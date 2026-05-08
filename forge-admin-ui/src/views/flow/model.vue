@@ -32,116 +32,11 @@
         >
           <template #prefix>
             <i class="i-material-symbols:search" />
-          </template>
-        </n-input>
-        <n-select
-          v-model:value="queryParams.category"
-          placeholder="流程分类"
-          clearable
-          class="category-select"
-          :options="categoryOptions"
-        />
-        <n-select
-          v-model:value="queryParams.status"
-          placeholder="全部状态"
-          clearable
-          class="status-select"
-          :options="statusOptions"
-        />
-        <NButton type="primary" class="search-btn" @click="handleSearch">
-          <i class="i-material-symbols:search mr-2" />
-          搜索
-        </NButton>
-        <NButton class="reset-btn" @click="handleReset">
-          <i class="i-material-symbols:refresh mr-2" />
-          重置
-        </NButton>
-        <NButton type="primary" class="add-btn" @click="handleAdd">
-          <i class="i-material-symbols:add mr-2" />
-          新增模型
-        </NButton>
-      </div>
-    </div>
+</template>
 
-    <!-- 卡片网格 -->
-    <n-spin :show="loading" class="model-list-spin">
-      <div v-if="dataSource.length > 0" class="model-grid">
-        <div
-          v-for="item in dataSource"
-          :key="item.id"
-          class="model-card"
-          @click="handleDesign(item)"
-        >
-          <!-- 卡片头 -->
-          <div class="card-header">
-            <div class="card-icon" :class="iconClass(item)">
-              <i :class="iconName(item)" />
-            </div>
-            <span class="status-tag" :class="statusClass(item.status)">
-              {{ statusText[item.status] ?? '未知' }}
-            </span>
-          </div>
-
-          <!-- 卡片体 -->
-          <div class="card-body">
-            <div class="card-title" :title="item.modelName">
-              {{ item.modelName }}
-            </div>
-            <div class="card-key">
-              {{ item.modelKey }}
-            </div>
-            <div class="card-desc" :title="item.description">
-              {{ item.description || '暂无描述' }}
-            </div>
-          </div>
-
-          <!-- 卡片脚 -->
-          <div class="card-footer">
-            <div class="card-meta">
-              <span class="meta-item">
-                <i class="i-material-symbols:category-outline" />
-                {{ item.category || '未分类' }}
-              </span>
-              <span class="meta-item">
-                <i class="i-material-symbols:layers-outline" />
-                v{{ item.version || 1 }}
-              </span>
-              <span v-if="item.deployTime" class="meta-item">
-                <i class="i-material-symbols:schedule-outline" />
-                {{ formatDate(item.deployTime) }}
-              </span>
-            </div>
-            <div class="card-actions" @click.stop>
-              <NButton size="small" type="primary" @click.stop="handleDesign(item)">
-                <i class="i-material-symbols:edit-outline mr-1" />
-                设计
-              </NButton>
-              <NButton
-                v-if="item.status === 0"
-                size="small"
-                type="success"
-                @click.stop="handleDeploy(item)"
-              >
-                <i class="i-material-symbols:rocket-launch mr-1" />
-                部署
-              </NButton>
-              <NButton
-                v-if="item.status === 1"
-                size="small"
-                @click.stop="handleViewInstances(item)"
-              >
-                <i class="i-material-symbols:visibility-outline mr-1" />
-                实例
-              </NButton>
-              <n-dropdown
-                trigger="click"
-                :options="getActionOptions(item)"
-                @select="(key) => handleActionSelect(key, item)"
-              >
-                <NButton size="small" quaternary circle @click.stop>
-                  <template #icon>
-                    <i class="i-material-symbols:more-horiz" />
-                  </template>
+    <VersionHistory v-if="showVersionHistory" :model-id="currentModelId" @close="showVersionHistory = false" />
+  </div>
+</template>
                 </NButton>
               </n-dropdown>
             </div>
@@ -278,6 +173,8 @@
         </template>
       </n-modal>
     </Teleport>
+
+    <VersionHistory v-if="showVersionHistory" :model-id="currentModelId" @close="showVersionHistory = false" />
   </div>
 </template>
 
@@ -347,6 +244,7 @@ function formatDate(d) {
 function getActionOptions(row) {
   const opts = [
     { label: '编辑信息', key: 'edit', icon: () => h('i', { class: 'i-material-symbols:edit-outline' }) },
+    { label: '版本历史', key: 'versionHistory', icon: () => h('i', { class: 'i-material-symbols:history-outline' }) },
     { label: '复制模型', key: 'copy', icon: () => h('i', { class: 'i-material-symbols:content-copy-outline' }) },
   ]
   if (row.status === 1) {
@@ -361,7 +259,7 @@ function getActionOptions(row) {
 }
 
 function handleActionSelect(key, row) {
-  const map = { edit: handleEdit, copy: handleCopy, suspend: handleSuspend, activate: handleActivate, delete: handleDelete }
+  const map = { edit: handleEdit, copy: handleCopy, versionHistory: handleVersionHistory, suspend: handleSuspend, activate: handleActivate, delete: handleDelete }
   map[key]?.(row)
 }
 
@@ -369,6 +267,8 @@ const queryParams = reactive({ modelName: '', category: null, status: null })
 const dataSource = ref([])
 const loading = ref(false)
 const pagination = reactive({ page: 1, pageSize: 12, itemCount: 0 })
+const showVersionHistory = ref(false)
+const currentModelId = ref('')
 
 const totalCount = ref(0)
 const designingCount = ref(0)
@@ -597,6 +497,11 @@ async function handleDelete(row) {
       }
     },
   })
+}
+
+function handleVersionHistory(row) {
+  currentModelId.value = row.id
+  showVersionHistory.value = true
 }
 
 onMounted(() => {
