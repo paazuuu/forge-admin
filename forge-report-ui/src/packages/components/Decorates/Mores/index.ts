@@ -8,10 +8,32 @@ import { PipelineHConfig } from './PipelineH/index'
 import { PipelineVConfig } from './PipelineV/index'
 import { CirclePointConfig } from './CirclePoint/index'
 import { KpiCardConfig } from './KpiCard/index'
+import { KpiGroupConfig } from './KpiGroup/index'
+import { SectionHeaderConfig } from './SectionHeader/index'
+import { MetricCompareCardConfig } from './MetricCompareCard/index'
+import { TimelineListConfig } from './TimelineList/index'
+import { ProgressRingConfig } from './ProgressRing/index'
 import { RankProgressListConfig } from './RankProgressList/index'
+import { StatusBadgeListConfig } from './StatusBadgeList/index'
+import { DataPairListConfig } from './DataPairList/index'
+import { MiniTrendCardConfig } from './MiniTrendCard/index'
+import { StepFlowConfig } from './StepFlow/index'
+import { DividerLineConfig } from './DividerLine/index'
+import { GlowBackdropConfig } from './GlowBackdrop/index'
 
 export default [
+  GlowBackdropConfig,
   KpiCardConfig,
+  KpiGroupConfig,
+  MetricCompareCardConfig,
+  MiniTrendCardConfig,
+  ProgressRingConfig,
+  StatusBadgeListConfig,
+  DataPairListConfig,
+  SectionHeaderConfig,
+  TimelineListConfig,
+  StepFlowConfig,
+  DividerLineConfig,
   RankProgressListConfig,
   NumberConfig,
   FlipperNumberConfig,
