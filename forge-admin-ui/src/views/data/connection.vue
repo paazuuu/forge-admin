@@ -81,7 +81,7 @@ const tableColumns = computed(() => [
     prop: 'status',
     label: '状态',
     width: 80,
-    render: (row) => h(NTag, {
+    render: row => h(NTag, {
       type: row.status === 1 ? 'success' : 'error',
       size: 'small',
     }, { default: () => row.status === 1 ? '启用' : '禁用' }),
@@ -216,7 +216,8 @@ function handleDelete(row) {
           window.$message.success('删除成功')
           crudRef.value?.refresh()
         }
-      } catch (error) {
+      }
+      catch (error) {
         window.$message.error('删除失败')
       }
     },
@@ -229,10 +230,12 @@ async function handleTest(row) {
     const res = await request.post(`/data/connection/${row.id}/test`)
     if (res.code === 200 && res.data) {
       window.$message.success('连接成功', { key: 'testConn' })
-    } else {
+    }
+    else {
       window.$message.error('连接失败', { key: 'testConn' })
     }
-  } catch (error) {
+  }
+  catch (error) {
     window.$message.error('连接测试失败', { key: 'testConn' })
   }
 }

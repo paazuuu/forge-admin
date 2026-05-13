@@ -24,9 +24,9 @@
 <script setup>
 import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
+import { getDataConnectionList } from '@/api/data/connection'
 import { AiCrudPage } from '@/components/ai-form'
 import { request } from '@/utils'
-import { getDataConnectionList } from '@/api/data/connection'
 
 defineOptions({ name: 'DataDataset' })
 
@@ -54,7 +54,8 @@ async function loadConnectionOptions() {
         value: c.id,
       }))
     }
-  } catch (e) {
+  }
+  catch (e) {
     console.error('Failed to load connections', e)
   }
 }
@@ -94,7 +95,7 @@ const tableColumns = computed(() => [
     prop: 'datasetType',
     label: '数据集类型',
     width: 100,
-    render: (row) => h(NTag, {
+    render: row => h(NTag, {
       type: row.datasetType === 'TABLE' ? 'info' : 'warning',
       size: 'small',
     }, { default: () => row.datasetType === 'TABLE' ? '单表' : 'SQL' }),
@@ -104,7 +105,7 @@ const tableColumns = computed(() => [
     prop: 'status',
     label: '状态',
     width: 80,
-    render: (row) => h(NTag, {
+    render: row => h(NTag, {
       type: row.status === 1 ? 'success' : 'error',
       size: 'small',
     }, { default: () => row.status === 1 ? '启用' : '禁用' }),
@@ -160,7 +161,7 @@ const editSchema = computed(() => [
     type: 'input',
     rules: [{ required: true, message: '请输入表名', trigger: 'blur' }],
     props: { placeholder: '请输入表名', disabled: false },
-    visible: (formData) => formData.datasetType === 'TABLE',
+    visible: formData => formData.datasetType === 'TABLE',
   },
   {
     field: 'sqlText',
@@ -169,7 +170,7 @@ const editSchema = computed(() => [
     span: 2,
     rules: [{ required: true, message: '请输入查询SQL', trigger: 'blur' }],
     props: { placeholder: 'SELECT ... FROM ...', rows: 6 },
-    visible: (formData) => formData.datasetType === 'SQL',
+    visible: formData => formData.datasetType === 'SQL',
   },
   {
     field: 'maxRows',
@@ -204,7 +205,8 @@ const editSchema = computed(() => [
 function beforeSubmit(formData) {
   if (formData.datasetType === 'TABLE') {
     formData.sqlText = null
-  } else {
+  }
+  else {
     formData.tableName = null
   }
   return formData
@@ -227,7 +229,8 @@ function handleDelete(row) {
           window.$message.success('删除成功')
           crudRef.value?.refresh()
         }
-      } catch (error) {
+      }
+      catch (error) {
         window.$message.error('删除失败')
       }
     },
@@ -240,10 +243,12 @@ async function handleSyncFields(row) {
     const res = await request.post(`/data/dataset/${row.id}/sync-fields`)
     if (res.code === 200) {
       window.$message.success(`同步成功，共${res.data?.length || 0}个字段`, { key: 'syncFields' })
-    } else {
+    }
+    else {
       window.$message.error(res.msg || '同步失败', { key: 'syncFields' })
     }
-  } catch (error) {
+  }
+  catch (error) {
     window.$message.error('同步字段失败', { key: 'syncFields' })
   }
 }
