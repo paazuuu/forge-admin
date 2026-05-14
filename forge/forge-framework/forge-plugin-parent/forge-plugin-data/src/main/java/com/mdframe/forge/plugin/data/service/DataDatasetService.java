@@ -8,8 +8,8 @@ import java.util.List;
 
 public interface DataDatasetService extends IService<DataDataset> {
 
-    IPage<DataDataset> page(String datasetName, Long connectionId, String datasetType, Integer status, 
-        Integer pageNum, Integer pageSize);
+    IPage<DataDataset> page(String datasetName, Long connectionId, String datasetType, Integer status,
+        Integer publishStatus, Long categoryId, Boolean uncategorized, Integer pageNum, Integer pageSize);
 
     List<DataDataset> listByConnectionId(Long connectionId);
 

@@ -21,10 +21,11 @@ public class DataDatasetServiceImpl extends ServiceImpl<DataDatasetMapper, DataD
 
     @Override
     public IPage<DataDataset> page(String datasetName, Long connectionId, String datasetType, Integer status,
-        Integer pageNum, Integer pageSize) {
+        Integer publishStatus, Long categoryId, Boolean uncategorized, Integer pageNum, Integer pageSize) {
         Long tenantId = SessionHelper.getTenantId();
         Page<DataDataset> page = new Page<>(pageNum, pageSize);
-        return datasetMapper.selectDatasetPage(page, tenantId, datasetName, connectionId, datasetType, status);
+        return datasetMapper.selectDatasetPage(page, tenantId, datasetName, connectionId, datasetType, status,
+            publishStatus, categoryId, uncategorized);
     }
 
     @Override

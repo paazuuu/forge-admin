@@ -16,7 +16,13 @@ public class DataDatasetDetailVO {
 
     private Long connectionId;
 
+    private Long categoryId;
+
     private String connectionName;
+
+    private String categoryCode;
+
+    private String categoryName;
 
     private String datasetType;
 
@@ -37,6 +43,8 @@ public class DataDatasetDetailVO {
     private Integer cacheTtlSeconds;
 
     private Integer status;
+
+    private Integer publishStatus;
 
     private String description;
 

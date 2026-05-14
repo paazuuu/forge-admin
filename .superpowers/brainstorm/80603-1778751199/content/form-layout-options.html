@@ -1,0 +1,287 @@
+<h2>数据集表单布局优化方案</h2>
+<p class="subtitle">三种不同的设计方向，请选择最符合你期望的风格</p>
+
+<div class="cards">
+  <div class="card" data-choice="layoutA" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">方案 A：精简分组式布局（推荐）</div>
+        <div class="mockup-body">
+          <div style="padding: 20px;">
+            <!-- 顶部概览区 -->
+            <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 16px; border-radius: 12px; margin-bottom: 20px;">
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <div>
+                  <div style="color: #0c4a6e; font-size: 12px; font-weight: 600;">资产标识</div>
+                  <div style="color: #0f172a; font-size: 16px; font-weight: 700; margin-top: 8px;">销售数据集</div>
+                </div>
+                <div>
+                  <div style="color: #0c4a6e; font-size: 12px; font-weight: 600;">数据来源</div>
+                  <div style="color: #0f172a; font-size: 16px; font-weight: 700; margin-top: 8px;">MySQL · 销售表</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 基础信息组 -->
+            <div style="margin-bottom: 20px;">
+              <div style="color: #334155; font-size: 14px; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">基础信息</div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                  <div style="color: #64748b; font-size: 12px; margin-bottom: 6px;">数据集编码 *</div>
+                  <div style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">SALES_DAILY</div>
+                </div>
+                <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                  <div style="color: #64748b; font-size: 12px; margin-bottom: 6px;">数据集名称 *</div>
+                  <div style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">日销售数据集</div>
+                </div>
+                <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                  <div style="color: #64748b; font-size: 12px; margin-bottom: 6px;">业务分类</div>
+                  <div style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">销售域</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 数据来源组 -->
+            <div>
+              <div style="color: #334155; font-size: 14px; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">数据来源</div>
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                  <div style="color: #64748b; font-size: 12px; margin-bottom: 6px;">数据连接 *</div>
+                  <div style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">生产库 MySQL</div>
+                </div>
+                <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                  <div style="color: #64748b; font-size: 12px; margin-bottom: 6px;">数据集类型</div>
+                  <div style="display: flex; gap: 8px;">
+                    <span style="background: #dbeafe; color: #1e40af; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">单表</span>
+                    <span style="background: #f8fafc; color: #64748b; padding: 6px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #e2e8f0;">SQL</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 A：精简分组式布局</h3>
+      <p><strong>特点：</strong></p>
+      <ul style="margin: 8px 0; padding-left: 20px; line-height: 1.8;">
+        <li>紧凑的分组标题，用细线分隔</li>
+        <li>表单项内嵌背景，减少边框视觉噪音</li>
+        <li>顶部信息概览区更简洁（2列而非4列）</li>
+        <li>留白适中，呼吸感好</li>
+      </ul>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>视觉噪音少，专注内容</li>
+            <li>分组清晰，快速定位</li>
+            <li>信息密度适中</li>
+            <li>实施成本低，改动小</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>不足</h4>
+          <ul>
+            <li>分组边界不如卡片明显</li>
+            <li>视觉层次相对扁平</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="layoutB" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">方案 B：卡片化分组布局</div>
+        <div class="mockup-body">
+          <div style="padding: 20px; background: #f1f5f9;">
+            <!-- 基础信息卡片 -->
+            <div style="background: #fff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);">
+              <div style="color: #0f172a; font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 6px; font-size: 12px;">01</span>
+                基础信息
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">数据集编码 *</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">SALES_DAILY</div>
+                </div>
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">数据集名称 *</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">日销售数据集</div>
+                </div>
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">业务分类</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">销售域</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 数据来源卡片 -->
+            <div style="background: #fff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);">
+              <div style="color: #0f172a; font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: #dcfce7; color: #166534; padding: 4px 8px; border-radius: 6px; font-size: 12px;">02</span>
+                数据来源
+              </div>
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">数据连接 *</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">生产库 MySQL</div>
+                </div>
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">数据集类型</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">单表数据集</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 查询条件卡片 -->
+            <div style="background: #fff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 20px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);">
+              <div style="color: #0f172a; font-size: 15px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 6px; font-size: 12px;">03</span>
+                查询条件定义
+              </div>
+              <div style="color: #64748b; font-size: 13px; padding: 12px; background: #f8fafc; border-radius: 8px;">
+                条件编辑区域...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 B：卡片化分组布局</h3>
+      <p><strong>特点：</strong></p>
+      <ul style="margin: 8px 0; padding-left: 20px; line-height: 1.8;">
+        <li>每个分组是独立卡片，边界清晰</li>
+        <li>编号标签强化分组顺序</li>
+        <li>卡片之间有明显间距</li>
+        <li>背景色区分卡片与表单项</li>
+      </ul>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>分组边界极其清晰</li>
+            <li>视觉层次丰富</li>
+            <li>适合复杂表单</li>
+            <li>符合主流设计趋势</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>不足</h4>
+          <ul>
+            <li>视觉元素多，可能显得繁琐</li>
+            <li>占用更多垂直空间</li>
+            <li>实施成本中等</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="layoutC" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">方案 C：步骤式表单布局</div>
+        <div class="mockup-body">
+          <div style="padding: 20px; background: #fff;">
+            <!-- 步骤指示器 -->
+            <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 24px; padding: 16px; background: #f8fafc; border-radius: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="background: #3b82f6; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;">1</div>
+                <div style="color: #0f172a; font-size: 14px; font-weight: 600;">基础信息</div>
+              </div>
+              <div style="width: 60px; height: 2px; background: #3b82f6; margin: 0 12px;"></div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="background: #e2e8f0; color: #64748b; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;">2</div>
+                <div style="color: #64748b; font-size: 14px;">数据来源</div>
+              </div>
+              <div style="width: 60px; height: 2px; background: #e2e8f0; margin: 0 12px;"></div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="background: #e2e8f0; color: #64748b; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;">3</div>
+                <div style="color: #64748b; font-size: 14px;">查询条件</div>
+              </div>
+              <div style="width: 60px; height: 2px; background: #e2e8f0; margin: 0 12px;"></div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="background: #e2e8f0; color: #64748b; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;">4</div>
+                <div style="color: #64748b; font-size: 14px;">执行设置</div>
+              </div>
+            </div>
+            
+            <!-- 当前步骤内容 -->
+            <div style="background: #fff; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0;">
+              <div style="color: #0f172a; font-size: 16px; font-weight: 700; margin-bottom: 20px;">步骤 1：基础信息</div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">数据集编码 *</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">SALES_DAILY</div>
+                </div>
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">数据集名称 *</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">日销售数据集</div>
+                </div>
+                <div>
+                  <div style="color: #475569; font-size: 13px; font-weight: 500; margin-bottom: 8px;">业务分类</div>
+                  <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;">销售域</div>
+                </div>
+              </div>
+              
+              <!-- 导航按钮 -->
+              <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+                <button style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 20px; border-radius: 8px; color: #64748b; cursor: pointer;">上一步</button>
+                <button style="background: #3b82f6; border: none; padding: 10px 20px; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">下一步</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 C：步骤式表单布局</h3>
+      <p><strong>特点：</strong></p>
+      <ul style="margin: 8px 0; padding-left: 20px; line-height: 1.8;">
+        <li>分步骤引导填写流程</li>
+        <li>顶部进度条显示当前位置</li>
+        <li>每步只显示少量字段，专注度高</li>
+        <li>适合新手用户或复杂流程</li>
+      </ul>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>降低认知负担</li>
+            <li>填写流程清晰</li>
+            <li>适合数据集创建场景</li>
+            <li>可逐步校验数据</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>不足</h4>
+          <ul>
+            <li>来回切换步骤较繁琐</li>
+            <li>不适合编辑场景</li>
+            <li>实施成本最高</li>
+            <li>需要额外开发进度条组件</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 12px; border-left: 4px solid #3b82f6;">
+  <div style="color: #1e40af; font-size: 14px; font-weight: 700; margin-bottom: 8px;">我的推荐：方案 A 或 方案 B</div>
+  <div style="color: #334155; font-size: 13px; line-height: 1.8;">
+    <strong>方案 A</strong>适合追求简洁、高效编辑的场景，改动成本低，可快速实施。<br>
+    <strong>方案 B</strong>适合需要强调分组边界、给用户明确分区感的场景，视觉层次更丰富。<br>
+    <strong>方案 C</strong>适合创建流程复杂、需要引导新手用户的场景，但编辑时来回切换步骤会比较繁琐。
+  </div>
+</div>
+
+<p style="margin-top: 16px; color: #64748b; font-size: 12px;">
+  请点击卡片选择你偏好的布局方案，或在终端告诉我你的想法。
+</p>

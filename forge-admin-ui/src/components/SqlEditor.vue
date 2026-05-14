@@ -6,13 +6,13 @@
         <span>SQL 编辑器</span>
       </div>
       <n-space :size="8">
-        <n-button size="small" secondary @click="handleFormat">
+        <n-button size="small" secondary :disabled="readonly" @click="handleFormat">
           <template #icon>
             <i class="i-material-symbols:format-align-left" />
           </template>
           格式化
         </n-button>
-        <n-button size="small" secondary @click="handleClear">
+        <n-button size="small" secondary :disabled="readonly" @click="handleClear">
           <template #icon>
             <i class="i-material-symbols:delete-outline" />
           </template>
@@ -105,6 +105,11 @@ watch(() => props.value, (value) => {
 
   innerValue.value = nextValue
   setEditorValue(nextValue)
+})
+
+watch(() => props.readonly, async () => {
+  await nextTick()
+  initEditor()
 })
 
 function initEditor() {

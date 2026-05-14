@@ -6,11 +6,19 @@ import com.mdframe.forge.plugin.data.dto.DataDatasetPreviewDTO;
 import com.mdframe.forge.plugin.data.dto.DataDatasetSaveDTO;
 import com.mdframe.forge.plugin.data.entity.DataConnection;
 import com.mdframe.forge.plugin.data.entity.DataDataset;
+import com.mdframe.forge.plugin.data.entity.DataDatasetCategory;
 import com.mdframe.forge.plugin.data.entity.DataDatasetField;
+import com.mdframe.forge.plugin.data.enums.DatasetPublishStatusEnum;
 import com.mdframe.forge.plugin.data.service.DataConnectionService;
+import com.mdframe.forge.plugin.data.service.DataDatasetCategoryService;
 import com.mdframe.forge.plugin.data.service.DataDatasetFieldService;
 import com.mdframe.forge.plugin.data.service.DataDatasetService;
-import com.mdframe.forge.plugin.data.support.*;
+import com.mdframe.forge.plugin.data.support.DatasetParamSchemaParser;
+import com.mdframe.forge.plugin.data.support.DbDialect;
+import com.mdframe.forge.plugin.data.support.DbDialectFactory;
+import com.mdframe.forge.plugin.data.support.JdbcDataSourceProvider;
+import com.mdframe.forge.plugin.data.support.SqlParameterBinder;
+import com.mdframe.forge.plugin.data.support.SqlSafetyValidator;
 import com.mdframe.forge.plugin.data.vo.DataConnectionFieldVO;
 import com.mdframe.forge.plugin.data.vo.DataDatasetDetailVO;
 import com.mdframe.forge.plugin.data.vo.DataDatasetFieldVO;
@@ -25,8 +33,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -42,6 +54,7 @@ public class DataDatasetController {
     private final DataDatasetService datasetService;
     private final DataDatasetFieldService fieldService;
     private final DataConnectionService connectionService;
+    private final DataDatasetCategoryService categoryService;
     private final JdbcDataSourceProvider dataSourceProvider;
     private final DbDialectFactory dialectFactory;
     private final SqlSafetyValidator sqlSafetyValidator;
@@ -50,38 +63,41 @@ public class DataDatasetController {
 
     @GetMapping("/page")
     public RespInfo<IPage<DataDataset>> page(
-            @RequestParam(required = false) String datasetName,
-            @RequestParam(required = false) Long connectionId,
-            @RequestParam(required = false) String datasetType,
-            @RequestParam(required = false) Integer status,
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
-        IPage<DataDataset> page = datasetService.page(datasetName, connectionId, datasetType, status, pageNum, pageSize);
+        @RequestParam(required = false) String datasetName,
+        @RequestParam(required = false) Long connectionId,
+        @RequestParam(required = false) Long categoryId,
+        @RequestParam(required = false) Boolean uncategorized,
+        @RequestParam(required = false) String datasetType,
+        @RequestParam(required = false) Integer status,
+        @RequestParam(required = false) Integer publishStatus,
+        @RequestParam(defaultValue = "1") Integer pageNum,
+        @RequestParam(defaultValue = "10") Integer pageSize) {
+        IPage<DataDataset> page = datasetService.page(datasetName, connectionId, datasetType, status, publishStatus,
+            categoryId, uncategorized, pageNum, pageSize);
         return RespInfo.success(page);
     }
 
     @GetMapping("/list")
     public RespInfo<List<DataDataset>> list(@RequestParam(required = false) Long connectionId) {
-        List<DataDataset> list = datasetService.listByConnectionId(connectionId);
-        return RespInfo.success(list);
+        return RespInfo.success(datasetService.listByConnectionId(connectionId));
     }
 
     @GetMapping("/{id}")
     public RespInfo<DataDatasetDetailVO> getById(@PathVariable Long id) {
-        DataDataset dataset = datasetService.getById(id);
-        if (dataset == null) {
-            throw new BusinessException("数据集不存在或已删除");
-        }
+        DataDataset dataset = requireDataset(id);
         DataConnection connection = connectionService.getById(dataset.getConnectionId());
+        DataDatasetCategory category = dataset.getCategoryId() != null ? categoryService.getById(dataset.getCategoryId()) : null;
         List<DataDatasetField> fields = fieldService.listByDatasetId(id);
-        return RespInfo.success(convertToDetailVO(dataset, connection, fields));
+        return RespInfo.success(convertToDetailVO(dataset, connection, category, fields));
     }
 
     @PostMapping
     @OperationLog(module = "数据资产", desc = "新增数据集：{{#dto.datasetName}}")
     public RespInfo<Void> add(@Validated @RequestBody DataDatasetSaveDTO dto) {
-        validateDataset(dto);
-        DataDataset entity = convertToEntity(dto);
+        validateDatasetDefinition(dto.getDatasetCode(), dto.getDatasetName(), dto.getConnectionId(), dto.getCategoryId(),
+            dto.getDatasetType(), dto.getTableName(), dto.getSqlText(), dto.getParamSchemaJson());
+        DataDataset entity = convertToEntity(dto, null);
+        entity.setPublishStatus(DatasetPublishStatusEnum.DRAFT.getCode());
         datasetService.save(entity);
         if (dto.getFields() != null && !dto.getFields().isEmpty()) {
             saveFields(entity.getId(), dto.getFields());
@@ -95,8 +111,11 @@ public class DataDatasetController {
         if (dto.getId() == null) {
             throw new BusinessException("数据集ID不能为空");
         }
-        validateDataset(dto);
-        DataDataset entity = convertToEntity(dto);
+        DataDataset existing = requireDataset(dto.getId());
+        assertEditable(existing, "修改");
+        validateDatasetDefinition(dto.getDatasetCode(), dto.getDatasetName(), dto.getConnectionId(), dto.getCategoryId(),
+            dto.getDatasetType(), dto.getTableName(), dto.getSqlText(), dto.getParamSchemaJson());
+        DataDataset entity = convertToEntity(dto, existing);
         datasetService.updateById(entity);
         if (dto.getFields() != null) {
             saveFields(entity.getId(), dto.getFields());
@@ -107,22 +126,51 @@ public class DataDatasetController {
     @DeleteMapping("/{id}")
     @OperationLog(module = "数据资产", desc = "删除数据集")
     public RespInfo<Void> remove(@PathVariable Long id) {
+        DataDataset dataset = requireDataset(id);
+        assertEditable(dataset, "删除");
         fieldService.deleteByDatasetId(id);
         datasetService.removeById(id);
+        return RespInfo.success();
+    }
+
+    @PostMapping("/{id}/publish")
+    @OperationLog(module = "数据资产", desc = "发布数据集")
+    public RespInfo<Void> publish(@PathVariable Long id) {
+        DataDataset dataset = requireDataset(id);
+        if (DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
+            throw new BusinessException("数据集已发布，无需重复操作");
+        }
+        validateDatasetDefinition(dataset.getDatasetCode(), dataset.getDatasetName(), dataset.getConnectionId(),
+            dataset.getCategoryId(), dataset.getDatasetType(), dataset.getTableName(), dataset.getSqlText(),
+            dataset.getParamSchemaJson());
+
+        List<DataDatasetField> fields = fieldService.listByDatasetId(id);
+        if (fields == null || fields.isEmpty()) {
+            DataConnection connection = requireEnabledConnection(dataset.getConnectionId());
+            fieldService.saveBatchFields(id, extractFieldsFromDataset(dataset, connection));
+        }
+
+        updatePublishStatus(id, DatasetPublishStatusEnum.PUBLISHED.getCode());
+        return RespInfo.success();
+    }
+
+    @PostMapping("/{id}/offline")
+    @OperationLog(module = "数据资产", desc = "下架数据集")
+    public RespInfo<Void> offline(@PathVariable Long id) {
+        DataDataset dataset = requireDataset(id);
+        if (!DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
+            throw new BusinessException("只有已发布的数据集才能下架");
+        }
+        updatePublishStatus(id, DatasetPublishStatusEnum.OFFLINE.getCode());
         return RespInfo.success();
     }
 
     @PostMapping("/{id}/sync-fields")
     @OperationLog(module = "数据资产", desc = "同步数据集字段")
     public RespInfo<List<DataDatasetFieldVO>> syncFields(@PathVariable Long id) {
-        DataDataset dataset = datasetService.getById(id);
-        if (dataset == null) {
-            throw new BusinessException("数据集不存在或已删除");
-        }
-        DataConnection connection = connectionService.getById(dataset.getConnectionId());
-        if (connection == null) {
-            throw new BusinessException("数据连接不存在或已删除");
-        }
+        DataDataset dataset = requireDataset(id);
+        assertEditable(dataset, "同步字段");
+        DataConnection connection = requireEnabledConnection(dataset.getConnectionId());
         List<DataDatasetField> fields = extractFieldsFromDataset(dataset, connection);
         fieldService.saveBatchFields(id, fields);
         return RespInfo.success(convertToFieldVOList(fields));
@@ -131,13 +179,11 @@ public class DataDatasetController {
     @PutMapping("/{id}/fields")
     @OperationLog(module = "数据资产", desc = "保存数据集字段配置")
     public RespInfo<Void> saveFields(@PathVariable Long id, @RequestBody List<DataDatasetFieldDTO> fieldDTOs) {
-        DataDataset dataset = datasetService.getById(id);
-        if (dataset == null) {
-            throw new BusinessException("数据集不存在或已删除");
-        }
+        DataDataset dataset = requireDataset(id);
+        assertEditable(dataset, "保存字段配置");
         List<DataDatasetField> fields = fieldDTOs.stream()
-                .map(this::convertFieldDTOToEntity)
-                .collect(Collectors.toList());
+            .map(this::convertFieldDTOToEntity)
+            .collect(Collectors.toList());
         fieldService.saveBatchFields(id, fields);
         return RespInfo.success();
     }
@@ -145,22 +191,10 @@ public class DataDatasetController {
     @PostMapping("/{id}/preview")
     @OperationLog(module = "数据资产", desc = "预览数据集")
     public RespInfo<Map<String, Object>> preview(@PathVariable Long id, @RequestBody DataDatasetPreviewDTO dto) {
-        DataDataset dataset = datasetService.getById(id);
-        if (dataset == null) {
-            throw new BusinessException("数据集不存在或已删除");
-        }
-        if (dataset.getStatus() != 1) {
-            throw new BusinessException("数据集已禁用");
-        }
-        DataConnection connection = connectionService.getById(dataset.getConnectionId());
-        if (connection == null) {
-            throw new BusinessException("数据连接不存在或已删除");
-        }
-        if (connection.getStatus() != 1) {
-            throw new BusinessException("数据连接已禁用");
-        }
-        Map<String, Object> result = executePreview(dataset, connection, dto);
-        return RespInfo.success(result);
+        DataDataset dataset = requireDataset(id);
+        ensureDatasetUsable(dataset);
+        DataConnection connection = requireEnabledConnection(dataset.getConnectionId());
+        return RespInfo.success(executePreview(dataset, connection, dto));
     }
 
     @PostMapping("/preview-sql")
@@ -172,13 +206,7 @@ public class DataDatasetController {
         if (dto.getSqlText() == null || dto.getSqlText().isEmpty()) {
             throw new BusinessException("SQL不能为空");
         }
-        DataConnection connection = connectionService.getById(dto.getConnectionId());
-        if (connection == null) {
-            throw new BusinessException("数据连接不存在或已删除");
-        }
-        if (connection.getStatus() != 1) {
-            throw new BusinessException("数据连接已禁用");
-        }
+        DataConnection connection = requireEnabledConnection(dto.getConnectionId());
 
         DataDataset dataset = new DataDataset();
         dataset.setConnectionId(dto.getConnectionId());
@@ -188,74 +216,129 @@ public class DataDatasetController {
         return RespInfo.success(result);
     }
 
-    private void validateDataset(DataDatasetSaveDTO dto) {
-        if (dto.getDatasetCode() == null || dto.getDatasetCode().isEmpty()) {
-            throw new BusinessException("数据集编码不能为空");
+    private DataDataset requireDataset(Long id) {
+        DataDataset dataset = datasetService.getById(id);
+        if (dataset == null) {
+            throw new BusinessException("数据集不存在或已删除");
         }
-        if (dto.getDatasetName() == null || dto.getDatasetName().isEmpty()) {
-            throw new BusinessException("数据集名称不能为空");
-        }
-        if (dto.getConnectionId() == null) {
-            throw new BusinessException("数据连接不能为空");
-        }
-        if (dto.getDatasetType() == null || dto.getDatasetType().isEmpty()) {
-            throw new BusinessException("数据集类型不能为空");
-        }
-        DataConnection connection = connectionService.getById(dto.getConnectionId());
+        return dataset;
+    }
+
+    private DataConnection requireEnabledConnection(Long connectionId) {
+        DataConnection connection = connectionService.getById(connectionId);
         if (connection == null) {
             throw new BusinessException("数据连接不存在或已删除");
         }
         if (connection.getStatus() != 1) {
             throw new BusinessException("数据连接已禁用");
         }
-        if ("TABLE".equals(dto.getDatasetType())) {
-            if (dto.getTableName() == null || dto.getTableName().isEmpty()) {
+        return connection;
+    }
+
+    private void validateDatasetDefinition(String datasetCode, String datasetName, Long connectionId, Long categoryId,
+        String datasetType, String tableName, String sqlText, String paramSchemaJson) {
+        if (datasetCode == null || datasetCode.isEmpty()) {
+            throw new BusinessException("数据集编码不能为空");
+        }
+        if (datasetName == null || datasetName.isEmpty()) {
+            throw new BusinessException("数据集名称不能为空");
+        }
+        if (connectionId == null) {
+            throw new BusinessException("数据连接不能为空");
+        }
+        if (datasetType == null || datasetType.isEmpty()) {
+            throw new BusinessException("数据集类型不能为空");
+        }
+
+        requireEnabledConnection(connectionId);
+
+        if (categoryId != null) {
+            DataDatasetCategory category = categoryService.getById(categoryId);
+            if (category == null) {
+                throw new BusinessException("数据集分类不存在或已删除");
+            }
+        }
+
+        if ("TABLE".equals(datasetType)) {
+            if (tableName == null || tableName.isEmpty()) {
                 throw new BusinessException("表名不能为空");
             }
         }
-        if ("SQL".equals(dto.getDatasetType())) {
-            if (dto.getSqlText() == null || dto.getSqlText().isEmpty()) {
+
+        if ("SQL".equals(datasetType)) {
+            if (sqlText == null || sqlText.isEmpty()) {
                 throw new BusinessException("SQL不能为空");
             }
-            sqlSafetyValidator.validate(dto.getSqlText());
+            sqlSafetyValidator.validate(sqlText);
         }
-        if (dto.getParamSchemaJson() != null && !dto.getParamSchemaJson().trim().isEmpty()) {
+
+        if (paramSchemaJson != null && !paramSchemaJson.trim().isEmpty()) {
             try {
-                datasetParamSchemaParser.validate(dto.getParamSchemaJson(), "TABLE".equals(dto.getDatasetType()));
+                datasetParamSchemaParser.validate(paramSchemaJson, "TABLE".equals(datasetType));
             } catch (IllegalArgumentException e) {
                 throw new BusinessException(e.getMessage());
             }
         }
     }
 
-    private DataDataset convertToEntity(DataDatasetSaveDTO dto) {
+    private DataDataset convertToEntity(DataDatasetSaveDTO dto, DataDataset existing) {
         DataDataset entity = new DataDataset();
         entity.setId(dto.getId());
-        entity.setTenantId(SessionHelper.getTenantId());
+        entity.setTenantId(existing != null ? existing.getTenantId() : SessionHelper.getTenantId());
         entity.setDatasetCode(dto.getDatasetCode());
         entity.setDatasetName(dto.getDatasetName());
         entity.setConnectionId(dto.getConnectionId());
+        entity.setCategoryId(dto.getCategoryId());
         entity.setDatasetType(dto.getDatasetType());
         entity.setTableName(dto.getTableName());
         entity.setSqlText(dto.getSqlText());
         entity.setParamSchemaJson(dto.getParamSchemaJson());
         entity.setDefaultOrderJson(dto.getDefaultOrderJson());
-        entity.setMaxRows(dto.getMaxRows() != null ? dto.getMaxRows() : 1000);
-        entity.setTimeoutSeconds(dto.getTimeoutSeconds() != null ? dto.getTimeoutSeconds() : 15);
-        entity.setCacheEnabled(dto.getCacheEnabled() != null ? dto.getCacheEnabled() : 0);
+        entity.setMaxRows(dto.getMaxRows() != null ? dto.getMaxRows() : existing != null ? existing.getMaxRows() : 1000);
+        entity.setTimeoutSeconds(dto.getTimeoutSeconds() != null ? dto.getTimeoutSeconds() : existing != null ? existing.getTimeoutSeconds() : 15);
+        entity.setCacheEnabled(dto.getCacheEnabled() != null ? dto.getCacheEnabled() : existing != null ? existing.getCacheEnabled() : 0);
         entity.setCacheTtlSeconds(dto.getCacheTtlSeconds());
-        entity.setStatus(dto.getStatus() != null ? dto.getStatus() : 1);
+        entity.setStatus(dto.getStatus() != null ? dto.getStatus() : existing != null ? existing.getStatus() : 1);
         entity.setDescription(dto.getDescription());
         return entity;
     }
 
-    private DataDatasetDetailVO convertToDetailVO(DataDataset dataset, DataConnection connection, List<DataDatasetField> fields) {
+    private void assertEditable(DataDataset dataset, String action) {
+        if (DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
+            throw new BusinessException("数据集已发布，请先下架后再" + action);
+        }
+    }
+
+    private void updatePublishStatus(Long id, Integer publishStatus) {
+        boolean updated = datasetService.lambdaUpdate()
+            .eq(DataDataset::getId, id)
+            .set(DataDataset::getPublishStatus, publishStatus)
+            .update();
+        if (!updated) {
+            throw new BusinessException("数据集发布状态更新失败");
+        }
+    }
+
+    private void ensureDatasetUsable(DataDataset dataset) {
+        if (!DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
+            throw new BusinessException("数据集未发布，暂不可使用");
+        }
+        if (dataset.getStatus() != 1) {
+            throw new BusinessException("数据集已禁用");
+        }
+    }
+
+    private DataDatasetDetailVO convertToDetailVO(DataDataset dataset, DataConnection connection, DataDatasetCategory category,
+        List<DataDatasetField> fields) {
         DataDatasetDetailVO vo = new DataDatasetDetailVO();
         vo.setId(dataset.getId());
         vo.setDatasetCode(dataset.getDatasetCode());
         vo.setDatasetName(dataset.getDatasetName());
         vo.setConnectionId(dataset.getConnectionId());
+        vo.setCategoryId(dataset.getCategoryId());
         vo.setConnectionName(connection != null ? connection.getConnectionName() : null);
+        vo.setCategoryCode(category != null ? category.getCategoryCode() : null);
+        vo.setCategoryName(category != null ? category.getCategoryName() : null);
         vo.setDatasetType(dataset.getDatasetType());
         vo.setTableName(dataset.getTableName());
         vo.setSqlText(dataset.getSqlText());
@@ -266,6 +349,7 @@ public class DataDatasetController {
         vo.setCacheEnabled(dataset.getCacheEnabled());
         vo.setCacheTtlSeconds(dataset.getCacheTtlSeconds());
         vo.setStatus(dataset.getStatus());
+        vo.setPublishStatus(dataset.getPublishStatus());
         vo.setDescription(dataset.getDescription());
         vo.setCreateTime(dataset.getCreateTime());
         vo.setUpdateTime(dataset.getUpdateTime());
@@ -274,23 +358,23 @@ public class DataDatasetController {
     }
 
     private List<DataDatasetFieldVO> convertToFieldVOList(List<DataDatasetField> fields) {
-        return fields.stream().map(f -> {
+        return fields.stream().map(field -> {
             DataDatasetFieldVO vo = new DataDatasetFieldVO();
-            vo.setId(f.getId());
-            vo.setFieldName(f.getFieldName());
-            vo.setFieldLabel(f.getFieldLabel());
-            vo.setSourceColumn(f.getSourceColumn());
-            vo.setDbType(f.getDbType());
-            vo.setDataType(f.getDataType());
-            vo.setFieldRole(f.getFieldRole());
-            vo.setDefaultAgg(f.getDefaultAgg());
-            vo.setQueryEnabled(f.getQueryEnabled());
-            vo.setDisplayEnabled(f.getDisplayEnabled());
-            vo.setSensitiveLevel(f.getSensitiveLevel());
-            vo.setMaskRule(f.getMaskRule());
-            vo.setDictType(f.getDictType());
-            vo.setSort(f.getSort());
-            vo.setDescription(f.getDescription());
+            vo.setId(field.getId());
+            vo.setFieldName(field.getFieldName());
+            vo.setFieldLabel(field.getFieldLabel());
+            vo.setSourceColumn(field.getSourceColumn());
+            vo.setDbType(field.getDbType());
+            vo.setDataType(field.getDataType());
+            vo.setFieldRole(field.getFieldRole());
+            vo.setDefaultAgg(field.getDefaultAgg());
+            vo.setQueryEnabled(field.getQueryEnabled());
+            vo.setDisplayEnabled(field.getDisplayEnabled());
+            vo.setSensitiveLevel(field.getSensitiveLevel());
+            vo.setMaskRule(field.getMaskRule());
+            vo.setDictType(field.getDictType());
+            vo.setSort(field.getSort());
+            vo.setDescription(field.getDescription());
             return vo;
         }).collect(Collectors.toList());
     }
@@ -315,6 +399,7 @@ public class DataDatasetController {
         return entity;
     }
 
+    @SuppressWarnings("unchecked")
     private List<DataDatasetField> extractFieldsFromDataset(DataDataset dataset, DataConnection connection) {
         List<DataDatasetField> fields = new ArrayList<>();
         if ("TABLE".equals(dataset.getDatasetType())) {
@@ -396,13 +481,12 @@ public class DataDatasetController {
         int maxRows = dto.getMaxRows() != null ? Math.min(dto.getMaxRows(), dataset.getMaxRows()) : dataset.getMaxRows();
         if ("TABLE".equals(dataset.getDatasetType())) {
             return executePreviewTable(dataset, connection, maxRows);
-        } else {
-            return executePreviewSql(dataset, connection, maxRows);
         }
+        return executePreviewSql(dataset, connection, maxRows);
     }
 
     private Map<String, Object> executePreviewTable(DataDataset dataset, DataConnection connection, int maxRows) {
-        Map<String, Object> result = new java.util.HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> rows = new ArrayList<>();
         List<String> columns = new ArrayList<>();
         try {
@@ -420,7 +504,7 @@ public class DataDatasetController {
                         columns.add(metaData.getColumnLabel(i));
                     }
                     while (rs.next()) {
-                        Map<String, Object> row = new java.util.LinkedHashMap<>();
+                        Map<String, Object> row = new LinkedHashMap<>();
                         for (int i = 1; i <= columnCount; i++) {
                             row.put(metaData.getColumnLabel(i), rs.getObject(i));
                         }
@@ -443,7 +527,7 @@ public class DataDatasetController {
     }
 
     private Map<String, Object> executePreviewSql(DataDataset dataset, DataConnection connection, int maxRows) {
-        Map<String, Object> result = new java.util.HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> rows = new ArrayList<>();
         List<String> columns = new ArrayList<>();
         try {
@@ -458,7 +542,7 @@ public class DataDatasetController {
     }
 
     private Map<String, Object> executePreviewSqlOrThrow(DataDataset dataset, DataConnection connection, int maxRows) {
-        Map<String, Object> result = new java.util.HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         List<Map<String, Object>> rows = new ArrayList<>();
         List<String> columns = new ArrayList<>();
         try {
@@ -469,8 +553,13 @@ public class DataDatasetController {
                 sqlSafetyValidator.validate(validatedSql);
                 String wrappedSql = "SELECT * FROM (" + validatedSql + ") t";
                 wrappedSql = dialect.buildLimitSql(wrappedSql, maxRows);
-                PreparedStatement ps = conn.prepareStatement(wrappedSql);
+                String preparedSql = parameterBinder.convertToPreparedStatement(wrappedSql);
+                PreparedStatement ps = conn.prepareStatement(preparedSql);
                 try {
+                    Map<Integer, Object> paramIndexMap = parameterBinder.buildParamIndexMap(wrappedSql, Map.of());
+                    for (Map.Entry<Integer, Object> entry : paramIndexMap.entrySet()) {
+                        ps.setObject(entry.getKey(), entry.getValue());
+                    }
                     ResultSet rs = ps.executeQuery();
                     ResultSetMetaData metaData = rs.getMetaData();
                     int columnCount = metaData.getColumnCount();
@@ -478,7 +567,7 @@ public class DataDatasetController {
                         columns.add(metaData.getColumnLabel(i));
                     }
                     while (rs.next()) {
-                        Map<String, Object> row = new java.util.LinkedHashMap<>();
+                        Map<String, Object> row = new LinkedHashMap<>();
                         for (int i = 1; i <= columnCount; i++) {
                             row.put(metaData.getColumnLabel(i), rs.getObject(i));
                         }
@@ -504,9 +593,12 @@ public class DataDatasetController {
     }
 
     private String mapDataType(String dbType) {
-        if (dbType == null) return "STRING";
+        if (dbType == null) {
+            return "STRING";
+        }
         String upper = dbType.toUpperCase();
-        if (upper.contains("INT") || upper.contains("DECIMAL") || upper.contains("FLOAT") || upper.contains("DOUBLE") || upper.contains("NUMERIC")) {
+        if (upper.contains("INT") || upper.contains("DECIMAL") || upper.contains("FLOAT")
+            || upper.contains("DOUBLE") || upper.contains("NUMERIC")) {
             return "NUMBER";
         }
         if (upper.contains("DATE") && !upper.contains("TIME")) {
@@ -522,26 +614,45 @@ public class DataDatasetController {
     }
 
     private String mapValueDataType(Object value) {
-        if (value == null) return "STRING";
-        if (value instanceof Number) return "NUMBER";
-        if (value instanceof java.sql.Date) return "DATE";
-        if (value instanceof java.sql.Timestamp || value instanceof java.util.Date) return "DATETIME";
-        if (value instanceof Boolean) return "BOOLEAN";
+        if (value == null) {
+            return "STRING";
+        }
+        if (value instanceof Number) {
+            return "NUMBER";
+        }
+        if (value instanceof java.sql.Date) {
+            return "DATE";
+        }
+        if (value instanceof java.sql.Timestamp || value instanceof java.util.Date) {
+            return "DATETIME";
+        }
+        if (value instanceof Boolean) {
+            return "BOOLEAN";
+        }
         return "STRING";
     }
 
     private boolean isNumericType(String dbType) {
-        if (dbType == null) return false;
+        if (dbType == null) {
+            return false;
+        }
         String upper = dbType.toUpperCase();
-        return upper.contains("INT") || upper.contains("DECIMAL") || upper.contains("FLOAT") || upper.contains("DOUBLE") || upper.contains("NUMERIC");
+        return upper.contains("INT") || upper.contains("DECIMAL") || upper.contains("FLOAT")
+            || upper.contains("DOUBLE") || upper.contains("NUMERIC");
     }
 
     private String extractSchemaFromUrl(String jdbcUrl) {
-        if (jdbcUrl == null) return null;
+        if (jdbcUrl == null) {
+            return null;
+        }
         int start = jdbcUrl.lastIndexOf('/');
-        if (start < 0) return null;
+        if (start < 0) {
+            return null;
+        }
         int end = jdbcUrl.indexOf('?');
-        if (end < 0) end = jdbcUrl.length();
+        if (end < 0) {
+            end = jdbcUrl.length();
+        }
         return jdbcUrl.substring(start + 1, end);
     }
 }

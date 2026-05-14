@@ -5,7 +5,10 @@ export interface DataDataset {
   datasetCode: string
   datasetName: string
   connectionId: number
+  categoryId?: number | null
   connectionName?: string
+  categoryCode?: string
+  categoryName?: string
   datasetType: string
   tableName?: string
   sqlText?: string
@@ -16,9 +19,23 @@ export interface DataDataset {
   cacheEnabled?: number
   cacheTtlSeconds?: number
   status?: number
+  publishStatus?: number
   description?: string
   createTime?: string
   updateTime?: string
+}
+
+export interface DataDatasetCategory {
+  id?: number
+  parentId?: number | null
+  level?: number
+  ancestors?: string
+  categoryCode: string
+  categoryName: string
+  sortOrder?: number
+  status?: number
+  description?: string
+  children?: DataDatasetCategory[]
 }
 
 export interface DataDatasetField {
@@ -44,7 +61,10 @@ export interface DataDatasetDetail {
   datasetCode: string
   datasetName: string
   connectionId: number
+  categoryId?: number | null
   connectionName?: string
+  categoryCode?: string
+  categoryName?: string
   datasetType: string
   tableName?: string
   sqlText?: string
@@ -55,6 +75,7 @@ export interface DataDatasetDetail {
   cacheEnabled: number
   cacheTtlSeconds?: number
   status: number
+  publishStatus: number
   description?: string
   createTime: string
   updateTime: string
@@ -67,7 +88,17 @@ export interface DataDatasetPreview {
   total: number
 }
 
-export function getDataDatasetPage(params: { pageNum: number, pageSize: number, datasetName?: string, connectionId?: number, datasetType?: string, status?: number }) {
+export function getDataDatasetPage(params: {
+  pageNum: number
+  pageSize: number
+  datasetName?: string
+  connectionId?: number
+  categoryId?: number
+  uncategorized?: boolean
+  datasetType?: string
+  status?: number
+  publishStatus?: number
+}) {
   return request.get('/data/dataset/page', { params })
 }
 
@@ -91,6 +122,14 @@ export function deleteDataDataset(id: number) {
   return request.delete(`/data/dataset/${id}`)
 }
 
+export function publishDataDataset(id: number) {
+  return request.post(`/data/dataset/${id}/publish`)
+}
+
+export function offlineDataDataset(id: number) {
+  return request.post(`/data/dataset/${id}/offline`)
+}
+
 export function syncDataDatasetFields(id: number) {
   return request.post(`/data/dataset/${id}/sync-fields`)
 }
@@ -105,6 +144,22 @@ export function previewDataDataset(id: number, params?: Record<string, any>, max
 
 export function getDataDatasetMetadata(id: number) {
   return request.get(`/data/dataset/runtime/${id}/metadata`)
+}
+
+export function getDataDatasetCategoryTree() {
+  return request.get('/data/dataset/category/tree')
+}
+
+export function createDataDatasetCategory(data: DataDatasetCategory) {
+  return request.post('/data/dataset/category', data)
+}
+
+export function updateDataDatasetCategory(data: DataDatasetCategory) {
+  return request.put('/data/dataset/category', data)
+}
+
+export function deleteDataDatasetCategory(id: number) {
+  return request.delete(`/data/dataset/category/${id}`)
 }
 
 export function queryDataDataset(dto: { datasetId: number, params?: Record<string, any>, fields?: string[], pageNum?: number, pageSize?: number, maxRows?: number }) {

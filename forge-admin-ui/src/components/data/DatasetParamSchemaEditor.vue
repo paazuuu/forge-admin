@@ -11,14 +11,14 @@
       </div>
 
       <n-space align="center" :size="8">
-        <n-button type="primary" secondary @click="handleAddRow">
+        <n-button type="primary" secondary :disabled="readonly" @click="handleAddRow">
           <template #icon>
             <n-icon><AddOutline /></n-icon>
           </template>
           新增条件
         </n-button>
         <template v-if="!isTableMode">
-          <n-button secondary @click="handleImportSqlParams">
+          <n-button secondary :disabled="readonly" @click="handleImportSqlParams">
             从 SQL 识别
           </n-button>
           <n-tag size="small" :bordered="false" type="info">
@@ -58,6 +58,7 @@
             </div>
             <n-input
               v-model:value="row.paramName"
+              :disabled="readonly"
               clearable
               placeholder="如 startTime"
             />
@@ -69,6 +70,7 @@
             </div>
             <n-input
               v-model:value="row.label"
+              :disabled="readonly"
               clearable
               :placeholder="isTableMode ? '如 开始时间' : '如 创建开始时间'"
             />
@@ -80,6 +82,7 @@
             </div>
             <n-select
               v-model:value="row.dataType"
+              :disabled="readonly"
               :options="dataTypeOptions"
               clearable
               placeholder="选择参数类型"
@@ -92,6 +95,7 @@
             </div>
             <n-select
               :value="row.operator"
+              :disabled="readonly"
               :options="operatorOptions"
               placeholder="选择操作符"
               @update:value="value => handleOperatorChange(index, value)"
@@ -106,7 +110,7 @@
               :value="row.fieldName"
               :options="fieldOptions"
               :loading="fieldLoading"
-              :disabled="!tableReady"
+              :disabled="readonly || !tableReady"
               clearable
               filterable
               placeholder="选择数据表字段"
@@ -118,7 +122,7 @@
             <div class="editor-cell__label">
               必填
             </div>
-            <n-switch v-model:value="row.required" />
+            <n-switch v-model:value="row.required" :disabled="readonly" />
           </div>
 
           <div class="editor-cell">
@@ -127,6 +131,7 @@
             </div>
             <n-input
               :value="formatDefaultValue(row.defaultValue)"
+              :disabled="readonly"
               clearable
               :placeholder="getDefaultValuePlaceholder(row.dataType)"
               @update:value="value => handleDefaultValueChange(index, value)"
@@ -137,7 +142,7 @@
             <div class="editor-cell__label">
               操作
             </div>
-            <n-button quaternary circle type="error" @click="handleRemoveRow(index)">
+            <n-button quaternary circle type="error" :disabled="readonly" @click="handleRemoveRow(index)">
               <template #icon>
                 <n-icon><TrashOutline /></n-icon>
               </template>
@@ -159,7 +164,7 @@
     <div v-else class="editor-empty">
       <n-empty :description="emptyDescription">
         <template #extra>
-          <n-button type="primary" secondary @click="handleAddRow">
+          <n-button type="primary" secondary :disabled="readonly" @click="handleAddRow">
             新增第一个条件
           </n-button>
         </template>
@@ -201,6 +206,10 @@ const props = defineProps({
   sqlText: {
     type: String,
     default: '',
+  },
+  readonly: {
+    type: Boolean,
+    default: false,
   },
 })
 

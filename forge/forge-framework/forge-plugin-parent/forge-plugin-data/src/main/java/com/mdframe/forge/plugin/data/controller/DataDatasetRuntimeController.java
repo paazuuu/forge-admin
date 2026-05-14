@@ -4,6 +4,7 @@ import com.mdframe.forge.plugin.data.dto.DataDatasetQueryDTO;
 import com.mdframe.forge.plugin.data.entity.DataConnection;
 import com.mdframe.forge.plugin.data.entity.DataDataset;
 import com.mdframe.forge.plugin.data.entity.DataDatasetField;
+import com.mdframe.forge.plugin.data.enums.DatasetPublishStatusEnum;
 import com.mdframe.forge.plugin.data.service.DataConnectionService;
 import com.mdframe.forge.plugin.data.service.DataDatasetFieldService;
 import com.mdframe.forge.plugin.data.service.DataDatasetService;
@@ -41,6 +42,9 @@ public class DataDatasetRuntimeController {
         if (dataset == null) {
             throw new BusinessException("数据集不存在或已删除");
         }
+        if (!DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
+            throw new BusinessException("数据集未发布，暂不可使用");
+        }
         if (dataset.getStatus() != 1) {
             throw new BusinessException("数据集已禁用");
         }
@@ -61,6 +65,12 @@ public class DataDatasetRuntimeController {
         DataDataset dataset = datasetService.getById(id);
         if (dataset == null) {
             throw new BusinessException("数据集不存在或已删除");
+        }
+        if (!DatasetPublishStatusEnum.isPublished(dataset.getPublishStatus())) {
+            throw new BusinessException("数据集未发布，暂不可使用");
+        }
+        if (dataset.getStatus() != 1) {
+            throw new BusinessException("数据集已禁用");
         }
         List<DataDatasetField> fields = fieldService.listByDatasetId(id);
         DataDatasetMetadataVO metadata = new DataDatasetMetadataVO();

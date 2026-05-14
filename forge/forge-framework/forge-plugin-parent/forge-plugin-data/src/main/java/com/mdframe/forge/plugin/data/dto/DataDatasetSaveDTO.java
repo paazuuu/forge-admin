@@ -15,6 +15,8 @@ public class DataDatasetSaveDTO {
 
     private Long connectionId;
 
+    private Long categoryId;
+
     private String datasetType;
 
     private String tableName;

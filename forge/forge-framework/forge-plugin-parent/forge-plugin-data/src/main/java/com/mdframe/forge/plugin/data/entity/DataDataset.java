@@ -21,8 +21,17 @@ public class DataDataset extends TenantEntity {
 
     private Long connectionId;
 
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Long categoryId;
+
     @TableField(exist = false)
     private String connectionName;
+
+    @TableField(exist = false)
+    private String categoryCode;
+
+    @TableField(exist = false)
+    private String categoryName;
 
     private String datasetType;
 
@@ -45,6 +54,8 @@ public class DataDataset extends TenantEntity {
     private Integer cacheTtlSeconds;
 
     private Integer status;
+
+    private Integer publishStatus;
 
     private String description;
 

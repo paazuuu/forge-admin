@@ -11,6 +11,9 @@ VALUES (9100, 1, '数据资产', 0, 1, 600, '/data', NULL, 0, 0, 1, 1, NULL,
         NOW(), 1, NOW(), 1, 'pc'),
        (9102, 1, '数据集管理', 9100, 2, 2, '/data/dataset', 'data/dataset', 0, 0, 1, 1, 'data:dataset:list',
         'TableOutlined', NULL, NULL, 1, 0, NULL, '数据集管理菜单', 1,
+        NOW(), 1, NOW(), 1, 'pc'),
+       (9136, 1, '数据集分类管理', 9100, 2, 3, '/data/dataset-category', 'data/dataset-category', 0, 0, 1, 1, 'data:dataset:category:list',
+        'AppstoreOutlined', NULL, NULL, 1, 0, NULL, '数据集分类管理菜单', 1,
         NOW(), 1, NOW(), 1, 'pc');
 
 -- 按钮资源：数据连接管理
@@ -41,7 +44,24 @@ VALUES (9108, 1, '查询数据集列表', 9102, 3, 1, NULL, NULL, 0, 0, 1, 1, 'd
        (9111, 1, '删除数据集', 9102, 3, 4, NULL, NULL, 0, 0, 1, 1, 'data:dataset:remove', NULL, NULL, NULL, 0, 0, NULL,
         '数据集删除按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
        (9112, 1, '预览数据集', 9102, 3, 5, NULL, NULL, 0, 0, 1, 1, 'data:dataset:preview', NULL, NULL, NULL, 0, 0, NULL,
-        '数据集预览按钮', 1, NOW(), 1, NOW(), 1, 'pc');
+        '数据集预览按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9134, 1, '发布数据集', 9102, 3, 6, NULL, NULL, 0, 0, 1, 1, 'data:dataset:publish', NULL, NULL, NULL, 0, 0, NULL,
+        '数据集发布按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9135, 1, '下架数据集', 9102, 3, 7, NULL, NULL, 0, 0, 1, 1, 'data:dataset:offline', NULL, NULL, NULL, 0, 0, NULL,
+        '数据集下架按钮', 1, NOW(), 1, NOW(), 1, 'pc');
+
+-- 按钮资源：数据集分类管理
+INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
+                          is_public, menu_status, visible, perms, icon, api_method, api_url, keep_alive, always_show,
+                          redirect, remark, create_by, create_time, update_by, update_time, create_dept, client_code)
+VALUES (9137, 1, '查询数据集分类', 9136, 3, 1, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:query', NULL, NULL, NULL, 0, 0, NULL,
+        '数据集分类查询按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9138, 1, '新增数据集分类', 9136, 3, 2, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:add', NULL, NULL, NULL, 0, 0, NULL,
+        '数据集分类新增按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9139, 1, '修改数据集分类', 9136, 3, 3, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:edit', NULL, NULL, NULL, 0, 0, NULL,
+        '数据集分类修改按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9146, 1, '删除数据集分类', 9136, 3, 4, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:remove', NULL, NULL, NULL, 0, 0, NULL,
+        '数据集分类删除按钮', 1, NOW(), 1, NOW(), 1, 'pc');
 
 -- API资源：数据连接管理
 INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
@@ -89,7 +109,24 @@ VALUES (9123, 1, '数据集分页查询API', 9102, 4, 1, NULL, NULL, 0, 0, 1, 1,
        (9130, 1, '数据集字段保存API', 9102, 4, 8, NULL, NULL, 0, 0, 1, 1, 'data:dataset:save-fields', NULL, 'PUT', '/data/dataset/:id/fields', 0, 0, NULL,
         '数据集字段保存接口', 1, NOW(), 1, NOW(), 1, 'pc'),
        (9131, 1, '数据集预览API', 9102, 4, 9, NULL, NULL, 0, 0, 1, 1, 'data:dataset:preview', NULL, 'POST', '/data/dataset/:id/preview', 0, 0, NULL,
-        '数据集预览接口', 1, NOW(), 1, NOW(), 1, 'pc');
+        '数据集预览接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9140, 1, '数据集发布API', 9102, 4, 10, NULL, NULL, 0, 0, 1, 1, 'data:dataset:publish', NULL, 'POST', '/data/dataset/:id/publish', 0, 0, NULL,
+        '数据集发布接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9141, 1, '数据集下架API', 9102, 4, 11, NULL, NULL, 0, 0, 1, 1, 'data:dataset:offline', NULL, 'POST', '/data/dataset/:id/offline', 0, 0, NULL,
+        '数据集下架接口', 1, NOW(), 1, NOW(), 1, 'pc');
+
+-- API资源：数据集分类管理
+INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
+                          is_public, menu_status, visible, perms, icon, api_method, api_url, keep_alive, always_show,
+                          redirect, remark, create_by, create_time, update_by, update_time, create_dept, client_code)
+VALUES (9142, 1, '数据集分类树API', 9136, 4, 1, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:tree', NULL, 'GET', '/data/dataset/category/tree', 0, 0, NULL,
+        '数据集分类树接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9143, 1, '新增数据集分类API', 9136, 4, 2, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:add', NULL, 'POST', '/data/dataset/category', 0, 0, NULL,
+        '新增数据集分类接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9144, 1, '修改数据集分类API', 9136, 4, 3, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:edit', NULL, 'PUT', '/data/dataset/category', 0, 0, NULL,
+        '修改数据集分类接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9145, 1, '删除数据集分类API', 9136, 4, 4, NULL, NULL, 0, 0, 1, 1, 'data:dataset:category:remove', NULL, 'DELETE', '/data/dataset/category/:id', 0, 0, NULL,
+        '删除数据集分类接口', 1, NOW(), 1, NOW(), 1, 'pc');
 
 -- API资源：数据集运行时查询
 INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
@@ -135,4 +172,17 @@ VALUES (9100, 1, 1, 9100, NOW()),
        (9130, 1, 1, 9130, NOW()),
        (9131, 1, 1, 9131, NOW()),
        (9132, 1, 1, 9132, NOW()),
-       (9133, 1, 1, 9133, NOW());
+       (9133, 1, 1, 9133, NOW()),
+       (9134, 1, 1, 9134, NOW()),
+       (9135, 1, 1, 9135, NOW()),
+       (9136, 1, 1, 9136, NOW()),
+       (9137, 1, 1, 9137, NOW()),
+       (9138, 1, 1, 9138, NOW()),
+       (9139, 1, 1, 9139, NOW()),
+       (9140, 1, 1, 9140, NOW()),
+       (9141, 1, 1, 9141, NOW()),
+       (9142, 1, 1, 9142, NOW()),
+       (9143, 1, 1, 9143, NOW()),
+       (9144, 1, 1, 9144, NOW()),
+       (9145, 1, 1, 9145, NOW()),
+       (9146, 1, 1, 9146, NOW());

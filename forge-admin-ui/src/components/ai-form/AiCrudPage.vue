@@ -367,9 +367,10 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
       if (index > 0) {
         nodes.push(h('span', { class: 'table-action-divider' }, ' | '))
       }
+      const typeClass = action.type ? `type-${action.type}` : ''
       const isDanger = action.type === 'error' || action.type === 'danger'
       nodes.push(h('a', {
-        class: ['table-action-link', isDanger ? 'danger' : ''],
+        class: ['table-action-link', typeClass, isDanger ? 'danger' : ''],
         onClick: (e) => {
           e?.stopPropagation()
           e?.preventDefault()
@@ -394,9 +395,10 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
     if (index > 0) {
       nodes.push(h('span', { class: 'table-action-divider' }, ' | '))
     }
+    const typeClass = action.type ? `type-${action.type}` : ''
     const isDanger = action.type === 'error' || action.type === 'danger'
     nodes.push(h('a', {
-      class: ['table-action-link', isDanger ? 'danger' : ''],
+      class: ['table-action-link', typeClass, isDanger ? 'danger' : ''],
       onClick: (e) => {
         e?.stopPropagation()
         e?.preventDefault()
@@ -960,7 +962,7 @@ async function handleAdd() {
  * 编辑
  */
 async function handleEdit(row) {
-  modalTitle.value = '编辑'
+  modalTitle.value = row?.__modalTitle || '编辑'
   modalStatus.value = 'edit'
   currentRow.value = row
 
@@ -1376,6 +1378,11 @@ async function handleExport() {
  */
 defineExpose({
   /**
+   * 外部触发搜索
+   */
+  search: handleSearch,
+
+  /**
    * 刷新列表
    */
   refresh: loadList,
@@ -1601,6 +1608,33 @@ watch(() => props.publicQuery, () => {
 :deep(.table-action-link:hover) {
   background: var(--primary-50);
   color: var(--primary-700);
+}
+
+:deep(.table-action-link.type-info) {
+  color: var(--info-600);
+}
+
+:deep(.table-action-link.type-info:hover) {
+  background: var(--info-50);
+  color: var(--info-700);
+}
+
+:deep(.table-action-link.type-success) {
+  color: var(--success-600);
+}
+
+:deep(.table-action-link.type-success:hover) {
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+:deep(.table-action-link.type-warning) {
+  color: var(--warning-600);
+}
+
+:deep(.table-action-link.type-warning:hover) {
+  background: var(--warning-50);
+  color: var(--warning-700);
 }
 
 :deep(.table-action-link.danger) {

@@ -13,10 +13,14 @@ import java.util.List;
 public interface DataDatasetMapper extends BaseMapper<DataDataset> {
 
     IPage<DataDataset> selectDatasetPage(Page<DataDataset> page, @Param("tenantId") Long tenantId,
-        @Param("datasetName") String datasetName, @Param("connectionId") Long connectionId, 
-        @Param("datasetType") String datasetType, @Param("status") Integer status);
+        @Param("datasetName") String datasetName, @Param("connectionId") Long connectionId,
+        @Param("datasetType") String datasetType, @Param("status") Integer status,
+        @Param("publishStatus") Integer publishStatus, @Param("categoryId") Long categoryId,
+        @Param("uncategorized") Boolean uncategorized);
 
     List<DataDataset> selectDatasetList(@Param("tenantId") Long tenantId, @Param("connectionId") Long connectionId);
 
     DataDataset selectDatasetByCode(@Param("datasetCode") String datasetCode, @Param("tenantId") Long tenantId);
+
+    int selectDatasetCountByCategoryId(@Param("categoryId") Long categoryId, @Param("tenantId") Long tenantId);
 }

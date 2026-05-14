@@ -8,7 +8,10 @@
         <result column="dataset_code" property="datasetCode"/>
         <result column="dataset_name" property="datasetName"/>
         <result column="connection_id" property="connectionId"/>
+        <result column="category_id" property="categoryId"/>
         <result column="connection_name" property="connectionName"/>
+        <result column="category_code" property="categoryCode"/>
+        <result column="category_name" property="categoryName"/>
         <result column="dataset_type" property="datasetType"/>
         <result column="table_name" property="tableName"/>
         <result column="sql_text" property="sqlText"/>
@@ -19,6 +22,7 @@
         <result column="cache_enabled" property="cacheEnabled"/>
         <result column="cache_ttl_seconds" property="cacheTtlSeconds"/>
         <result column="status" property="status"/>
+        <result column="publish_status" property="publishStatus"/>
         <result column="description" property="description"/>
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
@@ -28,11 +32,14 @@
     </resultMap>
 
     <select id="selectDatasetPage" resultMap="BaseResultMap">
-        SELECT d.*, c.connection_name
+        SELECT d.*, c.connection_name, cat.category_code, cat.category_name
         FROM ai_report_data_dataset d
         LEFT JOIN ai_report_data_connection c
             ON d.connection_id = c.id
             AND c.tenant_id = #{tenantId}
+        LEFT JOIN ai_report_data_dataset_category cat
+            ON d.category_id = cat.id
+            AND cat.tenant_id = #{tenantId}
         WHERE d.tenant_id = #{tenantId}
         <if test="datasetName != null and datasetName != ''">
             AND d.dataset_name LIKE CONCAT('%', #{datasetName}, '%')
@@ -46,18 +53,35 @@
         <if test="status != null">
             AND d.status = #{status}
         </if>
+        <if test="publishStatus != null">
+            AND d.publish_status = #{publishStatus}
+        </if>
+        <if test="uncategorized != null and uncategorized">
+            AND d.category_id IS NULL
+        </if>
+        <if test="categoryId != null and (uncategorized == null or !uncategorized)">
+            AND (
+                d.category_id = #{categoryId}
+                OR cat.ancestors LIKE CONCAT('%/', #{categoryId}, '/%')
+            )
+        </if>
         ORDER BY d.create_time DESC
     </select>
 
     <select id="selectDatasetList" resultMap="BaseResultMap">
-        SELECT d.id, d.tenant_id, d.dataset_code, d.dataset_name, d.connection_id, c.connection_name,
-               d.dataset_type, d.table_name, d.max_rows, d.timeout_seconds, d.status, d.description
+        SELECT d.id, d.tenant_id, d.dataset_code, d.dataset_name, d.connection_id, d.category_id,
+               c.connection_name, cat.category_code, cat.category_name,
+               d.dataset_type, d.table_name, d.max_rows, d.timeout_seconds, d.status, d.publish_status, d.description
         FROM ai_report_data_dataset d
         LEFT JOIN ai_report_data_connection c
             ON d.connection_id = c.id
             AND c.tenant_id = #{tenantId}
+        LEFT JOIN ai_report_data_dataset_category cat
+            ON d.category_id = cat.id
+            AND cat.tenant_id = #{tenantId}
         WHERE d.tenant_id = #{tenantId}
           AND d.status = 1
+          AND d.publish_status = 1
         <if test="connectionId != null">
             AND d.connection_id = #{connectionId}
         </if>
@@ -70,6 +94,14 @@
         WHERE dataset_code = #{datasetCode}
           AND tenant_id = #{tenantId}
           AND status = 1
+          AND publish_status = 1
+    </select>
+
+    <select id="selectDatasetCountByCategoryId" resultType="int">
+        SELECT COUNT(1)
+        FROM ai_report_data_dataset
+        WHERE tenant_id = #{tenantId}
+          AND category_id = #{categoryId}
     </select>
 
 </mapper>

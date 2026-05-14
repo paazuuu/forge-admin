@@ -11,9 +11,10 @@ import removeNoMatch from 'vite-plugin-router-warn'
 import VueDevTools from 'vite-plugin-vue-devtools'
 import { pluginIcons, pluginPagePathes } from './build/plugin-isme'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const viteEnv = loadEnv(mode, process.cwd())
   const { VITE_HTTP_PORT, VITE_REQUEST_PREFIX, VITE_PUBLIC_PATH, VITE_HTTP_PROXY_TARGET, VITE_FLOW_PROXY_TARGET } = viteEnv
+  const isServe = command === 'serve'
 
   return {
     base: VITE_PUBLIC_PATH || '/',
@@ -29,10 +30,11 @@ export default defineConfig(({ mode }) => {
           },
         ],
         dts: false,
+        watch: isServe,
       }),
       Vue(),
       VueJsx(),
-      VueDevTools(),
+      ...(isServe ? [VueDevTools()] : []),
       Unocss(),
       AutoImport({
         imports: ['vue', 'vue-router'],
