@@ -8,6 +8,7 @@ import { fetchChartComponent, fetchConfigComponent, createComponent } from '@/pa
 import { CreateComponentType, CreateComponentGroupType } from '@/packages/index.d'
 import { BaseEvent, EventLife } from '@/enums/eventEnum'
 import { PublicGroupConfigClass } from '@/packages/public/publicConfig'
+import { normalizeComponentPageActions } from '@/utils/reportPages'
 import merge from 'lodash/merge'
 
 /**
@@ -49,9 +50,12 @@ const componentVersionUpdatePolyfill = (newObject: any, sources: any) => {
             [EventLife.VNODE_MOUNTED]: undefined,
             [EventLife.VNODE_BEFORE_MOUNT]: undefined
           },
-          interactEvents: []
+          interactEvents: [],
+          actions: []
         }
       }
+      normalizeComponentPageActions(sources)
+      normalizeComponentPageActions(newObject)
       return newObject
     }
   } catch (error) {
@@ -68,6 +72,8 @@ const componentVersionUpdatePolyfill = (newObject: any, sources: any) => {
 const componentMerge = (newObject: any, sources: any, notComponent = false) => {
   // 处理组件补丁
   componentVersionUpdatePolyfill(newObject, sources)
+  normalizeComponentPageActions(newObject)
+  normalizeComponentPageActions(sources)
 
   // 非组件不处理
   if (notComponent) return merge(newObject, sources)

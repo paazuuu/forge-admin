@@ -1,6 +1,6 @@
 import { BaseEvent, EventLife, InteractEvents, InteractEventOn, InteractActionsType } from '@/enums/eventEnum'
 import type { GlobalThemeJsonType } from '@/settings/chartThemes/index'
-import type { RequestConfigType } from '@/store/modules/chartEditStore/chartEditStore.d'
+import type { ComponentAction, RequestConfigType } from '@/store/modules/chartEditStore/chartEditStore.d'
 import type { ChatCategoryEnum, ChatCategoryEnumName } from '@/packages/components/VChart/index.d'
 
 export enum ChartFrameEnum {
@@ -155,6 +155,7 @@ export interface PublicConfigType {
       [InteractEvents.INTERACT_COMPONENT_ID]: string | undefined
       [InteractEvents.INTERACT_FN]: { [name: string]: string }
     }[]
+    actions?: ComponentAction[]
   }
 }
 

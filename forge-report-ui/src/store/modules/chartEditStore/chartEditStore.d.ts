@@ -9,6 +9,7 @@ import {
   RequestBodyEnum,
   RequestParamsObjType
 } from '@/enums/httpEnum'
+import { BaseEvent } from '@/enums/eventEnum'
 import { PreviewScaleEnum } from '@/enums/styleEnum'
 import type { ChartColorsNameType, CustomColorsType, GlobalThemeJsonType } from '@/settings/chartThemes/index'
 
@@ -281,3 +282,46 @@ export interface ChartEditStorage {
   [ChartEditStoreEnum.REQUEST_GLOBAL_CONFIG]: RequestGlobalConfigType
   [ChartEditStoreEnum.COMPONENT_LIST]: Array<CreateComponentType | CreateComponentGroupType>
 }
+
+export type ReportPageTransition = 'none' | 'fade' | 'slide-left' | 'slide-right' | 'zoom'
+
+export type ComponentActionTrigger = BaseEvent.ON_CLICK | BaseEvent.ON_DBL_CLICK
+
+export type ComponentActionType = 'goPage'
+
+export type DrillParamSource = 'static' | 'componentField' | 'pageContext' | 'userContext'
+
+export interface DrillParamBinding {
+  id: string
+  targetKey: string
+  source: DrillParamSource
+  sourceKey?: string
+  value?: string | number | boolean | null
+  fallbackValue?: string | number | boolean | null
+}
+
+export interface ComponentAction {
+  id: string
+  trigger: ComponentActionTrigger
+  type: ComponentActionType
+  targetPageId: string
+  transition?: ReportPageTransition
+  params?: DrillParamBinding[]
+}
+
+export interface ReportCanvasPage extends ChartEditStorage {
+  id: string
+  name: string
+  sort: number
+}
+
+export interface ReportMultiPageStorage {
+  version: 2
+  homePageId: string
+  activePageId: string
+  pageTransition?: ReportPageTransition
+  pages: ReportCanvasPage[]
+  sharedRequestGlobalConfig?: Partial<RequestGlobalConfigType>
+}
+
+export type ReportProjectStorage = ChartEditStorage | ReportMultiPageStorage
