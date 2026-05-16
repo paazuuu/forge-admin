@@ -43,7 +43,6 @@
 import { ref, nextTick, computed, watch, inject } from 'vue'
 import { setTitle } from '@/utils'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
-import { EditCanvasConfigEnum } from '@/store/modules/chartEditStore/chartEditStore.d'
 import { icon } from '@/plugins'
 
 const { ConstructIcon, CreateIcon } = icon.ionicons5
@@ -60,10 +59,12 @@ const lastSaveTime = computed(() => autoSave.lastSaveTime.value)
 const focus = ref<boolean>(false)
 const inputInstRef = ref(null)
 
-const title = ref<string>(chartEditStore.getEditCanvasConfig.projectName || '')
+const title = ref<string>(chartEditStore.getProjectName || '')
+
+const normalizeTitle = (value?: string) => (value || '').replace(/\s/g, '').trim()
 
 watch(
-  () => chartEditStore.getEditCanvasConfig.projectName,
+  () => chartEditStore.getProjectName,
   newValue => {
     title.value = newValue || ''
   },
@@ -71,13 +72,16 @@ watch(
 )
 
 const comTitle = computed(() => {
-  // eslint-disable-next-line vue/no-side-effects-in-computed-properties
-  title.value = title.value.replace(/\s/g, '')
-  const newTitle = title.value.length ? title.value : '新项目'
+  const newTitle = normalizeTitle(title.value) || '新项目'
   setTitle(`工作空间-${newTitle}`)
-  chartEditStore.setEditCanvasConfig(EditCanvasConfigEnum.PROJECT_NAME, newTitle)
   return newTitle
 })
+
+const commitTitle = () => {
+  const newTitle = normalizeTitle(title.value) || '新项目'
+  title.value = newTitle
+  chartEditStore.setProjectName(newTitle)
+}
 
 const handleFocus = () => {
   focus.value = true
@@ -87,6 +91,7 @@ const handleFocus = () => {
 }
 
 const handleBlur = () => {
+  commitTitle()
   focus.value = false
 }
 </script>

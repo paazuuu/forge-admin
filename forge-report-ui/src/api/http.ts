@@ -8,7 +8,8 @@ import {
   RequestParamsObjType
 } from '@/enums/httpEnum'
 import type { RequestGlobalConfigType, RequestConfigType } from '@/store/modules/chartEditStore/chartEditStore.d'
-import { DynamicParamComponent, resolveDynamicRequestParams } from '@/utils/requestDynamicParams'
+import { resolveDynamicRequestParams } from '@/utils/requestDynamicParams'
+import type { DynamicPageContext, DynamicParamComponent } from '@/utils/requestDynamicParams'
 import { queryDataDataset } from './data/dataset'
 
 export const get = (url: string, params?: object) => {
@@ -135,7 +136,8 @@ export const translateStr = (target: string | object) => {
 export const customizeHttp = async (
   targetParams: RequestConfigType,
   globalParams: RequestGlobalConfigType,
-  componentList: DynamicParamComponent[] = []
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
 ) => {
   if (!targetParams || !globalParams) {
     return
@@ -149,12 +151,12 @@ export const customizeHttp = async (
   
   // 数据集模式
   if (targetParams.requestDataType === RequestDataTypeEnum.DATASET) {
-    return datasetRequest(targetParams, componentList)
+    return datasetRequest(targetParams, componentList, pageContext)
   }
   
   // 外部接口：通过代理转发
   if (requestSource === 'external' && targetParams.externalApiId) {
-    return externalProxyRequest(targetParams, componentList)
+    return externalProxyRequest(targetParams, componentList, pageContext)
   }
 
   // 内部接口：原有逻辑
@@ -194,7 +196,7 @@ export const customizeHttp = async (
     ...targetRequestParams.Header
   }
   headers = translateStr(headers)
-  const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList)
+  const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList, pageContext)
   headers = {
     ...headers,
     ...dynamicParams.Header
@@ -291,7 +293,8 @@ export const customizeHttp = async (
  */
 const externalProxyRequest = async (
   targetParams: RequestConfigType,
-  componentList: DynamicParamComponent[] = []
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
 ) => {
   const { externalApiId } = targetParams
   
@@ -301,7 +304,7 @@ const externalProxyRequest = async (
   }
 
   try {
-    const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList)
+    const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList, pageContext)
     const proxyParams = mergeDefinedObjects(
       toPlainObject(dynamicParams.Params),
       toPlainObject(dynamicParams.Header),
@@ -328,7 +331,8 @@ const externalProxyRequest = async (
  */
 const datasetRequest = async (
   targetParams: RequestConfigType,
-  componentList: DynamicParamComponent[] = []
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
 ) => {
   const {
     datasetId,
@@ -346,7 +350,7 @@ const datasetRequest = async (
   }
 
   try {
-    const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList)
+    const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList, pageContext)
     const datasetParams = mergeDefinedObjects(
       toPlainObject(baseDatasetParams),
       toPlainObject(dynamicParams.Params),

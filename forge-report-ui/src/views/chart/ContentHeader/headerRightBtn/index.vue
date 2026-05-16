@@ -50,9 +50,13 @@ const syncProjectStorageToSession = (id: string, storageInfo: ReturnType<typeof 
   setSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST, sessionStorageInfo)
 }
 
-const buildPreviewUrl = (path: string, id: string, pageId?: string) => {
+const buildPreviewUrl = (path: string, id: string, pageId?: string, modalPageId?: string) => {
   const baseUrl = `${path}/${id}`
-  return pageId ? `${baseUrl}?pageId=${encodeURIComponent(pageId)}` : baseUrl
+  const searchParams = new URLSearchParams()
+  if (pageId) searchParams.set('pageId', pageId)
+  if (modalPageId) searchParams.set('modalPageId', modalPageId)
+  const query = searchParams.toString()
+  return query ? `${baseUrl}?${query}` : baseUrl
 }
 
 const assertProjectComponentDataSaved = async (id: string, expectedComponentData?: string) => {
@@ -109,11 +113,15 @@ const previewHandle = () => {
 const sendHandle = async () => {
   const { id } = routerParamsInfo.params
   const previewId = typeof id === 'string' ? id : id[0]
-  const storageInfo = chartEditStore.getProjectStorageInfo()
 
   try {
     window['$message'].loading('正在生成项目截图...')
     console.log('[Publish] 开始发布, projectId:', previewId)
+    const currentProject = (await getProjectDetailApi(previewId))?.data
+    if (!chartEditStore.getProjectName && currentProject?.projectName) {
+      chartEditStore.setProjectName(currentProject.projectName)
+    }
+    const storageInfo = chartEditStore.getProjectStorageInfo()
 
     // 尝试生成截图 - 使用正确的画布元素选择器
     let indexImg: string | undefined = undefined
@@ -127,7 +135,7 @@ const sendHandle = async () => {
     }
 
     // 构建项目数据，包含截图
-    const projectPayload = buildProjectPayload(previewId, storageInfo, indexImg)
+    const projectPayload = buildProjectPayload(previewId, storageInfo, indexImg, currentProject)
     console.log('[Publish] 项目数据:', projectPayload)
 
     await updateProjectApi(projectPayload)

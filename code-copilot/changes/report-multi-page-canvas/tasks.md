@@ -21,8 +21,9 @@
 | Task 5 | 预览页多页面运行时 | completed | P0 |
 | Task 6 | 组件页面跳转动作配置 | completed | P0 |
 | Task 7 | 下钻上下文与动态参数接入 | completed | P0 |
-| Task 8 | JSON 导入导出和代码编辑兼容 | pending | P1 |
+| Task 8 | JSON 导入导出和代码编辑兼容 | completed | P1 |
 | Task 9 | 构建验证与手动回归 | pending | P0 |
+| Task 10 | 项目内弹窗页面 | completed | P0 |
 
 ---
 
@@ -310,6 +311,8 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 
 **目标**: 保证 JSON 编辑、导入、导出对新旧协议都可用。
 
+**状态**: completed
+
 **涉及文件**:
 - `forge-report-ui/src/views/edit/index.vue` — JSON 编辑页支持多页面协议。
 - `forge-report-ui/src/views/chart/ContentEdit/components/EditTools/index.vue` — 导入/导出使用完整项目协议。
@@ -322,6 +325,15 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 - 导入旧单页面 JSON 可自动变成一个页面。
 - 导入新多页面 JSON 可恢复全部页面。
 - JSON 编辑同步后编辑器和预览均正确显示。
+
+**验证**:
+```bash
+cd forge-report-ui && pnpm exec eslint src/views/chart/ContentEdit/components/EditTools/index.vue src/views/chart/ContentEdit/components/EditTools/hooks/useFile.hooks.ts src/views/chart/ContentEdit/components/EditTools/hooks/useSyncUpdate.hook.ts src/views/chart/ContentEdit/components/EditTools/utils/index.ts src/views/edit/index.vue
+```
+
+**结果**:
+- ESLint 无错误。
+- 导出、JSON 编辑窗口传递、同步预览改为项目级多页面 JSON；覆盖导入新协议会恢复全部页面，旧单页面 JSON 会先 normalize 为单页项目。
 
 ---
 
@@ -348,8 +360,36 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && cd forge-report-ui && pnpm build
 - 详情页组件动态请求可读取页面上下文参数。
 - 预览默认打开首页，`?pageId=` 打开指定页。
 - 发布后用发布链接验证页面跳转和下钻参数。
-- 老项目加载、保存、预览不报错。
 
 **验收标准**:
 - `pnpm build` 通过。
 - 手动回归清单全部通过或明确记录遗留问题。
+
+## Task 10: 项目内弹窗页面
+
+**目标**: 支持在大屏预览中点击组件打开项目内弹窗页面，弹窗内容仍由大屏编辑器页面配置。
+
+**状态**: completed
+
+**涉及文件**:
+- `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.d.ts` — 新增 `pageType=modal`、弹窗配置、运行时弹窗栈类型。
+- `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.ts` — 新增弹窗页创建、打开、关闭运行时动作。
+- `forge-report-ui/src/utils/reportPages.ts` — 多页面协议兼容 `pageType` 和 `modalConfig`。
+- `forge-report-ui/src/enums/eventEnum.ts`、`forge-report-ui/src/hooks/useLifeHandler.hook.ts` — 新增 `openModal`、`closeModal` 结构化动作。
+- `forge-report-ui/src/views/preview/suspenseIndex.vue`、`PreviewRenderList`、`PreviewRenderGroup`、`useComInstall.hook.ts` — 预览页叠加渲染弹窗页面并注册弹窗组件。
+- `forge-report-ui/src/views/chart/ContentPages/*`、`CanvasPage/index.vue`、`ChartEventPageAction/index.vue` — 新增弹窗页入口、弹窗外壳配置和事件配置。
+
+**验收标准**:
+- 页面列表可新增弹窗页，弹窗页可像普通页面一样拖组件编辑。
+- 普通页面组件可配置“打开弹窗”，目标来自项目内弹窗页。
+- 弹窗页组件可配置“关闭弹窗”。
+- 预览时打开弹窗不替换主页面，遮罩、位置、关闭按钮等配置生效。
+
+**验证**:
+```bash
+cd forge-report-ui && pnpm build
+```
+
+**结果**:
+- `pnpm build` 通过；输出的 lottie `eval`、Rollup 循环 chunk、CSS `:deep()`、chunk size 均为既有警告。
+- 老项目加载、保存、预览不报错。

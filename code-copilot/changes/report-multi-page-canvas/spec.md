@@ -46,6 +46,7 @@
 - [ ] 页面跳转支持携带固定值、组件数据字段、当前页面上下文参数。
 - [ ] 目标页面可读取下钻上下文，用于动态请求参数注入。
 - [ ] 页面切换支持基础过渡动画：无、淡入、左滑、右滑、缩放。
+- [ ] 项目内支持弹窗页面 `pageType=modal`，组件动作可打开/关闭弹窗，弹窗内容仍由大屏编辑器页面渲染。
 
 ## 4. 业务规则
 - 一个项目至少保留一个页面，最后一个页面不能删除。
@@ -54,6 +55,8 @@
 - 切换页面前必须先把当前 `editCanvasConfig`、`requestGlobalConfig`、`componentList` 写回当前页面。
 - 删除页面时，如存在组件动作跳转到该页面，需要提示用户确认并清理失效动作。
 - 跳转动作仅允许跳转项目内页面，不允许填写外部 URL。
+- 弹窗动作仅允许打开项目内 `pageType=modal` 页面，不能打开外部 URL。
+- 弹窗页面不替换当前主页面，运行时以弹层方式叠加渲染，并支持遮罩、关闭按钮、关闭行为和位置配置。
 - 下钻参数只保存结构化配置，不执行任意字符串脚本。
 - 旧项目没有 `pages` 字段时，自动包装成一个默认页面，不改变旧 JSON 读取能力。
 
@@ -74,6 +77,26 @@
       "id": "page-home",
       "name": "首页",
       "sort": 1,
+      "pageType": "page",
+      "editCanvasConfig": {},
+      "requestGlobalConfig": {},
+      "componentList": []
+    },
+    {
+      "id": "page-modal",
+      "name": "详情弹窗",
+      "sort": 2,
+      "pageType": "modal",
+      "modalConfig": {
+        "width": 720,
+        "height": 420,
+        "placement": "center",
+        "showMask": true,
+        "maskOpacity": 0.58,
+        "maskClosable": true,
+        "showClose": true,
+        "borderRadius": 8
+      },
       "editCanvasConfig": {},
       "requestGlobalConfig": {},
       "componentList": []
@@ -162,7 +185,8 @@
 | Task 5 | done | `forge-report-ui/src/views/preview/suspenseIndex.vue`, `forge-report-ui/src/views/preview/utils/storage.ts`, `forge-report-ui/src/hooks/useChartDataPondFetch.hook.ts`, `forge-report-ui/src/utils/reportPages.ts` | 预览默认解析首页，支持 `?pageId=`，提供运行态切页方法和页面转场；切页重建渲染列表并清理旧数据池 watcher/轮询；`pnpm build` 通过 |
 | Task 6 | done | `forge-report-ui/src/enums/eventEnum.ts`, `forge-report-ui/src/hooks/useLifeHandler.hook.ts`, `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.ts`, `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.d.ts`, `forge-report-ui/src/views/chart/ContentConfigurations/components/ChartEvent/index.vue`, `forge-report-ui/src/views/chart/ContentConfigurations/components/ChartEvent/components/ChartEventPageAction/index.vue`, `forge-report-ui/src/views/chart/ContentConfigurations/components/ChartEvent/components/ChartEventPageAction/index.ts`, `forge-report-ui/src/views/preview/suspenseIndex.vue`, `forge-report-ui/src/views/preview/utils/storage.ts` | 事件配置新增页面跳转动作面板，支持点击/双击跳转项目内页面并可选转场；运行时合并旧基础事件 JS 与结构化动作；`pnpm build` 通过 |
 | Task 7 | done | `forge-report-ui/src/utils/reportDrill.ts`, `forge-report-ui/src/utils/requestDynamicParams.ts`, `forge-report-ui/src/hooks/useLifeHandler.hook.ts`, `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.ts`, `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.d.ts`, `forge-report-ui/src/views/chart/ContentConfigurations/components/ChartEvent/components/ChartEventPageAction/index.vue`, `forge-report-ui/src/views/chart/ContentConfigurations/components/ChartData/components/ChartDataRequest/components/RequestTargetConfig/index.vue` | 跳转动作支持固定值、组件字段、页面上下文参数绑定；运行时合成 `pageContext`；动态请求参数新增页面上下文来源；`pnpm build` 通过 |
-| Task 8 | pending | - | 动画与回归 |
+| Task 10 | done | `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.d.ts`, `forge-report-ui/src/store/modules/chartEditStore/chartEditStore.ts`, `forge-report-ui/src/utils/reportPages.ts`, `forge-report-ui/src/enums/eventEnum.ts`, `forge-report-ui/src/hooks/useLifeHandler.hook.ts`, `forge-report-ui/src/views/preview/suspenseIndex.vue`, `forge-report-ui/src/views/preview/components/PreviewRenderList/index.vue`, `forge-report-ui/src/views/preview/components/PreviewRenderGroup/index.vue`, `forge-report-ui/src/views/preview/hooks/useComInstall.hook.ts`, `forge-report-ui/src/views/preview/utils/storage.ts`, `forge-report-ui/src/views/chart/ContentPages/index.vue`, `forge-report-ui/src/views/chart/ContentPages/components/PageListItem.vue`, `forge-report-ui/src/views/chart/ContentConfigurations/components/CanvasPage/index.vue`, `forge-report-ui/src/views/chart/ContentConfigurations/components/ChartEvent/components/ChartEventPageAction/index.vue` | 新增项目内弹窗页面 `pageType=modal`，支持新增弹窗页、配置弹窗外壳、组件动作打开/关闭弹窗，预览运行时主页面与弹窗页叠加渲染；`pnpm build` 通过 |
+| Task 8 | done | `forge-report-ui/src/views/edit/index.vue`, `forge-report-ui/src/views/chart/ContentEdit/components/EditTools/index.vue`, `forge-report-ui/src/views/chart/ContentEdit/components/EditTools/utils/index.ts`, `forge-report-ui/src/views/chart/ContentEdit/components/EditTools/hooks/useFile.hooks.ts`, `forge-report-ui/src/views/chart/ContentEdit/components/EditTools/hooks/useSyncUpdate.hook.ts` | JSON 编辑、导入、导出、同步预览统一使用项目级多页面 JSON；旧单页 JSON 经 `normalizeProjectStorage()` 兼容；目标文件 ESLint 通过 |
 
 ## 12. 审查结论
 待实现后审查。

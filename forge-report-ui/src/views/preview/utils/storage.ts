@@ -6,6 +6,7 @@ import { normalizeProjectStorage, resolveInitialPreviewPage } from '@/utils/repo
 import type { ChartEditStorage, ReportPageTransition, ReportProjectStorage } from '@/store/modules/chartEditStore/chartEditStore.d'
 
 const PAGE_ID_QUERY_KEY = 'pageId'
+const MODAL_PAGE_ID_QUERY_KEY = 'modalPageId'
 
 export interface ChartEditStorageType extends ChartEditStorage {
   id: string
@@ -28,19 +29,21 @@ const parseQueryValue = (value: string): unknown => {
   }
 }
 
-const getHashInfo = () => {
+export const getPreviewHashInfo = () => {
   const [path, query = ''] = document.location.hash.split('?')
   const toPathArray = path.split('/')
   const searchParams = new URLSearchParams(query)
   const pageContext: Record<string, unknown> = {}
   searchParams.forEach((value, key) => {
     if (key === PAGE_ID_QUERY_KEY) return
+    if (key === MODAL_PAGE_ID_QUERY_KEY) return
     pageContext[key] = parseQueryValue(value)
   })
   return {
     hashPath: path || '#/',
     id: (toPathArray && toPathArray[toPathArray.length - 1]) || '',
     pageId: searchParams.get(PAGE_ID_QUERY_KEY) || undefined,
+    modalPageId: searchParams.get(MODAL_PAGE_ID_QUERY_KEY) || undefined,
     pageContext
   }
 }
@@ -53,13 +56,21 @@ const applyStorage = (storage: ReportProjectStorage, id: string, pageId?: string
   return { ...pageStorage, id }
 }
 
+const applyPreviewRuntime = (
+  context: Record<string, any>
+) => {
+  const chartEditStore = useChartEditStore()
+  chartEditStore.setRuntimePageContext(context)
+  chartEditStore.closeAllModals()
+}
+
 const updatePreviewUrl = (
   pageId: string,
   context: Record<string, any> = {},
   replace = false
 ) => {
   if (typeof window === 'undefined') return
-  const { hashPath } = getHashInfo()
+  const { hashPath } = getPreviewHashInfo()
   const searchParams = new URLSearchParams()
   searchParams.set(PAGE_ID_QUERY_KEY, pageId)
   Object.entries(context || {}).forEach(([key, value]) => {
@@ -78,6 +89,7 @@ export const switchPreviewPage = async (
   transition?: ReportPageTransition
 ) => {
   const chartEditStore = useChartEditStore()
+  chartEditStore.closeAllModals()
   chartEditStore.setRuntimePageTransition(transition || '')
   chartEditStore.setRuntimePageContext(context)
   const nextStorage = chartEditStore.switchPage(pageId)
@@ -92,7 +104,7 @@ export const switchPreviewPage = async (
 }
 
 export const restorePreviewPageFromUrl = async () => {
-  const { pageId, pageContext } = getHashInfo()
+  const { pageId, modalPageId, pageContext } = getPreviewHashInfo()
   const chartEditStore = useChartEditStore()
   const targetPageId = pageId && chartEditStore.getProjectPages.some(page => page.id === pageId)
     ? pageId
@@ -100,22 +112,24 @@ export const restorePreviewPageFromUrl = async () => {
 
   chartEditStore.setRuntimePageTransition('')
   chartEditStore.setRuntimePageContext(pageContext)
+  chartEditStore.closeAllModals()
   if (targetPageId && targetPageId !== chartEditStore.getActivePageId) {
     chartEditStore.switchPage(targetPageId)
   }
+  return { modalPageId, pageContext }
 }
 
 // 根据路由 id 获取存储数据的信息
 // 优先从 sessionStorage 读取，如果没有，尝试从 localStorage 读取，最后从后端读取
 export const getSessionStorageInfo = async () => {
-  const { id, pageId, pageContext } = getHashInfo()
+  const { id, pageId, pageContext } = getPreviewHashInfo()
 
   const sessionList: Array<ChartEditStorageType | (ReportProjectStorage & { id: string })> = getSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST)
   if (sessionList) {
     for (let i = 0; i < sessionList.length; i++) {
       if (id.toString() === String(sessionList[i].id)) {
         const storage = applyStorage(sessionList[i], String(id), pageId)
-        useChartEditStore().setRuntimePageContext(pageContext)
+        applyPreviewRuntime(pageContext)
         return storage
       }
     }
@@ -126,7 +140,7 @@ export const getSessionStorageInfo = async () => {
     for (let i = 0; i < localList.length; i++) {
       if (id.toString() === String(localList[i].id)) {
         const storage = applyStorage(localList[i], String(id), pageId)
-        useChartEditStore().setRuntimePageContext(pageContext)
+        applyPreviewRuntime(pageContext)
         return storage
       }
     }
@@ -137,7 +151,7 @@ export const getSessionStorageInfo = async () => {
   if (project?.componentData) {
     const parsed = JSON.parse(project.componentData)
     const storage = applyStorage(parsed, String(id), pageId)
-    useChartEditStore().setRuntimePageContext(pageContext)
+    applyPreviewRuntime(pageContext)
     return storage
   }
 

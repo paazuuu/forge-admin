@@ -20,8 +20,10 @@ import { MenuEnum } from '@/enums/editPageEnum'
 import { getUUID, loadingStart, loadingFinish, loadingError, isString, isArray } from '@/utils'
 import {
   clonePageWithNewIds,
+  createDefaultModalPage,
   createDefaultPage,
   extractPageStorage,
+  normalizeModalConfig,
   normalizeProjectStorage,
   removeInvalidPageActions,
   updatePageStorage
@@ -38,6 +40,7 @@ import {
   EditCanvasConfigType,
   ReportCanvasPage,
   ReportMultiPageStorage,
+  ReportModalConfig,
   ReportPageTransition
 } from './chartEditStore.d'
 
@@ -184,7 +187,9 @@ export const useChartEditStore = defineStore({
     pageTransition: 'fade',
     runtimePageTransition: '',
     runtimePageContext: {},
-    sharedRequestGlobalConfig: {}
+    modalStack: [],
+    sharedRequestGlobalConfig: {},
+    projectName: undefined
   }),
   getters: {
     getMousePosition(): MousePositionType {
@@ -228,6 +233,12 @@ export const useChartEditStore = defineStore({
     },
     getRuntimePageContext(): Record<string, any> {
       return this.runtimePageContext
+    },
+    getModalStack() {
+      return this.modalStack
+    },
+    getProjectName(): string | undefined {
+      return this.projectName
     }
   },
   actions: {
@@ -244,6 +255,7 @@ export const useChartEditStore = defineStore({
       this.flushCurrentPage()
       const project = normalizeProjectStorage({
         version: 2,
+        projectName: this.projectName,
         homePageId: this.homePageId,
         activePageId: this.activePageId,
         pageTransition: this.pageTransition,
@@ -255,6 +267,7 @@ export const useChartEditStore = defineStore({
       this.activePageId = project.activePageId
       this.pageTransition = project.pageTransition || 'fade'
       this.sharedRequestGlobalConfig = project.sharedRequestGlobalConfig || {}
+      this.projectName = project.projectName || this.projectName
       return project
     },
     // * 当前 store 写入单页面画布
@@ -277,6 +290,7 @@ export const useChartEditStore = defineStore({
       this.pageTransition = project.pageTransition || 'fade'
       this.runtimePageTransition = ''
       this.sharedRequestGlobalConfig = project.sharedRequestGlobalConfig || {}
+      this.projectName = project.projectName
 
       const pageStorage = extractPageStorage({ ...project, activePageId }, activePageId)
       this.applyPageStorage(pageStorage)
@@ -298,6 +312,7 @@ export const useChartEditStore = defineStore({
       const project = updatePageStorage(
         {
           version: 2,
+          projectName: this.projectName,
           homePageId: this.homePageId || this.activePageId,
           activePageId: this.activePageId,
           pageTransition: this.pageTransition,
@@ -315,6 +330,7 @@ export const useChartEditStore = defineStore({
       this.flushCurrentPage()
       const project = normalizeProjectStorage({
         version: 2,
+        projectName: this.projectName,
         homePageId: this.homePageId,
         activePageId: pageId,
         pageTransition: this.pageTransition,
@@ -332,9 +348,9 @@ export const useChartEditStore = defineStore({
       return pageStorage
     },
     // * 创建空白页面并切换过去
-    createPage(name = '新页面'): string {
+    createPage(name = '新页面', pageType: 'page' | 'modal' = 'page'): string {
       this.flushCurrentPage()
-      const page = createDefaultPage(name)
+      const page = pageType === 'modal' ? createDefaultModalPage(name) : createDefaultPage(name)
       page.sort = Math.max(0, ...this.projectPages.map(item => item.sort || 0)) + 1
       this.projectPages.push(page)
       this.switchPage(page.id)
@@ -420,6 +436,50 @@ export const useChartEditStore = defineStore({
         const runtimeWindow = window as unknown as { reportContext?: Record<string, any> }
         runtimeWindow.reportContext = this.runtimePageContext
       }
+    },
+    // * 打开项目内弹窗页面，不替换当前主页面
+    openModal(pageId: string, context: Record<string, any> = {}, config?: Partial<ReportModalConfig>): void {
+      this.flushCurrentPage()
+      const project = normalizeProjectStorage({
+        version: 2,
+        projectName: this.projectName,
+        homePageId: this.homePageId,
+        activePageId: this.activePageId,
+        pageTransition: this.pageTransition,
+        pages: cloneDeep(toRaw(this.projectPages)),
+        sharedRequestGlobalConfig: cloneDeep(toRaw(this.sharedRequestGlobalConfig))
+      })
+      const page = project.pages.find(item => item.id === pageId)
+      if (!page) return
+      const modalConfig = normalizeModalConfig({
+        ...(page.modalConfig || {}),
+        ...(config || {})
+      })
+      this.modalStack.push({
+        id: getUUID(),
+        pageId,
+        pageName: page.name,
+        context: cloneDeep(context || {}),
+        pageStorage: extractPageStorage(project, pageId),
+        modalConfig
+      })
+    },
+    // * 关闭项目内弹窗页面
+    closeModal(modalId?: string): void {
+      if (!this.modalStack.length) return
+      if (modalId) {
+        this.modalStack = this.modalStack.filter(item => item.id !== modalId)
+      } else {
+        this.modalStack.pop()
+      }
+    },
+    closeAllModals(): void {
+      this.modalStack = []
+    },
+    // * 设置项目级名称，避免多页面切换时用页面名称覆盖项目表名称
+    setProjectName(name?: string): void {
+      const nextName = typeof name === 'string' ? name.trim() : ''
+      this.projectName = nextName || undefined
     },
     // * 获取针对 componentList 顺序排过序的 selectId
     getSelectIdSortList(ids?: string[]): string[] {

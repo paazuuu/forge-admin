@@ -12,9 +12,13 @@ const components: { [K in string]?: any } = {}
 export const npmPkgs = { echarts }
 
 // 组件事件处理 hook
-export const useLifeHandler = (chartConfig: CreateComponentType | CreateComponentGroupType) => {
+export const useLifeHandler = (
+  chartConfig: CreateComponentType | CreateComponentGroupType,
+  pageContext?: Record<string, any>
+) => {
   if (!chartConfig.events) return {}
   const chartEditStore = useChartEditStore()
+  const runtimePageContext = pageContext || chartEditStore.getRuntimePageContext
 
   // 处理基础事件
   const baseEvent: { [key: string]: any } = {}
@@ -22,7 +26,7 @@ export const useLifeHandler = (chartConfig: CreateComponentType | CreateComponen
     const fnStr: string | undefined = (chartConfig.events.baseEvent as any)[key]
     const actions = (chartConfig.events.actions || []).filter(action => action.trigger === key)
     if (fnStr || actions.length) {
-      baseEvent[key] = generateBaseFunc(fnStr, actions, chartConfig, chartEditStore.getRuntimePageContext)
+      baseEvent[key] = generateBaseFunc(fnStr, actions, chartConfig, runtimePageContext)
     }
   }
 
@@ -72,6 +76,14 @@ export const useLifeHandler = (chartConfig: CreateComponentType | CreateComponen
         if (action.type === ComponentActionType.GO_PAGE && action.targetPageId) {
           const drillParams = resolveDrillParams(action.params || [], { mouseEvent, component: chartConfig }, pageContext)
           await switchPreviewPage(action.targetPageId, { ...pageContext, ...drillParams }, action.transition)
+        }
+        if (action.type === ComponentActionType.OPEN_MODAL && action.targetPageId) {
+          const chartEditStore = useChartEditStore()
+          const drillParams = resolveDrillParams(action.params || [], { mouseEvent, component: chartConfig }, pageContext)
+          chartEditStore.openModal(action.targetPageId, { ...pageContext, ...drillParams })
+        }
+        if (action.type === ComponentActionType.CLOSE_MODAL) {
+          useChartEditStore().closeModal()
         }
       }
     }

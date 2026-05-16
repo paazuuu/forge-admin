@@ -280,7 +280,9 @@ export interface ChartEditStoreType {
   pageTransition: ReportPageTransition
   runtimePageTransition: ReportPageTransition | ''
   runtimePageContext: Record<string, any>
+  modalStack: ReportModalRuntime[]
   sharedRequestGlobalConfig: Partial<RequestGlobalConfigType>
+  projectName?: string
 }
 
 // 存储数据类型
@@ -294,7 +296,7 @@ export type ReportPageTransition = 'none' | 'fade' | 'slide-left' | 'slide-right
 
 export type ComponentActionTrigger = BaseEvent.ON_CLICK | BaseEvent.ON_DBL_CLICK
 
-export type ComponentActionType = 'goPage'
+export type ComponentActionType = 'goPage' | 'openModal' | 'closeModal'
 
 export type DrillParamSource = 'static' | 'componentField' | 'pageContext' | 'userContext'
 
@@ -311,19 +313,78 @@ export interface ComponentAction {
   id: string
   trigger: ComponentActionTrigger
   type: ComponentActionType
-  targetPageId: string
+  targetPageId?: string
   transition?: ReportPageTransition
   params?: DrillParamBinding[]
+}
+
+export type ReportCanvasPageType = 'page' | 'modal'
+
+export type ReportModalPlacement = 'center' | 'right' | 'bottom'
+export type ReportModalTheme = 'screen' | 'glass' | 'flat' | 'neon' | 'panel' | 'light' | 'aurora' | 'cyber' | 'gold' | 'fog'
+export type ReportModalAnimation = 'zoom' | 'slideRight' | 'slideUp' | 'fade'
+export type ReportModalHeightMode = 'fixed' | 'auto'
+export type ReportModalTitleAlign = 'left' | 'center' | 'right'
+export type ReportModalButtonActionType = 'none' | 'closeModal' | 'goPage' | 'openModal' | 'submitRequest'
+export type ReportModalSubmitSuccessAction = 'none' | 'closeModal' | 'goPage' | 'openModal'
+
+export interface ReportModalButtonAction {
+  type?: ReportModalButtonActionType
+  targetPageId?: string
+  requestConfig?: RequestConfigType
+  submitSuccessAction?: ReportModalSubmitSuccessAction
+  submitSuccessTargetPageId?: string
+}
+
+export interface ReportModalConfig {
+  title?: string
+  width?: number
+  height?: number
+  heightMode?: ReportModalHeightMode
+  titleHeight?: number
+  titleFontSize?: number
+  titleFontWeight?: number
+  titleColor?: string
+  titleBackground?: string
+  titleAlign?: ReportModalTitleAlign
+  placement?: ReportModalPlacement
+  theme?: ReportModalTheme
+  animation?: ReportModalAnimation
+  showTitle?: boolean
+  showFooter?: boolean
+  showCancel?: boolean
+  showConfirm?: boolean
+  cancelText?: string
+  confirmText?: string
+  cancelAction?: ReportModalButtonAction
+  confirmAction?: ReportModalButtonAction
+  showMask?: boolean
+  maskOpacity?: number
+  maskClosable?: boolean
+  showClose?: boolean
+  borderRadius?: number
 }
 
 export interface ReportCanvasPage extends ChartEditStorage {
   id: string
   name: string
   sort: number
+  pageType?: ReportCanvasPageType
+  modalConfig?: ReportModalConfig
+}
+
+export interface ReportModalRuntime {
+  id: string
+  pageId: string
+  pageName: string
+  context: Record<string, any>
+  pageStorage: ChartEditStorage
+  modalConfig: ReportModalConfig
 }
 
 export interface ReportMultiPageStorage {
   version: 2
+  projectName?: string
   homePageId: string
   activePageId: string
   pageTransition?: ReportPageTransition

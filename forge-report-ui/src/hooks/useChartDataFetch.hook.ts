@@ -1,4 +1,4 @@
-import { ref, toRefs, toRaw, watch } from 'vue'
+import { inject, ref, toRefs, toRaw, unref, watch } from 'vue'
 import type VChart from 'vue-echarts'
 import { customizeHttp } from '@/api/http'
 import { useChartDataPondFetch } from '@/hooks/'
@@ -8,7 +8,11 @@ import { RequestDataTypeEnum } from '@/enums/httpEnum'
 import { adaptDatasetForComponent, isPreview, newFunctionHandle, intervalUnitHandle, normalizeDatasetForChart } from '@/utils'
 import { setOption } from '@/packages/public/chart'
 import { isNil } from 'lodash'
-import { getDynamicRequestParamDependencySnapshot } from '@/utils/requestDynamicParams'
+import {
+  getDynamicRequestParamDependencySnapshot,
+  PREVIEW_COMPONENT_LIST_KEY,
+  PREVIEW_PAGE_CONTEXT_KEY
+} from '@/utils/requestDynamicParams'
 
 // 获取类型
 type ChartEditStoreType = typeof useChartEditStore
@@ -26,6 +30,8 @@ export const useChartDataFetch = (
 ) => {
   const vChartRef = ref<typeof VChart | null>(null)
   let fetchInterval: any = 0
+  const previewPageContext = inject(PREVIEW_PAGE_CONTEXT_KEY, undefined)
+  const previewComponentList = inject(PREVIEW_COMPONENT_LIST_KEY, undefined)
 
   // 数据池
   const { addGlobalDataInterface } = useChartDataPondFetch()
@@ -51,6 +57,7 @@ export const useChartDataFetch = (
       requestIntervalUnit: globalUnit,
       requestInterval: globalRequestInterval
     } = toRefs(chartEditStore.getRequestGlobalConfig)
+    const getRenderComponentList = () => unref(previewComponentList) || chartEditStore.getComponentList
 
     // 目标组件
     const {
@@ -83,7 +90,8 @@ export const useChartDataFetch = (
           const res = await customizeHttp(
             toRaw(targetComponent.request),
             toRaw(chartEditStore.getRequestGlobalConfig),
-            toRaw(chartEditStore.getComponentList)
+            toRaw(getRenderComponentList()),
+            previewPageContext
           )
           if (res) {
             try {
@@ -125,7 +133,8 @@ export const useChartDataFetch = (
             targetComponent.request.dynamicRequestParams,
             getDynamicRequestParamDependencySnapshot(
               targetComponent.request.dynamicRequestParams,
-              chartEditStore.getComponentList
+              getRenderComponentList(),
+              previewPageContext
             )
           ],
           () => {

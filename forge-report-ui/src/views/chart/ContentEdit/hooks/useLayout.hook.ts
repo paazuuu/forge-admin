@@ -30,9 +30,16 @@ async function loadProjectData() {
     if (id) {
       const res = await getProjectDetailApi(String(id))
       const project = res?.data
+      if (project?.projectName) {
+        chartEditStore.setProjectName(project.projectName)
+      }
       if (project?.componentData) {
         const parsed = JSON.parse(project.componentData)
-        if (await applyProjectStorage(parsed, updateComponent, '后端')) return
+        const loaded = await applyProjectStorage(parsed, updateComponent, '后端')
+        if (project.projectName) {
+          chartEditStore.setProjectName(project.projectName)
+        }
+        if (loaded) return
       }
     }
 

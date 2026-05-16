@@ -1,7 +1,7 @@
 <template>
   <div
     class="page-list-item"
-    :class="{ active, home }"
+    :class="{ active, home, modal: isModal }"
     @click="$emit('select')"
   >
     <div class="page-index">
@@ -25,6 +25,7 @@
           {{ page.name }}
         </n-ellipsis>
         <div class="page-meta">
+          <span v-if="isModal">弹窗</span>
           <span v-if="home">首页</span>
           <span>{{ page.componentList?.length || 0 }} 组件</span>
         </div>
@@ -111,6 +112,7 @@ const editing = ref(false)
 const draftName = ref(props.page.name)
 
 const displayIndex = computed(() => String(props.index + 1).padStart(2, '0'))
+const isModal = computed(() => props.page.pageType === 'modal')
 
 const options = computed(() => [
   {
@@ -121,7 +123,7 @@ const options = computed(() => [
   {
     label: '设为首页',
     key: 'home',
-    disabled: props.home,
+    disabled: props.home || isModal.value,
     icon: renderIcon(HomeIcon)
   },
   {
@@ -221,6 +223,12 @@ const handleAction = (key: string) => {
   &.home .page-index {
     color: var(--app-theme);
     border-color: rgba(var(--app-theme-rgb), 0.28);
+  }
+
+  &.modal .page-index {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.28);
+    background: rgba(14, 116, 144, 0.14);
   }
 }
 

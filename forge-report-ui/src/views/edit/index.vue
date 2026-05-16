@@ -42,23 +42,81 @@
 import { ref } from 'vue'
 import { MonacoEditor } from '@/components/Pages/MonacoEditor'
 import { SavePageEnum } from '@/enums/editPageEnum'
-import { getSessionStorageInfo } from '../preview/utils'
-import { setSessionStorage, JSONStringify, JSONParse, setTitle, goDialog } from '@/utils'
+import {
+  fetchRouteParamsLocation,
+  getLocalStorage,
+  getSessionStorage,
+  setSessionStorage,
+  JSONStringify,
+  JSONParse,
+  setTitle,
+  goDialog
+} from '@/utils'
 import { StorageEnum } from '@/enums/storageEnum'
 import { icon } from '@/plugins'
-import type { ChartEditStorageType } from '../preview/index.d'
+import { getProjectDetailApi } from '@/api/project'
+import { normalizeProjectStorage } from '@/utils/reportPages'
+import type { ReportProjectStorage } from '@/store/modules/chartEditStore/chartEditStore.d'
 
-const { ChevronBackOutlineIcon, DownloadIcon, AnalyticsIcon } = icon.ionicons5
+const { DownloadIcon, AnalyticsIcon } = icon.ionicons5
 const showOpenFilePicker: Function = (window as any).showOpenFilePicker
 const content = ref('')
 
 window['$message'].warning('请不要刷新此窗口！')
 
+const stripStorageId = (storage: any): ReportProjectStorage | null => {
+  if (!storage) return null
+  const { id: _id, ...projectStorage } = storage
+  return projectStorage
+}
+
+const findStorageById = (storageList: any, id: string) => {
+  if (!Array.isArray(storageList)) return null
+  const storageItem = storageList.find((item: any) => String(item?.id) === String(id))
+  return stripStorageId(storageItem)
+}
+
+const writeProjectToSession = (id: string, storage: ReportProjectStorage) => {
+  const sessionStorageInfo = getSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST) || []
+  const nextStorageInfo = Array.isArray(sessionStorageInfo) ? [...sessionStorageInfo] : []
+  const repeatIndex = nextStorageInfo.findIndex((item: any) => String(item?.id) === String(id))
+  const storageItem = { ...storage, id }
+
+  if (repeatIndex !== -1) {
+    nextStorageInfo.splice(repeatIndex, 1, storageItem)
+  } else {
+    nextStorageInfo.push(storageItem)
+  }
+
+  setSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST, nextStorageInfo)
+}
+
+const getProjectStorageByRoute = async () => {
+  const id = fetchRouteParamsLocation()
+  const sessionStorageInfo = findStorageById(getSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST), id)
+  if (sessionStorageInfo) return sessionStorageInfo
+
+  const localStorageInfo = findStorageById(getLocalStorage(StorageEnum.GO_CHART_STORAGE_LIST), id)
+  if (localStorageInfo) return localStorageInfo
+
+  const res = await getProjectDetailApi(id)
+  const project = res?.data
+  if (project?.componentData) {
+    return JSONParse(project.componentData)
+  }
+  return normalizeProjectStorage({}, project?.projectName || '新项目')
+}
+
 // 从sessionStorage 获取数据
 async function getDataBySession() {
-  const localStorageInfo: ChartEditStorageType = (await getSessionStorageInfo()) as unknown as ChartEditStorageType
-  setTitle(`编辑-${localStorageInfo.editCanvasConfig.projectName}`)
-  content.value = JSONStringify(localStorageInfo)
+  try {
+    const projectStorage = normalizeProjectStorage(await getProjectStorageByRoute())
+    setTitle(`编辑-${projectStorage.projectName || projectStorage.pages[0]?.name || '项目'}`)
+    content.value = JSONStringify(projectStorage)
+  } catch (error) {
+    window['$message'].error('项目数据读取失败，请检查项目 JSON 是否损坏！')
+    console.log(error)
+  }
 }
 setTimeout(getDataBySession)
 
@@ -93,11 +151,14 @@ function importJSON() {
 }
 
 // 同步数据编辑页
-window.opener.addEventListener(SavePageEnum.CHART, (e: any) => {
-  window['$message'].success('正在进行更新...')
-  setSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST, [e.detail])
-  content.value = JSONStringify(e.detail)
-})
+if (window.opener) {
+  window.opener.addEventListener(SavePageEnum.CHART, (e: any) => {
+    window['$message'].success('正在进行更新...')
+    const projectStorage = normalizeProjectStorage(e.detail)
+    writeProjectToSession(fetchRouteParamsLocation(), projectStorage)
+    content.value = JSONStringify(projectStorage)
+  })
+}
 
 // 保存按钮同步数据
 document.addEventListener('keydown', function (e) {
@@ -121,8 +182,8 @@ async function updateSync() {
     transformOrigin: 'center',
     onPositiveCallback: () => {
       try {
-        const detail = JSONParse(content.value)
-        delete detail.id
+        const detail = normalizeProjectStorage(JSONParse(content.value))
+        delete (detail as any).id
         // 保持id不变
         window.opener.dispatchEvent(new CustomEvent(SavePageEnum.JSON, { detail }))
         window['$message'].success('正在同步内容...')

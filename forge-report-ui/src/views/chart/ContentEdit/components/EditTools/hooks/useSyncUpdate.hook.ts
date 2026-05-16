@@ -8,6 +8,7 @@ import { ChartEnum } from '@/enums/pageEnum'
 import { SavePageEnum } from '@/enums/editPageEnum'
 import { editToJsonInterval } from '@/settings/designSetting'
 import { goDialog } from '@/utils'
+import { normalizeProjectStorage } from '@/utils/reportPages'
 
 const { updateComponent } = useSync()
 const chartEditStore = useChartEditStore()
@@ -19,14 +20,14 @@ export const syncData = () => {
     transformOrigin: 'center',
     onPositiveCallback: () => {
       window['$message'].success('正在同步编辑器...')
-      dispatchEvent(new CustomEvent(SavePageEnum.CHART, { detail: chartEditStore.getStorageInfo() }))
+      dispatchEvent(new CustomEvent(SavePageEnum.CHART, { detail: chartEditStore.getProjectStorageInfo() }))
     }
   })
 }
 
 // 同步数据到预览页
 export const syncDataToPreview = () => {
-  dispatchEvent(new CustomEvent(SavePageEnum.CHART_TO_PREVIEW, { detail: chartEditStore.getStorageInfo() }))
+  dispatchEvent(new CustomEvent(SavePageEnum.CHART_TO_PREVIEW, { detail: chartEditStore.getProjectStorageInfo() }))
 }
 
 // 侦听器更新
@@ -37,7 +38,9 @@ const useSyncUpdateHandle = () => {
   // 更新处理
   const updateFn = (e: any) => {
     window['$message'].success('正在进行更新...')
-    updateComponent(e!.detail, true)
+    const projectStorage = normalizeProjectStorage(e!.detail)
+    const pageStorage = chartEditStore.loadProjectStorage(projectStorage, projectStorage.activePageId)
+    updateComponent(pageStorage, true, false)
   }
 
   // 页面关闭处理

@@ -29,7 +29,7 @@
           ...getFilterStyle(item.styles),
           ...getTransformStyle(item.styles)
         }"
-        v-on="useLifeHandler(item)"
+        v-on="useLifeHandler(item, pageContext)"
       ></component>
     </div>
   </div>
@@ -58,6 +58,10 @@ const props = defineProps({
   groupIndex: {
     type: Number,
     required: true
+  },
+  pageContext: {
+    type: Object as PropType<Record<string, any>>,
+    default: () => ({})
   }
 })
 </script>

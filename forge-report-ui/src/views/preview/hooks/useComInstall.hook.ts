@@ -2,9 +2,11 @@ import { onUnmounted, ref, watch } from 'vue'
 import { ChartEditStorageType } from '../index.d'
 import { CreateComponentType, CreateComponentGroupType } from '@/packages/index.d'
 import { fetchChartComponent } from '@/packages/index'
+import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 
 export const useComInstall = (localStorageInfo: ChartEditStorageType) => {
   const show = ref(false)
+  const chartEditStore = useChartEditStore()
   let stopWatch: (() => void) | undefined
 
   const intComponent = (target: CreateComponentType) => {
@@ -29,9 +31,16 @@ export const useComInstall = (localStorageInfo: ChartEditStorageType) => {
   const setupComponentWatch = () => {
     if (stopWatch) return
     stopWatch = watch(
-      () => localStorageInfo.componentList,
-      componentList => {
-        installComponentList(componentList)
+      () => [
+        localStorageInfo.componentList,
+        chartEditStore.getProjectPages.map(page => page.componentList),
+        chartEditStore.getModalStack.map(modal => modal.pageStorage.componentList)
+      ],
+      componentGroups => {
+        componentGroups.flat(2).forEach((component: any) => {
+          if (!component) return
+          installComponentList([component])
+        })
         show.value = true
       },
       {
@@ -44,6 +53,7 @@ export const useComInstall = (localStorageInfo: ChartEditStorageType) => {
     if (window['$vue']?.component) {
       clearInterval(intervalTiming)
       installComponentList(localStorageInfo.componentList)
+      chartEditStore.getProjectPages.forEach(page => installComponentList(page.componentList))
       setupComponentWatch()
       show.value = true
     }

@@ -12,22 +12,26 @@
           <span>PAGES</span>
           <strong>画布页面</strong>
         </div>
-        <n-tooltip :show-arrow="false" trigger="hover">
-          <template #trigger>
-            <n-button type="primary" size="small" circle secondary @click="handleCreatePage">
+        <div class="pages-actions">
+          <n-dropdown
+            trigger="click"
+            placement="bottom-end"
+            :options="createOptions"
+            @select="handleCreateSelect"
+          >
+            <n-button type="primary" size="small" circle secondary>
               <template #icon>
                 <n-icon size="16">
                   <add-icon />
                 </n-icon>
               </template>
             </n-button>
-          </template>
-          新增页面
-        </n-tooltip>
+          </n-dropdown>
+        </div>
       </div>
 
       <div class="pages-summary">
-        <span>{{ pages.length }} 个页面</span>
+        <span>{{ normalPageCount }} 个页面 / {{ modalPageCount }} 个弹窗</span>
         <i></i>
       </div>
 
@@ -63,10 +67,11 @@ import { ContentBox } from '../ContentBox/index'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 import { useSync } from '@/views/chart/hooks/useSync.hook'
 import { icon } from '@/plugins'
+import { renderIcon } from '@/utils'
 import PageListItem from './components/PageListItem.vue'
 import type { ChartEditStorage } from '@/store/modules/chartEditStore/chartEditStore.d'
 
-const { AddIcon } = icon.ionicons5
+const { AddIcon, DocumentTextIcon, LayersIcon } = icon.ionicons5
 const chartEditStore = useChartEditStore()
 const { updateComponent } = useSync()
 
@@ -82,6 +87,9 @@ const pages = computed(() => {
     .sort((a, b) => (a.sort || 0) - (b.sort || 0))
 })
 
+const normalPageCount = computed(() => pages.value.filter(page => page.pageType !== 'modal').length)
+const modalPageCount = computed(() => pages.value.filter(page => page.pageType === 'modal').length)
+
 const renderPageStorage = async (storage?: ChartEditStorage) => {
   if (!storage) return
   await updateComponent(storage, true)
@@ -90,8 +98,35 @@ const renderPageStorage = async (storage?: ChartEditStorage) => {
   }
 }
 
+const createOptions = [
+  {
+    label: '新增页面',
+    key: 'page',
+    icon: renderIcon(DocumentTextIcon)
+  },
+  {
+    label: '新增弹窗',
+    key: 'modal',
+    icon: renderIcon(LayersIcon)
+  }
+]
+
+const handleCreateSelect = async (key: string) => {
+  if (key === 'page') {
+    chartEditStore.createPage(`页面 ${pages.value.length + 1}`)
+  } else if (key === 'modal') {
+    chartEditStore.createPage(`弹窗 ${modalPageCount.value + 1}`, 'modal')
+  }
+  await renderPageStorage(chartEditStore.getStorageInfo())
+}
+
 const handleCreatePage = async () => {
   chartEditStore.createPage(`页面 ${pages.value.length + 1}`)
+  await renderPageStorage(chartEditStore.getStorageInfo())
+}
+
+const handleCreateModalPage = async () => {
+  chartEditStore.createPage(`弹窗 ${modalPageCount.value + 1}`, 'modal')
   await renderPageStorage(chartEditStore.getStorageInfo())
 }
 
@@ -150,6 +185,12 @@ const handleMovePage = (pageId: string, direction: 'up' | 'down') => {
     gap: 8px;
     padding: 10px 10px 8px 12px;
     border-bottom: 1px solid rgba(var(--app-theme-rgb), 0.08);
+  }
+
+  .pages-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .pages-title {

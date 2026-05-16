@@ -3,10 +3,13 @@ import { UploadCustomRequestOptions } from 'naive-ui'
 import { FileTypeEnum } from '@/enums/fileTypeEnum'
 import { readFile, goDialog, JSONParse } from '@/utils'
 import { useSync } from '@/views/chart/hooks/useSync.hook'
+import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
+import { extractPageStorage, normalizeProjectStorage } from '@/utils/reportPages'
 
 export const useFile = () => {
   const importUploadFileListRef = ref()
   const { updateComponent } = useSync()
+  const chartEditStore = useChartEditStore()
 
   // 上传-前置
   //@ts-ignore
@@ -34,8 +37,9 @@ export const useFile = () => {
             // 新增
             onPositiveCallback: async () => {
               try {
-                fileData = JSONParse(fileData)
-                await updateComponent(fileData, false, true)
+                const projectStorage = normalizeProjectStorage(JSONParse(fileData))
+                const pageStorage = extractPageStorage(projectStorage, projectStorage.activePageId)
+                await updateComponent(pageStorage, false, true)
                 window['$message'].success('导入成功！')
               } catch (error) {
                 console.log(error)
@@ -45,8 +49,9 @@ export const useFile = () => {
             // 覆盖
             onNegativeCallback: async () => {
               try {
-                fileData = JSONParse(fileData)
-                await updateComponent(fileData, true, true)
+                const projectStorage = normalizeProjectStorage(JSONParse(fileData))
+                const pageStorage = chartEditStore.loadProjectStorage(projectStorage, projectStorage.activePageId)
+                await updateComponent(pageStorage, true, false)
                 window['$message'].success('导入成功！')
               } catch (error) {
                 console.log(error)

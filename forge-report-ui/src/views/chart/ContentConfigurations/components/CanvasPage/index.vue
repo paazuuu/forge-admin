@@ -37,6 +37,244 @@
       </div>
     </section>
 
+    <section v-if="isModalPage" class="canvas-section modal-section">
+      <div class="section-title">
+        <span>MODAL</span>
+        <strong>弹窗外壳</strong>
+      </div>
+      <div class="modal-grid">
+        <label class="modal-title-field">
+          <span>弹窗标题</span>
+          <n-input
+            size="small"
+            v-model:value="modalTitle"
+            placeholder="默认使用页面名称"
+          />
+        </label>
+        <label>
+          <span>弹窗宽度</span>
+          <n-input-number
+            size="small"
+            v-model:value="modalWidth"
+            :min="120"
+            :max="7680"
+          />
+        </label>
+        <label>
+          <span>{{ activeModalConfig.heightMode === 'auto' ? '最小高度' : '弹窗高度' }}</span>
+          <n-input-number
+            size="small"
+            v-model:value="modalHeight"
+            :min="120"
+            :max="4320"
+          />
+        </label>
+        <label>
+          <span>高度模式</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.heightMode"
+            :options="modalHeightModeOptions"
+          />
+        </label>
+        <label>
+          <span>打开位置</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.placement"
+            :options="modalPlacementOptions"
+          />
+        </label>
+        <label>
+          <span>外观风格</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.theme"
+            :options="modalThemeOptions"
+          />
+        </label>
+        <label>
+          <span>弹出动效</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.animation"
+            :options="modalAnimationOptions"
+          />
+        </label>
+        <label>
+          <span>标题高度</span>
+          <n-input-number
+            size="small"
+            v-model:value="activeModalConfig.titleHeight"
+            :min="28"
+            :max="96"
+          />
+        </label>
+        <label>
+          <span>标题字号</span>
+          <n-input-number
+            size="small"
+            v-model:value="activeModalConfig.titleFontSize"
+            :min="10"
+            :max="40"
+          />
+        </label>
+        <label>
+          <span>标题粗细</span>
+          <n-input-number
+            size="small"
+            v-model:value="activeModalConfig.titleFontWeight"
+            :min="100"
+            :max="900"
+            :step="50"
+          />
+        </label>
+        <label>
+          <span>标题位置</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.titleAlign"
+            :options="modalTitleAlignOptions"
+          />
+        </label>
+        <label>
+          <span>标题颜色</span>
+          <n-color-picker
+            size="small"
+            v-model:value="activeModalConfig.titleColor"
+            :show-alpha="true"
+          />
+        </label>
+        <label class="modal-title-field">
+          <span>标题背景（支持渐变）</span>
+          <n-input
+            size="small"
+            v-model:value="activeModalConfig.titleBackground"
+            placeholder="颜色或渐变，如 linear-gradient(90deg, #0f2, #08f)"
+            clearable
+          />
+        </label>
+        <label>
+          <span>圆角</span>
+          <n-input-number
+            size="small"
+            v-model:value="activeModalConfig.borderRadius"
+            :min="0"
+            :max="40"
+          />
+        </label>
+        <label>
+          <span>遮罩透明度</span>
+          <n-input-number
+            size="small"
+            v-model:value="activeModalConfig.maskOpacity"
+            :min="0"
+            :max="0.95"
+            :step="0.05"
+          />
+        </label>
+      </div>
+      <div class="modal-switches">
+        <n-checkbox v-model:checked="activeModalConfig.showTitle">显示标题栏</n-checkbox>
+        <n-checkbox v-model:checked="activeModalConfig.showFooter">显示底部按钮</n-checkbox>
+        <n-checkbox v-model:checked="activeModalConfig.showMask">显示遮罩</n-checkbox>
+        <n-checkbox v-model:checked="activeModalConfig.maskClosable">点击遮罩关闭</n-checkbox>
+        <n-checkbox v-model:checked="activeModalConfig.showClose">显示关闭按钮</n-checkbox>
+      </div>
+      <div v-if="activeModalConfig.showFooter" class="modal-footer-grid">
+        <label>
+          <span>取消按钮</span>
+          <n-input size="small" v-model:value="activeModalConfig.cancelText" />
+        </label>
+        <label>
+          <span>确认按钮</span>
+          <n-input size="small" v-model:value="activeModalConfig.confirmText" />
+        </label>
+        <label>
+          <span>取消事件</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.cancelAction.type"
+            :options="modalButtonActionOptions"
+            @update:value="() => handleModalButtonActionTypeChange(activeModalConfig.cancelAction)"
+          />
+        </label>
+        <label>
+          <span>确认事件</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.confirmAction.type"
+            :options="modalButtonActionOptions"
+            @update:value="() => handleModalButtonActionTypeChange(activeModalConfig.confirmAction)"
+          />
+        </label>
+        <label v-if="isPageAction(activeModalConfig.cancelAction?.type)">
+          <span>取消目标页</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.cancelAction.targetPageId"
+            :options="pageTargetOptions"
+          />
+        </label>
+        <label v-if="isPageAction(activeModalConfig.confirmAction?.type)">
+          <span>确认目标页</span>
+          <n-select
+            size="small"
+            v-model:value="activeModalConfig.confirmAction.targetPageId"
+            :options="pageTargetOptions"
+          />
+        </label>
+        <div v-if="isSubmitAction(activeModalConfig.cancelAction?.type)" class="modal-action-config">
+          <div class="modal-action-config-head">
+            <span>取消提交接口</span>
+            <n-button size="tiny" secondary @click="openActionRequestConfig('cancel')">配置请求</n-button>
+          </div>
+          <label>
+            <span>成功后</span>
+            <n-select
+              size="small"
+              v-model:value="activeModalConfig.cancelAction.submitSuccessAction"
+              :options="modalSubmitSuccessActionOptions"
+            />
+          </label>
+          <label v-if="isPageAction(activeModalConfig.cancelAction.submitSuccessAction)">
+            <span>成功目标页</span>
+            <n-select
+              size="small"
+              v-model:value="activeModalConfig.cancelAction.submitSuccessTargetPageId"
+              :options="pageTargetOptions"
+            />
+          </label>
+        </div>
+        <div v-if="isSubmitAction(activeModalConfig.confirmAction?.type)" class="modal-action-config">
+          <div class="modal-action-config-head">
+            <span>确认提交接口</span>
+            <n-button size="tiny" secondary @click="openActionRequestConfig('confirm')">配置请求</n-button>
+          </div>
+          <label>
+            <span>成功后</span>
+            <n-select
+              size="small"
+              v-model:value="activeModalConfig.confirmAction.submitSuccessAction"
+              :options="modalSubmitSuccessActionOptions"
+            />
+          </label>
+          <label v-if="isPageAction(activeModalConfig.confirmAction.submitSuccessAction)">
+            <span>成功目标页</span>
+            <n-select
+              size="small"
+              v-model:value="activeModalConfig.confirmAction.submitSuccessTargetPageId"
+              :options="pageTargetOptions"
+            />
+          </label>
+        </div>
+        <div class="modal-footer-switches">
+          <n-checkbox v-model:checked="activeModalConfig.showCancel">显示取消</n-checkbox>
+          <n-checkbox v-model:checked="activeModalConfig.showConfirm">显示确认</n-checkbox>
+        </div>
+      </div>
+    </section>
+
     <section class="canvas-section background-section">
       <div class="section-title">
         <span>BACKGROUND</span>
@@ -164,10 +402,17 @@
       </n-tab-pane>
     </n-tabs>
   </div>
+  <chart-data-request
+    v-if="showModalRequestConfig && modalRequestTarget"
+    v-model:model-show="showModalRequestConfig"
+    :target-data="modalRequestTarget"
+    save-btn-text="保存请求配置"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, watch } from 'vue'
+import { ref, nextTick, watch, computed } from 'vue'
+import cloneDeep from 'lodash/cloneDeep'
 import { backgroundImageSize } from '@/settings/designSetting'
 import { swatchesColors } from '@/settings/chartThemes/index'
 import { FileTypeEnum } from '@/enums/fileTypeEnum'
@@ -180,6 +425,10 @@ import { PreviewScaleEnum } from '@/enums/styleEnum'
 import { icon } from '@/plugins'
 import MaterialAssetSelector from '@/components/Pages/MaterialAssetSelector/index.vue'
 import FgAuthImage from '@/components/FgAuthImage/index.vue'
+import { createDefaultModalConfig, createDefaultModalSubmitRequestConfig } from '@/utils/reportPages'
+import { ChartDataRequest } from '../ChartData/components/ChartDataRequest'
+import { RequestDataTypeEnum, RequestHttpEnum } from '@/enums/httpEnum'
+import type { ReportModalButtonAction } from '@/store/modules/chartEditStore/chartEditStore.d'
 
 const { ColorPaletteIcon } = icon.ionicons5
 const { ScaleIcon, FitToScreenIcon, FitToHeightIcon, FitToWidthIcon } = icon.carbon
@@ -249,6 +498,219 @@ const previewTypeList = [
   }
 ]
 
+const modalPlacementOptions = [
+  { label: '居中', value: 'center' },
+  { label: '右侧抽屉', value: 'right' },
+  { label: '底部弹层', value: 'bottom' }
+]
+
+const modalHeightModeOptions = [
+  { label: '固定高度', value: 'fixed' },
+  { label: '自适应高度', value: 'auto' }
+]
+
+const modalThemeOptions = [
+  { label: '大屏浮层', value: 'screen' },
+  { label: '玻璃质感', value: 'glass' },
+  { label: '霓虹描边', value: 'neon' },
+  { label: '极光渐变', value: 'aurora' },
+  { label: '赛博科技', value: 'cyber' },
+  { label: '描金镶边', value: 'gold' },
+  { label: '深色面板', value: 'panel' },
+  { label: '晨雾质感', value: 'fog' },
+  { label: '浅色卡片', value: 'light' },
+  { label: '无边框', value: 'flat' }
+]
+
+const modalTitleAlignOptions = [
+  { label: '左对齐', value: 'left' },
+  { label: '居中', value: 'center' },
+  { label: '右对齐', value: 'right' }
+]
+
+const modalAnimationOptions = [
+  { label: '缩放弹出', value: 'zoom' },
+  { label: '右侧滑入', value: 'slideRight' },
+  { label: '底部滑入', value: 'slideUp' },
+  { label: '淡入', value: 'fade' }
+]
+
+const modalButtonActionOptions = [
+  { label: '提交接口', value: 'submitRequest' },
+  { label: '关闭弹窗', value: 'closeModal' },
+  { label: '跳转页面', value: 'goPage' },
+  { label: '打开弹窗', value: 'openModal' },
+  { label: '无动作', value: 'none' }
+]
+
+const modalSubmitSuccessActionOptions = [
+  { label: '关闭弹窗', value: 'closeModal' },
+  { label: '跳转页面', value: 'goPage' },
+  { label: '打开弹窗', value: 'openModal' },
+  { label: '无动作', value: 'none' }
+]
+
+const activePage = computed(() => {
+  return chartEditStore.getProjectPages.find(page => page.id === chartEditStore.getActivePageId)
+})
+
+const isModalPage = computed(() => activePage.value?.pageType === 'modal')
+
+const pageTargetOptions = computed(() => {
+  return chartEditStore.getProjectPages
+    .filter(page => page.id !== activePage.value?.id)
+    .map(page => ({
+      label: page.pageType === 'modal' ? `${page.name}（弹窗）` : page.name,
+      value: page.id
+    }))
+})
+
+const isPageAction = (type?: string) => {
+  return type === 'goPage' || type === 'openModal'
+}
+
+const isSubmitAction = (type?: string) => {
+  return type === 'submitRequest'
+}
+
+const activeModalConfig = computed(() => {
+  if (!activePage.value) return createDefaultModalConfig()
+  return activePage.value.modalConfig || createDefaultModalConfig()
+})
+
+const normalizeModalButtonAction = (action?: ReportModalButtonAction): ReportModalButtonAction => {
+  const nextAction = {
+    type: 'closeModal',
+    submitSuccessAction: 'closeModal',
+    ...action
+  } as ReportModalButtonAction
+  if (nextAction.type === 'submitRequest' && !nextAction.requestConfig) {
+    nextAction.requestConfig = createDefaultModalSubmitRequestConfig()
+  } else if (
+    nextAction.type === 'submitRequest' &&
+    nextAction.requestConfig?.requestDataType === RequestDataTypeEnum.STATIC
+  ) {
+    nextAction.requestConfig = {
+      ...nextAction.requestConfig,
+      requestDataType: RequestDataTypeEnum.AJAX,
+      requestHttpType: nextAction.requestConfig.requestHttpType || RequestHttpEnum.POST,
+      requestInterval: nextAction.requestConfig.requestInterval ?? 0
+    }
+  }
+  return nextAction
+}
+
+watch(
+  () => activePage.value?.id,
+  () => {
+    if (activePage.value?.pageType === 'modal' && !activePage.value.modalConfig) {
+      activePage.value.modalConfig = createDefaultModalConfig()
+    }
+    if (activePage.value?.modalConfig) {
+      activePage.value.modalConfig = {
+        ...createDefaultModalConfig(),
+        ...activePage.value.modalConfig,
+        cancelAction: {
+          ...normalizeModalButtonAction(createDefaultModalConfig().cancelAction),
+          ...normalizeModalButtonAction(activePage.value.modalConfig.cancelAction || {})
+        },
+        confirmAction: {
+          ...normalizeModalButtonAction(createDefaultModalConfig().confirmAction),
+          ...normalizeModalButtonAction(activePage.value.modalConfig.confirmAction || {})
+        }
+      }
+    }
+  },
+  { immediate: true }
+)
+
+const handleModalButtonActionTypeChange = (action?: ReportModalButtonAction) => {
+  if (!action) return
+  if (action.type === 'submitRequest') {
+    action.requestConfig = action.requestConfig || createDefaultModalSubmitRequestConfig()
+    if (action.requestConfig.requestDataType === RequestDataTypeEnum.STATIC) {
+      action.requestConfig.requestDataType = RequestDataTypeEnum.AJAX
+      action.requestConfig.requestHttpType = action.requestConfig.requestHttpType || RequestHttpEnum.POST
+      action.requestConfig.requestInterval = action.requestConfig.requestInterval ?? 0
+    }
+    action.submitSuccessAction = action.submitSuccessAction || 'closeModal'
+  }
+}
+
+const editingModalActionType = ref<'cancel' | 'confirm'>('confirm')
+const showModalRequestConfig = ref(false)
+
+const editingModalAction = computed(() => {
+  return editingModalActionType.value === 'cancel'
+    ? activeModalConfig.value.cancelAction
+    : activeModalConfig.value.confirmAction
+})
+
+const modalRequestTarget = computed(() => {
+  const action = editingModalAction.value
+  if (!action) return undefined
+  action.requestConfig = action.requestConfig || createDefaultModalSubmitRequestConfig()
+  return {
+    id: `modal-${editingModalActionType.value}-request`,
+    key: 'ModalButtonRequest',
+    chartConfig: {
+      key: 'ModalButtonRequest',
+      chartKey: 'ModalButtonRequest',
+      conKey: 'ModalButtonRequest',
+      category: 'modal',
+      categoryName: editingModalActionType.value === 'cancel' ? '弹窗取消按钮' : '弹窗确认按钮',
+      package: 'modal',
+      title: editingModalActionType.value === 'cancel' ? '弹窗取消按钮' : '弹窗确认按钮',
+      image: ''
+    },
+    request: action.requestConfig
+  } as any
+})
+
+const openActionRequestConfig = (type: 'cancel' | 'confirm') => {
+  editingModalActionType.value = type
+  const action = type === 'cancel'
+    ? activeModalConfig.value.cancelAction
+    : activeModalConfig.value.confirmAction
+  if (action) {
+    action.requestConfig = action.requestConfig || cloneDeep(createDefaultModalSubmitRequestConfig())
+    if (action.requestConfig.requestDataType === RequestDataTypeEnum.STATIC) {
+      action.requestConfig.requestDataType = RequestDataTypeEnum.AJAX
+      action.requestConfig.requestHttpType = action.requestConfig.requestHttpType || RequestHttpEnum.POST
+      action.requestConfig.requestInterval = action.requestConfig.requestInterval ?? 0
+    }
+  }
+  showModalRequestConfig.value = true
+}
+
+const setModalSize = (field: 'width' | 'height', value?: number | null) => {
+  if (!activePage.value || value === undefined || value === null) return
+  activePage.value.modalConfig = {
+    ...createDefaultModalConfig(),
+    ...(activePage.value.modalConfig || {}),
+    [field]: value
+  }
+  canvasConfig[field] = value
+  chartEditStore.computedScale()
+}
+
+const modalTitle = computed({
+  get: () => activeModalConfig.value.title || '',
+  set: value => {
+    activeModalConfig.value.title = value
+  }
+})
+
+const modalWidth = computed({
+  get: () => activeModalConfig.value.width || canvasConfig.width,
+  set: value => setModalSize('width', value)
+})
+
+const modalHeight = computed({
+  get: () => activeModalConfig.value.height || canvasConfig.height,
+  set: value => setModalSize('height', value)
+})
+
 watch(
   () => canvasConfig.selectColor,
   newValue => {
@@ -264,6 +726,14 @@ const validator = (x: number) => x > 50
 
 // 修改尺寸
 const changeSizeHandle = () => {
+  if (activePage.value?.pageType === 'modal') {
+    activePage.value.modalConfig = {
+      ...createDefaultModalConfig(),
+      ...(activePage.value.modalConfig || {}),
+      width: canvasConfig.width,
+      height: canvasConfig.height
+    }
+  }
   chartEditStore.computedScale()
 }
 
@@ -541,6 +1011,97 @@ $uploadHeight: 193px;
 
         &:disabled {
           opacity: 0.35;
+        }
+      }
+    }
+  }
+
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+
+      > span {
+        font-size: 11px;
+        @include fetch-color(3);
+      }
+    }
+
+    .modal-title-field {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .modal-switches {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.24);
+    border: 1px solid rgba(var(--app-theme-rgb), 0.08);
+  }
+
+  .modal-footer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--app-theme-rgb), 0.08);
+    background: rgba(2, 6, 23, 0.18);
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+
+      > span {
+        font-size: 11px;
+        @include fetch-color(3);
+      }
+    }
+
+    .modal-footer-switches {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .modal-action-config {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(var(--app-theme-rgb), 0.1);
+      background:
+        linear-gradient(135deg, rgba(var(--app-theme-rgb), 0.08), transparent),
+        rgba(15, 23, 42, 0.22);
+
+      .modal-action-config-head {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+
+        span {
+          font-size: 12px;
+          color: rgba(226, 232, 240, 0.86);
+          font-weight: 650;
         }
       }
     }

@@ -85,11 +85,10 @@ import {
   fetchPathByName,
   routerTurnByPath,
   setSessionStorage,
-  getLocalStorage
+  getSessionStorage
 } from '@/utils'
 import { EditEnum } from '@/enums/pageEnum'
 import { StorageEnum } from '@/enums/storageEnum'
-import { useRoute } from 'vue-router'
 import { FgSystemSet } from '@/components/FgSystemSet/index'
 import { exportHandle } from './utils'
 import { useFile } from './hooks/useFile.hooks'
@@ -108,7 +107,6 @@ const {
 } = icon.ionicons5
 const settingStore = useSettingStore()
 const chartEditStore = useChartEditStore()
-const routerParamsInfo = useRoute()
 // 初始化编辑 JSON 模块
 useSyncUpdate()
 
@@ -204,8 +202,8 @@ const editHandle = () => {
 
 // 把内存中的数据同步到SessionStorage 便于传递给新窗口初始化数据
 const updateToSession = (id: string) => {
-  const storageInfo = chartEditStore.getStorageInfo()
-  const sessionStorageInfo = getLocalStorage(StorageEnum.GO_CHART_STORAGE_LIST) || []
+  const storageInfo = chartEditStore.getProjectStorageInfo()
+  const sessionStorageInfo = getSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST) || []
 
   if (sessionStorageInfo?.length) {
     const repeateIndex = sessionStorageInfo.findIndex((e: { id: string }) => e.id === id)

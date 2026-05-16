@@ -3,17 +3,100 @@ import { defaultTheme, globalThemeJson } from '@/settings/chartThemes/index'
 import { requestInterval, previewScaleType, requestIntervalUnit } from '@/settings/designSetting'
 import { getUUID } from '@/utils/utils'
 import { requestConfig as defaultRequestConfig } from '@/packages/public/publicConfig'
+import { RequestDataTypeEnum, RequestHttpEnum } from '@/enums/httpEnum'
 import type { CreateComponentGroupType, CreateComponentType } from '@/packages/index.d'
 import { ChartEditStoreEnum } from '@/store/modules/chartEditStore/chartEditStore.d'
 import type {
   ChartEditStorage,
   EditCanvasConfigType,
+  ReportModalButtonAction,
+  ReportModalConfig,
   ReportCanvasPage,
   ReportMultiPageStorage,
   RequestGlobalConfigType
 } from '@/store/modules/chartEditStore/chartEditStore.d'
 
 const DEFAULT_PAGE_NAME = '首页'
+const DEFAULT_MODAL_NAME = '弹窗'
+
+export function createDefaultModalSubmitRequestConfig() {
+  return {
+    ...cloneDeep(defaultRequestConfig),
+    requestDataType: RequestDataTypeEnum.AJAX,
+    requestHttpType: RequestHttpEnum.POST,
+    requestInterval: 0
+  }
+}
+
+export function createDefaultModalConfig(): ReportModalConfig {
+  return {
+    title: '',
+    width: 720,
+    height: 420,
+    heightMode: 'fixed',
+    titleHeight: 44,
+    titleFontSize: 15,
+    titleFontWeight: 650,
+    titleColor: 'rgba(241, 245, 249, 0.96)',
+    titleBackground: 'rgba(2, 6, 23, 0.32)',
+    titleAlign: 'left',
+    placement: 'center',
+    theme: 'screen',
+    animation: 'zoom',
+    showTitle: true,
+    showFooter: false,
+    showCancel: true,
+    showConfirm: true,
+    cancelText: '取消',
+    confirmText: '确认',
+    cancelAction: { type: 'closeModal' },
+    confirmAction: {
+      type: 'closeModal',
+      submitSuccessAction: 'closeModal',
+      requestConfig: createDefaultModalSubmitRequestConfig()
+    },
+    showMask: true,
+    maskOpacity: 0.58,
+    maskClosable: true,
+    showClose: true,
+    borderRadius: 8
+  }
+}
+
+export function normalizeModalButtonAction(
+  action: ReportModalButtonAction | undefined,
+  fallback: ReportModalButtonAction = { type: 'closeModal' }
+): ReportModalButtonAction {
+  const nextAction = {
+    submitSuccessAction: 'closeModal',
+    ...fallback,
+    ...(action || {})
+  } as ReportModalButtonAction
+  if (nextAction.type === 'submitRequest' && !nextAction.requestConfig) {
+    nextAction.requestConfig = createDefaultModalSubmitRequestConfig()
+  } else if (
+    nextAction.type === 'submitRequest' &&
+    nextAction.requestConfig?.requestDataType === RequestDataTypeEnum.STATIC
+  ) {
+    nextAction.requestConfig = {
+      ...nextAction.requestConfig,
+      requestDataType: RequestDataTypeEnum.AJAX,
+      requestHttpType: nextAction.requestConfig.requestHttpType || RequestHttpEnum.POST,
+      requestInterval: nextAction.requestConfig.requestInterval ?? 0
+    }
+  }
+  return nextAction
+}
+
+export function normalizeModalConfig(config?: ReportModalConfig): ReportModalConfig {
+  const defaults = createDefaultModalConfig()
+  return {
+    ...defaults,
+    ...(config || {}),
+    cancelAction: normalizeModalButtonAction(config?.cancelAction, defaults.cancelAction),
+    confirmAction: normalizeModalButtonAction(config?.confirmAction, defaults.confirmAction)
+  }
+}
 
 export function isMultiPageStorage(storage: unknown): storage is ReportMultiPageStorage {
   const candidate = storage as Partial<ReportMultiPageStorage>
@@ -77,9 +160,25 @@ export function createDefaultPage(name = DEFAULT_PAGE_NAME): ReportCanvasPage {
     id: getUUID(),
     name,
     sort: 1,
+    pageType: 'page',
     editCanvasConfig: createDefaultEditCanvasConfig(name),
     requestGlobalConfig: createDefaultRequestGlobalConfig(),
     componentList: []
+  }
+}
+
+export function createDefaultModalPage(name = DEFAULT_MODAL_NAME): ReportCanvasPage {
+  const modalConfig = createDefaultModalConfig()
+  return {
+    ...createDefaultPage(name),
+    pageType: 'modal',
+    modalConfig,
+    editCanvasConfig: {
+      ...createDefaultEditCanvasConfig(name),
+      width: modalConfig.width || 720,
+      height: modalConfig.height || 420,
+      background: '#080d16f5'
+    }
   }
 }
 
@@ -89,6 +188,7 @@ export function createDefaultProjectStorage(projectName = '新项目'): ReportMu
 
   return {
     version: 2,
+    projectName,
     homePageId: page.id,
     activePageId: page.id,
     pageTransition: 'fade',
@@ -130,6 +230,9 @@ export function normalizeChartStorage(storage: Partial<ChartEditStorage> = {}, f
 
 export function normalizeProjectStorage(storage: unknown, fallbackName = DEFAULT_PAGE_NAME): ReportMultiPageStorage {
   if (isMultiPageStorage(storage)) {
+    const projectName = typeof storage.projectName === 'string' && storage.projectName.trim()
+      ? storage.projectName.trim()
+      : undefined
     const pages = storage.pages.length ? storage.pages : [createDefaultPage(fallbackName)]
     const normalizedPages = pages.map((page, index) => {
       const normalized = normalizeChartStorage(page, page.name || `${fallbackName}${index + 1}`)
@@ -137,7 +240,9 @@ export function normalizeProjectStorage(storage: unknown, fallbackName = DEFAULT
         ...normalized,
         id: page.id || getUUID(),
         name: page.name || `${fallbackName}${index + 1}`,
-        sort: page.sort || index + 1
+        sort: page.sort || index + 1,
+        pageType: page.pageType === 'modal' ? 'modal' : 'page',
+        modalConfig: page.pageType === 'modal' ? normalizeModalConfig(page.modalConfig) : undefined
       }
     })
     const homePageId = normalizedPages.some(page => page.id === storage.homePageId)
@@ -149,6 +254,7 @@ export function normalizeProjectStorage(storage: unknown, fallbackName = DEFAULT
 
     return {
       version: 2,
+      projectName,
       homePageId,
       activePageId,
       pageTransition: storage.pageTransition || 'fade',
@@ -162,11 +268,13 @@ export function normalizeProjectStorage(storage: unknown, fallbackName = DEFAULT
     ...legacyStorage,
     id: getUUID(),
     name: legacyStorage.editCanvasConfig.projectName || fallbackName,
-    sort: 1
+    sort: 1,
+    pageType: 'page' as const
   }
 
   return {
     version: 2,
+    projectName: legacyStorage.editCanvasConfig.projectName,
     homePageId: page.id,
     activePageId: page.id,
     pageTransition: 'fade',
@@ -238,6 +346,13 @@ export function clonePageWithNewIds(page: ReportCanvasPage, name?: string): Repo
     id: getUUID(),
     name: pageName,
     sort: page.sort + 1,
+    pageType: clonedPage.pageType || 'page',
+    modalConfig: clonedPage.pageType === 'modal'
+      ? {
+          ...createDefaultModalConfig(),
+          ...(clonedPage.modalConfig || {})
+        }
+      : undefined,
     editCanvasConfig: {
       ...createDefaultEditCanvasConfig(pageName),
       ...clonedPage.editCanvasConfig,

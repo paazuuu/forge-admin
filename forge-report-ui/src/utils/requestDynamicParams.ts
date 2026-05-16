@@ -1,5 +1,7 @@
 import axiosInstance from '@/api/axios'
 import dayjs from 'dayjs'
+import { unref } from 'vue'
+import type { InjectionKey, Ref } from 'vue'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 import type {
   DynamicRequestParamBinding,
@@ -19,6 +21,10 @@ export interface ResolvedDynamicRequestParams {
 }
 
 export type DynamicParamComponent = CreateComponentType | CreateComponentGroupType
+export type DynamicPageContext = Record<string, any> | Ref<Record<string, any>>
+export type DynamicComponentList = DynamicParamComponent[] | Ref<DynamicParamComponent[]>
+export const PREVIEW_PAGE_CONTEXT_KEY: InjectionKey<DynamicPageContext> = Symbol('PREVIEW_PAGE_CONTEXT_KEY')
+export const PREVIEW_COMPONENT_LIST_KEY: InjectionKey<DynamicComponentList> = Symbol('PREVIEW_COMPONENT_LIST_KEY')
 
 interface ApiResponse<T = unknown> {
   code?: number
@@ -171,9 +177,13 @@ const getContextValue = async (sourceKey?: string): Promise<unknown> => {
   return getByPath(user, sourceKey)
 }
 
-const getPageContextValue = (sourceKey?: string): unknown => {
+const getPageContextValue = (
+  sourceKey?: string,
+  pageContext?: DynamicPageContext
+): unknown => {
   const chartEditStore = useChartEditStore()
-  return getByPath(chartEditStore.getRuntimePageContext, sourceKey)
+  const currentPageContext = pageContext ? unref(pageContext) : undefined
+  return getByPath(currentPageContext || chartEditStore.getRuntimePageContext, sourceKey)
 }
 
 const getTabValue = (option: Record<string, unknown>) => {
@@ -229,7 +239,8 @@ const stringifyDependencyValue = (value: unknown) => {
 
 export const getDynamicRequestParamDependencySnapshot = (
   bindings?: DynamicRequestParamBinding[],
-  componentList: DynamicParamComponent[] = []
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
 ) => {
   if (!bindings?.length) return []
   return bindings
@@ -239,7 +250,7 @@ export const getDynamicRequestParamDependencySnapshot = (
     ))
     .map(binding => {
       if (binding.source === 'pageContext') {
-        return `${binding.id}:pageContext:${binding.sourceKey}:${stringifyDependencyValue(getPageContextValue(binding.sourceKey))}`
+        return `${binding.id}:pageContext:${binding.sourceKey}:${stringifyDependencyValue(getPageContextValue(binding.sourceKey, pageContext))}`
       }
       const component = componentList.find(item => item.id === binding.componentId)
       const field = binding.componentField || 'value'
@@ -271,13 +282,14 @@ const getPresetValue = (binding: DynamicRequestParamBinding): unknown => {
 
 const getBindingValue = async (
   binding: DynamicRequestParamBinding,
-  componentList: DynamicParamComponent[] = []
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
 ): Promise<unknown> => {
   let value: unknown
   if (binding.source === 'context') {
     value = await getContextValue(binding.sourceKey)
   } else if (binding.source === 'pageContext') {
-    value = getPageContextValue(binding.sourceKey)
+    value = getPageContextValue(binding.sourceKey, pageContext)
   } else if (binding.source === 'component') {
     value = getComponentValue(binding, componentList)
   } else if (binding.source === 'preset') {
@@ -294,7 +306,8 @@ const getBindingValue = async (
 
 export const resolveDynamicRequestParams = async (
   bindings?: DynamicRequestParamBinding[],
-  componentList: DynamicParamComponent[] = []
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
 ): Promise<ResolvedDynamicRequestParams> => {
   const result: ResolvedDynamicRequestParams = {
     Params: {},
@@ -308,7 +321,7 @@ export const resolveDynamicRequestParams = async (
     if (!binding.enabled || !binding.targetKey || !targetKeys.includes(binding.target)) {
       continue
     }
-    const value = await getBindingValue(binding, componentList)
+    const value = await getBindingValue(binding, componentList, pageContext)
     if (value === undefined || value === null || value === '') {
       continue
     }

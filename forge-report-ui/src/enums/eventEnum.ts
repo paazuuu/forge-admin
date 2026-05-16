@@ -12,7 +12,9 @@ export enum BaseEvent {
 
 // 结构化组件动作类型
 export enum ComponentActionType {
-  GO_PAGE = 'goPage'
+  GO_PAGE = 'goPage',
+  OPEN_MODAL = 'openModal',
+  CLOSE_MODAL = 'closeModal'
 }
 
 // 组件交互回调事件
