@@ -92,7 +92,7 @@
         :bordered="false"
         :striped="false"
         :scroll-x="1420"
-        max-height="calc(100vh - 360px)"
+        max-height="calc(100vh - 250px)"
         :edit-grid-cols="12"
         edit-label-placement="top"
         edit-form-class="data-connection-edit-form"
@@ -869,129 +869,138 @@ function getJdbcDatabaseName(jdbcUrl) {
   --studio-bg: linear-gradient(180deg, #f5f7fb 0%, #eef4f8 100%);
   --panel-bg: rgb(255 255 255 / 94%);
   --panel-border: rgb(148 163 184 / 16%);
-  --panel-shadow: 0 20px 56px rgb(15 23 42 / 9%);
+  --panel-shadow: 0 14px 34px rgb(15 23 42 / 8%);
   min-height: 100%;
-  padding: 20px;
+  padding: 14px;
   background: var(--studio-bg);
 }
 
 .studio-hero {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
-  gap: 18px;
-  margin-bottom: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top left, rgb(14 165 233 / 12%), transparent 36%),
+    radial-gradient(circle at 88% 24%, rgb(59 130 246 / 12%), transparent 24%),
+    linear-gradient(135deg, rgb(255 255 255 / 98%), rgb(247 251 255 / 96%));
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(16px);
 }
 
-.hero-main,
-.hero-stat-card,
 .connection-panel {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--panel-border);
-  border-radius: 24px;
+  border-radius: 20px;
   background: var(--panel-bg);
   box-shadow: var(--panel-shadow);
   backdrop-filter: blur(16px);
 }
 
 .hero-main {
-  padding: 30px;
-  background:
-    radial-gradient(circle at top left, rgb(14 165 233 / 14%), transparent 42%),
-    radial-gradient(circle at 88% 24%, rgb(59 130 246 / 16%), transparent 28%),
-    linear-gradient(135deg, rgb(255 255 255 / 98%), rgb(247 251 255 / 96%));
+  min-width: 0;
 }
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .hero-title {
   margin: 0;
   color: #0f172a;
-  font-size: 34px;
-  line-height: 1.12;
+  font-size: 24px;
+  line-height: 1.18;
 }
 
 .hero-description {
+  overflow: hidden;
   max-width: 720px;
-  margin: 14px 0 0;
+  margin: 6px 0 0;
   color: #475569;
-  font-size: 14px;
-  line-height: 1.8;
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .hero-stat-card {
-  padding: 22px 20px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(148 163 184 / 16%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
 
 .hero-stat-card::after {
-  position: absolute;
-  inset: auto -20px -28px auto;
-  width: 104px;
-  height: 104px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgb(14 165 233 / 14%), rgb(59 130 246 / 0%));
-  content: '';
+  display: none;
 }
 
 .hero-stat-label {
+  overflow: hidden;
   color: #64748b;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 12px;
+  margin-top: 4px;
   color: #0f172a;
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
 }
 
 .hero-stat-note {
-  margin-top: 10px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
+  display: none;
 }
 
 .connection-panel {
-  padding: 20px;
+  padding: 14px;
 }
 
 .panel-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .panel-toolbar h3 {
   margin: 0;
   color: #0f172a;
-  font-size: 22px;
+  font-size: 18px;
 }
 
 .toolbar-actions {
   display: grid;
-  grid-template-columns: minmax(220px, 1.2fr) 150px 130px auto auto auto;
-  gap: 12px;
-  min-width: min(100%, 940px);
+  grid-template-columns: minmax(200px, 1.2fr) 140px 120px auto auto auto;
+  gap: 8px;
+  min-width: min(100%, 880px);
 }
 
 .connection-name-card,
@@ -1206,6 +1215,10 @@ function getJdbcDatabaseName(jdbcUrl) {
     grid-template-columns: 1fr;
   }
 
+  .hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .toolbar-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     min-width: 100%;
@@ -1214,13 +1227,20 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 @media (max-width: 960px) {
   .connection-studio {
-    padding: 14px;
+    padding: 12px;
   }
 
-  .hero-stats,
   :global(.data-connection-edit-form .connection-guide-grid),
   .toolbar-actions {
     grid-template-columns: 1fr;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-description {
+    white-space: normal;
   }
 
   .panel-toolbar,

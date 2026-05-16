@@ -92,7 +92,7 @@
         :bordered="false"
         :striped="false"
         :scroll-x="1460"
-        max-height="calc(100vh - 360px)"
+        max-height="calc(100vh - 250px)"
         :edit-grid-cols="12"
         edit-label-placement="top"
         edit-form-class="data-dimension-edit-form"
@@ -960,117 +960,131 @@ function handleDeleteDimension(row) {
   --dimension-bg: linear-gradient(180deg, #f4f7fb 0%, #edf2f7 100%);
   --panel-bg: rgb(255 255 255 / 94%);
   --panel-border: rgb(100 116 139 / 16%);
-  --panel-shadow: 0 20px 54px rgb(15 23 42 / 10%);
+  --panel-shadow: 0 14px 34px rgb(15 23 42 / 8%);
   min-height: 100%;
-  padding: 20px;
+  padding: 14px;
   background: var(--dimension-bg);
 }
 
 .dimension-hero {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(440px, 0.85fr);
-  gap: 18px;
-  margin-bottom: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 12% 0%, rgb(20 184 166 / 14%), transparent 32%),
+    radial-gradient(circle at 88% 20%, rgb(37 99 235 / 11%), transparent 24%),
+    linear-gradient(135deg, rgb(255 255 255 / 96%), rgb(248 250 252 / 95%));
+  box-shadow: var(--panel-shadow);
 }
 
-.hero-main,
-.hero-stat-card,
 .dimension-panel {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--panel-border);
-  border-radius: 24px;
+  border-radius: 20px;
   background: var(--panel-bg);
   box-shadow: var(--panel-shadow);
 }
 
 .hero-main {
-  padding: 30px;
-  background:
-    radial-gradient(circle at 12% 0%, rgb(20 184 166 / 18%), transparent 34%),
-    radial-gradient(circle at 88% 20%, rgb(37 99 235 / 13%), transparent 30%),
-    linear-gradient(135deg, rgb(255 255 255 / 95%), rgb(248 250 252 / 95%));
+  min-width: 0;
 }
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .hero-title {
   margin: 0;
   color: #0f172a;
-  font-size: 34px;
-  line-height: 1.14;
+  font-size: 24px;
+  line-height: 1.18;
 }
 
 .hero-description {
+  overflow: hidden;
   max-width: 760px;
-  margin: 14px 0 0;
+  margin: 6px 0 0;
   color: #475569;
-  font-size: 14px;
-  line-height: 1.85;
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .hero-stat-card {
-  padding: 22px 20px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(148 163 184 / 16%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
 
 .hero-stat-label {
+  overflow: hidden;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 8px;
+  margin-top: 4px;
   color: #0f172a;
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .hero-stat-note {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
+  display: none;
 }
 
 .dimension-panel {
-  padding: 18px;
+  padding: 14px;
 }
 
 .panel-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .panel-toolbar h3 {
   margin: 0;
   color: #0f172a;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .toolbar-actions {
   display: grid;
-  grid-template-columns: 240px 150px 130px auto auto auto;
-  gap: 10px;
+  grid-template-columns: 220px 140px 120px auto auto auto;
+  gap: 8px;
   align-items: center;
 }
 
@@ -1306,6 +1320,10 @@ function handleDeleteDimension(row) {
     grid-template-columns: 1fr;
   }
 
+  .hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .toolbar-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
@@ -1321,11 +1339,18 @@ function handleDeleteDimension(row) {
     padding: 12px;
   }
 
-  .hero-stats,
   .toolbar-actions,
   .dimension-guide__facts,
   .dimension-preview-summary {
     grid-template-columns: 1fr;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-description {
+    white-space: normal;
   }
 
   .dimension-sql-preview-bar {

@@ -6,13 +6,16 @@ import com.mdframe.forge.plugin.ai.client.AiClient;
 import com.mdframe.forge.plugin.ai.client.dto.AiClientRequest;
 import com.mdframe.forge.plugin.ai.client.dto.AiClientResponse;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,7 +35,10 @@ public class AiClientController {
     }
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> stream(@RequestBody AiClientRequest request) {
+    public Flux<ServerSentEvent<String>> stream(@RequestBody AiClientRequest request, HttpServletResponse response) {
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
+        response.setHeader("X-Accel-Buffering", "no");
         return Flux.concat(
                 Flux.just(buildProgressEvent("connecting", "正在连接模型...")),
                 aiClient.stream(request).map(this::buildChunkEvent),

@@ -7,7 +7,7 @@
             智能体管理
           </div>
           <div class="page-subtitle">
-            {{ publishedCount }} 个已发布 · {{ draftCount }} 个草稿
+            共 {{ pagination.itemCount }} 个智能体
           </div>
         </div>
         <NButton type="primary" size="large" @click="handleCreateAgent">
@@ -43,8 +43,16 @@
       </div>
 
       <n-spin :show="agentLoading">
-        <div v-if="pagedAgents.length" class="agent-grid">
-          <article v-for="agent in pagedAgents" :key="agent.id" class="agent-card">
+        <div v-if="agentList.length" class="agent-grid">
+          <article
+            v-for="agent in agentList"
+            :key="agent.id"
+            class="agent-card"
+            tabindex="0"
+            @click="handleOpenDesigner(agent)"
+            @keydown.enter.prevent="handleOpenDesigner(agent)"
+            @keydown.space.prevent="handleOpenDesigner(agent)"
+          >
             <div class="agent-card-header">
               <div class="agent-avatar" :style="{ background: getAgentGradient(agent.agentCode) }">
                 {{ getAgentInitial(agent) }}
@@ -87,17 +95,18 @@
               <span v-if="!getAgentTools(agent).length" class="muted-chip">未配置 MCP</span>
             </div>
 
-            <div class="agent-card-footer">
-              <NButton text type="primary" @click="handleEditAgent(agent)">
-                编辑
-              </NButton>
-              <NButton text @click="handleTestAgent(agent)">
-                测试
+            <div class="agent-design-hint">
+              点击卡片进入设计表单
+            </div>
+
+            <div class="agent-card-footer" @click.stop>
+              <NButton text type="primary" @click.stop="handleEditAgent(agent)">
+                编辑信息
               </NButton>
               <NButton
                 text
                 :type="agent.status === '0' ? 'warning' : 'success'"
-                @click="handleTogglePublish(agent)"
+                @click.stop="handleTogglePublish(agent)"
               >
                 {{ agent.status === '0' ? '下线' : '发布' }}
               </NButton>
@@ -119,13 +128,58 @@
         </div>
       </n-spin>
 
-      <div v-if="filteredAgents.length > cardPageSize" class="pagination-wrap">
+      <div v-if="pagination.itemCount > 0" class="pagination-wrap">
+        <span class="pagination-total">共 {{ pagination.itemCount }} 个智能体</span>
         <n-pagination
           v-model:page="pagination.page"
-          :page-count="pageCount"
+          v-model:page-size="pagination.pageSize"
+          :item-count="pagination.itemCount"
+          :page-sizes="[6, 12, 24, 48]"
+          show-size-picker
           size="small"
+          @update:page="loadAgents"
+          @update:page-size="handleAgentPageSizeChange"
         />
       </div>
+
+      <n-modal
+        v-model:show="baseModalVisible"
+        preset="card"
+        :title="baseModalTitle"
+        class="agent-base-modal"
+        :bordered="false"
+      >
+        <n-form ref="baseFormRef" :model="baseForm" :rules="baseRules" label-placement="top">
+          <n-form-item label="智能体名称" path="agentName">
+            <n-input v-model:value="baseForm.agentName" placeholder="如 合同审查助手" />
+          </n-form-item>
+          <n-form-item label="智能体编码" path="agentCode">
+            <n-input
+              v-model:value="baseForm.agentCode"
+              :disabled="!!baseForm.id"
+              placeholder="contract_reviewer"
+            />
+          </n-form-item>
+          <n-form-item label="描述" path="description">
+            <n-input
+              v-model:value="baseForm.description"
+              type="textarea"
+              :rows="3"
+              placeholder="用于列表卡片展示和会话识别"
+            />
+          </n-form-item>
+        </n-form>
+        <template #footer>
+          <div class="modal-footer">
+            <NButton @click="baseModalVisible = false">
+              取消
+            </NButton>
+            <NButton type="primary" :loading="baseSaveLoading" @click="handleSaveBaseInfo">
+              保存
+            </NButton>
+          </div>
+        </template>
+      </n-modal>
     </div>
 
     <div v-else class="agent-workbench">
@@ -145,115 +199,260 @@
             </div>
           </div>
         </div>
-        <div class="model-dock">
-          <n-select
-            v-model:value="agentForm.providerId"
-            :options="providerOptions"
-            class="model-provider-select"
-            clearable
-            filterable
-            size="small"
-            placeholder="供应商"
-          />
-          <n-select
-            v-model:value="agentForm.modelName"
-            :options="modelOptions"
-            :loading="modelLoading"
-            class="model-name-select"
-            clearable
-            filterable
-            tag
-            size="small"
-            placeholder="模型"
-          />
-          <n-popover trigger="click" placement="bottom-end">
-            <template #trigger>
-              <NButton size="small" secondary>
-                <template #icon>
-                  <i class="ai-icon:tool" />
+        <div class="workbench-control-cluster">
+          <div class="model-command-card">
+            <div class="model-command-tabs">
+              <button type="button" class="agent-settings-pill" @click="handleOpenWorkbenchBaseSettings">
+                <i class="ai-icon:settings" />
+                <span>Agent 设置</span>
+              </button>
+              <n-popover trigger="click" placement="bottom-end" :width="560">
+                <template #trigger>
+                  <button type="button" class="active-model-pill">
+                    <span class="model-pill-icon">
+                      <i class="ai-icon:layers" />
+                    </span>
+                    <span class="model-pill-name">{{ selectedModelLabel }}</span>
+                    <span class="model-chat-badge">CHAT</span>
+                    <i class="model-pill-arrow ai-icon:chevron-down" />
+                  </button>
                 </template>
-                参数
-              </NButton>
-            </template>
-            <div class="model-param-panel">
-              <div class="param-row">
-                <div class="param-label">
-                  <span>温度</span>
-                  <small>控制回答发散程度</small>
+                <div class="model-dropdown-panel">
+                  <div class="model-selector-card">
+                    <div class="model-selector-icon">
+                      <i class="ai-icon:layers" />
+                    </div>
+                    <div class="model-selector-field provider-field">
+                      <span class="model-selector-label">供应商</span>
+                      <n-select
+                        v-model:value="agentForm.providerId"
+                        :options="providerOptions"
+                        class="model-provider-select"
+                        clearable
+                        filterable
+                        size="small"
+                        :bordered="false"
+                        placeholder="选择供应商"
+                      />
+                    </div>
+                    <div class="model-selector-divider" />
+                    <div class="model-selector-field model-field">
+                      <span class="model-selector-label">模型</span>
+                      <n-select
+                        v-model:value="agentForm.modelName"
+                        :options="modelOptions"
+                        :loading="modelLoading"
+                        class="model-name-select"
+                        clearable
+                        filterable
+                        tag
+                        size="small"
+                        :bordered="false"
+                        placeholder="选择或输入模型"
+                      />
+                    </div>
+                    <span class="selector-chat-badge">CHAT</span>
+                  </div>
+
+                  <div class="model-param-panel">
+                    <div class="param-panel-header">
+                      <div>
+                        <div class="param-panel-title">
+                          参数配置
+                        </div>
+                        <div class="param-panel-subtitle">
+                          调整当前模型的生成风格和回复长度
+                        </div>
+                      </div>
+                      <NButton quaternary circle size="small" @click="resetModelParams">
+                        <template #icon>
+                          <i class="ai-icon:refresh-ccw" />
+                        </template>
+                      </NButton>
+                    </div>
+
+                    <div class="param-config-list">
+                      <div class="param-config-row">
+                        <div class="param-meta-cell">
+                          <div class="param-title-line">
+                            <span>温度</span>
+                            <n-tooltip trigger="hover">
+                              <template #trigger>
+                                <span class="param-help">?</span>
+                              </template>
+                              控制回答发散程度，越高越有创造性。
+                            </n-tooltip>
+                          </div>
+                          <n-switch v-model:value="modelParamEnabled.temperature" size="small" />
+                        </div>
+                        <div class="param-slider-cell">
+                          <n-slider
+                            v-model:value="agentForm.temperature"
+                            :min="0"
+                            :max="1"
+                            :step="0.01"
+                            :disabled="!modelParamEnabled.temperature"
+                          />
+                        </div>
+                        <n-input-number
+                          v-model:value="agentForm.temperature"
+                          :min="0"
+                          :max="1"
+                          :step="0.01"
+                          :precision="2"
+                          :show-button="false"
+                          :disabled="!modelParamEnabled.temperature"
+                          size="small"
+                          class="param-number"
+                        />
+                      </div>
+
+                      <div class="param-config-row">
+                        <div class="param-meta-cell">
+                          <div class="param-title-line">
+                            <span>最大 Token</span>
+                            <n-tooltip trigger="hover">
+                              <template #trigger>
+                                <span class="param-help">?</span>
+                              </template>
+                              限制单次回复长度，越大可输出内容越长。
+                            </n-tooltip>
+                          </div>
+                          <n-switch v-model:value="modelParamEnabled.maxTokens" size="small" />
+                        </div>
+                        <div class="param-slider-cell">
+                          <n-slider
+                            v-model:value="agentForm.maxTokens"
+                            :min="256"
+                            :max="32000"
+                            :step="256"
+                            :disabled="!modelParamEnabled.maxTokens"
+                          />
+                        </div>
+                        <n-input-number
+                          v-model:value="agentForm.maxTokens"
+                          :min="256"
+                          :max="128000"
+                          :step="256"
+                          :precision="0"
+                          :show-button="false"
+                          :disabled="!modelParamEnabled.maxTokens"
+                          size="small"
+                          class="param-number"
+                        />
+                      </div>
+                    </div>
+
+                    <button type="button" class="multi-model-link">
+                      <span>多个模型进行调试</span>
+                      <i class="ai-icon:arrow-right" />
+                    </button>
+                  </div>
                 </div>
-                <div class="param-control">
-                  <n-slider
-                    v-model:value="agentForm.temperature"
-                    :min="0"
-                    :max="1"
-                    :step="0.01"
-                  />
-                  <n-input-number
-                    v-model:value="agentForm.temperature"
-                    :min="0"
-                    :max="1"
-                    :step="0.01"
-                    :precision="2"
-                    size="small"
-                    class="param-number"
-                  />
-                </div>
-              </div>
-              <div class="param-row">
-                <div class="param-label">
-                  <span>最大 Token</span>
-                  <small>限制单次回复长度</small>
-                </div>
-                <n-input-number
-                  v-model:value="agentForm.maxTokens"
-                  :min="256"
-                  :step="512"
-                  size="small"
-                  class="token-param-input"
-                />
-              </div>
+              </n-popover>
             </div>
-          </n-popover>
-        </div>
-        <div class="workbench-actions">
-          <NButton :loading="saveLoading" @click="handleSaveDraft">
-            保存
-          </NButton>
-          <NButton type="primary" :loading="publishLoading" @click="handlePublishAgent">
-            发布
-          </NButton>
+          </div>
+
+          <div class="workbench-actions">
+            <NButton class="draft-save-button" :loading="saveLoading" @click="handleSaveDraft">
+              保存
+            </NButton>
+            <n-popover v-model:show="publishMenuVisible" trigger="click" placement="bottom-end" :width="336">
+              <template #trigger>
+                <NButton class="publish-button" type="primary" :loading="publishLoading">
+                  发布
+                  <template #icon>
+                    <i class="ai-icon:chevron-down" />
+                  </template>
+                </NButton>
+              </template>
+              <div class="publish-panel">
+                <section class="publish-status-card">
+                  <div class="publish-status-head">
+                    <div>
+                      <div class="publish-eyebrow">
+                        最新发布
+                      </div>
+                      <div class="publish-time-text">
+                        {{ publishTimeText }}
+                      </div>
+                    </div>
+                    <button type="button" class="restore-button" @click="handlePendingPublishAction('恢复')">
+                      恢复
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="publish-update-button"
+                    :disabled="publishLoading"
+                    @click="handlePublishMenuUpdate"
+                  >
+                    更新
+                  </button>
+                </section>
+
+                <section class="publish-action-card">
+                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('运行')">
+                    <span class="publish-action-left">
+                      <i class="publish-action-icon ai-icon:send" />
+                      <span>运行</span>
+                    </span>
+                    <i class="publish-action-arrow ai-icon:arrow-right" />
+                  </button>
+                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('嵌入网站')">
+                    <span class="publish-action-left">
+                      <i class="publish-action-icon ai-icon:code" />
+                      <span>嵌入网站</span>
+                    </span>
+                    <i class="publish-action-arrow ai-icon:arrow-right" />
+                  </button>
+                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('探索')">
+                    <span class="publish-action-left">
+                      <i class="publish-action-icon ai-icon:message-circle" />
+                      <span>在 “探索” 中打开</span>
+                    </span>
+                    <i class="publish-action-arrow ai-icon:arrow-right" />
+                  </button>
+                  <button type="button" class="publish-action-row" @click="handlePendingPublishAction('访问 API')">
+                    <span class="publish-action-left">
+                      <i class="publish-action-icon ai-icon:link" />
+                      <span>访问 API</span>
+                    </span>
+                    <i class="publish-action-arrow ai-icon:arrow-right" />
+                  </button>
+                </section>
+              </div>
+            </n-popover>
+          </div>
         </div>
       </div>
 
-      <div class="workbench-body">
-        <section class="builder-panel">
-          <n-scrollbar class="builder-scroll">
+      <div class="workbench-body dify-workbench-body">
+        <section class="orchestration-panel">
+          <div class="orchestration-header">
+            <div>
+              <div class="orchestration-title">
+                编排
+              </div>
+              <div class="orchestration-subtitle">
+                配置智能体人设、提示词、工具与上下文
+              </div>
+            </div>
+            <NButton size="small" secondary @click="handleSaveDraft">
+              保存草稿
+            </NButton>
+          </div>
+
+          <div class="orchestration-scroll">
             <n-form ref="agentFormRef" :model="agentForm" :rules="agentRules" label-placement="top">
-              <div class="panel-section">
-                <div class="section-title">
+              <div class="panel-section panel-card prompt-card">
+                <div class="section-title compact-section-title">
                   <i class="ai-icon:user-check" />
-                  <span>人设</span>
+                  <span>提示词</span>
+                  <small>{{ agentForm.agentName || agentForm.agentCode }}</small>
                 </div>
-                <n-grid :cols="2" :x-gap="14">
-                  <n-form-item-gi label="智能体名称" path="agentName">
-                    <n-input v-model:value="agentForm.agentName" placeholder="如 合同审查助手" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="智能体编码" path="agentCode">
-                    <n-input
-                      v-model:value="agentForm.agentCode"
-                      :disabled="!!agentForm.id"
-                      placeholder="contract_reviewer"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi :span="2" label="描述" path="description">
-                    <n-input
-                      v-model:value="agentForm.description"
-                      type="textarea"
-                      :rows="2"
-                      placeholder="用于卡片展示和会话识别"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi :span="2" label="系统提示词" path="systemPrompt">
+                <n-grid :cols="1" :x-gap="14">
+                  <n-form-item-gi label="系统提示词" path="systemPrompt">
                     <n-input
                       v-model:value="agentForm.systemPrompt"
                       type="textarea"
@@ -261,7 +460,7 @@
                       placeholder="定义智能体角色、目标、边界和输出要求"
                     />
                   </n-form-item-gi>
-                  <n-form-item-gi :span="2" label="开场白">
+                  <n-form-item-gi label="开场白">
                     <n-input
                       v-model:value="agentForm.extraConfig.openingStatement"
                       type="textarea"
@@ -272,123 +471,53 @@
                 </n-grid>
               </div>
 
-              <div class="panel-section">
-                <div class="section-title">
-                  <i class="ai-icon:tool" />
-                  <span>工具与技能</span>
-                </div>
-                <n-form-item label="MCP 工具">
-                  <n-select
-                    v-model:value="agentForm.extraConfig.mcpTools"
-                    :options="mcpToolOptions"
-                    multiple
-                    clearable
-                    filterable
-                    placeholder="选择智能体可调用的 MCP 工具"
-                  />
-                </n-form-item>
-                <n-form-item label="推荐问题">
-                  <n-dynamic-tags v-model:value="agentForm.extraConfig.suggestedQuestions" />
-                </n-form-item>
-                <n-form-item label="Skill 预留">
-                  <n-dynamic-tags v-model:value="agentForm.extraConfig.skills" />
-                </n-form-item>
-              </div>
-            </n-form>
-          </n-scrollbar>
-        </section>
-
-        <section class="context-panel">
-          <div class="context-panel-header">
-            <div class="section-title">
-              <i class="ai-icon:book-open" />
-              <span>上下文</span>
-              <NTag size="small" round>
-                {{ contextConfigs.length }}
-              </NTag>
-            </div>
-            <NButton size="small" type="primary" secondary @click="addContextConfig">
-              <template #icon>
-                <i class="ai-icon:plus" />
-              </template>
-              添加
-            </NButton>
-          </div>
-
-          <n-scrollbar class="context-collapse-scroll">
-            <div v-if="contextConfigs.length" class="context-collapse-wrap">
-              <n-collapse v-model:expanded-names="expandedContextNames" class="context-collapse">
-                <n-collapse-item
-                  v-for="(context, index) in contextConfigs"
-                  :key="context.localKey"
-                  :name="context.localKey"
-                >
-                  <template #header>
-                    <div class="context-collapse-title">
-                      <strong>{{ context.configName || `上下文 ${index + 1}` }}</strong>
-                      <small>{{ getContextPreview(context) }}</small>
+              <div class="config-entry-grid">
+                <button type="button" class="config-entry-card" @click="toolModalVisible = true">
+                  <div class="config-entry-icon">
+                    <i class="ai-icon:tool" />
+                  </div>
+                  <div class="config-entry-main">
+                    <div class="config-entry-title">
+                      工具与技能
                     </div>
-                  </template>
-                  <template #header-extra>
-                    <div class="context-collapse-extra" @click.stop>
-                      <NTag size="small" :type="context.enabled ? 'success' : 'warning'" round>
-                        {{ context.configType || 'SPEC' }}
+                    <div class="config-entry-desc">
+                      {{ selectedMcpToolLabels.length }} 个 MCP · {{ suggestedQuestionCount }} 个推荐问题
+                    </div>
+                    <div class="config-entry-tags">
+                      <NTag
+                        v-for="label in selectedMcpToolLabels.slice(0, 3)"
+                        :key="label"
+                        size="small"
+                        round
+                      >
+                        {{ label }}
                       </NTag>
-                      <n-switch v-model:value="context.enabled" size="small" />
-                      <NPopconfirm @positive-click="removeContextConfig(index)">
-                        <template #trigger>
-                          <NButton quaternary circle size="small" type="error" @click.stop>
-                            <template #icon>
-                              <i class="ai-icon:trash-2" />
-                            </template>
-                          </NButton>
-                        </template>
-                        确定删除该上下文配置吗？
-                      </NPopconfirm>
-                    </div>
-                  </template>
-
-                  <div class="context-form">
-                    <div class="context-field-grid">
-                      <div class="context-field context-field-name">
-                        <div class="context-field-label">
-                          名称
-                        </div>
-                        <n-input v-model:value="context.configName" size="small" placeholder="配置名称" />
-                      </div>
-                      <div class="context-field">
-                        <div class="context-field-label">
-                          类型
-                        </div>
-                        <n-select v-model:value="context.configType" :options="contextTypeOptions" size="small" />
-                      </div>
-                      <div class="context-field">
-                        <div class="context-field-label">
-                          排序
-                        </div>
-                        <n-input-number v-model:value="context.sort" size="small" :min="0" class="sort-input" />
-                      </div>
-                    </div>
-                    <div class="context-field">
-                      <div class="context-field-label">
-                        内容
-                      </div>
-                      <n-input
-                        v-model:value="context.configContent"
-                        type="textarea"
-                        class="context-content-input"
-                        :autosize="{ minRows: 7, maxRows: 14 }"
-                        placeholder="上下文内容会在调用智能体时注入"
-                      />
+                      <span v-if="!selectedMcpToolLabels.length" class="config-entry-empty">未配置工具</span>
                     </div>
                   </div>
-                </n-collapse-item>
-              </n-collapse>
-            </div>
-            <div v-else class="context-empty">
-              暂无上下文配置，点击右上角添加
-            </div>
-          </n-scrollbar>
+                  <i class="config-entry-arrow ai-icon:chevron-right" />
+                </button>
+
+                <button type="button" class="config-entry-card" @click="contextModalVisible = true">
+                  <div class="config-entry-icon context-entry-icon">
+                    <i class="ai-icon:book-open" />
+                  </div>
+                  <div class="config-entry-main">
+                    <div class="config-entry-title">
+                      上下文
+                    </div>
+                    <div class="config-entry-desc">
+                      {{ contextConfigs.length }} 个配置 · {{ enabledContextCount }} 个启用
+                    </div>
+                    <div class="config-entry-preview">
+                      {{ contextConfigs[0]?.configName || '导入知识、规则或样例作为上下文' }}
+                    </div>
+                  </div>
+                  <i class="config-entry-arrow ai-icon:chevron-right" />
+                </button>
+              </div>
+            </n-form>
+          </div>
         </section>
 
         <section class="chat-panel">
@@ -399,7 +528,7 @@
               </div>
               <div>
                 <div class="chat-title">
-                  实时对话测试
+                  调试与预览
                 </div>
                 <div class="chat-subtitle">
                   {{ agentForm.status === '0' ? '已发布配置' : '草稿不可调用' }}
@@ -414,7 +543,7 @@
             </NButton>
           </div>
 
-          <n-scrollbar ref="messageScrollbarRef" class="chat-scroll">
+          <div ref="messageListRef" class="chat-scroll">
             <div class="chat-message-list">
               <div
                 v-for="message in previewMessages"
@@ -426,34 +555,34 @@
                   <i v-if="message.role === 'assistant'" class="ai-icon:message-circle" />
                   <span v-else>我</span>
                 </div>
-                  <div class="message-body">
-                    <div class="message-meta">
-                      <span>{{ message.role === 'user' ? '我' : agentForm.agentName || '智能体' }}</span>
-                      <span>{{ message.time }}</span>
-                    </div>
-                    <div v-if="message.reasoning && message.reasoning.trim()" class="reasoning-section">
-                      <div class="reasoning-header">
-                        <div class="reasoning-header-left">
-                          <i class="ai-icon:brain" />
-                          <span>思考过程</span>
-                          <small v-if="message.reasoningTime">用时 {{ message.reasoningTime }}s</small>
-                          <small v-else-if="message.isReasoning">思考中...</small>
-                        </div>
-                      </div>
-                      <div class="reasoning-content">
-                        {{ message.reasoning }}
+                <div class="message-body">
+                  <div class="message-meta">
+                    <span>{{ message.role === 'user' ? '我' : agentForm.agentName || '智能体' }}</span>
+                    <span>{{ message.time }}</span>
+                  </div>
+                  <div v-if="message.reasoning && message.reasoning.trim()" class="reasoning-section">
+                    <div class="reasoning-header">
+                      <div class="reasoning-header-left">
+                        <i class="ai-icon:brain" />
+                        <span>思考过程</span>
+                        <small v-if="message.reasoningTime">用时 {{ message.reasoningTime }}s</small>
+                        <small v-else-if="message.isReasoning">思考中...</small>
                       </div>
                     </div>
-                    <div v-if="message.content || (message.streaming && !message.isReasoning)" class="message-bubble">
-                      <template v-if="message.content">
-                        {{ message.content }}
-                      </template>
-                      <span v-if="message.streaming && !message.isReasoning" class="stream-cursor" />
+                    <div class="reasoning-content">
+                      {{ message.reasoning }}
                     </div>
                   </div>
+                  <div v-if="message.content || (message.streaming && !message.isReasoning)" class="message-bubble">
+                    <template v-if="message.content">
+                      {{ message.content }}
+                    </template>
+                    <span v-if="message.streaming && !message.isReasoning" class="stream-cursor" />
+                  </div>
                 </div>
+              </div>
             </div>
-          </n-scrollbar>
+          </div>
 
           <div v-if="suggestedQuestionList.length && !chatMessages.length" class="suggestion-row">
             <button
@@ -493,6 +622,148 @@
           </div>
         </section>
       </div>
+
+      <n-modal
+        v-model:show="toolModalVisible"
+        preset="card"
+        title="工具与技能"
+        class="agent-config-modal"
+        :bordered="false"
+      >
+        <div class="modal-section">
+          <n-form label-placement="top">
+            <n-form-item label="MCP 工具">
+              <n-select
+                v-model:value="agentForm.extraConfig.mcpTools"
+                :options="mcpToolOptions"
+                multiple
+                clearable
+                filterable
+                placeholder="选择智能体可调用的 MCP 工具"
+              />
+            </n-form-item>
+            <n-form-item label="推荐问题">
+              <n-dynamic-tags v-model:value="agentForm.extraConfig.suggestedQuestions" />
+            </n-form-item>
+            <n-form-item label="Skill 预留">
+              <n-dynamic-tags v-model:value="agentForm.extraConfig.skills" />
+            </n-form-item>
+          </n-form>
+        </div>
+        <template #footer>
+          <div class="modal-footer">
+            <NButton type="primary" @click="toolModalVisible = false">
+              完成
+            </NButton>
+          </div>
+        </template>
+      </n-modal>
+
+      <n-modal
+        v-model:show="contextModalVisible"
+        preset="card"
+        title="上下文配置"
+        class="agent-context-modal"
+        :bordered="false"
+      >
+        <div class="context-modal-toolbar">
+          <div class="context-modal-hint">
+            上下文会在调用智能体时注入，适合放规则、样例和领域知识。
+          </div>
+          <NButton size="small" type="primary" secondary @click="addContextConfig">
+            <template #icon>
+              <i class="ai-icon:plus" />
+            </template>
+            添加上下文
+          </NButton>
+        </div>
+
+        <div v-if="contextConfigs.length" class="context-modal-body">
+          <n-collapse v-model:expanded-names="expandedContextNames" class="context-collapse">
+            <n-collapse-item
+              v-for="(context, index) in contextConfigs"
+              :key="context.localKey"
+              :name="context.localKey"
+            >
+              <template #header>
+                <div class="context-collapse-title">
+                  <strong>{{ context.configName || `上下文 ${index + 1}` }}</strong>
+                  <small>{{ getContextPreview(context) }}</small>
+                </div>
+              </template>
+              <template #header-extra>
+                <div class="context-collapse-extra" @click.stop>
+                  <NTag size="small" :type="context.enabled ? 'success' : 'warning'" round>
+                    {{ context.configType || 'SPEC' }}
+                  </NTag>
+                  <n-switch v-model:value="context.enabled" size="small" />
+                  <NPopconfirm @positive-click="removeContextConfig(index)">
+                    <template #trigger>
+                      <NButton quaternary circle size="small" type="error" @click.stop>
+                        <template #icon>
+                          <i class="ai-icon:trash-2" />
+                        </template>
+                      </NButton>
+                    </template>
+                    确定删除该上下文配置吗？
+                  </NPopconfirm>
+                </div>
+              </template>
+
+              <div class="context-form">
+                <div class="context-field-grid">
+                  <div class="context-field context-field-name">
+                    <div class="context-field-label">
+                      名称
+                    </div>
+                    <n-input v-model:value="context.configName" size="small" placeholder="配置名称" />
+                  </div>
+                  <div class="context-field">
+                    <div class="context-field-label">
+                      类型
+                    </div>
+                    <n-select v-model:value="context.configType" :options="contextTypeOptions" size="small" />
+                  </div>
+                  <div class="context-field">
+                    <div class="context-field-label">
+                      排序
+                    </div>
+                    <n-input-number
+                      v-model:value="context.sort"
+                      size="small"
+                      :min="0"
+                      :show-button="false"
+                      class="sort-input"
+                    />
+                  </div>
+                </div>
+                <div class="context-field">
+                  <div class="context-field-label">
+                    内容
+                  </div>
+                  <n-input
+                    v-model:value="context.configContent"
+                    type="textarea"
+                    class="context-content-input"
+                    :autosize="{ minRows: 7, maxRows: 14 }"
+                    placeholder="上下文内容会在调用智能体时注入"
+                  />
+                </div>
+              </div>
+            </n-collapse-item>
+          </n-collapse>
+        </div>
+        <div v-else class="context-empty context-modal-empty">
+          暂无上下文配置，点击上方添加
+        </div>
+        <template #footer>
+          <div class="modal-footer">
+            <NButton type="primary" @click="contextModalVisible = false">
+              完成
+            </NButton>
+          </div>
+        </template>
+      </n-modal>
     </div>
   </div>
 </template>
@@ -522,8 +793,14 @@ const agentLoading = ref(false)
 const saveLoading = ref(false)
 const publishLoading = ref(false)
 const modelLoading = ref(false)
+const toolModalVisible = ref(false)
+const contextModalVisible = ref(false)
+const baseModalVisible = ref(false)
+const publishMenuVisible = ref(false)
+const baseSaveLoading = ref(false)
 const agentFormRef = ref(null)
-const messageScrollbarRef = ref(null)
+const baseFormRef = ref(null)
+const messageListRef = ref(null)
 const agentList = ref([])
 const providerList = ref([])
 const modelList = ref([])
@@ -535,12 +812,15 @@ const chatInput = ref('')
 const chatSending = ref(false)
 const chatStatusText = ref('等待输入')
 const sessionId = ref(generateUUID())
-const cardPageSize = 12
-const pagination = reactive({ page: 1 })
+const pagination = reactive({ page: 1, pageSize: 12, itemCount: 0 })
 const filter = reactive({ keyword: '', status: 'all' })
+const baseMode = ref('create')
+const baseEditingAgent = ref(null)
 const reasoningDelimiter = '==================== 思考过程 ===================='
 const answerDelimiter = '==================== 完整回复 ===================='
 let chatAbortController = null
+let chatScrollFrame = null
+let activeChatStreamId = null
 let hydratingProvider = false
 
 const defaultPrompt = `你是一个企业级智能体。请根据用户问题给出准确、清晰、可执行的回答。
@@ -551,6 +831,16 @@ const defaultPrompt = `你是一个企业级智能体。请根据用户问题给
 3. 输出结构清晰，必要时给出步骤或清单。`
 
 const agentForm = reactive(createEmptyAgent())
+const modelParamEnabled = reactive({
+  temperature: true,
+  maxTokens: true,
+})
+const baseForm = reactive({
+  id: null,
+  agentName: '',
+  agentCode: '',
+  description: '',
+})
 
 const statusFilterOptions = [
   { label: '全部状态', value: 'all' },
@@ -573,7 +863,7 @@ const mcpToolOptions = [
   { label: '代码执行', value: 'code_executor' },
 ]
 
-const agentRules = {
+const baseRules = {
   agentName: [{ required: true, message: '请输入智能体名称', trigger: 'blur' }],
   agentCode: [
     { required: true, message: '请输入智能体编码', trigger: 'blur' },
@@ -583,6 +873,9 @@ const agentRules = {
       trigger: 'blur',
     },
   ],
+}
+
+const agentRules = {
   systemPrompt: [{ required: true, message: '请输入系统提示词', trigger: 'blur' }],
 }
 
@@ -596,27 +889,35 @@ const modelOptions = computed(() => modelList.value.map(model => ({
   value: model.modelId,
 })))
 
-const filteredAgents = computed(() => {
-  const keyword = filter.keyword.trim().toLowerCase()
-  return agentList.value.filter((agent) => {
-    const matchedStatus = filter.status === 'all' || agent.status === filter.status
-    const matchedKeyword = !keyword
-      || (agent.agentName || '').toLowerCase().includes(keyword)
-      || (agent.agentCode || '').toLowerCase().includes(keyword)
-      || (agent.description || '').toLowerCase().includes(keyword)
-    return matchedStatus && matchedKeyword
-  })
+const selectedProviderName = computed(() => {
+  const provider = providerList.value.find(item => toIdString(item.id) === toIdString(agentForm.providerId))
+  return provider?.providerName || '未选择供应商'
 })
 
-const pageCount = computed(() => Math.max(1, Math.ceil(filteredAgents.value.length / cardPageSize)))
-
-const pagedAgents = computed(() => {
-  const start = (pagination.page - 1) * cardPageSize
-  return filteredAgents.value.slice(start, start + cardPageSize)
+const selectedModelLabel = computed(() => {
+  if (!agentForm.modelName) {
+    if (!agentForm.providerId) {
+      return '选择模型'
+    }
+    return getProviderDefaultModel(agentForm.providerId) || selectedProviderName.value
+  }
+  const selectedModel = modelList.value.find(model => model.modelId === agentForm.modelName)
+  return selectedModel?.modelName || agentForm.modelName
 })
 
-const publishedCount = computed(() => agentList.value.filter(agent => agent.status === '0').length)
-const draftCount = computed(() => agentList.value.filter(agent => agent.status !== '0').length)
+const pageCount = computed(() => Math.max(1, Math.ceil(pagination.itemCount / pagination.pageSize)))
+
+const baseModalTitle = computed(() => baseMode.value === 'create' ? '创建智能体' : '编辑基础信息')
+const enabledContextCount = computed(() => contextConfigs.value.filter(config => config.enabled).length)
+const selectedMcpToolLabels = computed(() => (agentForm.extraConfig.mcpTools || []).map(getMcpToolLabel))
+const suggestedQuestionCount = computed(() => (agentForm.extraConfig.suggestedQuestions || []).filter(Boolean).length)
+const publishTimeText = computed(() => {
+  if (agentForm.status !== '0') {
+    return '尚未发布'
+  }
+  const publishedAt = agentForm.updateTime || agentForm.createTime
+  return publishedAt ? `发布于 ${formatRelativeTime(publishedAt)}` : '已发布'
+})
 
 const openingStatement = computed(() => {
   return agentForm.extraConfig.openingStatement || `你好，我是${agentForm.agentName || '智能体'}，可以开始测试。`
@@ -648,10 +949,12 @@ const canSendChat = computed(() => {
 
 watch(() => filter.keyword, () => {
   pagination.page = 1
+  loadAgents()
 })
 
 watch(() => filter.status, () => {
   pagination.page = 1
+  loadAgents()
 })
 
 watch(() => pagination.page, () => {
@@ -659,6 +962,12 @@ watch(() => pagination.page, () => {
     pagination.page = pageCount.value
   }
 })
+
+watch(() => pagination.pageSize, () => {
+  pagination.page = 1
+})
+
+watch(() => chatMessages.value.length, () => scrollChatToBottom())
 
 watch(() => agentForm.providerId, async (providerId) => {
   const shouldResetModel = !hydratingProvider
@@ -694,6 +1003,8 @@ function createDefaultExtraConfig() {
 }
 
 function resetAgentForm(agent = createEmptyAgent()) {
+  modelParamEnabled.temperature = agent.temperature !== null && agent.temperature !== undefined
+  modelParamEnabled.maxTokens = agent.maxTokens !== null && agent.maxTokens !== undefined
   Object.assign(agentForm, {
     ...createEmptyAgent(),
     ...agent,
@@ -745,8 +1056,8 @@ function serializeAgent(status) {
     systemPrompt: agentForm.systemPrompt,
     providerId: toIdString(agentForm.providerId) || null,
     modelName: agentForm.modelName,
-    temperature: agentForm.temperature,
-    maxTokens: agentForm.maxTokens,
+    temperature: modelParamEnabled.temperature ? toNullableNumber(agentForm.temperature) : null,
+    maxTokens: modelParamEnabled.maxTokens ? toNullableInteger(agentForm.maxTokens) : null,
     status: status ?? agentForm.status,
     extraConfig: JSON.stringify(extraConfig),
   }
@@ -755,9 +1066,22 @@ function serializeAgent(status) {
 async function loadAgents() {
   agentLoading.value = true
   try {
-    const res = await agentPage({ pageNum: 1, pageSize: 1000 })
+    const params = {
+      pageNum: pagination.page,
+      pageSize: pagination.pageSize,
+      keyword: filter.keyword.trim() || undefined,
+      status: filter.status === 'all' ? undefined : filter.status,
+    }
+    const res = await agentPage(params)
     if (res.code === 200 && res.data) {
-      agentList.value = res.data.records || []
+      const records = res.data.records || []
+      pagination.itemCount = Number(res.data.total || 0)
+      if (!records.length && pagination.page > 1 && pagination.itemCount > 0) {
+        pagination.page = Math.min(pagination.page - 1, pageCount.value)
+        await loadAgents()
+        return
+      }
+      agentList.value = records
     }
   }
   catch (error) {
@@ -766,6 +1090,12 @@ async function loadAgents() {
   finally {
     agentLoading.value = false
   }
+}
+
+async function handleAgentPageSizeChange(pageSize) {
+  pagination.pageSize = pageSize
+  pagination.page = 1
+  await loadAgents()
 }
 
 async function loadProviders() {
@@ -799,6 +1129,19 @@ async function loadModels(providerId) {
 
 function toIdString(value) {
   return value === null || value === undefined || value === '' ? '' : String(value)
+}
+
+function toNullableNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue) ? numericValue : null
+}
+
+function toNullableInteger(value) {
+  const numericValue = toNullableNumber(value)
+  return numericValue === null ? null : Math.round(numericValue)
 }
 
 async function loadAgentContexts(agentCode) {
@@ -866,29 +1209,110 @@ function formatTime(date) {
   return `${h}:${m}`
 }
 
+function formatRelativeTime(value) {
+  const normalizedValue = typeof value === 'string' ? value.replace(/-/g, '/') : value
+  const timestamp = new Date(normalizedValue).getTime()
+  if (!Number.isFinite(timestamp)) {
+    return '未知时间'
+  }
+
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000))
+  const minute = 60
+  const hour = 60 * minute
+  const day = 24 * hour
+  const month = 30 * day
+  const year = 365 * day
+
+  if (diffSeconds < minute) {
+    return '刚刚'
+  }
+  if (diffSeconds < hour) {
+    return `${Math.floor(diffSeconds / minute)} 分钟前`
+  }
+  if (diffSeconds < day) {
+    return `${Math.floor(diffSeconds / hour)} 小时前`
+  }
+  if (diffSeconds < month) {
+    return `${Math.floor(diffSeconds / day)} 天前`
+  }
+  if (diffSeconds < year) {
+    return `${Math.floor(diffSeconds / month)} 个月前`
+  }
+  return `${Math.floor(diffSeconds / year)} 年前`
+}
+
 async function openWorkbench(agent) {
   viewMode.value = 'builder'
+  baseModalVisible.value = false
   chatInput.value = ''
-  hydratingProvider = true
-  resetAgentForm(agent)
-  await loadModels(agent.providerId)
-  hydratingProvider = false
+  await hydrateAgentForm(agent)
   await loadAgentContexts(agent.agentCode)
   resetConversation()
   await nextTick()
   agentFormRef.value?.restoreValidation?.()
 }
 
+async function hydrateAgentForm(agent) {
+  hydratingProvider = true
+  resetAgentForm(agent)
+  try {
+    await nextTick()
+    await loadModels(agent.providerId)
+  }
+  finally {
+    hydratingProvider = false
+  }
+}
+
+function resetBaseForm(agent = {}) {
+  Object.assign(baseForm, {
+    id: toIdString(agent.id) || null,
+    agentName: agent.agentName || '',
+    agentCode: agent.agentCode || '',
+    description: agent.description || '',
+  })
+}
+
+function openBaseModal(agent = null) {
+  baseMode.value = agent?.id ? 'edit' : 'create'
+  baseEditingAgent.value = agent
+  resetBaseForm(agent || {})
+  baseModalVisible.value = true
+  nextTick(() => baseFormRef.value?.restoreValidation?.())
+}
+
+function handleOpenWorkbenchBaseSettings() {
+  baseMode.value = 'edit'
+  baseEditingAgent.value = serializeAgent()
+  resetBaseForm(agentForm)
+  baseModalVisible.value = true
+  nextTick(() => baseFormRef.value?.restoreValidation?.())
+}
+
+function resetModelParams() {
+  modelParamEnabled.temperature = true
+  modelParamEnabled.maxTokens = true
+  agentForm.temperature = 0.7
+  agentForm.maxTokens = 4000
+}
+
 async function handleCreateAgent() {
-  resetAgentForm()
-  contextConfigs.value = []
-  deletedContextIds.value = []
-  expandedContextNames.value = []
-  modelList.value = []
-  await openWorkbench(createEmptyAgent())
+  openBaseModal()
 }
 
 async function handleEditAgent(agent) {
+  try {
+    const res = await agentGetById(agent.id)
+    if (res.code === 200 && res.data) {
+      openBaseModal(res.data)
+    }
+  }
+  catch (error) {
+    window.$message.error(error.message || '加载智能体详情失败')
+  }
+}
+
+async function handleOpenDesigner(agent) {
   try {
     const res = await agentGetById(agent.id)
     if (res.code === 200 && res.data) {
@@ -900,8 +1324,81 @@ async function handleEditAgent(agent) {
   }
 }
 
-async function handleTestAgent(agent) {
-  await handleEditAgent(agent)
+function buildBaseAgentPayload(status = '1') {
+  return {
+    ...createEmptyAgent(),
+    agentName: baseForm.agentName,
+    agentCode: baseForm.agentCode,
+    description: baseForm.description,
+    status,
+    extraConfig: JSON.stringify(createDefaultExtraConfig()),
+  }
+}
+
+function mergeBaseAgentPayload(agent) {
+  return {
+    ...agent,
+    id: baseForm.id,
+    agentName: baseForm.agentName,
+    agentCode: baseForm.agentCode,
+    description: baseForm.description,
+    extraConfig: typeof agent.extraConfig === 'string'
+      ? agent.extraConfig
+      : JSON.stringify(parseExtraConfig(agent.extraConfig)),
+  }
+}
+
+async function findAgentByCode(agentCode) {
+  if (!agentCode) {
+    return null
+  }
+  const res = await agentPage({ pageNum: 1, pageSize: 10, keyword: agentCode })
+  if (res.code !== 200) {
+    return null
+  }
+  const records = res.data?.records || []
+  return records.find(agent => agent.agentCode === agentCode) || records[0] || null
+}
+
+async function handleSaveBaseInfo() {
+  await baseFormRef.value?.validate()
+  baseSaveLoading.value = true
+  try {
+    const payload = baseMode.value === 'create'
+      ? buildBaseAgentPayload('1')
+      : mergeBaseAgentPayload(baseEditingAgent.value || {})
+    const res = payload.id ? await agentUpdate(payload) : await agentAdd(payload)
+    if (res.code !== 200) {
+      window.$message.error(res.msg || '保存失败')
+      return
+    }
+
+    const editingCurrentWorkbench = viewMode.value === 'builder'
+      && baseMode.value === 'edit'
+      && toIdString(payload.id) === toIdString(agentForm.id)
+    await loadAgents()
+    baseModalVisible.value = false
+    if (editingCurrentWorkbench) {
+      agentForm.agentName = payload.agentName
+      agentForm.agentCode = payload.agentCode
+      agentForm.description = payload.description
+    }
+    window.$message.success('保存成功')
+
+    if (baseMode.value === 'create') {
+      const savedAgent = agentList.value.find(agent => agent.agentCode === payload.agentCode)
+        || await findAgentByCode(payload.agentCode)
+      if (savedAgent) {
+        await openWorkbench(savedAgent)
+      }
+    }
+  }
+  catch (error) {
+    window.$message.error(error.message || '保存失败')
+  }
+  finally {
+    baseSaveLoading.value = false
+  }
 }
 
 async function validateContextConfigs() {
@@ -931,8 +1428,9 @@ async function saveAgent(status) {
   await syncContextConfigs(payload.agentCode)
   await loadAgents()
   const savedAgent = agentList.value.find(agent => agent.agentCode === payload.agentCode)
+    || await findAgentByCode(payload.agentCode)
   if (savedAgent) {
-    resetAgentForm(savedAgent)
+    await hydrateAgentForm(savedAgent)
     await loadAgentContexts(savedAgent.agentCode)
   }
   return true
@@ -968,6 +1466,15 @@ async function handlePublishAgent() {
   finally {
     publishLoading.value = false
   }
+}
+
+async function handlePublishMenuUpdate() {
+  publishMenuVisible.value = false
+  await handlePublishAgent()
+}
+
+function handlePendingPublishAction(label) {
+  window.$message.info(`${label}功能待定`)
 }
 
 async function handleTogglePublish(agent) {
@@ -1082,7 +1589,7 @@ async function sendChatMessage() {
 
   const content = chatInput.value.trim()
   const now = formatTime(new Date())
-  const assistantMessage = {
+  const assistantMessage = reactive({
     id: generateUUID(),
     role: 'assistant',
     content: '',
@@ -1091,10 +1598,44 @@ async function sendChatMessage() {
     reasoningTime: null,
     time: now,
     streaming: true,
-  }
+  })
+  const streamId = assistantMessage.id
   const streamState = {
     isReasoning: false,
     reasoningStartTime: null,
+  }
+  const pendingPayloads = []
+  let chunkFlushFrame = null
+
+  function flushPendingChunks() {
+    if (chunkFlushFrame !== null) {
+      cancelAnimationFrame(chunkFlushFrame)
+      chunkFlushFrame = null
+    }
+    if (activeChatStreamId !== streamId || !pendingPayloads.length) {
+      pendingPayloads.length = 0
+      return
+    }
+
+    const payloads = pendingPayloads.splice(0)
+    for (const payload of payloads) {
+      handleAgentSSEChunk(payload, assistantMessage, streamState)
+    }
+    scrollChatToBottom()
+  }
+
+  function scheduleChunkFlush(payload) {
+    if (activeChatStreamId !== streamId) {
+      return
+    }
+    pendingPayloads.push(payload)
+    if (chunkFlushFrame !== null) {
+      return
+    }
+    chunkFlushFrame = requestAnimationFrame(() => {
+      chunkFlushFrame = null
+      flushPendingChunks()
+    })
   }
 
   chatMessages.value.push({
@@ -1106,6 +1647,7 @@ async function sendChatMessage() {
   chatMessages.value.push(assistantMessage)
   chatInput.value = ''
   chatSending.value = true
+  activeChatStreamId = streamId
   chatStatusText.value = '生成中'
   await nextTick()
   scrollChatToBottom()
@@ -1118,15 +1660,14 @@ async function sendChatMessage() {
       sessionId: sessionId.value,
       providerId: toIdString(agentForm.providerId) || null,
       modelName: agentForm.modelName,
-      temperature: agentForm.temperature,
-      maxTokens: agentForm.maxTokens,
+      temperature: modelParamEnabled.temperature ? toNullableNumber(agentForm.temperature) : null,
+      maxTokens: modelParamEnabled.maxTokens ? toNullableInteger(agentForm.maxTokens) : null,
     },
-    async (payload) => {
-      handleAgentSSEChunk(payload, assistantMessage, streamState)
-      await nextTick()
-      scrollChatToBottom()
+    (payload) => {
+      scheduleChunkFlush(payload)
     },
     (data) => {
+      flushPendingChunks()
       if (data?.sessionId) {
         sessionId.value = data.sessionId
       }
@@ -1135,15 +1676,20 @@ async function sendChatMessage() {
       chatSending.value = false
       chatStatusText.value = '完成'
       chatAbortController = null
+      activeChatStreamId = null
+      scrollChatToBottom()
     },
     (message) => {
+      flushPendingChunks()
       finishAgentReasoning(assistantMessage, streamState)
       assistantMessage.streaming = false
       assistantMessage.content = assistantMessage.content || `测试失败：${message}`
       chatSending.value = false
       chatStatusText.value = '测试失败'
       chatAbortController = null
+      activeChatStreamId = null
       window.$message.error(message || '测试失败')
+      scrollChatToBottom()
     },
   )
 }
@@ -1239,6 +1785,11 @@ function stopChat() {
     chatAbortController.abort()
     chatAbortController = null
   }
+  activeChatStreamId = null
+  if (chatScrollFrame !== null) {
+    cancelAnimationFrame(chatScrollFrame)
+    chatScrollFrame = null
+  }
   if (chatSending.value) {
     const last = chatMessages.value[chatMessages.value.length - 1]
     if (last) {
@@ -1250,9 +1801,24 @@ function stopChat() {
 }
 
 function scrollChatToBottom() {
-  const scrollbar = messageScrollbarRef.value
-  if (scrollbar?.scrollTo) {
-    scrollbar.scrollTo({ top: 999999, behavior: 'smooth' })
+  if (chatScrollFrame !== null) {
+    return
+  }
+  chatScrollFrame = requestAnimationFrame(() => {
+    chatScrollFrame = null
+    const el = messageListRef.value
+    if (el) {
+      scrollLatestReasoningToBottom(el)
+      el.scrollTop = el.scrollHeight
+    }
+  })
+}
+
+function scrollLatestReasoningToBottom(container) {
+  const reasoningContents = container.querySelectorAll('.reasoning-content')
+  const latestReasoning = reasoningContents[reasoningContents.length - 1]
+  if (latestReasoning) {
+    latestReasoning.scrollTop = latestReasoning.scrollHeight
   }
 }
 
@@ -1292,10 +1858,10 @@ onBeforeUnmount(() => {
 }
 
 .workbench-header {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(360px, 560px) auto;
-  gap: 14px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   margin-bottom: 18px;
 }
 
@@ -1346,6 +1912,8 @@ onBeforeUnmount(() => {
   min-height: 250px;
   flex-direction: column;
   padding: 18px;
+  text-align: left;
+  cursor: pointer;
   background: #fff;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 8px;
@@ -1360,6 +1928,11 @@ onBeforeUnmount(() => {
   border-color: rgba(59, 130, 246, 0.35);
   box-shadow: 0 16px 38px rgba(15, 23, 42, 0.08);
   transform: translateY(-2px);
+}
+
+.agent-card:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 3px;
 }
 
 .agent-card-header,
@@ -1463,6 +2036,21 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
 }
 
+.agent-design-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  margin: 0 0 12px;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 650;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  opacity: 0.9;
+}
+
 .muted-chip {
   color: #94a3b8;
   font-size: 12px;
@@ -1479,8 +2067,23 @@ onBeforeUnmount(() => {
 
 .pagination-wrap {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
   margin-top: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
+}
+
+.pagination-total {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.agent-base-modal {
+  width: min(560px, calc(100vw - 32px));
 }
 
 .empty-state {
@@ -1501,20 +2104,195 @@ onBeforeUnmount(() => {
 }
 
 .agent-workbench {
-  min-height: calc(100vh - 112px);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 112px);
+  min-height: 640px;
+  overflow: hidden;
 }
 
-.model-dock {
+.workbench-title-block {
+  flex: 0 1 340px;
+  min-width: 240px;
+}
+
+.workbench-control-cluster {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.model-command-card {
+  flex: 0 1 520px;
+  width: min(520px, 100%);
+  min-width: 320px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.model-command-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-settings-pill,
+.active-model-pill,
+.model-settings-trigger,
+.restore-button,
+.publish-update-button,
+.publish-action-row,
+.multi-model-link {
+  border: 0;
+  appearance: none;
+}
+
+.agent-settings-pill,
+.active-model-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+  background: #fff;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+}
+
+.agent-settings-pill {
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.agent-settings-pill:hover {
+  color: #155eef;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.active-model-pill {
+  flex: 1 1 auto;
+  max-width: none;
+  color: #1e293b;
+  cursor: pointer;
+  background: #eff6ff;
+  border-color: #a4bcfd;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.active-model-pill:hover {
+  background: #e0ecff;
+  border-color: #84adff;
+  box-shadow: inset 0 0 0 1px rgba(21, 94, 239, 0.06);
+}
+
+.model-pill-icon,
+.model-selector-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: #155eef;
+  background: #fff;
+  border: 1px solid rgba(21, 94, 239, 0.16);
+  border-radius: 8px;
+}
+
+.model-pill-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.model-pill-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-pill-arrow {
+  flex: 0 0 auto;
+  color: #155eef;
+  font-size: 14px;
+}
+
+.model-chat-badge,
+.selector-chat-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 19px;
+  padding: 0 6px;
+  color: #155eef;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  background: #eef4ff;
+  border: 1px solid #a4bcfd;
+  border-radius: 6px;
+}
+
+.model-dropdown-panel {
+  padding: 2px;
+}
+
+.model-selector-card {
   display: grid;
-  grid-template-columns: minmax(132px, 0.8fr) minmax(190px, 1.2fr) auto;
+  grid-template-columns: 34px minmax(118px, 0.82fr) 1px minmax(210px, 1.18fr) auto;
   gap: 8px;
   align-items: center;
-  justify-self: end;
-  width: min(560px, 100%);
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 8px;
+  min-height: 48px;
+  padding: 7px 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 13px;
+}
+
+.model-selector-icon {
+  width: 34px;
+  height: 34px;
+  color: #475467;
+  background: #fff;
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.model-selector-field {
+  min-width: 0;
+}
+
+.model-selector-label {
+  display: block;
+  padding: 0 12px;
+  margin-bottom: -2px;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.model-selector-divider {
+  width: 1px;
+  height: 26px;
+  background: #e4e7ec;
 }
 
 .model-provider-select,
@@ -1522,45 +2300,130 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.model-provider-select :deep(.n-base-selection),
+.model-name-select :deep(.n-base-selection) {
+  --n-border: 0 !important;
+  --n-border-hover: 0 !important;
+  --n-border-active: 0 !important;
+  --n-border-focus: 0 !important;
+  --n-box-shadow-focus: none !important;
+  background: transparent;
+}
+
+.model-provider-select :deep(.n-base-selection-label),
+.model-name-select :deep(.n-base-selection-label) {
+  padding: 0 12px;
+  background: transparent;
+}
+
+.model-settings-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  color: #155eef;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.model-settings-trigger:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
 .model-param-panel {
-  width: 300px;
-  padding: 4px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 2px 0;
 }
 
-.param-row {
+.param-panel-header {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-}
-
-.param-row + .param-row {
-  border-top: 1px solid #eef2f7;
-}
-
-.param-label {
-  display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  padding: 2px 2px 12px;
+  border-bottom: 1px solid #eef2f7;
 }
 
-.param-label span {
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 650;
+.param-panel-title {
+  color: #101828;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
-.param-label small {
-  color: #94a3b8;
+.param-panel-subtitle {
+  margin-top: 3px;
+  color: #667085;
   font-size: 12px;
 }
 
-.param-control {
+.param-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.param-config-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 84px;
-  gap: 12px;
+  grid-template-columns: 118px minmax(170px, 1fr) 96px;
+  gap: 14px;
   align-items: center;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+}
+
+.param-meta-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.param-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.param-title-line span:first-child {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.param-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 800;
+  background: #f2f4f7;
+  border-radius: 50%;
+}
+
+.param-slider-cell {
+  min-width: 0;
 }
 
 .param-number,
@@ -1568,40 +2431,423 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
+.agent-console-page :deep(.n-input-number .n-input__input-el) {
+  color: #0f172a !important;
+  font-weight: 650;
+  text-align: left;
+}
+
+.agent-console-page :deep(.n-input-number .n-input-wrapper) {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.model-param-panel :deep(.n-input-number .n-input) {
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.model-param-panel :deep(.n-slider) {
+  --n-fill-color: #2563eb !important;
+  --n-fill-color-hover: #155eef !important;
+  --n-handle-color: #fff !important;
+}
+
+.multi-model-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px 0;
+  color: #155eef;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+}
+
 .workbench-actions {
   display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }
 
-.workbench-body {
-  display: grid;
-  min-height: calc(100vh - 164px);
-  grid-template-columns: minmax(320px, 30%) minmax(320px, 28%) minmax(420px, 1fr);
-  gap: 16px;
+.draft-save-button,
+.publish-button {
+  height: 50px;
+  min-width: 78px;
+  border-radius: 16px;
 }
 
-.builder-panel,
-.context-panel,
+.draft-save-button {
+  color: #344054;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045);
+}
+
+.publish-button {
+  min-width: 88px;
+  font-weight: 800;
+  box-shadow: 0 12px 24px rgba(21, 94, 239, 0.24);
+}
+
+.publish-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px;
+}
+
+.publish-status-card,
+.publish-action-card {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 16px;
+}
+
+.publish-status-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.publish-eyebrow {
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.publish-time-text {
+  margin-top: 4px;
+  color: #101828;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.restore-button {
+  height: 30px;
+  padding: 0 12px;
+  color: #155eef;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  background: #f8fafc;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.restore-button:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.publish-update-button {
+  width: 100%;
+  height: 42px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  background: #155eef;
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(21, 94, 239, 0.22);
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.publish-update-button:hover:not(:disabled) {
+  background: #004eeb;
+  box-shadow: 0 14px 26px rgba(21, 94, 239, 0.28);
+  transform: translateY(-1px);
+}
+
+.publish-update-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.publish-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.publish-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px 0 10px;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  background: #f8fafc;
+  border-radius: 12px;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.publish-action-row:hover {
+  background: #eef2f7;
+  transform: translateY(-1px);
+}
+
+.publish-action-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.publish-action-icon {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.publish-action-arrow {
+  flex: 0 0 auto;
+  color: #101828;
+  font-size: 14px;
+}
+
+.workbench-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+  background: #f7f8fb;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.07);
+}
+
+.orchestration-panel,
 .chat-panel {
   min-height: 0;
+  height: 100%;
   background: #fff;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
 }
 
-.builder-scroll {
-  height: calc(100vh - 164px);
+.orchestration-panel {
+  display: flex;
+  flex: 0 0 50%;
+  width: 50%;
+  min-width: 0;
+  flex-direction: column;
+  background: #f7f8fb;
+}
+
+.orchestration-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 56px;
+  padding: 0 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+}
+
+.orchestration-title {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.orchestration-subtitle {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.orchestration-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 22px 26px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .panel-section {
   padding: 18px;
-  border-bottom: 1px solid #eef2f7;
 }
 
-.panel-section:last-child {
-  border-bottom: none;
+.panel-card {
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+}
+
+.panel-card:last-child {
+  margin-bottom: 0;
+}
+
+.prompt-card {
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg, rgba(68, 76, 231, 0.25), rgba(14, 165, 233, 0.08)) border-box;
+  border-color: transparent;
+}
+
+.config-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-entry-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.config-entry-card:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.config-entry-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: #155eef;
+  background: #eff6ff;
+  border-radius: 12px;
+}
+
+.context-entry-icon {
+  color: #047857;
+  background: #ecfdf3;
+}
+
+.config-entry-icon i {
+  font-size: 18px;
+}
+
+.config-entry-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.config-entry-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.config-entry-desc,
+.config-entry-preview,
+.config-entry-empty {
+  color: #667085;
+  font-size: 12px;
+}
+
+.config-entry-desc {
+  margin-top: 3px;
+}
+
+.config-entry-preview {
+  margin-top: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-entry-tags {
+  display: flex;
+  min-height: 22px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.config-entry-arrow {
+  flex: 0 0 auto;
+  color: #98a2b3;
+  font-size: 18px;
+}
+
+.agent-config-modal,
+.agent-context-modal {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.agent-context-modal {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.modal-section {
+  padding-top: 2px;
+}
+
+.context-modal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 2px 0 14px;
+}
+
+.context-modal-hint {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.context-modal-body {
+  max-height: min(62vh, 640px);
+  padding-right: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.context-modal-empty {
+  margin: 0;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .section-title,
@@ -1623,10 +2869,19 @@ onBeforeUnmount(() => {
   font-size: 18px;
 }
 
+.compact-section-title small {
+  min-width: 0;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .context-panel {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 164px);
   overflow: hidden;
 }
 
@@ -1763,42 +3018,56 @@ onBeforeUnmount(() => {
 
 .chat-panel {
   display: flex;
+  flex: 1 1 50%;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
+  background: #f9fafb;
+  border-left: 1px solid rgba(226, 232, 240, 0.92);
 }
 
 .chat-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 18px;
-  border-bottom: 1px solid #eef2f7;
+  min-height: 58px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
 }
 
 .chat-title {
-  font-size: 16px;
+  color: #111827;
+  font-size: 18px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .chat-scroll {
   min-height: 0;
   flex: 1;
-  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(219, 234, 254, 0.55), transparent 34%),
+    linear-gradient(180deg, #f9fafb 0%, #fff 100%);
 }
 
 .chat-message-list {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px;
+  gap: 16px;
+  padding: 22px 18px 28px;
 }
 
 .chat-message {
   display: flex;
+  width: fit-content;
+  min-width: 0;
   gap: 10px;
-  max-width: 84%;
+  max-width: min(88%, 760px);
 }
 
 .message-user {
@@ -1826,6 +3095,7 @@ onBeforeUnmount(() => {
 
 .message-body {
   min-width: 0;
+  max-width: 100%;
 }
 
 .message-meta {
@@ -1886,21 +3156,25 @@ onBeforeUnmount(() => {
 }
 
 .message-bubble {
+  min-height: 24px;
   padding: 12px 14px;
   color: #1e293b;
   font-size: 14px;
   line-height: 1.7;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
 }
 
 .message-user .message-bubble {
   color: #fff;
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #155eef;
+  border-color: #155eef;
+  box-shadow: 0 10px 24px rgba(21, 94, 239, 0.22);
 }
 
 .stream-cursor {
@@ -1915,10 +3189,11 @@ onBeforeUnmount(() => {
 
 .suggestion-row {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 16px 0;
-  border-top: 1px solid #eef2f7;
+  background: linear-gradient(180deg, rgba(249, 250, 251, 0), #f9fafb 44%);
 }
 
 .suggestion-chip {
@@ -1944,8 +3219,20 @@ onBeforeUnmount(() => {
 }
 
 .chat-composer {
-  padding: 16px;
-  border-top: 1px solid #eef2f7;
+  flex: 0 0 auto;
+  padding: 14px 16px 16px;
+  background: linear-gradient(180deg, rgba(249, 250, 251, 0.2) 0%, #f9fafb 34%, #f9fafb 100%);
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.chat-composer :deep(.n-input) {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+.chat-composer :deep(textarea) {
+  line-height: 1.6;
 }
 
 .composer-actions {
@@ -1978,8 +3265,22 @@ onBeforeUnmount(() => {
 
 .dark .agent-filter,
 .dark .agent-card,
-.dark .model-dock,
-.dark .builder-panel,
+.dark .pagination-wrap,
+.dark .model-command-card,
+.dark .model-selector-card,
+.dark .agent-settings-pill,
+.dark .active-model-pill,
+.dark .model-settings-trigger,
+.dark .param-config-row,
+.dark .publish-status-card,
+.dark .publish-action-card,
+.dark .publish-action-row,
+.dark .draft-save-button,
+.dark .workbench-body,
+.dark .orchestration-panel,
+.dark .orchestration-header,
+.dark .panel-card,
+.dark .config-entry-card,
 .dark .context-panel,
 .dark .chat-panel,
 .dark .empty-state {
@@ -1992,6 +3293,7 @@ onBeforeUnmount(() => {
 .dark .chat-subtitle,
 .dark .agent-code,
 .dark .agent-description,
+.dark .pagination-total,
 .dark .composer-status,
 .dark .message-meta,
 .dark .muted-chip {
@@ -2009,13 +3311,29 @@ onBeforeUnmount(() => {
 
 .dark .agent-meta-item strong,
 .dark .context-collapse-title strong,
-.dark .param-label span,
+.dark .param-title-line span:first-child,
+.dark .param-panel-title,
+.dark .model-pill-name,
+.dark .publish-time-text,
+.dark .publish-action-row,
+.dark .publish-action-icon,
+.dark .publish-action-arrow,
+.dark .orchestration-title,
+.dark .chat-title,
+.dark .config-entry-title,
 .dark .section-title,
 .dark .message-bubble {
   color: #e2e8f0;
 }
 
+.dark .restore-button {
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(147, 197, 253, 0.35);
+}
+
 .dark .panel-section,
+.dark .orchestration-header,
 .dark .context-panel-header,
 .dark .chat-header,
 .dark .chat-composer,
@@ -2025,15 +3343,58 @@ onBeforeUnmount(() => {
   border-color: rgba(51, 65, 85, 0.8);
 }
 
-.dark .param-row + .param-row {
+.dark .param-panel-header {
   border-color: rgba(51, 65, 85, 0.8);
 }
 
 .dark .context-collapse-title small,
 .dark .context-field-label,
+.dark .orchestration-subtitle,
+.dark .compact-section-title small,
+.dark .config-entry-desc,
+.dark .config-entry-preview,
+.dark .config-entry-empty,
+.dark .context-modal-hint,
 .dark .reasoning-content,
-.dark .param-label small {
+.dark .param-panel-subtitle,
+.dark .model-selector-label,
+.dark .publish-eyebrow {
   color: #94a3b8;
+}
+
+.dark .model-selector-divider {
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.dark .model-pill-icon,
+.dark .model-selector-icon {
+  color: #93c5fd;
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(51, 65, 85, 0.9);
+}
+
+.dark .model-param-panel :deep(.n-input-number .n-input) {
+  background: rgba(30, 41, 59, 0.92);
+}
+
+.dark .agent-console-page :deep(.n-input-number .n-input__input-el) {
+  color: #e2e8f0 !important;
+}
+
+.dark .config-entry-icon {
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.dark .context-entry-icon {
+  color: #86efac;
+  background: rgba(5, 150, 105, 0.18);
+}
+
+.dark .agent-design-hint {
+  color: #93c5fd;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(59, 130, 246, 0.28);
 }
 
 .dark .chat-scroll {
@@ -2045,6 +3406,10 @@ onBeforeUnmount(() => {
   border-color: rgba(51, 65, 85, 0.9);
 }
 
+.dark .chat-composer :deep(.n-input) {
+  background: rgba(30, 41, 59, 0.92);
+}
+
 @media (min-width: 1580px) {
   .agent-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2053,25 +3418,11 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1380px) {
   .workbench-header {
-    grid-template-columns: minmax(240px, 1fr) minmax(360px, 560px);
+    flex-wrap: wrap;
   }
 
-  .workbench-actions {
-    grid-column: 2;
-    justify-self: end;
-  }
-
-  .workbench-body {
-    grid-template-columns: minmax(330px, 0.9fr) minmax(430px, 1.1fr);
-  }
-
-  .context-panel {
-    grid-column: 1;
-  }
-
-  .chat-panel {
-    grid-column: 2;
-    grid-row: 1 / span 2;
+  .workbench-control-cluster {
+    flex: 1 1 100%;
   }
 }
 
@@ -2080,34 +3431,43 @@ onBeforeUnmount(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .workbench-header {
-    grid-template-columns: 1fr;
+  .agent-workbench {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
 
-  .model-dock {
-    justify-self: stretch;
+  .model-command-card {
+    min-width: 0;
     width: 100%;
   }
 
-  .workbench-actions {
-    grid-column: auto;
-    justify-self: end;
-  }
-
   .workbench-body {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
   }
 
-  .builder-scroll,
-  .context-panel {
+  .orchestration-panel,
+  .chat-panel {
+    flex: none;
+    width: 100%;
     height: auto;
     max-height: none;
   }
 
+  .orchestration-scroll {
+    overflow: visible;
+  }
+
   .chat-panel {
-    grid-column: auto;
-    grid-row: auto;
     min-height: 640px;
+    border-top: 1px solid rgba(226, 232, 240, 0.92);
+    border-left: 0;
+  }
+
+  .chat-scroll {
+    min-height: 380px;
   }
 }
 
@@ -2131,22 +3491,67 @@ onBeforeUnmount(() => {
 
   .agent-grid,
   .agent-meta-grid,
-  .model-dock,
+  .config-entry-grid,
+  .model-selector-card,
+  .param-config-row,
   .context-field-grid {
     grid-template-columns: 1fr;
   }
 
+  .workbench-control-cluster {
+    flex-direction: column;
+  }
+
+  .model-command-card {
+    min-width: 0;
+  }
+
+  .model-command-tabs {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .active-model-pill {
+    max-width: none;
+  }
+
+  .model-selector-divider {
+    display: none;
+  }
+
   .model-param-panel {
-    width: 260px;
+    width: 100%;
   }
 
   .context-collapse-extra {
     gap: 6px;
   }
 
+  .orchestration-header,
+  .chat-header,
+  .context-modal-toolbar {
+    align-items: stretch;
+    height: auto;
+    flex-direction: column;
+  }
+
+  .orchestration-scroll,
+  .chat-message-list {
+    padding: 14px;
+  }
+
+  .panel-section {
+    padding: 14px;
+  }
+
   .workbench-actions,
   .composer-actions {
     justify-content: flex-end;
+  }
+
+  .pagination-wrap {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .chat-message {

@@ -1456,6 +1456,11 @@ defineExpose({
   handleBatchDelete,
 
   /**
+   * 提交当前弹窗表单
+   */
+  submitForm: handleModalConfirm,
+
+  /**
    * 关闭弹窗
    */
   closeModal: () => {

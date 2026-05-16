@@ -219,6 +219,26 @@ public RespInfo<GoviewProject> getById(@PathVariable Long id) {
 - 所有使用文件访问地址渲染图片的前端组件
 - 头像、favicon、素材预览、图片上传回显等场景
 
+## 7. SSE 流式对话前端解析不完整导致非实时输出
+
+**发现日期**: 2026-05-15
+
+**问题描述**:
+智能体测试对话使用 `fetch + ReadableStream` 接收 SSE。如果前端只处理已经按空行切开的完整事件，但流结束时不 flush 剩余 `buffer`，或没有单次完成保护，页面可能表现为输出不稳定、结束后才刷新，或者重复触发完成状态。
+另一个常见表现是数据已经追加到消息对象，但消息区域不重绘；窗口缩放或其他状态变化后才显示。常见原因包括：`n-scrollbar` 放在无明确高度的 flex/grid 容器中，滚动容器尺寸没有及时重算；或者把普通对象 push 到 `ref([])` 后，继续通过原始对象引用追加 chunk，未通过 Vue 代理对象触发重绘。
+
+**正确用法**:
+- SSE 解析必须支持 `\r\n` / `\n`，按事件块解析 `event:` 和多行 `data:`
+- `reader.read()` 返回 `done=true` 时，要先 `decoder.decode()` flush 解码器，再处理剩余 `buffer`
+- `complete` / `[DONE]` / 流自然结束必须通过 `completeOnce` 保护，避免重复完成
+- 生产代理场景下，后端流式接口应设置 `X-Accel-Buffering: no`，避免 Nginx 缓冲导致前端一次性收到完整响应
+- 流式消息对象需要使用 `reactive({...})`，或 push 后取数组中的代理对象再追加内容，避免原始对象引用变更不触发界面更新
+- 对话消息流建议参考 `flow/design.vue`：使用原生滚动容器、底部锚点、`nextTick + requestAnimationFrame` 后置滚动，并给父级面板明确高度
+
+**影响范围**:
+- 所有基于 SSE 的 AI 流式输出功能
+- 智能体测试、AI 代码生成、AI 流程生成等页面
+
 ---
 
 ## 6. SSO 接口缺少 `@ApiDecrypt` 会导致请求参数为空
@@ -520,3 +540,31 @@ for (const rawLine of block.split(/\r?\n/)) {
 **影响范围**:
 - `fetch + response.body.getReader()` 手写 SSE 解析的前端流式接口
 - Spring WebFlux `ServerSentEvent` 通过本地代理转发的流式响应
+
+## 11. Naive Select/TreeSelect 回显 Long ID 必须统一字符串类型
+
+**发现日期**: 2026-05-16
+
+**问题描述**:
+数据集私有访问模式下，选择角色、用户或组织授权主体时页面可能闪退。后端 Long ID 可能被序列化成字符串，前端选项值却可能仍是 number，`NSelect` / `NTreeSelect` 在回显、过滤或追加缺失选项时出现值类型不一致。
+
+**解决方案**:
+前端用于选择器的 Long ID 统一通过 `String(id)` 归一化，包含：
+- 列表选项 `value`
+- 树选项 `value/key`
+- 详情回显的 `subjectId`
+- `appendMissingOption` 和树节点 contains 判断
+
+提交给后端时保留字符串 ID，Jackson 可以反序列化为 `Long`，同时避免 JS 大整数精度问题。
+
+如果选择器位于 `n-modal` 内的复杂表单卡片中，还要避免父级 hover `transform` 影响 Naive 弹层定位：
+- 权限卡片所在 `n-form-item` 不要做 `translateY` 这类 hover 位移
+- ACL 下拉可设置 `:to="false"`，禁用 teleport，避免弹层挂到 modal body 后被滚动容器/层级影响
+- 异步加载选项时先加载完成再插入授权行，避免打开下拉时选项刷新导致弹层闪退
+
+如果字段是在 `AiCrudPage` 的自定义 slot 中维护，不能只在 slot 内直接 `v-model` 修改 `formData` 嵌套属性。`AiForm` 内部使用表单副本，slot 裸改不会同步到父级 `formData`，父级重渲染后会用旧值覆盖，表现为“私有模式跳回公开”。slot 内需要使用 `updateValue` 触发表单整体 `update:value`，或改成显式 `:value + @update:value` 后同步。
+
+**影响范围**:
+- 所有后端 Long ID 被用作 Naive UI 选择器值的页面
+- 数据集 ACL、用户/角色/组织选择器、树选择器回显场景
+- `AiCrudPage` 自定义 slot 内维护非当前字段值的场景

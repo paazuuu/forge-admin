@@ -42,9 +42,22 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
   })
 
   function completeOnce(data) {
-    if (!completed) {
-      completed = true
-      onComplete(data)
+    if (completed)
+      return
+
+    completed = true
+    onComplete(data)
+  }
+
+  function parseEventData(eventData) {
+    if (!eventData || eventData === '[DONE]')
+      return null
+
+    try {
+      return JSON.parse(eventData)
+    }
+    catch {
+      return null
     }
   }
 
@@ -54,9 +67,8 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
 
     for (const rawLine of block.split(/\r?\n/)) {
       const line = rawLine.trimEnd()
-      if (!line || line.startsWith(':')) {
+      if (!line || line.startsWith(':'))
         continue
-      }
 
       if (line.startsWith('event:')) {
         eventType = line.slice(6).trim()
@@ -74,29 +86,37 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
   }
 
   function processSseBlock(block) {
-    if (!block.trim() || completed) {
+    if (!block.trim() || completed)
       return
-    }
 
     const { eventType, eventData } = parseSseBlock(block)
     const parsedData = parseEventData(eventData)
+
     if (eventType === 'done' || eventData === '[DONE]') {
       completeOnce(parsedData)
+      return
     }
-    else if (eventType === 'complete') {
+
+    if (eventType === 'complete') {
       completeOnce(parsedData)
+      return
     }
-    else if (eventType === 'error') {
+
+    if (eventType === 'error') {
       completed = true
-      onError(parsedData?.message || eventData || '智能体测试失败')
+      onError(parsedData?.message || parsedData?.reason || eventData || '智能体测试失败')
+      return
     }
-    else if (eventType === 'progress') {
+
+    if (eventType === 'progress') {
       onChunk({
         event: 'progress',
         data: parsedData || { message: eventData },
       })
+      return
     }
-    else if (eventData) {
+
+    if (eventData) {
       onChunk({
         event: 'chunk',
         data: parsedData && typeof parsedData === 'object'
@@ -106,20 +126,8 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
     }
   }
 
-  function parseEventData(eventData) {
-    if (!eventData || eventData === '[DONE]') {
-      return null
-    }
-
-    try {
-      return JSON.parse(eventData)
-    }
-    catch {
-      return null
-    }
-  }
-
   function doFetch() {
+    completed = false
     fetch(`${BASE_URL}/ai/client/stream`, {
       method: 'POST',
       headers: {
@@ -146,25 +154,31 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+        let hasReceivedData = false
 
         function read() {
           reader.read().then(({ done, value }) => {
             if (done) {
+              if (!hasReceivedData) {
+                handleRetry('服务器未返回数据')
+                return
+              }
+              buffer += decoder.decode()
               if (buffer.trim()) {
                 processSseBlock(buffer)
               }
               completeOnce()
               return
             }
-
+            hasReceivedData = true
             buffer += decoder.decode(value, { stream: true })
+
             const events = buffer.split(/\r?\n\r?\n/)
-            buffer = events.pop() ?? ''
+            buffer = events.pop() || ''
 
             for (const eventStr of events) {
               processSseBlock(eventStr)
             }
-
             read()
           }).catch((error) => {
             if (error.name !== 'AbortError') {
@@ -183,16 +197,23 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
   }
 
   function handleRetry(errorMessage) {
-    if (isAborted) {
+    if (isAborted || completed)
       return
-    }
 
     if (currentRetry < maxRetries) {
       currentRetry++
+      completed = false
+      onChunk({
+        event: 'progress',
+        data: {
+          stage: 'retrying',
+          message: `连接中断，正在重试 (${currentRetry}/${maxRetries})...`,
+        },
+      })
       setTimeout(doFetch, retryDelay)
     }
     else {
-      onError(errorMessage || '智能体测试连接失败')
+      onError(`连接失败: ${errorMessage}`)
     }
   }
 

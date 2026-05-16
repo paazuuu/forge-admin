@@ -181,13 +181,13 @@
           :before-render-form="beforeRenderForm"
           :before-render-detail="beforeRenderDetail"
           :before-submit="beforeSubmit"
-          :hide-modal-footer="isFormReadOnly"
+          :hide-modal-footer="true"
           row-key="id"
           :load-detail-on-edit="true"
           :striped="false"
           :bordered="false"
           :scroll-x="1700"
-          max-height="calc(100vh - 420px)"
+          max-height="calc(100vh - 310px)"
           :edit-grid-cols="12"
           edit-label-placement="top"
           edit-form-class="data-dataset-edit-form"
@@ -265,6 +265,12 @@
                   <strong class="step-navigation-meta__title">{{ currentStepMeta.label }}</strong>
                   <span class="step-navigation-meta__desc">{{ stepNavigationNote }}</span>
                 </div>
+                <n-button
+                  quaternary
+                  @click="crudRef?.closeModal()"
+                >
+                  取消
+                </n-button>
                 <n-button
                   v-if="currentStep > 1"
                   quaternary
@@ -430,7 +436,7 @@
             </div>
           </template>
 
-          <template #form-accessPermissionConfig="{ formData }">
+          <template #form-accessPermissionConfig="{ formData, updateValue }">
             <div class="permission-panel">
               <div class="permission-panel__header">
                 <div>
@@ -445,9 +451,9 @@
                   </div>
                 </div>
                 <n-radio-group
-                  v-model:value="formData.accessMode"
+                  :value="formData.accessMode"
                   :disabled="isFormReadOnly"
-                  @update:value="value => handleAccessModeChange(value, formData)"
+                  @update:value="value => handleAccessModeChange(value, formData, updateValue)"
                 >
                   <n-radio-button
                     v-for="option in accessModeOptions"
@@ -487,8 +493,9 @@
                   <n-button
                     type="primary"
                     secondary
-                    :disabled="isFormReadOnly"
-                    @click="addAclItem(formData)"
+                    :disabled="isFormReadOnly || permissionOptionsLoading"
+                    :loading="permissionOptionsLoading"
+                    @click="addAclItem(formData, updateValue)"
                   >
                     <template #icon>
                       <i class="i-material-symbols:add-rounded" />
@@ -509,41 +516,52 @@
                     class="acl-row"
                   >
                     <NSelect
-                      v-model:value="item.subjectType"
+                      :value="item.subjectType"
                       :options="aclSubjectTypeOptions"
                       :disabled="isFormReadOnly"
-                      @update:value="() => handleAclSubjectTypeChange(item)"
+                      :to="false"
+                      @update:value="value => handleAclSubjectTypeChange(item, value, updateValue)"
                     />
                     <n-tree-select
                       v-if="item.subjectType === 'ORG'"
-                      v-model:value="item.subjectId"
+                      :value="item.subjectId"
                       :options="getAclOrgOptions(item)"
-                      :disabled="isFormReadOnly"
+                      :disabled="isFormReadOnly || permissionOptionsLoading"
+                      :loading="permissionOptionsLoading"
+                      :to="false"
+                      :virtual-scroll="false"
                       clearable
                       filterable
                       default-expand-all
                       placeholder="选择组织"
+                      @update:value="value => handleAclSubjectIdChange(item, value, updateValue)"
                     />
                     <NSelect
                       v-else
-                      v-model:value="item.subjectId"
+                      :value="item.subjectId"
                       :options="getAclSubjectOptions(item)"
-                      :disabled="isFormReadOnly"
+                      :disabled="isFormReadOnly || permissionOptionsLoading"
+                      :loading="permissionOptionsLoading"
+                      :to="false"
+                      :virtual-scroll="false"
                       clearable
                       filterable
                       placeholder="选择授权主体"
+                      @update:value="value => handleAclSubjectIdChange(item, value, updateValue)"
                     />
                     <NSelect
-                      v-model:value="item.accessLevel"
+                      :value="item.accessLevel"
                       :options="accessLevelOptions"
                       :disabled="isFormReadOnly"
+                      :to="false"
                       placeholder="权限级别"
+                      @update:value="value => handleAclAccessLevelChange(item, value, updateValue)"
                     />
                     <n-button
                       quaternary
                       type="error"
                       :disabled="isFormReadOnly"
-                      @click="removeAclItem(formData, index)"
+                      @click="removeAclItem(formData, index, updateValue)"
                     >
                       <template #icon>
                         <i class="i-material-symbols:delete-outline-rounded" />
@@ -555,7 +573,7 @@
             </div>
           </template>
 
-          <template #form-rowScopeConfig="{ formData }">
+          <template #form-rowScopeConfig="{ formData, updateValue }">
             <div class="permission-panel row-scope-panel">
               <div class="permission-panel__header">
                 <div>
@@ -563,40 +581,51 @@
                     Row Scope
                   </div>
                   <div class="permission-panel__title">
-                    数据行权限
+                    行级权限设置
                   </div>
                   <div class="permission-panel__desc">
-                    启用后按登录人的系统数据范围动态生成过滤条件，字段映射只从当前数据集字段中选择。
+                    后端会按当前用户角色绑定的数据范围自动选择生效规则；这里仅维护用户属性与数据表字段的映射，不再手动选择区划范围。
                   </div>
                 </div>
-                <n-switch
-                  v-model:value="formData.rowScope.enabled"
-                  :checked-value="1"
-                  :unchecked-value="0"
+                <n-button
+                  class="row-permission-add"
+                  type="primary"
                   :disabled="isFormReadOnly"
+                  @click="addRowScopeRule(formData, updateValue)"
                 >
-                  <template #checked>
-                    启用
+                  <template #icon>
+                    <i class="i-material-symbols:add-rounded" />
                   </template>
-                  <template #unchecked>
-                    关闭
-                  </template>
-                </n-switch>
+                  添加
+                </n-button>
               </div>
 
               <div class="permission-facts">
                 <div class="permission-fact">
                   <span>权限来源</span>
-                  <strong>系统角色数据范围</strong>
+                  <strong>角色绑定的数据范围</strong>
                 </div>
                 <div class="permission-fact">
                   <span>字段来源</span>
                   <strong>{{ getRowScopeFieldSourceLabel(formData) }}</strong>
                 </div>
                 <div class="permission-fact">
-                  <span>行政区划策略</span>
-                  <strong>{{ getRowScopeStrategyLabel(formData.rowScope.regionStrategy) }}</strong>
+                  <span>映射规则</span>
+                  <strong>{{ getRowScopeConfiguredCount(formData) }} 条已配置</strong>
                 </div>
+              </div>
+
+              <div class="row-permission-switch">
+                <n-checkbox
+                  :checked="formData.rowScope.enabled === 1"
+                  :disabled="isFormReadOnly"
+                  @update:checked="checked => handleRowScopeEnabledChange(checked, formData, updateValue)"
+                >
+                  根据用户属性设置权限
+                </n-checkbox>
+                <span>
+                  角色数据范围为“本部门 / 本人 / 行政区划”等模式时，会匹配下方对应字段；未配置的字段不会参与过滤。
+                </span>
               </div>
 
               <n-alert
@@ -617,67 +646,18 @@
                 当前暂无可选字段，请先保存并同步字段；单表数据集也可以刷新来源表字段后再配置。
               </n-alert>
 
-              <div class="row-scope-grid" :class="{ 'is-disabled': formData.rowScope.enabled !== 1 }">
-                <div class="row-scope-field">
-                  <label>租户字段</label>
-                  <NSelect
-                    v-model:value="formData.rowScope.tenantColumn"
-                    :options="getRowScopeFieldOptions(formData)"
-                    :loading="rowScopeTableFieldLoading"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
-                    clearable
-                    filterable
-                    placeholder="选择 tenant_id 字段"
-                  />
-                </div>
-                <div class="row-scope-field">
-                  <label>组织字段</label>
-                  <NSelect
-                    v-model:value="formData.rowScope.orgColumn"
-                    :options="getRowScopeFieldOptions(formData)"
-                    :loading="rowScopeTableFieldLoading"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
-                    clearable
-                    filterable
-                    placeholder="选择组织字段"
-                  />
-                </div>
-                <div class="row-scope-field">
-                  <label>用户字段</label>
-                  <NSelect
-                    v-model:value="formData.rowScope.userColumn"
-                    :options="getRowScopeFieldOptions(formData)"
-                    :loading="rowScopeTableFieldLoading"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
-                    clearable
-                    filterable
-                    placeholder="选择用户字段"
-                  />
-                </div>
-                <div class="row-scope-field">
-                  <label>行政区划字段</label>
-                  <NSelect
-                    v-model:value="formData.rowScope.regionColumn"
-                    :options="getRowScopeFieldOptions(formData)"
-                    :loading="rowScopeTableFieldLoading"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
-                    clearable
-                    filterable
-                    placeholder="选择 region_code 字段"
-                  />
-                </div>
-                <div class="row-scope-field">
-                  <label>区划范围</label>
-                  <NSelect
-                    v-model:value="formData.rowScope.regionStrategy"
-                    :options="rowScopeStrategyOptions"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
-                    placeholder="选择区划策略"
-                  />
-                </div>
-                <div class="row-scope-field row-scope-field--action">
-                  <label>字段刷新</label>
+              <div class="row-scope-rule-builder" :class="{ 'is-disabled': formData.rowScope.enabled !== 1 }">
+                <div class="row-scope-rule-titlebar">
+                  <div>
+                    <div class="row-scope-rule-title">
+                      权限设置
+                    </div>
+                    <div class="row-scope-rule-desc">
+                      规则结构为：用户属性 = 数据表字段，条件关系用于多条规则的可读化拼接。
+                    </div>
+                  </div>
                   <n-button
+                    secondary
                     :disabled="isFormReadOnly || formData.datasetType !== 'TABLE' || !formData.connectionId || !formData.tableName"
                     :loading="rowScopeTableFieldLoading"
                     @click="loadRowScopeTableFields(formData, { force: true })"
@@ -688,16 +668,92 @@
                     刷新字段
                   </n-button>
                 </div>
-                <div class="row-scope-field row-scope-field--wide">
-                  <label>备注</label>
-                  <NInput
-                    v-model:value="formData.rowScope.remark"
-                    type="textarea"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
-                    :autosize="{ minRows: 2, maxRows: 4 }"
-                    placeholder="记录该数据集行权限字段口径"
-                  />
+
+                <div class="row-scope-attribute-strip">
+                  <div
+                    v-for="option in rowScopeAttributeOptions"
+                    :key="option.value"
+                    class="row-scope-attribute-chip"
+                  >
+                    <span>{{ option.label }}</span>
+                    <small>{{ option.caption }}</small>
+                  </div>
                 </div>
+
+                <div class="row-scope-rule-header">
+                  <span>用户属性</span>
+                  <span />
+                  <span>表字段</span>
+                  <span>条件关系</span>
+                  <span />
+                </div>
+
+                <n-empty
+                  v-if="getRowScopeRules(formData).length === 0"
+                  description="暂无行权限规则，点击右上角添加"
+                  size="small"
+                  class="row-scope-empty"
+                />
+                <div
+                  v-for="(rule, index) in getRowScopeRules(formData)"
+                  :key="rule.__key || index"
+                  class="row-scope-rule-row"
+                >
+                  <NSelect
+                    :value="rule.attribute"
+                    :options="getRowScopeAttributeOptions(formData, rule)"
+                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                    clearable
+                    placeholder="选择用户属性"
+                    @update:value="value => handleRowScopeRuleAttributeChange(formData, rule, value, updateValue)"
+                  />
+                  <div class="row-scope-equals">
+                    =
+                  </div>
+                  <NSelect
+                    :value="rule.field"
+                    :options="getRowScopeFieldOptions(formData)"
+                    :loading="rowScopeTableFieldLoading"
+                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                    clearable
+                    filterable
+                    placeholder="选择数据表字段"
+                    @update:value="value => handleRowScopeRuleFieldChange(formData, rule, value, updateValue)"
+                  />
+                  <NSelect
+                    :value="rule.logic"
+                    :options="rowScopeLogicOptions"
+                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1 || index === getRowScopeRules(formData).length - 1"
+                    placeholder="关系"
+                    @update:value="value => handleRowScopeRuleLogicChange(rule, value, updateValue)"
+                  />
+                  <n-button
+                    quaternary
+                    class="row-scope-delete"
+                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                    @click="removeRowScopeRule(formData, index, updateValue)"
+                  >
+                    <template #icon>
+                      <i class="i-material-symbols:delete-outline-rounded" />
+                    </template>
+                  </n-button>
+                </div>
+
+                <div class="row-scope-condition-preview">
+                  {{ getRowScopeConditionPreview(formData) }}
+                </div>
+              </div>
+
+              <div class="row-scope-remark">
+                <label>备注</label>
+                <NInput
+                  :value="formData.rowScope.remark"
+                  type="textarea"
+                  :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  placeholder="记录该数据集行权限字段口径"
+                  @update:value="value => handleRowScopeRemarkChange(formData, value, updateValue)"
+                />
               </div>
             </div>
           </template>
@@ -842,6 +898,7 @@ const roleOptions = ref([])
 const userOptions = ref([])
 const orgTreeOptions = ref([])
 const permissionOptionsLoaded = ref(false)
+const permissionOptionsLoading = ref(false)
 const activeCategoryScope = ref('all')
 const selectedCategoryId = ref(null)
 const currentFormMode = ref('edit')
@@ -874,6 +931,7 @@ const stepDefinitions = [
   },
 ]
 const totalSteps = stepDefinitions.length
+let permissionOptionsRequest = null
 
 const queryForm = reactive({
   datasetName: '',
@@ -921,10 +979,16 @@ const accessLevelOptions = [
   { label: '管理', value: 'MANAGE' },
 ]
 
-const rowScopeStrategyOptions = [
-  { label: '仅本级', value: 'SELF' },
-  { label: '本级及直接下级', value: 'SELF_AND_CHILDREN' },
-  { label: '本级及所有下级', value: 'SELF_AND_DESCENDANTS' },
+const rowScopeAttributeOptions = [
+  { label: '租户 ID', value: 'tenantColumn', caption: '匹配当前登录租户' },
+  { label: '组织 ID', value: 'orgColumn', caption: '匹配用户所属组织' },
+  { label: '用户 ID', value: 'userColumn', caption: '匹配当前登录用户' },
+  { label: '行政区划', value: 'regionColumn', caption: '匹配地市 / 区县编码' },
+]
+
+const rowScopeLogicOptions = [
+  { label: 'AND', value: 'AND' },
+  { label: 'OR', value: 'OR' },
 ]
 
 const dataTypeOptions = [
@@ -1708,11 +1772,6 @@ function getAccessModeLabel(accessMode) {
   return accessMode === 'PRIVATE' ? '私有' : '公开'
 }
 
-function getRowScopeStrategyLabel(strategy) {
-  const option = rowScopeStrategyOptions.find(item => item.value === strategy)
-  return option?.label || '本级及所有下级'
-}
-
 function getDatasetSourceGuide(formData) {
   if (formData?.datasetType === 'SQL') {
     return 'SQL 数据集适合多表关联、预聚合和复杂过滤，保存前建议先执行 SQL 预览。'
@@ -1984,6 +2043,9 @@ async function beforeRenderForm(formData) {
     resetTableOptions()
     resetRowScopeTableFields()
   }
+  if (nextFormData.accessMode === 'PRIVATE') {
+    await loadPermissionOptions()
+  }
   return nextFormData
 }
 
@@ -1999,6 +2061,9 @@ async function beforeRenderDetail(detailData) {
   else {
     resetTableOptions()
     resetRowScopeTableFields()
+  }
+  if (nextFormData.accessMode === 'PRIVATE') {
+    await loadPermissionOptions()
   }
   return nextFormData
 }
@@ -2042,6 +2107,13 @@ function resetTableOptions() {
 function resetRowScopeTableFields() {
   rowScopeTableFieldKey.value = ''
   rowScopeTableFieldOptions.value = []
+}
+
+function toIdString(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+  return String(value)
 }
 
 async function loadTableOptions(connectionId) {
@@ -2122,12 +2194,23 @@ async function loadPermissionOptions() {
   if (permissionOptionsLoaded.value) {
     return
   }
-  await Promise.all([
+  if (permissionOptionsRequest) {
+    return permissionOptionsRequest
+  }
+  permissionOptionsLoading.value = true
+  permissionOptionsRequest = Promise.all([
     loadRoleOptions(),
     loadUserOptions(),
     loadOrgOptions(),
   ])
-  permissionOptionsLoaded.value = true
+    .then(() => {
+      permissionOptionsLoaded.value = true
+    })
+    .finally(() => {
+      permissionOptionsLoading.value = false
+      permissionOptionsRequest = null
+    })
+  return permissionOptionsRequest
 }
 
 async function loadRoleOptions() {
@@ -2139,7 +2222,7 @@ async function loadRoleOptions() {
       const rows = res.data?.records || res.data?.list || []
       roleOptions.value = rows.map(role => ({
         label: role.roleKey ? `${role.roleName}（${role.roleKey}）` : role.roleName,
-        value: role.id,
+        value: toIdString(role.id),
       }))
     }
   }
@@ -2157,7 +2240,7 @@ async function loadUserOptions() {
       const rows = res.data?.records || res.data?.list || []
       userOptions.value = rows.map(user => ({
         label: user.realName ? `${user.realName}（${user.username}）` : user.username,
-        value: user.id,
+        value: toIdString(user.id),
       }))
     }
   }
@@ -2181,8 +2264,8 @@ async function loadOrgOptions() {
 function transformOrgTreeOptions(tree) {
   return (tree || []).map(item => ({
     label: item.orgName,
-    value: item.id,
-    key: item.id,
+    value: toIdString(item.id),
+    key: toIdString(item.id),
     children: item.children?.length ? transformOrgTreeOptions(item.children) : undefined,
   }))
 }
@@ -2271,6 +2354,7 @@ function createDefaultRowScope() {
     userColumn: null,
     regionColumn: null,
     regionStrategy: 'SELF_AND_DESCENDANTS',
+    ruleItems: [],
     remark: null,
   }
 }
@@ -2283,18 +2367,54 @@ function normalizeAclItems(items) {
     __key: `${item.subjectType || 'ACL'}-${item.subjectId || 'NEW'}-${item.accessLevel || 'QUERY'}-${Math.random()}`,
     id: item.id,
     subjectType: normalizeAclSubjectType(item.subjectType),
-    subjectId: item.subjectId ?? null,
+    subjectId: toIdString(item.subjectId),
     accessLevel: normalizeAccessLevel(item.accessLevel),
   }))
 }
 
 function normalizeRowScope(rowScope) {
-  return {
+  const normalized = {
     ...createDefaultRowScope(),
     ...(rowScope || {}),
     enabled: rowScope?.enabled === 1 ? 1 : 0,
     regionStrategy: rowScope?.regionStrategy || 'SELF_AND_DESCENDANTS',
   }
+  normalized.ruleItems = Array.isArray(rowScope?.ruleItems)
+    ? rowScope.ruleItems.map(normalizeRowScopeRule).filter(Boolean)
+    : buildRowScopeRuleItems(normalized)
+  return normalized
+}
+
+function createRowScopeRule(attribute = null, field = null, logic = 'AND') {
+  return {
+    __key: `${Date.now()}-${Math.random()}`,
+    attribute,
+    field: field ?? null,
+    logic: normalizeRowScopeLogic(logic),
+  }
+}
+
+function buildRowScopeRuleItems(rowScope) {
+  return rowScopeAttributeOptions
+    .filter(option => rowScope?.[option.value])
+    .map((option, index) => createRowScopeRule(option.value, rowScope[option.value], index === 0 ? 'AND' : 'AND'))
+}
+
+function normalizeRowScopeRule(rule) {
+  if (!rule || typeof rule !== 'object') {
+    return null
+  }
+  const attribute = rowScopeAttributeOptions.some(option => option.value === rule.attribute) ? rule.attribute : null
+  return {
+    __key: rule.__key || `${Date.now()}-${Math.random()}`,
+    attribute,
+    field: trimToNull(rule.field),
+    logic: normalizeRowScopeLogic(rule.logic),
+  }
+}
+
+function normalizeRowScopeLogic(logic) {
+  return rowScopeLogicOptions.some(option => option.value === logic) ? logic : 'AND'
 }
 
 function normalizeAclSubjectType(subjectType) {
@@ -2305,10 +2425,18 @@ function normalizeAccessLevel(accessLevel) {
   return ['VIEW', 'QUERY', 'MANAGE'].includes(accessLevel) ? accessLevel : 'QUERY'
 }
 
-function handleAccessModeChange(value, formData) {
+function syncSlotForm(updateValue) {
+  if (typeof updateValue === 'function') {
+    updateValue(null)
+  }
+}
+
+async function handleAccessModeChange(value, formData, updateValue) {
   formData.accessMode = value === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC'
+  syncSlotForm(updateValue)
   if (formData.accessMode === 'PRIVATE') {
-    loadPermissionOptions()
+    await loadPermissionOptions()
+    syncSlotForm(updateValue)
   }
 }
 
@@ -2316,23 +2444,40 @@ function getAclCount(formData) {
   return Array.isArray(formData?.aclItems) ? formData.aclItems.length : 0
 }
 
-function addAclItem(formData) {
-  loadPermissionOptions()
+async function addAclItem(formData, updateValue) {
+  await loadPermissionOptions()
   if (!Array.isArray(formData.aclItems)) {
     formData.aclItems = []
   }
   formData.aclItems.push(createDefaultAclItem())
+  if (formData.accessMode !== 'PRIVATE') {
+    formData.accessMode = 'PRIVATE'
+  }
+  syncSlotForm(updateValue)
 }
 
-function removeAclItem(formData, index) {
+function removeAclItem(formData, index, updateValue) {
   if (!Array.isArray(formData.aclItems)) {
     return
   }
   formData.aclItems.splice(index, 1)
+  syncSlotForm(updateValue)
 }
 
-function handleAclSubjectTypeChange(item) {
+function handleAclSubjectTypeChange(item, value, updateValue) {
+  item.subjectType = normalizeAclSubjectType(value)
   item.subjectId = null
+  syncSlotForm(updateValue)
+}
+
+function handleAclSubjectIdChange(item, value, updateValue) {
+  item.subjectId = toIdString(value)
+  syncSlotForm(updateValue)
+}
+
+function handleAclAccessLevelChange(item, value, updateValue) {
+  item.accessLevel = normalizeAccessLevel(value)
+  syncSlotForm(updateValue)
 }
 
 function getAclSubjectOptions(item) {
@@ -2358,25 +2503,28 @@ function getAclSubjectFallbackLabel(item) {
 }
 
 function appendMissingFlatOption(options, value, label) {
-  if (!value || options.some(item => item.value === value)) {
+  const normalizedValue = toIdString(value)
+  if (!normalizedValue || options.some(item => toIdString(item.value) === normalizedValue)) {
     return options
   }
-  return [...options, { label, value }]
+  return [...options, { label, value: normalizedValue }]
 }
 
 function appendMissingTreeOption(options, value, label) {
-  if (!value || containsTreeValue(options, value)) {
+  const normalizedValue = toIdString(value)
+  if (!normalizedValue || containsTreeValue(options, normalizedValue)) {
     return options
   }
-  return [...options, { label, value, key: value }]
+  return [...options, { label, value: normalizedValue, key: normalizedValue }]
 }
 
 function containsTreeValue(options, value) {
+  const normalizedValue = toIdString(value)
   for (const option of options || []) {
-    if (option.value === value) {
+    if (toIdString(option.value) === normalizedValue) {
       return true
     }
-    if (containsTreeValue(option.children || [], value)) {
+    if (containsTreeValue(option.children || [], normalizedValue)) {
       return true
     }
   }
@@ -2421,6 +2569,120 @@ function clearRowScopeColumns(formData) {
   formData.rowScope.orgColumn = null
   formData.rowScope.userColumn = null
   formData.rowScope.regionColumn = null
+  formData.rowScope.ruleItems = []
+}
+
+function ensureRowScope(formData) {
+  if (!formData.rowScope) {
+    formData.rowScope = createDefaultRowScope()
+  }
+  if (!Array.isArray(formData.rowScope.ruleItems)) {
+    formData.rowScope.ruleItems = buildRowScopeRuleItems(formData.rowScope)
+  }
+  return formData.rowScope
+}
+
+function getRowScopeRules(formData) {
+  return ensureRowScope(formData).ruleItems
+}
+
+function handleRowScopeEnabledChange(checked, formData, updateValue) {
+  const rowScope = ensureRowScope(formData)
+  rowScope.enabled = checked ? 1 : 0
+  if (rowScope.enabled === 1 && rowScope.ruleItems.length === 0) {
+    addRowScopeRule(formData, updateValue)
+  }
+  syncSlotForm(updateValue)
+}
+
+function addRowScopeRule(formData, updateValue) {
+  const rowScope = ensureRowScope(formData)
+  const usedAttributes = new Set(rowScope.ruleItems.map(rule => rule.attribute).filter(Boolean))
+  const nextAttribute = rowScopeAttributeOptions.find(option => !usedAttributes.has(option.value))?.value || null
+  if (!nextAttribute && rowScope.ruleItems.length >= rowScopeAttributeOptions.length) {
+    window.$message?.warning('可配置的用户属性已全部添加')
+    return
+  }
+  if (rowScope.enabled !== 1) {
+    rowScope.enabled = 1
+  }
+  rowScope.ruleItems.push(createRowScopeRule(nextAttribute))
+  syncRowScopeColumnsFromRules(rowScope)
+  syncSlotForm(updateValue)
+}
+
+function removeRowScopeRule(formData, index, updateValue) {
+  const rowScope = ensureRowScope(formData)
+  rowScope.ruleItems.splice(index, 1)
+  syncRowScopeColumnsFromRules(rowScope)
+  syncSlotForm(updateValue)
+}
+
+function handleRowScopeRuleAttributeChange(formData, rule, value, updateValue) {
+  rule.attribute = value
+  rule.field = null
+  syncRowScopeColumnsFromRules(ensureRowScope(formData))
+  syncSlotForm(updateValue)
+}
+
+function handleRowScopeRuleFieldChange(formData, rule, value, updateValue) {
+  rule.field = value
+  syncRowScopeColumnsFromRules(ensureRowScope(formData))
+  syncSlotForm(updateValue)
+}
+
+function handleRowScopeRuleLogicChange(rule, value, updateValue) {
+  rule.logic = normalizeRowScopeLogic(value)
+  syncSlotForm(updateValue)
+}
+
+function handleRowScopeRemarkChange(formData, value, updateValue) {
+  ensureRowScope(formData).remark = value
+  syncSlotForm(updateValue)
+}
+
+function getRowScopeAttributeOptions(formData, currentRule) {
+  const usedAttributes = new Set(
+    getRowScopeRules(formData)
+      .filter(rule => rule !== currentRule)
+      .map(rule => rule.attribute)
+      .filter(Boolean),
+  )
+  return rowScopeAttributeOptions.map(option => ({
+    ...option,
+    disabled: usedAttributes.has(option.value),
+  }))
+}
+
+function getRowScopeConfiguredCount(formData) {
+  return getRowScopeRules(formData).filter(rule => rule.attribute && trimToNull(rule.field)).length
+}
+
+function getRowScopeConditionPreview(formData) {
+  const rules = getRowScopeRules(formData).filter(rule => rule.attribute && trimToNull(rule.field))
+  if (rules.length === 0) {
+    return '保存后将按角色数据范围动态拼接过滤条件。'
+  }
+  return rules.map((rule, index) => {
+    const attributeLabel = rowScopeAttributeOptions.find(option => option.value === rule.attribute)?.label || '用户属性'
+    const expression = `${attributeLabel} = ${rule.field}`
+    if (index === rules.length - 1) {
+      return expression
+    }
+    return `${expression} ${normalizeRowScopeLogic(rule.logic)}`
+  }).join(' ')
+}
+
+function syncRowScopeColumnsFromRules(rowScope) {
+  rowScope.tenantColumn = null
+  rowScope.orgColumn = null
+  rowScope.userColumn = null
+  rowScope.regionColumn = null
+  for (const rule of rowScope.ruleItems || []) {
+    if (rowScopeAttributeOptions.some(option => option.value === rule.attribute) && trimToNull(rule.field)) {
+      rowScope[rule.attribute] = trimToNull(rule.field)
+    }
+  }
 }
 
 function normalizeSubmitAclItems(formData) {
@@ -2433,7 +2695,7 @@ function normalizeSubmitAclItems(formData) {
   const uniqueSubjects = new Set()
   for (const [index, item] of (formData.aclItems || []).entries()) {
     const subjectType = normalizeAclSubjectType(item?.subjectType)
-    const subjectId = item?.subjectId
+    const subjectId = toIdString(item?.subjectId)
     const accessLevel = normalizeAccessLevel(item?.accessLevel)
     const isEmptyRow = !item?.subjectId && !item?.accessLevel
     if (isEmptyRow) {
@@ -2457,19 +2719,51 @@ function normalizeSubmitAclItems(formData) {
 function normalizeSubmitRowScope(formData) {
   const rowScope = normalizeRowScope(formData.rowScope)
   if (rowScope.enabled !== 1) {
-    rowScope.enabled = 0
-    return rowScope
+    return {
+      enabled: 0,
+      scopeMode: rowScope.scopeMode || 'SYSTEM_DATA_SCOPE',
+      tenantColumn: null,
+      orgColumn: null,
+      userColumn: null,
+      regionColumn: null,
+      regionStrategy: rowScope.regionStrategy || 'SELF_AND_DESCENDANTS',
+      remark: trimToNull(rowScope.remark),
+    }
   }
 
-  const columns = [
-    rowScope.tenantColumn,
-    rowScope.orgColumn,
-    rowScope.userColumn,
-    rowScope.regionColumn,
-  ].map(value => typeof value === 'string' ? value.trim() : value).filter(Boolean)
-  if (columns.length === 0) {
-    window.$message?.error('启用数据行权限后，至少需要配置一个权限字段')
+  const rules = rowScope.ruleItems || []
+  if (rules.length === 0) {
+    window.$message?.error('启用数据行权限后，至少需要添加一条权限规则')
     return null
+  }
+
+  const usedAttributes = new Set()
+  const normalizedColumns = {
+    tenantColumn: null,
+    orgColumn: null,
+    userColumn: null,
+    regionColumn: null,
+  }
+  for (const [index, rule] of rules.entries()) {
+    if (!rule.attribute) {
+      window.$message?.error(`第${index + 1}行用户属性不能为空`)
+      return null
+    }
+    if (!rowScopeAttributeOptions.some(option => option.value === rule.attribute)) {
+      window.$message?.error(`第${index + 1}行用户属性无效`)
+      return null
+    }
+    if (usedAttributes.has(rule.attribute)) {
+      window.$message?.error('同一个用户属性只能配置一条映射规则')
+      return null
+    }
+    usedAttributes.add(rule.attribute)
+    const field = trimToNull(rule.field)
+    if (!field) {
+      window.$message?.error(`第${index + 1}行表字段不能为空`)
+      return null
+    }
+    normalizedColumns[rule.attribute] = field
   }
 
   if (formData.datasetType === 'SQL' && !String(formData.sqlText || '').includes('/*DATA_SCOPE*/')) {
@@ -2480,10 +2774,10 @@ function normalizeSubmitRowScope(formData) {
   return {
     enabled: 1,
     scopeMode: rowScope.scopeMode || 'SYSTEM_DATA_SCOPE',
-    tenantColumn: trimToNull(rowScope.tenantColumn),
-    orgColumn: trimToNull(rowScope.orgColumn),
-    userColumn: trimToNull(rowScope.userColumn),
-    regionColumn: trimToNull(rowScope.regionColumn),
+    tenantColumn: normalizedColumns.tenantColumn,
+    orgColumn: normalizedColumns.orgColumn,
+    userColumn: normalizedColumns.userColumn,
+    regionColumn: normalizedColumns.regionColumn,
     regionStrategy: rowScope.regionStrategy || 'SELF_AND_DESCENDANTS',
     remark: trimToNull(rowScope.remark),
   }
@@ -2979,22 +3273,32 @@ function goToPrevStep() {
   --studio-bg: linear-gradient(180deg, #f4f7fb 0%, #eef3f8 100%);
   --panel-bg: rgb(255 255 255 / 92%);
   --panel-border: rgb(148 163 184 / 16%);
-  --panel-shadow: 0 18px 50px rgb(15 23 42 / 10%);
-  --panel-radius: 24px;
+  --panel-shadow: 0 14px 34px rgb(15 23 42 / 8%);
+  --panel-radius: 20px;
   min-height: 100%;
-  padding: 20px;
+  padding: 14px;
   background: var(--studio-bg);
 }
 
 .studio-hero {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(420px, 0.8fr);
-  gap: 18px;
-  margin-bottom: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  background:
+    radial-gradient(circle at top left, rgb(59 130 246 / 14%), transparent 36%),
+    radial-gradient(circle at 90% 25%, rgb(14 165 233 / 12%), transparent 24%),
+    linear-gradient(135deg, rgb(255 255 255 / 96%), rgb(248 251 255 / 94%));
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(14px);
 }
 
-.hero-main,
-.hero-stat-card,
 .workspace-sidebar,
 .workspace-main {
   position: relative;
@@ -3007,90 +3311,89 @@ function goToPrevStep() {
 }
 
 .hero-main {
-  padding: 28px 30px;
-  background:
-    radial-gradient(circle at top left, rgb(59 130 246 / 18%), transparent 40%),
-    radial-gradient(circle at 90% 25%, rgb(14 165 233 / 16%), transparent 28%),
-    linear-gradient(135deg, rgb(255 255 255 / 94%), rgb(248 251 255 / 92%));
+  min-width: 0;
 }
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .hero-title {
   margin: 0;
   color: #0f172a;
-  font-size: 34px;
-  line-height: 1.15;
+  font-size: 24px;
+  line-height: 1.18;
 }
 
 .hero-description {
+  overflow: hidden;
   max-width: 720px;
-  margin: 14px 0 0;
+  margin: 6px 0 0;
   color: #475569;
-  font-size: 14px;
-  line-height: 1.8;
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .hero-stat-card {
-  padding: 22px 20px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(148 163 184 / 16%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
 
 .hero-stat-card::after {
-  position: absolute;
-  inset: auto -18px -24px auto;
-  width: 96px;
-  height: 96px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgb(14 165 233 / 18%), rgb(37 99 235 / 0%));
-  content: '';
+  display: none;
 }
 
 .hero-stat-label {
+  overflow: hidden;
   color: #64748b;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 12px;
+  margin-top: 4px;
   color: #0f172a;
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
 }
 
 .hero-stat-note {
-  margin-top: 10px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
+  display: none;
 }
 
 .dataset-workspace {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 288px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
 .workspace-sidebar,
 .workspace-main {
-  padding: 20px;
+  padding: 14px;
 }
 
 .sidebar-head,
@@ -3105,17 +3408,17 @@ function goToPrevStep() {
 .toolbar-title-row h3 {
   margin: 0;
   color: #0f172a;
-  font-size: 22px;
+  font-size: 18px;
 }
 
 .sidebar-shortcuts {
   display: flex;
-  gap: 10px;
-  margin: 18px 0 14px;
+  gap: 8px;
+  margin: 12px 0 10px;
 }
 
 .scope-chip {
-  padding: 9px 14px;
+  padding: 7px 12px;
   color: #334155;
   font-size: 12px;
   font-weight: 600;
@@ -3139,17 +3442,17 @@ function goToPrevStep() {
 }
 
 .category-search {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .category-tree-shell {
-  min-height: 360px;
-  max-height: calc(100vh - 520px);
-  padding: 12px;
+  min-height: 300px;
+  max-height: calc(100vh - 410px);
+  padding: 10px;
   overflow: auto;
   background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
   border: 1px solid #e2e8f0;
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .category-detail-card {
@@ -3186,18 +3489,18 @@ function goToPrevStep() {
 }
 
 .main-toolbar {
-  margin-bottom: 18px;
-  padding: 18px 18px 16px;
+  margin-bottom: 12px;
+  padding: 12px;
   background: linear-gradient(180deg, rgb(248 250 252 / 0.86), rgb(255 255 255 / 0.94));
   border: 1px solid #e2e8f0;
-  border-radius: 20px;
+  border-radius: 16px;
 }
 
 .toolbar-title-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .toolbar-scope {
@@ -3212,9 +3515,9 @@ function goToPrevStep() {
 
 .toolbar-filters {
   display: grid;
-  grid-template-columns: minmax(260px, 1.5fr) repeat(3, minmax(150px, 0.8fr)) auto;
-  gap: 12px;
-  margin-top: 18px;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, 0.8fr)) auto;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .toolbar-filter {
@@ -3492,8 +3795,18 @@ function goToPrevStep() {
   transform: translateY(-1px);
 }
 
+:global(.data-dataset-edit-form .n-form-item:has(.permission-panel)) {
+  overflow: visible;
+  transform: none !important;
+}
+
+:global(.data-dataset-edit-form .n-form-item:has(.permission-panel):hover) {
+  transform: none !important;
+}
+
 :global(.data-dataset-edit-form .n-form-item-blank) {
   width: 100%;
+  overflow: visible;
 }
 
 :global(.data-dataset-edit-form .n-form-item-label) {
@@ -3642,6 +3955,7 @@ function goToPrevStep() {
   background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
   border: 1px solid #dbe3ef;
   border-radius: 18px;
+  overflow: visible;
 }
 
 :global(.data-dataset-edit-form .permission-panel__header) {
@@ -3704,6 +4018,7 @@ function goToPrevStep() {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
+  overflow: visible;
 }
 
 :global(.data-dataset-edit-form .acl-editor__toolbar) {
@@ -3731,6 +4046,7 @@ function goToPrevStep() {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow: visible;
 }
 
 :global(.data-dataset-edit-form .acl-row) {
@@ -3738,52 +4054,205 @@ function goToPrevStep() {
   grid-template-columns: minmax(120px, 0.55fr) minmax(260px, 1.4fr) minmax(150px, 0.7fr) 42px;
   gap: 10px;
   align-items: center;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+}
+
+:global(.data-dataset-edit-form .acl-row:focus-within) {
+  z-index: 20;
+}
+
+:global(.data-dataset-edit-form .acl-row .v-binder-follower-container) {
+  z-index: 4200 !important;
 }
 
 :global(.data-dataset-edit-form .row-scope-alert) {
   border-radius: 14px;
 }
 
-:global(.data-dataset-edit-form .row-scope-grid) {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  transition: opacity 0.18s ease;
+:global(.data-dataset-edit-form .row-permission-add) {
+  min-width: 92px;
+  border-radius: 12px;
+  background: #0f9f8f;
 }
 
-:global(.data-dataset-edit-form .row-scope-grid.is-disabled) {
-  opacity: 0.72;
-}
-
-:global(.data-dataset-edit-form .row-scope-field) {
+:global(.data-dataset-edit-form .row-permission-switch) {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 14px 16px;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
 }
 
-:global(.data-dataset-edit-form .row-scope-field label) {
+:global(.data-dataset-edit-form .row-permission-switch span) {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-builder) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 14px 36px rgb(15 23 42 / 6%);
+  transition: opacity 0.18s ease;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-builder.is-disabled) {
+  opacity: 0.68;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-titlebar) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-title) {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-desc) {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+:global(.data-dataset-edit-form .row-scope-attribute-strip) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .row-scope-attribute-chip) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+:global(.data-dataset-edit-form .row-scope-attribute-chip span) {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+:global(.data-dataset-edit-form .row-scope-attribute-chip small) {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-header),
+:global(.data-dataset-edit-form .row-scope-rule-row) {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 28px minmax(220px, 1.35fr) minmax(110px, 0.55fr) 42px;
+  gap: 10px;
+  align-items: center;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-header) {
+  padding: 0 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-row) {
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-row .n-base-selection) {
+  border-radius: 12px;
+  --n-color: #f1f5f9;
+  --n-color-disabled: #f1f5f9;
+}
+
+:global(.data-dataset-edit-form .row-scope-equals) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+:global(.data-dataset-edit-form .row-scope-delete) {
+  color: #64748b;
+}
+
+:global(.data-dataset-edit-form .row-scope-delete:hover) {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+:global(.data-dataset-edit-form .row-scope-empty) {
+  padding: 20px 0;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+}
+
+:global(.data-dataset-edit-form .row-scope-condition-preview) {
+  min-height: 38px;
+  padding: 10px 12px;
+  color: #334155;
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+:global(.data-dataset-edit-form .row-scope-remark) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+:global(.data-dataset-edit-form .row-scope-remark label) {
   color: #334155;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
 }
 
-:global(.data-dataset-edit-form .row-scope-field--wide) {
-  grid-column: 1 / -1;
-}
-
-:global(.data-dataset-edit-form .row-scope-field--action .n-button) {
-  width: 100%;
-}
-
 @media (max-width: 1400px) {
   .studio-hero {
     grid-template-columns: 1fr;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .dataset-workspace {
@@ -3797,11 +4266,15 @@ function goToPrevStep() {
 
 @media (max-width: 960px) {
   .dataset-studio {
-    padding: 14px;
+    padding: 12px;
   }
 
   .hero-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-description {
+    white-space: normal;
   }
 
   .toolbar-filters {
@@ -4089,12 +4562,22 @@ function goToPrevStep() {
   }
 
   :global(.data-dataset-edit-form .permission-facts),
-  :global(.data-dataset-edit-form .row-scope-grid) {
+  :global(.data-dataset-edit-form .row-scope-attribute-strip) {
     grid-template-columns: 1fr;
   }
 
-  :global(.data-dataset-edit-form .acl-row) {
+  :global(.data-dataset-edit-form .acl-row),
+  :global(.data-dataset-edit-form .row-scope-rule-header),
+  :global(.data-dataset-edit-form .row-scope-rule-row) {
     grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .row-scope-rule-header) {
+    display: none;
+  }
+
+  :global(.data-dataset-edit-form .row-scope-equals) {
+    width: 100%;
   }
 
   :global(.data-dataset-edit-form .step-progress) {
