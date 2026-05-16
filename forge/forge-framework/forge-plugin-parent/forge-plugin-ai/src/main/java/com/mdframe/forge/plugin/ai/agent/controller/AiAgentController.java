@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,9 +25,24 @@ public class AiAgentController {
     @GetMapping("/page")
     public RespInfo<Page<AiAgent>> page(
             @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
-        return RespInfo.success(agentService.page(new Page<>(pageNum, pageSize),
-                new LambdaQueryWrapper<AiAgent>().orderByDesc(AiAgent::getCreateTime)));
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status) {
+        LambdaQueryWrapper<AiAgent> queryWrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            String searchKeyword = keyword.trim();
+            queryWrapper.and(wrapper -> wrapper
+                    .like(AiAgent::getAgentName, searchKeyword)
+                    .or()
+                    .like(AiAgent::getAgentCode, searchKeyword)
+                    .or()
+                    .like(AiAgent::getDescription, searchKeyword));
+        }
+        if (StringUtils.hasText(status) && !"all".equals(status)) {
+            queryWrapper.eq(AiAgent::getStatus, status);
+        }
+        queryWrapper.orderByDesc(AiAgent::getCreateTime);
+        return RespInfo.success(agentService.page(new Page<>(pageNum, pageSize), queryWrapper));
     }
 
     @GetMapping("/list")
