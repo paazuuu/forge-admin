@@ -1,15 +1,23 @@
-import { isExternal } from '@/utils'
-
-export const SSO_BRIDGE_ROUTE = '/report/design'
-export const DEFAULT_SSO_TARGET_CLIENT = 'forge_report'
-export const DEFAULT_REPORT_BASE_URL = 'http://localhost:3021/forge-report'
-
-const DEFAULT_SSO_ENTRY_MAP = {
-  [DEFAULT_SSO_TARGET_CLIENT]: '/project/items',
-}
+import { isExternal } from '@/utils/is'
 
 function trimString(value) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeRoutePath(value, fallback = '') {
+  const raw = trimString(value) || fallback
+  if (!raw) {
+    return ''
+  }
+  return raw.startsWith('/') ? raw : `/${raw}`
+}
+
+function normalizeRedirectPathValue(value, fallback = '/') {
+  const raw = trimString(value)
+  if (!raw || raw.includes('://') || raw.startsWith('//')) {
+    return fallback
+  }
+  return raw.startsWith('/') ? raw : `/${raw}`
 }
 
 function parseEnvJsonMap(rawValue) {
@@ -30,6 +38,26 @@ function parseEnvJsonMap(rawValue) {
 
 export function normalizeSsoBaseUrl(value) {
   return trimString(value).replace(/\/+$/, '')
+}
+
+export const SSO_BRIDGE_ROUTE = normalizeRoutePath(import.meta.env.VITE_SSO_BRIDGE_ROUTE)
+export const DEFAULT_SSO_TARGET_CLIENT = trimString(import.meta.env.VITE_SSO_TARGET_CLIENT)
+export const DEFAULT_REPORT_BASE_URL = normalizeSsoBaseUrl(import.meta.env.VITE_REPORT_UI_BASE_URL)
+export const REPORT_HOST_FALLBACK = trimString(import.meta.env.VITE_REPORT_UI_HOST_FALLBACK)
+export const REPORT_PATH_PREFIX = normalizeRoutePath(import.meta.env.VITE_REPORT_UI_PATH_PREFIX)
+
+const envDefaultRedirectMap = parseEnvJsonMap(import.meta.env.VITE_SSO_DEFAULT_REDIRECTS)
+const DEFAULT_SSO_ENTRY_MAP = Object.entries(envDefaultRedirectMap).reduce((acc, [key, value]) => {
+  const redirectPath = normalizeRedirectPathValue(value, '')
+  if (key && redirectPath) {
+    acc[key] = redirectPath
+  }
+  return acc
+}, {})
+
+const reportDefaultRedirect = normalizeRedirectPathValue(import.meta.env.VITE_REPORT_UI_DEFAULT_REDIRECT, '')
+if (DEFAULT_SSO_TARGET_CLIENT && reportDefaultRedirect && !DEFAULT_SSO_ENTRY_MAP[DEFAULT_SSO_TARGET_CLIENT]) {
+  DEFAULT_SSO_ENTRY_MAP[DEFAULT_SSO_TARGET_CLIENT] = reportDefaultRedirect
 }
 
 export function getDefaultSsoRedirectPath(targetClient = DEFAULT_SSO_TARGET_CLIENT) {
@@ -83,11 +111,9 @@ export function getConfiguredSsoTargetBaseUrls() {
     return acc
   }, {})
 
-  const legacyReportBaseUrl = normalizeSsoBaseUrl(
-    import.meta.env.VITE_REPORT_UI_BASE_URL || DEFAULT_REPORT_BASE_URL,
-  )
+  const legacyReportBaseUrl = DEFAULT_REPORT_BASE_URL
 
-  if (legacyReportBaseUrl && !normalizedMap[DEFAULT_SSO_TARGET_CLIENT]) {
+  if (DEFAULT_SSO_TARGET_CLIENT && legacyReportBaseUrl && !normalizedMap[DEFAULT_SSO_TARGET_CLIENT]) {
     normalizedMap[DEFAULT_SSO_TARGET_CLIENT] = legacyReportBaseUrl
   }
 

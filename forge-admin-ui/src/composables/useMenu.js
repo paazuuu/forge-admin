@@ -8,17 +8,17 @@ import { usePermissionStore } from '@/store'
 import { isExternal } from '@/utils'
 import { findMenuItem, processMenuData } from '@/utils/menu-utils'
 import {
+  DEFAULT_REPORT_BASE_URL,
   DEFAULT_SSO_TARGET_CLIENT,
+  getDefaultSsoRedirectPath,
   normalizeSsoBaseUrl,
   normalizeSsoRedirectPath,
   parseExternalSsoTarget,
+  REPORT_HOST_FALLBACK,
+  REPORT_PATH_PREFIX,
   resolveSsoTargetBaseUrl,
   SSO_BRIDGE_ROUTE,
 } from '@/utils/sso-target'
-
-const REPORT_BASE_URL = (import.meta.env.VITE_REPORT_UI_BASE_URL || '').replace(/\/+$/, '')
-const REPORT_HOST_FALLBACK = 'localhost:3021'
-const REPORT_PATH_PREFIX = '/forge-report'
 
 function normalizeLocalPath(path) {
   if (!path) {
@@ -34,19 +34,42 @@ function normalizeLocalPath(path) {
   return `/${targetPath}`
 }
 
+function collectReportBaseUrls() {
+  return [
+    DEFAULT_REPORT_BASE_URL,
+    resolveSsoTargetBaseUrl({ targetClient: DEFAULT_SSO_TARGET_CLIENT }),
+  ].filter(Boolean)
+}
+
+function getUrlPathname(value) {
+  try {
+    return new URL(`${value}/`).pathname.replace(/\/+$/, '') || '/'
+  }
+  catch {
+    return ''
+  }
+}
+
 function isReportBaseUrl(baseUrl) {
   if (!baseUrl) {
     return false
   }
 
   const normalizedBaseUrl = normalizeSsoBaseUrl(baseUrl)
-  if (REPORT_BASE_URL && normalizedBaseUrl === REPORT_BASE_URL) {
+  const reportBaseUrls = collectReportBaseUrls()
+  if (reportBaseUrls.includes(normalizedBaseUrl)) {
     return true
   }
 
   try {
     const url = new URL(`${normalizedBaseUrl}/`)
-    return url.host === REPORT_HOST_FALLBACK || url.pathname.startsWith(REPORT_PATH_PREFIX)
+    const reportPathPrefixes = [
+      REPORT_PATH_PREFIX,
+      ...reportBaseUrls.map(getUrlPathname),
+    ].filter(prefix => prefix && prefix !== '/')
+
+    return (REPORT_HOST_FALLBACK && url.host === REPORT_HOST_FALLBACK)
+      || reportPathPrefixes.some(prefix => url.pathname.startsWith(prefix))
   }
   catch {
     return false
@@ -75,7 +98,7 @@ function parseReportMenuTarget(rawTarget) {
     }
 
     if (!redirectPath) {
-      redirectPath = '/project/items'
+      redirectPath = getDefaultSsoRedirectPath(DEFAULT_SSO_TARGET_CLIENT)
     }
 
     return {
@@ -107,10 +130,17 @@ function buildSsoBridgeRoute(router, { targetClient, redirectPath, baseUrl, menu
     query.display = display
   }
 
-  return router.resolve({
+  const location = {
     path: SSO_BRIDGE_ROUTE,
     query,
-  }).fullPath
+  }
+  const resolved = router.resolve(location)
+
+  return {
+    location,
+    fullPath: resolved.fullPath,
+    href: resolved.href,
+  }
 }
 
 function normalizeOpenTarget(openTarget) {
@@ -127,11 +157,11 @@ function navigateSsoBridge(router, bridgeRoute, openTarget) {
   }
 
   if (normalizeOpenTarget(openTarget) === '_blank') {
-    window.open(bridgeRoute, '_blank', 'noopener,noreferrer')
+    window.open(bridgeRoute.href || bridgeRoute.fullPath, '_blank', 'noopener,noreferrer')
     return
   }
 
-  router.push(bridgeRoute)
+  router.push(bridgeRoute.location || bridgeRoute.fullPath)
 }
 
 function buildConfiguredSsoTarget(originalItem) {
@@ -398,12 +428,12 @@ export function useMenu() {
         const targetPath = normalizeLocalPath(fallbackPath)
         const reportRoute = resolveReportMenuRoute(targetPath)
         if (reportRoute) {
-          router.push(reportRoute)
+          router.push(reportRoute.location)
           return
         }
         const noMatchSsoRoute = resolveNoMatchSsoRoute(targetPath)
         if (noMatchSsoRoute) {
-          router.push(noMatchSsoRoute)
+          router.push(noMatchSsoRoute.location)
           return
         }
         router.push(targetPath)

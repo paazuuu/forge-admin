@@ -1,10 +1,11 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig, AxiosError } from 'axios'
 import { ResultEnum } from "@/enums/httpEnum"
-import { getLocalStorage } from '@/utils/storage'
+import { getLocalStorage, clearLocalStorage } from '@/utils/storage'
 import { StorageEnum } from '@/enums/storageEnum'
 import { decryptResponse, encryptRequest } from '@/utils/api-crypto/crypto-interceptor'
 import { shouldEncrypt } from '@/utils/api-crypto/crypto-config'
 import { ensureKeyExchanged, getCurrentCryptoSessionId, resetKeyExchange } from '@/utils/api-crypto/key-exchange'
+import router from '@/router'
 
 interface ApiResponse<T = any> {
   code?: number
@@ -30,6 +31,19 @@ function generateUUID(): string {
 
 // 不需要防重放的路径
 const REPLAY_EXCLUDE_PATHS = ['/auth/captcha', '/crypto/public-key']
+
+// 防止多个并发 401 重复触发跳转
+let isHandlingUnauth = false
+
+const handleUnauthorized = () => {
+  if (isHandlingUnauth) return
+  isHandlingUnauth = true
+  clearLocalStorage(StorageEnum.GO_ACCESS_TOKEN_STORE)
+  window['$message']?.error('登录凭证已失效，请重新登录')
+  setTimeout(() => {
+    router.replace({ name: 'Login' })
+  }, 1200)
+}
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env.DEV ? import.meta.env.VITE_DEV_PATH : import.meta.env.VITE_PRO_PATH,
@@ -104,10 +118,17 @@ axiosInstance.interceptors.response.use(
     if (code === undefined || code === null) return res.data as any
     if (code === ResultEnum.DATA_SUCCESS) return res.data as any
     if (code === ResultEnum.SUCCESS) return res.data as any
-    throw createRequestError(res)
+    if (code === 401) {
+      handleUnauthorized()
+    }
+    return Promise.reject(createRequestError(res))
   },
   (err: AxiosError<ApiResponse>) => {
-    return Promise.reject(createAxiosRequestError(err))
+    const requestError = createAxiosRequestError(err)
+    if (requestError.code === 401 || err.response?.status === 401) {
+      handleUnauthorized()
+    }
+    return Promise.reject(requestError)
   }
 )
 

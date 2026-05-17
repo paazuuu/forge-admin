@@ -8,7 +8,8 @@ const STORAGE_KEYS = {
   SESSION_KEY: 'report_crypto_session_key',
   PUBLIC_KEY: 'report_crypto_public_key',
   EXCHANGED: 'report_crypto_exchanged',
-  SESSION_ID: 'report_crypto_session_id'
+  SESSION_ID: 'report_crypto_session_id',
+  ANONYMOUS_SESSION_ID: 'report_crypto_anonymous_session_id'
 }
 
 const keyExchangeState = {
@@ -19,8 +20,26 @@ const keyExchangeState = {
   exchanging: false
 }
 
+function createAnonymousSessionId(): string {
+  const id = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `forge-report-anonymous-${id}`
+}
+
+function getAnonymousSessionId(): string {
+  const storedSessionId = localStorage.getItem(STORAGE_KEYS.ANONYMOUS_SESSION_ID)
+  if (storedSessionId) {
+    return storedSessionId
+  }
+
+  const sessionId = createAnonymousSessionId()
+  localStorage.setItem(STORAGE_KEYS.ANONYMOUS_SESSION_ID, sessionId)
+  return sessionId
+}
+
 function currentSessionId(): string {
-  return getLocalStorage(StorageEnum.GO_ACCESS_TOKEN_STORE) || 'forge-report-anonymous'
+  return getLocalStorage(StorageEnum.GO_ACCESS_TOKEN_STORE) || getAnonymousSessionId()
 }
 
 export function getCurrentCryptoSessionId(): string {
@@ -77,6 +96,15 @@ function clearStoredKeyState() {
   localStorage.removeItem(STORAGE_KEYS.SESSION_ID)
 }
 
+function clearRuntimeKeyState() {
+  keyExchangeState.publicKey = null
+  keyExchangeState.sessionKey = null
+  keyExchangeState.sessionId = null
+  keyExchangeState.exchanged = false
+  clearStoredKeyState()
+  updateCryptoConfig({ secretKey: '' })
+}
+
 restoreKeyState()
 
 function generateSessionKey(length = 16): string {
@@ -120,29 +148,43 @@ export async function exchangeKey(axios: AxiosInstance): Promise<boolean> {
 
   keyExchangeState.exchanging = true
   try {
-    const publicKey = await fetchPublicKey(axios)
-    const sessionKey = generateSessionKey(16)
-    const encryptedKey = rsaEncrypt(sessionKey, publicKey)
-    const headers: Record<string, string> = {}
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        clearRuntimeKeyState()
+      }
 
-    const token = getLocalStorage(StorageEnum.GO_ACCESS_TOKEN_STORE)
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    } else {
-      headers['X-Session-Id'] = sessionId
+      try {
+        const publicKey = await fetchPublicKey(axios, attempt > 0)
+        const sessionKey = generateSessionKey(16)
+        const encryptedKey = rsaEncrypt(sessionKey, publicKey)
+        const headers: Record<string, string> = {}
+
+        const token = getLocalStorage(StorageEnum.GO_ACCESS_TOKEN_STORE)
+        if (token) {
+          headers.Authorization = `Bearer ${token}`
+        } else {
+          headers['X-Session-Id'] = sessionId
+        }
+
+        const res: any = await axios.post('/forge-report-api/crypto/exchange', { encryptedKey }, { headers, encrypt: false } as any)
+        if (res?.code !== 200) {
+          throw new Error(res?.message || res?.msg || '密钥交换失败')
+        }
+
+        keyExchangeState.sessionKey = sessionKey
+        keyExchangeState.sessionId = sessionId
+        keyExchangeState.exchanged = true
+        updateCryptoConfig({ secretKey: sessionKey })
+        saveKeyState()
+        return true
+      } catch (error) {
+        if (attempt === 0) {
+          console.warn('[Crypto] 密钥交换失败，刷新公钥后重试:', error)
+          continue
+        }
+        throw error
+      }
     }
-
-    const res: any = await axios.post('/forge-report-api/crypto/exchange', { encryptedKey }, { headers, encrypt: false } as any)
-    if (res?.code !== 200) {
-      throw new Error(res?.message || res?.msg || '密钥交换失败')
-    }
-
-    keyExchangeState.sessionKey = sessionKey
-    keyExchangeState.sessionId = sessionId
-    keyExchangeState.exchanged = true
-    updateCryptoConfig({ secretKey: sessionKey })
-    saveKeyState()
-    return true
   } catch (error) {
     console.error('[Crypto] 密钥交换失败:', error)
     return false
@@ -157,11 +199,7 @@ export async function ensureKeyExchanged(axios: AxiosInstance): Promise<boolean>
 }
 
 export function resetKeyExchange() {
-  keyExchangeState.publicKey = null
-  keyExchangeState.sessionKey = null
-  keyExchangeState.sessionId = null
+  clearRuntimeKeyState()
   keyExchangeState.exchanged = false
   keyExchangeState.exchanging = false
-  clearStoredKeyState()
-  updateCryptoConfig({ secretKey: '' })
 }

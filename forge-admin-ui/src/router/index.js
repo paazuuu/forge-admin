@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { routes as autoRoutes } from 'vue-router/auto-routes'
+import { SSO_BRIDGE_ROUTE } from '@/utils/sso-target'
 import { setupRouterGuards } from './guards'
 
 // 手动定义的路由（登录页、SSO、带参数的路由等）
@@ -86,7 +87,7 @@ export const manualRoutes = [
   },
   {
     name: 'ReportSsoBridge',
-    path: '/report/design',
+    path: SSO_BRIDGE_ROUTE,
     component: () => import('@/views/report/design.vue'),
     meta: { title: '子系统跳转' },
   },
