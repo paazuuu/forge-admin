@@ -66,7 +66,34 @@
                   </div>
                   <div class="generate-result-meta">
                     <span>{{ msg.canvasResponse.components?.length || 0 }} 个组件</span>
+                    <span v-if="msg.validationSummary">{{ msg.validationSummary.bound }} 个动态绑定</span>
+                    <span v-if="msg.validationSummary?.staticFallback">{{ msg.validationSummary.staticFallback }} 个静态降级</span>
                     <span>可应用到当前画布</span>
+                  </div>
+                  <div v-if="msg.validationSummary" class="validation-summary">
+                    <div class="validation-metrics">
+                      <span class="metric bound">动态 {{ msg.validationSummary.bound }}</span>
+                      <span class="metric static">静态 {{ msg.validationSummary.static + msg.validationSummary.staticFallback }}</span>
+                      <span class="metric repaired">修复 {{ msg.validationSummary.repaired }}</span>
+                    </div>
+                    <div class="validation-items">
+                      <div
+                        v-for="item in visibleValidationItems(msg.validationSummary)"
+                        :key="`${item.index}-${item.key}`"
+                        class="validation-item"
+                      >
+                        <span class="validation-status" :class="getValidationStatusClass(item.status)">
+                          {{ getValidationStatusLabel(item.status) }}
+                        </span>
+                        <span class="validation-name" :title="item.title">{{ item.title }}</span>
+                        <span class="validation-dataset" :title="getValidationDatasetText(item)">
+                          {{ getValidationDatasetText(item) }}
+                        </span>
+                      </div>
+                    </div>
+                    <div v-if="msg.validationSummary.warnings.length" class="validation-warning">
+                      {{ msg.validationSummary.warnings[0] }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -131,7 +158,83 @@
         </template>
         模式设置
       </n-tooltip>
+      <n-tooltip placement="top" trigger="hover">
+        <template #trigger>
+          <n-button
+            size="tiny"
+            quaternary
+            :disabled="historyButtonDisabled"
+            @click="toggleHistoryPanel"
+          >
+            <template #icon><n-icon><AnalyticsIcon /></n-icon></template>
+          </n-button>
+        </template>
+        最近生成记录
+      </n-tooltip>
     </div>
+
+    <n-collapse-transition :show="showHistoryPanel">
+      <div class="ai-history-panel">
+        <div class="ai-history-header">
+          <span>最近生成记录</span>
+          <n-button size="tiny" quaternary :loading="historyLoading" @click="loadGenerateRecords(true)">
+            刷新
+          </n-button>
+        </div>
+        <div v-if="historyLoading && !generationHistoryItems.length" class="ai-history-empty">
+          正在加载生成记录...
+        </div>
+        <div v-else-if="!generationHistoryItems.length" class="ai-history-empty">
+          暂无生成记录
+        </div>
+        <template v-else>
+          <div
+            v-for="record in generationHistoryItems.slice(0, 8)"
+            :key="record.id"
+            class="ai-history-item"
+            :class="{ failed: record.status !== 'success' }"
+          >
+            <div class="ai-history-main">
+              <div class="ai-history-title">
+                {{ record.title || '未命名大屏' }}
+              </div>
+              <div class="ai-history-meta">
+                <span>{{ record.source === 'remote' ? '云端' : '本地' }}</span>
+                <span>{{ formatHistoryTime(record.timestamp || record.createTime) }}</span>
+                <span>{{ record.componentCount || 0 }} 组件</span>
+                <span v-if="record.boundCount !== undefined">{{ record.boundCount }} 动态</span>
+                <span v-if="record.businessName">{{ record.businessName }}</span>
+                <span v-if="record.status !== 'success'" class="ai-history-status">
+                  {{ getHistoryStatusLabel(record.status) }}
+                </span>
+              </div>
+              <div v-if="record.errorMessage" class="ai-history-error">
+                {{ record.errorMessage }}
+              </div>
+            </div>
+            <div class="ai-history-actions">
+              <n-button
+                size="tiny"
+                type="primary"
+                ghost
+                :disabled="!record.response"
+                @click="record.response && applyToCanvas(record.response)"
+              >
+                应用
+              </n-button>
+              <n-tooltip v-if="record.source === 'remote' && record.recordId" placement="top" trigger="hover">
+                <template #trigger>
+                  <n-button size="tiny" quaternary circle @click="deleteGenerateRecord(record)">
+                    <template #icon><n-icon><CloseIcon /></n-icon></template>
+                  </n-button>
+                </template>
+                删除记录
+              </n-tooltip>
+            </div>
+          </div>
+        </template>
+      </div>
+    </n-collapse-transition>
 
     <div v-if="chatModeRef === 'generate'" class="business-context-row">
       <span class="style-label">业务：</span>
@@ -155,9 +258,69 @@
       </n-tooltip>
     </div>
 
-    <div v-if="chatModeRef === 'generate' && selectedBusiness" class="business-context-tip">
-      {{ selectedBusiness.businessName }}
-      <span v-if="selectedBusiness.datasetCount"> / {{ selectedBusiness.datasetCount }} 个数据集</span>
+    <div v-if="chatModeRef === 'generate' && selectedBusiness" class="business-context-tip" :class="{ 'is-expanded': businessContextExpanded }">
+      <div class="business-context-compact">
+        <div class="business-tip-main">
+          <span class="business-tip-name" :title="selectedBusiness.businessName">{{ selectedBusiness.businessName }}</span>
+          <span v-if="selectedBusiness.datasetCount" class="business-tip-chip">{{ selectedBusiness.datasetCount }} 数据集</span>
+          <span v-if="selectedBusinessReadiness" class="business-tip-chip" :class="`is-${selectedBusinessReadiness.level}`">
+            准备度 {{ selectedBusinessReadiness.score }}
+          </span>
+          <span class="business-tip-chip" :class="runtimePreviewClassName">
+            预检 {{ runtimePreviewTitle }}
+            <template v-if="businessRuntimePreview"> / 可查 {{ businessRuntimePreview.ready }}</template>
+          </span>
+        </div>
+        <div class="business-tip-actions">
+          <n-button
+            size="tiny"
+            quaternary
+            :loading="runtimePreviewLoading"
+            :disabled="!selectedBusinessPreviewContext || aiStore.getGenerating"
+            @click="refreshBusinessRuntimePreview(selectedBusinessPreviewContext, true)"
+          >
+            刷新
+          </n-button>
+          <n-button size="tiny" quaternary @click="businessContextExpanded = !businessContextExpanded">
+            {{ businessContextExpanded ? '收起' : '详情' }}
+            <span class="business-expand-icon" :class="{ expanded: businessContextExpanded }">⌄</span>
+          </n-button>
+        </div>
+      </div>
+
+      <n-collapse-transition :show="businessContextExpanded">
+        <div class="business-context-detail">
+          <div v-if="selectedBusinessReadiness" class="business-readiness" :class="`is-${selectedBusinessReadiness.level}`">
+            <div class="business-readiness-score">
+              AI 准备度 {{ selectedBusinessReadiness.score }} / {{ selectedBusinessReadiness.label }}
+            </div>
+            <div class="business-readiness-meta">
+              <span>{{ selectedBusinessReadiness.datasetCount }} 数据集</span>
+              <span>{{ selectedBusinessReadiness.fieldCount }} 字段</span>
+              <span v-if="selectedBusinessReadiness.primaryDatasetName">{{ selectedBusinessReadiness.primaryDatasetName }}</span>
+            </div>
+            <div v-if="selectedBusinessReadiness.suggestions.length" class="business-readiness-suggestion">
+              {{ selectedBusinessReadiness.suggestions[0] }}
+            </div>
+          </div>
+          <div class="business-runtime-preview" :class="runtimePreviewClassName">
+            <div class="runtime-preview-head">
+              <div class="runtime-preview-title">
+                数据预检 {{ runtimePreviewTitle }}
+              </div>
+            </div>
+            <div class="runtime-preview-meta">
+              <span>可查 {{ businessRuntimePreview?.ready || 0 }}</span>
+              <span>空 {{ businessRuntimePreview?.empty || 0 }}</span>
+              <span>异常 {{ businessRuntimePreview?.failed || 0 }}</span>
+              <span v-if="businessRuntimePreview?.skipped">跳过 {{ businessRuntimePreview.skipped }}</span>
+            </div>
+            <div v-if="runtimePreviewMessage" class="runtime-preview-message">
+              {{ runtimePreviewMessage }}
+            </div>
+          </div>
+        </div>
+      </n-collapse-transition>
     </div>
 
     <n-collapse-transition :show="showModeSelect">
@@ -304,25 +467,46 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, toRaw, watch } from 'vue'
 import {
+  type AiDashboardComponentLineageItem,
+  type AiDashboardGenerateRecord,
+  type AiDashboardGenerateRecordSaveRequest,
   type AiProvider,
   aiChatStream,
   aiGenerateStream,
-  getProviderPageApi
+  deleteDashboardGenerateRecordApi,
+  getDashboardGenerateRecentApi,
+  getProviderPageApi,
+  saveDashboardGenerateRecordApi
 } from '@/api/ai'
 import {
   getDataBusinessAiContext,
   getDataBusinessList,
   type DataBusinessAiContext,
+  type DataBusinessDatasetContext,
   type DataBusinessOption
 } from '@/api/data/business'
+import type { DataDatasetField } from '@/api/data/dataset'
 import type { AIGenerateResponse } from '@/api/ai/ai.d'
 import { applyAIToCanvas } from './aiEngine'
 import { parseStreamedResponse } from './llmClient'
 import { getComponentCatalogText } from './componentRegistry'
+import {
+  validateAIGenerateResponse,
+  type GenerateValidationItem,
+  type GenerateValidationStatus,
+  type GenerateValidationSummary
+} from './generateValidation'
+import { evaluateBusinessReadiness, type BusinessReadinessResult } from './businessReadiness'
+import {
+  previewBusinessRuntimeData,
+  type BusinessRuntimePreviewSummary,
+  type DatasetRuntimePreviewStatus
+} from './datasetRuntimePreview'
 import { icon } from '@/plugins'
 import type { CreateComponentGroupType, CreateComponentType } from '@/packages/index.d'
 import { useAIStore } from '@/store/modules/aiStore/aiStore'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
+import { fetchRouteParamsLocation } from '@/utils'
 
 const { SparklesIcon, SendIcon, AnalyticsIcon, PersonIcon, SettingsSharpIcon, CloseIcon, LayersIcon, RefreshOutlineIcon, Click } = icon.ionicons5
 const { Carbon3DCursorIcon } = icon.carbon
@@ -348,6 +532,15 @@ const selectedProviderId = ref<number | string | null>(aiStore.getSelectedProvid
 const selectedModelName = ref(aiStore.getSelectedProvider?.modelName || '')
 const temperatureRef = ref(aiStore.getSelectedProvider?.temperature ?? 0.7)
 const maxTokensRef = ref<number | null>(aiStore.getSelectedProvider?.maxTokens ?? 384000)
+const showHistoryPanel = ref(false)
+const selectedBusinessPreviewContext = ref<DataBusinessAiContext | null>(null)
+const selectedBusinessReadiness = ref<BusinessReadinessResult | null>(null)
+const businessRuntimePreview = ref<BusinessRuntimePreviewSummary | null>(null)
+const runtimePreviewLoading = ref(false)
+const businessContextExpanded = ref(false)
+const remoteGenerateRecords = ref<AiDashboardGenerateRecord[]>([])
+const historyLoading = ref(false)
+const historyLoaded = ref(false)
 
 const quickPrompts = [
   '基于所选业务定义生成经营监控大屏',
@@ -364,6 +557,38 @@ const GENERATE_PROGRESS_STEPS = [
   { key: 'detail', label: '完善配置' },
   { key: 'verify', label: '校验结果' }
 ]
+
+const validationStatusLabels: Record<GenerateValidationStatus, string> = {
+  bound: '动态',
+  repaired: '已修复',
+  static: '静态',
+  staticFallback: '降级',
+  unverified: '未校验',
+  skipped: '跳过'
+}
+
+const validationStatusClassNames: Record<GenerateValidationStatus, string> = {
+  bound: 'is-bound',
+  repaired: 'is-repaired',
+  static: 'is-static',
+  staticFallback: 'is-static-fallback',
+  unverified: 'is-unverified',
+  skipped: 'is-skipped'
+}
+
+const historyStatusLabels: Record<string, string> = {
+  success: '成功',
+  failed: '失败',
+  parse_failed: '解析失败',
+  stopped: '已停止'
+}
+
+const runtimePreviewStatusLabels: Record<DatasetRuntimePreviewStatus, string> = {
+  ready: '可查',
+  empty: '空数据',
+  failed: '异常',
+  skipped: '跳过'
+}
 
 const hasStreamingMessage = computed(() => aiStore.getChatMessages.some(message => message.streaming))
 const referencedComponentIds = ref<string[]>([])
@@ -406,6 +631,27 @@ type AIReferencedComponent = {
   request?: Record<string, any>
   option?: Record<string, any>
   children?: AIReferencedComponent[]
+}
+
+type GenerateHistoryDisplayItem = {
+  id: string
+  source: 'remote' | 'local'
+  recordId?: number | string
+  title: string
+  prompt?: string
+  timestamp?: number
+  createTime?: string
+  response?: AIGenerateResponse | null
+  validationSummary?: GenerateValidationSummary
+  businessName?: string
+  modelName?: string
+  status: string
+  componentCount?: number
+  boundCount?: number
+  staticCount?: number
+  staticFallbackCount?: number
+  repairedCount?: number
+  errorMessage?: string
 }
 
 function createSessionId() {
@@ -468,6 +714,63 @@ const modelOptions = computed(() => {
     options.push({ label: selectedProvider.value.defaultModel, value: selectedProvider.value.defaultModel })
   }
   return options
+})
+
+const generationHistoryItems = computed<GenerateHistoryDisplayItem[]>(() => {
+  const remoteItems = remoteGenerateRecords.value
+    .map(record => remoteRecordToHistoryItem(record))
+    .filter(Boolean) as GenerateHistoryDisplayItem[]
+  const remoteKeys = new Set(remoteItems.map(item => `${item.prompt || ''}|${item.title || ''}`))
+  const localItems = aiStore.getGenerateHistory
+    .map(item => ({
+      id: item.id || `local-${item.timestamp}`,
+      source: 'local' as const,
+      title: item.response?.title || '未命名大屏',
+      prompt: item.prompt,
+      timestamp: item.timestamp,
+      response: item.response,
+      validationSummary: item.validationSummary,
+      businessName: item.businessName,
+      modelName: item.modelName,
+      status: 'success',
+      componentCount: item.response?.components?.length || 0,
+      boundCount: item.validationSummary?.bound,
+      staticCount: item.validationSummary?.static,
+      staticFallbackCount: item.validationSummary?.staticFallback,
+      repairedCount: item.validationSummary?.repaired
+    }))
+    .filter(item => !remoteKeys.has(`${item.prompt || ''}|${item.title || ''}`))
+
+  return [...remoteItems, ...localItems].slice(0, 20)
+})
+
+const historyButtonDisabled = computed(() =>
+  historyLoaded.value
+  && !historyLoading.value
+  && generationHistoryItems.value.length === 0
+)
+
+const runtimePreviewTitle = computed(() => {
+  if (runtimePreviewLoading.value) return '检查中'
+  if (!businessRuntimePreview.value) return '未检查'
+  if (businessRuntimePreview.value.ready > 0) return '可用'
+  if (businessRuntimePreview.value.failed > 0) return '异常'
+  if (businessRuntimePreview.value.empty > 0) return '空数据'
+  return '待补充'
+})
+
+const runtimePreviewClassName = computed(() => {
+  if (runtimePreviewLoading.value) return 'is-loading'
+  if (!businessRuntimePreview.value) return 'is-pending'
+  if (businessRuntimePreview.value.ready > 0 && businessRuntimePreview.value.failed === 0) return 'is-ready'
+  if (businessRuntimePreview.value.ready > 0) return 'is-partial'
+  return 'is-failed'
+})
+
+const runtimePreviewMessage = computed(() => {
+  if (runtimePreviewLoading.value) return '正在抽样查询绑定数据集...'
+  if (!businessRuntimePreview.value) return '生成前会自动做一次轻量预检。'
+  return businessRuntimePreview.value.suggestions[0] || '已获取可查询数据集样例，AI 将优先基于样例规划组件。'
 })
 
 function isNearScrollBottom(el: HTMLElement, threshold = 48) {
@@ -565,6 +868,38 @@ watch([selectedProviderId, selectedModelName, temperatureRef, maxTokensRef, prov
   })
 })
 
+watch(selectedBusinessId, async value => {
+  selectedBusinessPreviewContext.value = null
+  selectedBusinessReadiness.value = null
+  businessRuntimePreview.value = null
+  businessContextExpanded.value = false
+  if (!value || chatModeRef.value !== 'generate') return
+  try {
+    const context = await loadSelectedBusinessContext()
+    if (String(selectedBusinessId.value) !== String(value)) return
+    selectedBusinessPreviewContext.value = context
+    selectedBusinessReadiness.value = evaluateBusinessReadiness(context)
+    refreshBusinessRuntimePreview(context)
+  } catch {
+    selectedBusinessReadiness.value = null
+  }
+})
+
+watch(chatModeRef, mode => {
+  businessContextExpanded.value = false
+  if (mode === 'generate' && selectedBusinessId.value && !selectedBusinessReadiness.value) {
+    loadSelectedBusinessContext()
+      .then(context => {
+        selectedBusinessPreviewContext.value = context
+        selectedBusinessReadiness.value = evaluateBusinessReadiness(context)
+        refreshBusinessRuntimePreview(context)
+      })
+      .catch(() => {
+        selectedBusinessReadiness.value = null
+      })
+  }
+})
+
 function renderContent(content: string): string {
   if (!content) return ''
   let escaped = content
@@ -578,6 +913,170 @@ function renderContent(content: string): string {
   escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
   escaped = escaped.replace(/\n/g, '<br/>')
   return escaped
+}
+
+function visibleValidationItems(summary: GenerateValidationSummary): GenerateValidationItem[] {
+  return (summary.items || []).slice(0, 8)
+}
+
+function getValidationStatusLabel(status: GenerateValidationStatus) {
+  return validationStatusLabels[status] || '未知'
+}
+
+function getValidationStatusClass(status: GenerateValidationStatus) {
+  return validationStatusClassNames[status] || 'is-static'
+}
+
+function getValidationDatasetText(item: GenerateValidationItem) {
+  if (item.status === 'skipped') return '未知组件'
+  if (item.status === 'static' || item.status === 'staticFallback') return '静态数据'
+  if (item.status === 'unverified') return item.datasetName || (item.datasetId ? `数据集 ${item.datasetId}` : '未校验数据集')
+  return item.datasetName || (item.datasetId ? `数据集 ${item.datasetId}` : '动态数据集')
+}
+
+function safeParseJson<T>(value?: string | null): T | null {
+  if (!value) return null
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
+  }
+}
+
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
+function getCurrentProjectId() {
+  const rawId = fetchRouteParamsLocation()
+  const projectId = Number(rawId)
+  return Number.isFinite(projectId) && projectId > 0 ? projectId : undefined
+}
+
+function remoteRecordToHistoryItem(record: AiDashboardGenerateRecord): GenerateHistoryDisplayItem {
+  const response = safeParseJson<AIGenerateResponse>(record.responseJson)
+  const validationSummary = safeParseJson<GenerateValidationSummary>(record.validationSummaryJson)
+  const status = record.status || 'success'
+  const canApply = status === 'success' && !!response && Array.isArray(response.components)
+
+  return {
+    id: `remote-${record.id || record.createTime || Math.random()}`,
+    source: 'remote',
+    recordId: record.id,
+    title: record.generatedTitle || response?.title || (status === 'success' ? '未命名大屏' : '生成未完成'),
+    prompt: record.prompt,
+    createTime: record.createTime,
+    response: canApply ? response : null,
+    validationSummary: validationSummary || undefined,
+    businessName: record.businessName,
+    modelName: record.modelName,
+    status,
+    componentCount: record.componentCount ?? response?.components?.length ?? 0,
+    boundCount: record.boundCount ?? validationSummary?.bound,
+    staticCount: record.staticCount ?? validationSummary?.static,
+    staticFallbackCount: record.staticFallbackCount ?? validationSummary?.staticFallback,
+    repairedCount: record.repairedCount ?? validationSummary?.repaired,
+    errorMessage: record.errorMessage
+  }
+}
+
+function getHistoryStatusLabel(status?: string) {
+  return historyStatusLabels[status || 'success'] || status || '未知'
+}
+
+function formatHistoryTime(timestamp?: number | string) {
+  if (!timestamp) return ''
+  const source = typeof timestamp === 'string' ? timestamp.replace(/-/g, '/') : timestamp
+  const date = new Date(source)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+async function loadGenerateRecords(showError = false) {
+  historyLoading.value = true
+  try {
+    const params: { projectId?: number; limit: number } = { limit: 20 }
+    const projectId = getCurrentProjectId()
+    if (projectId) {
+      params.projectId = projectId
+    }
+    const res = await getDashboardGenerateRecentApi(params)
+    remoteGenerateRecords.value = res?.data || []
+    historyLoaded.value = true
+  } catch (error: any) {
+    historyLoaded.value = true
+    if (showError) {
+      window['$message']?.warning('云端生成记录加载失败: ' + (error?.message || '未知错误'))
+    }
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function toggleHistoryPanel() {
+  showHistoryPanel.value = !showHistoryPanel.value
+  if (showHistoryPanel.value) {
+    loadGenerateRecords()
+  }
+}
+
+function prependRemoteGenerateRecord(record?: AiDashboardGenerateRecord) {
+  if (!record?.id) return
+  remoteGenerateRecords.value = [
+    record,
+    ...remoteGenerateRecords.value.filter(item => String(item.id) !== String(record.id))
+  ].slice(0, 20)
+  historyLoaded.value = true
+}
+
+async function persistGenerateRecord(payload: AiDashboardGenerateRecordSaveRequest) {
+  try {
+    const res = await saveDashboardGenerateRecordApi(payload)
+    prependRemoteGenerateRecord(res?.data)
+  } catch (error) {
+    console.warn('[AI生成记录] 保存失败', error)
+  }
+}
+
+async function deleteGenerateRecord(record: GenerateHistoryDisplayItem) {
+  if (!record.recordId) return
+  try {
+    await deleteDashboardGenerateRecordApi(record.recordId)
+    remoteGenerateRecords.value = remoteGenerateRecords.value.filter(item => String(item.id) !== String(record.recordId))
+    window['$message']?.success('生成记录已删除')
+  } catch (error: any) {
+    window['$message']?.error('删除生成记录失败: ' + (error?.message || '未知错误'))
+  }
+}
+
+function buildValidatedResultText(response: AIGenerateResponse, summary: GenerateValidationSummary) {
+  return [
+    '大屏生成完成',
+    `标题：${response.title || '未命名大屏'}`,
+    `组件：${summary.accepted}/${summary.total}`,
+    `动态绑定：${summary.bound}，静态/降级：${summary.static + summary.staticFallback}`,
+    '已完成结果校验，可应用到画布。'
+  ].join('\n')
+}
+
+function buildLineageItems(summary?: GenerateValidationSummary): AiDashboardComponentLineageItem[] {
+  if (!summary?.items?.length) return []
+  return summary.items
+    .filter(item => item.datasetId && item.status !== 'static' && item.status !== 'staticFallback' && item.status !== 'skipped')
+    .map(item => ({
+      componentIndex: item.index,
+      componentKey: item.key,
+      componentTitle: item.title,
+      datasetId: item.datasetId,
+      datasetName: item.datasetName,
+      fieldNames: item.fields || [],
+      bindingStatus: item.status
+    }))
 }
 
 function useQuickPrompt(prompt: string) {
@@ -883,6 +1382,78 @@ function buildGenerateStreamingPreview(fullText: string): string {
   return fullText.trim() ? 'AI 正在生成大屏，请稍候...' : 'AI 正在理解需求...'
 }
 
+function getDatasetFieldName(field: DataDatasetField) {
+  return String(field.fieldName || '').trim()
+}
+
+function getFieldsByRole(fields: DataDatasetField[], roles: string[], limit = 8) {
+  const roleSet = new Set(roles.map(role => role.toLowerCase()))
+  return fields
+    .filter(field => isPromptSafeField(field) && roleSet.has(String(field.fieldRole || '').toLowerCase()) && getDatasetFieldName(field))
+    .slice(0, limit)
+    .map(field => getDatasetFieldName(field))
+}
+
+function getDisplayFieldNames(fields: DataDatasetField[], limit = 12) {
+  return fields
+    .filter(field => isPromptSafeField(field) && field.displayEnabled !== 0 && getDatasetFieldName(field))
+    .slice(0, limit)
+    .map(field => getDatasetFieldName(field))
+}
+
+function getSensitiveLevel(field: DataDatasetField) {
+  return String(field.sensitiveLevel || '').trim().toUpperCase()
+}
+
+function isPromptSafeField(field: DataDatasetField) {
+  return getSensitiveLevel(field) !== 'HIDDEN'
+}
+
+function buildPromptField(field: DataDatasetField) {
+  if (!isPromptSafeField(field)) return null
+  const sensitiveLevel = getSensitiveLevel(field)
+  const masked = sensitiveLevel === 'MASK'
+  return {
+    fieldName: field.fieldName,
+    fieldLabel: field.fieldLabel,
+    dataType: field.dataType,
+    fieldRole: field.fieldRole,
+    defaultAgg: field.defaultAgg,
+    dataUnit: field.dataUnit,
+    dimensionName: field.dimensionName,
+    displayEnabled: field.displayEnabled,
+    sensitiveLevel: masked ? 'MASK' : sensitiveLevel || undefined,
+    safeUsage: masked ? '敏感字段，运行时只允许脱敏展示或聚合统计，AI 不得要求展示原始值。' : undefined,
+    description: masked ? '敏感字段，已从 prompt 中移除脱敏规则和原始样例。' : field.description
+  }
+}
+
+function buildDatasetProfile(dataset: DataBusinessDatasetContext) {
+  const fields = dataset.fields || []
+  const dimensions = getFieldsByRole(fields, ['DIMENSION', 'DATE', 'TIME', 'CATEGORY', 'NAME'])
+  const metrics = getFieldsByRole(fields, ['METRIC', 'MEASURE', 'VALUE', 'NUMBER'])
+  const fallbackFields = getDisplayFieldNames(fields)
+
+  return {
+    datasetId: dataset.datasetId,
+    datasetCode: dataset.datasetCode,
+    datasetName: dataset.datasetName,
+    priority: dataset.isPrimary === 1 ? 'primary' : 'normal',
+    usageRemark: dataset.usageRemark,
+    description: dataset.description,
+    matchHints: [
+      dataset.datasetCode,
+      dataset.datasetName,
+      dataset.usageRemark
+    ].filter(Boolean),
+    recommendedFields: {
+      dimensions: dimensions.length ? dimensions : fallbackFields.slice(0, 4),
+      metrics: metrics.length ? metrics : fallbackFields.slice(1, 7),
+      displayFields: fallbackFields
+    }
+  }
+}
+
 const loadProviders = async () => {
   providerLoading.value = true
   try {
@@ -908,11 +1479,13 @@ const loadProviders = async () => {
 }
 
 const businessContextCache = new Map<string, DataBusinessAiContext>()
+const businessRuntimePreviewCache = new Map<string, BusinessRuntimePreviewSummary>()
 
 const loadBusinessDefinitions = async () => {
   businessLoading.value = true
   try {
     businessContextCache.clear()
+    businessRuntimePreviewCache.clear()
     const res = await getDataBusinessList()
     businessList.value = res?.data || []
     if (selectedBusinessId.value && !businessList.value.some(item => String(item.id) === String(selectedBusinessId.value))) {
@@ -925,32 +1498,138 @@ const loadBusinessDefinitions = async () => {
   }
 }
 
-function compactBusinessContext(context: DataBusinessAiContext) {
+async function refreshBusinessRuntimePreview(context?: DataBusinessAiContext | null, force = false) {
+  if (!selectedBusinessId.value || !context) {
+    businessRuntimePreview.value = null
+    return null
+  }
+  const cacheKey = String(selectedBusinessId.value)
+  if (!force && businessRuntimePreviewCache.has(cacheKey)) {
+    const cached = businessRuntimePreviewCache.get(cacheKey) || null
+    businessRuntimePreview.value = cached
+    return cached
+  }
+
+  runtimePreviewLoading.value = true
+  try {
+    const summary = await previewBusinessRuntimeData(context, {
+      maxDatasets: 6,
+      maxFields: 10,
+      maxRows: 3
+    })
+    if (String(selectedBusinessId.value) !== cacheKey) return summary
+    if (summary) {
+      businessRuntimePreviewCache.set(cacheKey, summary)
+      businessRuntimePreview.value = summary
+    }
+    return summary
+  } catch (error: any) {
+    if (force) {
+      window['$message']?.warning('数据预检失败: ' + (error?.message || '未知错误'))
+    }
+    return null
+  } finally {
+    if (String(selectedBusinessId.value) === cacheKey) {
+      runtimePreviewLoading.value = false
+    }
+  }
+}
+
+async function ensureBusinessRuntimePreview(context?: DataBusinessAiContext | null) {
+  if (!selectedBusinessId.value || !context) return null
+  const cacheKey = String(selectedBusinessId.value)
+  if (businessRuntimePreviewCache.has(cacheKey)) {
+    const cached = businessRuntimePreviewCache.get(cacheKey) || null
+    businessRuntimePreview.value = cached
+    return cached
+  }
+  return refreshBusinessRuntimePreview(context)
+}
+
+function compactBusinessContext(context: DataBusinessAiContext, runtimePreview?: BusinessRuntimePreviewSummary | null) {
+  const readiness = evaluateBusinessReadiness(context)
   const datasets = (context.datasets || []).slice(0, 8).map(dataset => ({
     datasetId: dataset.datasetId,
     datasetCode: dataset.datasetCode,
     datasetName: dataset.datasetName,
     datasetType: dataset.datasetType,
+    isPrimary: dataset.isPrimary,
     usageRemark: dataset.usageRemark,
     description: dataset.description,
     paramSchemaJson: dataset.paramSchemaJson,
-    fields: (dataset.fields || []).slice(0, 24).map(field => ({
-      fieldName: field.fieldName,
-      fieldLabel: field.fieldLabel,
-      dataType: field.dataType,
-      fieldRole: field.fieldRole,
-      defaultAgg: (field as any).defaultAgg,
-      dataUnit: (field as any).dataUnit,
-      dimensionName: (field as any).dimensionName
-    }))
+    fields: (dataset.fields || [])
+      .map(field => buildPromptField(field))
+      .filter(Boolean)
+      .slice(0, 24)
   }))
 
   return JSON.stringify({
     instruction: [
-      '请优先使用 datasets 中的 datasetId 生成动态数据组件。',
-      '图表组件如果能映射到数据集，请在组件 JSON 中输出 request.datasetId、request.datasetFields 和 request.datasetMapping。',
-      '无法匹配到数据集的标题、装饰和说明组件可以继续使用静态 option.dataset。'
+      '这是数据驱动大屏生成任务，请优先使用 datasets 中的真实 datasetId 生成动态数据组件。',
+      '所有图表、表格、排行、指标组件只要能映射到数据集，必须输出 request.datasetId、request.datasetFields 和 request.datasetMapping。',
+      'request.datasetId 只能来自 datasets；request.datasetFields 只能使用该数据集 fields 内的 fieldName，不能使用 fieldLabel。',
+      '如果无法确定 datasetId，请优先根据 datasetProfiles.matchHints、recommendedFields、usageRemark 选择最接近的数据集，而不是直接生成静态数据。',
+      '字段上下文已按当前用户权限和敏感级别清洗：隐藏字段不会出现，脱敏字段只能用于脱敏展示或聚合统计。',
+      '标题、装饰、模块框、说明文字可以静态；业务指标、趋势、排行、表格、地图必须尽量动态绑定。',
+      '允许保留 option.dataset 作为预览兜底，但动态组件仍必须带 request。'
     ],
+    generationPolicy: {
+      bindingPriority: [
+        '优先使用 runtimeDataPreview 中 status=ready 的数据集，样例行可用于判断字段取值、量级和图表类型。',
+        'status=failed/empty/skipped 的数据集不要作为核心图表首选，除非业务定义明确需要。',
+        '优先使用 primary 数据集生成顶部 KPI、主图和核心趋势。',
+        '按 usageRemark 匹配趋势、排行、明细、地图、告警等组件。',
+        '字段映射优先使用 recommendedFields.dimensions 作为 category/time/name，recommendedFields.metrics 作为 value/series。',
+        '不要输出未在当前业务定义中出现的 datasetId。'
+      ],
+      requiredRequestShape: {
+        datasetId: 'number',
+        datasetName: 'string',
+        datasetFields: ['fieldName'],
+        datasetMapping: {
+          mode: 'auto',
+          fieldMap: {
+            category: '维度字段 fieldName',
+            value: '指标字段 fieldName',
+            time: '时间字段 fieldName',
+            series: '系列字段 fieldName'
+          },
+          outputFields: ['fieldName'],
+          syncHeader: true
+        }
+      },
+      readiness
+    },
+    runtimeDataPreview: runtimePreview
+      ? {
+          instruction: [
+            'sampleRows 只用于理解字段取值和数据形态，不要把样例值写死为最终静态数据。',
+            '如果数据集 status 为 ready，请生成动态 request 绑定；如果 status 为 failed/empty/skipped，优先选择其他可查询数据集。',
+            '当业务必须使用异常数据集时，组件可以先静态兜底，但标题要表达业务含义。'
+          ],
+          summary: {
+            total: runtimePreview.total,
+            ready: runtimePreview.ready,
+            empty: runtimePreview.empty,
+            failed: runtimePreview.failed,
+            skipped: runtimePreview.skipped
+          },
+          items: runtimePreview.items.map(item => ({
+            datasetId: item.datasetId,
+            datasetCode: item.datasetCode,
+            datasetName: item.datasetName,
+            status: item.status,
+            statusLabel: runtimePreviewStatusLabels[item.status],
+            fields: item.fields,
+            rowCount: item.rowCount,
+            sampleRows: item.status === 'ready' ? item.sampleRows : [],
+            message: item.message
+          }))
+        }
+      : {
+          status: 'not_loaded',
+          instruction: '当前没有运行时样例，请只基于业务定义和字段语义生成，并严格输出 request.datasetId。'
+        },
     business: {
       businessId: context.businessId,
       businessCode: context.businessCode,
@@ -961,12 +1640,13 @@ function compactBusinessContext(context: DataBusinessAiContext) {
       dimensionDefinition: context.dimensionDefinition,
       usageGuide: context.usageGuide
     },
+    datasetProfiles: (context.datasets || []).slice(0, 8).map(dataset => buildDatasetProfile(dataset)),
     datasets
   }, null, 2)
 }
 
-async function loadSelectedBusinessContext() {
-  if (!selectedBusinessId.value) return ''
+async function loadSelectedBusinessContext(): Promise<DataBusinessAiContext | null> {
+  if (!selectedBusinessId.value) return null
   const cacheKey = String(selectedBusinessId.value)
   let context = businessContextCache.get(cacheKey)
   if (!context) {
@@ -976,8 +1656,7 @@ async function loadSelectedBusinessContext() {
       businessContextCache.set(cacheKey, context)
     }
   }
-  if (!context) return ''
-  return compactBusinessContext(context)
+  return context || null
 }
 
 async function handleSend() {
@@ -988,6 +1667,7 @@ async function handleSend() {
       : ''
   )
   if (!content || aiStore.getGenerating) return
+  businessContextExpanded.value = false
 
   if (!selectedProvider.value || !selectedProviderId.value) {
     window['$message']?.warning('请先选择一个可用的 AI 供应商')
@@ -1002,9 +1682,22 @@ async function handleSend() {
   }
 
   let selectedBusinessContext = ''
+  let selectedBusinessContextData: DataBusinessAiContext | null = null
   if (chatModeRef.value === 'generate' && selectedBusinessId.value) {
     try {
-      selectedBusinessContext = await loadSelectedBusinessContext()
+      selectedBusinessContextData = await loadSelectedBusinessContext()
+      selectedBusinessPreviewContext.value = selectedBusinessContextData
+      selectedBusinessReadiness.value = evaluateBusinessReadiness(selectedBusinessContextData)
+      const runtimePreview = await ensureBusinessRuntimePreview(selectedBusinessContextData)
+      selectedBusinessContext = selectedBusinessContextData
+        ? compactBusinessContext(selectedBusinessContextData, runtimePreview)
+        : ''
+      if (selectedBusinessReadiness.value?.level === 'low') {
+        window['$message']?.warning(`当前业务定义 AI 准备度 ${selectedBusinessReadiness.value.score}，可能会产生较多静态组件`)
+      }
+      if (runtimePreview && runtimePreview.ready === 0 && runtimePreview.total > 0) {
+        window['$message']?.warning('当前业务数据集预检无可查样例，AI 将更多依赖字段语义生成')
+      }
     } catch (error: any) {
       window['$message']?.error('业务定义上下文加载失败: ' + (error?.message || '未知错误'))
       return
@@ -1043,6 +1736,7 @@ async function handleSend() {
 
   if (chatModeRef.value === 'generate') {
     const { width, height } = getCanvasSize()
+    const generateStartedAt = Date.now()
     const generateRequest = {
       prompt: content,
       sessionId: chatSessionIdRef.value,
@@ -1059,6 +1753,25 @@ async function handleSend() {
       temperature: temperatureRef.value,
       maxTokens: maxTokensRef.value || undefined
     }
+    const buildGenerateRecordPayload = (
+      overrides: Partial<AiDashboardGenerateRecordSaveRequest> = {}
+    ): AiDashboardGenerateRecordSaveRequest => ({
+      sessionId: chatSessionIdRef.value,
+      projectId: getCurrentProjectId(),
+      projectName: chartEditStore.getEditCanvasConfig?.projectName,
+      businessDefinitionId: selectedBusinessId.value || undefined,
+      businessName: selectedBusiness.value?.businessName,
+      providerId: selectedProviderId.value || undefined,
+      providerName: selectedProvider.value?.providerName,
+      modelName,
+      style: styleRef.value,
+      canvasWidth: width,
+      canvasHeight: height,
+      prompt: content,
+      requestJson: safeJsonStringify(generateRequest),
+      elapsedMs: Date.now() - generateStartedAt,
+      ...overrides
+    })
 
     updateAssistantStreaming(buildGenerateStreamingPreview(''), null)
 
@@ -1075,6 +1788,10 @@ async function handleSend() {
             isReasoning: false,
             reasoningTime: aiReasoningContent.value ? getReasoningTime() : null
           })
+          void persistGenerateRecord(buildGenerateRecordPayload({
+            status: 'stopped',
+            errorMessage: '用户停止生成'
+          }))
           aiStore.setGenerating(false)
           scrollToBottom()
           return
@@ -1087,38 +1804,77 @@ async function handleSend() {
             isReasoning: false,
             reasoningTime: aiReasoningContent.value ? getReasoningTime() : null
           })
+          void persistGenerateRecord(buildGenerateRecordPayload({
+            status: 'stopped',
+            errorMessage: '生成响应为空'
+          }))
           aiStore.setGenerating(false)
           scrollToBottom()
           return
         }
 
         try {
-          const canvasResponse = parseStreamedResponse(answerContent)
-          const displayText = `✅ 大屏生成完成！\n📊 标题：${canvasResponse.title}\n🧩 共 ${canvasResponse.components.length} 个组件\n\n点击下方按钮应用到画布。`
+          const parsedResponse = parseStreamedResponse(answerContent)
+          const validationResult = validateAIGenerateResponse(parsedResponse, {
+            businessContext: selectedBusinessContextData,
+            canvasWidth: width,
+            canvasHeight: height
+          })
+          const canvasResponse = validationResult.response
+          const displayText = buildValidatedResultText(canvasResponse, validationResult.summary)
           aiStore.updateLastAssistantMessage(displayText, canvasResponse, {
             reasoning: aiReasoningContent.value,
             isReasoning: false,
             reasoningTime: aiReasoningContent.value ? getReasoningTime() : null,
-            progressSteps: undefined
+            progressSteps: undefined,
+            validationSummary: validationResult.summary
           })
-          aiStore.addHistory(content, canvasResponse)
+          aiStore.addHistory(content, canvasResponse, {
+            businessDefinitionId: selectedBusinessId.value || undefined,
+            businessName: selectedBusiness.value?.businessName,
+            providerName: selectedProvider.value?.providerName,
+            modelName,
+            validationSummary: validationResult.summary
+          })
+          void persistGenerateRecord(buildGenerateRecordPayload({
+            status: 'success',
+            generatedTitle: canvasResponse.title,
+            responseJson: safeJsonStringify(canvasResponse),
+            validationSummaryJson: safeJsonStringify(validationResult.summary),
+            componentCount: validationResult.summary.accepted,
+            boundCount: validationResult.summary.bound,
+            staticCount: validationResult.summary.static,
+            staticFallbackCount: validationResult.summary.staticFallback,
+            repairedCount: validationResult.summary.repaired,
+            lineageItems: buildLineageItems(validationResult.summary)
+          }))
         } catch (error: any) {
           aiStore.updateLastAssistantMessage(`❌ 生成结果解析失败：${error?.message || '返回内容不是合法 JSON'}`, null, {
             reasoning: aiReasoningContent.value,
             isReasoning: false,
             reasoningTime: aiReasoningContent.value ? getReasoningTime() : null
           })
+          void persistGenerateRecord(buildGenerateRecordPayload({
+            status: 'parse_failed',
+            responseJson: answerContent,
+            errorMessage: error?.message || '返回内容不是合法 JSON'
+          }))
         } finally {
           aiStore.setGenerating(false)
           scrollToBottom()
         }
       },
       error => {
+        const errorMessage = error?.message || '未知错误'
         aiStore.updateLastAssistantMessage(`❌ 生成失败：${error?.message || '未知错误'}`, null, {
           reasoning: aiReasoningContent.value,
           isReasoning: false,
           reasoningTime: aiReasoningContent.value ? getReasoningTime() : null
         })
+        void persistGenerateRecord(buildGenerateRecordPayload({
+          status: 'failed',
+          errorMessage
+        }))
         aiStore.setGenerating(false)
         scrollToBottom()
       },
@@ -1212,6 +1968,7 @@ async function applyToCanvas(response: AIGenerateResponse) {
 
 onMounted(async () => {
   await Promise.all([loadProviders(), loadBusinessDefinitions()])
+  loadGenerateRecords()
   aiStore.setChatSessions([])
   if (!aiStore.currentSessionId) {
     aiStore.setCurrentSessionId(chatSessionIdRef.value)
@@ -1573,6 +2330,7 @@ $topHeight: 40px;
 
           .generate-result-main {
             min-width: 0;
+            width: 100%;
             display: flex;
             flex-direction: column;
             gap: 4px;
@@ -1606,6 +2364,118 @@ $topHeight: 40px;
               line-height: 1.6;
             }
           }
+
+          .validation-summary {
+            margin-top: 6px;
+            display: grid;
+            gap: 6px;
+          }
+
+          .validation-metrics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+          }
+
+          .metric {
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 11px;
+            line-height: 1.5;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+
+            &.bound {
+              color: #51d6a9;
+              background: rgba(81, 214, 169, 0.09);
+              border-color: rgba(81, 214, 169, 0.22);
+            }
+
+            &.static {
+              color: rgba(226, 232, 240, 0.82);
+              background: rgba(148, 163, 184, 0.1);
+            }
+
+            &.repaired {
+              color: #facc15;
+              background: rgba(250, 204, 21, 0.1);
+              border-color: rgba(250, 204, 21, 0.22);
+            }
+          }
+
+          .validation-items {
+            max-height: 156px;
+            overflow-y: auto;
+            display: grid;
+            gap: 4px;
+            padding-right: 2px;
+
+            &::-webkit-scrollbar {
+              width: 4px;
+            }
+
+            &::-webkit-scrollbar-thumb {
+              border-radius: 2px;
+              background: rgba(81, 214, 169, 0.28);
+            }
+          }
+
+          .validation-item {
+            display: grid;
+            grid-template-columns: 46px minmax(74px, 1fr) minmax(72px, 0.9fr);
+            gap: 6px;
+            align-items: center;
+            min-width: 0;
+            padding: 5px 6px;
+            border-radius: 7px;
+            background: rgba(255, 255, 255, 0.045);
+          }
+
+          .validation-status {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 20px;
+            border-radius: 5px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.76);
+            background: rgba(148, 163, 184, 0.16);
+
+            &.is-bound,
+            &.is-repaired {
+              color: #082016;
+              background: #51d6a9;
+              font-weight: 700;
+            }
+
+            &.is-static-fallback {
+              color: #facc15;
+              background: rgba(250, 204, 21, 0.14);
+            }
+
+            &.is-skipped {
+              color: #f87171;
+              background: rgba(248, 113, 113, 0.12);
+            }
+          }
+
+          .validation-name,
+          .validation-dataset {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+          }
+
+          .validation-dataset {
+            color: rgba(255, 255, 255, 0.58);
+          }
+
+          .validation-warning {
+            color: #facc15;
+            font-size: 11px;
+            line-height: 1.45;
+          }
         }
 
         .msg-actions {
@@ -1620,6 +2490,7 @@ $topHeight: 40px;
   .mode-row,
   .business-context-row,
   .business-context-tip,
+  .ai-history-panel,
   .config-grid,
   .selection-context,
   .provider-tip {
@@ -1650,9 +2521,299 @@ $topHeight: 40px;
   }
 
   .business-context-tip {
-    padding: 0 10px 8px 56px;
+    display: grid;
+    gap: 6px;
+    padding: 6px 10px;
     color: #7f8c8d;
     font-size: 12px;
+
+    &.is-expanded {
+      padding-bottom: 8px;
+    }
+  }
+
+  .business-context-compact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .business-tip-main {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .business-tip-name {
+    min-width: 0;
+    max-width: 120px;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.84);
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .business-tip-chip {
+    min-width: 0;
+    overflow: hidden;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(255, 255, 255, 0.62);
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-high,
+    &.is-ready {
+      background: rgba(81, 214, 169, 0.12);
+      color: #9ff2d7;
+    }
+
+    &.is-medium,
+    &.is-partial,
+    &.is-loading {
+      background: rgba(250, 204, 21, 0.12);
+      color: #fde68a;
+    }
+
+    &.is-low,
+    &.is-failed {
+      background: rgba(248, 113, 113, 0.13);
+      color: #fecaca;
+    }
+  }
+
+  .business-tip-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .business-expand-icon {
+    display: inline-block;
+    margin-left: 2px;
+    transition: transform 0.18s ease;
+
+    &.expanded {
+      transform: rotate(180deg);
+    }
+  }
+
+  .business-context-detail {
+    display: grid;
+    gap: 7px;
+    max-height: 172px;
+    overflow-y: auto;
+    padding-right: 2px;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.16);
+    }
+  }
+
+  .business-readiness {
+    display: grid;
+    gap: 5px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.42);
+
+    &.is-high {
+      border-color: rgba(81, 214, 169, 0.26);
+      background: rgba(81, 214, 169, 0.08);
+    }
+
+    &.is-medium {
+      border-color: rgba(250, 204, 21, 0.24);
+      background: rgba(250, 204, 21, 0.07);
+    }
+
+    &.is-low {
+      border-color: rgba(248, 113, 113, 0.24);
+      background: rgba(248, 113, 113, 0.08);
+    }
+  }
+
+  .business-readiness-score {
+    color: rgba(255, 255, 255, 0.86);
+    font-weight: 700;
+  }
+
+  .business-readiness-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+
+    span {
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.07);
+      color: rgba(255, 255, 255, 0.64);
+    }
+  }
+
+  .business-readiness-suggestion {
+    color: #facc15;
+    line-height: 1.45;
+  }
+
+  .business-runtime-preview {
+    display: grid;
+    gap: 5px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.38);
+
+    &.is-ready {
+      border-color: rgba(81, 214, 169, 0.24);
+      background: rgba(81, 214, 169, 0.07);
+    }
+
+    &.is-partial,
+    &.is-loading {
+      border-color: rgba(250, 204, 21, 0.24);
+      background: rgba(250, 204, 21, 0.07);
+    }
+
+    &.is-failed {
+      border-color: rgba(248, 113, 113, 0.24);
+      background: rgba(248, 113, 113, 0.08);
+    }
+  }
+
+  .runtime-preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .runtime-preview-title {
+    min-width: 0;
+    color: rgba(255, 255, 255, 0.86);
+    font-weight: 700;
+  }
+
+  .runtime-preview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+
+    span {
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.07);
+      color: rgba(255, 255, 255, 0.64);
+    }
+  }
+
+  .runtime-preview-message {
+    color: #facc15;
+    line-height: 1.45;
+  }
+
+  .ai-history-panel {
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .ai-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .ai-history-empty {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed rgba(148, 163, 184, 0.18);
+    border-radius: 8px;
+    color: #7f8c8d;
+    font-size: 12px;
+  }
+
+  .ai-history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.5);
+
+    &.failed {
+      border-color: rgba(248, 113, 113, 0.18);
+      background: rgba(127, 29, 29, 0.12);
+    }
+  }
+
+  .ai-history-main {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .ai-history-title {
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 12px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ai-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    color: #7f8c8d;
+    font-size: 11px;
+  }
+
+  .ai-history-status {
+    color: #facc15;
+  }
+
+  .ai-history-error {
+    min-width: 0;
+    color: rgba(248, 113, 113, 0.86);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ai-history-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .config-grid {

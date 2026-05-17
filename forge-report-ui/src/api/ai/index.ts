@@ -82,6 +82,93 @@ export interface AiGenerateStreamRequest {
   maxTokens?: number
 }
 
+export interface AiDashboardGenerateRecord {
+  id?: number | string
+  sessionId?: string
+  projectId?: number | string
+  projectName?: string
+  businessDefinitionId?: number | string
+  businessName?: string
+  providerId?: number | string
+  providerName?: string
+  modelName?: string
+  style?: string
+  canvasWidth?: number
+  canvasHeight?: number
+  prompt?: string
+  requestJson?: string
+  generatedTitle?: string
+  responseJson?: string
+  validationSummaryJson?: string
+  status?: 'success' | 'failed' | 'parse_failed' | 'stopped' | string
+  componentCount?: number
+  boundCount?: number
+  staticCount?: number
+  staticFallbackCount?: number
+  repairedCount?: number
+  elapsedMs?: number
+  errorMessage?: string
+  createTime?: string
+  updateTime?: string
+}
+
+export interface AiDashboardGenerateRecordSaveRequest {
+  sessionId?: string
+  projectId?: number | string
+  projectName?: string
+  businessDefinitionId?: number | string
+  businessName?: string
+  providerId?: number | string
+  providerName?: string
+  modelName?: string
+  style?: string
+  canvasWidth?: number
+  canvasHeight?: number
+  prompt?: string
+  requestJson?: string
+  generatedTitle?: string
+  responseJson?: string
+  validationSummaryJson?: string
+  status?: string
+  componentCount?: number
+  boundCount?: number
+  staticCount?: number
+  staticFallbackCount?: number
+  repairedCount?: number
+  elapsedMs?: number
+  errorMessage?: string
+  lineageItems?: AiDashboardComponentLineageItem[]
+}
+
+export interface AiDashboardComponentLineageItem {
+  componentIndex?: number
+  componentKey?: string
+  componentTitle?: string
+  datasetId?: number | string
+  datasetName?: string
+  fieldNames?: string[]
+  bindingStatus?: string
+}
+
+export interface AiDashboardDatasetImpactItem {
+  lineageId?: number | string
+  recordId?: number | string
+  projectId?: number | string
+  projectName?: string
+  businessDefinitionId?: number | string
+  businessName?: string
+  componentIndex?: number
+  componentKey?: string
+  componentTitle?: string
+  datasetId?: number | string
+  datasetName?: string
+  fieldNames?: string
+  bindingStatus?: string
+  generatedTitle?: string
+  recordStatus?: string
+  createTime?: string
+}
+
 // ==================== AI 生成 ====================
 
 /** AI 生成大屏 */
@@ -103,6 +190,26 @@ export const aiGenerateStream = async (
 ) => {
   return consumeAiSse('/forge-report-api/ai/generate/stream', data, onChunk, onDone, onError, signal, 'AI 生成请求失败')
 }
+
+/** 保存 AI 大屏生成记录 */
+export const saveDashboardGenerateRecordApi = (data: AiDashboardGenerateRecordSaveRequest) =>
+  post('/forge-report-api/ai/dashboard-generate-record', data) as unknown as Promise<ApiResponse<AiDashboardGenerateRecord>>
+
+/** 获取当前用户最近 AI 大屏生成记录 */
+export const getDashboardGenerateRecentApi = (params?: {
+  businessDefinitionId?: number | string
+  projectId?: number | string
+  limit?: number
+}) =>
+  get('/forge-report-api/ai/dashboard-generate-record/recent', params) as unknown as Promise<ApiResponse<AiDashboardGenerateRecord[]>>
+
+/** 删除 AI 大屏生成记录 */
+export const deleteDashboardGenerateRecordApi = (id: number | string) =>
+  del(`/forge-report-api/ai/dashboard-generate-record/${id}`) as unknown as Promise<ApiResponse>
+
+/** 查询数据集影响的大屏组件 */
+export const getDashboardDatasetImpactApi = (datasetId: number | string, params?: { limit?: number }) =>
+  get(`/forge-report-api/ai/dashboard-generate-record/impact/dataset/${datasetId}`, params) as unknown as Promise<ApiResponse<AiDashboardDatasetImpactItem[]>>
 
 // ==================== AI 供应商管理 ====================
 

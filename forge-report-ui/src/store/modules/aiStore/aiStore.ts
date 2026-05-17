@@ -2,6 +2,29 @@ import { defineStore } from 'pinia'
 import { AIStoreType, AIHistoryItem, ChatMessage, AIProviderOption } from './aiStore.d'
 import type { AiChatSession } from '@/api/ai'
 import { AIGenerateResponse } from '@/api/ai/ai.d'
+import type { GenerateValidationSummary } from '@/components/FgAI/generateValidation'
+import { StorageEnum } from '@/enums/storageEnum'
+import { getLocalStorage, setLocalStorage } from '@/utils/storage'
+
+const MAX_GENERATE_HISTORY = 20
+
+interface AddHistoryOptions {
+  businessDefinitionId?: number | string
+  businessName?: string
+  providerName?: string
+  modelName?: string
+  validationSummary?: GenerateValidationSummary
+}
+
+function loadGenerateHistory(): AIHistoryItem[] {
+  const history = getLocalStorage(StorageEnum.GO_AI_GENERATE_HISTORY)
+  if (!Array.isArray(history)) return []
+  return history.slice(0, MAX_GENERATE_HISTORY) as AIHistoryItem[]
+}
+
+function persistGenerateHistory(history: AIHistoryItem[]) {
+  setLocalStorage(StorageEnum.GO_AI_GENERATE_HISTORY, history.slice(0, MAX_GENERATE_HISTORY))
+}
 
 export const useAIStore = defineStore({
   id: 'useAIStore',
@@ -11,7 +34,7 @@ export const useAIStore = defineStore({
     streamingText: '',
     lastPrompt: '',
     lastResponse: null,
-    generateHistory: [],
+    generateHistory: loadGenerateHistory(),
     chatMessages: [],
     chatSessions: [],
     currentSessionId: null,
@@ -90,16 +113,23 @@ export const useAIStore = defineStore({
     setLastResponse(response: AIGenerateResponse | null) {
       this.lastResponse = response
     },
-    addHistory(prompt: string, response: AIGenerateResponse) {
+    addHistory(prompt: string, response: AIGenerateResponse, options?: AddHistoryOptions) {
       this.generateHistory.unshift({
+        id: `ai-history-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         prompt,
         response,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        businessDefinitionId: options?.businessDefinitionId,
+        businessName: options?.businessName,
+        providerName: options?.providerName,
+        modelName: options?.modelName,
+        validationSummary: options?.validationSummary
       })
       // 最多保留 20 条历史
       if (this.generateHistory.length > 20) {
         this.generateHistory = this.generateHistory.slice(0, 20)
       }
+      persistGenerateHistory(this.generateHistory)
     },
     addChatMessage(msg: ChatMessage) {
       this.chatMessages.push(msg)
@@ -133,6 +163,9 @@ export const useAIStore = defineStore({
           }
           if (reasoningData.progressSteps !== undefined) {
             lastMsg.progressSteps = reasoningData.progressSteps
+          }
+          if (reasoningData.validationSummary !== undefined) {
+            lastMsg.validationSummary = reasoningData.validationSummary
           }
         }
       }

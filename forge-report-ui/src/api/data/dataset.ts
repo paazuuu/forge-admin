@@ -39,10 +39,23 @@ export interface DataDatasetField {
   id?: number
   fieldName: string
   fieldLabel?: string
+  sourceColumn?: string
+  dbType?: string
   dataType: string
   fieldRole: string
+  defaultAgg?: string
   queryEnabled?: number
   displayEnabled?: number
+  sensitiveLevel?: string
+  maskRule?: string
+  dictType?: string
+  dateFormat?: string
+  dataUnit?: string
+  dimensionId?: number
+  dimensionCode?: string
+  dimensionName?: string
+  sort?: number
+  description?: string
 }
 
 export interface DataDatasetQueryResult {

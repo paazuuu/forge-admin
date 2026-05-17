@@ -25,4 +25,10 @@ public interface ReportProjectMapper extends BaseMapper<ReportProject> {
      * 统计目录下项目数量
      */
     Long countByDirectoryIds(@Param("directoryIds") List<Long> directoryIds);
+
+    /**
+     * 根据图片引用反查文件ID
+     */
+    String selectFileIdByImageReference(@Param("rawValue") String rawValue,
+                                        @Param("objectKey") String objectKey);
 }

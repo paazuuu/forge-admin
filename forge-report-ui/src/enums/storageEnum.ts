@@ -16,5 +16,7 @@ export enum StorageEnum {
   // 用户存储的图片媒体
   GO_USER_MEDIA_PHOTOS = 'GO_USER_MEDIA_PHOTOS',
   // 文件访问 URL 缓存
-  GO_FILE_URL_CACHE = 'GO_FILE_URL_CACHE'
+  GO_FILE_URL_CACHE = 'GO_FILE_URL_CACHE',
+  // AI 大屏生成历史
+  GO_AI_GENERATE_HISTORY = 'GO_AI_GENERATE_HISTORY'
 }

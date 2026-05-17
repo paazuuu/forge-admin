@@ -64,4 +64,22 @@
         </where>
     </select>
 
+    <select id="selectFileIdByImageReference" resultType="java.lang.String">
+        SELECT file_id
+        FROM sys_file_metadata
+        <where>
+            status = 1
+            AND (
+                file_id = #{rawValue}
+                OR access_url = #{rawValue}
+                <if test="objectKey != null and objectKey != ''">
+                    OR file_path = #{objectKey}
+                    OR storage_name = #{objectKey}
+                </if>
+            )
+        </where>
+        ORDER BY upload_time DESC
+        LIMIT 1
+    </select>
+
 </mapper>

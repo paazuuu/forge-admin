@@ -122,6 +122,35 @@
                 <strong>{{ formData.status === 0 ? '禁用' : '启用' }}</strong>
               </div>
             </div>
+            <div class="business-readiness-panel" :class="`is-${getBusinessReadiness(formData).level}`">
+              <div class="business-readiness-main">
+                <span>AI 准备度</span>
+                <strong>{{ getBusinessReadiness(formData).score }} / {{ getBusinessReadiness(formData).label }}</strong>
+              </div>
+              <div class="business-readiness-bar">
+                <span :style="{ width: `${getBusinessReadiness(formData).score}%` }" />
+              </div>
+              <div class="business-readiness-tip">
+                {{ getBusinessReadiness(formData).suggestions[0] || '业务语义和数据集绑定已满足 AI 生成要求' }}
+              </div>
+            </div>
+            <div class="business-template-panel">
+              <div class="business-template-head">
+                <span>模板填充</span>
+                <small>快速生成 AI 可读业务语义</small>
+              </div>
+              <div class="business-template-list">
+                <NButton
+                  v-for="template in businessTemplates"
+                  :key="template.key"
+                  size="small"
+                  secondary
+                  @click="applyBusinessTemplate(formData, template)"
+                >
+                  {{ template.name }}
+                </NButton>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -166,7 +195,7 @@
 </template>
 
 <script setup>
-import { NButton, NInput, NInputNumber, NSelect, NSwitch, NTag } from 'naive-ui'
+import { NButton, NInput, NInputNumber, NProgress, NSelect, NSwitch, NTag } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import { deleteDataBusiness } from '@/api/data/business'
@@ -222,6 +251,53 @@ const statCards = computed(() => [
   },
 ])
 
+const businessTemplates = [
+  {
+    key: 'sales_overview',
+    name: '销售经营',
+    businessCode: 'sales_overview',
+    businessName: '销售经营分析',
+    businessDesc: '面向销售经营管理场景，围绕销售额、订单、客户、渠道、区域和商品等核心对象，监控经营规模、增长趋势、结构贡献和异常波动。',
+    analysisGoal: '快速识别销售增长来源、区域/渠道贡献差异、订单转化变化和重点商品表现，为经营复盘、资源投放和销售目标达成提供依据。',
+    metricDefinition: '核心指标包括销售额、订单量、客单价、支付转化率、退款金额、活跃客户数、同比增速和环比增速。金额类指标按元展示，趋势类指标按日/月聚合。',
+    dimensionDefinition: '按时间、区域、渠道、门店、商品类目、客户类型、销售组织等维度分析，可组合展示趋势、占比、排行和明细。',
+    usageGuide: '优先使用销售汇总数据集生成 KPI、趋势和结构图；使用订单明细或商品排行数据集生成 TopN、滚动表格和异常列表。无法映射字段时再使用静态模拟数据。',
+  },
+  {
+    key: 'operation_monitor',
+    name: '运营监控',
+    businessCode: 'operation_monitor',
+    businessName: '业务运营监控',
+    businessDesc: '面向日常运营指挥场景，描述业务运行状态、关键过程指标、实时告警、任务处置和资源使用情况，支持管理人员快速判断当前运营健康度。',
+    analysisGoal: '监控核心业务链路是否稳定，发现流量、订单、服务、告警和任务处理中的异常变化，辅助运营调度和问题定位。',
+    metricDefinition: '核心指标包括访问量、办理量、完成率、超时率、告警数、待处理数、平均处理时长和资源利用率。实时类指标按最新批次展示，趋势类指标按时间序列展示。',
+    dimensionDefinition: '按时间、业务类型、区域、组织、状态、优先级、处理人和渠道等维度分析。',
+    usageGuide: '概览区使用汇总数据集；趋势区使用按时间聚合的数据集；告警、任务和事件使用明细数据集生成列表或时间线。',
+  },
+  {
+    key: 'finance_analysis',
+    name: '财务分析',
+    businessCode: 'finance_analysis',
+    businessName: '财务经营分析',
+    businessDesc: '面向财务经营分析场景，围绕收入、成本、利润、预算、回款和费用等核心财务对象，展示经营质量、预算执行和风险变化。',
+    analysisGoal: '分析收入利润走势、预算执行偏差、成本费用结构、回款风险和部门/项目贡献，帮助管理层掌握经营质量。',
+    metricDefinition: '核心指标包括营业收入、成本、毛利、毛利率、净利润、预算完成率、应收账款、回款率和费用率。金额字段统一按元或万元展示，比例字段按百分比展示。',
+    dimensionDefinition: '按期间、组织、项目、客户、产品线、费用类型、区域和会计科目等维度分析。',
+    usageGuide: '财务汇总数据集适合 KPI、趋势和预算对比；费用明细、应收明细适合排行、结构占比和风险列表。',
+  },
+  {
+    key: 'equipment_monitor',
+    name: '设备监控',
+    businessCode: 'equipment_monitor',
+    businessName: '设备运行监控',
+    businessDesc: '面向设备、产线、能源或物联网监控场景，描述设备运行状态、产能效率、告警事件、维护工单和能耗指标。',
+    analysisGoal: '实时掌握设备在线状态、运行效率、异常告警、产线负荷和能耗变化，支撑生产调度、故障定位和维护决策。',
+    metricDefinition: '核心指标包括在线设备数、运行率、故障数、告警数、产量、OEE、能耗、停机时长和维修完成率。状态类指标展示当前值，趋势类指标按小时/日聚合。',
+    dimensionDefinition: '按设备、产线、车间、区域、状态、告警等级、时间和维护类型等维度分析。',
+    usageGuide: '设备状态数据集适合状态标签、分布和地图；生产/能耗数据集适合趋势和对比；告警/工单明细适合滚动列表和时间线。',
+  },
+]
+
 const tableColumns = computed(() => [
   {
     prop: 'businessName',
@@ -252,6 +328,12 @@ const tableColumns = computed(() => [
     label: '绑定数据集',
     width: 240,
     render: row => renderDatasetSummary(row),
+  },
+  {
+    prop: 'aiReadiness',
+    label: 'AI准备度',
+    width: 170,
+    render: row => renderReadiness(row),
   },
   {
     prop: 'metricDefinition',
@@ -401,6 +483,108 @@ function handleReset() {
 
 function handleOpenAddBusiness() {
   crudRef.value?.showAdd()
+}
+
+function hasText(value) {
+  return !!String(value || '').trim()
+}
+
+function getDatasetCount(source) {
+  if (Array.isArray(source?.datasets)) {
+    return source.datasets.filter(item => item.datasetId).length
+  }
+  return source?.datasetCount || 0
+}
+
+function getBusinessReadiness(source = {}) {
+  let score = 0
+  const suggestions = []
+  const semanticFields = [
+    { key: 'businessDesc', score: 14, suggestion: '补充业务定义描述，说明业务边界和管理对象。' },
+    { key: 'analysisGoal', score: 12, suggestion: '补充分析目标，让 AI 知道大屏要回答什么问题。' },
+    { key: 'metricDefinition', score: 16, suggestion: '补充指标口径，明确单位、聚合和同比环比口径。' },
+    { key: 'dimensionDefinition', score: 12, suggestion: '补充分析维度，如时间、区域、渠道、组织等。' },
+    { key: 'usageGuide', score: 11, suggestion: '补充 AI 使用建议，说明数据集适合做哪些组件。' },
+  ]
+
+  semanticFields.forEach(item => {
+    if (hasText(source[item.key])) {
+      score += item.score
+    }
+    else {
+      suggestions.push(item.suggestion)
+    }
+  })
+
+  const datasetCount = getDatasetCount(source)
+  if (datasetCount > 0) {
+    score += Math.min(24, 14 + datasetCount * 3)
+  }
+  else {
+    suggestions.push('至少绑定一个数据集，否则 AI 大屏只能生成静态组件。')
+  }
+
+  if (Array.isArray(source.datasets) && source.datasets.some(item => hasText(item.usageRemark))) {
+    score += 6
+  }
+  else if (datasetCount > 0) {
+    suggestions.push('为数据集补充用途说明，可提升动态绑定成功率。')
+  }
+
+  if ((source.status ?? 1) === 1) {
+    score += 5
+  }
+
+  const normalizedScore = Math.min(100, score)
+  const level = normalizedScore >= 80 ? 'high' : normalizedScore >= 55 ? 'medium' : 'low'
+  const label = level === 'high' ? '准备充分' : level === 'medium' ? '可生成' : '待完善'
+
+  return {
+    score: normalizedScore,
+    level,
+    label,
+    suggestions: suggestions.slice(0, 3),
+  }
+}
+
+function getReadinessColor(level) {
+  if (level === 'high') return '#0f766e'
+  if (level === 'medium') return '#d97706'
+  return '#dc2626'
+}
+
+function renderReadiness(row) {
+  const readiness = getBusinessReadiness(row)
+  return h('div', { class: 'readiness-cell' }, [
+    h('div', { class: 'readiness-cell-head' }, [
+      h('strong', { style: { color: getReadinessColor(readiness.level) } }, `${readiness.score}`),
+      h('span', readiness.label),
+    ]),
+    h(NProgress, {
+      type: 'line',
+      percentage: readiness.score,
+      height: 6,
+      borderRadius: 3,
+      fillBorderRadius: 3,
+      showIndicator: false,
+      color: getReadinessColor(readiness.level),
+    }),
+  ])
+}
+
+function applyBusinessTemplate(formData, template) {
+  if (!formData.businessCode) {
+    formData.businessCode = template.businessCode
+  }
+  if (!formData.businessName) {
+    formData.businessName = template.businessName
+  }
+  formData.businessDesc = template.businessDesc
+  formData.analysisGoal = template.analysisGoal
+  formData.metricDefinition = template.metricDefinition
+  formData.dimensionDefinition = template.dimensionDefinition
+  formData.usageGuide = template.usageGuide
+  window.$message?.success(`已应用“${template.name}”模板`)
 }
 
 function handleEditBusiness(row) {
@@ -837,6 +1021,26 @@ function handleDeleteBusiness(row) {
   gap: 5px;
 }
 
+.readiness-cell {
+  display: grid;
+  gap: 7px;
+}
+
+.readiness-cell-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.readiness-cell-head strong {
+  font-size: 18px;
+}
+
+.readiness-cell-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
 .sort-editor {
   display: grid;
   grid-template-columns: 42px minmax(72px, 1fr);
@@ -925,6 +1129,102 @@ function handleDeleteBusiness(row) {
   color: #0f172a;
 }
 
+.business-readiness-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: #fff;
+}
+
+.business-readiness-panel.is-high {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: #f0fdfa;
+}
+
+.business-readiness-panel.is-medium {
+  border-color: rgba(217, 119, 6, 0.22);
+  background: #fffbeb;
+}
+
+.business-readiness-panel.is-low {
+  border-color: rgba(220, 38, 38, 0.18);
+  background: #fef2f2;
+}
+
+.business-readiness-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #64748b;
+}
+
+.business-readiness-main strong {
+  color: #0f172a;
+}
+
+.business-readiness-bar {
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.business-readiness-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #22c55e);
+}
+
+.business-readiness-panel.is-medium .business-readiness-bar span {
+  background: linear-gradient(90deg, #d97706, #facc15);
+}
+
+.business-readiness-panel.is-low .business-readiness-bar span {
+  background: linear-gradient(90deg, #dc2626, #f97316);
+}
+
+.business-readiness-tip {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.business-template-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.business-template-head {
+  display: grid;
+  gap: 4px;
+}
+
+.business-template-head span {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.business-template-head small {
+  color: #64748b;
+}
+
+.business-template-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .dataset-binding-panel {
   padding: 16px;
 }
@@ -962,6 +1262,14 @@ function handleDeleteBusiness(row) {
   .toolbar-actions {
     grid-template-columns: 1fr 1fr;
     min-width: 0;
+  }
+
+  .business-template-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .business-template-list {
+    justify-content: flex-start;
   }
 }
 </style>

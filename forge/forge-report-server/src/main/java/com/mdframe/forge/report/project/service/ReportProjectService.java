@@ -11,6 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -83,7 +86,7 @@ public class ReportProjectService extends ServiceImpl<ReportProjectMapper, Repor
             exists.setRemark(project.getRemark());
         }
         if (project.getIndexImg() != null) {
-            exists.setIndexImg(project.getIndexImg());
+            exists.setIndexImg(normalizeIndexImg(project.getIndexImg()));
         }
         if (project.getStatus() != null) {
             exists.setStatus(project.getStatus());
@@ -126,6 +129,74 @@ public class ReportProjectService extends ServiceImpl<ReportProjectMapper, Repor
         boolean updated = updateById(project);
         if (!updated) {
             throw new BusinessException("项目发布状态保存失败，请检查租户或项目状态");
+        }
+    }
+
+    private String normalizeIndexImg(String indexImg) {
+        String value = indexImg == null ? "" : indexImg.trim();
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+
+        if (value.startsWith("forge-file://")) {
+            value = value.substring("forge-file://".length()).trim();
+        }
+
+        String directFileId = extractDownloadFileId(value);
+        if (StringUtils.hasText(directFileId)) {
+            return directFileId;
+        }
+
+        if (!isUrlLike(value)) {
+            return value;
+        }
+
+        String objectKey = extractObjectKey(value);
+        String fileId = baseMapper.selectFileIdByImageReference(value, objectKey);
+        if (StringUtils.hasText(fileId)) {
+            return fileId;
+        }
+
+        throw new BusinessException("项目截图保存失败，无法根据图片路径匹配文件ID");
+    }
+
+    private boolean isUrlLike(String value) {
+        return value.startsWith("http://")
+                || value.startsWith("https://")
+                || value.startsWith("/api/file/")
+                || value.startsWith("/forge-report-api/api/file/");
+    }
+
+    private String extractDownloadFileId(String value) {
+        int downloadIndex = value.indexOf("/api/file/download/");
+        if (downloadIndex < 0) {
+            return null;
+        }
+        String fileId = value.substring(downloadIndex + "/api/file/download/".length());
+        int queryIndex = fileId.indexOf('?');
+        if (queryIndex >= 0) {
+            fileId = fileId.substring(0, queryIndex);
+        }
+        int slashIndex = fileId.indexOf('/');
+        if (slashIndex >= 0) {
+            fileId = fileId.substring(0, slashIndex);
+        }
+        return URLDecoder.decode(fileId, StandardCharsets.UTF_8).trim();
+    }
+
+    private String extractObjectKey(String value) {
+        try {
+            URI uri = URI.create(value);
+            String path = uri.getPath();
+            if (!StringUtils.hasText(path)) {
+                return null;
+            }
+            while (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            return URLDecoder.decode(path, StandardCharsets.UTF_8).trim();
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 }

@@ -21,6 +21,7 @@ import com.mdframe.forge.plugin.data.support.DataDatasetFieldViewAssembler;
 import com.mdframe.forge.plugin.data.vo.DataBusinessAiContextVO;
 import com.mdframe.forge.plugin.data.vo.DataBusinessDatasetVO;
 import com.mdframe.forge.plugin.data.vo.DataBusinessDefinitionDetailVO;
+import com.mdframe.forge.plugin.data.vo.DataDatasetFieldVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,9 @@ import java.util.Set;
 public class DataBusinessDefinitionServiceImpl
     extends ServiceImpl<DataBusinessDefinitionMapper, DataBusinessDefinition>
     implements DataBusinessDefinitionService {
+
+    private static final String SENSITIVE_LEVEL_HIDDEN = "HIDDEN";
+    private static final String SENSITIVE_LEVEL_MASK = "MASK";
 
     private final DataBusinessDefinitionMapper businessMapper;
     private final DataBusinessDatasetMapper businessDatasetMapper;
@@ -213,7 +217,7 @@ public class DataBusinessDefinitionServiceImpl
                 continue;
             }
             List<DataDatasetField> fields = datasetFieldService.listByDatasetId(binding.getDatasetId());
-            result.add(toDatasetVO(binding, fields));
+            result.add(toDatasetVO(binding, fields, onlyAccessible));
         }
         return result;
     }
@@ -236,7 +240,7 @@ public class DataBusinessDefinitionServiceImpl
         return vo;
     }
 
-    private DataBusinessDatasetVO toDatasetVO(DataBusinessDataset binding, List<DataDatasetField> fields) {
+    private DataBusinessDatasetVO toDatasetVO(DataBusinessDataset binding, List<DataDatasetField> fields, boolean sanitizeForAi) {
         DataBusinessDatasetVO vo = new DataBusinessDatasetVO();
         vo.setId(binding.getId());
         vo.setDatasetId(binding.getDatasetId());
@@ -248,8 +252,30 @@ public class DataBusinessDefinitionServiceImpl
         vo.setIsPrimary(binding.getIsPrimary());
         vo.setSort(binding.getSort());
         vo.setUsageRemark(binding.getUsageRemark());
-        vo.setFields(fieldViewAssembler.toVOList(fields));
+        List<DataDatasetFieldVO> fieldVos = fieldViewAssembler.toVOList(fields);
+        vo.setFields(sanitizeForAi ? sanitizeAiFields(fieldVos) : fieldVos);
         return vo;
+    }
+
+    private List<DataDatasetFieldVO> sanitizeAiFields(List<DataDatasetFieldVO> fields) {
+        List<DataDatasetFieldVO> result = new ArrayList<>();
+        for (DataDatasetFieldVO field : fields) {
+            String sensitiveLevel = normalizeSensitiveLevel(field.getSensitiveLevel());
+            if (SENSITIVE_LEVEL_HIDDEN.equals(sensitiveLevel)) {
+                continue;
+            }
+            if (SENSITIVE_LEVEL_MASK.equals(sensitiveLevel)) {
+                field.setMaskRule(null);
+                field.setSourceColumn(null);
+                field.setDescription("敏感字段，仅允许脱敏展示或聚合统计");
+            }
+            result.add(field);
+        }
+        return result;
+    }
+
+    private String normalizeSensitiveLevel(String sensitiveLevel) {
+        return StringUtils.hasText(sensitiveLevel) ? sensitiveLevel.trim().toUpperCase() : "";
     }
 
     private String trimToNull(String value) {
