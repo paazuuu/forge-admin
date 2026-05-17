@@ -220,6 +220,9 @@ INSERT INTO ai_agent (id, tenant_id, agent_name, agent_code, description, system
 ## 当前画布已有内容
 {{canvasContext}}
 
+## 业务定义与绑定数据集上下文
+{{businessContext}}
+
 ## 用户需求
 {{prompt}}
 
@@ -242,12 +245,25 @@ INSERT INTO ai_agent (id, tenant_id, agent_name, agent_code, description, system
       "w": 500,
       "h": 300,
       "title": "组件标题",
-      "option": {}
+      "option": {},
+      "request": {
+        "datasetId": 123,
+        "datasetName": "数据集名称",
+        "datasetFields": ["维度字段", "指标字段"],
+        "datasetMapping": {
+          "mode": "auto",
+          "fieldMap": {},
+          "syncHeader": true
+        }
+      }
     }
   ]
 }
 
 ## option 规则
+- 如果“业务定义与绑定数据集上下文”中提供了 datasets，图表、表格、排行、指标类组件应优先绑定其中的 datasetId。只有标题、装饰、说明或无法匹配数据集的组件才使用纯静态数据。
+- 绑定数据集时必须在组件上输出 request.datasetId；datasetFields 只能使用该数据集 fields 中存在的 fieldName。request.datasetMapping.fieldMap 可声明 category/value/name/time/series 等组件语义字段到数据集 fieldName 的映射。
+- 绑定了 request.datasetId 的组件仍可提供 option.dataset 作为兜底预览数据，但运行时会由数据集查询刷新。
 - ECharts 和 VChart 图表只填 option.dataset，不要写 series、xAxis、yAxis、tooltip。
 - 普通图表 dataset: { "dimensions": ["类目", "系列1", "系列2"], "source": [{"类目": "1月", "系列1": 820.5, "系列2": 320.2}] }
 - 饼图 PieCommon/PieCircle/VChartPie 只能有 2 个 dimensions: 名称和值。

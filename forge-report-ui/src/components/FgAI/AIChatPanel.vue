@@ -1,12 +1,12 @@
 <template>
   <div class="go-ai-chat-panel">
-    <div class="messages-container" ref="messagesContainerRef">
+    <div class="messages-container" ref="messagesContainerRef" @scroll="handleMessagesScroll">
       <div v-if="aiStore.getChatMessages.length === 0" class="empty-state">
         <n-icon size="40" color="#51d6a9" style="margin-bottom: 12px">
           <SparklesIcon />
         </n-icon>
         <p class="empty-title">Forge AI 助手</p>
-        <p class="empty-desc">描述你想要的数据大屏，AI 将帮你自动生成</p>
+        <p class="empty-desc">选择业务定义或描述你想要的数据大屏，AI 将优先基于数据集生成</p>
         <div class="quick-prompts">
           <n-button
             v-for="prompt in quickPrompts"
@@ -44,6 +44,7 @@
                 v-if="expandedReasonings[index]"
                 :ref="el => setReasoningContentRef(el, index)"
                 class="reasoning-content"
+                @scroll.stop="handleReasoningScroll(index)"
               >
                 {{ msg.reasoning }}
               </div>
@@ -130,6 +131,33 @@
         </template>
         模式设置
       </n-tooltip>
+    </div>
+
+    <div v-if="chatModeRef === 'generate'" class="business-context-row">
+      <span class="style-label">业务：</span>
+      <n-select
+        v-model:value="selectedBusinessId"
+        size="small"
+        clearable
+        filterable
+        :options="businessOptions"
+        :loading="businessLoading"
+        :disabled="aiStore.getGenerating"
+        placeholder="可选业务定义"
+      />
+      <n-tooltip placement="top" trigger="hover">
+        <template #trigger>
+          <n-button size="tiny" quaternary :loading="businessLoading" @click="loadBusinessDefinitions">
+            <template #icon><n-icon><RefreshOutlineIcon /></n-icon></template>
+          </n-button>
+        </template>
+        刷新业务定义
+      </n-tooltip>
+    </div>
+
+    <div v-if="chatModeRef === 'generate' && selectedBusiness" class="business-context-tip">
+      {{ selectedBusiness.businessName }}
+      <span v-if="selectedBusiness.datasetCount"> / {{ selectedBusiness.datasetCount }} 个数据集</span>
     </div>
 
     <n-collapse-transition :show="showModeSelect">
@@ -262,7 +290,7 @@
           v-else
           type="primary"
           size="small"
-          :disabled="!inputRef.trim() || !selectedProviderId"
+          :disabled="!canSendMessage || !selectedProviderId"
           @click="handleSend"
         >
           <template #icon><n-icon><SendIcon /></n-icon></template>
@@ -281,6 +309,12 @@ import {
   aiGenerateStream,
   getProviderPageApi
 } from '@/api/ai'
+import {
+  getDataBusinessAiContext,
+  getDataBusinessList,
+  type DataBusinessAiContext,
+  type DataBusinessOption
+} from '@/api/data/business'
 import type { AIGenerateResponse } from '@/api/ai/ai.d'
 import { applyAIToCanvas } from './aiEngine'
 import { parseStreamedResponse } from './llmClient'
@@ -290,7 +324,7 @@ import type { CreateComponentGroupType, CreateComponentType } from '@/packages/i
 import { useAIStore } from '@/store/modules/aiStore/aiStore'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 
-const { SparklesIcon, SendIcon, AnalyticsIcon, PersonIcon, SettingsSharpIcon, CloseIcon, LayersIcon, Click } = icon.ionicons5
+const { SparklesIcon, SendIcon, AnalyticsIcon, PersonIcon, SettingsSharpIcon, CloseIcon, LayersIcon, RefreshOutlineIcon, Click } = icon.ionicons5
 const { Carbon3DCursorIcon } = icon.carbon
 
 const emit = defineEmits(['applied'])
@@ -306,6 +340,9 @@ const messagesContainerRef = ref<HTMLElement>()
 const reasoningContentRefs = ref<HTMLElement[]>([])
 const providerList = ref<AiProvider[]>([])
 const providerLoading = ref(false)
+const businessList = ref<DataBusinessOption[]>([])
+const businessLoading = ref(false)
+const selectedBusinessId = ref<number | string | null>(null)
 const chatSessionIdRef = ref(aiStore.currentSessionId || createSessionId())
 const selectedProviderId = ref<number | string | null>(aiStore.getSelectedProvider?.providerId ?? null)
 const selectedModelName = ref(aiStore.getSelectedProvider?.modelName || '')
@@ -313,6 +350,7 @@ const temperatureRef = ref(aiStore.getSelectedProvider?.temperature ?? 0.7)
 const maxTokensRef = ref<number | null>(aiStore.getSelectedProvider?.maxTokens ?? 384000)
 
 const quickPrompts = [
+  '基于所选业务定义生成经营监控大屏',
   '电商销售数据监控大屏',
   '智慧城市运营中心大屏',
   '工厂生产数据监控大屏',
@@ -343,9 +381,13 @@ const referencedComponentSummary = computed(() => {
 })
 const inputPlaceholder = computed(() => {
   if (referencedComponents.value.length) return '针对已引用元素提问，比如：帮我优化这个模块的配色和层级...'
+  if (chatModeRef.value === 'generate' && selectedBusinessId.value) return '可直接发送，AI 将基于所选业务定义和绑定数据集生成大屏...'
   return chatModeRef.value === 'generate' ? '描述你想要的数据大屏...' : '有什么可以帮你？'
 })
 const expandedReasonings = ref<Record<number, boolean>>({})
+const manuallyCollapsedReasonings = ref<Record<number, boolean>>({})
+const shouldAutoScrollMessages = ref(true)
+const reasoningAutoScrollState = ref<Record<number, boolean>>({})
 const aiRawContent = ref('')
 const aiReasoningContent = ref('')
 const aiIsReasoningPhase = ref(false)
@@ -404,6 +446,20 @@ const selectedProvider = computed(() =>
   providerList.value.find(item => String(item.id) === String(selectedProviderId.value)) || null
 )
 
+const businessOptions = computed(() =>
+  businessList.value.map(item => ({
+    label: `${item.businessName || '未命名业务'}${item.businessCode ? ` (${item.businessCode})` : ''}`,
+    value: item.id as number | string
+  }))
+)
+
+const selectedBusiness = computed(() =>
+  businessList.value.find(item => String(item.id) === String(selectedBusinessId.value)) || null
+)
+const canSendMessage = computed(() =>
+  !!inputRef.value.trim() || (chatModeRef.value === 'generate' && !!selectedBusinessId.value)
+)
+
 const modelOptions = computed(() => {
   if (!selectedProvider.value) return []
   const models = parseModels(selectedProvider.value.models)
@@ -414,16 +470,47 @@ const modelOptions = computed(() => {
   return options
 })
 
-const scrollToBottom = async () => {
+function isNearScrollBottom(el: HTMLElement, threshold = 48) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+}
+
+function handleMessagesScroll() {
+  const el = messagesContainerRef.value
+  if (!el) return
+  shouldAutoScrollMessages.value = isNearScrollBottom(el, 96)
+}
+
+function handleReasoningScroll(index: number) {
+  const el = reasoningContentRefs.value[index]
+  if (!el) return
+  reasoningAutoScrollState.value[index] = isNearScrollBottom(el, 24)
+}
+
+function scrollMessagesToActiveContent() {
+  const container = messagesContainerRef.value
+  if (!container) return
+
+  const activeIndex = aiStore.getChatMessages.findLastIndex(msg => msg.role === 'assistant' && msg.isReasoning)
+  const reasoningEl = reasoningContentRefs.value[activeIndex]
+  if (reasoningEl) {
+    const containerRect = container.getBoundingClientRect()
+    const reasoningRect = reasoningEl.getBoundingClientRect()
+    container.scrollTop += reasoningRect.top - containerRect.top - 48
+    return
+  }
+  container.scrollTop = container.scrollHeight
+}
+
+const scrollToBottom = async (force = false) => {
   await nextTick()
-  scrollActiveReasoningToBottom()
-  if (messagesContainerRef.value) {
-    messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
+  scrollActiveReasoningToBottom(force)
+  if (force || shouldAutoScrollMessages.value) {
+    scrollMessagesToActiveContent()
   }
   requestAnimationFrame(() => {
-    scrollActiveReasoningToBottom()
-    if (messagesContainerRef.value) {
-      messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
+    scrollActiveReasoningToBottom(force)
+    if (force || shouldAutoScrollMessages.value) {
+      scrollMessagesToActiveContent()
     }
   })
 }
@@ -598,22 +685,33 @@ function buildSelectedComponentInstruction() {
 }
 
 function toggleReasoning(index: number) {
-  expandedReasonings.value[index] = !expandedReasonings.value[index]
-  scrollToBottom()
+  const nextExpanded = !expandedReasonings.value[index]
+  expandedReasonings.value[index] = nextExpanded
+  if (nextExpanded) {
+    delete manuallyCollapsedReasonings.value[index]
+    reasoningAutoScrollState.value[index] = true
+    scrollToBottom(true)
+    return
+  }
+  manuallyCollapsedReasonings.value[index] = true
+  reasoningAutoScrollState.value[index] = false
 }
 
 function setReasoningContentRef(el: Element | null, index: number) {
   if (el instanceof HTMLElement) {
     reasoningContentRefs.value[index] = el
+    if (reasoningAutoScrollState.value[index] === undefined) {
+      reasoningAutoScrollState.value[index] = true
+    }
   } else {
     delete reasoningContentRefs.value[index]
   }
 }
 
-function scrollActiveReasoningToBottom() {
+function scrollActiveReasoningToBottom(force = false) {
   const activeIndex = aiStore.getChatMessages.findLastIndex(msg => msg.role === 'assistant' && msg.isReasoning)
   const reasoningEl = reasoningContentRefs.value[activeIndex]
-  if (reasoningEl) {
+  if (reasoningEl && (force || reasoningAutoScrollState.value[activeIndex] !== false)) {
     reasoningEl.scrollTop = reasoningEl.scrollHeight
   }
 }
@@ -624,6 +722,9 @@ function resetStreamingState() {
   aiIsReasoningPhase.value = false
   aiReasoningStartTime.value = null
   aiReasoningEndTime.value = null
+  shouldAutoScrollMessages.value = true
+  reasoningAutoScrollState.value = {}
+  manuallyCollapsedReasonings.value = {}
 }
 
 function getReasoningTime() {
@@ -644,7 +745,7 @@ function updateAssistantStreaming(content: string, canvasResponse?: AIGenerateRe
   const lastMsg = aiStore.getChatMessages[lastMessageIndex]
   if (lastMsg?.role === 'assistant') {
     lastMsg.streaming = aiStore.getGenerating
-    if (aiIsReasoningPhase.value) {
+    if (aiIsReasoningPhase.value && manuallyCollapsedReasonings.value[lastMessageIndex] !== true) {
       expandedReasonings.value[lastMessageIndex] = true
     }
   }
@@ -806,8 +907,86 @@ const loadProviders = async () => {
   }
 }
 
+const businessContextCache = new Map<string, DataBusinessAiContext>()
+
+const loadBusinessDefinitions = async () => {
+  businessLoading.value = true
+  try {
+    businessContextCache.clear()
+    const res = await getDataBusinessList()
+    businessList.value = res?.data || []
+    if (selectedBusinessId.value && !businessList.value.some(item => String(item.id) === String(selectedBusinessId.value))) {
+      selectedBusinessId.value = null
+    }
+  } catch (error: any) {
+    window['$message']?.error('加载业务定义失败: ' + (error?.message || '未知错误'))
+  } finally {
+    businessLoading.value = false
+  }
+}
+
+function compactBusinessContext(context: DataBusinessAiContext) {
+  const datasets = (context.datasets || []).slice(0, 8).map(dataset => ({
+    datasetId: dataset.datasetId,
+    datasetCode: dataset.datasetCode,
+    datasetName: dataset.datasetName,
+    datasetType: dataset.datasetType,
+    usageRemark: dataset.usageRemark,
+    description: dataset.description,
+    paramSchemaJson: dataset.paramSchemaJson,
+    fields: (dataset.fields || []).slice(0, 24).map(field => ({
+      fieldName: field.fieldName,
+      fieldLabel: field.fieldLabel,
+      dataType: field.dataType,
+      fieldRole: field.fieldRole,
+      defaultAgg: (field as any).defaultAgg,
+      dataUnit: (field as any).dataUnit,
+      dimensionName: (field as any).dimensionName
+    }))
+  }))
+
+  return JSON.stringify({
+    instruction: [
+      '请优先使用 datasets 中的 datasetId 生成动态数据组件。',
+      '图表组件如果能映射到数据集，请在组件 JSON 中输出 request.datasetId、request.datasetFields 和 request.datasetMapping。',
+      '无法匹配到数据集的标题、装饰和说明组件可以继续使用静态 option.dataset。'
+    ],
+    business: {
+      businessId: context.businessId,
+      businessCode: context.businessCode,
+      businessName: context.businessName,
+      businessDesc: context.businessDesc,
+      analysisGoal: context.analysisGoal,
+      metricDefinition: context.metricDefinition,
+      dimensionDefinition: context.dimensionDefinition,
+      usageGuide: context.usageGuide
+    },
+    datasets
+  }, null, 2)
+}
+
+async function loadSelectedBusinessContext() {
+  if (!selectedBusinessId.value) return ''
+  const cacheKey = String(selectedBusinessId.value)
+  let context = businessContextCache.get(cacheKey)
+  if (!context) {
+    const res = await getDataBusinessAiContext(selectedBusinessId.value)
+    context = res?.data
+    if (context) {
+      businessContextCache.set(cacheKey, context)
+    }
+  }
+  if (!context) return ''
+  return compactBusinessContext(context)
+}
+
 async function handleSend() {
-  const content = inputRef.value.trim()
+  const typedContent = inputRef.value.trim()
+  const content = typedContent || (
+    chatModeRef.value === 'generate' && selectedBusinessId.value
+      ? '请基于所选业务定义和绑定数据集自动生成数据大屏。'
+      : ''
+  )
   if (!content || aiStore.getGenerating) return
 
   if (!selectedProvider.value || !selectedProviderId.value) {
@@ -820,6 +999,16 @@ async function handleSend() {
   if (!modelName) {
     window['$message']?.warning('当前供应商未配置可用模型，请先在 AI 供应商页面维护')
     return
+  }
+
+  let selectedBusinessContext = ''
+  if (chatModeRef.value === 'generate' && selectedBusinessId.value) {
+    try {
+      selectedBusinessContext = await loadSelectedBusinessContext()
+    } catch (error: any) {
+      window['$message']?.error('业务定义上下文加载失败: ' + (error?.message || '未知错误'))
+      return
+    }
   }
 
   const requestCanvasContext = buildCanvasContext()
@@ -849,7 +1038,7 @@ async function handleSend() {
     canvasResponse: null
   })
 
-  await scrollToBottom()
+  await scrollToBottom(true)
   const abortController = aiStore.getAbortController()
 
   if (chatModeRef.value === 'generate') {
@@ -863,6 +1052,8 @@ async function handleSend() {
       componentCatalog: getComponentCatalogText(),
       projectName: chartEditStore.getEditCanvasConfig?.projectName,
       canvasContext: requestCanvasContext,
+      businessDefinitionId: selectedBusinessId.value || undefined,
+      businessContext: selectedBusinessContext || undefined,
       providerId: selectedProviderId.value,
       modelName,
       temperature: temperatureRef.value,
@@ -1020,7 +1211,7 @@ async function applyToCanvas(response: AIGenerateResponse) {
 }
 
 onMounted(async () => {
-  await loadProviders()
+  await Promise.all([loadProviders(), loadBusinessDefinitions()])
   aiStore.setChatSessions([])
   if (!aiStore.currentSessionId) {
     aiStore.setCurrentSessionId(chatSessionIdRef.value)
@@ -1049,6 +1240,8 @@ $topHeight: 40px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: 10px 10px 8px;
     display: flex;
     flex-direction: column;
@@ -1411,6 +1604,8 @@ $topHeight: 40px;
 
   .style-row,
   .mode-row,
+  .business-context-row,
+  .business-context-tip,
   .config-grid,
   .selection-context,
   .provider-tip {
@@ -1421,7 +1616,8 @@ $topHeight: 40px;
   }
 
   .style-row,
-  .mode-row {
+  .mode-row,
+  .business-context-row {
     display: flex;
     align-items: center;
     padding: 7px 10px;
@@ -1432,6 +1628,17 @@ $topHeight: 40px;
       color: #888;
       white-space: nowrap;
     }
+
+    :deep(.n-base-selection) {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
+  .business-context-tip {
+    padding: 0 10px 8px 56px;
+    color: #7f8c8d;
+    font-size: 12px;
   }
 
   .config-grid {

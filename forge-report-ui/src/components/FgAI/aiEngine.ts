@@ -5,6 +5,7 @@ import { componentInstall, loadingStart, loadingFinish, loadingError } from '@/u
 import { findConfigTypeByKey } from './componentRegistry'
 import { autoLayout, normalizeAILayout } from './layoutAlgorithm'
 import { AIGenerateResponse, AIComponentSchema } from '@/api/ai/ai.d'
+import { RequestDataTypeEnum } from '@/enums/httpEnum'
 import merge from 'lodash/merge'
 import cloneDeep from 'lodash/cloneDeep'
 
@@ -105,6 +106,45 @@ function applyOption(instance: CreateComponentType, comp: AIComponentSchema, con
   }
 }
 
+function normalizeStringArray(value: any): string[] {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value.map(item => String(item).trim()).filter(Boolean)
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map(item => item.trim()).filter(Boolean)
+  }
+  return []
+}
+
+function applyDatasetRequest(instance: CreateComponentType, comp: AIComponentSchema) {
+  const aiRequest = comp.request || {}
+  const datasetId = Number(aiRequest.datasetId || aiRequest.dataSetId)
+  if (!Number.isFinite(datasetId) || datasetId <= 0) {
+    return
+  }
+
+  const datasetMapping = {
+    mode: 'auto',
+    fieldMap: {},
+    outputFields: [],
+    syncHeader: true,
+    ...(aiRequest.datasetMapping || aiRequest.mapping || {})
+  }
+
+  instance.request.requestDataType = RequestDataTypeEnum.DATASET
+  instance.request.datasetId = datasetId
+  instance.request.datasetConnectionId = aiRequest.datasetConnectionId || null
+  instance.request.datasetName = aiRequest.datasetName || aiRequest.name || ''
+  instance.request.datasetFields = normalizeStringArray(aiRequest.datasetFields || aiRequest.fields || datasetMapping.outputFields)
+  instance.request.datasetParams = aiRequest.datasetParams || aiRequest.params || {}
+  instance.request.datasetPageNum = Number(aiRequest.datasetPageNum || aiRequest.pageNum || 1)
+  instance.request.datasetPageSize = Number(aiRequest.datasetPageSize || aiRequest.pageSize || 50)
+  instance.request.datasetMaxRows = Number(aiRequest.datasetMaxRows || aiRequest.maxRows || 1000)
+  instance.request.datasetOutputMode = aiRequest.datasetOutputMode || 'ECHARTS_DATASET'
+  instance.request.datasetMapping = datasetMapping
+}
+
 /**
  * 将单个 AIComponentSchema 应用为画布组件
  */
@@ -133,6 +173,7 @@ async function createAIComponent(comp: AIComponentSchema): Promise<CreateCompone
 
     // 智能合并 option
     applyOption(instance, comp, configType)
+    applyDatasetRequest(instance, comp)
 
     // redirectComponent 处理（和 ChartsItemBox 一致）
     if (configType.redirectComponent) {

@@ -1,5 +1,6 @@
 // AI 生成大屏 - 请求类型
 export interface AIGenerateRequest {
+  sessionId?: string
   // 用户需求描述
   prompt: string
   // 主题风格
@@ -14,6 +15,10 @@ export interface AIGenerateRequest {
   projectName?: string
   // 当前画布上下文，供 AI 在原有基础上增量修改
   canvasContext?: string
+  // 当前选择的业务定义 ID
+  businessDefinitionId?: number | string
+  // 业务定义和绑定数据集上下文
+  businessContext?: string
   // 指定供应商
   providerId?: number | string
   // 指定模型
@@ -42,6 +47,8 @@ export interface AIComponentSchema {
   dataset?: any
   // 自定义标题（覆盖默认）
   title?: string
+  // 动态数据请求配置。包含 datasetId 时，应用到画布后自动切换为数据库数据集模式
+  request?: Record<string, any>
 }
 
 // AI 生成大屏 - 响应类型
