@@ -1059,6 +1059,7 @@ async function loadAndSetMenuData() {
   object-fit: contain;
   filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.25));
   transition: transform 0.3s ease;
+  border-radius: 16px;
 }
 
 .logo-img:hover {
