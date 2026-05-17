@@ -14,7 +14,7 @@
       <div class="login-brand">
         <div class="brand-content">
           <div class="logo-wrapper">
-            <img src="@/assets/images/logo.png" class="logo-img" alt="Logo">
+            <img src="@/assets/images/logo_text.png" class="logo-img" alt="Logo">
           </div>
           <h1 class="brand-title">
             {{ title }}
@@ -1054,8 +1054,8 @@ async function loadAndSetMenuData() {
 }
 
 .logo-img {
-  width: 72px;
-  height: 72px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
   filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.25));
   transition: transform 0.3s ease;
