@@ -1,4 +1,4 @@
-<h1 align="center">Forge Admin</h1>
+![Logo.png](images/Logo.png)
 
 <p align="center">
   🚀 基于 Vue 3 + Spring Boot 3 的企业级中后台管理框架<br>
