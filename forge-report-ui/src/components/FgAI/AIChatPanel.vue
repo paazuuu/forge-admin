@@ -1288,18 +1288,32 @@ $topHeight: 40px;
 
       .quick-prompts {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 7px;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
         width: 100%;
+        max-width: 280px;
 
         .quick-btn {
+          width: 100%;
+          min-width: 0;
+          min-height: 34px;
+          height: auto;
+          padding: 6px 10px;
           text-align: left;
           font-size: 12px;
-          height: 32px;
           justify-content: flex-start;
           border-radius: 9px;
           background: rgba(15, 23, 42, 0.56);
           border: 1px solid rgba(148, 163, 184, 0.1);
+
+          :deep(.n-button__content) {
+            width: 100%;
+            min-width: 0;
+            justify-content: flex-start;
+            white-space: normal;
+            line-height: 1.35;
+            text-align: left;
+          }
         }
       }
     }
