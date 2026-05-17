@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { toRefs, Ref, reactive, computed } from 'vue'
+import { computed, reactive, Ref, toRefs, unref } from 'vue'
 import { renderIcon, goDialog, goHome } from '@/utils'
 import { icon } from '@/plugins'
 import { useRemoveKeyboard } from '../../hooks/useKeyboard.hook'
@@ -59,13 +59,22 @@ import { ChartLayoutStoreEnum } from '@/store/modules/chartLayoutStore/chartLayo
 import { useAIStore } from '@/store/modules/aiStore/aiStore'
 
 const { AlbumsIcon, LayersIcon, BarChartIcon, PrismIcon, HomeIcon, ArrowUndoIcon, ArrowRedoIcon, SparklesIcon } = icon.ionicons5
-const { setItem } = useChartLayoutStore()
-const { getPages, getLayers, getCharts, getDetails } = toRefs(useChartLayoutStore())
+const chartLayoutStore = useChartLayoutStore()
+const { getPages, getLayers, getCharts, getDetails } = toRefs(chartLayoutStore)
 const chartEditStore = useChartEditStore()
 const chartHistoryStore = useChartHistoryStore()
 const aiStore = useAIStore()
 
-const isAIActive = computed(() => aiStore.getAIPanelVisible)
+type LeftPanelKey = ChartLayoutStoreEnum.PAGES | ChartLayoutStoreEnum.CHARTS | ChartLayoutStoreEnum.LAYERS
+
+const activeLeftPanel = computed<LeftPanelKey | 'ai' | ''>(() => {
+  if (aiStore.getAIPanelVisible) return 'ai'
+  if (getCharts.value) return ChartLayoutStoreEnum.CHARTS
+  if (getPages.value) return ChartLayoutStoreEnum.PAGES
+  if (getLayers.value) return ChartLayoutStoreEnum.LAYERS
+  return ''
+})
+const isAIActive = computed(() => activeLeftPanel.value === 'ai')
 
 interface ItemType<T> {
   key: T
@@ -120,18 +129,34 @@ const historyList = reactive<ItemType<HistoryStackEnum>[]>([
   }
 ])
 
+const getSelectedValue = (item: ItemType<any>) => Boolean(unref(item.select))
 
 // store 描述的是展示的值，所以和 ContentConfigurations 的 collapsed 是相反的
 const styleHandle = (item: ItemType<ChartLayoutStoreEnum>) => {
   if (item.key === ChartLayoutStoreEnum.DETAILS) {
-    return item.select ? '' : 'primary'
+    return getSelectedValue(item) ? '' : 'primary'
   }
-  return item.select ? 'primary' : ''
+  return activeLeftPanel.value === item.key ? 'primary' : ''
+}
+
+const setExclusiveLeftPanel = (key: LeftPanelKey | 'ai' | '') => {
+  chartLayoutStore.setItem(ChartLayoutStoreEnum.PAGES, key === ChartLayoutStoreEnum.PAGES, false)
+  chartLayoutStore.setItem(ChartLayoutStoreEnum.CHARTS, key === ChartLayoutStoreEnum.CHARTS, false)
+  chartLayoutStore.setItem(ChartLayoutStoreEnum.LAYERS, key === ChartLayoutStoreEnum.LAYERS, false)
+  aiStore.setAIPanelVisible(key === 'ai')
+  setTimeout(() => {
+    chartEditStore.computedScale()
+  }, 260)
 }
 
 // 布局处理
 const clickHandle = (item: ItemType<ChartLayoutStoreEnum>) => {
-  setItem(item.key, !item.select)
+  if (item.key === ChartLayoutStoreEnum.DETAILS) {
+    chartLayoutStore.setItem(item.key, !getSelectedValue(item))
+    return
+  }
+  const key = item.key as LeftPanelKey
+  setExclusiveLeftPanel(activeLeftPanel.value === key ? '' : key)
 }
 
 // 历史记录处理
@@ -147,7 +172,7 @@ const clickHistoryHandle = (item: ItemType<HistoryStackEnum>) => {
 }
 
 const toggleAIHandle = () => {
-  aiStore.setAIPanelVisible(!isAIActive.value)
+  setExclusiveLeftPanel(isAIActive.value ? '' : 'ai')
 }
 
 // 返回首页

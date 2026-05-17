@@ -16,10 +16,10 @@
         </template>
       </layout-header-pro>
       <n-layout-content class="chart-main" content-style="overflow:hidden; display: flex">
-        <div class="chart-left-stack">
-          <content-pages v-if="getPages"></content-pages>
+        <div v-if="activeLeftPanel" class="chart-left-stack">
+          <content-pages v-if="showPagesPanel"></content-pages>
           <content-charts v-if="showChartsPanel"></content-charts>
-          <content-layers v-if="getLayers"></content-layers>
+          <content-layers v-if="showLayersPanel"></content-layers>
         </div>
         <content-configurations class="chart-stage-shell"></content-configurations>
       </n-layout-content>
@@ -50,13 +50,23 @@ import { useAutoSave } from './hooks/useAutoSave.hook'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 import { useChartHistoryStore } from '@/store/modules/chartHistoryStore/chartHistoryStore'
 import { useChartLayoutStore } from '@/store/modules/chartLayoutStore/chartLayoutStore'
+import { ChartLayoutStoreEnum } from '@/store/modules/chartLayoutStore/chartLayoutStore.d'
 import { useAIStore } from '@/store/modules/aiStore/aiStore'
 
 const chartHistoryStoreStore = useChartHistoryStore()
 const chartEditStore = useChartEditStore()
 const aiStore = useAIStore()
 const { getPages, getCharts, getLayers } = toRefs(useChartLayoutStore())
-const showChartsPanel = computed(() => getCharts.value || aiStore.getAIPanelVisible)
+const activeLeftPanel = computed(() => {
+  if (aiStore.getAIPanelVisible) return 'ai'
+  if (getCharts.value) return ChartLayoutStoreEnum.CHARTS
+  if (getPages.value) return ChartLayoutStoreEnum.PAGES
+  if (getLayers.value) return ChartLayoutStoreEnum.LAYERS
+  return ''
+})
+const showPagesPanel = computed(() => activeLeftPanel.value === ChartLayoutStoreEnum.PAGES)
+const showChartsPanel = computed(() => activeLeftPanel.value === ChartLayoutStoreEnum.CHARTS || activeLeftPanel.value === 'ai')
+const showLayersPanel = computed(() => activeLeftPanel.value === ChartLayoutStoreEnum.LAYERS)
 
 // 实时自动保存
 const { saveStatus, lastSaveTime, saveError } = useAutoSave()
