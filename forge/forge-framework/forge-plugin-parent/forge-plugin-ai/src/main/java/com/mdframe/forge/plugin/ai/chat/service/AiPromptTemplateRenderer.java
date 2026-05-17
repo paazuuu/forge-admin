@@ -43,6 +43,7 @@ public final class AiPromptTemplateRenderer {
         variables.put("componentCatalog", safeText(request.getComponentCatalog()));
         variables.put("projectName", safeText(request.getProjectName()));
         variables.put("canvasContext", safeText(request.getCanvasContext()));
+        variables.put("businessContext", safeText(request.getBusinessContext()));
         return variables;
     }
 

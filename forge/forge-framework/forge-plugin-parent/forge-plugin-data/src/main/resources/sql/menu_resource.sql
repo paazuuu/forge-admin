@@ -242,3 +242,61 @@ VALUES (9100, 1, 1, 9100, NOW()),
        (9159, 1, 1, 9159, NOW()),
        (9160, 1, 1, 9160, NOW()),
        (9161, 1, 1, 9161, NOW());
+
+-- 菜单资源：业务定义管理
+INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
+                          is_public, menu_status, visible, perms, icon, api_method, api_url, keep_alive, always_show,
+                          redirect, remark, create_by, create_time, update_by, update_time, create_dept, client_code)
+VALUES (9162, 1, '业务定义', 9100, 2, 5, '/data/business', 'data/business', 0, 0, 1, 1, 'data:business:list',
+        'ProfileOutlined', NULL, NULL, 1, 0, NULL, '业务定义管理菜单', 1,
+        NOW(), 1, NOW(), 1, 'pc');
+
+-- 按钮资源：业务定义管理
+INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
+                          is_public, menu_status, visible, perms, icon, api_method, api_url, keep_alive, always_show,
+                          redirect, remark, create_by, create_time, update_by, update_time, create_dept, client_code)
+VALUES (9163, 1, '查询业务定义', 9162, 3, 1, NULL, NULL, 0, 0, 1, 1, 'data:business:query', NULL, NULL, NULL, 0, 0, NULL,
+        '业务定义查询按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9164, 1, '新增业务定义', 9162, 3, 2, NULL, NULL, 0, 0, 1, 1, 'data:business:add', NULL, NULL, NULL, 0, 0, NULL,
+        '业务定义新增按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9165, 1, '修改业务定义', 9162, 3, 3, NULL, NULL, 0, 0, 1, 1, 'data:business:edit', NULL, NULL, NULL, 0, 0, NULL,
+        '业务定义修改按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9166, 1, '删除业务定义', 9162, 3, 4, NULL, NULL, 0, 0, 1, 1, 'data:business:remove', NULL, NULL, NULL, 0, 0, NULL,
+        '业务定义删除按钮', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9167, 1, '业务定义AI上下文', 9162, 3, 5, NULL, NULL, 0, 0, 1, 1, 'data:business:ai-context', NULL, NULL, NULL, 0, 0, NULL,
+        '业务定义AI上下文按钮', 1, NOW(), 1, NOW(), 1, 'pc');
+
+-- API资源：业务定义管理
+INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
+                          is_public, menu_status, visible, perms, icon, api_method, api_url, keep_alive, always_show,
+                          redirect, remark, create_by, create_time, update_by, update_time, create_dept, client_code)
+VALUES (9168, 1, '业务定义分页查询API', 9162, 4, 1, NULL, NULL, 0, 0, 1, 1, 'data:business:page', NULL, 'GET', '/data/business/page', 0, 0, NULL,
+        '业务定义分页查询接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9169, 1, '业务定义列表API', 9162, 4, 2, NULL, NULL, 0, 0, 1, 1, 'data:business:list', NULL, 'GET', '/data/business/list', 0, 0, NULL,
+        '业务定义列表接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9170, 1, '业务定义详情API', 9162, 4, 3, NULL, NULL, 0, 0, 1, 1, 'data:business:detail', NULL, 'GET', '/data/business/:id', 0, 0, NULL,
+        '业务定义详情接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9171, 1, '业务定义新增API', 9162, 4, 4, NULL, NULL, 0, 0, 1, 1, 'data:business:add', NULL, 'POST', '/data/business', 0, 0, NULL,
+        '新增业务定义接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9172, 1, '业务定义修改API', 9162, 4, 5, NULL, NULL, 0, 0, 1, 1, 'data:business:edit', NULL, 'PUT', '/data/business', 0, 0, NULL,
+        '修改业务定义接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9173, 1, '业务定义删除API', 9162, 4, 6, NULL, NULL, 0, 0, 1, 1, 'data:business:remove', NULL, 'DELETE', '/data/business/:id', 0, 0, NULL,
+        '删除业务定义接口', 1, NOW(), 1, NOW(), 1, 'pc'),
+       (9174, 1, '业务定义AI上下文API', 9162, 4, 7, NULL, NULL, 0, 0, 1, 1, 'data:business:ai-context', NULL, 'GET', '/data/business/:id/ai-context', 0, 0, NULL,
+        '业务定义AI上下文接口', 1, NOW(), 1, NOW(), 1, 'pc');
+
+-- 角色授权：超级管理员(role_id=1)默认拥有业务定义权限
+INSERT INTO sys_role_resource (id, tenant_id, role_id, resource_id, create_time)
+VALUES (9162, 1, 1, 9162, NOW()),
+       (9163, 1, 1, 9163, NOW()),
+       (9164, 1, 1, 9164, NOW()),
+       (9165, 1, 1, 9165, NOW()),
+       (9166, 1, 1, 9166, NOW()),
+       (9167, 1, 1, 9167, NOW()),
+       (9168, 1, 1, 9168, NOW()),
+       (9169, 1, 1, 9169, NOW()),
+       (9170, 1, 1, 9170, NOW()),
+       (9171, 1, 1, 9171, NOW()),
+       (9172, 1, 1, 9172, NOW()),
+       (9173, 1, 1, 9173, NOW()),
+       (9174, 1, 1, 9174, NOW());

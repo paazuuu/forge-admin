@@ -15,6 +15,8 @@ public class AIGenerateRequest {
     private String componentCatalog;
     private String projectName;
     private String canvasContext;
+    private Long businessDefinitionId;
+    private String businessContext;
     private Long providerId;
     private String modelName;
     private Double temperature;

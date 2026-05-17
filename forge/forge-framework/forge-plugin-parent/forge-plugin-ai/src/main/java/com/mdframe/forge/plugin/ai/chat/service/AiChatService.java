@@ -82,6 +82,10 @@ public class AiChatService {
             userPrompt.append("\n\n当前画布已有内容（请在此基础上增量修改，尽量保持现有布局和组件语义一致）：\n")
                     .append(request.getCanvasContext());
         }
+        if (StringUtils.hasText(request.getBusinessContext())) {
+            userPrompt.append("\n\n业务定义与绑定数据集上下文（请优先基于这些数据集生成组件；无法绑定时才使用静态数据）：\n")
+                    .append(request.getBusinessContext());
+        }
         if (request.getCanvasWidth() != null && request.getCanvasHeight() != null) {
             userPrompt.append("\n\n画布尺寸：")
                     .append(request.getCanvasWidth())
@@ -112,6 +116,7 @@ public class AiChatService {
         vars.put("componentCatalog", safeText(request.getComponentCatalog()));
         vars.put("projectName", safeText(request.getProjectName()));
         vars.put("canvasContext", safeText(request.getCanvasContext()));
+        vars.put("businessContext", safeText(request.getBusinessContext()));
         return vars;
     }
 

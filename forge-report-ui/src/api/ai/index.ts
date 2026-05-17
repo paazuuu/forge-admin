@@ -74,6 +74,8 @@ export interface AiGenerateStreamRequest {
   componentCatalog?: string
   projectName?: string
   canvasContext?: string
+  businessDefinitionId?: number | string
+  businessContext?: string
   providerId?: number | string
   modelName?: string
   temperature?: number
