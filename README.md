@@ -1,8 +1,10 @@
-<h1 align="center">Forge Admin</h1>
+
+
+<center><img src="images/Logo.png" width="800"></center>
 
 <p align="center">
-  🚀 基于 Vue3 + Spring Boot 3 的企业级中后台管理框架<br>
-  ✨ 集成 AI 数据可视化大屏，自然语言一键生成数据报表
+  🚀 基于 Vue 3 + Spring Boot 3 的企业级中后台管理框架<br>
+  ✨ 插件化架构、AI 代码生成、Flowable 工作流与 AI 数据可视化大屏一体化开箱
 </p>
 
 <p align="center">
@@ -14,10 +16,11 @@
 </p>
 
 <p align="center">
-  <a href="#演示地址">在线演示</a> ·
-  <a href="#快速开始">快速开始</a> ·
+  <a href="#-在线演示">在线演示</a> ·
+  <a href="#-项目亮点">项目亮点</a> ·
+  <a href="#-系统截图">系统截图</a> ·
   <a href="#-ai-数据可视化大屏">AI 大屏</a> ·
-  <a href="#功能模块">功能模块</a> ·
+  <a href="#-快速开始">快速开始</a> ·
   <a href="CHANGELOG.md">更新日志</a>
 </p>
 
@@ -25,34 +28,61 @@
 
 ## ✨ 项目简介
 
-**Forge Admin** 是一个现代化的企业级中后台管理框架，采用 **微内核 + 插件化** 架构设计，核心功能以插件形式存在，便于按需引入和扩展。
+**Forge Admin** 是一套面向企业后台、SaaS 管理端、数据可视化平台和内部低代码工具的中后台框架。它不只提供常见的用户、角色、菜单、字典、文件、日志等基础能力，还把 **AI 代码生成**、**AI 数据大屏**、**Flowable 工作流**、**多租户隔离** 做成可持续扩展的工程体系。
 
-## 系统架构
+如果你正在搭建一个长期演进的后台系统，Forge Admin 更关注三件事：
+
+| 目标 | Forge Admin 提供什么 |
+|------|----------------------|
+| 更快交付业务页面 | AI 表单生成、CRUD 页面配置、代码生成插件、可下载代码包 |
+| 更稳承载企业复杂度 | RBAC、多租户、数据权限、操作日志、动态配置、文件存储、Excel 导入导出 |
+| 更容易扩展新能力 | 微内核 + 插件化架构，业务插件和技术 Starter 分层清晰 |
+
+---
+
+## 🌟 项目亮点
+
+| 能力 | 说明 |
+|------|------|
+| 🏗️ **微内核插件化** | 核心框架轻量，系统、生成器、任务、消息、流程、AI 等能力以插件方式组合 |
+| 🤖 **AI 数据大屏** | 通过自然语言生成大屏，支持组件拖拽、主题定制、真实 API 数据接入和发布 |
+| ⚡ **AI 代码生成** | 面向表单和 CRUD 场景，支持 0 代码配置，也支持下载代码包二次开发 |
+| 🔐 **多租户 + RBAC** | 租户级数据隔离、菜单权限、按钮权限、角色资源绑定等企业后台基础能力 |
+| 🔄 **工作流引擎** | 集成 Flowable，覆盖模型设计、流程发起、待办审批、时间轴追踪 |
+| 🧩 **组件化前端** | Vue 3 + Naive UI + UnoCSS，内置字典、区域、上传、图标选择、AI 表单等组件 |
+| 🔌 **多 AI 供应商** | 支持阿里百炼、OpenAI、DeepSeek、Ollama、智谱、Moonshot 等模型服务 |
+| 📊 **真实数据报表** | 大屏报表可直接对接后端接口，减少静态 Mock 到真实业务之间的落差 |
+
+---
+
+## 🧭 适合场景
+
+- 企业内部管理系统：组织、用户、角色、菜单、配置、文件、日志、通知等通用后台能力。
+- 多租户 SaaS 后台：租户隔离、数据权限、客户独立配置、权限精细化控制。
+- 审批流业务系统：请假、采购、合同、报销、工单等需要流程编排的业务。
+- 数据大屏与驾驶舱：用 AI 快速生成可视化大屏，再接入真实业务 API。
+- 低代码/代码生成平台：通过模板、表单设计器和 AI 生成能力沉淀研发资产。
+
+---
+
+## 🏛️ 系统架构
+
 ![系统架构图.jpeg](images/%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84%E5%9B%BE.jpeg)
 
-### 🌟 核心亮点
+后端采用 `forge-framework` + `forge-plugin-parent` + `forge-starter-parent` 的分层方式：Starter 负责认证、缓存、ORM、多租户、数据权限、加解密、日志、文件、Excel 等底层能力；Plugin 负责系统管理、代码生成、任务调度、消息中心、流程和 AI 等业务能力；应用服务按场景聚合插件并对外提供接口。
 
-| 能力                | 说明                              |
-|-------------------|---------------------------------|
-| 🏗️ **微内核架构**     | 核心框架轻量级，功能通过插件扩展，按需引入           |
-| 🤖 **AI 大屏生成**    | 自然语言描述需求，AI 自动生成完整数据大屏          |
-| 🎨 **低代码大屏设计**    | 拖拽式可视化编辑器，丰富的图表组件和主题            |
-| 🔐 **多租户 & RBAC** | 完善的多租户数据隔离 + 细粒度权限控制            |
-| ⚡ **AI驱动代码生成器**   | AI驱动0代码生成，简单CRUD实现0代码驱动         |
-| 🔄 **流程管理**       | 轻量集成 Flowable 工作流引擎             |
-| 🔌 **多 AI 供应商**   | 支持阿里百炼、OpenAI、DeepSeek、Ollama 等 |
-| 📊 **真实数据对接**     | 大屏报表直接对接后端 API，告别静态 Mock        |
+---
 
-## 📺 演示地址
+## 📺 在线演示
 
-> **后台管理**：http://81.70.22.48:8084/forge/login
->
-> 账号：`admin` / `123456`
->
-> **项目文档**：http://81.70.22.48:8084/forge-docs/
->
-> **项目源码**：gitee: https://gitee.com/ForgeLab/forge-admin
-> **项目源码**：github: https://github.com/yaomindong1996/forge-admin
+| 入口 | 地址 |
+|------|------|
+| 后台管理 | http://81.70.22.48:8084/forge/login |
+| 项目文档 | http://81.70.22.48:8084/forge-docs/ |
+| Gitee | https://gitee.com/ForgeLab/forge-admin |
+| GitHub | https://github.com/yaomindong1996/forge-admin |
+
+默认体验账号：`admin` / `123456`
 
 ---
 
@@ -64,30 +94,31 @@
 
 ![登录页.png](images/%E7%99%BB%E5%BD%95%E9%A1%B5.png)
 
-系统提供安全的登录认证，支持验证码校验，保障系统安全。
+支持账号密码登录与验证码校验，作为后台系统的统一认证入口。
 
 #### 首页仪表盘
+
 ![首页.png](images/%E9%A6%96%E9%A1%B5.png)
 
-直观的数据展示面板，实时掌握系统运行状态和关键业务指标。
+集中展示系统运行状态、业务指标和常用入口，适合作为管理端工作台。
 
 #### 菜单管理
 
 ![菜单管理.png](images/%E8%8F%9C%E5%8D%95%E7%AE%A1%E7%90%86.png)
 
-灵活的菜单配置，支持动态路由、权限绑定，轻松构建系统导航结构。
+支持动态路由、菜单目录、按钮权限和资源绑定，便于快速搭建权限导航。
 
 #### 配置管理
 
 ![配置管理.png](images/%E9%85%8D%E7%BD%AE%E7%AE%A1%E7%90%86.png)
 
-可视化配置管理，支持系统参数、字典数据的动态维护。
+系统参数、字典数据等基础配置可以在后台动态维护，减少重复发布。
 
 #### 消息管理
 
 ![消息管理](images/%E6%B6%88%E6%81%AF%E7%AE%A1%E7%90%86.png)
 
-统一消息中心，管理系统通知、站内消息，支持消息模板配置。
+统一管理站内信、系统通知和消息模板，适合接入业务提醒、审批通知等场景。
 
 #### 流程管理
 
@@ -95,66 +126,54 @@
 ![流程设计](images/%E6%B5%81%E7%A8%8B%E8%AE%BE%E8%AE%A1.png)
 ![流程时间轴](images/%E6%B5%81%E7%A8%8B%E6%97%B6%E9%97%B4%E8%BD%B4.png)
 
-轻量集成 Flowable 工作流引擎，业务一键触发，统一管控。
+基于 Flowable 提供流程模型、在线设计、节点配置、审批记录与流程时间轴。
 
 #### 我的待办
 
 ![我的待办](images/%E6%88%91%E7%9A%84%E5%BE%85%E5%8A%9E.png)
 
+审批人可以集中处理待办任务，快速完成通过、驳回和流程跟踪。
+
 #### 文件管理
 
 ![文件管理](images/%E6%96%87%E4%BB%B6%E7%AE%A1%E7%90%86.png)
 
-统一文件管理，支持 RustFS、本地存储等多种存储方式。
+统一文件管理能力，支持本地存储、对象存储和鉴权访问。
 
 #### 数据权限配置
 
 ![数据权限配置](images/%E6%95%B0%E6%8D%AE%E6%9D%83%E9%99%90%E9%85%8D%E7%BD%AE.png)
 
-灵活的数据权限配置，精确到字段级别的数据隔离。
+支持按组织、角色和业务规则配置数据范围，降低多组织数据越权风险。
 
 #### Excel 导出配置
 
 ![excel导出配置](images/excel%E5%AF%BC%E5%87%BA%E9%85%8D%E7%BD%AE.png)
 
-导入导出可配置，省去多余的注解配置，动态调整模版。
+导入导出模板可配置，减少大量重复注解和临时导出代码。
 
 #### 服务监控
 
 ![服务监控](images/%E6%9C%8D%E5%8A%A1%E7%9B%91%E6%8E%A7.png)
 
-实时监控服务器状态，包括 CPU、内存、磁盘等关键指标。
+查看 CPU、内存、磁盘等运行指标，辅助排查本地和测试环境问题。
 
 ---
 
 ## 🤖 AI 数据可视化大屏
 
-**Forge AI** — AI 驱动的数据可视化低代码开发平台。一句话描述即可自动生成数据大屏，支持拖拽编排、数据接入与一键发布。
+**Forge AI** 是项目内置的 AI 数据可视化低代码平台。你可以先用自然语言描述业务目标，让 AI 生成大屏草稿，再通过可视化编辑器调整组件、数据源、主题和交互，最后发布为可访问页面。
 
 ### 核心特性
 
-<table>
-  <tr>
-    <td width="33%"><strong>🤖 AI 智能生成</strong></td>
-    <td width="33%"><strong>🧩 组件素材库</strong></td>
-    <td width="33%"><strong>🎨 主题定制</strong></td>
-  </tr>
-  <tr>
-    <td>接入 AI 大模型，一句话描述即可自动生成数据大屏页面。支持多供应商灵活配置，AI 对话式交互完成组件编排与数据配置。</td>
-    <td>内置 50+ 图表组件，涵盖柱状图、折线图、饼图、雷达图、热力图、地图等。所有组件支持拖拽编排、自由缩放与图层管理。</td>
-    <td>内置多套深/亮色主题，支持自定义主题色、全局滤镜、背景图片/颜色、画布尺寸与适配方式。</td>
-  </tr>
-  <tr>
-    <td><strong>📊 数据接入</strong></td>
-    <td><strong>⚡ 事件交互</strong></td>
-    <td><strong>🚀 一键发布</strong></td>
-  </tr>
-  <tr>
-    <td>支持静态数据、动态 HTTP 请求、数据池三种数据模式。内置数据映射、过滤器、在线编辑器，轻松对接后端 API。</td>
-    <td>支持组件交互事件（单击/双击/鼠标进入/移出）、高级生命周期事件（渲染前/后）、自定义 JavaScript 代码编辑器。</td>
-    <td>编辑完成即可发布上线，自动生成预览链接，支持截图分享。发布前自动保存，杜绝数据丢失。</td>
-  </tr>
-</table>
+| 特性 | 说明 |
+|------|------|
+| 🤖 AI 智能生成 | 接入大模型后，可通过对话生成大屏结构、组件布局和基础配置 |
+| 🧩 组件素材库 | 内置图表、文字、图片、视频、滚动表格、装饰边框、数字翻牌等组件 |
+| 🎨 主题定制 | 支持深浅主题、背景、全局滤镜、画布尺寸和自适应方式 |
+| 📊 数据接入 | 支持静态数据、动态 HTTP 请求和数据池，方便接入后端业务 API |
+| ⚡ 事件交互 | 支持点击、双击、鼠标进入/移出、生命周期事件和自定义 JavaScript |
+| 🚀 一键发布 | 编辑完成即可发布预览链接，便于分享、嵌入和交付 |
 
 ### 界面预览
 
@@ -176,100 +195,80 @@
 
 ### AI 供应商
 
-支持阿里百炼（通义千问）、OpenAI（GPT）、智谱 AI（GLM）、Moonshot（Kimi）、DeepSeek、Ollama 等主流 AI 服务，内置预设模板一键配置，兼容 OpenAI API 格式的任意自定义服务。
+支持阿里百炼（通义千问）、OpenAI（GPT）、智谱 AI（GLM）、Moonshot（Kimi）、DeepSeek、Ollama 等主流 AI 服务，也支持兼容 OpenAI API 格式的自定义服务。
 
 ---
 
----
-## AI驱动的代码生成
+## 🧠 AI 驱动的代码生成
 
-🧠 基于AI驱动的代码生成，区别与其它传统的代码生成器，简单的CRUD页面，可以通过组件市场进行个性化配置，配置之后既可完整0代码生成，也可以选择将代码包下载到工程，进行后续的改造
+Forge Admin 的代码生成能力面向真实后台研发流程：可以通过 AI 辅助生成表单和 CRUD 页面，也可以通过模板市场进行个性化配置。简单业务可以 0 代码上线，复杂业务可以下载代码包继续二次开发。
 
-### AI表单生成
+### AI 表单生成
+
 ![AI表单生成.png](images/AI%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90/AI%E8%A1%A8%E5%8D%95%E7%94%9F%E6%88%90.png)
 
-### AI表单生成列表
+### AI 表单生成列表
+
 ![AI表单生成列表.png](images/AI%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90/AI%E8%A1%A8%E5%8D%95%E7%94%9F%E6%88%90%E5%88%97%E8%A1%A8.png)
 
-### 模版配置
+### 模板配置
+
 ![模版配置.png](images/AI%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90/%E6%A8%A1%E7%89%88%E9%85%8D%E7%BD%AE.png)
 
 ### 表单编辑
+
 ![表单编辑.png](images/AI%E4%BB%A3%E7%A0%81%E7%94%9F%E6%88%90/%E8%A1%A8%E5%8D%95%E7%BC%96%E8%BE%91.png)
 
 ---
 
 ## 💻 技术栈
 
-### 后端技术
+### 后端
 
-| 技术 | 说明 |
+| 技术 | 用途 |
 |------|------|
-| Spring Boot 3 | 应用开发框架 |
-| Spring Cloud | 微服务框架（可选） |
-| MyBatis-Plus | ORM 框架 |
-| Sa-Token | 认证授权框架 |
-| Redisson | 分布式缓存 |
-| Quartz | 任务调度 |
-| Flowable | 工作流引擎 |
-| Spring Cloud Gateway | 网关（可选） |
+| Java 17 | 后端运行环境 |
+| Spring Boot 3.2 | 应用开发框架 |
+| MyBatis-Plus 3.5 | ORM 与分页能力 |
+| Sa-Token 1.38 | 登录认证、权限校验、Token 管理 |
+| Flowable 7.0 | 工作流建模与执行 |
+| Redis / Redisson | 缓存、分布式锁、会话能力 |
+| Quartz / SnailJob | 任务调度 |
+| Maven | 后端多模块构建 |
 
-### 前端技术
+### 前端
 
-| 技术 | 说明 |
+| 技术 | 用途 |
 |------|------|
-| Vue 3 | 渐进式前端框架 |
-| Naive UI | Vue 3 组件库 |
-| Pinia | 状态管理 |
-| Vue Router | 路由管理 |
-| Vite | 构建工具 |
-| UnoCSS | 原子化 CSS |
-| ECharts 5 | 数据可视化图表库 |
-| VChart | 字节跳动图表框架 |
+| Vue 3.5 | 前端框架 |
+| Naive UI 2.42 | 管理端组件库 |
+| Vite 7 | 开发服务器与构建工具 |
+| Pinia 3 | 状态管理 |
+| Vue Router 4.5 | 动态路由与权限路由 |
+| UnoCSS 66 | 原子化样式 |
+| ECharts / VChart | 图表与大屏可视化 |
+| BPMN.js / CodeMirror | 流程设计与代码编辑 |
 
 ---
 
-## 📁 模块说明
+## 📁 项目结构
 
-### 后端模块
-
-```
+```text
 forge/
-├── forge-admin/                 # 主应用模块
-├── forge-flow/                  # 流程管理模块
-├── forge-framework/            # 框架核心
-│   ├── forge-plugin-parent/    # 插件父模块
-│   │   ├── forge-plugin-system/     # 系统管理插件
-│   │   ├── forge-plugin-generator/  # 代码生成插件
-│   │   ├── forge-plugin-job/        # 任务调度插件
-│   │   └── forge-plugin-message/    # 消息插件
-│   └── forge-starter-parent/   # 启动器父模块
-│       ├── forge-starter-auth/      # 认证授权
-│       ├── forge-starter-cache/     # 缓存管理
-│       ├── forge-starter-config/    # 配置中心
-│       └── forge-starter-api-config/# API配置
-```
+├── forge-admin-server/          # 主应用入口，聚合后台管理能力
+├── forge-report-server/         # AI 大屏报表服务
+├── forge-app-server/            # App 接口服务
+├── forge-flow/                  # 独立流程服务与流程客户端
+├── forge-business/              # 业务模块
+└── forge-framework/
+    ├── forge-dependencies/      # 统一依赖版本管理
+    ├── forge-plugin-parent/     # system / generator / job / message / flow / ai 等业务插件
+    └── forge-starter-parent/    # auth / cache / orm / tenant / crypto / excel / file 等技术 Starter
 
-### 前端项目
-
-```
 forge-admin-ui/                  # 后台管理系统前端
-├── src/
-│   ├── api/            # API 接口
-│   ├── components/     # 公共组件（含 AI 表单组件）
-│   ├── composables/    # 组合式 API
-│   ├── layouts/       # 布局组件
-│   ├── router/        # 路由配置
-│   ├── store/         # 状态管理
-│   └── views/         # 页面视图
-
-forge-report-ui/                # AI 数据可视化大屏前端（基于 GoView）
-├── src/
-│   ├── components/
-│   │   └── GoAI/       # AI 功能核心模块
-│   ├── api/ai/         # AI 接口层
-│   ├── packages/       # 图表组件包（ECharts/VChart/装饰/3D）
-│   └── views/          # 大屏编辑器/预览/项目管理
+forge-report-ui/                 # AI 数据可视化大屏前端
+forge-docs/                      # VitePress 文档站
+code-copilot/                    # AI 编程规则与变更管理
 ```
 
 ---
@@ -278,138 +277,103 @@ forge-report-ui/                # AI 数据可视化大屏前端（基于 GoView
 
 ### 环境要求
 
-- JDK 17+
-- Node.js 18+
-- pnpm 8+
-- MySQL 8.0+
-- Redis 6.0+
+| 环境 | 推荐版本 |
+|------|----------|
+| JDK | 17+ |
+| Node.js | 20.19+ |
+| pnpm | 8+ |
+| MySQL | 8.0+ |
+| Redis | 6.0+ |
 
-### 后端部署
-
-#### 1. 克隆项目
+### 1. 克隆项目
 
 ```bash
 git clone https://gitee.com/ForgeLab/forge-admin.git
 cd forge-admin
 ```
 
-#### 2. 导入数据库
-
-执行 `forge/forge-admin/sql/初始化脚本.sql` 创建基础数据库表
-如果需要部署大屏项目
-执行 `forge/forge-report/sql/report-init.sql` 大屏相关数据表
-
-#### 3. 本地环境配置
-
-##### 复制配置模板
-
-首次克隆项目后，需要复制配置模板文件到本地配置：
+### 2. 初始化数据库
 
 ```bash
-# 复制admin模块配置
-cp forge/forge-admin/src/main/resources/application-dev.example.yml forge/forge-admin/src/main/resources/application-dev.yml
+# 创建数据库
+mysql -u root -p -e "CREATE DATABASE forge DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 
-# 复制flow模块配置
-cp forge/forge-flow/src/main/resources/application-dev.example.yml forge/forge-flow/src/main/resources/application-dev.yml
+# 后台管理基础表
+mysql -u root -p forge < forge/forge-admin-server/sql/初始化脚本.sql
+
+# 如果启用 AI 大屏，再导入报表服务表
+mysql -u root -p forge < forge/forge-report-server/sql/report-init.sql
 ```
 
-##### 修改配置信息
-
-编辑 `application-dev.yml` 文件，修改以下配置：
-
-**数据库配置**
-
-```yaml
-spring:
-  datasource:
-    dynamic:
-      datasource:
-        master:
-          url: jdbc:mysql://localhost:3306/your_database?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
-          username: your_username
-          password: 'your_password'
-```
-
-**Redis配置**
-
-```yaml
-spring.data:
-  redis:
-    host: localhost
-    port: 6379
-    database: 0
-    password: 'your_redis_password'
-    redisson:
-      config: |
-        singleServerConfig:
-          address: "redis://localhost:6379"
-          database: 0
-          password: 'your_redis_password'
-```
-
-##### 配置说明
-
-- `application-dev.yml` 属于本地配置文件，已经加入 `.gitignore`，不会提交到Git仓库
-- `application-dev.example.yml` 是配置模板，提交到Git仓库，供其他开发者参考
-- 其他配置项根据需要自行修改，不需要提交到仓库
-
-##### 注意事项
-
-> ⚠️ **禁止将包含敏感信息的配置文件提交到Git仓库**
-> - 数据库密码、Redis密码、密钥等敏感信息不得提交
-> - 新增配置项需要添加到 `application-dev.example.yml` 模板中，并替换敏感信息
-> - 生产环境配置使用单独的 `application-prod.yml`，同样不提交到仓库
-
-##### 其他配置
-
-- 前端配置请参考 `forge-admin-ui/.env.example` 文件，复制为 `.env.local` 进行修改
-
-#### 4. 启动服务
+### 3. 准备本地配置
 
 ```bash
-cd forge/forge-admin
+# 后台管理服务
+cp forge/forge-admin-server/src/main/resources/application-dev.example.yml \
+   forge/forge-admin-server/src/main/resources/application-dev.yml
+
+# 独立流程服务
+cp forge/forge-flow/forge-flow-server/src/main/resources/application-dev.example.yml \
+   forge/forge-flow/forge-flow-server/src/main/resources/application-dev.yml
+```
+
+然后按本地环境修改 MySQL、Redis、文件存储、AI 供应商等配置。`application-dev.yml` 属于本地配置，敏感信息不要提交到仓库；新增通用配置时，请同步更新 `application-dev.example.yml` 并使用占位符。
+
+### 4. 启动后端
+
+```bash
+# 主后台服务，默认 http://localhost:8580
+cd forge/forge-admin-server
 mvn spring-boot:run
 ```
 
-服务默认启动在 `http://localhost:8080`
-
-### 前端部署
-
-#### 后台管理系统
+可选服务：
 
 ```bash
+# AI 大屏报表服务，默认 http://localhost:8581
+cd forge/forge-report-server
+mvn spring-boot:run
+
+# 独立流程服务，默认 http://localhost:8081
+cd forge/forge-flow/forge-flow-server
+mvn spring-boot:run
+```
+
+### 5. 启动前端
+
+```bash
+# 后台管理前端，默认 http://localhost:3000
 cd forge-admin-ui
 pnpm install
 pnpm dev
 ```
 
-#### AI 大屏平台
-
 ```bash
-后台项目启动 forge-report服务
-```
-
-```bash
+# AI 大屏前端，默认 http://localhost:3021/forge-report
 cd forge-report-ui
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
-系统用户名: `admin` / `123456`
+默认登录账号：`admin` / `123456`
 
-#### 构建生产版本
+### 6. 构建生产包
 
 ```bash
-# 后台管理
-cd forge-admin-ui && pnpm build
+# 后台管理前端
+cd forge-admin-ui
+pnpm build
 
-# AI 大屏
-cd forge-report-ui && npm run build
+# AI 大屏前端
+cd forge-report-ui
+pnpm build
+
+# 后端全量构建
+cd forge
+mvn clean install -DskipTests
 ```
 
-### 测试/生产环境部署
-
-详细的 Nginx 配置请参考 [NGINX_CONFIG.md](NGINX_CONFIG.md)
+生产环境 Nginx 配置参考 [NGINX_CONFIG.md](NGINX_CONFIG.md)。
 
 ---
 
@@ -419,132 +383,127 @@ cd forge-report-ui && npm run build
 
 | 模块 | 说明 |
 |------|------|
-| 用户管理 | 用户的增删改查、角色绑定、组织关联 |
-| 角色管理 | 角色权限配置、资源绑定 |
-| 菜单管理 | 动态菜单配置、页面路由管理 |
-| 部门管理 | 组织架构管理、树形结构 |
+| 用户管理 | 用户增删改查、角色绑定、组织关联 |
+| 角色管理 | 角色权限配置、资源绑定、数据范围 |
+| 菜单管理 | 动态菜单、页面路由、按钮权限 |
+| 部门管理 | 组织架构、树形结构、上下级关系 |
 | 岗位管理 | 岗位配置、用户岗位关联 |
 | 租户管理 | 多租户配置、租户隔离 |
 
-### 系统监控
+### 运维与监控
 
 | 模块 | 说明 |
 |------|------|
-| 在线用户 | 查看当前在线用户、强制下线 |
-| 定时任务 | 任务配置、动态调度 |
-| 系统日志 | 操作日志、登录日志查询 |
-| 系统监控 | CPU、内存、磁盘监控 |
-
-### 运维工具
-
-| 模块 | 说明 |
-|------|------|
+| 在线用户 | 查看在线会话、强制下线 |
+| 定时任务 | 任务配置、动态调度、执行日志 |
+| 系统日志 | 操作日志、登录日志、异常排查 |
+| 服务监控 | CPU、内存、磁盘等指标 |
 | 缓存管理 | Redis 缓存可视化操作 |
-| 文件管理 | 文件上传、存储配置 |
-| 字典管理 | 静态字典维护 |
-| 通知公告 | 通知发布、阅读状态跟踪 |
+| 文件管理 | 文件上传、下载、存储配置 |
 
 ### 开发者工具
 
 | 模块 | 说明 |
 |------|------|
-| 代码生成 | 可视化配置、代码生成 |
+| 代码生成 | 表导入、字段配置、模板管理、代码预览与下载 |
 | API 配置 | 接口行为动态配置 |
 | 数据源管理 | 多数据源配置 |
-| Excel 配置 | 导入导出模版动态配置 |
+| Excel 配置 | 导入导出模板动态配置 |
+| 字典管理 | 字典类型、字典数据、状态标签 |
+| 通知公告 | 公告发布、阅读状态、消息模板 |
 
 ### AI 大屏报表
 
 | 模块 | 说明 |
 |------|------|
-| 大屏编辑器 | 拖拽式可视化设计，支持 30+ 图表组件 |
-| AI 生成 | 自然语言描述，一键生成数据大屏 |
-| AI 供应商 | 多供应商管理，支持 7+ 主流 AI 服务 |
-| 数据源配置 | 对接真实后端 API，支持动态数据刷新 |
-| 项目管理 | 大屏项目持久化存储、发布管理 |
-| 模板市场 | 预置行业模板，快速复用 |
+| 大屏编辑器 | 拖拽式画布、图层管理、组件配置 |
+| AI 生成 | 自然语言生成大屏页面 |
+| AI 供应商 | 多模型供应商配置与切换 |
+| 数据源配置 | 静态数据、动态 HTTP、数据池 |
+| 项目管理 | 大屏项目保存、发布、预览 |
+| 模板市场 | 行业模板复用与二次编辑 |
 
 ---
 
-## 🔌 插件说明
+## 🔌 插件体系
 
-### 系统管理插件 (forge-plugin-system)
-
-提供完整的系统管理功能，包括用户、角色、菜单、部门、岗位、租户等管理。
-
-### 代码生成插件 (forge-plugin-generator)
-
-可视化代码生成工具，支持：
-- 数据库表导入
-- 字段配置
-- 模板管理
-- 代码预览与下载
-
-### 任务调度插件 (forge-plugin-job)
-
-基于 Quartz 的分布式任务调度，支持：
-- Cron 表达式配置
-- 手动触发执行
-- 任务执行日志
-
-### 消息插件 (forge-plugin-message)
-
-统一消息中心，支持：
-- 系统通知
-- 站内消息
-- 消息模板
+| 插件 | 说明 |
+|------|------|
+| `forge-plugin-system` | 用户、角色、菜单、部门、岗位、租户、字典等系统管理能力 |
+| `forge-plugin-generator` | AI 驱动代码生成、模板配置、代码预览与下载 |
+| `forge-plugin-job` | 定时任务、任务触发、执行日志 |
+| `forge-plugin-message` | 站内信、系统通知、消息模板 |
+| `forge-plugin-flow` | Flowable 流程模型、审批任务、流程事件 |
+| `forge-plugin-ai` | AI 供应商、模型配置、对话与生成能力 |
 
 ---
 
 ## ❓ 常见问题
 
-### Q: 为什么我拉取代码后启动报错？
-A: 首次拉取代码需要复制配置模板并修改为本地环境的数据库和Redis配置。
+### Q: 为什么首次启动报数据库或 Redis 连接错误？
+
+A: 需要先复制 `application-dev.example.yml` 为 `application-dev.yml`，并改成本地 MySQL、Redis 连接信息。
+
+### Q: 前端请求后端失败怎么排查？
+
+A: 先确认后端端口是否启动，再检查 `forge-admin-ui/.env.development` 中的 `VITE_HTTP_PROXY_TARGET` 和 `VITE_FLOW_PROXY_TARGET` 是否指向本地服务。
 
 ### Q: 新增配置项需要注意什么？
-A: 如果新增的配置项是通用的，请同步更新到 `application-dev.example.yml` 模板中，敏感信息用占位符代替。
+
+A: 本地敏感配置不要提交；通用配置请同步到 `application-dev.example.yml`，密码、密钥、AK/SK 等统一使用占位符。
 
 ### Q: 不小心提交了敏感配置怎么办？
-A:
-1. 立即修改密码
-2. 执行 `git rm --cached <file>` 从仓库中移除文件
-3. 将文件加入 `.gitignore`
-4. 提交并推送到仓库
+
+A: 立即更换相关密码或密钥，然后从仓库历史和当前索引中清理敏感文件，并补充 `.gitignore` 规则。
 
 ---
 
 ## 📝 更新日志
 
-查看 [CHANGELOG.md](CHANGELOG.md) 了解项目的版本更新历史。
+查看 [CHANGELOG.md](CHANGELOG.md) 了解项目版本变化。
 
 ## 🤝 贡献指南
 
-欢迎提交 Issue 和 Pull Request。
+欢迎提交 Issue 和 Pull Request。建议提交前先说明问题背景、复现步骤或功能目标，便于更快讨论和合并。
 
-## 📮 联系作者 项目合作，沟通交流，欢迎各位老板打扰👏🏻
+---
+
+## 📮 联系作者
+
+项目合作、技术交流、功能建议欢迎联系。
+
 <img src="images/wechat.png" width="200">
 <img src="images/wechat1.png" width="200">
 <img src="images/微信群.png" width="200">
 
+---
+
 ## 💖 开源赞助支持
-> 感谢各位大佬赞助支持项目持续迭代、维护与开源分享，所有赞助不分金额，都是莫大鼓励！
+
+感谢每一位朋友对项目持续迭代、维护和开源分享的支持。所有赞助不分金额，都会记录在 README 中。
 
 ### 赞助规则
-- 微信转账/赞赏均可
-- 赞助后可提供：**微信昵称、自定义备注、个人诉求、GitHub/Gitee 主页**
-- 永久公示在本项目 README 赞助名单中
+
+- 微信转账/赞赏均可。
+- 赞助后可提供：**微信昵称、自定义备注、个人诉求、GitHub/Gitee 主页**。
+- 赞助名单长期展示在本项目 README 中。
 
 ### 🏆 赞助名单
-| 序号 |   微信昵称    |  赞助金额   | 赞助时间 | 个人诉求 / 备注       |
-|:--:|:---------:|:-------:|:---:|:----------------|
-| 1  | Jacstybao | ¥30.00  | 2025-05-12 | 希望升级springBoot4 |
-| 2  |    白哥     | ¥200.00 | 2025-05-12 | 开源赞助            |
-| 2  |    *超     | ¥30.00  | 2025-05-12 | 开源赞助            |
 
----
+| 序号 | 微信昵称 | 赞助金额 | 赞助时间 | 个人诉求 / 备注 |
+|:--:|:--:|:--:|:--:|:--|
+| 1 | Jacstybao | ¥30.00 | 2025-05-12 | 希望升级 springBoot4 |
+| 2 | 白哥 | ¥200.00 | 2025-05-12 | 开源赞助 |
+| 3 | *超 | ¥30.00 | 2025-05-12 | 开源赞助 |
+
 ### 赞助方式
+
 扫码微信即可赞助，备注「开源赞助」，我会及时录入名单更新 README。
+
 <img src="images/微信收款码.png" width="200">
 
+---
+
 ## 📄 许可证
+
 本项目基于 [MIT](LICENSE) 许可证开源。
