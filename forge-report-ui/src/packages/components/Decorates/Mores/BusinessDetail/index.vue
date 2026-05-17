@@ -7,7 +7,9 @@
         <p v-if="option.subtitle">{{ option.subtitle }}</p>
       </div>
     </header>
-    <div class="detail-grid" :style="{ gridTemplateColumns: `repeat(${option.columns || 2}, minmax(0, 1fr))` }">
+    <div v-if="loading" class="detail-state">加载中...</div>
+    <div v-else-if="errorMessage" class="detail-state is-error">{{ errorMessage }}</div>
+    <div v-else class="detail-grid" :style="{ gridTemplateColumns: `repeat(${option.columns || 2}, minmax(0, 1fr))` }">
       <div
         v-for="field in option.fields"
         :key="field.key"
@@ -19,6 +21,13 @@
         <div v-else-if="field.type === 'tag'" class="value-tag" :style="{ color: field.color, borderColor: field.color }">
           {{ formatValue(field) }}
         </div>
+        <a v-else-if="field.type === 'link'" class="value-link" :href="formatLink(field)" :target="field.openTarget || '_self'">
+          {{ formatValue(field) }}
+        </a>
+        <div v-else-if="field.type === 'progress'" class="value-progress">
+          <span><i :style="{ width: `${clampPercent(getValue(field.key))}%` }"></i></span>
+          <em>{{ clampPercent(getValue(field.key)) }}{{ field.unit || '%' }}</em>
+        </div>
         <div v-else class="value">{{ formatValue(field) }}</div>
       </div>
     </div>
@@ -26,8 +35,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, PropType, ref, unref } from 'vue'
+import { computed, inject, onMounted, PropType, ref, unref, watch } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
+import { get, post } from '@/api/http'
 import { PREVIEW_PAGE_CONTEXT_KEY } from '@/utils/requestDynamicParams'
 import type { DetailField, option as defaultOption } from './config'
 
@@ -39,8 +49,18 @@ const props = defineProps({
 })
 
 const pageContext = inject(PREVIEW_PAGE_CONTEXT_KEY, ref({}))
+const detailData = ref<Record<string, any>>({})
+const loading = ref(false)
+const errorMessage = ref('')
 const option = computed(() => props.chartConfig.option)
-const data = computed(() => ({ ...(option.value.data || {}), ...(unref(pageContext) || {}) }))
+const apiOption = computed(() => ({
+  detailUrl: '',
+  method: 'get',
+  dataPath: 'data',
+  paramMap: { id: 'id' },
+  ...(option.value.api || {})
+}))
+const data = computed(() => ({ ...(option.value.data || {}), ...(unref(pageContext) || {}), ...(detailData.value || {}) }))
 const rootStyle = computed(() => ({
   '--detail-accent': option.value.style.accentColor,
   '--detail-text': option.value.style.textColor,
@@ -52,12 +72,64 @@ const rootStyle = computed(() => ({
 
 const getByPath = (target: any, path: string) => path.split('.').reduce((current, key) => current?.[key], target)
 const getValue = (key: string) => getByPath(data.value, key)
+
+const templateUrl = (template: string, row: Record<string, any>) =>
+  template.replace(/\$\{([^}]+)\}/g, (_, key) => String(getByPath(row, key) ?? ''))
+
+const buildParams = () => {
+  const context = unref(pageContext) || {}
+  const params: Record<string, any> = {}
+  Object.entries(apiOption.value.paramMap || {}).forEach(([targetKey, sourceKey]) => {
+    const value = getByPath(context, sourceKey)
+    if (value !== undefined && value !== null && value !== '') params[targetKey] = value
+  })
+  return params
+}
+
+const normalizeDetail = (payload: any) => {
+  const detail = apiOption.value.dataPath ? getByPath(payload, apiOption.value.dataPath) : payload?.data
+  return detail && typeof detail === 'object' ? detail : {}
+}
+
+const fetchDetail = async () => {
+  if (!apiOption.value.detailUrl) {
+    detailData.value = {}
+    errorMessage.value = ''
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const params = buildParams()
+    const method = apiOption.value.method === 'post' ? post : get
+    const res = await method(apiOption.value.detailUrl, params)
+    detailData.value = normalizeDetail(res)
+  } catch (error) {
+    console.error(error)
+    errorMessage.value = '详情数据加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
 const formatValue = (field: DetailField) => {
   const value = getValue(field.key)
   if (field.type === 'money') return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (field.type === 'date' && value) return String(value).slice(0, 10)
+  if (field.type === 'progress') return `${clampPercent(value)}${field.unit || '%'}`
   return value ?? '-'
 }
+
+const formatLink = (field: DetailField) => field.urlTemplate ? templateUrl(field.urlTemplate, data.value) : String(getValue(field.key) || '#')
+const clampPercent = (value: any) => Math.min(100, Math.max(0, Number(value) || 0))
+
+watch(
+  () => [apiOption.value.detailUrl, apiOption.value.method, apiOption.value.dataPath, apiOption.value.paramMap, unref(pageContext)],
+  fetchDetail,
+  { deep: true }
+)
+
+onMounted(fetchDetail)
 </script>
 
 <style scoped lang="scss">
@@ -102,6 +174,19 @@ const formatValue = (field: DetailField) => {
 .detail-grid {
   display: grid;
   gap: 10px;
+  max-height: calc(100% - 48px);
+  overflow: auto;
+}
+
+.detail-state {
+  display: grid;
+  height: calc(100% - 48px);
+  place-items: center;
+  color: var(--detail-muted);
+}
+
+.detail-state.is-error {
+  color: #fb7185;
 }
 
 .detail-item {
@@ -134,6 +219,40 @@ const formatValue = (field: DetailField) => {
   border: 1px solid;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
+}
+
+.value-link {
+  color: var(--detail-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.value-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  span {
+    position: relative;
+    flex: 1;
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--detail-accent), #34d399);
+  }
+
+  em {
+    color: var(--detail-muted);
+    font-size: 12px;
+    font-style: normal;
+  }
 }
 
 .value-image {
