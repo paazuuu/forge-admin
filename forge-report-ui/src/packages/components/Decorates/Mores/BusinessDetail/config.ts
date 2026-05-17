@@ -8,14 +8,23 @@ export interface DetailField {
   label: string
   key: string
   span?: number
-  type?: 'text' | 'tag' | 'money' | 'date' | 'image'
+  type?: 'text' | 'tag' | 'money' | 'date' | 'image' | 'link' | 'progress'
   color?: string
+  unit?: string
+  urlTemplate?: string
+  openTarget?: '_self' | '_blank'
 }
 
 export const option = {
   title: '业务详情',
   subtitle: '弹窗和下钻页面信息面板',
   columns: 2,
+  api: {
+    detailUrl: '',
+    method: 'get' as 'get' | 'post',
+    dataPath: 'data',
+    paramMap: { id: 'id' } as Record<string, string>
+  },
   fields: [
     { label: '项目名称', key: 'name', span: 2 },
     { label: '状态', key: 'status', type: 'tag', color: '#34d399' },
