@@ -36,6 +36,8 @@
         :load-detail-on-edit="true"
         :edit-grid-cols="2"
         modal-width="900px"
+        max-height="var(--storage-table-max-height)"
+        :search-y-gap="8"
       >
         <!-- 自定义表单项：允许的文件类型 -->
         <template #form-allowedTypes="{ value, updateValue }">
@@ -607,18 +609,22 @@ function handleCreateBucket(row) {
 
 <style scoped>
 .storage-config-page {
+  --storage-table-max-height: calc(100vh - 244px);
   height: 100%;
-  padding: 20px;
+  min-height: 0;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  overflow: hidden;
 }
 
 /* 页面头部 */
 .page-header {
+  flex-shrink: 0;
   background: #fff;
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -638,14 +644,14 @@ function handleCreateBucket(row) {
 }
 
 .title-icon {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .title-icon.storage-icon {
@@ -653,7 +659,7 @@ function handleCreateBucket(row) {
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -668,14 +674,30 @@ function handleCreateBucket(row) {
 .storage-content {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #fff;
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 12px 14px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
 .storage-content :deep(.ai-crud-page) {
   height: 100%;
+  min-height: 0;
+}
+
+.storage-content :deep(.ai-crud-main) {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.storage-content :deep(.ai-search-box) {
+  padding: 10px 12px 2px;
+}
+
+.storage-content :deep(.ai-table-toolbar) {
+  min-height: 42px;
+  padding: 8px 12px;
 }
 
 .file-types-input {
@@ -708,5 +730,47 @@ function handleCreateBucket(row) {
 .dark .storage-content {
   background: #0f172a !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 768px) {
+  .storage-config-page {
+    --storage-table-max-height: calc(100vh - 190px);
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .page-header {
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
+  .storage-content {
+    padding: 10px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-height: 720px) {
+  .storage-config-page {
+    --storage-table-max-height: calc(100vh - 184px);
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .page-header {
+    padding: 10px 14px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
+  .storage-content {
+    padding: 10px 12px;
+  }
 }
 </style>

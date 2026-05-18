@@ -52,6 +52,8 @@
         add-button-text="新增定时任务"
         :before-submit="beforeSubmit"
         modal-type="modal"
+        max-height="var(--job-table-max-height)"
+        :search-y-gap="8"
       >
         <!-- Cron表达式自定义插槽 -->
         <template #form-cronExpression="{ value, updateValue }">
@@ -542,21 +544,26 @@ function handleCleanLogs(days) {
 
 <style scoped>
 .job-config-page {
+  --job-table-max-height: calc(100vh - 248px);
   height: 100%;
-  padding: 20px;
+  min-height: 0;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  overflow: hidden;
 }
 
 /* 页面头部 */
 .page-header {
+  flex-shrink: 0;
   background: #fff;
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
@@ -573,14 +580,14 @@ function handleCleanLogs(days) {
 }
 
 .title-icon {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .title-icon.job-icon {
@@ -588,7 +595,7 @@ function handleCleanLogs(days) {
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -609,14 +616,30 @@ function handleCleanLogs(days) {
 .job-content {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #fff;
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 12px 14px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
 .job-content :deep(.ai-crud-page) {
   height: 100%;
+  min-height: 0;
+}
+
+.job-content :deep(.ai-crud-main) {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.job-content :deep(.ai-search-box) {
+  padding: 10px 12px 2px;
+}
+
+.job-content :deep(.ai-table-toolbar) {
+  min-height: 42px;
+  padding: 8px 12px;
 }
 
 /* Cron选择器样式 */
@@ -697,5 +720,54 @@ function handleCleanLogs(days) {
 .dark .job-content :deep(.cron-expr) {
   color: #fbbf24;
   background: #422006;
+}
+
+@media (max-width: 768px) {
+  .job-config-page {
+    --job-table-max-height: calc(100vh - 212px);
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
+  .header-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .job-content {
+    padding: 10px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-height: 720px) {
+  .job-config-page {
+    --job-table-max-height: calc(100vh - 190px);
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .page-header {
+    padding: 10px 14px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
+  .job-content {
+    padding: 10px 12px;
+  }
 }
 </style>

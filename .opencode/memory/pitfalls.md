@@ -585,3 +585,17 @@ for (const rawLine of block.split(/\r?\n/)) {
 - 业务定义绑定数据集
 - 数据集字段、权限、行级权限等主从表编辑表单
 - 所有依赖详情接口回显嵌套数组的 AiCrudPage 页面
+
+## 13. sys_file_metadata 不是标准业务审计表
+
+**发现日期**: 2026-05-18
+
+**问题描述**:
+通用文件表 `sys_file_metadata` 的建表脚本只包含 `create_time`、`update_time`、`uploader_id`、`upload_time` 等文件元数据字段，没有 `create_by`、`create_dept`、`update_by` 这些标准业务表审计字段。
+
+**解决方案**:
+从 `sys_file_metadata` 做迁移脚本时，不要直接引用 `create_by` / `create_dept` / `update_by`。需要创建业务表审计字段时，优先用 `uploader_id` 映射创建人/更新人，用 `upload_time` 映射创建时间，`create_dept` 置空或按业务上下文单独补齐。
+
+**影响范围**:
+- 文件表迁移到业务表的 SQL
+- 报表素材、通知附件等以文件 ID 关联业务数据的场景

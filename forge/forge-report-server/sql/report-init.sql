@@ -174,6 +174,26 @@ CREATE TABLE `ai_report_template`
     KEY                `idx_template_create_by` (`create_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='模板表';
 
+-- forge_admin_new.ai_report_material definition
+
+CREATE TABLE `ai_report_material`
+(
+    `id`                bigint      NOT NULL COMMENT '主键ID',
+    `tenant_id`         bigint      NOT NULL DEFAULT '1' COMMENT '租户ID',
+    `file_id`           varchar(64) NOT NULL COMMENT '通用文件ID',
+    `material_category` varchar(50) NOT NULL DEFAULT 'background' COMMENT '素材分类(background/panel/icon/illustration)',
+    `status`            tinyint(1)  NOT NULL DEFAULT '1' COMMENT '状态(1正常 0删除)',
+    `create_by`         bigint               DEFAULT NULL COMMENT '创建者',
+    `create_time`       datetime             DEFAULT NULL COMMENT '创建时间',
+    `create_dept`       bigint               DEFAULT NULL COMMENT '创建部门',
+    `update_by`         bigint               DEFAULT NULL COMMENT '更新者',
+    `update_time`       datetime             DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_report_material_file` (`tenant_id`, `file_id`),
+    KEY `idx_report_material_category` (`tenant_id`, `material_category`, `status`),
+    KEY `idx_report_material_create_by` (`create_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='报表素材表';
+
 INSERT INTO ai_agent (id, tenant_id, agent_name, agent_code, description, system_prompt, provider_id, model_name, temperature, max_tokens, extra_config, status, create_by, create_time, update_by, update_time, del_flag, create_dept) VALUES(1, 1, '大屏生成助手', 'dashboard_generator', '根据用户需求自动生成数据可视化大屏布局', '你是一个资深数据可视化大屏设计专家。你需要根据用户需求选择合适组件，设计规整、有主次、有视觉层级的大屏，并且只输出一个合法 JSON 对象。
 
 ## 画布

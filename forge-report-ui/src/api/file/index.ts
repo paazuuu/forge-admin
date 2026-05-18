@@ -1,6 +1,6 @@
 import type { AxiosRequestConfig } from 'axios'
 import axiosInstance from '@/api/axios'
-import { del, get, put } from '@/api/http'
+import { del, get, post, put } from '@/api/http'
 
 export interface FileUploadResult {
   fileId: string
@@ -83,10 +83,9 @@ export const getMaterialAssetPageApi = (params?: {
   businessId?: string
   isPrivate?: boolean
 }) => {
-  return get('/forge-report-api/system/file/metadata/page', {
+  return get('/forge-report-api/report/material/page', {
     pageNum: params?.pageNum ?? 1,
     pageSize: params?.pageSize ?? 24,
-    businessType: REPORT_MATERIAL_BUSINESS_TYPE,
     businessId: params?.businessId,
     originalName: params?.originalName,
     isPrivate: params?.isPrivate,
@@ -95,12 +94,34 @@ export const getMaterialAssetPageApi = (params?: {
 }
 
 export const deleteMaterialAssetApi = (fileId: string) => {
-  return del(`/forge-report-api/system/file/metadata/delete/${fileId}`) as unknown as Promise<{ code: number; data?: boolean; msg: string }>
+  return del(`/forge-report-api/report/material/${fileId}`) as unknown as Promise<{ code: number; data?: boolean; msg: string }>
 }
 
 export const getMaterialAssetDownloadUrl = (fileId: string) => `/forge-report-api/api/file/download/${fileId}`
 
 export const renameMaterialAssetApi = (fileId: string, originalName: string) => {
   const params = `fileId=${encodeURIComponent(fileId)}&originalName=${encodeURIComponent(originalName)}`
-  return put(`/forge-report-api/system/file/metadata/rename?${params}`) as unknown as Promise<{ code: number; msg: string }>
+  return put(`/forge-report-api/report/material/rename?${params}`) as unknown as Promise<{ code: number; msg: string }>
+}
+
+export const createMaterialAssetApi = (fileId: string, businessId: string) => {
+  return post('/forge-report-api/report/material', {
+    fileId,
+    businessId,
+    materialCategory: businessId
+  }) as unknown as Promise<{ code: number; data?: MaterialAsset; msg: string }>
+}
+
+export const uploadMaterialAssetApi = async (file: File, businessId: string, isPrivate = true) => {
+  const uploadRes = await uploadFileApi(file, REPORT_MATERIAL_BUSINESS_TYPE, businessId, isPrivate)
+  if (uploadRes.code !== 200 || !uploadRes.data?.fileId) {
+    throw new Error(uploadRes.msg || '素材上传失败')
+  }
+
+  const createRes = await createMaterialAssetApi(uploadRes.data.fileId, businessId)
+  if (createRes.code !== 200) {
+    throw new Error(createRes.msg || '素材入库失败')
+  }
+
+  return uploadRes
 }

@@ -259,9 +259,8 @@ import {
   getMaterialAssetDownloadUrl,
   getMaterialAssetPageApi,
   renameMaterialAssetApi,
-  REPORT_MATERIAL_BUSINESS_TYPE,
   reportMaterialCategoryOptions,
-  uploadFileApi
+  uploadMaterialAssetApi
 } from '@/api/file'
 import type { MaterialAsset, ReportMaterialCategory } from '@/api/file'
 import { StorageEnum } from '@/enums/storageEnum'
@@ -432,7 +431,7 @@ const handleUploadRequest = async (options: UploadCustomRequestOptions) => {
 
   uploading.value = true
   try {
-    const res = await uploadFileApi(rawFile as File, REPORT_MATERIAL_BUSINESS_TYPE, uploadCategory.value, uploadVisibility.value)
+    const res = await uploadMaterialAssetApi(rawFile as File, uploadCategory.value, uploadVisibility.value)
     if (res.code === 200) {
       options.onFinish?.()
       window['$message']?.success('素材上传成功')
