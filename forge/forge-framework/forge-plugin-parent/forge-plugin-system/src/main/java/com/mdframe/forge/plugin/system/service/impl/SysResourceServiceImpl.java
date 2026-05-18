@@ -274,6 +274,7 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
         vo.setVisible(resource.getVisible());
         vo.setPerms(resource.getPerms());
         vo.setIcon(resource.getIcon());
+        vo.setClientCode(resource.getClientCode());
         vo.setApiMethod(resource.getApiMethod());
         vo.setApiUrl(resource.getApiUrl());
         vo.setKeepAlive(resource.getKeepAlive());

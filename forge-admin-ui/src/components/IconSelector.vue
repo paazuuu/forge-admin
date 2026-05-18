@@ -1,6 +1,6 @@
 <template>
   <div class="icon-selector">
-    <n-button ghost :disabled="disabled" style="width: 100%" @click="showDrawer = true">
+    <n-button v-if="trigger" ghost :disabled="disabled" style="width: 100%" @click="open">
       <template v-if="modelValue">
         <IconRenderer :icon="modelValue" custom-class="icon-preview" />
         <span class="icon-text">{{ formatDisplayName(modelValue) }}</span>
@@ -38,16 +38,39 @@
               style="margin-bottom: 12px"
             />
             <n-tabs v-model:value="activeTab" type="segment" size="small">
+              <n-tab v-if="currentImagePreview" name="currentImage">
+                当前图片
+              </n-tab>
               <n-tab name="ionicons">
                 Ionicons
               </n-tab>
               <n-tab name="local">
                 本地图标
               </n-tab>
+              <n-tab name="localImages">
+                本地图片
+              </n-tab>
+              <n-tab name="uploadImage">
+                上传图片
+              </n-tab>
             </n-tabs>
           </div>
 
-          <div class="icon-selector-content" style="max-height: 500px; overflow-y: auto">
+          <div ref="contentRef" class="icon-selector-content">
+            <div v-if="activeTab === 'currentImage'" class="current-image-panel">
+              <div class="current-image-preview selected">
+                <IconRenderer :icon="modelValue" :size="44" />
+                <div class="current-image-meta">
+                  <div class="current-image-title">
+                    当前图片图标
+                  </div>
+                  <div class="current-image-name">
+                    {{ formatDisplayName(modelValue) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div v-if="activeTab === 'ionicons'" class="icon-grid">
               <div
                 v-for="icon in filteredIonicons"
@@ -83,6 +106,38 @@
                 未找到匹配的图标
               </div>
             </div>
+
+            <div v-if="activeTab === 'localImages'" class="icon-grid">
+              <div
+                v-for="icon in filteredLocalImageIcons"
+                :key="icon.value"
+                class="icon-item"
+                :class="{ selected: isIconSelected(icon.value, 'localImages') }"
+                @click="selectLocalImageIcon(icon.value)"
+              >
+                <IconRenderer :icon="icon.value" :size="32" />
+                <div class="icon-name">
+                  {{ icon.displayName }}
+                </div>
+              </div>
+              <div v-if="filteredLocalImageIcons.length === 0" class="no-icons">
+                未找到匹配的图片图标
+              </div>
+            </div>
+
+            <div v-if="activeTab === 'uploadImage'" class="upload-image-panel">
+              <ImageUpload
+                :model-value="uploadImageValue"
+                :limit="1"
+                :file-size="2"
+                :file-type="['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg']"
+                business-type="menu-icon"
+                :show-tip="true"
+                value-type="string"
+                @success="handleUploadSuccess"
+                @update:model-value="handleUploadValueChange"
+              />
+            </div>
           </div>
         </div>
       </n-drawer-content>
@@ -93,8 +148,9 @@
 <script setup>
 import * as ionicons from '@vicons/ionicons5'
 import icons from 'isme:icons'
-import { computed, onMounted, ref } from 'vue'
-import { loadSvgIcons } from '@/utils/svg-icons'
+import { computed, nextTick, ref, watch } from 'vue'
+import ImageUpload from '@/components/image-upload/index.vue'
+import { getLocalImageIconName, isLocalImageIcon, localImageIcons } from '@/utils/local-image-icons'
 import IconRenderer from './IconRenderer.vue'
 
 const props = defineProps({
@@ -106,6 +162,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  trigger: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -113,13 +173,10 @@ const emit = defineEmits(['update:modelValue'])
 const showDrawer = ref(false)
 const searchText = ref('')
 const activeTab = ref('ionicons')
-const localIconComponents = ref({})
+const contentRef = ref(null)
 
 // 获取所有 Ionicons 图标名称
 const ioniconNames = Object.keys(ionicons)
-
-// 获取所有本地图标名称
-const localIconNames = ref([])
 
 // 过滤 Ionicons 图标
 const filteredIonicons = computed(() => {
@@ -141,28 +198,28 @@ const filteredLocalIcons = computed(() => {
   })
 })
 
+const filteredLocalImageIcons = computed(() => {
+  if (!searchText.value)
+    return localImageIcons
+  return localImageIcons.filter((icon) => {
+    const keyword = searchText.value.toLowerCase()
+    return icon.name.toLowerCase().includes(keyword)
+      || icon.displayName.toLowerCase().includes(keyword)
+  })
+})
+
+const currentImagePreview = computed(() => {
+  const value = props.modelValue?.trim?.() || ''
+  if (!value || isLocalImageIcon(value))
+    return false
+  return isImageIconValue(value)
+})
+
+const uploadImageValue = computed(() => currentImagePreview.value ? props.modelValue : '')
+
 // 获取 Ionicons 图标组件
 function getIoniconComponent(name) {
   return ionicons[name]
-}
-
-// 获取本地图标组件
-function getLocalIconComponent(name) {
-  return localIconComponents.value[name] || null
-}
-
-// 获取图标组件
-function getIconComponent(name) {
-  if (!name)
-    return null
-
-  // 如果是 Ionicons 图标
-  if (ioniconNames.includes(name)) {
-    return getIoniconComponent(name)
-  }
-
-  // 如果是本地图标
-  return getLocalIconComponent(name)
 }
 
 // 格式化图标名称显示
@@ -195,6 +252,77 @@ function selectIcon(iconName) {
   showDrawer.value = false // 选择后关闭抽屉
 }
 
+function selectLocalImageIcon(iconValue) {
+  emit('update:modelValue', iconValue)
+  showDrawer.value = false
+}
+
+function normalizeUploadedIconValue(value) {
+  if (!value)
+    return ''
+  if (typeof value === 'string')
+    return value
+  return value.fileId || value.filePath || value.accessUrl || ''
+}
+
+function handleUploadSuccess(fileData) {
+  const value = normalizeUploadedIconValue(fileData)
+  if (!value)
+    return
+  emit('update:modelValue', value)
+  showDrawer.value = false
+}
+
+function handleUploadValueChange(value) {
+  const nextValue = normalizeUploadedIconValue(value)
+  emit('update:modelValue', nextValue)
+}
+
+function isImageIconValue(value) {
+  if (!value || typeof value !== 'string')
+    return false
+
+  const iconValue = value.trim()
+  if (!iconValue || isLocalImageIcon(iconValue))
+    return false
+
+  return iconValue.startsWith('http://')
+    || iconValue.startsWith('https://')
+    || iconValue.startsWith('data:')
+    || iconValue.startsWith('blob:')
+    || iconValue.startsWith('/api/file/')
+    || iconValue.startsWith('forge-file://')
+    || /^[a-f0-9]{32}$/i.test(iconValue)
+    || /\.(?:png|jpe?g|webp|gif|svg|avif)(?:\?.*)?$/i.test(iconValue)
+}
+
+function getInitialTab() {
+  const value = props.modelValue?.trim?.() || ''
+  if (!value)
+    return 'ionicons'
+  if (currentImagePreview.value)
+    return 'currentImage'
+  if (isLocalImageIcon(value))
+    return 'localImages'
+  if (value.startsWith('ionicons5:'))
+    return 'ionicons'
+  return 'local'
+}
+
+function scrollSelectedIntoView() {
+  const selectedEl = contentRef.value?.querySelector?.('.icon-item.selected')
+  selectedEl?.scrollIntoView?.({ block: 'center' })
+}
+
+function open() {
+  if (props.disabled)
+    return
+  searchText.value = ''
+  activeTab.value = getInitialTab()
+  showDrawer.value = true
+  nextTick(scrollSelectedIntoView)
+}
+
 // 清除选择
 function clearSelection() {
   emit('update:modelValue', '')
@@ -206,6 +334,9 @@ function clearSelection() {
 function isIconSelected(iconName, type) {
   if (!props.modelValue)
     return false
+
+  if (type === 'localImages')
+    return props.modelValue === iconName
 
   // 构建完整的图标名称（带前缀）
   const fullIconName = type === 'ionicons'
@@ -220,6 +351,16 @@ function formatDisplayName(iconValue) {
   if (!iconValue)
     return ''
 
+  if (isLocalImageIcon(iconValue))
+    return getLocalImageIconName(iconValue)
+
+  if (isImageIconValue(iconValue)) {
+    const filename = iconValue.split(/[\\/]/).pop() || iconValue
+    if (/^[a-f0-9]{32}$/i.test(iconValue))
+      return '上传图片图标'
+    return filename.length > 28 ? `${filename.slice(0, 12)}...${filename.slice(-10)}` : filename
+  }
+
   // 移除前缀，只显示图标名称
   if (iconValue.includes(':')) {
     return iconValue.split(':')[1]
@@ -228,21 +369,13 @@ function formatDisplayName(iconValue) {
   return iconValue
 }
 
-// 动态导入本地图标 暂时不用了
-async function loadLocalIcons() {
-  try {
-    const { components, names } = await loadSvgIcons()
-    localIconComponents.value = components
-    localIconNames.value = names
-  }
-  catch (error) {
-    console.error('加载本地图标失败:', error)
-  }
-}
+defineExpose({
+  open,
+})
 
-onMounted(() => {
-  // 暂时不用了
-  // loadLocalIcons()
+watch(activeTab, () => {
+  if (showDrawer.value)
+    nextTick(scrollSelectedIntoView)
 })
 </script>
 
@@ -259,6 +392,12 @@ onMounted(() => {
 .icon-selector-popover {
   width: 100%;
   padding: 12px;
+}
+
+.icon-selector-content {
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .icon-grid {
@@ -286,6 +425,36 @@ onMounted(() => {
 .icon-item.selected {
   background-color: #e6f4ff;
   border: 1px solid #1890ff;
+}
+
+.current-image-panel {
+  padding: 4px 0;
+}
+
+.current-image-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #1890ff;
+  border-radius: 6px;
+  background: #e6f4ff;
+}
+
+.current-image-title {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+}
+
+.current-image-name {
+  margin-top: 4px;
+  color: #666;
+  font-size: var(--font-size-sm);
+  word-break: break-all;
+}
+
+.upload-image-panel {
+  padding: 4px 0;
 }
 
 .icon {

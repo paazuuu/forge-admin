@@ -197,9 +197,9 @@
 <script setup>
 import { NButton, NInput, NInputNumber, NProgress, NSelect, NSwitch, NTag } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
-import { AiCrudPage } from '@/components/ai-form'
 import { deleteDataBusiness } from '@/api/data/business'
 import { getDataDatasetList } from '@/api/data/dataset'
+import { AiCrudPage } from '@/components/ai-form'
 
 defineOptions({ name: 'DataBusiness' })
 
@@ -507,7 +507,7 @@ function getBusinessReadiness(source = {}) {
     { key: 'usageGuide', score: 11, suggestion: '补充 AI 使用建议，说明数据集适合做哪些组件。' },
   ]
 
-  semanticFields.forEach(item => {
+  semanticFields.forEach((item) => {
     if (hasText(source[item.key])) {
       score += item.score
     }
@@ -548,8 +548,10 @@ function getBusinessReadiness(source = {}) {
 }
 
 function getReadinessColor(level) {
-  if (level === 'high') return '#0f766e'
-  if (level === 'medium') return '#d97706'
+  if (level === 'high')
+    return '#0f766e'
+  if (level === 'medium')
+    return '#d97706'
   return '#dc2626'
 }
 
@@ -711,7 +713,7 @@ function updateDatasetBinding(row, key, value, updateValue) {
 }
 
 function markPrimaryDataset(row, updateValue) {
-  row.__owner.forEach(item => {
+  row.__owner.forEach((item) => {
     item.isPrimary = item.__key === row.__key ? 1 : 0
   })
   updateValue(cleanDatasetBindings(row.__owner))
@@ -788,7 +790,7 @@ function datasetBindingColumns(updateValue) {
       width: 100,
       render: row => h(NSwitch, {
         value: row.isPrimary === 1,
-        onUpdateValue: checked => {
+        onUpdateValue: (checked) => {
           if (checked) {
             markPrimaryDataset(row, updateValue)
           }

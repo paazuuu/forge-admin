@@ -17,6 +17,7 @@
 import { NMenu } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import IconRenderer from '@/components/IconRenderer.vue'
 import { useMenu } from '@/composables'
 import { usePermissionStore } from '@/store'
 
@@ -57,7 +58,7 @@ function processMenuData(menuItems) {
 
     // 设置图标
     if (item.icon && item.icon.trim() !== '') {
-      menuItem.icon = () => h('i', { class: item.icon })
+      menuItem.icon = () => h(IconRenderer, { icon: item.icon, size: 18 })
     }
 
     // 对于menu类型，设置路由路径和点击事件

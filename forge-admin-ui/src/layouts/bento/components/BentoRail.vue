@@ -24,7 +24,7 @@
         :title="item.label"
         @click="handleMenuSelect(item)"
       >
-        <i :class="item.iconClass" />
+        <IconRenderer :icon="item.iconClass" :size="20" />
       </div>
     </div>
 
@@ -71,6 +71,7 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import TheLogo from '@/components/common/TheLogo.vue'
+import IconRenderer from '@/components/IconRenderer.vue'
 import { useMenu, useUser } from '@/composables'
 import { MessageNotification } from '@/layouts/components'
 import { useAppStore, usePermissionStore } from '@/store'

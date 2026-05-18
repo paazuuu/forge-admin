@@ -32,6 +32,7 @@ public class UserResourceTreeVO implements Serializable {
     private Integer visible;
     private String perms;
     private String icon;
+    private String clientCode;
     private Integer keepAlive;
     private Integer alwaysShow;
     private String redirect;

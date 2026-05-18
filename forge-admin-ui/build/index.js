@@ -20,6 +20,8 @@ export function getIcons() {
  * @usage 生成.vue文件路径列表，用于添加菜单时可下拉选择对应的.vue文件路径，防止手动输入报错
  */
 export function getPagePathes() {
-  const files = globSync('src/views/**/*.vue')
+  const files = globSync('src/views/**/*.vue', {
+    ignore: ['src/views/**/components/**', 'src/views/**/api/**'],
+  })
   return files.map(item => `/${path.normalize(item).replace(/\\/g, '/')}`)
 }

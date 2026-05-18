@@ -22,7 +22,7 @@
               <IconRenderer
                 v-if="item.icon"
                 :icon="item.icon"
-                :size="18"
+                :size="19"
                 class="nav-icon"
               />
               <span class="nav-label">{{ item.label }}</span>

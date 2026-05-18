@@ -13,7 +13,13 @@
       <template #default="{ option }">
         <div class="menu-item-content">
           <!-- 图标 -->
-          <i v-if="option.icon" :class="option.icon" class="menu-icon" />
+          <IconRenderer
+            v-if="option.icon"
+            :icon="option.icon"
+            :size="18"
+            custom-class="menu-icon"
+            class="menu-icon"
+          />
 
           <!-- 标签文字 -->
           <span class="menu-label">{{ option.label }}</span>
@@ -44,6 +50,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import IconRenderer from '@/components/IconRenderer.vue'
 import { useMenu } from '@/composables'
 import { useMenuStore } from '@/store'
 
