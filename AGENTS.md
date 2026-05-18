@@ -340,6 +340,8 @@ forge-admin-ui/src/
 - 字符集 `utf8mb4`，引擎 `InnoDB`
 - 金额字段用 `long`，单位**分**
 - 时间字段用 `LocalDateTime`
+### 5.11 数据库脚本维护规范
+- [migration](forge/db/migration) 增量脚本放到这俩 参考flyway的规范
 
 ---
 

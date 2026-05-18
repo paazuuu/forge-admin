@@ -182,6 +182,7 @@ CREATE TABLE `ai_report_material`
     `tenant_id`         bigint      NOT NULL DEFAULT '1' COMMENT '租户ID',
     `file_id`           varchar(64) NOT NULL COMMENT '通用文件ID',
     `material_category` varchar(50) NOT NULL DEFAULT 'background' COMMENT '素材分类(background/panel/icon/illustration)',
+    `is_private`        tinyint(1)  NOT NULL DEFAULT '1' COMMENT '是否私有(1私有 0公共)',
     `status`            tinyint(1)  NOT NULL DEFAULT '1' COMMENT '状态(1正常 0删除)',
     `create_by`         bigint               DEFAULT NULL COMMENT '创建者',
     `create_time`       datetime             DEFAULT NULL COMMENT '创建时间',
@@ -191,6 +192,7 @@ CREATE TABLE `ai_report_material`
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_report_material_file` (`tenant_id`, `file_id`),
     KEY `idx_report_material_category` (`tenant_id`, `material_category`, `status`),
+    KEY `idx_report_material_scope` (`tenant_id`, `is_private`, `create_by`, `status`),
     KEY `idx_report_material_create_by` (`create_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='报表素材表';
 

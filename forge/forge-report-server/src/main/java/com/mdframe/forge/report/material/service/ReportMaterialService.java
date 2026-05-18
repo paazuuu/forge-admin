@@ -70,21 +70,33 @@ public class ReportMaterialService extends ServiceImpl<ReportMaterialMapper, Rep
                 && !REPORT_MATERIAL_BUSINESS_TYPE.equals(metadata.getBusinessType())) {
             throw new BusinessException("文件不是报表素材类型");
         }
-        checkOperatePermission(metadata);
 
         Long tenantId = currentTenantId();
         ReportMaterial existing = materialMapper.selectActiveByFileId(tenantId, fileId);
         if (existing != null) {
+            checkOperatePermission(existing);
             existing.setMaterialCategory(category);
+            if (dto.getIsPrivate() != null) {
+                checkVisibilityPermission(dto.getIsPrivate());
+                existing.setIsPrivate(dto.getIsPrivate());
+            }
             updateById(existing);
             return getMaterialByFileId(fileId);
         }
+
+        Boolean materialPrivate = dto.getIsPrivate() != null
+                ? dto.getIsPrivate() : Boolean.TRUE.equals(metadata.getIsPrivate());
+        checkCreatePermission(metadata, materialPrivate);
 
         ReportMaterial material = new ReportMaterial();
         material.setTenantId(tenantId);
         material.setFileId(fileId);
         material.setMaterialCategory(category);
+        material.setIsPrivate(materialPrivate);
         material.setStatus(1);
+        Long ownerId = metadata.getUploaderId() != null ? metadata.getUploaderId() : SessionHelper.getUserId();
+        material.setCreateBy(ownerId);
+        material.setUpdateBy(ownerId);
         save(material);
         return getMaterialByFileId(fileId);
     }
@@ -97,8 +109,8 @@ public class ReportMaterialService extends ServiceImpl<ReportMaterialMapper, Rep
         if (!StringUtils.hasText(fileId)) {
             throw new BusinessException("文件ID不能为空");
         }
-        FileMetadata metadata = requireFileMetadata(fileId);
-        checkOperatePermission(metadata);
+        ReportMaterial material = requireActiveMaterial(fileId);
+        checkOperatePermission(material);
         int deleted = materialMapper.markDeletedByFileId(currentTenantId(), fileId.trim());
         if (deleted <= 0) {
             throw new BusinessException("素材不存在");
@@ -117,8 +129,9 @@ public class ReportMaterialService extends ServiceImpl<ReportMaterialMapper, Rep
         if (!StringUtils.hasText(originalName)) {
             throw new BusinessException("素材名称不能为空");
         }
-        FileMetadata metadata = requireFileMetadata(fileId);
-        checkOperatePermission(metadata);
+        ReportMaterial material = requireActiveMaterial(fileId);
+        checkOperatePermission(material);
+        requireFileMetadata(fileId);
         fileClient.rename(fileId.trim(), originalName.trim());
     }
 
@@ -134,15 +147,43 @@ public class ReportMaterialService extends ServiceImpl<ReportMaterialMapper, Rep
         return metadata;
     }
 
-    private void checkOperatePermission(FileMetadata metadata) {
+    private ReportMaterial requireActiveMaterial(String fileId) {
+        ReportMaterial material = materialMapper.selectActiveByFileId(currentTenantId(), fileId.trim());
+        if (material == null) {
+            throw new BusinessException("素材不存在");
+        }
+        return material;
+    }
+
+    private void checkCreatePermission(FileMetadata metadata, Boolean materialPrivate) {
+        checkVisibilityPermission(materialPrivate);
         if (SessionHelper.hasPermission("*:*:*")) {
             return;
         }
         Long currentUserId = SessionHelper.getUserId();
-        if (!Boolean.TRUE.equals(metadata.getIsPrivate())) {
+        if (currentUserId == null || !currentUserId.equals(metadata.getUploaderId())) {
+            throw new BusinessException("无权操作他人素材");
+        }
+    }
+
+    private void checkVisibilityPermission(Boolean materialPrivate) {
+        if (SessionHelper.hasPermission("*:*:*")) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(materialPrivate)) {
             throw new BusinessException("只有管理员才能维护公共素材");
         }
-        if (currentUserId == null || !currentUserId.equals(metadata.getUploaderId())) {
+    }
+
+    private void checkOperatePermission(ReportMaterial material) {
+        if (SessionHelper.hasPermission("*:*:*")) {
+            return;
+        }
+        Long currentUserId = SessionHelper.getUserId();
+        if (!Boolean.TRUE.equals(material.getIsPrivate())) {
+            throw new BusinessException("只有管理员才能维护公共素材");
+        }
+        if (currentUserId == null || !currentUserId.equals(material.getCreateBy())) {
             throw new BusinessException("无权操作他人素材");
         }
     }

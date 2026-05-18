@@ -104,11 +104,12 @@ export const renameMaterialAssetApi = (fileId: string, originalName: string) => 
   return put(`/forge-report-api/report/material/rename?${params}`) as unknown as Promise<{ code: number; msg: string }>
 }
 
-export const createMaterialAssetApi = (fileId: string, businessId: string) => {
+export const createMaterialAssetApi = (fileId: string, businessId: string, isPrivate = true) => {
   return post('/forge-report-api/report/material', {
     fileId,
     businessId,
-    materialCategory: businessId
+    materialCategory: businessId,
+    isPrivate
   }) as unknown as Promise<{ code: number; data?: MaterialAsset; msg: string }>
 }
 
@@ -118,7 +119,7 @@ export const uploadMaterialAssetApi = async (file: File, businessId: string, isP
     throw new Error(uploadRes.msg || '素材上传失败')
   }
 
-  const createRes = await createMaterialAssetApi(uploadRes.data.fileId, businessId)
+  const createRes = await createMaterialAssetApi(uploadRes.data.fileId, businessId, isPrivate)
   if (createRes.code !== 200) {
     throw new Error(createRes.msg || '素材入库失败')
   }

@@ -1,38 +1,13 @@
 <template>
   <div class="dataset-param-editor">
     <div class="editor-toolbar">
-      <div class="editor-toolbar__content">
-        <div class="editor-toolbar__title">
-          {{ editorTitle }}
-        </div>
-        <n-text depth="3">
-          {{ helperText }}
-        </n-text>
-      </div>
+      <n-text depth="3">
+        {{ helperText }}
+      </n-text>
 
-      <n-space align="center" :size="8">
-        <n-button type="primary" secondary :disabled="readonly" @click="handleAddRow">
-          <template #icon>
-            <n-icon><AddOutline /></n-icon>
-          </template>
-          新增条件
-        </n-button>
-        <template v-if="!isTableMode">
-          <n-button secondary :disabled="readonly" @click="handleImportSqlParams">
-            从 SQL 识别
-          </n-button>
-          <n-tag size="small" :bordered="false" type="info">
-            已识别 {{ sqlParamNames.length }} 个 SQL 参数
-          </n-tag>
-        </template>
-      </n-space>
-    </div>
-
-    <div class="editor-summary-strip">
-      <div v-for="item in editorStatItems" :key="item.label" class="editor-summary-card">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-      </div>
+      <n-tag v-if="!isTableMode" size="small" :bordered="false" type="info">
+        已识别 {{ sqlParamNames.length }} 个 SQL 参数
+      </n-tag>
     </div>
 
     <div v-if="isTableMode && !tableReady" class="editor-alert">
@@ -43,13 +18,13 @@
 
     <div v-if="rows.length > 0" class="editor-body">
       <div class="editor-head" :style="gridStyle">
-        <span>{{ paramColumnTitle }}</span>
-        <span>条件名称</span>
-        <span>参数类型</span>
+        <span>参数名</span>
+        <span>类型</span>
         <span v-if="isTableMode">匹配方式</span>
         <span v-if="isTableMode">数据表字段</span>
-        <span>必填</span>
         <span>默认值</span>
+        <span>必须</span>
+        <span>说明</span>
         <span>操作</span>
       </div>
 
@@ -58,43 +33,22 @@
         :key="row.__key"
         class="editor-row-card"
       >
-        <div class="editor-row-card__header">
-          <div class="editor-row-card__title">
-            条件 {{ String(index + 1).padStart(2, '0') }}
-          </div>
-          <span class="editor-row-badge" :class="getRowBadgeClass(row)">
-            {{ getRowBadgeLabel(row) }}
-          </span>
-        </div>
-
         <div class="editor-row" :style="gridStyle">
           <div class="editor-cell">
             <div class="editor-cell__label">
-              {{ paramColumnTitle }}
+              参数名
             </div>
             <n-input
               v-model:value="row.paramName"
               :disabled="readonly"
               clearable
-              placeholder="如 startTime"
+              placeholder="如 start_time"
             />
           </div>
 
           <div class="editor-cell">
             <div class="editor-cell__label">
-              条件名称
-            </div>
-            <n-input
-              v-model:value="row.label"
-              :disabled="readonly"
-              clearable
-              :placeholder="isTableMode ? '如 开始时间' : '如 创建开始时间'"
-            />
-          </div>
-
-          <div class="editor-cell">
-            <div class="editor-cell__label">
-              参数类型
+              类型
             </div>
             <n-select
               v-model:value="row.dataType"
@@ -134,13 +88,6 @@
             />
           </div>
 
-          <div class="editor-cell editor-cell--switch">
-            <div class="editor-cell__label">
-              必填
-            </div>
-            <n-switch v-model:value="row.required" :disabled="readonly" />
-          </div>
-
           <div class="editor-cell">
             <div class="editor-cell__label">
               默认值
@@ -151,6 +98,25 @@
               clearable
               :placeholder="getDefaultValuePlaceholder(row.dataType)"
               @update:value="value => handleDefaultValueChange(index, value)"
+            />
+          </div>
+
+          <div class="editor-cell editor-cell--switch">
+            <div class="editor-cell__label">
+              必须
+            </div>
+            <n-switch v-model:value="row.required" :disabled="readonly" />
+          </div>
+
+          <div class="editor-cell">
+            <div class="editor-cell__label">
+              说明
+            </div>
+            <n-input
+              v-model:value="row.label"
+              :disabled="readonly"
+              clearable
+              :placeholder="isTableMode ? '如 开始时间（含）' : '如 订单状态'"
             />
           </div>
 
@@ -165,26 +131,25 @@
             </n-button>
           </div>
         </div>
-
-        <div v-if="!isTableMode" class="editor-row-tip">
-          <template v-if="isSqlParamLinked(row.paramName)">
-            SQL 已引用 <code>:{{ row.paramName }}</code>，报表侧可直接绑定这个条件。
-          </template>
-          <template v-else>
-            当前 SQL 还没有引用 <code>:{{ row.paramName || 'paramName' }}</code>，保存前需要先写进 SQL。
-          </template>
-        </div>
       </div>
     </div>
 
     <div v-else class="editor-empty">
-      <n-empty :description="emptyDescription">
-        <template #extra>
-          <n-button type="primary" secondary :disabled="readonly" @click="handleAddRow">
-            新增第一个条件
-          </n-button>
-        </template>
-      </n-empty>
+      <n-empty :description="emptyDescription" />
+    </div>
+
+    <div class="editor-action-bar">
+      <n-space align="center" :size="12">
+        <n-button text type="primary" :disabled="readonly" @click="handleAddRow">
+          <template #icon>
+            <n-icon><AddOutline /></n-icon>
+          </template>
+          添加参数
+        </n-button>
+        <n-button v-if="!isTableMode" text type="primary" :disabled="readonly" @click="handleImportSqlParams">
+          从 SQL 识别
+        </n-button>
+      </n-space>
     </div>
 
     <div class="editor-footer">
@@ -264,16 +229,12 @@ let rowSeed = 0
 const isTableMode = computed(() => props.datasetType === 'TABLE')
 const tableReady = computed(() => Boolean(props.connectionId && props.tableName))
 const sqlParamNames = computed(() => extractSqlParamNames(props.sqlText))
-const sqlParamNameSet = computed(() => new Set(sqlParamNames.value))
 
 const gridStyle = computed(() => ({
   gridTemplateColumns: isTableMode.value
-    ? '1.2fr 1.1fr 0.9fr 0.8fr 1.5fr 0.7fr 1.1fr 52px'
-    : '1.1fr 1.3fr 1fr 0.75fr 1.35fr 52px',
+    ? '1.1fr 0.9fr 0.8fr 1.4fr 1fr 0.6fr 1.2fr 52px'
+    : '1.1fr 0.9fr 1fr 0.6fr 1.4fr 52px',
 }))
-
-const editorTitle = computed(() => isTableMode.value ? '查询条件定义' : 'SQL 查询条件定义')
-const paramColumnTitle = computed(() => isTableMode.value ? '条件参数' : 'SQL 参数')
 
 const helperText = computed(() => {
   if (isTableMode.value) {
@@ -303,23 +264,6 @@ const footerText = computed(() => {
     ? 'SQL 条件手工维护，不会因为你修改 SQL 文本而自动追加重复行。'
     : '当前 SQL 还没有命名参数；你可以先定义条件，后续再把 :条件参数 接入 SQL。'
 })
-
-const editorStatItems = computed(() => [
-  {
-    label: '条件数',
-    value: `${rows.value.length} 个`,
-  },
-  {
-    label: '工作模式',
-    value: isTableMode.value ? '单表字段映射' : 'SQL 参数维护',
-  },
-  {
-    label: isTableMode.value ? '字段状态' : '识别参数',
-    value: isTableMode.value
-      ? (tableReady.value ? `${fieldOptions.value.length} 个可选字段` : '待选择数据表')
-      : `${sqlParamNames.value.length} 个命名参数`,
-  },
-])
 
 watch(
   () => props.modelValue,
@@ -512,17 +456,6 @@ function handleDefaultValueChange(index, value) {
   })
 }
 
-function getRowBadgeLabel(row) {
-  if (isTableMode.value) {
-    return row.fieldName ? '已映射字段' : '待映射字段'
-  }
-  return isSqlParamLinked(row.paramName) ? 'SQL 已接入' : '待接入 SQL'
-}
-
-function getRowBadgeClass(row) {
-  return getRowBadgeLabel(row).includes('已') ? 'is-linked' : 'is-pending'
-}
-
 function clearInvalidFieldMappings() {
   if (!isTableMode.value || rows.value.length === 0) {
     return
@@ -565,10 +498,6 @@ function normalizeRows(value) {
     return []
   }
   return value.map(createRow)
-}
-
-function isSqlParamLinked(paramName) {
-  return Boolean(paramName) && sqlParamNameSet.value.has(paramName)
 }
 
 function toOutputRows(value) {
@@ -693,60 +622,18 @@ function getDefaultValuePlaceholder(dataType) {
 <style scoped>
 .dataset-param-editor {
   width: 100%;
-  padding: 18px;
-  border: 1px solid #dbe3ef;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  padding: 0;
+  background: #fff;
 }
 
 .editor-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.editor-toolbar__content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.editor-toolbar__title {
-  color: #0f172a;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.editor-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
-}
-
-.editor-summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-}
-
-.editor-summary-card span {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.editor-summary-card strong {
-  color: #0f172a;
+  margin-bottom: 12px;
+  color: #86909c;
   font-size: 14px;
-  font-weight: 700;
-  line-height: 1.4;
 }
 
 .editor-alert {
@@ -756,83 +643,43 @@ function getDefaultValuePlaceholder(dataType) {
 .editor-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  overflow-x: auto;
+  border: 1px solid #e5e6eb;
+  border-radius: 4px;
 }
 
 .editor-head {
   display: grid;
-  gap: 12px;
-  padding: 0 4px;
-  color: #475569;
+  gap: 8px;
+  min-width: 760px;
+  padding: 10px 12px;
+  color: #4e5969;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  background: #f7f8fa;
+  border-bottom: 1px solid #e5e6eb;
 }
 
 .editor-row-card {
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  min-width: 760px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e6eb;
   background: #fff;
-  box-shadow: 0 8px 20px rgb(15 23 42 / 4%);
+  transition: background 0.18s ease;
 }
 
-.editor-row-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+.editor-row-card:hover {
+  background: #f2f3f5;
 }
 
-.editor-row-card__title {
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.editor-row-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.editor-row-badge.is-linked {
-  color: #1d4ed8;
-  background: #dbeafe;
-}
-
-.editor-row-badge.is-pending {
-  color: #92400e;
-  background: #fef3c7;
+.editor-row-card:last-child {
+  border-bottom: 0;
 }
 
 .editor-row {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   align-items: start;
-}
-
-.editor-row-tip {
-  margin-top: 8px;
-  padding-left: 10px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
-  border-left: 2px solid #e2e8f0;
-}
-
-.editor-row-tip code {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: #f1f5f9;
-  color: #1e293b;
 }
 
 .editor-cell {
@@ -842,7 +689,7 @@ function getDefaultValuePlaceholder(dataType) {
 .editor-cell__label {
   display: none;
   margin-bottom: 6px;
-  color: #64748b;
+  color: #86909c;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -862,27 +709,49 @@ function getDefaultValuePlaceholder(dataType) {
 
 .editor-empty {
   padding: 24px 0;
-  border: 1px dashed #cbd5e1;
-  border-radius: 16px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 4px;
   background: #fff;
+}
+
+.editor-action-bar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 12px;
 }
 
 .editor-footer {
   margin-top: 12px;
-  color: #64748b;
+  color: #86909c;
+  font-size: 12px;
 }
 
-@media (max-width: 1320px) {
+.dataset-param-editor :deep(.n-input),
+.dataset-param-editor :deep(.n-base-selection) {
+  --n-border-radius: 4px !important;
+  --n-border: 1px solid #dcdfe6 !important;
+  --n-border-hover: 1px solid #86909c !important;
+  --n-border-focus: 1px solid #1677ff !important;
+  --n-box-shadow-focus: 0 0 0 2px rgb(22 119 255 / 20%) !important;
+}
+
+.dataset-param-editor :deep(.n-switch.n-switch--active) {
+  --n-rail-color-active: #1677ff !important;
+}
+
+@media (max-width: 768px) {
   .editor-head {
     display: none;
   }
 
-  .editor-summary-strip {
-    grid-template-columns: 1fr;
-  }
-
   .editor-row {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .editor-row-card {
+    min-width: 0;
+    border: 1px solid #e5e6eb;
+    border-radius: 4px;
   }
 
   .editor-cell__label {
@@ -897,7 +766,7 @@ function getDefaultValuePlaceholder(dataType) {
 
 @media (max-width: 768px) {
   .dataset-param-editor {
-    padding: 12px;
+    padding: 0;
   }
 
   .editor-toolbar {

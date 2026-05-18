@@ -192,11 +192,700 @@
           edit-label-placement="top"
           edit-form-class="data-dataset-edit-form"
           modal-type="modal"
-          modal-width="min(1320px, calc(100vw - 32px))"
+          modal-width="min(1480px, calc(100vw - 32px))"
           add-button-text="新增数据集"
           @load-list-success="handleDatasetLoadSuccess"
           @modal-close="handleDatasetModalClose"
         >
+          <template #form-datasetEditor="{ formData, updateValue }">
+            <div class="dataset-editor-page">
+              <header class="dataset-editor-header">
+                <div class="dataset-editor-heading">
+                  <button class="dataset-editor-breadcrumb" type="button" @click="crudRef?.closeModal()">
+                    <span>数据资产管理</span>
+                    <i>/</i>
+                    <span>数据集定义</span>
+                  </button>
+                  <div class="dataset-editor-title-row">
+                    <h2>{{ getDatasetTypeLabel(formData.datasetType) }}</h2>
+                    <span class="dataset-status-tag">
+                      {{ getPublishStatusLabel(formData.publishStatus) }}
+                    </span>
+                  </div>
+                  <div class="dataset-editor-meta">
+                    创建于 {{ formatDatasetDate(formData.createTime) }}
+                    <span>|</span>
+                    更新于 {{ formatDatasetDate(formData.updateTime) }}
+                    <span>|</span>
+                    创建人：{{ getDatasetCreatorLabel(formData) }}
+                  </div>
+                </div>
+
+                <div class="dataset-editor-actions">
+                  <n-button
+                    type="primary"
+                    :disabled="isFormReadOnly"
+                    @click="crudRef?.submitForm()"
+                  >
+                    保存
+                  </n-button>
+                  <n-button
+                    v-if="formData.datasetType === 'SQL'"
+                    :loading="sqlPreviewLoading"
+                    @click="handlePreviewSql(formData, false)"
+                  >
+                    预览SQL
+                  </n-button>
+                  <n-button @click="crudRef?.closeModal()">
+                    返回
+                  </n-button>
+                </div>
+              </header>
+
+              <div class="dataset-editor-steps">
+                <button
+                  v-for="(step, index) in stepDefinitions"
+                  :key="step.label"
+                  class="dataset-editor-step"
+                  :class="{
+                    'is-active': currentStep === index + 1,
+                    'is-completed': currentStep > index + 1,
+                  }"
+                  type="button"
+                  @click="setEditorStep(index + 1)"
+                >
+                  <span class="dataset-editor-step__content">
+                    <span class="dataset-editor-step__title">
+                      <span class="dataset-editor-step__index">{{ index + 1 }}</span>
+                      <span class="dataset-editor-step__label">{{ step.label }}</span>
+                    </span>
+                    <span class="dataset-editor-step__caption">{{ step.caption }}</span>
+                  </span>
+                  <span v-if="index < stepDefinitions.length - 1" class="dataset-editor-step__separator">&gt;</span>
+                </button>
+              </div>
+
+              <div class="dataset-editor-grid">
+                <section class="dataset-edit-panel dataset-edit-panel--basic">
+                  <div class="panel-section-head">
+                    <h3>基础信息</h3>
+                  </div>
+
+                  <div class="dataset-form-grid">
+                    <label class="dataset-field dataset-field--required">
+                      <span>数据集名称</span>
+                      <NInput
+                        :value="formData.datasetName"
+                        :disabled="isFormReadOnly"
+                        maxlength="64"
+                        show-count
+                        placeholder="请输入数据集名称"
+                        @update:value="value => formData.datasetName = value"
+                      />
+                    </label>
+                    <label class="dataset-field dataset-field--required">
+                      <span>数据集编码</span>
+                      <NInput
+                        :value="formData.datasetCode"
+                        :disabled="isFormReadOnly"
+                        placeholder="请输入数据集编码"
+                        @update:value="value => formData.datasetCode = value"
+                      />
+                    </label>
+                    <label class="dataset-field">
+                      <span>所属目录</span>
+                      <n-tree-select
+                        :value="formData.categoryId"
+                        :options="categoryTreeSelectOptions"
+                        :disabled="isFormReadOnly"
+                        clearable
+                        default-expand-all
+                        placeholder="请选择业务分类"
+                        @update:value="value => formData.categoryId = value"
+                      />
+                    </label>
+                    <label class="dataset-field dataset-field--required">
+                      <span>数据源</span>
+                      <NSelect
+                        :value="formData.connectionId"
+                        :options="connectionOptions"
+                        :disabled="isFormReadOnly"
+                        filterable
+                        clearable
+                        placeholder="请选择数据连接"
+                        @update:value="value => handleConnectionChange(value, formData)"
+                      />
+                    </label>
+                    <label class="dataset-field dataset-field--required">
+                      <span>数据集类型</span>
+                      <n-radio-group
+                        :value="formData.datasetType"
+                        :disabled="isFormReadOnly || Boolean(formData.id)"
+                        @update:value="value => handleDatasetTypeChange(value, formData)"
+                      >
+                        <n-radio-button
+                          v-for="option in datasetTypeOptions"
+                          :key="option.value"
+                          :value="option.value"
+                        >
+                          {{ option.label }}
+                        </n-radio-button>
+                      </n-radio-group>
+                    </label>
+                    <label class="dataset-field">
+                      <span>可用状态</span>
+                      <n-radio-group
+                        :value="formData.status"
+                        :disabled="isFormReadOnly"
+                        @update:value="value => formData.status = value"
+                      >
+                        <n-radio-button
+                          v-for="option in statusOptions"
+                          :key="option.value"
+                          :value="option.value"
+                        >
+                          {{ option.label }}
+                        </n-radio-button>
+                      </n-radio-group>
+                    </label>
+                    <label v-if="formData.datasetType === 'TABLE'" class="dataset-field dataset-field--wide dataset-field--required">
+                      <span>数据表</span>
+                      <NSelect
+                        :value="formData.tableName"
+                        :options="tableOptions"
+                        :loading="tableLoading"
+                        :disabled="isFormReadOnly"
+                        filterable
+                        clearable
+                        placeholder="请先选择数据连接，再选择数据表"
+                        @update:value="value => handleTableNameChange(value, formData)"
+                      />
+                    </label>
+                    <label class="dataset-field dataset-field--wide">
+                      <span>描述</span>
+                      <NInput
+                        :value="formData.description"
+                        type="textarea"
+                        :disabled="isFormReadOnly"
+                        :autosize="{ minRows: 3, maxRows: 5 }"
+                        maxlength="200"
+                        show-count
+                        placeholder="请输入数据集描述"
+                        @update:value="value => formData.description = value"
+                      />
+                    </label>
+                    <div class="dataset-field dataset-field--wide">
+                      <span>标签</span>
+                      <div class="dataset-tag-list">
+                        <span
+                          v-for="tag in getDatasetTagLabels(formData)"
+                          :key="tag"
+                          class="dataset-soft-tag"
+                        >
+                          {{ tag }}
+                        </span>
+                        <button class="dataset-text-action" type="button" disabled>
+                          + 添加标签
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section
+                  class="dataset-edit-panel dataset-edit-panel--sql"
+                  :class="{ 'is-table-mode': formData.datasetType !== 'SQL' }"
+                >
+                  <div class="panel-section-head">
+                    <h3>{{ formData.datasetType === 'SQL' ? 'SQL编辑器 + 预览结果' : '来源表结构' }}</h3>
+                  </div>
+
+                  <div v-if="formData.datasetType === 'SQL'" class="sql-workbench">
+                    <div class="sql-editor-shell">
+                      <SqlEditor
+                        class="dataset-sql-editor"
+                        :value="formData.sqlText"
+                        :readonly="isFormReadOnly"
+                        theme="dark"
+                        show-fullscreen
+                        placeholder="SELECT order_id, order_time, customer_name, amount, status FROM orders WHERE order_time >= :start_time AND order_time < :end_time AND status = :status LIMIT :limit"
+                        @update:value="value => formData.sqlText = value"
+                      />
+                    </div>
+                    <div class="sql-preview-shell">
+                      <div class="sql-workbench-toolbar">
+                        <span>预览结果（前5行）</span>
+                        <n-button
+                          size="small"
+                          :loading="sqlPreviewLoading"
+                          :disabled="isFormReadOnly"
+                          @click="handlePreviewSql(formData, false)"
+                        >
+                          刷新预览
+                        </n-button>
+                      </div>
+                      <n-data-table
+                        v-if="sqlPreviewColumns.length"
+                        size="small"
+                        :columns="sqlPreviewColumns"
+                        :data="sqlPreviewRows"
+                        :loading="sqlPreviewLoading"
+                        :pagination="false"
+                        :scroll-x="sqlPreviewScrollX"
+                        max-height="274px"
+                      />
+                      <n-empty
+                        v-else
+                        class="sql-preview-empty"
+                        description="暂无预览数据，点击预览SQL获取前5行"
+                        size="small"
+                      />
+                      <div class="sql-preview-note">
+                        以上为示例数据，实际结果以运行时为准
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else class="table-source-panel">
+                    <div class="table-source-summary">
+                      <div class="table-source-card">
+                        <span>数据连接</span>
+                        <strong>{{ formData.connectionId ? getConnectionName(formData.connectionId) : '待选择' }}</strong>
+                      </div>
+                      <div class="table-source-card">
+                        <span>来源数据表</span>
+                        <strong>{{ formData.tableName || '待选择' }}</strong>
+                      </div>
+                      <div class="table-source-card">
+                        <span>字段来源</span>
+                        <strong>{{ getRowScopeFieldSourceLabel(formData) }}</strong>
+                      </div>
+                    </div>
+
+                    <div class="table-source-fields">
+                      <div class="table-source-fields__head">
+                        <span>字段结构</span>
+                        <small>{{ getRowScopeFieldOptions(formData).length }} 个字段</small>
+                      </div>
+                      <div v-if="getRowScopeFieldOptions(formData).length" class="table-source-field-list">
+                        <span
+                          v-for="field in getRowScopeFieldOptions(formData).slice(0, 18)"
+                          :key="field.value"
+                          class="table-source-field-chip"
+                        >
+                          {{ field.label }}
+                        </span>
+                        <span
+                          v-if="getRowScopeFieldOptions(formData).length > 18"
+                          class="table-source-field-chip table-source-field-chip--more"
+                        >
+                          +{{ getRowScopeFieldOptions(formData).length - 18 }}
+                        </span>
+                      </div>
+                      <n-empty
+                        v-else
+                        size="small"
+                        description="暂无字段结构，请先选择数据表并刷新来源字段"
+                      />
+                    </div>
+
+                    <div class="table-source-actions">
+                      <n-button
+                        secondary
+                        :disabled="isFormReadOnly || !formData.connectionId || !formData.tableName"
+                        :loading="rowScopeTableFieldLoading"
+                        @click="loadRowScopeTableFields(formData, { force: true })"
+                      >
+                        刷新来源字段
+                      </n-button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="dataset-edit-panel dataset-edit-panel--params">
+                  <div class="panel-section-head panel-section-head--inline">
+                    <h3>查询参数定义</h3>
+                    <n-popover trigger="click" placement="bottom-end" :width="320">
+                      <template #trigger>
+                        <button class="panel-inline-indicator panel-inline-indicator--button" type="button">
+                          参数预览
+                        </button>
+                      </template>
+                      <div class="param-preview-popover">
+                        <div v-if="getParamPreviewRows(formData).length" class="param-preview-list">
+                          <div
+                            v-for="(param, index) in getParamPreviewRows(formData)"
+                            :key="`${param.paramName || param.label || param.fieldName}-${index}`"
+                            class="param-preview-row"
+                          >
+                            <strong>{{ param.paramName || '-' }}</strong>
+                            <span>{{ getParamPreviewDescription(param, formData.datasetType) }}</span>
+                          </div>
+                        </div>
+                        <n-empty v-else size="small" description="暂无查询参数" />
+                      </div>
+                    </n-popover>
+                  </div>
+                  <DatasetParamSchemaEditor
+                    :model-value="formData.paramSchemaJson || []"
+                    :readonly="isFormReadOnly"
+                    :dataset-type="formData.datasetType"
+                    :connection-id="formData.connectionId"
+                    :table-name="formData.tableName"
+                    :sql-text="formData.sqlText"
+                    @update:model-value="value => formData.paramSchemaJson = value"
+                  />
+                </section>
+
+                <section class="dataset-edit-panel dataset-edit-panel--settings">
+                  <div class="panel-section-head">
+                    <h3>执行设置</h3>
+                  </div>
+                  <div class="execution-settings">
+                    <div class="setting-row">
+                      <div class="setting-row__head">
+                        <span>最大返回行数</span>
+                        <strong>{{ formData.maxRows || 10000 }}</strong>
+                      </div>
+                      <div class="setting-row__control">
+                        <n-slider
+                          :value="formData.maxRows || 10000"
+                          :disabled="isFormReadOnly"
+                          :min="100"
+                          :max="1000000"
+                          :step="100"
+                          @update:value="value => formData.maxRows = value"
+                        />
+                        <n-input-number
+                          :value="formData.maxRows"
+                          :disabled="isFormReadOnly"
+                          :min="100"
+                          :max="1000000"
+                          :step="100"
+                          @update:value="value => formData.maxRows = value"
+                        />
+                      </div>
+                    </div>
+                    <div class="setting-row">
+                      <div class="setting-row__head">
+                        <span>查询超时时间</span>
+                        <strong>{{ formData.timeoutSeconds || 60 }} 秒</strong>
+                      </div>
+                      <div class="setting-row__control">
+                        <n-slider
+                          :value="formData.timeoutSeconds || 60"
+                          :disabled="isFormReadOnly"
+                          :min="1"
+                          :max="1800"
+                          :step="1"
+                          @update:value="value => formData.timeoutSeconds = value"
+                        />
+                        <n-input-number
+                          :value="formData.timeoutSeconds"
+                          :disabled="isFormReadOnly"
+                          :min="1"
+                          :max="1800"
+                          @update:value="value => formData.timeoutSeconds = value"
+                        />
+                      </div>
+                    </div>
+                    <label class="dataset-field dataset-field--full">
+                      <span>缓存策略</span>
+                      <n-radio-group
+                        :value="formData.cacheEnabled === 1 ? 1 : 0"
+                        :disabled="isFormReadOnly"
+                        @update:value="value => handleCacheStrategyChange(value, formData)"
+                      >
+                        <n-radio-button :value="0">
+                          不缓存
+                        </n-radio-button>
+                        <n-radio-button :value="1">
+                          按时间缓存
+                        </n-radio-button>
+                        <n-radio-button :value="2" disabled>
+                          按依赖缓存
+                        </n-radio-button>
+                      </n-radio-group>
+                    </label>
+                    <label v-if="formData.cacheEnabled === 1" class="dataset-field">
+                      <span>缓存时长(秒)</span>
+                      <n-input-number
+                        :value="formData.cacheTtlSeconds"
+                        :disabled="isFormReadOnly"
+                        :min="1"
+                        :max="86400"
+                        @update:value="value => formData.cacheTtlSeconds = value"
+                      />
+                    </label>
+                    <label class="dataset-field">
+                      <span>结果集编码</span>
+                      <NSelect
+                        :value="formData.__resultEncoding || 'UTF-8'"
+                        :options="resultEncodingOptions"
+                        :disabled="isFormReadOnly"
+                        @update:value="value => formData.__resultEncoding = value"
+                      />
+                    </label>
+                    <label class="setting-switch-row">
+                      <span>允许导出</span>
+                      <n-switch
+                        :value="formData.__allowExport ?? true"
+                        :disabled="isFormReadOnly"
+                        @update:value="value => formData.__allowExport = value"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section class="dataset-edit-panel dataset-edit-panel--access">
+                  <div class="panel-section-head">
+                    <h3>权限控制</h3>
+                  </div>
+
+                  <div class="access-control-block">
+                    <div class="access-mode-row">
+                      <span>访问范围</span>
+                      <n-radio-group
+                        :value="formData.accessMode"
+                        :disabled="isFormReadOnly"
+                        @update:value="value => handleAccessModeChange(value, formData, updateValue)"
+                      >
+                        <n-radio value="PUBLIC">
+                          公开（所有已登录用户可访问）
+                        </n-radio>
+                        <n-radio value="PRIVATE">
+                          私有（仅授权用户/用户组可访问）
+                        </n-radio>
+                      </n-radio-group>
+                    </div>
+
+                    <div class="row-permission-strip">
+                      <div class="row-permission-title">
+                        <span>行级权限规则</span>
+                        <n-checkbox
+                          :checked="isRowScopeEnabled(formData)"
+                          :disabled="isFormReadOnly"
+                          @update:checked="checked => handleRowScopeEnabledChange(checked, formData, updateValue)"
+                        >
+                          根据用户属性设置权限
+                        </n-checkbox>
+                      </div>
+                      <div class="row-scope-expression">
+                        {{ getRowScopeConditionPreview(formData) }}
+                      </div>
+                      <div class="row-permission-rules">
+                        <span
+                          v-for="rule in getRowScopeRules(formData).filter(item => item.attribute && item.field)"
+                          :key="rule.__key"
+                          class="rule-chip"
+                        >
+                          {{ getRowScopeRuleLabel(rule) }}
+                        </span>
+                        <span v-if="getRowScopeConfiguredCount(formData) === 0" class="rule-chip rule-chip--empty">
+                          暂无规则
+                        </span>
+                        <button
+                          class="dataset-text-action"
+                          type="button"
+                          :disabled="isFormReadOnly"
+                          @click="addRowScopeRule(formData, updateValue)"
+                        >
+                          + 添加规则
+                        </button>
+                      </div>
+                      <div v-if="getRowScopeRules(formData).length" class="row-scope-rule-mini-list">
+                        <div
+                          v-for="(rule, index) in getRowScopeRules(formData)"
+                          :key="rule.__key || index"
+                          class="row-scope-rule-mini"
+                        >
+                          <NSelect
+                            :value="rule.attribute"
+                            :options="getRowScopeAttributeOptions(formData, rule)"
+                            :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
+                            clearable
+                            placeholder="用户属性"
+                            @update:value="value => handleRowScopeRuleAttributeChange(formData, rule, value, updateValue)"
+                          />
+                          <span>=</span>
+                          <NSelect
+                            :value="rule.field"
+                            :options="getRowScopeFieldOptions(formData)"
+                            :loading="rowScopeTableFieldLoading"
+                            :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
+                            clearable
+                            filterable
+                            placeholder="数据表字段"
+                            @update:value="value => handleRowScopeRuleFieldChange(formData, rule, value, updateValue)"
+                          />
+                          <n-button
+                            quaternary
+                            :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
+                            @click="removeRowScopeRule(formData, index, updateValue)"
+                          >
+                            <template #icon>
+                              <i class="i-material-symbols:delete-outline-rounded" />
+                            </template>
+                          </n-button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div v-if="formData.accessMode === 'PRIVATE'" class="acl-editor acl-editor--compact">
+                      <div class="acl-editor__toolbar">
+                        <div>
+                          <div class="acl-editor__title">
+                            授权对象
+                          </div>
+                          <div class="acl-editor__hint">
+                            已配置 {{ getAclCount(formData) }} 个授权主体。
+                          </div>
+                        </div>
+                        <n-button
+                          secondary
+                          type="primary"
+                          :disabled="isFormReadOnly || permissionOptionsLoading"
+                          :loading="permissionOptionsLoading"
+                          @click="addAclItem(formData, updateValue)"
+                        >
+                          <template #icon>
+                            <i class="i-material-symbols:add-rounded" />
+                          </template>
+                          选择用户/用户组
+                        </n-button>
+                      </div>
+
+                      <n-empty
+                        v-if="!formData.aclItems || formData.aclItems.length === 0"
+                        description="暂无授权主体"
+                        size="small"
+                      />
+                      <div v-else class="acl-tag-list">
+                        <span
+                          v-for="(item, index) in formData.aclItems"
+                          :key="item.__key || `${item.subjectType || 'ACL'}-${index}`"
+                          class="acl-tag"
+                        >
+                          {{ getAclItemLabel(item) }}
+                          <button
+                            type="button"
+                            :disabled="isFormReadOnly"
+                            @click="removeAclItem(formData, index, updateValue)"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                      <div v-if="formData.aclItems && formData.aclItems.length > 0" class="acl-rows">
+                        <div
+                          v-for="(item, index) in formData.aclItems"
+                          :key="item.__key || `${item.subjectType || 'ACL'}-${index}`"
+                          class="acl-row"
+                        >
+                          <NSelect
+                            :value="item.subjectType"
+                            :options="aclSubjectTypeOptions"
+                            :disabled="isFormReadOnly"
+                            :to="false"
+                            @update:value="value => handleAclSubjectTypeChange(item, value, updateValue)"
+                          />
+                          <n-tree-select
+                            v-if="item.subjectType === 'ORG'"
+                            :value="item.subjectId"
+                            :options="getAclOrgOptions(item)"
+                            :disabled="isFormReadOnly || permissionOptionsLoading"
+                            :loading="permissionOptionsLoading"
+                            :to="false"
+                            :virtual-scroll="false"
+                            clearable
+                            filterable
+                            default-expand-all
+                            placeholder="选择组织"
+                            @update:value="value => handleAclSubjectIdChange(item, value, updateValue)"
+                          />
+                          <NSelect
+                            v-else
+                            :value="item.subjectId"
+                            :options="getAclSubjectOptions(item)"
+                            :disabled="isFormReadOnly || permissionOptionsLoading"
+                            :loading="permissionOptionsLoading"
+                            :to="false"
+                            :virtual-scroll="false"
+                            clearable
+                            filterable
+                            placeholder="选择授权主体"
+                            @update:value="value => handleAclSubjectIdChange(item, value, updateValue)"
+                          />
+                          <NSelect
+                            :value="item.accessLevel"
+                            :options="accessLevelOptions"
+                            :disabled="isFormReadOnly"
+                            :to="false"
+                            placeholder="权限级别"
+                            @update:value="value => handleAclAccessLevelChange(item, value, updateValue)"
+                          />
+                          <n-button
+                            quaternary
+                            type="error"
+                            :disabled="isFormReadOnly"
+                            @click="removeAclItem(formData, index, updateValue)"
+                          >
+                            <template #icon>
+                              <i class="i-material-symbols:delete-outline-rounded" />
+                            </template>
+                          </n-button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="dataset-edit-panel dataset-edit-panel--info">
+                  <div class="panel-section-head">
+                    <h3>数据集信息</h3>
+                  </div>
+                  <dl class="dataset-info-grid">
+                    <div>
+                      <dt>数据集ID</dt>
+                      <dd>{{ formData.id || '保存后生成' }}</dd>
+                    </div>
+                    <div>
+                      <dt>数据集类型</dt>
+                      <dd>{{ getDatasetTypeLabel(formData.datasetType) }}</dd>
+                    </div>
+                    <div>
+                      <dt>数据源</dt>
+                      <dd>{{ formData.connectionId ? getConnectionName(formData.connectionId) : '-' }}</dd>
+                    </div>
+                    <div>
+                      <dt>创建人</dt>
+                      <dd>{{ getDatasetCreatorLabel(formData) }}</dd>
+                    </div>
+                    <div>
+                      <dt>创建时间</dt>
+                      <dd>{{ formatDatasetDate(formData.createTime) }}</dd>
+                    </div>
+                    <div>
+                      <dt>更新时间</dt>
+                      <dd>{{ formatDatasetDate(formData.updateTime) }}</dd>
+                    </div>
+                    <div>
+                      <dt>更新人</dt>
+                      <dd>{{ getDatasetUpdaterLabel(formData) }}</dd>
+                    </div>
+                    <div>
+                      <dt>版本号</dt>
+                      <dd>
+                        {{ getDatasetVersionLabel(formData) }}
+                        <span class="dataset-current-version">当前版本</span>
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+            </div>
+          </template>
+
           <template #form-stepIndicator>
             <div class="step-shell" :class="{ 'is-readonly': isFormReadOnly }" :style="stepShellStyle">
               <div class="step-shell__header">
@@ -249,12 +938,6 @@
                 </template>
               </div>
             </div>
-          </template>
-
-          <template #form-publishReadonlyAlert>
-            <n-alert type="warning" :show-icon="false">
-              当前数据集已发布，内容处于只读状态。如需修改，请先在列表中执行“下架”。
-            </n-alert>
           </template>
 
           <template #form-stepNavigation="{ formData }">
@@ -617,7 +1300,7 @@
 
               <div class="row-permission-switch">
                 <n-checkbox
-                  :checked="formData.rowScope.enabled === 1"
+                  :checked="isRowScopeEnabled(formData)"
                   :disabled="isFormReadOnly"
                   @update:checked="checked => handleRowScopeEnabledChange(checked, formData, updateValue)"
                 >
@@ -629,7 +1312,7 @@
               </div>
 
               <n-alert
-                v-if="formData.datasetType === 'SQL' && formData.rowScope.enabled === 1"
+                v-if="formData.datasetType === 'SQL' && isRowScopeEnabled(formData)"
                 type="warning"
                 :show-icon="false"
                 class="row-scope-alert"
@@ -638,7 +1321,7 @@
               </n-alert>
 
               <n-alert
-                v-if="formData.rowScope.enabled === 1 && getRowScopeFieldOptions(formData).length === 0"
+                v-if="isRowScopeEnabled(formData) && getRowScopeFieldOptions(formData).length === 0"
                 type="warning"
                 :show-icon="false"
                 class="row-scope-alert"
@@ -646,7 +1329,7 @@
                 当前暂无可选字段，请先保存并同步字段；单表数据集也可以刷新来源表字段后再配置。
               </n-alert>
 
-              <div class="row-scope-rule-builder" :class="{ 'is-disabled': formData.rowScope.enabled !== 1 }">
+              <div class="row-scope-rule-builder" :class="{ 'is-disabled': !isRowScopeEnabled(formData) }">
                 <div class="row-scope-rule-titlebar">
                   <div>
                     <div class="row-scope-rule-title">
@@ -702,7 +1385,7 @@
                   <NSelect
                     :value="rule.attribute"
                     :options="getRowScopeAttributeOptions(formData, rule)"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                    :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
                     clearable
                     placeholder="选择用户属性"
                     @update:value="value => handleRowScopeRuleAttributeChange(formData, rule, value, updateValue)"
@@ -714,7 +1397,7 @@
                     :value="rule.field"
                     :options="getRowScopeFieldOptions(formData)"
                     :loading="rowScopeTableFieldLoading"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                    :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
                     clearable
                     filterable
                     placeholder="选择数据表字段"
@@ -723,14 +1406,14 @@
                   <NSelect
                     :value="rule.logic"
                     :options="rowScopeLogicOptions"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1 || index === getRowScopeRules(formData).length - 1"
+                    :disabled="isFormReadOnly || !isRowScopeEnabled(formData) || index === getRowScopeRules(formData).length - 1"
                     placeholder="关系"
                     @update:value="value => handleRowScopeRuleLogicChange(rule, value, updateValue)"
                   />
                   <n-button
                     quaternary
                     class="row-scope-delete"
-                    :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                    :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
                     @click="removeRowScopeRule(formData, index, updateValue)"
                   >
                     <template #icon>
@@ -747,9 +1430,9 @@
               <div class="row-scope-remark">
                 <label>备注</label>
                 <NInput
-                  :value="formData.rowScope.remark"
+                  :value="getRowScopeRemark(formData)"
                   type="textarea"
-                  :disabled="isFormReadOnly || formData.rowScope.enabled !== 1"
+                  :disabled="isFormReadOnly || !isRowScopeEnabled(formData)"
                   :autosize="{ minRows: 2, maxRows: 4 }"
                   placeholder="记录该数据集行权限字段口径"
                   @update:value="value => handleRowScopeRemarkChange(formData, value, updateValue)"
@@ -907,28 +1590,28 @@ const currentEditingDataset = ref(null)
 const currentStep = ref(1)
 const stepDefinitions = [
   {
-    label: '数据集定义',
-    caption: '编码 / 分类 / 来源',
-    title: '先把数据集身份和接入来源定清楚',
-    description: '编码、名称、分类和来源会影响字段同步、参数建模和后续发布方式。',
+    label: '基本信息',
+    caption: '定义数据集基本信息与SQL',
+    title: '定义数据集基本信息与SQL',
+    description: '配置数据集名称、编码、所属目录、数据源和 SQL 或数据表来源。',
   },
   {
     label: '查询条件',
-    caption: '参数 / 字段 / 约束',
-    title: '只定义真正会被下游消费的筛选条件',
-    description: '单表模式强调字段映射，SQL 模式强调参数名与语句保持一致。',
+    caption: '配置参数化查询条件',
+    title: '配置参数化查询条件',
+    description: '维护报表侧可绑定的查询条件，保证参数名、字段映射和默认值可预期。',
   },
   {
-    label: '执行设置',
-    caption: '行数 / 超时 / 描述',
-    title: '控制查询边界，保证运行时稳定',
-    description: '通过返回行数和超时限制，把数据集控制在可复用、可治理的范围内。',
+    label: '执行配置',
+    caption: '设置执行限制与调度策略',
+    title: '设置执行限制与调度策略',
+    description: '控制返回行数、超时时间和缓存策略，让数据集在大屏运行时保持稳定。',
   },
   {
     label: '权限控制',
-    caption: '访问 / 行权限',
-    title: '开放给合适的人，并按数据范围收敛查询结果',
-    description: '访问权限控制谁能用数据集，行权限复用登录人的系统数据范围动态过滤数据。',
+    caption: '配置数据访问权限策略',
+    title: '配置数据访问权限策略',
+    description: '配置公开或私有访问范围，并按用户属性映射行级数据权限。',
   },
 ]
 const totalSteps = stepDefinitions.length
@@ -955,6 +1638,11 @@ const datasetTypeOptions = [
 const statusOptions = [
   { label: '启用', value: 1 },
   { label: '禁用', value: 0 },
+]
+
+const resultEncodingOptions = [
+  { label: 'UTF-8', value: 'UTF-8' },
+  { label: 'GBK', value: 'GBK' },
 ]
 
 const publishStatusOptions = [
@@ -1382,316 +2070,16 @@ const fieldColumns = computed(() => [
 
 const fieldTableScrollX = computed(() => fieldColumns.value.reduce((total, column) => total + (Number(column.width) || 140), 0))
 
-const step1Schema = computed(() => [
+const editSchema = computed(() => [
   {
-    field: 'publishReadonlyAlert',
+    field: 'datasetEditor',
     label: '',
     type: 'slot',
-    slotName: 'publishReadonlyAlert',
-    span: 12,
-    showFeedback: false,
-    vIf: () => isFormReadOnly.value,
-  },
-  {
-    field: 'stepIndicator',
-    label: '',
-    type: 'slot',
-    slotName: 'stepIndicator',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: '__sectionBasic',
-    label: '基础信息',
-    type: 'divider',
-    span: 12,
-    showFeedback: false,
-    props: { class: 'dataset-form-divider' },
-  },
-  {
-    field: 'datasetCode',
-    label: '数据集编码',
-    type: 'input',
-    span: 3,
-    disabled: () => isFormReadOnly.value,
-    rules: [{ required: true, message: '请输入数据集编码', trigger: 'blur' }],
-    props: { placeholder: '请输入数据集编码' },
-  },
-  {
-    field: 'datasetName',
-    label: '数据集名称',
-    type: 'input',
-    span: 4,
-    disabled: () => isFormReadOnly.value,
-    rules: [{ required: true, message: '请输入数据集名称', trigger: 'blur' }],
-    props: { placeholder: '请输入数据集名称' },
-  },
-  {
-    field: 'categoryId',
-    label: '业务分类',
-    type: 'treeSelect',
-    span: 5,
-    disabled: () => isFormReadOnly.value,
-    props: {
-      options: categoryTreeSelectOptions.value,
-      clearable: true,
-      defaultExpandAll: true,
-      placeholder: '请选择业务分类',
-    },
-  },
-  {
-    field: 'status',
-    label: '可用状态',
-    type: 'radio',
-    span: 4,
-    disabled: () => isFormReadOnly.value,
-    defaultValue: 1,
-    props: { options: statusOptions },
-  },
-  {
-    field: '__sectionSource',
-    label: '数据来源',
-    type: 'divider',
-    span: 12,
-    showFeedback: false,
-    props: { class: 'dataset-form-divider' },
-  },
-  {
-    field: 'connectionId',
-    label: '数据连接',
-    type: 'select',
-    span: 4,
-    disabled: () => isFormReadOnly.value,
-    props: { placeholder: '请选择数据连接', options: connectionOptions.value, filterable: true },
-    onChange: ({ value, formData }) => handleConnectionChange(value, formData),
-  },
-  {
-    field: 'datasetType',
-    label: '数据集类型',
-    type: 'radio',
-    span: 3,
-    disabled: ({ context }) => isFormReadOnly.value || context?.isEdit,
-    defaultValue: 'TABLE',
-    rules: [{ required: true }],
-    props: { options: datasetTypeOptions },
-    onChange: ({ value, formData }) => handleDatasetTypeChange(value, formData),
-  },
-  {
-    field: 'tableName',
-    label: '数据表',
-    type: 'select',
-    span: 5,
-    disabled: () => isFormReadOnly.value,
-    props: {
-      placeholder: '请先选择数据连接，再选择数据表',
-      options: tableOptions.value,
-      loading: tableLoading.value,
-      filterable: true,
-      clearable: true,
-    },
-    onChange: ({ value, formData }) => handleTableNameChange(value, formData),
-    vIf: formData => formData.datasetType === 'TABLE',
-  },
-  {
-    field: 'sqlText',
-    label: '查询SQL',
-    type: 'slot',
-    slotName: 'sqlText',
-    span: 12,
-    rules: [{ required: true, message: '请输入查询SQL', trigger: 'blur' }],
-    vIf: formData => formData.datasetType === 'SQL',
-  },
-  {
-    field: 'sqlPreviewAction',
-    label: '',
-    type: 'slot',
-    slotName: 'sqlPreviewAction',
-    span: 12,
-    showFeedback: false,
-    vIf: formData => formData.datasetType === 'SQL',
-  },
-  {
-    field: 'sourceGuide',
-    label: '',
-    type: 'slot',
-    slotName: 'sourceGuide',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: 'stepNavigation',
-    label: '',
-    type: 'slot',
-    slotName: 'stepNavigation',
+    slotName: 'datasetEditor',
     span: 12,
     showFeedback: false,
   },
 ])
-
-const step2Schema = computed(() => [
-  {
-    field: 'stepIndicator',
-    label: '',
-    type: 'slot',
-    slotName: 'stepIndicator',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: '__sectionParam',
-    label: '查询条件定义',
-    type: 'divider',
-    span: 12,
-    showFeedback: false,
-    props: { class: 'dataset-form-divider' },
-  },
-  {
-    field: 'paramGuide',
-    label: '',
-    type: 'slot',
-    slotName: 'paramGuide',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: 'paramSchemaJson',
-    label: '查询条件',
-    type: 'slot',
-    slotName: 'paramSchemaJson',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: 'stepNavigation',
-    label: '',
-    type: 'slot',
-    slotName: 'stepNavigation',
-    span: 12,
-    showFeedback: false,
-  },
-])
-
-const step3Schema = computed(() => [
-  {
-    field: 'stepIndicator',
-    label: '',
-    type: 'slot',
-    slotName: 'stepIndicator',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: '__sectionSetting',
-    label: '执行设置',
-    type: 'divider',
-    span: 12,
-    showFeedback: false,
-    props: { class: 'dataset-form-divider' },
-  },
-  {
-    field: 'settingGuide',
-    label: '',
-    type: 'slot',
-    slotName: 'settingGuide',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: 'maxRows',
-    label: '最大返回行数',
-    type: 'number',
-    span: 3,
-    disabled: () => isFormReadOnly.value,
-    defaultValue: 1000,
-    props: { placeholder: '请输入最大返回行数', min: 1, max: 10000 },
-  },
-  {
-    field: 'timeoutSeconds',
-    label: '查询超时(秒)',
-    type: 'number',
-    span: 3,
-    disabled: () => isFormReadOnly.value,
-    defaultValue: 15,
-    props: { placeholder: '请输入超时时间', min: 1, max: 300 },
-  },
-  {
-    field: 'description',
-    label: '描述',
-    type: 'textarea',
-    span: 6,
-    disabled: () => isFormReadOnly.value,
-    props: { placeholder: '请输入描述', rows: 3 },
-  },
-  {
-    field: 'stepNavigation',
-    label: '',
-    type: 'slot',
-    slotName: 'stepNavigation',
-    span: 12,
-    showFeedback: false,
-  },
-])
-
-const step4Schema = computed(() => [
-  {
-    field: 'stepIndicator',
-    label: '',
-    type: 'slot',
-    slotName: 'stepIndicator',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: '__sectionAccessPermission',
-    label: '访问权限',
-    type: 'divider',
-    span: 12,
-    showFeedback: false,
-    props: { class: 'dataset-form-divider' },
-  },
-  {
-    field: 'accessPermissionConfig',
-    label: '',
-    type: 'slot',
-    slotName: 'accessPermissionConfig',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: '__sectionRowScope',
-    label: '数据行权限',
-    type: 'divider',
-    span: 12,
-    showFeedback: false,
-    props: { class: 'dataset-form-divider' },
-  },
-  {
-    field: 'rowScopeConfig',
-    label: '',
-    type: 'slot',
-    slotName: 'rowScopeConfig',
-    span: 12,
-    showFeedback: false,
-  },
-  {
-    field: 'stepNavigation',
-    label: '',
-    type: 'slot',
-    slotName: 'stepNavigation',
-    span: 12,
-    showFeedback: false,
-  },
-])
-
-const editSchema = computed(() => {
-  if (currentStep.value === 1)
-    return step1Schema.value
-  if (currentStep.value === 2)
-    return step2Schema.value
-  if (currentStep.value === 3)
-    return step3Schema.value
-  return step4Schema.value
-})
 
 loadConnectionOptions()
 loadCategoryTree()
@@ -1758,6 +2146,21 @@ function getConnectionName(connectionId) {
   return connection?.label || connectionId || '-'
 }
 
+function getCategoryName(categoryId) {
+  return findCategoryById(categoryTree.value, categoryId)?.categoryName || '未分类'
+}
+
+function formatDatasetDate(value) {
+  if (!value) {
+    return '-'
+  }
+  return String(value).replace('T', ' ').slice(0, 19)
+}
+
+function setEditorStep(step) {
+  currentStep.value = step
+}
+
 function getPublishStatusLabel(status) {
   return publishStatusOptions.find(item => item.value === status)?.label || '未发布'
 }
@@ -1774,6 +2177,29 @@ function getPublishStatusTagType(status) {
 
 function getAccessModeLabel(accessMode) {
   return accessMode === 'PRIVATE' ? '私有' : '公开'
+}
+
+function getDatasetCreatorLabel(formData) {
+  return formData?.createByName || formData?.creatorName || formData?.createBy || '-'
+}
+
+function getDatasetUpdaterLabel(formData) {
+  return formData?.updateByName || formData?.updaterName || formData?.updateBy || '-'
+}
+
+function getDatasetVersionLabel(formData) {
+  if (formData?.versionNo) {
+    return `v${formData.versionNo}`
+  }
+  return formData?.id ? 'v1' : '保存后生成'
+}
+
+function getDatasetTagLabels(formData) {
+  return [
+    getDatasetTypeLabel(formData?.datasetType),
+    getAccessModeLabel(formData?.accessMode),
+    getCategoryName(formData?.categoryId),
+  ].filter(Boolean)
 }
 
 function getDatasetSourceGuide(formData) {
@@ -1816,6 +2242,37 @@ function getDatasetParamConstraint(formData) {
     return '参数名需与 SQL 保持一致'
   }
   return '每项都需要映射字段'
+}
+
+function getParamPreviewRows(formData) {
+  const value = formData?.paramSchemaJson
+  let rows = []
+  if (Array.isArray(value)) {
+    rows = value
+  }
+  else if (typeof value === 'string' && value) {
+    try {
+      const parsed = JSON.parse(value)
+      rows = Array.isArray(parsed) ? parsed : []
+    }
+    catch {
+      rows = []
+    }
+  }
+
+  return rows.filter(row => row?.paramName || row?.label || row?.fieldName)
+}
+
+function getParamPreviewDescription(param, datasetType) {
+  const parts = [
+    param.label || null,
+    param.dataType || 'STRING',
+    param.required ? '必填' : '可选',
+  ]
+  if (datasetType === 'TABLE' && param.fieldName) {
+    parts.push(`${param.operator || '='} ${param.fieldName}`)
+  }
+  return parts.filter(Boolean).join(' / ')
 }
 
 function getStepNodeInlineStyle(index) {
@@ -2016,6 +2473,8 @@ function prepareDatasetFormData(sourceData = {}, options = {}) {
     status: 1,
     maxRows: 1000,
     timeoutSeconds: 15,
+    cacheEnabled: 0,
+    cacheTtlSeconds: null,
     accessMode: 'PUBLIC',
     aclItems: [],
     rowScope: createDefaultRowScope(),
@@ -2073,6 +2532,7 @@ async function beforeRenderDetail(detailData) {
 }
 
 async function handleConnectionChange(connectionId, formData) {
+  formData.connectionId = connectionId
   formData.tableName = null
   clearRowScopeColumns(formData)
   resetRowScopeTableFields()
@@ -2082,6 +2542,7 @@ async function handleConnectionChange(connectionId, formData) {
 }
 
 async function handleDatasetTypeChange(datasetType, formData) {
+  formData.datasetType = datasetType
   clearRowScopeColumns(formData)
   resetRowScopeTableFields()
   if (datasetType === 'TABLE') {
@@ -2094,6 +2555,7 @@ async function handleDatasetTypeChange(datasetType, formData) {
 }
 
 async function handleTableNameChange(tableName, formData) {
+  formData.tableName = tableName
   clearRowScopeColumns(formData)
   if (!tableName) {
     resetRowScopeTableFields()
@@ -2279,8 +2741,8 @@ function beforeSubmit(formData) {
     return false
   }
 
-  delete formData.publishReadonlyAlert
   delete formData.datasetOverview
+  delete formData.datasetEditor
   delete formData.stepIndicator
   delete formData.stepNavigation
   delete formData.__sectionBasic
@@ -2295,6 +2757,8 @@ function beforeSubmit(formData) {
   delete formData.settingGuide
   delete formData.accessPermissionConfig
   delete formData.rowScopeConfig
+  delete formData.__resultEncoding
+  delete formData.__allowExport
 
   if (!formData.connectionId) {
     window.$message?.error('请选择数据连接')
@@ -2484,6 +2948,35 @@ function handleAclAccessLevelChange(item, value, updateValue) {
   syncSlotForm(updateValue)
 }
 
+function getAclItemLabel(item) {
+  const subjectTypeLabel = aclSubjectTypeOptions.find(option => option.value === item?.subjectType)?.label || '授权主体'
+  const accessLevelLabel = accessLevelOptions.find(option => option.value === item?.accessLevel)?.label || '查询'
+  if (!item?.subjectId) {
+    return `${subjectTypeLabel} · 待选择 · ${accessLevelLabel}`
+  }
+  if (item.subjectType === 'ORG') {
+    const option = findTreeOption(orgTreeOptions.value, toIdString(item.subjectId))
+    return `${option?.label || `组织 #${item.subjectId}`} · ${accessLevelLabel}`
+  }
+  const options = item.subjectType === 'USER' ? userOptions.value : roleOptions.value
+  const option = options.find(row => toIdString(row.value) === toIdString(item.subjectId))
+  return `${option?.label || getAclSubjectFallbackLabel(item)} · ${accessLevelLabel}`
+}
+
+function findTreeOption(options, value) {
+  const normalizedValue = toIdString(value)
+  for (const option of options || []) {
+    if (toIdString(option.value) === normalizedValue) {
+      return option
+    }
+    const child = findTreeOption(option.children || [], normalizedValue)
+    if (child) {
+      return child
+    }
+  }
+  return null
+}
+
 function getAclSubjectOptions(item) {
   const baseOptions = item?.subjectType === 'USER' ? userOptions.value : roleOptions.value
   return appendMissingFlatOption(baseOptions, item?.subjectId, getAclSubjectFallbackLabel(item))
@@ -2590,6 +3083,14 @@ function getRowScopeRules(formData) {
   return ensureRowScope(formData).ruleItems
 }
 
+function isRowScopeEnabled(formData) {
+  return formData?.rowScope?.enabled === 1
+}
+
+function getRowScopeRemark(formData) {
+  return formData?.rowScope?.remark || null
+}
+
 function handleRowScopeEnabledChange(checked, formData, updateValue) {
   const rowScope = ensureRowScope(formData)
   rowScope.enabled = checked ? 1 : 0
@@ -2645,6 +3146,13 @@ function handleRowScopeRemarkChange(formData, value, updateValue) {
   syncSlotForm(updateValue)
 }
 
+function handleCacheStrategyChange(value, formData) {
+  formData.cacheEnabled = value === 1 ? 1 : 0
+  if (formData.cacheEnabled === 1 && !formData.cacheTtlSeconds) {
+    formData.cacheTtlSeconds = 300
+  }
+}
+
 function getRowScopeAttributeOptions(formData, currentRule) {
   const usedAttributes = new Set(
     getRowScopeRules(formData)
@@ -2675,6 +3183,11 @@ function getRowScopeConditionPreview(formData) {
     }
     return `${expression} ${normalizeRowScopeLogic(rule.logic)}`
   }).join(' ')
+}
+
+function getRowScopeRuleLabel(rule) {
+  const attributeLabel = rowScopeAttributeOptions.find(option => option.value === rule.attribute)?.label || '用户属性'
+  return `${attributeLabel} = ${rule.field}`
 }
 
 function syncRowScopeColumnsFromRules(rowScope) {
@@ -2941,7 +3454,7 @@ function normalizeSortInput(value) {
   return parsed
 }
 
-async function handlePreviewSql(formData) {
+async function handlePreviewSql(formData, openModal = true) {
   if (!formData.connectionId) {
     window.$message?.error('请选择数据连接')
     return
@@ -2951,7 +3464,7 @@ async function handlePreviewSql(formData) {
     return
   }
 
-  sqlPreviewVisible.value = true
+  sqlPreviewVisible.value = openModal
   sqlPreviewLoading.value = true
   sqlPreviewColumns.value = []
   sqlPreviewRows.value = []
@@ -2961,7 +3474,7 @@ async function handlePreviewSql(formData) {
     const res = await request.post('/data/dataset/preview-sql', {
       connectionId: formData.connectionId,
       sqlText: formData.sqlText,
-      maxRows: 10,
+      maxRows: 5,
     })
     if (res.code === 200) {
       const columns = res.data?.columns || []
@@ -3796,6 +4309,7 @@ function goToPrevStep() {
 }
 
 :global(.data-dataset-edit-form .n-form-item:has(.step-shell)),
+:global(.data-dataset-edit-form .n-form-item:has(.dataset-editor-page)),
 :global(.data-dataset-edit-form .n-form-item:has(.dataset-context-panel)),
 :global(.data-dataset-edit-form .n-form-item:has(.permission-panel)),
 :global(.data-dataset-edit-form .n-form-item:has(.dataset-param-editor)),
@@ -3815,7 +4329,18 @@ function goToPrevStep() {
   max-width: none !important;
 }
 
+:global(.data-dataset-edit-form .n-form-item:has(.dataset-editor-page)) {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
 :global(.data-dataset-edit-form .n-form-item:has(.step-shell) .n-form-item-blank) {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+:global(.data-dataset-edit-form .n-form-item:has(.dataset-editor-page) .n-form-item-blank) {
   width: 100% !important;
   max-width: none !important;
 }
@@ -3845,6 +4370,12 @@ function goToPrevStep() {
 
 :global(.data-dataset-edit-form .n-form-item:has(.permission-panel):hover) {
   transform: none !important;
+}
+
+:global(.data-dataset-edit-form .n-form-item:has(.dataset-editor-page):hover) {
+  border: 0;
+  box-shadow: none;
+  transform: none;
 }
 
 :global(.data-dataset-edit-form .n-form-item-blank) {
@@ -4253,39 +4784,921 @@ function goToPrevStep() {
   background: #fee2e2;
 }
 
+:global(.data-dataset-edit-form .dataset-editor-page) {
+  --editor-blue: #1677ff;
+  --editor-blue-soft: #e8f3ff;
+  --editor-bg: #f7f8fa;
+  --editor-border: #dcdfe6;
+  --editor-border-light: #e5e6eb;
+  --editor-text: #1d2129;
+  --editor-muted: #86909c;
+  --editor-disabled: #c9cdd4;
+  --editor-error: #f53f3f;
+  --editor-success: #00b42a;
+  min-height: min(78vh, 920px);
+  padding: 16px;
+  color: var(--editor-text);
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--editor-bg);
+  border-radius: 4px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page *),
+:global(.data-dataset-edit-form .dataset-editor-page *::before),
+:global(.data-dataset-edit-form .dataset-editor-page *::after) {
+  box-sizing: border-box;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page button) {
+  cursor: pointer;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page button:disabled) {
+  cursor: default;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page .n-button) {
+  min-height: 36px;
+  padding: 0 24px;
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 4px;
+  --n-border-radius: 4px !important;
+  --n-border: 1px solid #dcdfe6 !important;
+  --n-border-hover: 1px solid #86909c !important;
+  --n-border-focus: 1px solid #1677ff !important;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page .n-button--primary-type) {
+  color: #fff;
+  --n-color: #1677ff !important;
+  --n-color-hover: #4096ff !important;
+  --n-color-pressed: #0958d9 !important;
+  --n-border: 1px solid #1677ff !important;
+  --n-border-hover: 1px solid #4096ff !important;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page .n-input),
+:global(.data-dataset-edit-form .dataset-editor-page .n-input-number),
+:global(.data-dataset-edit-form .dataset-editor-page .n-base-selection) {
+  --n-border-radius: 4px !important;
+  --n-border: 1px solid #dcdfe6 !important;
+  --n-border-hover: 1px solid #86909c !important;
+  --n-border-focus: 1px solid #1677ff !important;
+  --n-box-shadow-focus: 0 0 0 2px rgb(22 119 255 / 20%) !important;
+  --n-placeholder-color: #c9cdd4 !important;
+  --n-text-color: #1d2129 !important;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page .n-radio-button) {
+  --n-button-border-radius: 4px !important;
+  --n-button-color-active: #1677ff !important;
+  --n-button-text-color-active: #fff !important;
+  --n-button-border-color-active: #1677ff !important;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page .n-switch.n-switch--active) {
+  --n-rail-color-active: #1677ff !important;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page .n-slider) {
+  --n-fill-color: #1677ff !important;
+  --n-fill-color-hover: #1677ff !important;
+  --n-handle-color: #1677ff !important;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-header) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--editor-border);
+  border-radius: 4px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-heading) {
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-breadcrumb) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  color: #4e5969;
+  font-size: 14px;
+  line-height: 1.4;
+  border: 0;
+  background: transparent;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-breadcrumb:hover span:first-child) {
+  color: var(--editor-blue);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-breadcrumb i) {
+  color: var(--editor-disabled);
+  font-style: normal;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-title-row) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-title-row h2) {
+  max-width: 520px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--editor-text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .dataset-status-tag) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  color: var(--editor-blue);
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 4px;
+  background: var(--editor-blue-soft);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-meta) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-meta span) {
+  color: var(--editor-disabled);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-actions) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-actions .n-button) {
+  min-width: 88px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-steps) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  border: 1px solid var(--editor-border);
+  border-radius: 4px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 14px 0 0;
+  color: var(--editor-muted);
+  text-align: left;
+  border: 0;
+  background: transparent;
+  transition: color 0.18s ease;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step:last-child) {
+  grid-template-columns: minmax(0, 1fr);
+  padding-right: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step:hover),
+:global(.data-dataset-edit-form .dataset-editor-step.is-active),
+:global(.data-dataset-edit-form .dataset-editor-step.is-completed) {
+  color: var(--editor-text);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__content) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: inherit;
+  line-height: 1.4;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__index) {
+  flex: 0 0 auto;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__label) {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__caption) {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--editor-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step.is-active .dataset-editor-step__index),
+:global(.data-dataset-edit-form .dataset-editor-step.is-active .dataset-editor-step__label),
+:global(.data-dataset-edit-form .dataset-editor-step.is-completed .dataset-editor-step__index),
+:global(.data-dataset-edit-form .dataset-editor-step.is-completed .dataset-editor-step__label) {
+  color: var(--editor-blue);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step.is-active .dataset-editor-step__caption) {
+  color: #4e5969;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__separator) {
+  padding-top: 1px;
+  color: var(--editor-disabled);
+  font-size: 18px;
+  line-height: 1;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-grid) {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.72fr) minmax(560px, 1.28fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel) {
+  min-width: 0;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid var(--editor-border);
+  border-radius: 4px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .panel-section-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+  margin-bottom: 16px;
+}
+
+:global(.data-dataset-edit-form .panel-section-head h3) {
+  margin: 0;
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+:global(.data-dataset-edit-form .panel-inline-indicator) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  color: var(--editor-blue);
+  font-size: 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--editor-blue-soft);
+}
+
+:global(.data-dataset-edit-form .panel-inline-indicator--button) {
+  cursor: pointer;
+}
+
+:global(.data-dataset-edit-form .panel-inline-indicator--button:hover) {
+  border-color: rgb(22 119 255 / 28%);
+}
+
+:global(.param-preview-popover) {
+  min-width: 0;
+}
+
+:global(.param-preview-list) {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+:global(.param-preview-row) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #e5e6eb;
+  border-radius: 4px;
+  background: #f7f8fa;
+}
+
+:global(.param-preview-row strong) {
+  overflow: hidden;
+  color: #1d2129;
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.param-preview-row span) {
+  overflow-wrap: anywhere;
+  color: #86909c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+:global(.data-dataset-edit-form .dataset-form-grid),
+:global(.data-dataset-edit-form .execution-settings) {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+:global(.data-dataset-edit-form .dataset-field) {
+  display: flex;
+  grid-column: span 6;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .setting-switch-row) {
+  display: flex;
+  grid-column: span 6;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+}
+
+:global(.data-dataset-edit-form .dataset-field--wide),
+:global(.data-dataset-edit-form .dataset-field--full) {
+  grid-column: 1 / -1;
+}
+
+:global(.data-dataset-edit-form .dataset-field > span) {
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .setting-switch-row > span) {
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .dataset-field--required > span::before) {
+  margin-right: 4px;
+  color: var(--editor-error);
+  content: '*';
+}
+
+:global(.data-dataset-edit-form .dataset-tag-list),
+:global(.data-dataset-edit-form .acl-tag-list) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+}
+
+:global(.data-dataset-edit-form .dataset-soft-tag),
+:global(.data-dataset-edit-form .acl-tag) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 8px;
+  color: var(--editor-blue);
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--editor-blue-soft);
+}
+
+:global(.data-dataset-edit-form .acl-tag button) {
+  padding: 0;
+  color: var(--editor-blue);
+  font-size: 14px;
+  line-height: 1;
+  border: 0;
+  background: transparent;
+}
+
+:global(.data-dataset-edit-form .dataset-text-action) {
+  padding: 0;
+  color: var(--editor-blue);
+  font-size: 14px;
+  border: 0;
+  background: transparent;
+}
+
+:global(.data-dataset-edit-form .dataset-text-action:disabled) {
+  color: var(--editor-disabled);
+}
+
+:global(.data-dataset-edit-form .sql-workbench) {
+  display: grid;
+  gap: 12px;
+}
+
+:global(.data-dataset-edit-form .sql-editor-shell) {
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor) {
+  border-color: #1e1e1e;
+  border-radius: 4px;
+  background: #1e1e1e;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__toolbar) {
+  min-height: 40px;
+  border-bottom: 1px solid #2f3338;
+  background: #1e1e1e;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__title),
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__title i) {
+  color: #d4d4d4;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__body),
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__container),
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-editor),
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-scroller) {
+  min-height: 300px;
+  background: #1e1e1e !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-editor) {
+  color: #d4d4d4 !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-gutters) {
+  color: #86909c !important;
+  background: #1e1e1e !important;
+  border-right: 1px solid #2f3338 !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-activeLine),
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-activeLineGutter) {
+  background: #252526 !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__placeholder) {
+  color: #6b7280;
+}
+
+:global(.data-dataset-edit-form .sql-workbench-toolbar) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 0 10px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .sql-workbench-toolbar span) {
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell) {
+  min-width: 0;
+  padding-top: 2px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell .n-data-table-th) {
+  color: #4e5969;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell .n-data-table-td) {
+  color: var(--editor-text);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell .n-data-table-tr:hover .n-data-table-td) {
+  background: #f2f3f5;
+}
+
+:global(.data-dataset-edit-form .sql-preview-empty) {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--editor-border);
+  border-radius: 4px;
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .sql-preview-note) {
+  margin-top: 8px;
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .table-source-panel) {
+  display: grid;
+  gap: 12px;
+}
+
+:global(.data-dataset-edit-form .table-source-summary) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+:global(.data-dataset-edit-form .table-source-card) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--editor-border);
+  border-radius: 4px;
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .table-source-card span) {
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .table-source-card strong) {
+  overflow: hidden;
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .table-source-fields) {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--editor-border);
+  border-radius: 4px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .table-source-fields__head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+:global(.data-dataset-edit-form .table-source-fields__head span) {
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .table-source-fields__head small) {
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .table-source-field-list) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 174px;
+  overflow: auto;
+}
+
+:global(.data-dataset-edit-form .table-source-field-chip) {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #4e5969;
+  font-size: 12px;
+  border: 1px solid var(--editor-border-light);
+  border-radius: 4px;
+  background: var(--editor-bg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .table-source-field-chip--more) {
+  color: var(--editor-blue);
+  border-color: transparent;
+  background: var(--editor-blue-soft);
+}
+
+:global(.data-dataset-edit-form .table-source-actions) {
+  display: flex;
+  justify-content: flex-start;
+}
+
+:global(.data-dataset-edit-form .setting-row) {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+:global(.data-dataset-edit-form .setting-row__head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .setting-row__head strong) {
+  color: #4e5969;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .setting-row__control) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 12px;
+  align-items: center;
+}
+
+:global(.data-dataset-edit-form .access-control-block) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+:global(.data-dataset-edit-form .access-mode-row) {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .access-mode-row .n-radio-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .access-mode-row > span),
+:global(.data-dataset-edit-form .row-permission-title > span) {
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .acl-editor--compact) {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+:global(.data-dataset-edit-form .acl-editor__toolbar) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+:global(.data-dataset-edit-form .acl-editor__title) {
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .acl-editor__hint) {
+  margin-top: 4px;
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .acl-rows) {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+:global(.data-dataset-edit-form .acl-row) {
+  display: grid;
+  grid-template-columns: 94px minmax(180px, 1fr) 96px 36px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--editor-border-light);
+  border-radius: 4px;
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .row-permission-strip) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .row-permission-title) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+:global(.data-dataset-edit-form .row-scope-expression) {
+  min-height: 34px;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  color: #4e5969;
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 4px;
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .row-permission-rules) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .rule-chip) {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  overflow-wrap: anywhere;
+  color: var(--editor-blue);
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 4px;
+  background: var(--editor-blue-soft);
+  white-space: normal;
+}
+
+:global(.data-dataset-edit-form .rule-chip--empty) {
+  color: var(--editor-muted);
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-mini-list) {
+  display: grid;
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-mini) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr) 36px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--editor-border-light);
+  border-radius: 4px;
+  background: var(--editor-bg);
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-mini .n-select) {
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .row-scope-rule-mini > span) {
+  text-align: center;
+  color: #4e5969;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid) {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid div) {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid dt) {
+  color: var(--editor-muted);
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid dd) {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--editor-text);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .dataset-current-version) {
+  margin-left: 4px;
+  color: var(--editor-blue);
+}
+
 :global(.data-dataset-edit-form .row-scope-empty) {
   padding: 20px 0;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 14px;
+  background: var(--editor-bg);
+  border: 1px dashed var(--editor-border);
+  border-radius: 4px;
 }
 
 :global(.data-dataset-edit-form .row-scope-condition-preview) {
   min-height: 38px;
   padding: 10px 12px;
-  color: #334155;
+  color: #4e5969;
   font-family: 'JetBrains Mono', 'Menlo', monospace;
   font-size: 12px;
   line-height: 1.6;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  background: var(--editor-bg);
+  border: 1px solid var(--editor-border-light);
+  border-radius: 4px;
 }
 
 :global(.data-dataset-edit-form .row-scope-remark) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 16px;
+  padding: 12px;
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border: 1px solid var(--editor-border-light);
+  border-radius: 4px;
 }
 
 :global(.data-dataset-edit-form .row-scope-remark label) {
-  color: #334155;
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--editor-text);
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -4650,6 +6063,32 @@ function goToPrevStep() {
     grid-template-columns: 1fr;
   }
 
+  :global(.data-dataset-edit-form .dataset-editor-header),
+  :global(.data-dataset-edit-form .row-permission-title) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  :global(.data-dataset-edit-form .access-mode-row) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-actions) {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-grid),
+  :global(.data-dataset-edit-form .sql-workbench),
+  :global(.data-dataset-edit-form .table-source-summary) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .sql-preview-shell) {
+    border-top: 1px solid #e2e8f0;
+    border-left: 0;
+  }
+
   :global(.data-dataset-edit-form .permission-panel__header),
   :global(.data-dataset-edit-form .acl-editor__toolbar) {
     flex-direction: column;
@@ -4662,7 +6101,8 @@ function goToPrevStep() {
 
   :global(.data-dataset-edit-form .acl-row),
   :global(.data-dataset-edit-form .row-scope-rule-header),
-  :global(.data-dataset-edit-form .row-scope-rule-row) {
+  :global(.data-dataset-edit-form .row-scope-rule-row),
+  :global(.data-dataset-edit-form .row-scope-rule-mini) {
     grid-template-columns: 1fr;
   }
 
@@ -4725,6 +6165,38 @@ function goToPrevStep() {
 
   :global(.data-dataset-edit-form .context-panel__facts) {
     grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-title-row h2) {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  :global(.data-dataset-edit-form .dataset-form-grid),
+  :global(.data-dataset-edit-form .execution-settings),
+  :global(.data-dataset-edit-form .dataset-info-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .dataset-field),
+  :global(.data-dataset-edit-form .dataset-field--wide),
+  :global(.data-dataset-edit-form .dataset-field--full),
+  :global(.data-dataset-edit-form .setting-switch-row) {
+    grid-column: auto;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-steps),
+  :global(.data-dataset-edit-form .setting-row__control) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-step) {
+    grid-template-columns: 1fr;
+    padding-right: 0;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-step__separator) {
+    display: none;
   }
 
   :global(.data-dataset-edit-form .sql-preview-action) {

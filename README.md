@@ -295,6 +295,29 @@ cd forge-admin
 
 ### 2. 初始化数据库
 
+推荐使用统一初始化脚本，它会按顺序执行历史初始化 SQL、`forge/db/migration` 迁移脚本、`forge/db/seed/required` 必需初始化数据，并可按需导入 demo/optional 数据。
+
+```bash
+bash forge/scripts/db/init-db.sh \
+  --host 127.0.0.1 \
+  --port 3306 \
+  --database forge \
+  --user root \
+  --password your_password
+```
+
+如需导入演示数据：
+
+```bash
+bash forge/scripts/db/init-db.sh \
+  --database forge \
+  --user root \
+  --password your_password \
+  --with-demo
+```
+
+也可以手动执行 SQL：
+
 ```bash
 # 创建数据库
 mysql -u root -p -e "CREATE DATABASE forge DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
@@ -302,9 +325,23 @@ mysql -u root -p -e "CREATE DATABASE forge DEFAULT CHARACTER SET utf8mb4 COLLATE
 # 后台管理基础表
 mysql -u root -p forge < forge/forge-admin-server/sql/初始化脚本.sql
 
+# 数据库迁移脚本
+find forge/db/migration -maxdepth 1 -type f -name '*.sql' | sort | while read file; do mysql -u root -p forge < "$file"; done
+
+# 必需初始化数据
+find forge/db/seed/required -maxdepth 1 -type f -name '*.sql' | sort | while read file; do mysql -u root -p forge < "$file"; done
+
 # 如果启用 AI 大屏，再导入报表服务表
 mysql -u root -p forge < forge/forge-report-server/sql/report-init.sql
 ```
+
+数据库变更约定：
+
+- 表结构变更统一新增到 `forge/db/migration/Vx.y.z__change_name.sql`。
+- 系统必需基础数据放入 `forge/db/seed/required/R__*.sql`。
+- 演示数据放入 `forge/db/seed/demo/D__*.sql`，默认不导入。
+- 可选模块数据放入 `forge/db/seed/optional/O__*.sql`。
+- SQL 必须幂等、显式列字段，禁止提交真实密码、token、API Key 或生产业务数据。
 
 ### 3. 准备本地配置
 
@@ -358,7 +395,23 @@ pnpm dev
 
 默认登录账号：`admin` / `123456`
 
-### 6. 构建生产包
+### 6. 社区数据库同步
+
+需要同步开源社区数据库脚本时，先执行 dry-run 查看本次导出范围：
+
+```bash
+bash forge/scripts/db/export-community-db.sh --dry-run
+```
+
+确认无误后执行导出：
+
+```bash
+bash forge/scripts/db/export-community-db.sh
+```
+
+导出结果位于 `forge/db/community-export/`，流程会校验 migration 命名、复制 seed 脚本、扫描敏感字段并生成摘要。白名单、黑名单和敏感字段规则维护在 `forge/scripts/db/community-db.config.json`。
+
+### 7. 构建生产包
 
 ```bash
 # 后台管理前端

@@ -15,7 +15,10 @@ export const usePackagesStore = defineStore({
     materialUploadVisible: false,
     materialUploadCategory: 'background',
     materialPhotosLoading: false,
-    materialPhotosVersion: 0
+    materialPhotosVersion: 0,
+    materialPhotosPageNum: 1,
+    materialPhotosPageSize: 24,
+    materialPhotosTotal: 0
   }),
   getters: {
     getPackagesList(): PackagesType {
@@ -27,14 +30,16 @@ export const usePackagesStore = defineStore({
       this.packagesList.Photos.splice(0, this.packagesList.Photos.length, ...nextPhotos)
       this.materialPhotosVersion += 1
     },
-    async loadMaterialPhotos() {
+    async loadMaterialPhotos(pageNum = this.materialPhotosPageNum) {
       this.materialPhotosLoading = true
       try {
         const response = await getMaterialAssetPageApi({
-          pageNum: 1,
-          pageSize: 200
+          pageNum,
+          pageSize: this.materialPhotosPageSize
         })
         const records = (response.data?.records || []) as MaterialAsset[]
+        this.materialPhotosPageNum = Number(response.data?.current || pageNum || 1)
+        this.materialPhotosTotal = Number(response.data?.total || 0)
         const nextPhotos = [
           buildMaterialUploadEntry(),
           ...records.map(mapMaterialAssetToPhotoConfig),

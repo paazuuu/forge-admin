@@ -9,5 +9,8 @@ export interface PackagesStoreType {
   materialUploadVisible: boolean,
   materialUploadCategory: string,
   materialPhotosLoading: boolean,
-  materialPhotosVersion: number
+  materialPhotosVersion: number,
+  materialPhotosPageNum: number,
+  materialPhotosPageSize: number,
+  materialPhotosTotal: number
 }
