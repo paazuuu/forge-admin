@@ -85,6 +85,8 @@
             class="ai-card-item"
             :class="{ 'is-checked': isRowChecked(row) }"
             @click="handleCardClick(row, index)"
+            @mousemove="handleCardMouseMove"
+            @mouseleave="handleCardMouseLeave"
           >
             <slot
               name="card"
@@ -630,6 +632,25 @@ function handleCardClick(row) {
   setRowChecked(row, !isRowChecked(row))
 }
 
+function handleCardMouseMove(event) {
+  const target = event.currentTarget
+  if (!target)
+    return
+
+  const rect = target.getBoundingClientRect()
+  target.style.setProperty('--card-spotlight-x', `${event.clientX - rect.left}px`)
+  target.style.setProperty('--card-spotlight-y', `${event.clientY - rect.top}px`)
+}
+
+function handleCardMouseLeave(event) {
+  const target = event.currentTarget
+  if (!target)
+    return
+
+  target.style.setProperty('--card-spotlight-x', '50%')
+  target.style.setProperty('--card-spotlight-y', '50%')
+}
+
 /**
  * 清除选择
  */
@@ -689,7 +710,11 @@ defineExpose({
 }
 
 .ai-card-item {
+  --card-spotlight-x: 50%;
+  --card-spotlight-y: 50%;
   min-width: 0;
+  position: relative;
+  isolation: isolate;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-primary);
@@ -701,9 +726,50 @@ defineExpose({
     background-color 0.2s ease;
 }
 
+.ai-card-item::before,
+.ai-card-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.ai-card-item::before {
+  background: radial-gradient(
+    180px circle at var(--card-spotlight-x) var(--card-spotlight-y),
+    color-mix(in srgb, var(--primary-color) 22%, transparent),
+    color-mix(in srgb, #06b6d4 10%, transparent) 36%,
+    transparent 68%
+  );
+  filter: blur(10px);
+}
+
+.ai-card-item::after {
+  padding: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    150px circle at var(--card-spotlight-x) var(--card-spotlight-y),
+    color-mix(in srgb, var(--primary-color) 48%, transparent),
+    transparent 72%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
 .ai-card-item:hover {
   border-color: color-mix(in srgb, var(--primary-color) 46%, var(--border-light));
   box-shadow: 0 4px 12px rgb(15 23 42 / 7%);
+}
+
+.ai-card-item:hover::before,
+.ai-card-item:hover::after {
+  opacity: 1;
 }
 
 .ai-card-item.is-checked {
@@ -712,6 +778,8 @@ defineExpose({
 }
 
 .ai-card-default {
+  position: relative;
+  z-index: 2;
   height: 100%;
   min-height: 136px;
   display: flex;

@@ -963,7 +963,7 @@ async function loadAndSetMenuData() {
   );
   filter: blur(2px);
   transform: skewX(-18deg);
-  animation: backgroundSweep 4.8s ease-in-out infinite;
+  animation: backgroundSweep 9.6s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -1011,6 +1011,12 @@ async function loadAndSetMenuData() {
 }
 
 /* Login card */
+@property --login-card-border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
 .login-card {
   position: relative;
   z-index: 2;
@@ -1049,6 +1055,35 @@ async function loadAndSetMenuData() {
   pointer-events: none;
 }
 
+.login-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 4;
+  padding: 3px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--login-card-border-angle),
+    transparent 0deg,
+    transparent 268deg,
+    rgba(8, 145, 178, 0.12) 286deg,
+    rgba(29, 78, 216, 0.82) 310deg,
+    rgba(14, 116, 144, 1) 332deg,
+    rgba(125, 211, 252, 0.92) 346deg,
+    rgba(8, 145, 178, 0.88) 356deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(29, 78, 216, 0.72)) drop-shadow(0 0 18px rgba(8, 145, 178, 0.5));
+  pointer-events: none;
+  animation: loginCardMeteor 7.2s linear infinite;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -1057,6 +1092,12 @@ async function loadAndSetMenuData() {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loginCardMeteor {
+  to {
+    --login-card-border-angle: 360deg;
   }
 }
 
@@ -1095,7 +1136,7 @@ async function loadAndSetMenuData() {
   );
   filter: blur(1px);
   transform: skewX(-18deg);
-  animation: brandSweep 3.4s ease-in-out infinite;
+  animation: brandSweep 7.8s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -2039,7 +2080,8 @@ async function loadAndSetMenuData() {
   .light-sweep,
   .login-bg-animated::before,
   .login-brand::before,
-  .login-brand::after {
+  .login-brand::after,
+  .login-card::after {
     animation: none;
   }
 }
