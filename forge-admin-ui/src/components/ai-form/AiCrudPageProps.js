@@ -126,6 +126,34 @@ export const aiCrudPageProps = {
   },
 
   /**
+   * 数据渲染模式
+   * @type {'table'|'card'}
+   */
+  renderMode: {
+    type: String,
+    default: 'table',
+    validator: value => ['table', 'card'].includes(value),
+  },
+
+  /**
+   * 卡片渲染配置
+   * @type {object}
+   */
+  cardProps: {
+    type: Object,
+    default: () => ({}),
+  },
+
+  /**
+   * 是否显示列表/卡片切换
+   * @type {boolean}
+   */
+  showRenderModeSwitch: {
+    type: Boolean,
+    default: true,
+  },
+
+  /**
    * 表格最大高度
    * @type {number | string}
    */

@@ -65,6 +65,40 @@
       </template>
     </n-button>
 
+    <!-- 渲染模式切换 -->
+    <div v-if="showRenderModeSwitch" class="render-mode-switch">
+      <n-tooltip>
+        <template #trigger>
+          <button
+            type="button"
+            class="render-mode-button"
+            :class="{ active: renderMode === 'table' }"
+            @click="handleRenderModeChange('table')"
+          >
+            <n-icon size="16">
+              <ListOutline />
+            </n-icon>
+          </button>
+        </template>
+        列表
+      </n-tooltip>
+      <n-tooltip>
+        <template #trigger>
+          <button
+            type="button"
+            class="render-mode-button"
+            :class="{ active: renderMode === 'card' }"
+            @click="handleRenderModeChange('card')"
+          >
+            <n-icon size="16">
+              <GridOutline />
+            </n-icon>
+          </button>
+        </template>
+        卡片
+      </n-tooltip>
+    </div>
+
     <!-- 全屏按钮 -->
     <n-tooltip v-if="showFullscreen">
       <template #trigger>
@@ -85,11 +119,14 @@
 </template>
 
 <script setup>
+/* eslint-disable vue/custom-event-name-casing */
 import {
   ChevronDownOutline,
   ChevronUpOutline,
   ContractOutline,
   ExpandOutline,
+  GridOutline,
+  ListOutline,
   RefreshOutline,
   ResizeOutline,
 } from '@vicons/ionicons5'
@@ -180,6 +217,25 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+
+  /**
+   * 当前渲染模式
+   * @type {'table'|'card'}
+   */
+  renderMode: {
+    type: String,
+    default: 'table',
+    validator: value => ['table', 'card'].includes(value),
+  },
+
+  /**
+   * 是否显示列表/卡片切换
+   * @type {boolean}
+   */
+  showRenderModeSwitch: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 /**
@@ -191,6 +247,7 @@ const emit = defineEmits([
   'filter-change', // 列筛选变化
   'search-toggle', // 搜索显示/隐藏切换
   'fullscreen-change', // 全屏状态变化
+  'render-mode-change', // 渲染模式变化
 ])
 
 /**
@@ -245,6 +302,15 @@ function handleSearchToggle() {
 }
 
 /**
+ * 渲染模式切换
+ */
+function handleRenderModeChange(mode) {
+  if (mode === props.renderMode)
+    return
+  emit('render-mode-change', mode)
+}
+
+/**
  * 全屏切换
  */
 function handleFullscreen() {
@@ -272,7 +338,55 @@ defineExpose({
 .ai-toolbar-action {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   font-size: var(--font-size-lg);
+}
+
+.render-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-light) 82%, var(--primary-color));
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 80%), rgb(255 255 255 / 35%)),
+    color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
+}
+
+.render-mode-button {
+  width: 30px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.render-mode-button:hover {
+  color: var(--text-primary);
+  background: rgb(15 23 42 / 5%);
+}
+
+.render-mode-button.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 68%, #2563eb));
+  box-shadow: 0 4px 10px rgb(15 23 42 / 16%);
+}
+
+.render-mode-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 42%, transparent);
+  outline-offset: 2px;
 }
 </style>

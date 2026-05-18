@@ -23,12 +23,15 @@
           :show-column-filter="showColumnFilter"
           :show-search-toggle="showSearchToggle"
           :show-fullscreen="showFullscreen"
+          :show-render-mode-switch="showRenderModeSwitch"
           :search-visible="searchVisible"
+          :render-mode="currentRenderMode"
           @refresh="handleRefresh"
           @density-change="handleDensityChange"
           @filter-change="handleFilterChange"
           @search-toggle="handleSearchToggle"
           @fullscreen-change="handleFullscreenChange"
+          @render-mode-change="handleRenderModeChange"
         >
           <template #extra>
             <slot name="toolbar-extra" />
@@ -38,6 +41,7 @@
     </div>
     <!-- 数据表格 -->
     <n-data-table
+      v-if="currentRenderMode === 'table'"
       ref="tableRef"
       remote
       :columns="tableColumns"
@@ -51,7 +55,7 @@
       :size="currentSize"
       :max-height="maxHeight"
       :scroll-x="scrollX"
-      :checked-row-keys="checkedRowKeys"
+      :checked-row-keys="innerCheckedRowKeys"
       v-bind="$attrs"
       @update:checked-row-keys="handleUpdateCheckedKeys"
     >
@@ -59,12 +63,93 @@
         <NEmpty description="暂无数据" />
       </template>
     </n-data-table>
+
+    <!-- 卡片列表 -->
+    <div
+      v-else
+      class="ai-card-mode"
+      :style="cardModeStyle"
+    >
+      <NSpin :show="loading">
+        <NGrid
+          v-if="dataSource.length > 0"
+          class="ai-card-grid"
+          :cols="cardGridCols"
+          :x-gap="cardGridGap"
+          :y-gap="cardGridGap"
+          responsive="screen"
+        >
+          <NGridItem
+            v-for="(row, index) in dataSource"
+            :key="rowKeyFn(row)"
+            class="ai-card-item"
+            :class="{ 'is-checked': isRowChecked(row) }"
+            @click="handleCardClick(row, index)"
+          >
+            <slot
+              name="card"
+              :row="row"
+              :index="index"
+              :columns="cardContentColumns"
+              :action-column="cardActionColumn"
+              :checked="isRowChecked(row)"
+              :toggle-checked="checked => setRowChecked(row, checked)"
+              :context="context"
+            >
+              <div class="ai-card-default">
+                <div class="ai-card-header">
+                  <NCheckbox
+                    v-if="!hideSelection"
+                    :checked="isRowChecked(row)"
+                    @click.stop
+                    @update:checked="checked => setRowChecked(row, checked)"
+                  />
+                  <div class="ai-card-title">
+                    <RenderCell
+                      v-if="cardTitleColumn"
+                      :render="() => renderCardCell(row, cardTitleColumn, index)"
+                    />
+                    <span v-else>-</span>
+                  </div>
+                </div>
+
+                <div class="ai-card-body">
+                  <div
+                    v-for="column in cardBodyColumns"
+                    :key="column.key"
+                    class="ai-card-field"
+                  >
+                    <span class="ai-card-field-label">{{ column.title }}</span>
+                    <span class="ai-card-field-value">
+                      <RenderCell :render="() => renderCardCell(row, column, index)" />
+                    </span>
+                  </div>
+                </div>
+
+                <div v-if="cardActionColumn" class="ai-card-footer" @click.stop>
+                  <RenderCell :render="() => renderCardCell(row, cardActionColumn, index)" />
+                </div>
+              </div>
+            </slot>
+          </NGridItem>
+        </NGrid>
+
+        <NEmpty v-else class="ai-card-empty" description="暂无数据" />
+      </NSpin>
+
+      <NPagination
+        v-if="paginationProps"
+        class="ai-card-pagination"
+        v-bind="paginationProps"
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { NEmpty } from 'naive-ui'
-import { computed, h, ref, useSlots } from 'vue'
+/* eslint-disable vue/custom-event-name-casing */
+import { NCheckbox, NEmpty, NGrid, NGridItem, NPagination, NSpin } from 'naive-ui'
+import { computed, h, ref, useSlots, watch } from 'vue'
 import AiToolbarAction from './AiToolbarAction.vue'
 
 const props = defineProps({
@@ -120,6 +205,17 @@ const props = defineProps({
     type: String,
     default: 'small', // 'small' | 'medium' | 'large'
   },
+  // 渲染模式
+  renderMode: {
+    type: String,
+    default: 'table',
+    validator: value => ['table', 'card'].includes(value),
+  },
+  // 卡片渲染配置
+  cardProps: {
+    type: Object,
+    default: () => ({}),
+  },
   // 最大高度
   maxHeight: {
     type: [Number, String],
@@ -134,6 +230,10 @@ const props = defineProps({
   hideSelection: {
     type: Boolean,
     default: false,
+  },
+  checkedRowKeys: {
+    type: Array,
+    default: () => [],
   },
   // 上下文对象（传递给插槽）
   context: {
@@ -196,6 +296,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /**
+   * 是否显示列表/卡片切换
+   * @type {boolean}
+   */
+  showRenderModeSwitch: {
+    type: Boolean,
+    default: true,
+  },
 
   /**
    * 列筛选下拉菜单最大高度
@@ -234,16 +342,34 @@ const emit = defineEmits([
   'filter-change',
   'search-toggle',
   'fullscreen-change',
+  'render-mode-change',
 ])
 
 const slots = useSlots()
 
 const tableRef = ref(null)
-const checkedRowKeys = ref([])
+const innerCheckedRowKeys = ref([...props.checkedRowKeys])
 
 // 工具栏相关状态
 const currentSize = ref(props.size)
+const currentRenderMode = ref(props.renderMode)
 const visibleColumns = ref([])
+
+const RenderCell = props => props.render?.() ?? null
+
+watch(
+  () => props.checkedRowKeys,
+  (keys = []) => {
+    innerCheckedRowKeys.value = [...keys]
+  },
+)
+
+watch(
+  () => props.renderMode,
+  (mode) => {
+    currentRenderMode.value = mode || 'table'
+  },
+)
 
 /**
  * 行键函数
@@ -353,6 +479,62 @@ const tableColumns = computed(() => {
   return cols
 })
 
+function isActionColumn(column) {
+  const key = column?.key || column?.prop || column?.dataIndex || ''
+  return key === 'action' || key === 'actions'
+}
+
+function normalizeCssUnit(value) {
+  if (value === undefined || value === null || value === '')
+    return undefined
+  if (typeof value === 'number')
+    return `${value}px`
+  return String(value)
+}
+
+const cardModeStyle = computed(() => {
+  const style = { ...(props.cardProps.style || {}) }
+  const maxHeight = props.cardProps.maxHeight ?? props.maxHeight
+  if (maxHeight !== undefined) {
+    style.maxHeight = normalizeCssUnit(maxHeight)
+    style.overflow = style.overflow || 'auto'
+  }
+  return style
+})
+
+const cardGridCols = computed(() => props.cardProps.cols || props.cardProps.gridCols || '1 s:2 m:3 l:4 xl:4 2xl:4')
+const cardGridGap = computed(() => props.cardProps.gap ?? 10)
+
+const cardActionColumn = computed(() => tableColumns.value.find(isActionColumn))
+
+const cardContentColumns = computed(() => {
+  return tableColumns.value.filter(column => column.type !== 'selection' && !isActionColumn(column))
+})
+
+const cardTitleColumn = computed(() => {
+  const titleKey = props.cardProps.titleKey || props.cardProps.titleField
+  if (titleKey) {
+    const matchedColumn = cardContentColumns.value.find(column => column.key === titleKey)
+    if (matchedColumn)
+      return matchedColumn
+  }
+  return cardContentColumns.value[0]
+})
+
+const cardBodyColumns = computed(() => {
+  const limit = props.cardProps.fieldLimit ?? 4
+  return cardContentColumns.value
+    .filter(column => column.key !== cardTitleColumn.value?.key)
+    .slice(0, limit)
+})
+
+function renderCardCell(row, column, index) {
+  if (column?.render)
+    return column.render(row, index)
+  const value = row?.[column?.key]
+  return value ?? '-'
+}
+
 /**
  * 处理刷新
  */
@@ -391,6 +573,14 @@ function handleFullscreenChange(isFullscreen) {
 }
 
 /**
+ * 处理列表/卡片模式变化
+ */
+function handleRenderModeChange(mode) {
+  currentRenderMode.value = mode
+  emit('render-mode-change', mode)
+}
+
+/**
  * 分页配置
  */
 const paginationProps = computed(() => {
@@ -414,15 +604,37 @@ const paginationProps = computed(() => {
  * 更新选中的行
  */
 function handleUpdateCheckedKeys(keys) {
-  checkedRowKeys.value = keys
+  innerCheckedRowKeys.value = keys
   emit('update:checked-row-keys', keys)
+}
+
+function isRowChecked(row) {
+  return innerCheckedRowKeys.value.includes(rowKeyFn.value(row))
+}
+
+function setRowChecked(row, checked) {
+  const key = rowKeyFn.value(row)
+  const keys = new Set(innerCheckedRowKeys.value)
+  if (checked) {
+    keys.add(key)
+  }
+  else {
+    keys.delete(key)
+  }
+  handleUpdateCheckedKeys(Array.from(keys))
+}
+
+function handleCardClick(row) {
+  if (props.hideSelection || !props.cardProps.selectOnClick)
+    return
+  setRowChecked(row, !isRowChecked(row))
 }
 
 /**
  * 清除选择
  */
 function clearSelection() {
-  checkedRowKeys.value = []
+  innerCheckedRowKeys.value = []
   emit('update:checked-row-keys', [])
 }
 
@@ -432,7 +644,7 @@ function clearSelection() {
 function getCheckedRows() {
   return props.dataSource.filter((row) => {
     const key = rowKeyFn.value(row)
-    return checkedRowKeys.value.includes(key)
+    return innerCheckedRowKeys.value.includes(key)
   })
 }
 
@@ -440,7 +652,7 @@ function getCheckedRows() {
  * 设置选中的行
  */
 function setCheckedKeys(keys) {
-  checkedRowKeys.value = keys
+  innerCheckedRowKeys.value = keys
   emit('update:checked-row-keys', keys)
 }
 
@@ -449,7 +661,9 @@ defineExpose({
   clearSelection,
   getCheckedRows,
   setCheckedKeys,
-  checkedRowKeys,
+  checkedRowKeys: innerCheckedRowKeys,
+  getRenderMode: () => currentRenderMode.value,
+  setRenderMode: handleRenderModeChange,
   handleRefresh,
   handleDensityChange,
   handleFilterChange,
@@ -459,6 +673,132 @@ defineExpose({
 <style scoped>
 .ai-table-wrapper {
   width: 100%;
+}
+
+.ai-card-mode {
+  padding: 10px 12px 0;
+}
+
+.ai-card-mode :deep(.n-spin-container),
+.ai-card-mode :deep(.n-spin-content) {
+  width: 100%;
+}
+
+.ai-card-grid {
+  width: 100%;
+}
+
+.ai-card-item {
+  min-width: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+  overflow: hidden;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.ai-card-item:hover {
+  border-color: color-mix(in srgb, var(--primary-color) 46%, var(--border-light));
+  box-shadow: 0 4px 12px rgb(15 23 42 / 7%);
+}
+
+.ai-card-item.is-checked {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 72%, transparent);
+}
+
+.ai-card-default {
+  height: 100%;
+  min-height: 136px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 6px 6px 0 0;
+  background:
+    linear-gradient(135deg, rgb(37 99 235 / 8%), transparent 46%),
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-secondary) 82%, transparent), var(--bg-primary));
+}
+
+.ai-card-header :deep(.n-checkbox) {
+  flex-shrink: 0;
+}
+
+.ai-card-title {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-card-body {
+  flex: 1;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.ai-card-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.ai-card-field-label {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.ai-card-field-value {
+  min-width: 0;
+  color: var(--text-secondary);
+  word-break: break-word;
+  display: flex;
+  align-items: center;
+}
+
+.ai-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-light);
+  border-radius: 0 0 6px 6px;
+  background:
+    linear-gradient(90deg, transparent, rgb(16 185 129 / 6%)), color-mix(in srgb, var(--bg-secondary) 56%, transparent);
+}
+
+.ai-card-empty {
+  padding: 56px 0;
+}
+
+.ai-card-pagination {
+  padding: 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-light);
+  margin-top: 12px;
 }
 
 .ai-table-toolbar {

@@ -52,12 +52,16 @@
           :striped="striped"
           :bordered="bordered"
           :size="tableSize"
+          :render-mode="renderMode"
+          :card-props="cardProps"
+          :show-render-mode-switch="showRenderModeSwitch"
           :max-height="computedMaxHeight"
           :scroll-x="computedScrollX"
           v-bind="tableProps"
           @page-change="handlePageChange"
           @page-size-change="handlePageSizeChange"
           @refresh="handleRefresh"
+          @render-mode-change="handleRenderModeChange"
         >
           <template #toolbar-left>
             <!-- 工具栏区域 -->
@@ -117,6 +121,9 @@
           <!-- 透传表格插槽 -->
           <template v-for="slotName in tableSlots" #[slotName]="slotProps">
             <slot :name="`table-${slotName}`" v-bind="slotProps" />
+          </template>
+          <template v-if="$slots['table-card']" #card="slotProps">
+            <slot name="table-card" v-bind="slotProps" />
           </template>
         </AiTable>
       </div>
@@ -297,6 +304,7 @@ const emit = defineEmits([
   'selection-change', // 选中项变化
   'modal-open', // 弹窗打开
   'modal-close', // 弹窗关闭
+  'render-mode-change', // 列表/卡片模式切换
 ])
 
 /**
@@ -832,6 +840,13 @@ function handleReset() {
  */
 function handleRefresh() {
   loadList()
+}
+
+/**
+ * 列表/卡片渲染模式切换
+ */
+function handleRenderModeChange(mode) {
+  emit('render-mode-change', mode)
 }
 
 /**
