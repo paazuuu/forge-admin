@@ -21,7 +21,8 @@ import { CreateComponentType } from '@/packages/index.d'
 import { get, post, put, del } from '@/api/http'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 import { switchPreviewPage } from '@/views/preview/utils/storage'
-import type { ToolbarAction, option as defaultOption } from './config'
+import { option as defaultOption } from './config'
+import type { ToolbarAction } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -32,7 +33,12 @@ const props = defineProps({
 
 const chartEditStore = useChartEditStore()
 const loadingMap = reactive<Record<string, boolean>>({})
-const option = computed(() => props.chartConfig.option)
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  actions: props.chartConfig.option?.actions || []
+}))
 const rootStyle = computed(() => ({
   '--tool-accent': option.value.style.accentColor,
   '--tool-text': option.value.style.textColor,

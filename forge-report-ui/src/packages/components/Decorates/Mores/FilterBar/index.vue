@@ -14,10 +14,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, PropType, reactive } from 'vue'
+import { computed, onMounted, PropType, reactive, watch } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
-import type { option as defaultOption } from './config'
+import { option as defaultOption } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -28,7 +28,12 @@ const props = defineProps({
 
 const chartEditStore = useChartEditStore()
 const form = reactive<Record<string, any>>({})
-const option = computed(() => props.chartConfig.option)
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  fields: props.chartConfig.option?.fields || []
+}))
 const rootStyle = computed(() => ({
   '--filter-accent': option.value.style.accentColor,
   '--filter-text': option.value.style.textColor,
@@ -44,6 +49,7 @@ const initForm = () => {
 }
 const applyFilter = () => {
   chartEditStore.setRuntimePageContext({ ...chartEditStore.getRuntimePageContext, ...form })
+  window.dispatchEvent(new CustomEvent('forge-report-refresh', { detail: { source: 'filter-bar', context: { ...form } } }))
   window['$message']?.success('筛选条件已应用')
 }
 const resetFilter = () => {
@@ -53,6 +59,7 @@ const resetFilter = () => {
   applyFilter()
 }
 
+watch(() => option.value.fields, initForm, { deep: true })
 onMounted(initForm)
 </script>
 

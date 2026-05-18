@@ -8,6 +8,13 @@ export type CrudFieldType = 'input' | 'select' | 'date' | 'dateRange' | 'number'
 export type CrudActionType = 'goPage' | 'openModal' | 'closeModal' | 'link' | 'request'
 export type CrudColumnType = 'text' | 'dict' | 'date' | 'money' | 'image' | 'link' | 'progress' | 'switch'
 export type CrudActionAfter = 'none' | 'refresh' | 'closeModal' | 'goPage' | 'openModal'
+export type CrudConditionOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'empty' | 'notEmpty'
+
+export interface CrudCondition {
+  field: string
+  operator: CrudConditionOperator
+  value?: string | number | boolean
+}
 
 export interface CrudSearchField {
   label: string
@@ -49,6 +56,8 @@ export interface CrudRowAction {
   confirmText?: string
   visibleWhen?: string
   disabledWhen?: string
+  visibleConditions?: CrudCondition[]
+  disabledConditions?: CrudCondition[]
   afterAction?: CrudActionAfter
   afterTargetPageId?: string
 }

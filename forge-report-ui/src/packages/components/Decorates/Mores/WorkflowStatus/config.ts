@@ -7,6 +7,12 @@ import { WorkflowStatusConfig } from './index'
 export const option = {
   title: '处理进度',
   activeIndex: 1,
+  dataSource: {
+    url: '',
+    method: 'get',
+    dataPath: 'data',
+    paramMap: {}
+  },
   steps: [
     { label: '提交', desc: '已创建', status: 'done' },
     { label: '审核', desc: '处理中', status: 'active' },

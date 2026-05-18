@@ -155,7 +155,10 @@
     <template v-else-if="editorMode === 'apiTest'">
       <div class="modal-toolbar">
         <span>按当前接口配置拉取详情数据。</span>
-        <n-button size="small" type="primary" :loading="apiTesting" @click="testApi">重新测试</n-button>
+        <div class="toolbar-actions">
+          <n-button size="small" secondary :disabled="!Object.keys(apiTestData).length" @click="generateFieldsFromApi">生成字段</n-button>
+          <n-button size="small" type="primary" :loading="apiTesting" @click="testApi">重新测试</n-button>
+        </div>
       </div>
       <div v-if="apiTestError" class="api-test-error">{{ apiTestError }}</div>
       <n-input v-else :value="apiTestPreview" type="textarea" readonly :autosize="{ minRows: 14, maxRows: 24 }" />
@@ -255,6 +258,23 @@ const jsonPreview = computed(() =>
 )
 
 const apiTestPreview = computed(() => JSON.stringify(apiTestData.value, null, 2))
+
+const guessFieldType = (value: any) => {
+  if (typeof value === 'number') return value >= 0 && value <= 100 ? 'progress' : 'money'
+  if (typeof value === 'string' && /^https?:\/\/.+\.(png|jpg|jpeg|webp|gif)$/i.test(value)) return 'image'
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return 'date'
+  return 'text'
+}
+
+const generateFieldsFromApi = () => {
+  props.optionData.fields = Object.keys(apiTestData.value || {}).slice(0, 12).map(key => ({
+    label: key,
+    key,
+    type: guessFieldType(apiTestData.value[key]) as any,
+    span: 1
+  }))
+  window['$message']?.success('已按接口响应生成详情字段')
+}
 
 const openEditor = (mode: EditorMode) => {
   editorMode.value = mode
@@ -406,6 +426,11 @@ const copyJson = async () => {
 
 .config-actions {
   gap: 4px;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .field-label {
