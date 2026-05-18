@@ -116,6 +116,25 @@ export interface DataDatasetPreview {
   total: number
 }
 
+export interface AiDashboardDatasetImpactItem {
+  lineageId?: number
+  recordId?: number
+  projectId?: number
+  projectName?: string
+  businessDefinitionId?: number
+  businessName?: string
+  componentIndex?: number
+  componentKey?: string
+  componentTitle?: string
+  datasetId?: number
+  datasetName?: string
+  fieldNames?: string
+  bindingStatus?: string
+  generatedTitle?: string
+  recordStatus?: string
+  createTime?: string
+}
+
 export function getDataDatasetPage(params: {
   pageNum: number
   pageSize: number
@@ -156,6 +175,10 @@ export function publishDataDataset(id: number) {
 
 export function offlineDataDataset(id: number) {
   return request.post(`/data/dataset/${id}/offline`)
+}
+
+export function getDashboardDatasetImpact(id: number, limit = 10) {
+  return request.get(`/ai/dashboard-generate-record/impact/dataset/${id}`, { params: { limit } })
 }
 
 export function syncDataDatasetFields(id: number) {

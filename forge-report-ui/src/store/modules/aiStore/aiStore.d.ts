@@ -1,4 +1,5 @@
 import { AIGenerateResponse } from '@/api/ai/ai.d'
+import type { GenerateValidationSummary } from '@/components/FgAI/generateValidation'
 import type { AiChatSession } from '@/api/ai'
 
 export interface AIProviderOption {
@@ -26,9 +27,15 @@ export interface AIStoreType {
 }
 
 export interface AIHistoryItem {
+  id?: string
   prompt: string
   response: AIGenerateResponse
   timestamp: number
+  businessDefinitionId?: number | string
+  businessName?: string
+  providerName?: string
+  modelName?: string
+  validationSummary?: GenerateValidationSummary
 }
 
 export type ChatMessageRole = 'user' | 'assistant'
@@ -45,6 +52,7 @@ export interface ChatMessage {
   progressSteps?: ChatProgressStep[]
   // 当 role 为 assistant 时，保存应用到画布的响应
   canvasResponse?: AIGenerateResponse | null
+  validationSummary?: GenerateValidationSummary
   // 是否正在流式输出中
   streaming?: boolean
 }

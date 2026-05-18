@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { renderIcon, goDialog, fetchPathByName, routerTurnByPath, openNewWindow, setSessionStorage, getSessionStorage, downloadTextFile } from '@/utils'
+import { renderIcon, goDialog, fetchPathByName, openNewWindow, setSessionStorage, getSessionStorage, downloadTextFile } from '@/utils'
 import { captureProjectScreenshot } from '@/utils/capture'
 import { buildApiContractDocument, buildApiContractFileName } from '@/utils/apiContractExport'
 import { PreviewEnum } from '@/enums/pageEnum'
@@ -129,9 +129,10 @@ const sendHandle = async () => {
     console.log('[Screenshot] 画布元素:', canvasElement)
     if (canvasElement) {
       indexImg = await captureProjectScreenshot(previewId, canvasElement as HTMLElement)
-      console.log('[Screenshot] 截图结果:', indexImg)
+      console.log('[Screenshot] 截图文件ID:', indexImg)
     } else {
       console.warn('[Screenshot] 未找到画布元素 .go-edit-range')
+      throw new Error('未找到画布元素，无法生成项目截图')
     }
 
     // 构建项目数据，包含截图
@@ -161,23 +162,7 @@ const sendHandle = async () => {
     await publishProjectApi(previewId, previewUrl)
     await assertProjectComponentDataSaved(previewId, projectPayload.componentData)
 
-    window['$message'].success('发布成功')
-
-    goDialog({
-      message: `发布成功！\n\n预览链接：\n${previewUrl}`,
-      positiveText: '复制链接',
-      negativeText: '直接预览',
-      onPositiveCallback: () => {
-        navigator.clipboard.writeText(previewUrl).then(() => {
-          window['$message'].success('链接已复制到剪贴板')
-        }).catch(() => {
-          routerTurnByPath(previewPath, [previewId], undefined, true)
-        })
-      },
-      onNegativeCallback: () => {
-        routerTurnByPath(previewPath, [previewId], undefined, true)
-      }
-    })
+    window['$message'].success('发布成功，项目截图和预览链接已更新，可在项目列表中预览或分享')
   } catch (error: any) {
     console.error('[Publish] 发布失败:', error)
     window['$message'].error(error?.message || '发布失败')

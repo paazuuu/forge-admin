@@ -855,6 +855,7 @@ import { useRouter } from 'vue-router'
 import { getDataConnectionFields, getDataConnectionList, getDataConnectionTables } from '@/api/data/connection'
 import {
   deleteDataDataset,
+  getDashboardDatasetImpact,
   getDataDatasetById,
   getDataDatasetCategoryTree,
   offlineDataDataset,
@@ -961,6 +962,9 @@ const publishStatusOptions = [
   { label: '已发布', value: 1 },
   { label: '已下架', value: 2 },
 ]
+
+const datasetImpactLimit = 10
+const datasetImpactVisibleLimit = 6
 
 const accessModeOptions = [
   { label: '公开', value: 'PUBLIC' },
@@ -3189,10 +3193,49 @@ function handlePublishDataset(row) {
   })
 }
 
-function handleOfflineDataset(row) {
+async function loadDatasetImpact(row) {
+  try {
+    const res = await getDashboardDatasetImpact(row.id, datasetImpactLimit)
+    if (res.code === 200) {
+      return res.data || []
+    }
+    window.$message?.warning(res.msg || '数据集影响分析查询失败')
+  }
+  catch (error) {
+    window.$message?.warning(error?.message || '数据集影响分析查询失败')
+  }
+  return null
+}
+
+function renderDatasetImpactContent(row, impacts) {
+  if (impacts === null) {
+    return `下架后数据集“${row.datasetName}”将暂停供下游使用。当前影响分析查询失败，请确认是否继续下架。`
+  }
+  if (!impacts.length) {
+    return `下架后数据集“${row.datasetName}”将暂停供下游使用。当前未发现 AI 大屏组件血缘影响，确认继续吗？`
+  }
+
+  const visibleItems = impacts.slice(0, datasetImpactVisibleLimit)
+  return h('div', { class: 'dataset-impact-dialog' }, [
+    h('p', null, `下架后数据集“${row.datasetName}”将暂停供下游使用。`),
+    h('div', { class: 'dataset-impact-dialog__summary' }, `检测到最近 ${impacts.length} 个 AI 大屏组件使用了该数据集：`),
+    h('ul', { class: 'dataset-impact-dialog__list' }, visibleItems.map(item => h('li', { key: item.lineageId || `${item.recordId}-${item.componentIndex}` }, [
+      h('strong', null, item.projectName || item.generatedTitle || '未命名大屏'),
+      h('span', null, ` / ${item.componentTitle || item.componentKey || `组件${item.componentIndex ?? ''}`}`),
+      item.businessName ? h('small', null, `业务：${item.businessName}`) : null,
+      item.fieldNames ? h('small', null, `字段：${item.fieldNames}`) : null,
+    ]))),
+    impacts.length > visibleItems.length
+      ? h('div', { class: 'dataset-impact-dialog__more' }, `仅展示前 ${visibleItems.length} 个，请到影响分析接口查看完整结果。`)
+      : null,
+  ])
+}
+
+async function handleOfflineDataset(row) {
+  const impacts = await loadDatasetImpact(row)
   window.$dialog.warning({
     title: '确认下架',
-    content: `下架后数据集“${row.datasetName}”将暂停供下游使用，但可以继续修改，确认继续吗？`,
+    content: () => renderDatasetImpactContent(row, impacts),
     positiveText: '下架',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -4244,6 +4287,57 @@ function goToPrevStep() {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
+}
+
+:global(.dataset-impact-dialog) {
+  display: grid;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+:global(.dataset-impact-dialog p) {
+  margin: 0;
+}
+
+:global(.dataset-impact-dialog__summary) {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
+}
+
+:global(.dataset-impact-dialog__list) {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+:global(.dataset-impact-dialog__list li) {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+:global(.dataset-impact-dialog__list strong) {
+  color: #0f172a;
+}
+
+:global(.dataset-impact-dialog__list span) {
+  color: #475569;
+}
+
+:global(.dataset-impact-dialog__list small),
+:global(.dataset-impact-dialog__more) {
+  color: #64748b;
+  font-size: 12px;
 }
 
 @media (max-width: 1400px) {

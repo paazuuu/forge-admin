@@ -197,6 +197,9 @@
               row-key="id"
               :show-add-button="false"
               :public-params="listParams"
+              :search-y-gap="8"
+              :search-max-visible-fields="3"
+              max-height="100%"
             />
           </div>
 
@@ -1431,25 +1434,27 @@ function handleDelete(row) {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-page);
-  padding: 20px;
-  gap: 16px;
+  padding: 12px;
+  gap: 10px;
 }
 
 /* --- 页面头部 --- */
 .page-header {
   background: #fff;
-  border-radius: 12px;
-  padding: 16px 20px;
+  border-radius: 10px;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  min-height: 52px;
 }
 
 .header-left {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .title-row {
@@ -1459,14 +1464,15 @@ function handleDelete(row) {
 }
 
 .title-icon {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
 .title-icon.file-icon {
@@ -1474,33 +1480,41 @@ function handleDelete(row) {
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
+  white-space: nowrap;
 }
 
 .header-desc {
   font-size: 12px;
   color: #64748b;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .stats-info {
   display: flex;
-  gap: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .stat-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 5px 10px;
   background: #f8fafc;
   border-radius: 8px;
 }
@@ -1511,7 +1525,7 @@ function handleDelete(row) {
 }
 
 .stat-value {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -1530,7 +1544,7 @@ function handleDelete(row) {
 
 /* --- 左侧分组导航 --- */
 .sidebar {
-  width: 220px;
+  width: 210px;
   background: var(--bg-primary);
   border-right: 1px solid var(--border-light);
   display: flex;
@@ -1540,7 +1554,7 @@ function handleDelete(row) {
 }
 
 .sidebar-header {
-  padding: 16px;
+  padding: 12px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1658,7 +1672,8 @@ function handleDelete(row) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  min-height: 42px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-primary);
   flex-shrink: 0;
@@ -1678,6 +1693,9 @@ function handleDelete(row) {
 .upload-section {
   display: flex;
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* --- 文件内容区域 --- */
@@ -1693,7 +1711,7 @@ function handleDelete(row) {
 .file-table {
   flex: 1;
   overflow: hidden;
-  padding: 16px;
+  padding: 10px;
 }
 
 .file-table :deep(.ai-crud-page) {
@@ -1704,6 +1722,22 @@ function handleDelete(row) {
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+}
+
+.file-table :deep(.ai-search-box) {
+  padding: 10px 12px 2px;
+}
+
+.file-table :deep(.ai-table-wrapper) {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-table :deep(.ai-table-toolbar) {
+  min-height: 42px;
+  padding: 6px 10px;
 }
 
 /* 修复双滚动条：外层用 overflow: clip 裁剪，n-data-table 用 flex 确保分页器可见 */
@@ -1722,12 +1756,13 @@ function handleDelete(row) {
   min-height: 0;
   overflow: hidden;
 }
+.file-table :deep(.n-pagination) {
+  flex-shrink: 0;
+  padding: 8px 12px;
+}
 .file-table :deep(.n-data-table-wrapper) {
   flex: 1;
   min-height: 0;
-}
-.file-table :deep(.n-pagination) {
-  flex-shrink: 0;
 }
 
 :deep(.n-data-table) {
@@ -1828,7 +1863,7 @@ function handleDelete(row) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 16px;
+  padding: 10px;
   background: var(--bg-page);
 }
 
@@ -1836,8 +1871,8 @@ function handleDelete(row) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding: 10px 16px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
   background: var(--bg-primary);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
@@ -2230,9 +2265,22 @@ function handleDelete(row) {
 
 /* --- 响应式 --- */
 @media (max-width: 768px) {
+  .file-management-page {
+    padding: 8px;
+    gap: 8px;
+  }
   .page-header {
     flex-direction: column;
-    gap: 12px;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .header-left {
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .header-desc {
+    display: none;
   }
   .header-right {
     width: 100%;
@@ -2246,9 +2294,17 @@ function handleDelete(row) {
   }
   .sidebar {
     width: 100%;
-    height: 180px;
+    height: 140px;
     border-right: none;
     border-bottom: 1px solid var(--border-light);
+  }
+  .toolbar {
+    align-items: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .upload-section {
+    flex: 1;
   }
   .file-grid-container {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -2263,6 +2319,78 @@ function handleDelete(row) {
   }
   .file-info {
     min-height: 96px;
+  }
+}
+
+@media (max-height: 760px) {
+  .file-management-page {
+    padding: 8px;
+    gap: 8px;
+  }
+  .page-header {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+  .title-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .page-title {
+    font-size: 16px;
+  }
+  .header-desc {
+    display: none;
+  }
+  .stat-item {
+    padding: 4px 8px;
+  }
+  .stat-label {
+    display: none;
+  }
+  .sidebar-header {
+    padding: 8px 12px;
+  }
+  .group-list {
+    padding: 6px;
+  }
+  .group-item {
+    padding: 7px 10px;
+  }
+  .toolbar {
+    min-height: 38px;
+    padding: 6px 10px;
+  }
+  .file-table,
+  .file-grid {
+    padding: 8px;
+  }
+  .file-table :deep(.ai-search-box) {
+    padding: 8px 10px 0;
+  }
+  .file-table :deep(.ai-table-toolbar) {
+    min-height: 38px;
+    padding: 5px 10px;
+  }
+  .file-table :deep(.n-pagination) {
+    padding: 6px 10px;
+  }
+  .file-table :deep(.n-data-table-td) {
+    padding: 7px 12px;
+  }
+  .grid-header {
+    margin-bottom: 8px;
+    padding: 7px 10px;
+  }
+  .file-grid-container {
+    gap: 10px;
+    grid-auto-rows: minmax(214px, auto);
+  }
+  .file-preview {
+    height: 124px;
+    flex-basis: 124px;
+  }
+  .file-card {
+    min-height: 214px;
   }
 }
 
