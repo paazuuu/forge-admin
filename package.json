@@ -1,0 +1,8 @@
+{
+  "name": "forge-project",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "forge:create": "node scripts/forge-create/create-project.mjs"
+  }
+}
