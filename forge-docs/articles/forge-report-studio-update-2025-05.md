@@ -8,8 +8,8 @@
 
 - 🔗 **Git 仓库**：[https://gitee.com/ForgeLab/forge-admin](https://gitee.com/ForgeLab/forge-admin)
 - 🌐 **在线体验**：
-  - 直接访问：[http://81.70.22.48:8084/forge-report/](http://81.70.22.48:8084/forge-report/)
-  - 或登录后台 [http://81.70.22.48:8084/forge/login](http://81.70.22.48:8084/forge/login)（账号：`admin` / `123456`），进入「报表管理 → AI大屏」
+  - 直接访问：[http://www.dlforgelab.com:8084/forge-report/](http://www.dlforgelab.com:8084/forge-report/)
+  - 或登录后台 [http://www.dlforgelab.com:8084/forge/login](http://www.dlforgelab.com:8084/forge/login)（账号：`admin` / `123456`），进入「报表管理 → AI大屏」
 
 ---
 

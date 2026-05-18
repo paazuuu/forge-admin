@@ -20,7 +20,7 @@ hero:
       link: /backend/modules/overview
     - theme: alt
       text: 🔗 在线演示
-      link: http://81.70.22.48:8084/forge/login
+      link: http://www.dlforgelab.com:8084/forge/login
 
 features:
   - title: 📝 渐进式 SDD 开发
@@ -53,6 +53,6 @@ features:
 
 ## 📺 在线演示
 
-> **后台管理**：[http://81.70.22.48:8084/forge/login](http://81.70.22.48:8084/forge/login)
+> **后台管理**：[http://www.dlforgelab.com:8084/forge/login](http://www.dlforgelab.com:8084/forge/login)
 >
 > 账号：`admin` / 密码：`123456`
