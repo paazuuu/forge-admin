@@ -1,5 +1,11 @@
 <template>
-  <div class="sql-editor">
+  <div
+    class="sql-editor"
+    :class="{
+      'sql-editor--dark': theme === 'dark',
+      'sql-editor--fullscreen': isFullscreen,
+    }"
+  >
     <div class="sql-editor__toolbar">
       <div class="sql-editor__title">
         <i class="i-material-symbols:database-outline" />
@@ -17,6 +23,18 @@
             <i class="i-material-symbols:delete-outline" />
           </template>
           清空
+        </n-button>
+        <n-button
+          v-if="showFullscreen"
+          size="small"
+          secondary
+          circle
+          :title="isFullscreen ? '退出全屏' : '全屏编辑'"
+          @click="toggleFullscreen"
+        >
+          <template #icon>
+            <i :class="isFullscreen ? 'i-material-symbols:fullscreen-exit' : 'i-material-symbols:fullscreen'" />
+          </template>
         </n-button>
       </n-space>
     </div>
@@ -47,12 +65,21 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  theme: {
+    type: String,
+    default: 'light',
+  },
+  showFullscreen: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['update:value', 'format', 'clear'])
 
 const editorRef = ref(null)
 const innerValue = ref(props.value || '')
+const isFullscreen = ref(false)
 
 let editorView = null
 
@@ -178,6 +205,14 @@ function handleClear() {
   emit('update:value', '')
   emit('clear')
   editorView?.focus()
+}
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value
+  nextTick(() => {
+    editorView?.requestMeasure()
+    editorView?.focus()
+  })
 }
 
 function formatSql(value) {
@@ -331,6 +366,16 @@ function createPlaceholder(fragments, fragment) {
   background: #fff;
 }
 
+.sql-editor--fullscreen {
+  position: fixed;
+  inset: 24px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 28%);
+}
+
 .sql-editor__toolbar {
   display: flex;
   align-items: center;
@@ -361,6 +406,11 @@ function createPlaceholder(fragments, fragment) {
   position: relative;
   min-height: 248px;
   background: #fff;
+}
+
+.sql-editor--fullscreen .sql-editor__body {
+  flex: 1;
+  min-height: 0;
 }
 
 .sql-editor__container {
@@ -394,7 +444,55 @@ function createPlaceholder(fragments, fragment) {
   min-height: 248px;
 }
 
+.sql-editor--fullscreen :deep(.cm-editor),
+.sql-editor--fullscreen :deep(.cm-scroller),
+.sql-editor--fullscreen .sql-editor__container {
+  height: 100%;
+  min-height: 0;
+}
+
 .sql-editor :deep(.cm-line) {
   padding: 0 12px;
+}
+
+.sql-editor--dark {
+  border-color: #1e1e1e;
+  background: #1e1e1e;
+}
+
+.sql-editor--dark .sql-editor__toolbar {
+  border-bottom-color: #2f3338;
+  background: #1e1e1e;
+}
+
+.sql-editor--dark .sql-editor__title,
+.sql-editor--dark .sql-editor__title i {
+  color: #d4d4d4;
+}
+
+.sql-editor--dark .sql-editor__body,
+.sql-editor--dark .sql-editor__container,
+.sql-editor--dark :deep(.cm-editor),
+.sql-editor--dark :deep(.cm-scroller) {
+  background: #1e1e1e !important;
+}
+
+.sql-editor--dark :deep(.cm-editor) {
+  color: #d4d4d4 !important;
+}
+
+.sql-editor--dark :deep(.cm-gutters) {
+  color: #86909c !important;
+  background: #1e1e1e !important;
+  border-right-color: #2f3338 !important;
+}
+
+.sql-editor--dark :deep(.cm-activeLine),
+.sql-editor--dark :deep(.cm-activeLineGutter) {
+  background: #252526 !important;
+}
+
+.sql-editor--dark .sql-editor__placeholder {
+  color: #6b7280;
 }
 </style>

@@ -7,6 +7,7 @@
         <result column="tenant_id" property="tenantId" />
         <result column="file_id" property="fileId" />
         <result column="material_category" property="materialCategory" />
+        <result column="is_private" property="isPrivate" />
         <result column="status" property="status" />
         <result column="create_by" property="createBy" />
         <result column="create_time" property="createTime" />
@@ -32,7 +33,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, tenant_id, file_id, material_category, status,
+        id, tenant_id, file_id, material_category, is_private, status,
         create_by, create_time, create_dept, update_by, update_time
     </sql>
 
@@ -47,7 +48,7 @@
             f.storage_type,
             'report_material' AS business_type,
             m.material_category AS business_id,
-            f.is_private,
+            m.is_private,
             f.access_url,
             f.upload_time,
             f.download_count
@@ -66,10 +67,10 @@
                 AND f.mime_type LIKE CONCAT(#{mimeType}, '%')
             </if>
             <if test="isPrivate != null">
-                AND f.is_private = #{isPrivate}
+                AND m.is_private = #{isPrivate}
             </if>
             <if test="admin == null or admin == false">
-                AND (f.is_private = 0 OR f.uploader_id = #{currentUserId})
+                AND (m.is_private = 0 OR m.create_by = #{currentUserId})
             </if>
         </where>
         ORDER BY f.upload_time DESC, m.create_time DESC
@@ -95,7 +96,7 @@
             f.storage_type,
             'report_material' AS business_type,
             m.material_category AS business_id,
-            f.is_private,
+            m.is_private,
             f.access_url,
             f.upload_time,
             f.download_count

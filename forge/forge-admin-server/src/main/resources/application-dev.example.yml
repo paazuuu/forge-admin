@@ -52,7 +52,7 @@ spring.data:
         singleServerConfig:
           address: "redis://localhost:6379"
           database: 0
-          password: forge123456
+          password: your_redis_password
           connectTimeout: 10000
           timeout: 3000
           retryAttempts: 3
@@ -61,6 +61,15 @@ spring.data:
           connectionMinimumIdleSize: 10
         threads: 16
         nettyThreads: 32
+  flyway:
+    enabled: ${FORGE_FLYWAY_ENABLED:false}
+    url: ${spring.datasource.dynamic.datasource.master.url}
+    user: ${spring.datasource.dynamic.datasource.master.username}
+    password: ${spring.datasource.dynamic.datasource.master.password}
+    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration}
+    baseline-on-migrate: true
+    baseline-version: 1.0.0
+    table: forge_schema_history
 config:
   datasource:
     url: ${spring.datasource.dynamic.datasource.master.url}

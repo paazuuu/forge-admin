@@ -22,4 +22,9 @@ public class ReportMaterialCreateDTO {
      * 兼容前端旧字段，等同 materialCategory。
      */
     private String businessId;
+
+    /**
+     * 是否私有。
+     */
+    private Boolean isPrivate;
 }

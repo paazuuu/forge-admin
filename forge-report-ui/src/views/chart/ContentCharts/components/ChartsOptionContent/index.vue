@@ -41,6 +41,16 @@
           <charts-item-box :menuOptions="packages.selectOptions"></charts-item-box>
         </n-scrollbar>
       </n-spin>
+      <div v-if="isPhotosPanel && materialPageCount > 1" class="material-pagebar">
+        <span class="material-pagebar-total">共 {{ packagesStore.materialPhotosTotal }} 张素材</span>
+        <n-pagination
+          simple
+          :page="packagesStore.materialPhotosPageNum"
+          :page-size="packagesStore.materialPhotosPageSize"
+          :item-count="packagesStore.materialPhotosTotal"
+          @update:page="handleMaterialPhotoPageChange"
+        />
+      </div>
     </div>
 
     <n-modal
@@ -107,9 +117,12 @@ const visibilityOptions = computed(() => [
 const props = defineProps({
   selectOptions: {
     type: Object,
-    default: () => {}
+    default: () => ({})
   }
 })
+
+const isPhotosPanel = computed(() => props.selectOptions?.key === PackagesCategoryEnum.PHOTOS)
+const materialPageCount = computed(() => Math.ceil(packagesStore.materialPhotosTotal / packagesStore.materialPhotosPageSize))
 
 // 隐藏设置
 const settingStore = useSettingStore()
@@ -181,7 +194,7 @@ watch(
   () => props.selectOptions,
   async (newData: { list: ConfigType[]; key?: string }) => {
     if (newData?.key === PackagesCategoryEnum.PHOTOS) {
-      await packagesStore.loadMaterialPhotos()
+      await packagesStore.loadMaterialPhotos(1)
     }
     rebuildPackagesCategory(newData)
   },
@@ -205,6 +218,10 @@ const clickItemHandle = (key: string) => {
   packages.selectOptions = packages.categorys[key]
 }
 
+const handleMaterialPhotoPageChange = async (page: number) => {
+  await packagesStore.loadMaterialPhotos(page)
+}
+
 const handleMaterialUpload = async (options: UploadCustomRequestOptions) => {
   const rawFile = options.file.file
   if (!rawFile) {
@@ -216,7 +233,7 @@ const handleMaterialUpload = async (options: UploadCustomRequestOptions) => {
     if (res.code === 200) {
       options.onFinish?.()
       packagesStore.closeMaterialUploadDialog()
-      await packagesStore.loadMaterialPhotos()
+      await packagesStore.loadMaterialPhotos(1)
       window['$message']?.success('素材上传成功')
     } else {
       throw new Error(res.msg || '素材上传失败')
@@ -364,10 +381,30 @@ $workbenchGapHeight: 24px;
 
     .chart-content-spin {
       width: 100%;
-      height: 100%;
+      flex: 1;
+      min-height: 0;
 
       :deep(.n-spin-content) {
         height: 100%;
+      }
+    }
+
+    .material-pagebar {
+      width: 100%;
+      min-height: 38px;
+      padding: 7px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+      border-top: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(8, 13, 22, 0.78);
+
+      .material-pagebar-total {
+        font-size: 12px;
+        color: rgba(203, 213, 225, 0.72);
+        white-space: nowrap;
       }
     }
   }

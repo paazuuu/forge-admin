@@ -93,4 +93,5 @@ yarn.lock
 *.env
 .env
 *.secrets
+forge/db/community-export/
 *docs-dist

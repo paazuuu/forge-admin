@@ -40,6 +40,11 @@ public class ReportMaterial extends TenantEntity implements Serializable {
     private String materialCategory;
 
     /**
+     * 是否私有：true 私有，false 公共。
+     */
+    private Boolean isPrivate;
+
+    /**
      * 状态：1 正常，0 删除。
      */
     private Integer status;
