@@ -98,10 +98,11 @@ async function main() {
   }
 
   const options = normalizeOptions(args, catalog)
-  const selection = resolveSelection(catalog, options.preset)
+  const selection = resolveSelection(catalog, options.preset, options.includeModuleIds)
   const artifactMap = buildArtifactMap(catalog, options)
   const applicationClassMap = buildApplicationClassMap(options)
   const outputRoot = path.resolve(process.cwd(), options.target)
+  const adminServerArtifactId = artifactMap['forge-admin-server']
 
   await assertWritableTarget(outputRoot, options.force)
   await fs.mkdir(outputRoot, { recursive: true })
@@ -133,8 +134,9 @@ async function main() {
   await moveJavaPackageDirectories(outputRoot, 'com.mdframe.forge', options.basePackage)
   await renameFilesByBasename(outputRoot, applicationClassMap, '.java')
   await renameArtifactDirectories(serverRoot, artifactMap)
+  await writeSelectedSqlBundle(serverRoot, catalog, selection, replacements, options)
 
-  printSummary(outputRoot, options, selection, catalog)
+  printSummary(outputRoot, options, selection, catalog, adminServerArtifactId)
 }
 
 function parseArgs(argv) {
@@ -179,14 +181,26 @@ function normalizeOptions(args, catalog) {
 
   const projectName = normalizeProjectName(args['project-name'] || path.basename(path.resolve(target)))
   const artifactPrefix = normalizeProjectName(args['artifact-prefix'] || projectName)
+  const stripModulePrefix = args['strip-module-prefix']
+    ? normalizeProjectName(args['strip-module-prefix'])
+    : ''
+  const moduleArtifactPrefix = normalizeProjectName(
+    args['module-artifact-prefix'] || deriveModuleArtifactPrefix(artifactPrefix, stripModulePrefix),
+  )
   const displayName = String(args['display-name'] || projectName)
   const preset = String(args.preset || 'ai-report')
   const basePackage = String(args['base-package'] || '').trim()
   const groupId = String(args['group-id'] || basePackage).trim()
   const databaseName = String(args['database-name'] || toSnakeCase(projectName)).trim()
+  const includeModuleIds = parseModuleList(args.include || args['include-modules'])
 
   if (!catalog.presets[preset]) {
     throw new Error(`未知 preset：${preset}。可选值：${Object.keys(catalog.presets).join(', ')}`)
+  }
+  for (const moduleId of includeModuleIds) {
+    if (!catalog.modules[moduleId]) {
+      throw new Error(`未知 include 模块：${moduleId}。可选模块见 scripts/forge-create/module-catalog.json`)
+    }
   }
   if (!isValidJavaPackage(basePackage)) {
     throw new Error('请通过 --base-package 指定合法 Java 包名，例如 com.company.smartfactory')
@@ -207,8 +221,34 @@ function normalizeOptions(args, catalog) {
     basePackage,
     groupId,
     databaseName,
+    includeModuleIds,
+    moduleArtifactPrefix,
+    stripModulePrefix,
     force: args.force === true || args.force === 'true',
   }
+}
+
+function deriveModuleArtifactPrefix(artifactPrefix, stripModulePrefix) {
+  if (!stripModulePrefix) {
+    return artifactPrefix
+  }
+  if (artifactPrefix === stripModulePrefix) {
+    throw new Error('--strip-module-prefix 不能等于完整 artifact 前缀，否则子模块前缀为空')
+  }
+  if (!artifactPrefix.startsWith(`${stripModulePrefix}-`)) {
+    throw new Error(`--strip-module-prefix 必须是 artifact 前缀的开头：${artifactPrefix}`)
+  }
+  return artifactPrefix.slice(stripModulePrefix.length + 1)
+}
+
+function parseModuleList(value) {
+  if (!value) {
+    return []
+  }
+  return String(value)
+    .split(/[,\s]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
 }
 
 function normalizeProjectName(value) {
@@ -226,7 +266,7 @@ function isValidJavaPackage(value) {
   return /^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)+$/.test(value)
 }
 
-function resolveSelection(catalog, presetName) {
+function resolveSelection(catalog, presetName, includeModuleIds = []) {
   const preset = catalog.presets[presetName]
   const selectedModuleIds = new Set()
   const frontendIds = new Set()
@@ -251,6 +291,9 @@ function resolveSelection(catalog, presetName) {
 
   for (const root of preset.roots) {
     visit(root)
+  }
+  for (const moduleId of includeModuleIds) {
+    visit(moduleId)
   }
 
   return {
@@ -278,16 +321,17 @@ function collectSelectedArtifacts(catalog, selection) {
 }
 
 function buildArtifactMap(catalog, options) {
+  const modulePrefix = options.moduleArtifactPrefix
   const map = {
-    [backendParentArtifacts.framework]: `${options.artifactPrefix}-framework`,
-    [backendParentArtifacts.dependencies]: `${options.artifactPrefix}-dependencies`,
-    [backendParentArtifacts.starterParent]: `${options.artifactPrefix}-starter-parent`,
-    [backendParentArtifacts.pluginParent]: `${options.artifactPrefix}-plugin-parent`,
-    [backendParentArtifacts.flowParent]: `${options.artifactPrefix}-flow`,
-    [backendParentArtifacts.businessParent]: `${options.artifactPrefix}-business`,
-    'forge-admin': `${options.artifactPrefix}-admin`,
-    'forge-report': `${options.artifactPrefix}-report`,
-    'forge-starter-property': `${options.artifactPrefix}-starter-property`,
+    [backendParentArtifacts.framework]: `${modulePrefix}-framework`,
+    [backendParentArtifacts.dependencies]: `${modulePrefix}-dependencies`,
+    [backendParentArtifacts.starterParent]: `${modulePrefix}-starter-parent`,
+    [backendParentArtifacts.pluginParent]: `${modulePrefix}-plugin-parent`,
+    [backendParentArtifacts.flowParent]: `${modulePrefix}-flow`,
+    [backendParentArtifacts.businessParent]: `${modulePrefix}-business`,
+    'forge-admin': `${modulePrefix}-admin`,
+    'forge-report': `${modulePrefix}-report`,
+    'forge-starter-property': `${modulePrefix}-starter-property`,
   }
 
   for (const moduleInfo of Object.values(catalog.modules)) {
@@ -295,7 +339,7 @@ function buildArtifactMap(catalog, options) {
       continue
     }
     const next = moduleInfo.artifactId
-      .replace(/^forge-/, `${options.artifactPrefix}-`)
+      .replace(/^forge-/, `${modulePrefix}-`)
       .replace(/-parent$/, '-parent')
     map[moduleInfo.artifactId] = next
   }
@@ -376,6 +420,11 @@ async function pruneBackendSourceGlue(serverRoot, selectedArtifacts) {
       force: true,
     })
   }
+  else if (!selectedArtifacts.has('forge-plugin-ai')) {
+    await fs.rm(path.join(adminServerRoot, 'src/main/java/com/mdframe/forge/admin/bridge/AiClientAdapterImpl.java'), {
+      force: true,
+    })
+  }
   if (!selectedArtifacts.has('forge-plugin-ai')) {
     await fs.rm(path.join(adminServerRoot, 'src/main/java/com/mdframe/forge/admin/ai'), {
       recursive: true,
@@ -439,6 +488,8 @@ async function patchBackendPoms(serverRoot, catalog, selection, selectedArtifact
   for (const pomFile of pomFiles) {
     await prunePomDependencies(pomFile, selectedArtifacts)
   }
+
+  await patchBusinessCoreDependency(serverRoot, selectedArtifacts)
 }
 
 async function replacePomModules(pomFile, modules) {
@@ -462,6 +513,43 @@ async function prunePomDependencies(pomFile, selectedArtifacts) {
   const nextContent = content.replace(/[\t ]*<dependency>[\s\S]*?<groupId>com\.mdframe\.forge<\/groupId>[\s\S]*?<artifactId>(forge[^<]+)<\/artifactId>[\s\S]*?<\/dependency>\s*/g, (block, artifactId) => {
     return selectedArtifacts.has(artifactId) ? block : ''
   })
+  if (nextContent !== content) {
+    await fs.writeFile(pomFile, nextContent)
+  }
+}
+
+async function patchBusinessCoreDependency(serverRoot, selectedArtifacts) {
+  if (!selectedArtifacts.has('forge-business-core') || !selectedArtifacts.has('forge-admin-server')) {
+    return
+  }
+  await ensurePomDependency(
+    path.join(serverRoot, 'forge-admin-server/pom.xml'),
+    'com.mdframe.forge',
+    'forge-business-core',
+    '${revision}',
+  )
+}
+
+async function ensurePomDependency(pomFile, groupId, artifactId, version) {
+  if (!(await exists(pomFile))) {
+    return
+  }
+  const content = await fs.readFile(pomFile, 'utf8')
+  if (content.includes(`<artifactId>${artifactId}</artifactId>`)) {
+    return
+  }
+  const dependencyLines = [
+    '',
+    '        <dependency>',
+    `            <groupId>${groupId}</groupId>`,
+    `            <artifactId>${artifactId}</artifactId>`,
+  ]
+  if (version) {
+    dependencyLines.push(`            <version>${version}</version>`)
+  }
+  dependencyLines.push('        </dependency>')
+  const dependency = `${dependencyLines.join('\n')}\n`
+  const nextContent = content.replace(/\s*<\/dependencies>/, `${dependency}    </dependencies>`)
   if (nextContent !== content) {
     await fs.writeFile(pomFile, nextContent)
   }
@@ -495,6 +583,8 @@ async function rewriteRootPomArtifact(serverRoot, rootArtifactId) {
 function buildTextReplacements(artifactMap, applicationClassMap, options) {
   const snakeName = toSnakeCase(options.projectName)
   const serverDirName = `${options.artifactPrefix}-server`
+  const adminServerArtifactId = artifactMap['forge-admin-server']
+  const reportServerArtifactId = artifactMap['forge-report-server']
   const reportPath = `/${options.projectName}-report`
   const replacements = [
     ['com.mdframe.forge', options.basePackage],
@@ -511,10 +601,10 @@ function buildTextReplacements(artifactMap, applicationClassMap, options) {
     ['mysql -u root -p forge ', `mysql -u root -p ${options.databaseName} `],
     ['forge-admin-ui', `${options.projectName}-admin-ui`],
     ['forge-report-ui', `${options.projectName}-report-ui`],
-    ['forge/forge-admin/', `${serverDirName}/${options.artifactPrefix}-admin-server/`],
-    ['forge/forge-report/', `${serverDirName}/${options.artifactPrefix}-report-server/`],
-    ['forge-admin/', `${options.artifactPrefix}-admin-server/`],
-    ['forge-report/', `${options.artifactPrefix}-report-server/`],
+    ['forge/forge-admin/', `${serverDirName}/${adminServerArtifactId}/`],
+    ['forge/forge-report/', `${serverDirName}/${reportServerArtifactId}/`],
+    ['forge-admin/', `${adminServerArtifactId}/`],
+    ['forge-report/', `${reportServerArtifactId}/`],
     ['forge/db', `${serverDirName}/db`],
     ['forge/scripts', `${serverDirName}/scripts`],
     ['forge/var', `${serverDirName}/var`],
@@ -558,14 +648,19 @@ async function rewriteTextFiles(rootDir, replacements) {
     catch {
       continue
     }
-    let nextContent = content
-    for (const [from, to] of replacements) {
-      nextContent = nextContent.split(from).join(to)
-    }
+    const nextContent = applyTextReplacements(content, replacements)
     if (nextContent !== content) {
       await fs.writeFile(file, nextContent)
     }
   }
+}
+
+function applyTextReplacements(content, replacements) {
+  let nextContent = content
+  for (const [from, to] of replacements) {
+    nextContent = nextContent.split(from).join(to)
+  }
+  return nextContent
 }
 
 function isBinaryFile(filePath) {
@@ -681,8 +776,11 @@ async function writeGeneratedConfig(outputRoot, options, selection, catalog) {
     basePackage: options.basePackage,
     groupId: options.groupId,
     artifactPrefix: options.artifactPrefix,
+    moduleArtifactPrefix: options.moduleArtifactPrefix,
+    stripModulePrefix: options.stripModulePrefix,
     databaseName: options.databaseName,
     preset: options.preset,
+    includedModules: options.includeModuleIds,
     modules: [...selection.selectedModuleIds].sort(),
     frontends: [...selection.frontendIds].sort(),
   }
@@ -692,6 +790,11 @@ async function writeGeneratedConfig(outputRoot, options, selection, catalog) {
   )
 
   const presetDescription = catalog.presets[options.preset]?.description || options.preset
+  const modulePrefixLine = options.moduleArtifactPrefix === options.artifactPrefix
+    ? ''
+    : `- 子模块 artifact 前缀: ${options.moduleArtifactPrefix}
+`
+  const adminServerArtifactId = `${options.moduleArtifactPrefix}-admin-server`
   const readme = `# ${options.displayName}
 
 该工程由 Forge 项目装配器生成。
@@ -702,13 +805,16 @@ async function writeGeneratedConfig(outputRoot, options, selection, catalog) {
 - Java 包名: ${options.basePackage}
 - Maven groupId: ${options.groupId}
 - artifact 前缀: ${options.artifactPrefix}
+${modulePrefixLine}
 - 数据库名: ${options.databaseName}
+${options.includeModuleIds.length ? `- 额外模块: ${options.includeModuleIds.join(', ')}
+` : ''}
 
 ## 常用命令
 
 \`\`\`bash
 cd ${options.artifactPrefix}-server
-mvn -pl ${options.artifactPrefix}-admin-server -am compile -DskipTests
+mvn -pl ${adminServerArtifactId} -am compile -DskipTests
 \`\`\`
 
 \`\`\`bash
@@ -727,9 +833,109 @@ pnpm dev
   : ''}
 ## 说明
 
-第一版生成器按 preset 裁剪 Maven 子模块、starter、plugin 和前端工程目录。管理端前端内部页面暂未做菜单级裁剪，后续应结合 seed 菜单数据和路由清单继续细化。
+生成器按 preset 裁剪 Maven 子模块、starter、plugin、前端工程和模块 SQL 资源。管理端前端内部页面暂未做菜单级裁剪，后续应结合 seed 菜单数据和路由清单继续细化。
 `
   await fs.writeFile(path.join(outputRoot, 'README.md'), readme)
+}
+
+async function writeSelectedSqlBundle(serverRoot, catalog, selection, replacements, options) {
+  const entries = await collectSelectedSqlEntries(catalog, selection)
+  const dbRoot = path.join(serverRoot, 'db')
+  const moduleSqlRoot = path.join(dbRoot, 'module')
+  await fs.mkdir(moduleSqlRoot, { recursive: true })
+
+  const manifest = []
+  let index = 1
+  for (const entry of entries) {
+    const sourceFile = path.join(repoRoot, entry.path)
+    if (!(await exists(sourceFile))) {
+      continue
+    }
+    const fileName = `${String(index).padStart(3, '0')}__${sanitizeFileName(entry.moduleId)}__${path.basename(entry.path)}`
+    const targetFile = path.join(moduleSqlRoot, fileName)
+    const content = applyTextReplacements(await fs.readFile(sourceFile, 'utf8'), replacements)
+    await fs.writeFile(targetFile, content)
+    manifest.push({
+      order: index,
+      module: entry.moduleId,
+      source: entry.path,
+      file: `module/${fileName}`,
+    })
+    index += 1
+  }
+
+  await fs.writeFile(
+    path.join(dbRoot, 'manifest.json'),
+    `${JSON.stringify({ scripts: manifest }, null, 2)}\n`,
+  )
+  await fs.writeFile(path.join(dbRoot, 'README.md'), buildDatabaseReadme(options))
+}
+
+async function collectSelectedSqlEntries(catalog, selection) {
+  const entries = []
+  const seen = new Set()
+  const add = (moduleId, relativePath) => {
+    if (seen.has(relativePath)) {
+      return
+    }
+    seen.add(relativePath)
+    entries.push({ moduleId, path: relativePath })
+  }
+
+  const requiredSeedRoot = path.join(repoRoot, 'forge/db/seed/required')
+  const requiredSeeds = await collectFiles(requiredSeedRoot, filePath => path.extname(filePath) === '.sql')
+  for (const filePath of requiredSeeds.sort()) {
+    add('required-seed', path.relative(repoRoot, filePath))
+  }
+
+  for (const moduleId of selection.selectedModuleIds) {
+    const moduleInfo = catalog.modules[moduleId]
+    if (!moduleInfo?.path || moduleInfo.type === 'frontend') {
+      continue
+    }
+    if (moduleId === 'admin-server') {
+      continue
+    }
+    const moduleRoot = path.join(repoRoot, moduleInfo.path)
+    const sqlFiles = await collectFiles(moduleRoot, (filePath) => {
+      const normalized = filePath.split(path.sep).join('/')
+      const baseName = path.basename(filePath)
+      return path.extname(filePath) === '.sql'
+        && !normalized.includes('/target/')
+        && !normalized.includes('/templates/')
+        && !baseName.includes('example')
+        && !baseName.startsWith('test_')
+    })
+    for (const filePath of sqlFiles.sort()) {
+      add(moduleId, path.relative(repoRoot, filePath))
+    }
+  }
+
+  return entries
+}
+
+function sanitizeFileName(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+function buildDatabaseReadme(options) {
+  return `# 数据库脚本
+
+\`manifest.json\` 和 \`module/\` 按本次选择的模块收集 SQL 资源，数据库名已替换为 \`${options.databaseName}\`。
+
+数据库初始化统一使用后端根工程脚本：
+
+\`\`\`bash
+bash scripts/db/init-db.sh \\
+  --host 127.0.0.1 \\
+  --port 3306 \\
+  --database ${options.databaseName} \\
+  --user root \\
+  --password your_password
+\`\`\`
+
+如需额外执行本目录按模块收集的 SQL，追加 \`--with-module\`。当前仓库历史大脚本 \`forge-admin-server/sql/初始化脚本.sql\` 还没有拆成 core/module 两层，默认初始化仍会先执行该大脚本，避免基础表缺失。
+`
 }
 
 async function assertWritableTarget(outputRoot, force) {
@@ -821,7 +1027,10 @@ function printHelp(catalog) {
   --base-package      新 Java 包名，必填，例如 com.company.smartfactory
   --group-id          Maven groupId，默认等于 base-package
   --artifact-prefix   Maven artifactId 前缀，默认等于 project-name
+  --module-artifact-prefix 子模块 artifactId 前缀，默认等于 artifact-prefix
+  --strip-module-prefix 从子模块 artifactId 前缀中剥离指定前缀，例如 nmg-lt
   --database-name     数据库名，默认由 project-name 转 snake_case
+  --include           额外模块 ID，逗号分隔，例如 business-core
   --force             目标目录非空时覆盖
 
 示例：
@@ -832,17 +1041,20 @@ function printHelp(catalog) {
 `)
 }
 
-function printSummary(outputRoot, options, selection, catalog) {
+function printSummary(outputRoot, options, selection, catalog, adminServerArtifactId) {
   const modules = [...selection.selectedModuleIds].sort()
   const frontends = [...selection.frontendIds].sort()
   console.log('\n[forge:create] 生成完成')
   console.log(`目标目录：${outputRoot}`)
   console.log(`preset：${options.preset} - ${catalog.presets[options.preset].description}`)
+  if (options.moduleArtifactPrefix !== options.artifactPrefix) {
+    console.log(`子模块 artifact 前缀：${options.moduleArtifactPrefix}`)
+  }
   console.log(`后端模块：${modules.join(', ')}`)
   console.log(`前端工程：${frontends.length ? frontends.join(', ') : '无'}`)
   console.log('\n建议验证：')
   console.log(`  cd ${path.join(outputRoot, `${options.artifactPrefix}-server`)}`)
-  console.log(`  mvn -pl ${options.artifactPrefix}-admin-server -am compile -DskipTests`)
+  console.log(`  mvn -pl ${adminServerArtifactId} -am compile -DskipTests`)
   if (selection.frontendIds.has('admin-ui')) {
     console.log(`  cd ${path.join(outputRoot, `${options.projectName}-admin-ui`)}`)
     console.log('  pnpm install && pnpm build')

@@ -1,11 +1,12 @@
 {
   "presets": {
     "minimal-admin": {
-      "description": "最小后台：系统权限、租户、文件、基础认证和管理端前端。",
+      "description": "最小后台：系统权限、租户、文件、基础认证、代码生成和管理端前端。",
       "roots": [
         "admin-server",
         "admin-ui",
-        "plugin-system"
+        "plugin-system",
+        "plugin-generator"
       ]
     },
     "data-app": {

@@ -10,6 +10,8 @@ USER="root"
 PASSWORD=""
 WITH_DEMO="false"
 WITH_OPTIONAL="false"
+WITH_MODULE="false"
+SKIP_ADMIN_INIT="false"
 
 usage() {
   cat <<'USAGE'
@@ -23,6 +25,8 @@ Options:
   --password PASSWORD      MySQL password
   --with-demo              Import demo seed data
   --with-optional          Import optional seed data
+  --with-module            Import module SQL from db/module
+  --skip-admin-init        Skip forge-admin-server/sql/初始化脚本.sql
 USAGE
 }
 
@@ -54,6 +58,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-optional)
       WITH_OPTIONAL="true"
+      shift
+      ;;
+    --with-module)
+      WITH_MODULE="true"
+      shift
+      ;;
+    --skip-admin-init)
+      SKIP_ADMIN_INIT="true"
       shift
       ;;
     -h|--help)
@@ -98,9 +110,15 @@ run_sql_dir() {
   fi
 }
 
-run_sql_file "$FORGE_DIR/forge-admin-server/sql/初始化脚本.sql"
+if [[ "$SKIP_ADMIN_INIT" != "true" ]]; then
+  run_sql_file "$FORGE_DIR/forge-admin-server/sql/初始化脚本.sql"
+fi
 run_sql_dir "$FORGE_DIR/db/migration"
 run_sql_dir "$FORGE_DIR/db/seed/required"
+
+if [[ "$WITH_MODULE" == "true" ]]; then
+  run_sql_dir "$FORGE_DIR/db/module"
+fi
 
 if [[ "$WITH_DEMO" == "true" ]]; then
   run_sql_dir "$FORGE_DIR/db/seed/demo"
