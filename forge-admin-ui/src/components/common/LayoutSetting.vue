@@ -3,7 +3,7 @@
     <n-tooltip trigger="hover" placement="left">
       <template #trigger>
         <div id="layout-setting" class="f-c-c rounded-4 bg-primary p-8" @click="modalRef.open()">
-          <i class="ai-icon:settings text-20 cursor-pointer bg-white" />
+          <i class="layout-setting-icon ai-icon:settings text-20 cursor-pointer bg-white" />
         </div>
       </template>
       布局设置
@@ -233,5 +233,22 @@ const [modalRef] = useModal()
   justify-content: center;
   align-items: center;
   min-height: 60px;
+}
+
+.layout-setting-icon {
+  display: inline-block;
+  transform-origin: center center;
+  animation: layout-setting-spin 8s linear infinite;
+  will-change: transform;
+}
+
+@keyframes layout-setting-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

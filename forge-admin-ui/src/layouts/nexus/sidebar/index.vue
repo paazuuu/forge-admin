@@ -255,6 +255,7 @@ function handleUserAvatarError() {
 
 /* Logo */
 .nexus-logo {
+  position: relative;
   height: 56px;
   display: flex;
   align-items: center;
@@ -263,6 +264,39 @@ function handleUserAvatarError() {
   border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
   justify-content: center;
+  overflow: hidden;
+}
+
+.nexus-logo::after {
+  content: '';
+  position: absolute;
+  top: -45%;
+  bottom: -45%;
+  left: -55%;
+  width: 46%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgb(255 255 255 / 0%) 12%,
+    rgb(255 255 255 / 62%) 44%,
+    rgb(255 255 255 / 82%) 50%,
+    rgb(255 255 255 / 0%) 82%,
+    transparent 100%
+  );
+  filter: blur(0.5px);
+  transform: translateX(-120%) skewX(-18deg);
+  animation: nexus-logo-shine 2.6s ease-in-out infinite;
+}
+
+@keyframes nexus-logo-shine {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+
+  100% {
+    transform: translateX(520%) skewX(-18deg);
+  }
 }
 
 .logo-icon {

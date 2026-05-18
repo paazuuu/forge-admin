@@ -660,7 +660,9 @@ onMounted(() => {
   padding: 20px;
   min-height: 100%;
   padding-bottom: 60px;
-  background: #f8fafc;
+  background:
+    radial-gradient(circle at 8% 4%, rgba(99, 102, 241, 0.08) 0%, transparent 26%),
+    radial-gradient(circle at 92% 12%, rgba(14, 165, 233, 0.08) 0%, transparent 24%), #f8fafc;
 }
 
 /* 统计卡片网格 */
@@ -676,14 +678,65 @@ onMounted(() => {
   border-radius: 12px;
   padding: 20px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    transform 0.24s ease,
+    box-shadow 0.24s ease,
+    border-color 0.24s ease;
   border: 1px solid #e2e8f0;
   position: relative;
+  overflow: hidden;
+  animation: cardRise 0.56s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.stat-card:nth-child(1) {
+  animation-delay: 0.02s;
+}
+
+.stat-card:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.stat-card:nth-child(3) {
+  animation-delay: 0.14s;
+}
+
+.stat-card:nth-child(4) {
+  animation-delay: 0.2s;
+}
+
+.stat-card:nth-child(5) {
+  animation-delay: 0.26s;
+}
+
+.stat-card:nth-child(6) {
+  animation-delay: 0.32s;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: -36%;
+  left: -68%;
+  width: 46%;
+  height: 172%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: skewX(-20deg);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    left 0.55s ease,
+    opacity 0.28s ease;
 }
 
 .stat-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+.stat-card:hover::before {
+  left: 122%;
+  opacity: 1;
 }
 
 .stat-header {
@@ -702,6 +755,15 @@ onMounted(() => {
   justify-content: center;
   font-size: 24px;
   color: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  transition:
+    transform 0.26s ease,
+    box-shadow 0.26s ease;
+}
+
+.stat-card:hover .stat-icon {
+  transform: rotate(-4deg) scale(1.06);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
 }
 
 .stat-card.online .stat-icon {
@@ -807,6 +869,29 @@ onMounted(() => {
   background: #fff;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  animation: panelRise 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.todo-panel {
+  animation-delay: 0.18s;
+}
+
+.notice-panel {
+  animation-delay: 0.24s;
+}
+
+.quick-panel {
+  animation-delay: 0.3s;
+}
+
+.chart-card:nth-child(1) {
+  animation-delay: 0.36s;
+}
+
+.chart-card:nth-child(2) {
+  animation-delay: 0.42s;
 }
 
 .todo-panel .n-spin {
@@ -831,6 +916,7 @@ onMounted(() => {
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.78));
 }
 
 .panel-title {
@@ -891,12 +977,16 @@ onMounted(() => {
   background: #f8fafc;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .todo-item:hover {
   background: #eef2ff;
   transform: translateX(4px);
+  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
 }
 
 .todo-left {
@@ -992,11 +1082,16 @@ onMounted(() => {
   background: #f8fafc;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .notice-item:hover {
   background: #eef2ff;
+  transform: translateX(4px);
+  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
 }
 
 .notice-item.unread {
@@ -1065,12 +1160,32 @@ onMounted(() => {
   background: #f8fafc;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.22s ease,
+    background 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.quick-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(14, 165, 233, 0));
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
 }
 
 .quick-item:hover {
   background: #eef2ff;
   transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.1);
+}
+
+.quick-item:hover::before {
+  opacity: 1;
 }
 
 .quick-icon {
@@ -1082,12 +1197,22 @@ onMounted(() => {
   justify-content: center;
   font-size: 20px;
   color: #fff;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  transition: transform 0.24s ease;
+}
+
+.quick-item:hover .quick-icon {
+  transform: translateY(-2px) scale(1.06);
 }
 
 .quick-title {
   font-size: 13px;
   font-weight: 500;
   color: #475569;
+  position: relative;
+  z-index: 1;
 }
 
 /* 图表网格 */
@@ -1100,6 +1225,28 @@ onMounted(() => {
 .chart-container {
   height: 280px;
   padding: 16px;
+}
+
+@keyframes cardRise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes panelRise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 弹窗样式 */
@@ -1202,7 +1349,9 @@ onMounted(() => {
 
 /* 深色模式 */
 .dark .home-page {
-  background: #0f172a;
+  background:
+    radial-gradient(circle at 8% 4%, rgba(99, 102, 241, 0.18) 0%, transparent 26%),
+    radial-gradient(circle at 92% 12%, rgba(14, 165, 233, 0.14) 0%, transparent 24%), #0f172a;
 }
 
 .dark .stat-card,
@@ -1245,6 +1394,16 @@ onMounted(() => {
 .dark .todo-item:hover,
 .dark .notice-item:hover {
   background: #475569;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .dark .notice-item.unread {
