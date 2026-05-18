@@ -1,6 +1,6 @@
 <template>
   <section class="detail-card-group" :style="rootStyle">
-    <article v-for="card in option.cards" :key="card.label">
+    <article v-for="card in cards" :key="card.label">
       <span>{{ card.label }}</span>
       <strong>{{ card.value }}<em>{{ card.unit }}</em></strong>
       <p>{{ card.desc }}</p>
@@ -9,9 +9,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, PropType } from 'vue'
+import { computed, inject, onMounted, onUnmounted, PropType, ref, unref } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
-import type { option as defaultOption } from './config'
+import { PREVIEW_PAGE_CONTEXT_KEY } from '@/utils/requestDynamicParams'
+import { fetchBusinessData, normalizeArrayData } from '@/packages/components/common/businessDataSource'
+import { option as defaultOption } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -20,7 +22,15 @@ const props = defineProps({
   }
 })
 
-const option = computed(() => props.chartConfig.option)
+const pageContext = inject(PREVIEW_PAGE_CONTEXT_KEY, ref({}))
+const remoteCards = ref<any[]>([])
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  dataSource: { ...defaultOption.dataSource, ...(props.chartConfig.option?.dataSource || {}) }
+}))
+const cards = computed(() => remoteCards.value.length ? remoteCards.value : option.value.cards)
 const rootStyle = computed(() => ({
   gridTemplateColumns: `repeat(${option.value.columns || 3}, minmax(0, 1fr))`,
   '--card-accent': option.value.style.accentColor,
@@ -29,6 +39,20 @@ const rootStyle = computed(() => ({
   '--card-panel': option.value.style.panelColor,
   '--card-border': option.value.style.borderColor
 }))
+
+const fetchCards = async () => {
+  const data = await fetchBusinessData(option.value.dataSource, unref(pageContext) || {})
+  remoteCards.value = normalizeArrayData(data)
+}
+
+onMounted(() => {
+  fetchCards()
+  window.addEventListener('forge-report-refresh', fetchCards)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('forge-report-refresh', fetchCards)
+})
 </script>
 
 <style scoped lang="scss">

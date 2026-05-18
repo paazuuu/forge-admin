@@ -6,6 +6,12 @@ import { DetailCardGroupConfig } from './index'
 
 export const option = {
   columns: 3,
+  dataSource: {
+    url: '',
+    method: 'get',
+    dataPath: 'data',
+    paramMap: {}
+  },
   cards: [
     { label: '项目总数', value: 128, unit: '个', desc: '本月新增 12 个' },
     { label: '处理中', value: 36, unit: '项', desc: '较昨日 +4' },

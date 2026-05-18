@@ -52,6 +52,9 @@
       <SettingItem name="配置源码">
         <n-button size="tiny" secondary @click="openEditor('json')">查看 JSON</n-button>
       </SettingItem>
+      <SettingItem name="配置模板">
+        <n-button size="tiny" secondary @click="openEditor('templates')">套用模板</n-button>
+      </SettingItem>
     </SettingItemBox>
 
     <SettingItemBox name="显示">
@@ -287,13 +290,10 @@
             </n-grid-item>
             <n-grid-item v-if="action.type === 'goPage' || action.type === 'openModal'">
               <div class="field-label">{{ action.type === 'openModal' ? '目标弹窗' : '目标页面' }}</div>
-              <n-select
+              <PageTargetSelect
                 v-model:value="action.targetPageId"
-                size="small"
-                filterable
-                clearable
                 placeholder="选择项目页面"
-                :options="action.type === 'openModal' ? modalPageOptions : normalPageOptions"
+                :page-type="action.type === 'openModal' ? 'modal' : 'page'"
               />
             </n-grid-item>
             <n-grid-item v-if="action.type === 'link' || action.type === 'request'">
@@ -318,12 +318,9 @@
             </n-grid-item>
             <n-grid-item v-if="action.afterAction === 'goPage' || action.afterAction === 'openModal'">
               <div class="field-label">执行后目标</div>
-              <n-select
+              <PageTargetSelect
                 v-model:value="action.afterTargetPageId"
-                size="small"
-                filterable
-                clearable
-                :options="action.afterAction === 'openModal' ? modalPageOptions : normalPageOptions"
+                :page-type="action.afterAction === 'openModal' ? 'modal' : 'page'"
               />
             </n-grid-item>
             <n-grid-item>
@@ -334,15 +331,31 @@
               <div class="field-label">确认文案</div>
               <n-input v-model:value="action.confirmText" size="small" placeholder="确认执行该操作？" />
             </n-grid-item>
-            <n-grid-item>
-              <div class="field-label">显示条件</div>
-              <n-input v-model:value="action.visibleWhen" size="small" placeholder="如 status === '1'" />
-            </n-grid-item>
-            <n-grid-item>
-              <div class="field-label">禁用条件</div>
-              <n-input v-model:value="action.disabledWhen" size="small" placeholder="如 status === '0'" />
-            </n-grid-item>
           </n-grid>
+          <div class="nested-editor">
+            <div class="nested-editor__head">
+              <span>显示条件</span>
+              <n-button size="tiny" secondary @click="addCondition(action, 'visibleConditions')">新增条件</n-button>
+            </div>
+            <div v-for="(condition, conditionIndex) in action.visibleConditions || []" :key="conditionIndex" class="condition-row">
+              <n-input v-model:value="condition.field" size="small" placeholder="行字段，如 status" />
+              <n-select v-model:value="condition.operator" size="small" :options="conditionOperatorOptions" />
+              <n-input v-model:value="condition.value" size="small" placeholder="比较值" />
+              <n-button size="tiny" quaternary type="error" @click="removeItem(action.visibleConditions, conditionIndex)">删除</n-button>
+            </div>
+          </div>
+          <div class="nested-editor">
+            <div class="nested-editor__head">
+              <span>禁用条件</span>
+              <n-button size="tiny" secondary @click="addCondition(action, 'disabledConditions')">新增条件</n-button>
+            </div>
+            <div v-for="(condition, conditionIndex) in action.disabledConditions || []" :key="conditionIndex" class="condition-row">
+              <n-input v-model:value="condition.field" size="small" placeholder="行字段，如 status" />
+              <n-select v-model:value="condition.operator" size="small" :options="conditionOperatorOptions" />
+              <n-input v-model:value="condition.value" size="small" placeholder="比较值" />
+              <n-button size="tiny" quaternary type="error" @click="removeItem(action.disabledConditions, conditionIndex)">删除</n-button>
+            </div>
+          </div>
           <div class="nested-editor">
             <div class="nested-editor__head">
               <span>参数映射</span>
@@ -411,8 +424,22 @@
         <div class="api-test-stat">
           <span>解析条数：{{ apiTestRows.length }}</span>
           <span>解析总数：{{ apiTestTotal }}</span>
+          <n-button size="tiny" secondary :disabled="!apiTestRows.length" @click="generateColumnsFromApi">生成列</n-button>
+          <n-button size="tiny" secondary :disabled="!apiTestRows.length" @click="generateSearchFieldsFromApi">生成查询项</n-button>
         </div>
         <n-input :value="apiTestPreview" type="textarea" readonly :autosize="{ minRows: 14, maxRows: 24 }" />
+      </div>
+    </template>
+
+    <template v-else-if="editorMode === 'templates'">
+      <div class="modal-toolbar">
+        <span>选择常用业务表格模板，会覆盖查询条件、列和操作。</span>
+      </div>
+      <div class="template-grid">
+        <button v-for="tpl in crudTemplates" :key="tpl.name" @click="applyTemplate(tpl)">
+          <strong>{{ tpl.name }}</strong>
+          <span>{{ tpl.desc }}</span>
+        </button>
       </div>
     </template>
 
@@ -432,10 +459,11 @@
 import { computed, PropType, ref } from 'vue'
 import { CollapseItem, SettingItemBox, SettingItem } from '@/components/Pages/ChartItemSetting'
 import { get, post } from '@/api/http'
-import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
-import { option } from './config'
+import PageTargetSelect from '@/packages/components/common/PageTargetSelect.vue'
+import { ensureObject, ensureArray } from '@/packages/components/common/configCompat'
+import { option, CrudRowAction } from './config'
 
-type EditorMode = 'searchFields' | 'columns' | 'actions' | 'contextParamMap' | 'apiTest' | 'json'
+type EditorMode = 'searchFields' | 'columns' | 'actions' | 'contextParamMap' | 'apiTest' | 'templates' | 'json'
 type RecordSide = 'key' | 'value'
 
 const props = defineProps({
@@ -447,7 +475,6 @@ const props = defineProps({
 
 const editorVisible = ref(false)
 const editorMode = ref<EditorMode>('searchFields')
-const chartEditStore = useChartEditStore()
 const apiTesting = ref(false)
 const apiTestRows = ref<any[]>([])
 const apiTestTotal = ref(0)
@@ -528,23 +555,88 @@ const afterActionOptions = [
   { label: '打开弹窗', value: 'openModal' }
 ]
 
-const normalPageOptions = computed(() =>
-  chartEditStore.getProjectPages
-    .filter(page => page.pageType !== 'modal')
-    .map(page => ({
-      label: `${page.name}${page.id === chartEditStore.getHomePageId ? '（首页）' : ''}`,
-      value: page.id
-    }))
-)
+const conditionOperatorOptions = [
+  { label: '等于', value: 'eq' },
+  { label: '不等于', value: 'ne' },
+  { label: '大于', value: 'gt' },
+  { label: '大于等于', value: 'gte' },
+  { label: '小于', value: 'lt' },
+  { label: '小于等于', value: 'lte' },
+  { label: '包含', value: 'contains' },
+  { label: '为空', value: 'empty' },
+  { label: '不为空', value: 'notEmpty' }
+]
 
-const modalPageOptions = computed(() =>
-  chartEditStore.getProjectPages
-    .filter(page => page.pageType === 'modal')
-    .map(page => ({
-      label: page.name,
-      value: page.id
-    }))
-)
+const crudTemplates = [
+  {
+    name: '普通列表',
+    desc: '关键词、状态、查看操作',
+    patch: {
+      searchFields: [
+        { label: '关键词', field: 'keyword', type: 'input', placeholder: '请输入关键词' },
+        { label: '状态', field: 'status', type: 'select', options: [{ label: '正常', value: '1' }, { label: '停用', value: '0' }] }
+      ],
+      columns: [
+        { title: '名称', key: 'name', type: 'text', width: 180 },
+        { title: '状态', key: 'status', type: 'dict', width: 100, align: 'center', options: [{ label: '正常', value: '1' }, { label: '停用', value: '0' }] },
+        { title: '更新时间', key: 'updateTime', type: 'date', width: 140 }
+      ],
+      actions: [{ label: '查看', type: 'openModal', style: 'primary', afterAction: 'none', paramMap: { id: 'id' } }]
+    }
+  },
+  {
+    name: '审批列表',
+    desc: '审批状态、通过/驳回操作',
+    patch: {
+      searchFields: [
+        { label: '申请人', field: 'applicant', type: 'input' },
+        { label: '状态', field: 'status', type: 'select', options: [{ label: '待审', value: 'pending' }, { label: '通过', value: 'pass' }, { label: '驳回', value: 'reject' }] }
+      ],
+      columns: [
+        { title: '标题', key: 'title', type: 'text', width: 180 },
+        { title: '申请人', key: 'applicant', type: 'text', width: 100 },
+        { title: '状态', key: 'status', type: 'dict', width: 100, options: [{ label: '待审', value: 'pending' }, { label: '通过', value: 'pass' }, { label: '驳回', value: 'reject' }] }
+      ],
+      actions: [
+        { label: '通过', type: 'request', style: 'success', confirm: true, visibleConditions: [{ field: 'status', operator: 'eq', value: 'pending' }], afterAction: 'refresh', paramMap: { id: 'id' } },
+        { label: '驳回', type: 'request', style: 'error', confirm: true, visibleConditions: [{ field: 'status', operator: 'eq', value: 'pending' }], afterAction: 'refresh', paramMap: { id: 'id' } }
+      ]
+    }
+  },
+  {
+    name: '告警列表',
+    desc: '级别、时间、处置操作',
+    patch: {
+      searchFields: [
+        { label: '级别', field: 'level', type: 'select', options: [{ label: '严重', value: 'critical' }, { label: '警告', value: 'warning' }, { label: '提示', value: 'info' }] },
+        { label: '时间', field: 'time', type: 'dateRange', startKey: 'startTime', endKey: 'endTime' }
+      ],
+      columns: [
+        { title: '告警标题', key: 'title', type: 'text', width: 180 },
+        { title: '级别', key: 'level', type: 'dict', width: 100, options: [{ label: '严重', value: 'critical' }, { label: '警告', value: 'warning' }, { label: '提示', value: 'info' }] },
+        { title: '发生时间', key: 'time', type: 'date', width: 140 }
+      ],
+      actions: [{ label: '处置', type: 'openModal', style: 'warning', afterAction: 'none', paramMap: { id: 'id' } }]
+    }
+  },
+  {
+    name: '项目列表',
+    desc: '进度、金额、下钻详情',
+    patch: {
+      searchFields: [
+        { label: '项目名称', field: 'projectName', type: 'input' },
+        { label: '进度', field: 'progress', type: 'numberRange', startKey: 'minProgress', endKey: 'maxProgress' }
+      ],
+      columns: [
+        { title: '项目名称', key: 'projectName', type: 'text', width: 180 },
+        { title: '金额', key: 'amount', type: 'money', moneyUnit: 'yuan', width: 120, align: 'right' },
+        { title: '进度', key: 'progress', type: 'progress', width: 160 }
+      ],
+      actions: [{ label: '下钻', type: 'goPage', style: 'primary', afterAction: 'none', paramMap: { projectId: 'id', projectName: 'projectName' } }]
+    }
+  }
+]
+
 
 const editorTitle = computed(() => {
   const titleMap: Record<EditorMode, string> = {
@@ -553,6 +645,7 @@ const editorTitle = computed(() => {
     actions: '配置行操作',
     contextParamMap: '配置上下文参数',
     apiTest: '接口测试预览',
+    templates: '套用 CRUD 模板',
     json: '查看 CRUD 配置 JSON'
   }
   return titleMap[editorMode.value]
@@ -599,6 +692,37 @@ const normalizeTotal = (payload: any, rows: any[]) => {
 
 const apiTestPreview = computed(() => JSON.stringify(apiTestRows.value.slice(0, 5), null, 2))
 
+const guessColumnType = (value: any) => {
+  if (typeof value === 'number') return value >= 0 && value <= 100 ? 'progress' : 'text'
+  if (typeof value === 'boolean') return 'switch'
+  if (typeof value === 'string' && /^https?:\/\/.+\.(png|jpg|jpeg|webp|gif)$/i.test(value)) return 'image'
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return 'date'
+  return 'text'
+}
+
+const generateColumnsFromApi = () => {
+  const sample = apiTestRows.value[0] || {}
+  props.optionData.columns = Object.keys(sample).slice(0, 10).map(key => ({
+    title: key,
+    key,
+    type: guessColumnType(sample[key]) as any,
+    width: 140,
+    align: typeof sample[key] === 'number' ? 'right' : 'left'
+  }))
+  window['$message']?.success('已按接口响应生成列')
+}
+
+const generateSearchFieldsFromApi = () => {
+  const sample = apiTestRows.value[0] || {}
+  props.optionData.searchFields = Object.keys(sample).slice(0, 4).map(key => ({
+    label: key,
+    field: key,
+    type: typeof sample[key] === 'number' ? 'number' : 'input',
+    placeholder: `请输入${key}`
+  }))
+  window['$message']?.success('已按接口响应生成查询项')
+}
+
 const testApi = async () => {
   apiTestError.value = ''
   apiTestRows.value = []
@@ -632,6 +756,13 @@ const copyJson = async () => {
 
 const isOptionField = (type: string) => ['select', 'multiSelect', 'radio'].includes(type)
 
+const applyTemplate = (tpl: any) => {
+  props.optionData.searchFields = JSON.parse(JSON.stringify(tpl.patch.searchFields))
+  props.optionData.columns = JSON.parse(JSON.stringify(tpl.patch.columns))
+  props.optionData.actions = JSON.parse(JSON.stringify(tpl.patch.actions))
+  window['$message']?.success(`已套用${tpl.name}`)
+}
+
 const addSearchField = () => {
   if (!props.optionData.searchFields) props.optionData.searchFields = []
   props.optionData.searchFields.push({
@@ -663,6 +794,11 @@ const addAction = () => {
     afterAction: 'none',
     paramMap: { id: 'id' }
   })
+}
+
+const addCondition = (action: CrudRowAction, key: 'visibleConditions' | 'disabledConditions') => {
+  if (!action[key]) action[key] = []
+  action[key]?.push({ field: 'status', operator: 'eq', value: '' })
 }
 
 const addOption = (target: { options?: Array<{ label: string; value: string | number }> }) => {
@@ -802,6 +938,42 @@ const removeRecordEntry = (target: any, key: 'paramMap' | 'contextParamMap', ind
   margin-bottom: 8px;
 }
 
+.condition-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px minmax(0, 1fr) 58px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+
+  button {
+    min-height: 92px;
+    padding: 14px;
+    color: rgba(255, 255, 255, 0.88);
+    text-align: left;
+    border: 1px solid rgba(120, 172, 255, 0.18);
+    border-radius: 8px;
+    cursor: pointer;
+    background: rgba(13, 20, 38, 0.72);
+  }
+
+  strong,
+  span {
+    display: block;
+  }
+
+  span {
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 12px;
+  }
+}
+
 .option-row--header {
   margin-bottom: 10px;
   color: rgba(255, 255, 255, 0.52);
@@ -840,3 +1012,17 @@ const removeRecordEntry = (target: any, key: 'paramMap' | 'contextParamMap', ind
   }
 }
 </style>
+const ensureOptionData = () => {
+  const data = props.optionData as any
+  ensureObject(data, 'api', option.api)
+  ensureObject(data, 'style', option.style)
+  ensureObject(data, 'contextParamMap', {})
+  ensureArray(data, 'searchFields', option.searchFields)
+  ensureArray(data, 'columns', option.columns)
+  ensureArray(data, 'actions', option.actions)
+  data.staticRows = Array.isArray(data.staticRows) ? data.staticRows : option.staticRows
+  data.pageSize = data.pageSize || option.pageSize
+  data.dictApiPrefix = data.dictApiPrefix || option.dictApiPrefix
+}
+
+ensureOptionData()

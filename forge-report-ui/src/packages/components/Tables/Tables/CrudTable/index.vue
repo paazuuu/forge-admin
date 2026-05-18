@@ -154,13 +154,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, PropType, reactive, ref, unref, watch } from 'vue'
+import { computed, inject, onMounted, onUnmounted, PropType, reactive, ref, unref, watch } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
 import { get, post, put, del } from '@/api/http'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 import { switchPreviewPage } from '@/views/preview/utils/storage'
 import { PREVIEW_PAGE_CONTEXT_KEY } from '@/utils/requestDynamicParams'
-import type { CrudColumn, CrudRowAction, CrudSearchField, option as defaultOption } from './config'
+import { option as defaultOption } from './config'
+import type { CrudColumn, CrudCondition, CrudRowAction, CrudSearchField } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -180,7 +181,17 @@ const queryForm = reactive<Record<string, any>>({})
 const actionLoading = reactive<Record<string, boolean>>({})
 const requestVersion = ref(0)
 
-const option = computed(() => props.chartConfig.option)
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  api: { ...defaultOption.api, ...(props.chartConfig.option?.api || {}) },
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  contextParamMap: props.chartConfig.option?.contextParamMap || {},
+  searchFields: props.chartConfig.option?.searchFields || [],
+  columns: props.chartConfig.option?.columns || [],
+  actions: props.chartConfig.option?.actions || [],
+  staticRows: props.chartConfig.option?.staticRows || []
+}))
 const pageSize = computed(() => Math.max(1, Number(option.value.pageSize || 10)))
 const totalPage = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const colspan = computed(() =>
@@ -216,16 +227,45 @@ const getRuntimeContext = () => unref(pageContext) || chartEditStore.getRuntimeP
 const templateUrl = (template: string, row: Record<string, any>) =>
   template.replace(/\$\{([^}]+)\}/g, (_, key) => String(getByPath(row, key) ?? ''))
 
-const evaluateExpression = (expression: string | undefined, row: Record<string, any>) => {
+const compareCondition = (condition: CrudCondition, row: Record<string, any>) => {
+  const current = getByPath(row, condition.field)
+  const target = condition.value
+  if (condition.operator === 'empty') return current === undefined || current === null || current === ''
+  if (condition.operator === 'notEmpty') return current !== undefined && current !== null && current !== ''
+  if (condition.operator === 'contains') return String(current ?? '').includes(String(target ?? ''))
+  const leftNumber = Number(current)
+  const rightNumber = Number(target)
+  const canCompareNumber = !Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)
+  if (condition.operator === 'eq') return String(current) === String(target)
+  if (condition.operator === 'ne') return String(current) !== String(target)
+  if (condition.operator === 'gt') return canCompareNumber && leftNumber > rightNumber
+  if (condition.operator === 'gte') return canCompareNumber && leftNumber >= rightNumber
+  if (condition.operator === 'lt') return canCompareNumber && leftNumber < rightNumber
+  if (condition.operator === 'lte') return canCompareNumber && leftNumber <= rightNumber
+  return false
+}
+
+const evaluateConditions = (conditions: CrudCondition[] | undefined, row: Record<string, any>, defaultValue: boolean) => {
+  if (!conditions?.length) return defaultValue
+  return conditions.every(condition => compareCondition(condition, row))
+}
+
+const evaluateLegacyExpression = (expression: string | undefined, row: Record<string, any>) => {
   if (!expression?.trim()) return false
-  try {
-    const keys = Object.keys(row)
-    const values = Object.values(row)
-    return Boolean(new Function(...keys, `return (${expression})`)(...values))
-  } catch (error) {
-    console.warn('CRUD 条件表达式执行失败', error)
-    return false
+  const matched = expression.trim().match(/^([\w.]+)\s*(===|==|!==|!=|>=|<=|>|<)\s*['"]?([^'"]+)['"]?$/)
+  if (!matched) return false
+  const [, field, operator, value] = matched
+  const operatorMap: Record<string, CrudCondition['operator']> = {
+    '===': 'eq',
+    '==': 'eq',
+    '!==': 'ne',
+    '!=': 'ne',
+    '>': 'gt',
+    '>=': 'gte',
+    '<': 'lt',
+    '<=': 'lte'
   }
+  return compareCondition({ field, operator: operatorMap[operator], value }, row)
 }
 
 const applyContextParams = (params: Record<string, any>) => {
@@ -372,13 +412,15 @@ const formatLink = (row: Record<string, any>, column: CrudColumn) => {
 const clampPercent = (value: any) => Math.min(100, Math.max(0, Number(value) || 0))
 
 const isActionVisible = (action: CrudRowAction, row: Record<string, any>) => {
-  if (!action.visibleWhen) return true
-  return evaluateExpression(action.visibleWhen, row)
+  if (action.visibleConditions?.length) return evaluateConditions(action.visibleConditions, row, true)
+  if (action.visibleWhen) return evaluateLegacyExpression(action.visibleWhen, row)
+  return true
 }
 
 const isActionDisabled = (action: CrudRowAction, row: Record<string, any>) => {
-  if (!action.disabledWhen) return false
-  return evaluateExpression(action.disabledWhen, row)
+  if (action.disabledConditions?.length) return evaluateConditions(action.disabledConditions, row, false)
+  if (action.disabledWhen) return evaluateLegacyExpression(action.disabledWhen, row)
+  return false
 }
 
 const handleSearch = () => {
@@ -465,7 +507,14 @@ watch(
   { deep: true }
 )
 
-onMounted(fetchRows)
+onMounted(() => {
+  fetchRows()
+  window.addEventListener('forge-report-refresh', fetchRows)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('forge-report-refresh', fetchRows)
+})
 </script>
 
 <style lang="scss" scoped>

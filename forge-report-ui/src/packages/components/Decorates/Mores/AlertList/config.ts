@@ -6,6 +6,12 @@ import { AlertListConfig } from './index'
 
 export const option = {
   title: '实时告警',
+  dataSource: {
+    url: '',
+    method: 'get',
+    dataPath: 'data',
+    paramMap: {}
+  },
   items: [
     { level: 'critical', title: '设备离线', time: '19:21', desc: 'A 区 3 号设备超过 5 分钟无心跳' },
     { level: 'warning', title: '库存预警', time: '18:46', desc: '关键物资低于安全库存' },

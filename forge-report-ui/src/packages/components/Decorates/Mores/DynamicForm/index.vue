@@ -14,10 +14,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, PropType, reactive, ref } from 'vue'
+import { computed, onMounted, PropType, reactive, ref, watch } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
 import { post, put } from '@/api/http'
-import type { option as defaultOption } from './config'
+import { option as defaultOption } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -28,7 +28,12 @@ const props = defineProps({
 
 const form = reactive<Record<string, any>>({})
 const submitting = ref(false)
-const option = computed(() => props.chartConfig.option)
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  fields: props.chartConfig.option?.fields || []
+}))
 const rootStyle = computed(() => ({
   '--form-accent': option.value.style.accentColor,
   '--form-text': option.value.style.textColor,
@@ -37,11 +42,14 @@ const rootStyle = computed(() => ({
   '--form-border': option.value.style.borderColor
 }))
 
-onMounted(() => {
+const initForm = () => {
   option.value.fields.forEach(field => {
     if (!(field.field in form)) form[field.field] = ''
   })
-})
+}
+
+watch(() => option.value.fields, initForm, { deep: true })
+onMounted(initForm)
 
 const submit = async () => {
   const invalid = option.value.fields.find(field => field.required && !form[field.field])
@@ -58,6 +66,7 @@ const submit = async () => {
     const method = option.value.submitMethod === 'put' ? put : post
     await method(option.value.submitUrl, form)
     window['$message']?.success('提交成功')
+    window.dispatchEvent(new CustomEvent('forge-report-refresh', { detail: { source: 'dynamic-form' } }))
   } finally {
     submitting.value = false
   }

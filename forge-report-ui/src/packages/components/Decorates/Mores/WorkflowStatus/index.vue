@@ -2,9 +2,9 @@
   <section class="workflow-status" :style="rootStyle">
     <h3>{{ option.title }}</h3>
     <div class="steps">
-      <div v-for="(step, index) in option.steps" :key="step.label" class="step" :class="stepClass(step, index)">
+      <div v-for="(step, index) in steps" :key="step.label" class="step" :class="stepClass(step, index)">
         <div class="dot">{{ index + 1 }}</div>
-        <div class="line" v-if="index < option.steps.length - 1"></div>
+        <div class="line" v-if="index < steps.length - 1"></div>
         <strong>{{ step.label }}</strong>
         <span>{{ step.desc }}</span>
       </div>
@@ -13,9 +13,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, PropType } from 'vue'
+import { computed, inject, onMounted, onUnmounted, PropType, ref, unref } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
-import type { option as defaultOption } from './config'
+import { PREVIEW_PAGE_CONTEXT_KEY } from '@/utils/requestDynamicParams'
+import { fetchBusinessData, normalizeArrayData, normalizeObjectData } from '@/packages/components/common/businessDataSource'
+import { option as defaultOption } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -24,7 +26,17 @@ const props = defineProps({
   }
 })
 
-const option = computed(() => props.chartConfig.option)
+const pageContext = inject(PREVIEW_PAGE_CONTEXT_KEY, ref({}))
+const remoteSteps = ref<any[]>([])
+const remoteActiveIndex = ref<number | undefined>()
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  dataSource: { ...defaultOption.dataSource, ...(props.chartConfig.option?.dataSource || {}) }
+}))
+const steps = computed(() => remoteSteps.value.length ? remoteSteps.value : option.value.steps)
+const activeIndex = computed(() => remoteActiveIndex.value ?? option.value.activeIndex)
 const rootStyle = computed(() => ({
   '--wf-accent': option.value.style.accentColor,
   '--wf-done': option.value.style.doneColor,
@@ -33,7 +45,27 @@ const rootStyle = computed(() => ({
   '--wf-panel': option.value.style.panelColor,
   '--wf-border': option.value.style.borderColor
 }))
-const stepClass = (step: any, index: number) => step.status || (index < option.value.activeIndex ? 'done' : index === option.value.activeIndex ? 'active' : 'todo')
+const stepClass = (step: any, index: number) => step.status || (index < activeIndex.value ? 'done' : index === activeIndex.value ? 'active' : 'todo')
+
+const fetchSteps = async () => {
+  const data = await fetchBusinessData(option.value.dataSource, unref(pageContext) || {})
+  if (Array.isArray(data)) {
+    remoteSteps.value = data
+    return
+  }
+  const detail = normalizeObjectData(data)
+  remoteSteps.value = normalizeArrayData(detail.steps)
+  remoteActiveIndex.value = Number.isFinite(Number(detail.activeIndex)) ? Number(detail.activeIndex) : undefined
+}
+
+onMounted(() => {
+  fetchSteps()
+  window.addEventListener('forge-report-refresh', fetchSteps)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('forge-report-refresh', fetchSteps)
+})
 </script>
 
 <style scoped lang="scss">

@@ -2,10 +2,10 @@
   <section class="alert-list" :style="rootStyle">
     <header>
       <h3>{{ option.title }}</h3>
-      <span>{{ option.items.length }}</span>
+      <span>{{ items.length }}</span>
     </header>
     <div class="alert-items">
-      <article v-for="item in option.items" :key="`${item.title}-${item.time}`" :class="`is-${item.level}`">
+      <article v-for="item in items" :key="`${item.title}-${item.time}`" :class="`is-${item.level}`">
         <i></i>
         <div>
           <strong>{{ item.title }}</strong>
@@ -18,9 +18,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, PropType } from 'vue'
+import { computed, inject, onMounted, onUnmounted, PropType, ref, unref } from 'vue'
 import { CreateComponentType } from '@/packages/index.d'
-import type { option as defaultOption } from './config'
+import { PREVIEW_PAGE_CONTEXT_KEY } from '@/utils/requestDynamicParams'
+import { fetchBusinessData, normalizeArrayData } from '@/packages/components/common/businessDataSource'
+import { option as defaultOption } from './config'
 
 const props = defineProps({
   chartConfig: {
@@ -29,7 +31,15 @@ const props = defineProps({
   }
 })
 
-const option = computed(() => props.chartConfig.option)
+const pageContext = inject(PREVIEW_PAGE_CONTEXT_KEY, ref({}))
+const remoteItems = ref<any[]>([])
+const option = computed(() => ({
+  ...defaultOption,
+  ...(props.chartConfig.option || {}),
+  style: { ...defaultOption.style, ...(props.chartConfig.option?.style || {}) },
+  dataSource: { ...defaultOption.dataSource, ...(props.chartConfig.option?.dataSource || {}) }
+}))
+const items = computed(() => remoteItems.value.length ? remoteItems.value : option.value.items)
 const rootStyle = computed(() => ({
   '--alert-accent': option.value.style.accentColor,
   '--alert-critical': option.value.style.criticalColor,
@@ -40,6 +50,20 @@ const rootStyle = computed(() => ({
   '--alert-panel': option.value.style.panelColor,
   '--alert-border': option.value.style.borderColor
 }))
+
+const fetchItems = async () => {
+  const data = await fetchBusinessData(option.value.dataSource, unref(pageContext) || {})
+  remoteItems.value = normalizeArrayData(data)
+}
+
+onMounted(() => {
+  fetchItems()
+  window.addEventListener('forge-report-refresh', fetchItems)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('forge-report-refresh', fetchItems)
+})
 </script>
 
 <style scoped lang="scss">
