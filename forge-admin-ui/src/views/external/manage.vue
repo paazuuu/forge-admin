@@ -58,6 +58,8 @@
         modal-width="960px"
         :hide-selection="true"
         :scroll-x="1180"
+        max-height="var(--external-table-max-height)"
+        :search-y-gap="8"
         @load-list-success="handleSystemListLoaded"
         @submit-success="handleSystemSaved"
         @delete="handleSystemDeleted"
@@ -115,6 +117,8 @@
         modal-width="1040px"
         :hide-selection="true"
         :scroll-x="1780"
+        max-height="var(--external-table-max-height)"
+        :search-y-gap="8"
         @submit-success="handleApiSaved"
         @delete="handleApiDeleted"
       />
@@ -1351,13 +1355,54 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .external-manage-page {
-  padding: 16px;
+  --external-table-max-height: calc(100vh - 282px);
+  height: 100%;
+  min-height: 0;
+  padding: 12px;
+  display: flex;
+  overflow: hidden;
 }
 
 .panel-card {
-  min-height: calc(100vh - 120px);
-  border-radius: 16px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
   box-shadow: 0 14px 40px rgba(31, 41, 55, 0.08);
+}
+
+.panel-card :deep(.n-card-header) {
+  flex-shrink: 0;
+  padding: 12px 16px;
+}
+
+.panel-card :deep(.n-card__content) {
+  flex: 1;
+  min-height: 0;
+  padding: 0 16px 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-card :deep(.ai-crud-page) {
+  flex: 1;
+  min-height: 0;
+}
+
+.panel-card :deep(.ai-crud-main) {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-card :deep(.ai-search-box) {
+  padding: 10px 12px 2px;
+}
+
+.panel-card :deep(.ai-table-toolbar) {
+  min-height: 42px;
+  padding: 8px 12px;
 }
 
 .panel-header {
@@ -1371,8 +1416,9 @@ onMounted(() => {
 .log-summary-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .log-summary-strip {
@@ -1383,7 +1429,7 @@ onMounted(() => {
 .log-summary-card {
   position: relative;
   overflow: hidden;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border: 1px solid rgba(42, 87, 154, 0.08);
   border-radius: 14px;
   background:
@@ -1394,9 +1440,9 @@ onMounted(() => {
 .overview-card strong,
 .log-summary-card strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1;
 }
 
@@ -1514,9 +1560,26 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .external-manage-page {
+    --external-table-max-height: calc(100vh - 184px);
+    padding: 10px;
+  }
+
+  .panel-card {
+    border-radius: 10px;
+  }
+
+  .panel-card :deep(.n-card-header) {
+    padding: 10px 12px;
+  }
+
+  .panel-card :deep(.n-card__content) {
+    padding: 0 10px 10px;
+  }
+
   .overview-strip,
   .log-summary-strip {
-    grid-template-columns: 1fr 1fr;
+    display: none;
   }
 
   .kv-config-row {
@@ -1527,6 +1590,27 @@ onMounted(() => {
 @media (max-width: 768px) {
   .panel-card {
     min-height: auto;
+  }
+}
+
+@media (max-height: 720px) {
+  .external-manage-page {
+    --external-table-max-height: calc(100vh - 174px);
+    padding: 10px 12px;
+  }
+
+  .panel-card :deep(.n-card-header) {
+    padding: 10px 14px;
+  }
+
+  .panel-card :deep(.n-card__content) {
+    padding: 0 12px 12px;
+  }
+
+  .overview-strip,
+  .log-summary-strip,
+  .panel-subtitle {
+    display: none;
   }
 }
 </style>

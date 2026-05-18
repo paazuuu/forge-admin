@@ -163,9 +163,8 @@ import FgAuthImage from '@/components/FgAuthImage/index.vue'
 import { createFileAssetRef } from '@/utils'
 import {
   getMaterialAssetPageApi,
-  REPORT_MATERIAL_BUSINESS_TYPE,
   reportMaterialCategoryOptions,
-  uploadFileApi
+  uploadMaterialAssetApi
 } from '@/api/file'
 import type { MaterialAsset } from '@/api/file'
 import type { UploadCustomRequestOptions } from 'naive-ui'
@@ -330,7 +329,7 @@ const handleUploadMaterial = async (options: UploadCustomRequestOptions) => {
   }
   uploading.value = true
   try {
-    const res = await uploadFileApi(rawFile as File, REPORT_MATERIAL_BUSINESS_TYPE, uploadCategory.value, uploadVisibility.value)
+    const res = await uploadMaterialAssetApi(rawFile as File, uploadCategory.value, uploadVisibility.value)
     if (res.code !== 200 || !res.data?.fileId) {
       throw new Error(res.msg || '素材上传失败')
     }

@@ -60,9 +60,10 @@
         :hide-selection="true"
         :striped="true"
         :scroll-x="1460"
-        max-height="calc(100vh - 360px)"
+        max-height="var(--data-scope-table-max-height)"
         :search-grid-cols="3"
         :search-max-visible-fields="3"
+        :search-y-gap="8"
         search-label-width="84"
       >
         <template #form-mapperMethod="{ value: mapperValue, updateValue }">
@@ -705,21 +706,25 @@ function handleDelete(row) {
 
 <style scoped>
 .data-scope-config-page {
+  --data-scope-table-max-height: calc(100vh - 268px);
   height: 100%;
+  min-height: 0;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  overflow: hidden;
   background: #f6f8fb;
   color: #0f172a;
 }
 
 .page-header {
+  flex-shrink: 0;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 20px;
+  padding: 14px 18px;
   background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
   border: 1px solid #dbe5f3;
   border-radius: 14px;
@@ -740,15 +745,15 @@ function handleDelete(row) {
 }
 
 .title-icon {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   color: #fff;
-  font-size: 22px;
+  font-size: 20px;
   background: linear-gradient(135deg, #1e40af 0%, #0f766e 100%);
   box-shadow: 0 10px 18px rgba(30, 64, 175, 0.18);
 }
@@ -756,8 +761,8 @@ function handleDelete(row) {
 .page-title {
   margin: 0;
   color: #0f172a;
-  font-size: 20px;
-  line-height: 28px;
+  font-size: 18px;
+  line-height: 25px;
   font-weight: 700;
 }
 
@@ -780,7 +785,7 @@ function handleDelete(row) {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
   background: rgba(255, 255, 255, 0.82);
@@ -821,7 +826,8 @@ function handleDelete(row) {
 .data-scope-content {
   flex: 1;
   min-height: 0;
-  padding: 16px 18px;
+  overflow: hidden;
+  padding: 12px 14px;
   background: #fff;
   border: 1px solid #dbe5f3;
   border-radius: 14px;
@@ -830,21 +836,29 @@ function handleDelete(row) {
 
 .data-scope-content :deep(.ai-crud-page) {
   height: 100%;
+  min-height: 0;
   background: transparent;
 }
 
 .data-scope-content :deep(.ai-crud-search) {
-  padding: 2px 0 14px;
+  padding: 0 0 8px;
   background: transparent;
   border-bottom: 1px solid #eef2f7;
 }
 
 .data-scope-content :deep(.ai-crud-main) {
+  min-height: 0;
+  overflow: hidden;
   background: transparent;
 }
 
+.data-scope-content :deep(.ai-search-box) {
+  padding: 10px 12px 2px;
+}
+
 .data-scope-content :deep(.ai-table-toolbar) {
-  padding: 12px 0;
+  min-height: 42px;
+  padding: 8px 0;
 }
 
 .data-scope-content :deep(.n-data-table) {
@@ -1161,7 +1175,9 @@ function handleDelete(row) {
 
 @media (max-width: 768px) {
   .data-scope-config-page {
-    padding: 12px;
+    --data-scope-table-max-height: calc(100vh - 198px);
+    padding: 10px;
+    gap: 10px;
   }
 
   .page-header,
@@ -1169,8 +1185,31 @@ function handleDelete(row) {
     border-radius: 10px;
   }
 
+  .page-header {
+    padding: 10px 12px;
+  }
+
+  .title-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 17px;
+  }
+
+  .page-title {
+    font-size: 16px;
+    line-height: 22px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
   .scope-summary {
-    grid-template-columns: 1fr;
+    display: none;
+  }
+
+  .data-scope-content {
+    padding: 10px;
   }
 
   :global(.scope-editor-head) {
@@ -1191,6 +1230,27 @@ function handleDelete(row) {
   :global(.scope-example-label) {
     justify-content: flex-start;
     width: auto;
+  }
+}
+
+@media (max-height: 720px) {
+  .data-scope-config-page {
+    --data-scope-table-max-height: calc(100vh - 190px);
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .page-header {
+    padding: 10px 14px;
+  }
+
+  .header-desc,
+  .scope-summary {
+    display: none;
+  }
+
+  .data-scope-content {
+    padding: 10px 12px;
   }
 }
 

@@ -84,7 +84,7 @@ import { useSettingStore } from '@/store/modules/settingStore/settingStore'
 import { loadAsyncComponent } from '@/utils'
 import { usePackagesStore } from '@/store/modules/packagesStore/packagesStore'
 import { icon } from '@/plugins'
-import { REPORT_MATERIAL_BUSINESS_TYPE, reportMaterialCategoryOptions, uploadFileApi } from '@/api/file'
+import { reportMaterialCategoryOptions, uploadMaterialAssetApi } from '@/api/file'
 import { useUserStore } from '@/store/modules/userStore/userStore'
 import type { UploadCustomRequestOptions } from 'naive-ui'
 
@@ -212,7 +212,7 @@ const handleMaterialUpload = async (options: UploadCustomRequestOptions) => {
   }
   materialUploading.value = true
   try {
-    const res = await uploadFileApi(rawFile as File, REPORT_MATERIAL_BUSINESS_TYPE, materialUploadCategory.value, materialUploadVisibility.value)
+    const res = await uploadMaterialAssetApi(rawFile as File, materialUploadCategory.value, materialUploadVisibility.value)
     if (res.code === 200) {
       options.onFinish?.()
       packagesStore.closeMaterialUploadDialog()
