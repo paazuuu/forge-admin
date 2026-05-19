@@ -200,6 +200,9 @@
           <template #form-datasetEditor="{ formData, updateValue }">
             <div class="dataset-editor-page">
               <header class="dataset-editor-header">
+                <div class="dataset-editor-icon">
+                  <i class="i-material-symbols:database-outline" />
+                </div>
                 <div class="dataset-editor-heading">
                   <button class="dataset-editor-breadcrumb" type="button" @click="crudRef?.closeModal()">
                     <span>数据资产管理</span>
@@ -207,7 +210,7 @@
                     <span>数据集定义</span>
                   </button>
                   <div class="dataset-editor-title-row">
-                    <h2>{{ getDatasetTypeLabel(formData.datasetType) }}</h2>
+                    <h2>{{ formData.datasetName || getDatasetTypeLabel(formData.datasetType) }}</h2>
                     <span class="dataset-status-tag">
                       {{ getPublishStatusLabel(formData.publishStatus) }}
                     </span>
@@ -242,7 +245,10 @@
                 </div>
               </header>
 
-              <div class="dataset-editor-steps">
+              <div
+                class="dataset-editor-steps"
+                :style="{ '--dataset-step-index': currentStep - 1 }"
+              >
                 <button
                   v-for="(step, index) in stepDefinitions"
                   :key="step.label"
@@ -252,21 +258,21 @@
                     'is-completed': currentStep > index + 1,
                   }"
                   type="button"
-                  @click="setEditorStep(index + 1)"
+                  @click="setEditorStep(index + 1, true)"
                 >
+                  <span v-if="index > 0" class="dataset-editor-step__line" />
                   <span class="dataset-editor-step__content">
-                    <span class="dataset-editor-step__title">
-                      <span class="dataset-editor-step__index">{{ index + 1 }}</span>
+                    <span class="dataset-editor-step__index">{{ index + 1 }}</span>
+                    <span class="dataset-editor-step__text">
                       <span class="dataset-editor-step__label">{{ step.label }}</span>
+                      <span class="dataset-editor-step__caption">{{ step.caption }}</span>
                     </span>
-                    <span class="dataset-editor-step__caption">{{ step.caption }}</span>
                   </span>
-                  <span v-if="index < stepDefinitions.length - 1" class="dataset-editor-step__separator">&gt;</span>
                 </button>
               </div>
 
               <div class="dataset-editor-grid">
-                <section class="dataset-edit-panel dataset-edit-panel--basic">
+                <section class="dataset-edit-panel dataset-edit-panel--basic" data-step-section="1">
                   <div class="panel-section-head">
                     <h3>基础信息</h3>
                   </div>
@@ -306,32 +312,36 @@
                     </label>
                     <label class="dataset-field dataset-field--required">
                       <span>数据源</span>
-                      <NSelect
-                        :value="formData.connectionId"
-                        :options="connectionOptions"
-                        :disabled="isFormReadOnly"
-                        filterable
-                        clearable
-                        placeholder="请选择数据连接"
-                        @update:value="value => handleConnectionChange(value, formData)"
-                      />
+                      <div class="data-source-select">
+                        <i class="data-source-status-dot" />
+                        <NSelect
+                          :value="formData.connectionId"
+                          :options="connectionOptions"
+                          :disabled="isFormReadOnly"
+                          filterable
+                          clearable
+                          placeholder="请选择数据连接"
+                          @update:value="value => handleConnectionChange(value, formData)"
+                        />
+                      </div>
                     </label>
-                    <label class="dataset-field dataset-field--required">
+                    <div class="dataset-field dataset-field--required">
                       <span>数据集类型</span>
-                      <n-radio-group
-                        :value="formData.datasetType"
-                        :disabled="isFormReadOnly || Boolean(formData.id)"
-                        @update:value="value => handleDatasetTypeChange(value, formData)"
-                      >
-                        <n-radio-button
+                      <div class="dataset-type-segment" :class="{ 'is-disabled': isFormReadOnly }">
+                        <button
                           v-for="option in datasetTypeOptions"
                           :key="option.value"
-                          :value="option.value"
+                          class="dataset-type-option"
+                          :class="{ 'is-active': formData.datasetType === option.value }"
+                          type="button"
+                          :disabled="isFormReadOnly"
+                          @mousedown.stop.prevent
+                          @click.stop.prevent="handleDatasetTypeChange(option.value, formData, updateValue)"
                         >
                           {{ option.label }}
-                        </n-radio-button>
-                      </n-radio-group>
-                    </label>
+                        </button>
+                      </div>
+                    </div>
                     <label class="dataset-field">
                       <span>可用状态</span>
                       <n-radio-group
@@ -406,7 +416,7 @@
                         class="dataset-sql-editor"
                         :value="formData.sqlText"
                         :readonly="isFormReadOnly"
-                        theme="dark"
+                        theme="light"
                         show-fullscreen
                         placeholder="SELECT order_id, order_time, customer_name, amount, status FROM orders WHERE order_time >= :start_time AND order_time < :end_time AND status = :status LIMIT :limit"
                         @update:value="value => formData.sqlText = value"
@@ -502,7 +512,7 @@
                   </div>
                 </section>
 
-                <section class="dataset-edit-panel dataset-edit-panel--params">
+                <section class="dataset-edit-panel dataset-edit-panel--params" data-step-section="2">
                   <div class="panel-section-head panel-section-head--inline">
                     <h3>查询参数定义</h3>
                     <n-popover trigger="click" placement="bottom-end" :width="320">
@@ -537,7 +547,7 @@
                   />
                 </section>
 
-                <section class="dataset-edit-panel dataset-edit-panel--settings">
+                <section class="dataset-edit-panel dataset-edit-panel--settings" data-step-section="3">
                   <div class="panel-section-head">
                     <h3>执行设置</h3>
                   </div>
@@ -637,7 +647,7 @@
                   </div>
                 </section>
 
-                <section class="dataset-edit-panel dataset-edit-panel--access">
+                <section class="dataset-edit-panel dataset-edit-panel--access" data-step-section="4">
                   <div class="panel-section-head">
                     <h3>权限控制</h3>
                   </div>
@@ -1533,7 +1543,7 @@
 
 <script setup>
 import { NInput, NSelect, NTag } from 'naive-ui'
-import { computed, h, reactive, ref } from 'vue'
+import { computed, h, nextTick, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDataConnectionFields, getDataConnectionList, getDataConnectionTables } from '@/api/data/connection'
 import {
@@ -1590,7 +1600,7 @@ const currentEditingDataset = ref(null)
 const currentStep = ref(1)
 const stepDefinitions = [
   {
-    label: '基本信息',
+    label: '基础信息',
     caption: '定义数据集基本信息与SQL',
     title: '定义数据集基本信息与SQL',
     description: '配置数据集名称、编码、所属目录、数据源和 SQL 或数据表来源。',
@@ -1602,7 +1612,7 @@ const stepDefinitions = [
     description: '维护报表侧可绑定的查询条件，保证参数名、字段映射和默认值可预期。',
   },
   {
-    label: '执行配置',
+    label: '执行设置',
     caption: '设置执行限制与调度策略',
     title: '设置执行限制与调度策略',
     description: '控制返回行数、超时时间和缓存策略，让数据集在大屏运行时保持稳定。',
@@ -2157,8 +2167,21 @@ function formatDatasetDate(value) {
   return String(value).replace('T', ' ').slice(0, 19)
 }
 
-function setEditorStep(step) {
+function setEditorStep(step, shouldScroll = false) {
   currentStep.value = step
+  if (shouldScroll) {
+    scrollToStepSection(step)
+  }
+}
+
+async function scrollToStepSection(step) {
+  await nextTick()
+  const section = document.querySelector(`.data-dataset-edit-form [data-step-section="${step}"]`)
+  section?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+    inline: 'nearest',
+  })
 }
 
 function getPublishStatusLabel(status) {
@@ -2541,17 +2564,25 @@ async function handleConnectionChange(connectionId, formData) {
   }
 }
 
-async function handleDatasetTypeChange(datasetType, formData) {
+async function handleDatasetTypeChange(datasetType, formData, updateValue) {
+  if (isFormReadOnly.value || formData.datasetType === datasetType) {
+    return
+  }
   formData.datasetType = datasetType
   clearRowScopeColumns(formData)
   resetRowScopeTableFields()
   if (datasetType === 'TABLE') {
     formData.sqlText = null
+    syncSlotForm(updateValue)
     await loadTableOptions(formData.connectionId)
     return
   }
 
   formData.tableName = null
+  if (formData.sqlText === null || formData.sqlText === undefined) {
+    formData.sqlText = ''
+  }
+  syncSlotForm(updateValue)
 }
 
 async function handleTableNameChange(tableName, formData) {
@@ -3826,14 +3857,9 @@ function goToPrevStep() {
 
 <style scoped>
 .dataset-studio {
-  --studio-bg: linear-gradient(180deg, #f4f7fb 0%, #eef3f8 100%);
-  --panel-bg: rgb(255 255 255 / 92%);
-  --panel-border: rgb(148 163 184 / 16%);
-  --panel-shadow: 0 14px 34px rgb(15 23 42 / 8%);
-  --panel-radius: 20px;
+  background: #f8fafc;
   min-height: 100%;
-  padding: 14px;
-  background: var(--studio-bg);
+  padding: 10px;
 }
 
 .studio-hero {
@@ -3841,9 +3867,98 @@ function goToPrevStep() {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
   align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 14px 16px;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 12px 16px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.workspace-sidebar,
+.workspace-main {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.hero-main {
+  min-width: 0;
+}
+
+.hero-kicker,
+.panel-kicker {
+  margin: 0 0 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hero-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.hero-description {
+  overflow: hidden;
+  max-width: 720px;
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hero-stat-card {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hero-stat-label {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-stat-value {
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.studio-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 10px 14px;
   overflow: hidden;
   border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
@@ -3872,27 +3987,27 @@ function goToPrevStep() {
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 5px;
+  margin: 0 0 3px;
   color: #0f766e;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .hero-title {
   margin: 0;
   color: #0f172a;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1.18;
 }
 
 .hero-description {
   overflow: hidden;
   max-width: 720px;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: #475569;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3901,14 +4016,14 @@ function goToPrevStep() {
 .hero-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .hero-stat-card {
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgb(148 163 184 / 16%);
-  border-radius: 14px;
+  padding: 8px 10px;
+  border: 1px solid rgb(148 163 184 / 14%);
+  border-radius: 10px;
   background: rgb(255 255 255 / 78%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
@@ -3920,18 +4035,18 @@ function goToPrevStep() {
 .hero-stat-label {
   overflow: hidden;
   color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #0f172a;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1;
 }
@@ -3942,14 +4057,14 @@ function goToPrevStep() {
 
 .dataset-workspace {
   display: grid;
-  grid-template-columns: 288px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 8px;
   align-items: start;
 }
 
 .workspace-sidebar,
 .workspace-main {
-  padding: 14px;
+  padding: 10px;
 }
 
 .sidebar-head,
@@ -3957,26 +4072,27 @@ function goToPrevStep() {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
 .sidebar-head h3,
 .toolbar-title-row h3 {
   margin: 0;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .sidebar-shortcuts {
   display: flex;
-  gap: 8px;
-  margin: 12px 0 10px;
+  gap: 6px;
+  margin: 8px 0 8px;
 }
 
 .scope-chip {
-  padding: 7px 12px;
+  padding: 5px 10px;
   color: #334155;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -3998,82 +4114,84 @@ function goToPrevStep() {
 }
 
 .category-search {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .category-tree-shell {
-  min-height: 300px;
-  max-height: calc(100vh - 410px);
-  padding: 10px;
+  min-height: 180px;
+  max-height: calc(100vh - 390px);
+  padding: 6px;
   overflow: auto;
-  background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  background: rgb(248 250 252 / 60%);
+  border: 1px solid #e8ecf1;
+  border-radius: 10px;
 }
 
 .category-detail-card {
-  margin-top: 12px;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, rgb(15 23 42 / 0.94), rgb(30 41 59 / 0.92));
-  border-radius: 18px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 20%);
 }
 
 .category-detail-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .category-detail-name {
-  color: #f8fafc;
-  font-size: 18px;
+  color: #f1f5f9;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .category-detail-code {
-  margin-top: 6px;
-  color: rgb(186 230 253 / 0.86);
-  font-size: 12px;
+  margin-top: 3px;
+  color: rgb(148 163 184 / 90%);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .category-detail-desc {
-  margin: 14px 0 0;
-  color: rgb(226 232 240 / 0.8);
-  font-size: 13px;
-  line-height: 1.7;
+  margin: 8px 0 0;
+  color: rgb(148 163 184 / 80%);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .main-toolbar {
-  margin-bottom: 12px;
-  padding: 12px;
-  background: linear-gradient(180deg, rgb(248 250 252 / 0.86), rgb(255 255 255 / 0.94));
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e8ecf1;
+  border-radius: 10px;
 }
 
 .toolbar-title-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .toolbar-scope {
-  padding: 6px 10px;
-  color: #0f766e;
-  font-size: 12px;
+  padding: 3px 8px;
+  color: #1e40af;
+  font-size: 11px;
   font-weight: 600;
-  background: #ecfeff;
-  border: 1px solid #a5f3fc;
-  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
 }
 
 .toolbar-filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(140px, 0.8fr)) auto;
-  gap: 8px;
-  margin-top: 10px;
+  grid-template-columns: minmax(200px, 1.4fr) repeat(3, minmax(130px, 0.8fr)) auto;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .toolbar-filter {
@@ -4086,32 +4204,33 @@ function goToPrevStep() {
 
 .asset-name-card {
   display: grid;
-  gap: 7px;
+  gap: 4px;
 }
 
 .asset-name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .asset-name {
   color: #0f172a;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .asset-code {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .asset-desc {
   overflow: hidden;
-  color: #64748b;
-  font-size: 12px;
+  color: #94a3b8;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4125,9 +4244,9 @@ function goToPrevStep() {
 
 .asset-category-code,
 .asset-source-detail {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 12px;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
 }
 
 .sql-preview-action {
@@ -4273,39 +4392,38 @@ function goToPrevStep() {
 
 :deep(.dataset-crud .ai-crud-table) {
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  border-radius: 22px;
-  background: rgb(255 255 255 / 0.92);
-  box-shadow: 0 16px 36px rgb(15 23 42 / 6%);
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
 }
 
 :deep(.dataset-crud .n-data-table-th) {
+  padding: 9px 12px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
   background: #f8fafc;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+:deep(.dataset-crud .n-data-table-tr:nth-child(even) td) {
+  background: rgb(248 250 252 / 50%);
 }
 
 :deep(.dataset-crud .n-data-table-tr:hover td) {
-  background: #fbfdff;
+  background: rgb(241 245 249 / 80%);
 }
 
 :deep(.n-tree .n-tree-node-content) {
-  min-height: 38px;
-  padding: 0 8px;
-  border-radius: 12px;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease;
-}
-
-:deep(.n-tree .n-tree-node-content:hover) {
-  background: #eef6ff;
-}
-
-:deep(.n-tree .n-tree-node--selected > .n-tree-node-content) {
-  background: #e0f2fe;
+  min-height: 34px;
+  padding-left: 15px;
 }
 
 :global(.data-dataset-edit-form) {
-  padding: 8px 4px 4px;
+  padding: 4px 2px 0;
 }
 
 :global(.data-dataset-edit-form .n-form-item:has(.step-shell)),
@@ -4346,10 +4464,10 @@ function goToPrevStep() {
 }
 
 :global(.data-dataset-edit-form .n-form-item) {
-  margin-bottom: 10px;
-  padding: 14px 16px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
   border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(180deg, #fff 0%, #fcfdff 100%);
   transition:
     border-color 0.18s ease,
@@ -4359,7 +4477,7 @@ function goToPrevStep() {
 
 :global(.data-dataset-edit-form .n-form-item:hover) {
   border-color: #cbd5e1;
-  box-shadow: 0 10px 24px rgb(15 23 42 / 6%);
+  box-shadow: 0 6px 16px rgb(15 23 42 / 5%);
   transform: translateY(-1px);
 }
 
@@ -4384,17 +4502,17 @@ function goToPrevStep() {
 }
 
 :global(.data-dataset-edit-form .n-form-item-label) {
-  min-height: 20px;
-  margin-bottom: 10px;
+  min-height: 18px;
+  margin-bottom: 6px;
   color: #334155;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.4;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
 }
 
 :global(.data-dataset-edit-form .dataset-form-divider) {
-  margin: 14px 0 10px;
+  margin: 10px 0 6px;
   color: #64748b;
 }
 
@@ -4405,7 +4523,7 @@ function goToPrevStep() {
 
 :global(.data-dataset-edit-form .dataset-form-divider .n-divider__title) {
   color: #0f172a;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -4424,11 +4542,11 @@ function goToPrevStep() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
+  gap: 12px;
+  padding: 10px 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  border-radius: 12px;
 }
 
 :global(.data-dataset-edit-form .n-radio-group .n-space) {
@@ -4438,11 +4556,11 @@ function goToPrevStep() {
 :global(.data-dataset-edit-form .dataset-context-panel) {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.95fr);
-  gap: 18px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 12px 14px;
   background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
   border: 1px solid #dbe3ef;
-  border-radius: 18px;
+  border-radius: 14px;
 }
 
 :global(.data-dataset-edit-form .dataset-context-panel--muted) {
@@ -4459,42 +4577,42 @@ function goToPrevStep() {
 
 :global(.data-dataset-edit-form .context-panel__eyebrow) {
   color: #475569;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 :global(.data-dataset-edit-form .context-panel__title) {
-  margin-top: 8px;
+  margin-top: 6px;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.35;
 }
 
 :global(.data-dataset-edit-form .context-panel__desc) {
-  margin-top: 8px;
+  margin-top: 6px;
   color: #475569;
-  font-size: 13px;
-  line-height: 1.8;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 :global(.data-dataset-edit-form .context-panel__facts) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
   align-content: start;
 }
 
 :global(.data-dataset-edit-form .context-fact) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
+  gap: 4px;
+  padding: 10px 12px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 10px;
 }
 
 :global(.data-dataset-edit-form .context-fact--wide) {
@@ -4503,12 +4621,12 @@ function goToPrevStep() {
 
 :global(.data-dataset-edit-form .context-fact span) {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 :global(.data-dataset-edit-form .context-fact strong) {
   color: #0f172a;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -4524,11 +4642,11 @@ function goToPrevStep() {
 :global(.data-dataset-edit-form .permission-panel) {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 12px 14px;
   background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
   border: 1px solid #dbe3ef;
-  border-radius: 18px;
+  border-radius: 14px;
   overflow: visible;
 }
 
@@ -4558,29 +4676,29 @@ function goToPrevStep() {
 :global(.data-dataset-edit-form .permission-facts) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 :global(.data-dataset-edit-form .permission-fact) {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 14px 16px;
+  padding: 10px 12px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 10px;
 }
 
 :global(.data-dataset-edit-form .permission-fact span) {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 :global(.data-dataset-edit-form .permission-fact strong) {
   overflow: hidden;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -4588,10 +4706,10 @@ function goToPrevStep() {
 }
 
 :global(.data-dataset-edit-form .acl-editor) {
-  padding: 14px;
+  padding: 10px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: visible;
 }
 
@@ -4599,27 +4717,27 @@ function goToPrevStep() {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 :global(.data-dataset-edit-form .acl-editor__title) {
   color: #0f172a;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 :global(.data-dataset-edit-form .acl-editor__hint) {
-  margin-top: 4px;
+  margin-top: 3px;
   color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 :global(.data-dataset-edit-form .acl-rows) {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   overflow: visible;
 }
 
@@ -5702,6 +5820,629 @@ function goToPrevStep() {
   line-height: 1.4;
 }
 
+:global(.data-dataset-edit-form .dataset-editor-page) {
+  --editor-blue: #1677ff;
+  --editor-blue-soft: #e6f4ff;
+  --editor-bg: #f5f7fb;
+  --editor-border: #e8e8e8;
+  --editor-border-light: #edf1f7;
+  --editor-text: #1f2329;
+  --editor-muted: #6b7280;
+  --editor-disabled: #a8abb2;
+  min-height: min(82vh, 980px);
+  padding: 20px;
+  background: #f5f7fb;
+  border-radius: 4px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-header) {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  border-color: var(--editor-border);
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(31 35 41 / 3%);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: #fff;
+  font-size: 19px;
+  border-radius: 8px;
+  background: #1677ff;
+  box-shadow: 0 6px 12px rgb(22 119 255 / 18%);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-breadcrumb) {
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-title-row h2) {
+  max-width: 680px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+:global(.data-dataset-edit-form .dataset-status-tag) {
+  min-height: 20px;
+  padding: 0 7px;
+  color: #1677ff;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #91caff;
+  background: #e6f4ff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-actions) {
+  align-self: center;
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-actions .n-button) {
+  min-width: 72px;
+  min-height: 30px;
+  padding: 0 14px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-steps) {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 12px 18px 14px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(31 35 41 / 3%);
+}
+
+:global(.data-dataset-edit-form .dataset-editor-steps::before) {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: #edf1f7;
+  content: '';
+}
+
+:global(.data-dataset-edit-form .dataset-editor-steps::after) {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 25%;
+  height: 3px;
+  background: #1677ff;
+  content: '';
+  transform: translateX(calc(var(--dataset-step-index, 0) * 100%));
+  transition: transform 0.22s ease;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step) {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 72px;
+  padding: 0 10px;
+  overflow: visible;
+  text-align: center;
+  border: 0;
+  background: transparent;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__content) {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__line) {
+  position: absolute;
+  top: 15px;
+  right: calc(50% + 18px);
+  left: calc(-50% + 18px);
+  height: 1px;
+  background: #e5e7eb;
+  content: '';
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step.is-completed + .dataset-editor-step .dataset-editor-step__line) {
+  background: #1677ff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__index) {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 8px;
+  color: #1f2329;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid #d9dee8;
+  border-radius: 6px;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__text) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__label) {
+  overflow: hidden;
+  max-width: 100%;
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__caption) {
+  overflow: hidden;
+  max-width: 100%;
+  color: #999;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step.is-active .dataset-editor-step__index),
+:global(.data-dataset-edit-form .dataset-editor-step.is-completed .dataset-editor-step__index) {
+  color: #fff;
+  border-color: #1677ff;
+  background: #1677ff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step.is-active .dataset-editor-step__label),
+:global(.data-dataset-edit-form .dataset-editor-step.is-completed .dataset-editor-step__label) {
+  color: #1677ff;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step.is-active .dataset-editor-step__caption) {
+  color: #999;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-grid) {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel) {
+  min-width: 0;
+  height: 100%;
+  padding: 22px 24px;
+  border-color: var(--editor-border);
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(31 35 41 / 4%);
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--basic) {
+  grid-column: span 4;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--sql) {
+  grid-column: span 8;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--params),
+:global(.data-dataset-edit-form .dataset-edit-panel--access) {
+  grid-column: span 7;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--settings),
+:global(.data-dataset-edit-form .dataset-edit-panel--info) {
+  grid-column: span 5;
+}
+
+:global(.data-dataset-edit-form .panel-section-head) {
+  min-height: 28px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+:global(.data-dataset-edit-form .panel-section-head h3) {
+  color: #1f2329;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-form-grid) {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field),
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field--wide),
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field--full) {
+  display: grid;
+  grid-column: auto;
+  grid-template-columns: 94px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+:global(.data-dataset-edit-form .dataset-field > span),
+:global(.data-dataset-edit-form .setting-switch-row > span) {
+  padding-top: 6px;
+  color: #4e5969;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-tag-list) {
+  padding-top: 2px;
+}
+
+:global(.data-dataset-edit-form .data-source-select) {
+  position: relative;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .data-source-status-dot) {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #52c41a;
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 3px rgb(82 196 26 / 12%);
+}
+
+:global(.data-dataset-edit-form .data-source-select .n-base-selection-label) {
+  padding-left: 16px;
+}
+
+:global(.data-dataset-edit-form .dataset-type-segment) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-type-option) {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 12px;
+  overflow: hidden;
+  color: #4e5969;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fff;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+:global(.data-dataset-edit-form .dataset-type-option:hover) {
+  color: #1677ff;
+  border-color: #1677ff;
+}
+
+:global(.data-dataset-edit-form .dataset-type-option.is-active) {
+  color: #fff;
+  border-color: #1677ff;
+  background: #1677ff;
+}
+
+:global(.data-dataset-edit-form .dataset-type-option:disabled) {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+:global(.data-dataset-edit-form .dataset-soft-tag),
+:global(.data-dataset-edit-form .acl-tag),
+:global(.data-dataset-edit-form .rule-chip) {
+  color: #344054;
+  border: 1px solid #eaecf0;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+:global(.data-dataset-edit-form .dataset-text-action) {
+  color: #1677ff;
+  font-weight: 500;
+}
+
+:global(.data-dataset-edit-form .sql-workbench) {
+  grid-template-columns: minmax(420px, 1.25fr) minmax(320px, 0.75fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+:global(.data-dataset-edit-form .sql-editor-shell) {
+  display: flex;
+  min-width: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor) {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__toolbar) {
+  min-height: 42px;
+  border-bottom: 1px solid #edf1f7;
+  background: #fafafa;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__title),
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__title i) {
+  color: #344054;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__body),
+:global(.data-dataset-edit-form .dataset-sql-editor .sql-editor__container),
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-editor),
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-scroller) {
+  min-height: 378px;
+  background: #fff !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-editor) {
+  color: #1f2329 !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-gutters) {
+  color: #98a2b3 !important;
+  background: #fafafa !important;
+  border-right: 1px solid #edf1f7 !important;
+}
+
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-activeLine),
+:global(.data-dataset-edit-form .dataset-sql-editor .cm-activeLineGutter) {
+  background: #eef4ff !important;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #edf1f7;
+  background: #fff;
+}
+
+:global(.data-dataset-edit-form .sql-workbench-toolbar) {
+  min-height: 34px;
+  padding-bottom: 12px;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell .n-data-table) {
+  flex: 1 1 auto;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell .n-data-table-th) {
+  color: #344054;
+  font-weight: 600;
+  background: #f7f8fa;
+}
+
+:global(.data-dataset-edit-form .sql-preview-shell .n-data-table-td) {
+  border-bottom: 1px solid #f0f2f5;
+}
+
+:global(.data-dataset-edit-form .execution-settings) {
+  gap: 16px;
+}
+
+:global(.data-dataset-edit-form .setting-row__control) {
+  grid-template-columns: minmax(0, 1fr) 108px;
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .setting-row__control .n-input-number) {
+  width: 108px;
+  min-width: 108px;
+}
+
+:global(.data-dataset-edit-form .setting-row__control .n-input__input-el) {
+  text-align: right;
+}
+
+:global(.data-dataset-edit-form .access-mode-row) {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+:global(.data-dataset-edit-form .row-scope-expression) {
+  border: 1px solid #edf1f7;
+  background: #f7f8fa;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid div) {
+  grid-template-columns: 72px minmax(0, 1fr);
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+:global(.data-dataset-edit-form .dataset-info-grid div:last-child) {
+  border-bottom: 0;
+}
+
+:global(.data-dataset-edit-form) {
+  padding: 0;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-page) {
+  min-height: min(78vh, 900px);
+  padding: 8px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-header) {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  box-shadow: none;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-icon) {
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-breadcrumb) {
+  display: none;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-title-row h2) {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-meta) {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-actions) {
+  gap: 6px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-actions .n-button) {
+  min-width: 60px;
+  min-height: 28px;
+  padding: 0 10px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-steps) {
+  padding: 4px 8px 6px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step) {
+  min-height: 34px;
+  padding: 0 6px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__content) {
+  flex-direction: row;
+  justify-content: center;
+  gap: 6px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__line) {
+  display: none;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__index) {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  font-size: 12px;
+  border-radius: 5px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__text) {
+  width: auto;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__label) {
+  font-size: 13px;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-step__caption) {
+  display: none;
+}
+
+:global(.data-dataset-edit-form .dataset-editor-grid) {
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel) {
+  padding: 12px 14px;
+  box-shadow: none;
+}
+
+:global(.data-dataset-edit-form .panel-section-head) {
+  min-height: 22px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+:global(.data-dataset-edit-form .panel-section-head h3) {
+  font-size: 14px;
+}
+
+:global(.data-dataset-edit-form .dataset-form-grid),
+:global(.data-dataset-edit-form .execution-settings) {
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-form-grid) {
+  gap: 10px;
+}
+
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field),
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field--wide),
+:global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field--full) {
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 8px;
+}
+
+:global(.data-dataset-edit-form .dataset-field > span),
+:global(.data-dataset-edit-form .setting-switch-row > span) {
+  padding-top: 5px;
+  font-size: 12px;
+}
+
+:global(.data-dataset-edit-form .sql-workbench) {
+  gap: 10px;
+}
+
 :global(.dataset-impact-dialog) {
   display: grid;
   gap: 10px;
@@ -6202,6 +6943,42 @@ function goToPrevStep() {
   :global(.data-dataset-edit-form .sql-preview-action) {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 1180px) {
+  :global(.data-dataset-edit-form .dataset-editor-header) {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-actions) {
+    grid-column: 1 / -1;
+  }
+
+  :global(.data-dataset-edit-form .dataset-edit-panel--basic),
+  :global(.data-dataset-edit-form .dataset-edit-panel--sql),
+  :global(.data-dataset-edit-form .dataset-edit-panel--params),
+  :global(.data-dataset-edit-form .dataset-edit-panel--settings),
+  :global(.data-dataset-edit-form .dataset-edit-panel--access),
+  :global(.data-dataset-edit-form .dataset-edit-panel--info) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  :global(.data-dataset-edit-form .dataset-editor-header) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.data-dataset-edit-form .dataset-editor-icon) {
+    width: 32px;
+    height: 32px;
+  }
+
+  :global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field),
+  :global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field--wide),
+  :global(.data-dataset-edit-form .dataset-edit-panel--basic .dataset-field--full) {
+    grid-template-columns: 1fr;
   }
 }
 </style>

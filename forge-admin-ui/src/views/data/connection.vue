@@ -866,13 +866,9 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 <style scoped>
 .connection-studio {
-  --studio-bg: linear-gradient(180deg, #f5f7fb 0%, #eef4f8 100%);
-  --panel-bg: rgb(255 255 255 / 94%);
-  --panel-border: rgb(148 163 184 / 16%);
-  --panel-shadow: 0 14px 34px rgb(15 23 42 / 8%);
+  background: #f8fafc;
   min-height: 100%;
-  padding: 14px;
-  background: var(--studio-bg);
+  padding: 10px;
 }
 
 .studio-hero {
@@ -880,28 +876,22 @@ function getJdbcDatabaseName(jdbcUrl) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
   align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 14px 16px;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 12px 16px;
   overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at top left, rgb(14 165 233 / 12%), transparent 36%),
-    radial-gradient(circle at 88% 24%, rgb(59 130 246 / 12%), transparent 24%),
-    linear-gradient(135deg, rgb(255 255 255 / 98%), rgb(247 251 255 / 96%));
-  box-shadow: var(--panel-shadow);
-  backdrop-filter: blur(16px);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .connection-panel {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: 20px;
-  background: var(--panel-bg);
-  box-shadow: var(--panel-shadow);
-  backdrop-filter: blur(16px);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #fff;
 }
 
 .hero-main {
@@ -910,27 +900,28 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 5px;
-  color: #0f766e;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  margin: 0 0 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .hero-title {
   margin: 0;
   color: #0f172a;
-  font-size: 24px;
-  line-height: 1.18;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .hero-description {
   overflow: hidden;
   max-width: 720px;
-  margin: 6px 0 0;
-  color: #475569;
-  font-size: 13px;
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -939,14 +930,64 @@ function getJdbcDatabaseName(jdbcUrl) {
 .hero-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .hero-stat-card {
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgb(148 163 184 / 16%);
-  border-radius: 14px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hero-stat-label {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-stat-value {
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.hero-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.18;
+}
+
+.hero-description {
+  overflow: hidden;
+  max-width: 720px;
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hero-stat-card {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgb(148 163 184 / 14%);
+  border-radius: 10px;
   background: rgb(255 255 255 / 78%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
@@ -958,18 +999,18 @@ function getJdbcDatabaseName(jdbcUrl) {
 .hero-stat-label {
   overflow: hidden;
   color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #0f172a;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1;
 }
@@ -979,28 +1020,29 @@ function getJdbcDatabaseName(jdbcUrl) {
 }
 
 .connection-panel {
-  padding: 14px;
+  padding: 10px;
 }
 
 .panel-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .panel-toolbar h3 {
   margin: 0;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .toolbar-actions {
   display: grid;
-  grid-template-columns: minmax(200px, 1.2fr) 140px 120px auto auto auto;
-  gap: 8px;
-  min-width: min(100%, 880px);
+  grid-template-columns: minmax(180px, 1.1fr) 130px 110px auto auto auto;
+  gap: 6px;
+  min-width: min(100%, 800px);
 }
 
 .connection-name-card,
@@ -1019,15 +1061,15 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 .connection-name {
   color: #0f172a;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .connection-code {
-  color: #0f766e;
+  color: #94a3b8;
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .connection-desc,
@@ -1035,7 +1077,7 @@ function getJdbcDatabaseName(jdbcUrl) {
 .connection-meta-tertiary,
 .connection-endpoint-secondary,
 .connection-endpoint-tertiary {
-  color: #64748b;
+  color: #94a3b8;
   font-size: 12px;
 }
 
@@ -1043,7 +1085,7 @@ function getJdbcDatabaseName(jdbcUrl) {
 .connection-endpoint-primary {
   color: #0f172a;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .modal-toolbar {
@@ -1088,18 +1130,29 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 :deep(.connection-crud .ai-crud-table) {
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  border-radius: 22px;
-  background: rgb(255 255 255 / 0.94);
-  box-shadow: 0 16px 36px rgb(15 23 42 / 6%);
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
 }
 
 :deep(.connection-crud .n-data-table-th) {
+  padding: 9px 12px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
   background: #f8fafc;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+:deep(.connection-crud .n-data-table-tr:nth-child(even) td) {
+  background: rgb(248 250 252 / 50%);
 }
 
 :deep(.connection-crud .n-data-table-tr:hover td) {
-  background: #fbfdff;
+  background: rgb(241 245 249 / 80%);
 }
 
 :global(.data-connection-edit-form) {
@@ -1109,62 +1162,62 @@ function getJdbcDatabaseName(jdbcUrl) {
 :global(.data-connection-edit-form .connection-guide-grid) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 :global(.data-connection-edit-form .connection-guide-card) {
-  padding: 14px 16px;
+  padding: 10px 12px;
   border: 1px solid #dbe8f5;
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(180deg, #fbfdff 0%, #f6faff 100%);
 }
 
 :global(.data-connection-edit-form .guide-label) {
   color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 :global(.data-connection-edit-form .guide-value) {
-  margin-top: 10px;
+  margin-top: 6px;
   color: #0f172a;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.4;
 }
 
 :global(.data-connection-edit-form .guide-note) {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #64748b;
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 :global(.data-connection-edit-form .connection-inline-tip) {
-  padding: 12px 14px;
+  padding: 10px 12px;
   color: #475569;
   font-size: 12px;
-  line-height: 1.8;
+  line-height: 1.7;
   background: #f8fafc;
   border: 1px dashed #cbd5e1;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 :global(.data-connection-edit-form .connection-probe-bar) {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 38px;
+  gap: 10px;
+  min-height: 34px;
   padding: 2px 0 4px;
 }
 
 :global(.data-connection-edit-form .n-form-item) {
-  margin-bottom: 8px;
-  padding: 12px;
+  margin-bottom: 6px;
+  padding: 10px;
   border: 1px solid #e8edf5;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   transition:
     border-color 0.18s ease,
@@ -1181,16 +1234,16 @@ function getJdbcDatabaseName(jdbcUrl) {
 }
 
 :global(.data-connection-edit-form .n-form-item-label) {
-  min-height: 20px;
-  margin-bottom: 7px;
+  min-height: 18px;
+  margin-bottom: 5px;
   color: #475569;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.3;
 }
 
 :global(.data-connection-edit-form .connection-form-divider) {
-  margin: 12px 0 8px;
+  margin: 8px 0 6px;
   color: #64748b;
 }
 
@@ -1201,7 +1254,7 @@ function getJdbcDatabaseName(jdbcUrl) {
 
 :global(.data-connection-edit-form .connection-form-divider .n-divider__title) {
   color: #1e293b;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 

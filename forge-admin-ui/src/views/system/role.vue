@@ -1021,7 +1021,7 @@ async function handleSubmitAuth() {
 <style scoped>
 .system-role-page {
   height: 100%;
-  padding: 20px;
+  //padding: 20px;
   display: flex;
   flex-direction: column;
 }
@@ -1032,7 +1032,7 @@ async function handleSubmitAuth() {
   min-height: 0;
   background: #fff;
   border-radius: 12px;
-  padding: 16px 20px;
+  //padding: 16px 20px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 

@@ -687,3 +687,181 @@ body {
 .gap-4 {
   gap: var(--space-4);
 }
+
+/* ═══════════════════════════════════════
+ * 全局 n-tree 精品化样式 - Premium Tree
+ * ═══════════════════════════════════════ */
+.n-tree {
+  background: transparent;
+}
+
+.n-tree-node {
+  padding: 1px 0;
+}
+
+.n-tree-node-content {
+  position: relative;
+  min-height: 36px;
+  padding: 4px 10px 4px 15px;
+  border-radius: 8px;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.n-tree-node-content:hover {
+  background-color: color-mix(in srgb, var(--primary-color, #165dff) 6%, transparent);
+}
+
+/* 修复选中态: 干掉 n-tree-node 的背景，统一由 content 承载 */
+.n-tree-node--selected,
+.n-tree-node--selected:hover {
+  background-color: transparent !important;
+}
+
+.n-tree-node--selected > .n-tree-node-content {
+  background: color-mix(in srgb, var(--primary-color, #165dff) 8%, transparent);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+/* 选中节点左侧指示条 */
+.n-tree-node--selected > .n-tree-node-content::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 5px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--primary-color, #165dff);
+  content: '';
+}
+
+/* 展开/折叠图标 */
+.n-tree-node-switcher {
+  width: 20px;
+  height: 20px;
+  color: #94a3b8;
+  transition:
+    transform 0.2s ease,
+    color 0.2s ease;
+}
+
+.n-tree-node-switcher:hover {
+  color: var(--primary-color, #165dff);
+}
+
+/* 缩进线 */
+.n-tree-node-indent {
+  width: 18px;
+}
+
+/* 树容器内滚动条 */
+.n-tree .n-tree-wrapper::-webkit-scrollbar {
+  width: 4px;
+}
+
+.n-tree .n-tree-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+/* 暗色模式 */
+.dark .n-tree-node-content:hover {
+  background-color: color-mix(in srgb, var(--primary-color, #165dff) 10%, transparent);
+}
+
+.dark .n-tree-node--selected > .n-tree-node-content {
+  background: color-mix(in srgb, var(--primary-color, #165dff) 16%, transparent);
+}
+
+.dark .n-tree-node--selected > .n-tree-node-content::before {
+  background: var(--primary-color, #4080ff);
+}
+
+.dark .n-tree-node-switcher {
+  color: #64748b;
+}
+
+.dark .n-tree-node-switcher:hover {
+  color: var(--primary-color, #4080ff);
+}
+
+/* ═══════════════════════════════════════
+ * 表格行渐进入场动画 — Staggered Row Reveal
+ * ═══════════════════════════════════════ */
+@keyframes table-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.n-data-table-tr {
+  animation: table-row-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.n-data-table-tr:nth-child(1) {
+  animation-delay: 0.01s;
+}
+.n-data-table-tr:nth-child(2) {
+  animation-delay: 0.03s;
+}
+.n-data-table-tr:nth-child(3) {
+  animation-delay: 0.05s;
+}
+.n-data-table-tr:nth-child(4) {
+  animation-delay: 0.07s;
+}
+.n-data-table-tr:nth-child(5) {
+  animation-delay: 0.09s;
+}
+.n-data-table-tr:nth-child(6) {
+  animation-delay: 0.1s;
+}
+.n-data-table-tr:nth-child(7) {
+  animation-delay: 0.12s;
+}
+.n-data-table-tr:nth-child(8) {
+  animation-delay: 0.13s;
+}
+.n-data-table-tr:nth-child(9) {
+  animation-delay: 0.15s;
+}
+.n-data-table-tr:nth-child(10) {
+  animation-delay: 0.16s;
+}
+.n-data-table-tr:nth-child(11) {
+  animation-delay: 0.17s;
+}
+.n-data-table-tr:nth-child(12) {
+  animation-delay: 0.18s;
+}
+.n-data-table-tr:nth-child(13) {
+  animation-delay: 0.19s;
+}
+.n-data-table-tr:nth-child(14) {
+  animation-delay: 0.2s;
+}
+.n-data-table-tr:nth-child(15) {
+  animation-delay: 0.21s;
+}
+.n-data-table-tr:nth-child(16) {
+  animation-delay: 0.22s;
+}
+.n-data-table-tr:nth-child(17) {
+  animation-delay: 0.23s;
+}
+.n-data-table-tr:nth-child(18) {
+  animation-delay: 0.24s;
+}
+.n-data-table-tr:nth-child(19) {
+  animation-delay: 0.25s;
+}
+.n-data-table-tr:nth-child(20) {
+  animation-delay: 0.26s;
+}

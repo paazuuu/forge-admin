@@ -874,179 +874,197 @@ function handleDeleteBusiness(row) {
 
 <style scoped>
 .business-studio {
+  background: #f8fafc;
   min-height: 100%;
-  padding: 18px;
-  background: linear-gradient(180deg, #f4f7fb 0%, #eef3f8 100%);
-  color: #1f2937;
+  padding: 10px;
 }
 
 .business-hero {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.9fr);
-  gap: 18px;
-  padding: 24px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 12px 16px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
   background: #fff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 8px;
-  color: #0f766e;
+  margin: 0 0 4px;
+  color: #94a3b8;
   font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
+  font-weight: 500;
   letter-spacing: 0;
+  text-transform: none;
 }
 
 .hero-title {
   margin: 0;
-  font-size: 30px;
-  line-height: 1.25;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .hero-description {
+  overflow: hidden;
   max-width: 720px;
-  margin: 12px 0 0;
+  margin: 4px 0 0;
   color: #64748b;
-  line-height: 1.7;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .hero-stat-card {
-  min-height: 112px;
-  padding: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 8px;
-  background: #f8fafc;
+  background: #fff;
 }
 
 .hero-stat-label {
-  color: #64748b;
-  font-size: 12px;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 6px;
+  margin-top: 2px;
   color: #0f172a;
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .hero-stat-note {
-  margin-top: 8px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.45;
+  display: none;
 }
 
 .business-panel {
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
+  position: relative;
+  margin-top: 0;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
   background: #fff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+  padding: 10px;
 }
 
 .panel-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .panel-toolbar h3 {
   margin: 0;
-  font-size: 18px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .toolbar-actions {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 140px auto auto auto;
-  gap: 10px;
+  grid-template-columns: minmax(200px, 1fr) 130px auto auto auto;
+  gap: 6px;
   align-items: center;
-  min-width: min(760px, 100%);
+  min-width: min(700px, 100%);
 }
 
 .business-name-card {
   display: grid;
-  gap: 5px;
+  gap: 3px;
 }
 
 .business-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .business-name {
   color: #0f172a;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .business-code {
   color: #0f766e;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .business-desc {
   color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .dataset-summary {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .dataset-summary-count,
 .dataset-empty {
   color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .dataset-summary-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
 .readiness-cell {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .readiness-cell-head {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
 }
 
 .readiness-cell-head strong {
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .readiness-cell-head span {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .sort-editor {
   display: grid;
-  grid-template-columns: 42px minmax(72px, 1fr);
-  gap: 8px;
+  grid-template-columns: 38px minmax(68px, 1fr);
+  gap: 6px;
   align-items: center;
 }
 
@@ -1054,12 +1072,12 @@ function handleDeleteBusiness(row) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 38px;
-  height: 26px;
+  min-width: 34px;
+  height: 24px;
   border-radius: 6px;
   background: #e0f2f1;
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -1075,67 +1093,72 @@ function handleDeleteBusiness(row) {
 
 .business-guide,
 .dataset-binding-panel {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
   background: #f8fafc;
 }
 
 .business-guide {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
-  gap: 16px;
-  padding: 18px;
+  gap: 12px;
+  padding: 12px 14px;
 }
 
 .business-guide__eyebrow {
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .business-guide__title {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .business-guide__desc {
-  margin-top: 8px;
+  margin-top: 6px;
   color: #64748b;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .business-guide__facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .guide-fact {
-  padding: 12px;
+  padding: 10px;
   border-radius: 8px;
   background: #fff;
+  border: 1px solid rgb(148 163 184 / 14%);
 }
 
 .guide-fact span {
   display: block;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .guide-fact strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .business-readiness-panel {
   grid-column: 1 / -1;
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px;
   border-radius: 8px;
   border: 1px solid rgba(15, 23, 42, 0.06);
   background: #fff;
@@ -1159,8 +1182,9 @@ function handleDeleteBusiness(row) {
 .business-readiness-main {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   color: #64748b;
+  font-size: 12px;
 }
 
 .business-readiness-main strong {
@@ -1168,7 +1192,7 @@ function handleDeleteBusiness(row) {
 }
 
 .business-readiness-bar {
-  height: 7px;
+  height: 5px;
   border-radius: 999px;
   overflow: hidden;
   background: rgba(15, 23, 42, 0.08);
@@ -1191,16 +1215,16 @@ function handleDeleteBusiness(row) {
 
 .business-readiness-tip {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .business-template-panel {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(160px, 0.34fr) minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
-  padding: 12px;
+  padding: 10px;
   border-radius: 8px;
   background: #fff;
   border: 1px solid rgba(15, 23, 42, 0.06);
@@ -1208,46 +1232,80 @@ function handleDeleteBusiness(row) {
 
 .business-template-head {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .business-template-head span {
   color: #0f172a;
   font-weight: 700;
+  font-size: 13px;
 }
 
 .business-template-head small {
   color: #64748b;
+  font-size: 11px;
 }
 
 .business-template-list {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dataset-binding-panel {
-  padding: 16px;
+  padding: 12px;
 }
 
 .dataset-binding-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .dataset-binding-title {
   color: #0f172a;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .dataset-binding-desc {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
+}
+
+:deep(.business-crud .ai-crud-main) {
+  background: transparent;
+}
+
+:deep(.business-crud .ai-crud-table) {
+  overflow: hidden;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
+}
+
+:deep(.business-crud .n-data-table-th) {
+  padding: 9px 12px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #f8fafc;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+:deep(.business-crud .n-data-table-tr:nth-child(even) td) {
+  background: rgb(248 250 252 / 50%);
+}
+
+:deep(.business-crud .n-data-table-tr:hover td) {
+  background: rgb(241 245 249 / 80%);
 }
 
 @media (max-width: 1100px) {
