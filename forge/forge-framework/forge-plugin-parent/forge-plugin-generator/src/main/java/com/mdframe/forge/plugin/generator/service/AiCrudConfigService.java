@@ -8,7 +8,11 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiPageTemplate;
 import com.mdframe.forge.plugin.generator.dto.AiCrudConfigDTO;
 import com.mdframe.forge.plugin.generator.dto.AiCrudConfigRenderVO;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRuntimeConfig;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
+import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeRuntimeConfigBuilder;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +29,7 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
 
     private final ObjectMapper objectMapper;
     private final MenuRegisterAdapter menuRegisterAdapter;
+    private final LowcodeRuntimeConfigBuilder lowcodeRuntimeConfigBuilder;
     @Lazy
     private final AiPageTemplateService pageTemplateService;
 
@@ -70,6 +75,13 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         copyDtoToEntityOnCreate(dto, config);
         config.setStatus(StringUtils.isNotBlank(dto.getStatus()) ? dto.getStatus() : "0");
         config.setMode(StringUtils.isNotBlank(dto.getMode()) ? dto.getMode() : "CONFIG");
+        config.setBuildMode(StringUtils.isNotBlank(dto.getBuildMode()) ? dto.getBuildMode() : "AI");
+        config.setPublishStatus(StringUtils.isNotBlank(dto.getPublishStatus()) ? dto.getPublishStatus() : "PUBLISHED");
+        config.setDraftVersion(dto.getDraftVersion() != null ? dto.getDraftVersion() : 0);
+        config.setPublishedVersion(dto.getPublishedVersion() != null ? dto.getPublishedVersion() : 1);
+        if (StringUtils.isBlank(config.getAppName())) {
+            config.setAppName(StringUtils.defaultIfBlank(dto.getMenuName(), config.getTableComment()));
+        }
         save(config);
 
         if ("CONFIG".equals(config.getMode())) {
@@ -146,6 +158,9 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         vo.setConfigKey(config.getConfigKey());
         vo.setTableName(config.getTableName());
         vo.setTableComment(config.getTableComment());
+        vo.setAppName(config.getAppName());
+        vo.setPublishStatus(config.getPublishStatus());
+        vo.setPublishedVersion(config.getPublishedVersion());
         vo.setRowKey("id");
         vo.setModalType("drawer");
         vo.setModalWidth("800px");
@@ -163,38 +178,16 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             log.debug("[AiCrudConfigService] 加载模板默认配置失败, layoutType={}", layoutType);
         }
         try {
-            if (StringUtils.isNotBlank(config.getSearchSchema())) {
-                vo.setSearchSchema(objectMapper.readValue(config.getSearchSchema(), Object.class));
+            if (StringUtils.isNotBlank(config.getModelSchema())) {
+                vo.setModelSchema(objectMapper.readValue(config.getModelSchema(), Object.class));
             }
-            if (StringUtils.isNotBlank(config.getColumnsSchema())) {
-                vo.setColumnsSchema(objectMapper.readValue(config.getColumnsSchema(), Object.class));
+            if (StringUtils.isNotBlank(config.getPageSchema())) {
+                vo.setPageSchema(objectMapper.readValue(config.getPageSchema(), Object.class));
             }
-            if (StringUtils.isNotBlank(config.getEditSchema())) {
-                vo.setEditSchema(objectMapper.readValue(config.getEditSchema(), Object.class));
-            }
-            // 强制使用动态路由，避免 AI 生成错误的 URL
-            java.util.Map<String, Object> apiConfig = new java.util.HashMap<>();
-            String ck = config.getConfigKey();
-            apiConfig.put("list", "get@/ai/crud/" + ck + "/page");
-            apiConfig.put("detail", "get@/ai/crud/" + ck + "/:id");
-            apiConfig.put("create", "post@/ai/crud/" + ck);
-            apiConfig.put("update", "put@/ai/crud/" + ck);
-            apiConfig.put("delete", "delete@/ai/crud/" + ck + "/:id");
-            vo.setApiConfig(apiConfig);
-            if (StringUtils.isNotBlank(config.getOptions())) {
-                vo.setOptions(objectMapper.readValue(config.getOptions(), Object.class));
-            }
-            if (StringUtils.isNotBlank(config.getDictConfig())) {
-                vo.setDictConfig(objectMapper.readValue(config.getDictConfig(), Object.class));
-            }
-            if (StringUtils.isNotBlank(config.getDesensitizeConfig())) {
-                vo.setDesensitizeConfig(objectMapper.readValue(config.getDesensitizeConfig(), Object.class));
-            }
-            if (StringUtils.isNotBlank(config.getEncryptConfig())) {
-                vo.setEncryptConfig(objectMapper.readValue(config.getEncryptConfig(), Object.class));
-            }
-            if (StringUtils.isNotBlank(config.getTransConfig())) {
-                vo.setTransConfig(objectMapper.readValue(config.getTransConfig(), Object.class));
+            if (StringUtils.isNotBlank(config.getModelSchema()) && StringUtils.isNotBlank(config.getPageSchema())) {
+                applyLowcodeRuntimeConfig(config, vo);
+            } else {
+                applyLegacyRuntimeConfig(config, vo);
             }
         } catch (Exception e) {
             log.error("[AiCrudConfigService] JSON解析失败, configKey={}", config.getConfigKey(), e);
@@ -203,9 +196,72 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         return vo;
     }
 
+    private void applyLowcodeRuntimeConfig(AiCrudConfig config, AiCrudConfigRenderVO vo) throws Exception {
+        LowcodeModelSchema modelSchema = objectMapper.readValue(config.getModelSchema(), LowcodeModelSchema.class);
+        LowcodePageSchema pageSchema = objectMapper.readValue(config.getPageSchema(), LowcodePageSchema.class);
+        LowcodeRuntimeConfig runtimeConfig = lowcodeRuntimeConfigBuilder.buildRuntimeConfig(
+                config.getConfigKey(), modelSchema, pageSchema);
+
+        vo.setLayoutType(runtimeConfig.getLayoutType());
+        vo.setTableName(runtimeConfig.getTableName());
+        vo.setTableComment(runtimeConfig.getTableComment());
+        vo.setSearchSchema(readJson(runtimeConfig.getSearchSchema()));
+        vo.setColumnsSchema(readJson(runtimeConfig.getColumnsSchema()));
+        vo.setEditSchema(readJson(runtimeConfig.getEditSchema()));
+        vo.setApiConfig(readJson(runtimeConfig.getApiConfig()));
+        vo.setOptions(readJson(runtimeConfig.getOptions()));
+        vo.setDictConfig(readJson(runtimeConfig.getDictConfig()));
+        vo.setDesensitizeConfig(readJson(runtimeConfig.getDesensitizeConfig()));
+        vo.setEncryptConfig(readJson(runtimeConfig.getEncryptConfig()));
+        vo.setTransConfig(readJson(runtimeConfig.getTransConfig()));
+    }
+
+    private void applyLegacyRuntimeConfig(AiCrudConfig config, AiCrudConfigRenderVO vo) throws Exception {
+        if (StringUtils.isNotBlank(config.getSearchSchema())) {
+            vo.setSearchSchema(readJson(config.getSearchSchema()));
+        }
+        if (StringUtils.isNotBlank(config.getColumnsSchema())) {
+            vo.setColumnsSchema(readJson(config.getColumnsSchema()));
+        }
+        if (StringUtils.isNotBlank(config.getEditSchema())) {
+            vo.setEditSchema(readJson(config.getEditSchema()));
+        }
+        // 强制使用动态路由，避免 AI 生成错误的 URL
+        java.util.Map<String, Object> apiConfig = new java.util.HashMap<>();
+        String ck = config.getConfigKey();
+        apiConfig.put("list", "get@/ai/crud/" + ck + "/page");
+        apiConfig.put("detail", "get@/ai/crud/" + ck + "/:id");
+        apiConfig.put("create", "post@/ai/crud/" + ck);
+        apiConfig.put("update", "put@/ai/crud/" + ck);
+        apiConfig.put("delete", "delete@/ai/crud/" + ck + "/:id");
+        vo.setApiConfig(apiConfig);
+        if (StringUtils.isNotBlank(config.getOptions())) {
+            vo.setOptions(readJson(config.getOptions()));
+        }
+        if (StringUtils.isNotBlank(config.getDictConfig())) {
+            vo.setDictConfig(readJson(config.getDictConfig()));
+        }
+        if (StringUtils.isNotBlank(config.getDesensitizeConfig())) {
+            vo.setDesensitizeConfig(readJson(config.getDesensitizeConfig()));
+        }
+        if (StringUtils.isNotBlank(config.getEncryptConfig())) {
+            vo.setEncryptConfig(readJson(config.getEncryptConfig()));
+        }
+        if (StringUtils.isNotBlank(config.getTransConfig())) {
+            vo.setTransConfig(readJson(config.getTransConfig()));
+        }
+    }
+
+    private Object readJson(String json) throws Exception {
+        return objectMapper.readValue(json, Object.class);
+    }
+
     private void copyDtoToEntity(AiCrudConfigDTO dto, AiCrudConfig config) {
         if (dto.getTableComment() != null) {
             config.setTableComment(dto.getTableComment());
+        }
+        if (dto.getAppName() != null) {
+            config.setAppName(dto.getAppName());
         }
         if (dto.getSearchSchema() != null) {
             config.setSearchSchema(dto.getSearchSchema());
@@ -225,8 +281,14 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         if (dto.getMode() != null) {
             config.setMode(dto.getMode());
         }
+        if (dto.getBuildMode() != null) {
+            config.setBuildMode(dto.getBuildMode());
+        }
         if (dto.getStatus() != null) {
             config.setStatus(dto.getStatus());
+        }
+        if (dto.getPublishStatus() != null) {
+            config.setPublishStatus(dto.getPublishStatus());
         }
         if (dto.getMenuName() != null) {
             config.setMenuName(dto.getMenuName());
@@ -252,6 +314,18 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         if (dto.getLayoutType() != null) {
             config.setLayoutType(dto.getLayoutType());
         }
+        if (dto.getModelSchema() != null) {
+            config.setModelSchema(dto.getModelSchema());
+        }
+        if (dto.getPageSchema() != null) {
+            config.setPageSchema(dto.getPageSchema());
+        }
+        if (dto.getDraftVersion() != null) {
+            config.setDraftVersion(dto.getDraftVersion());
+        }
+        if (dto.getPublishedVersion() != null) {
+            config.setPublishedVersion(dto.getPublishedVersion());
+        }
     }
 
     private void copyDtoToEntityOnCreate(AiCrudConfigDTO dto, AiCrudConfig config) {
@@ -274,6 +348,8 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         validateJson(dto.getDesensitizeConfig(), "desensitizeConfig");
         validateJson(dto.getEncryptConfig(), "encryptConfig");
         validateJson(dto.getTransConfig(), "transConfig");
+        validateJson(dto.getModelSchema(), "modelSchema");
+        validateJson(dto.getPageSchema(), "pageSchema");
     }
 
     private void validateJson(String json, String fieldName) {
