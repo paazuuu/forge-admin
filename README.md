@@ -293,6 +293,16 @@ git clone https://gitee.com/ForgeLab/forge-admin.git
 cd forge-admin
 ```
 
+#### 基于模版项目构建
+
+```bash
+npx --yes \     
+    --package git+https://gitee.com/ForgeLab/forge-create-cli \
+    forge-create 项目存储目录/项目名称 \
+    --template-git https://gitee.com/ForgeLab/forge-admin \
+    --template-ref main
+```
+
 ### 2. 初始化数据库
 
 推荐使用统一初始化脚本，它会按顺序执行历史初始化 SQL、`forge/db/migration` 迁移脚本、`forge/db/seed/required` 必需初始化数据，并可按需导入 demo/optional 数据。
