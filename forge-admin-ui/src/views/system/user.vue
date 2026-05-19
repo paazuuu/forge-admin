@@ -1165,7 +1165,7 @@ async function handleSubmitOrg() {
 <style scoped>
 .system-user-page {
   height: 100%;
-  padding: 20px;
+  //padding: 20px;
   display: flex;
   flex-direction: column;
 }

@@ -413,6 +413,6 @@ async function handleReloadCache(row: any) {
 
 <style scoped lang="scss">
 .client-management-page {
-  padding: 16px;
+  //padding: 16px;
 }
 </style>

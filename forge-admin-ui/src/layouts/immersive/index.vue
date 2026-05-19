@@ -55,7 +55,7 @@ import ImmersiveHeader from './header/index.vue'
   flex: 1;
   overflow: auto;
   background: var(--gray-100);
-  padding: 0;
+  padding: 10px;
   min-height: 0;
 }
 

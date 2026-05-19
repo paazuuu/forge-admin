@@ -957,13 +957,9 @@ function handleDeleteDimension(row) {
 
 <style scoped>
 .dimension-studio {
-  --dimension-bg: linear-gradient(180deg, #f4f7fb 0%, #edf2f7 100%);
-  --panel-bg: rgb(255 255 255 / 94%);
-  --panel-border: rgb(100 116 139 / 16%);
-  --panel-shadow: 0 14px 34px rgb(15 23 42 / 8%);
+  background: #f8fafc;
   min-height: 100%;
-  padding: 14px;
-  background: var(--dimension-bg);
+  padding: 10px;
 }
 
 .dimension-hero {
@@ -971,26 +967,22 @@ function handleDeleteDimension(row) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(460px, 0.9fr);
   align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 14px 16px;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 12px 16px;
   overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at 12% 0%, rgb(20 184 166 / 14%), transparent 32%),
-    radial-gradient(circle at 88% 20%, rgb(37 99 235 / 11%), transparent 24%),
-    linear-gradient(135deg, rgb(255 255 255 / 96%), rgb(248 250 252 / 95%));
-  box-shadow: var(--panel-shadow);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .dimension-panel {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--panel-border);
-  border-radius: 20px;
-  background: var(--panel-bg);
-  box-shadow: var(--panel-shadow);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #fff;
 }
 
 .hero-main {
@@ -999,27 +991,28 @@ function handleDeleteDimension(row) {
 
 .hero-kicker,
 .panel-kicker {
-  margin: 0 0 5px;
-  color: #0f766e;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  margin: 0 0 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .hero-title {
   margin: 0;
   color: #0f172a;
-  font-size: 24px;
-  line-height: 1.18;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .hero-description {
   overflow: hidden;
   max-width: 760px;
-  margin: 6px 0 0;
-  color: #475569;
-  font-size: 13px;
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1028,35 +1021,33 @@ function handleDeleteDimension(row) {
 .hero-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .hero-stat-card {
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgb(148 163 184 / 16%);
-  border-radius: 14px;
-  background: rgb(255 255 255 / 78%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 8px;
+  background: #fff;
 }
 
 .hero-stat-label {
   overflow: hidden;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 500;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .hero-stat-value {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #0f172a;
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 600;
   line-height: 1;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .hero-stat-note {
@@ -1064,33 +1055,65 @@ function handleDeleteDimension(row) {
 }
 
 .dimension-panel {
-  padding: 14px;
+  padding: 10px;
 }
 
 .panel-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .panel-toolbar h3 {
   margin: 0;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .toolbar-actions {
   display: grid;
-  grid-template-columns: 220px 140px 120px auto auto auto;
-  gap: 8px;
+  grid-template-columns: 200px 130px 110px auto auto auto;
+  gap: 6px;
   align-items: center;
 }
 
 .dimension-crud {
-  border-radius: 18px;
+  border-radius: 12px;
   background: #fff;
+}
+
+:deep(.dimension-crud .ai-crud-main) {
+  background: transparent;
+}
+
+:deep(.dimension-crud .ai-crud-table) {
+  overflow: hidden;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 3%);
+}
+
+:deep(.dimension-crud .n-data-table-th) {
+  padding: 9px 12px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #f8fafc;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+:deep(.dimension-crud .n-data-table-tr:nth-child(even) td) {
+  background: rgb(248 250 252 / 50%);
+}
+
+:deep(.dimension-crud .n-data-table-tr:hover td) {
+  background: rgb(241 245 249 / 80%);
 }
 
 :global(.data-dimension-edit-form .n-form-item:has(.dimension-guide)),
@@ -1129,7 +1152,7 @@ function handleDeleteDimension(row) {
   overflow: hidden;
   color: #0f172a;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1138,9 +1161,9 @@ function handleDeleteDimension(row) {
 .dimension-desc,
 .source-cell__desc,
 .source-type-cell span {
-  margin-top: 5px;
-  color: #64748b;
-  font-size: 12px;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
 }
 
 .dimension-desc {
@@ -1158,63 +1181,66 @@ function handleDeleteDimension(row) {
 .source-type-cell strong,
 .source-cell__name {
   color: #0f172a;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .item-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 42px;
-  height: 26px;
-  border-radius: 999px;
-  background: #e0f2fe;
-  color: #075985;
-  font-weight: 800;
+  min-width: 36px;
+  height: 24px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .dimension-guide {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
-  gap: 16px;
+  gap: 12px;
   width: 100%;
-  padding: 18px;
+  padding: 12px 14px;
   border: 1px solid rgb(100 116 139 / 16%);
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(135deg, rgb(15 23 42 / 3%), transparent), #f8fafc;
 }
 
 .dimension-guide__eyebrow {
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .dimension-guide__title {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #0f172a;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .dimension-guide__desc {
-  margin-top: 8px;
+  margin-top: 6px;
   color: #475569;
-  line-height: 1.7;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .dimension-guide__facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .guide-fact {
   min-width: 0;
-  padding: 12px;
-  border-radius: 14px;
+  padding: 10px;
+  border-radius: 10px;
   background: #fff;
   box-shadow: inset 0 0 0 1px rgb(148 163 184 / 16%);
 }
@@ -1222,14 +1248,15 @@ function handleDeleteDimension(row) {
 .guide-fact span {
   display: block;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .guide-fact strong {
   display: block;
   overflow: hidden;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #0f172a;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1238,52 +1265,53 @@ function handleDeleteDimension(row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
   width: 100%;
-  padding: 16px 18px;
+  padding: 12px 14px;
   border: 1px solid #dbe3ef;
-  border-radius: 16px;
+  border-radius: 12px;
   background: linear-gradient(135deg, rgb(15 23 42 / 4%), transparent), #f8fafc;
 }
 
 .dimension-sql-preview-bar__title {
   color: #0f172a;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
 }
 
 .dimension-sql-preview-bar__desc {
-  margin-top: 5px;
+  margin-top: 4px;
   color: #64748b;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .dimension-preview-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .dimension-preview-summary div {
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid rgb(148 163 184 / 18%);
-  border-radius: 14px;
+  border-radius: 10px;
   background: #f8fafc;
 }
 
 .dimension-preview-summary span {
   display: block;
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .dimension-preview-summary strong {
   display: block;
   overflow: hidden;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #0f172a;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1292,26 +1320,27 @@ function handleDeleteDimension(row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .item-modal__title {
   color: #0f172a;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .item-modal__desc {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #64748b;
+  font-size: 12px;
 }
 
 .item-modal__actions,
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 @media (max-width: 1200px) {
