@@ -26,6 +26,7 @@ import java.util.List;
 public class ReportProjectService extends ServiceImpl<ReportProjectMapper, ReportProject> {
 
     private final ReportDirectoryService directoryService;
+    private final ReportProjectVersionService projectVersionService;
 
     /**
      * 分页查询项目
@@ -130,6 +131,7 @@ public class ReportProjectService extends ServiceImpl<ReportProjectMapper, Repor
         if (!updated) {
             throw new BusinessException("项目发布状态保存失败，请检查租户或项目状态");
         }
+        projectVersionService.createPublishVersion(project);
     }
 
     private String normalizeIndexImg(String indexImg) {

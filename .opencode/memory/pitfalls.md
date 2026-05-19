@@ -599,3 +599,68 @@ for (const rawLine of block.split(/\r?\n/)) {
 **影响范围**:
 - 文件表迁移到业务表的 SQL
 - 报表素材、通知附件等以文件 ID 关联业务数据的场景
+
+## 14. forge-report-ui 图标必须先注册到统一 icon 插件
+
+**发现日期**: 2026-05-19
+
+**问题描述**:
+给大屏编辑器顶部“版本”按钮加图标时，组件里直接从 `icon.ionicons5` 解构 `TimeOutlineIcon` 使用。由于 `forge-report-ui/src/plugins/icon.ts` 没有导入并导出 `TimeOutlineIcon`，运行时拿到的是 `undefined`，按钮前面只出现空白占位，没有真实 SVG。
+
+**错误示例**:
+```ts
+const { TimeOutlineIcon } = icon.ionicons5
+```
+
+但 `icon.ts` 中未注册：
+```ts
+const ionicons5 = {
+  // 缺少 TimeOutlineIcon
+}
+```
+
+**解决方案**:
+在使用 `icon.ionicons5` 或 `icon.carbon` 中的图标前，必须先确认该图标已经在 `forge-report-ui/src/plugins/icon.ts` 中完成两步注册：
+
+```ts
+import {
+  TimeOutline as TimeOutlineIcon,
+} from '@vicons/ionicons5'
+
+const ionicons5 = {
+  TimeOutlineIcon,
+}
+```
+
+如果只在单个组件内使用，也可以直接从 `@vicons/ionicons5` 导入，避免经过统一插件时漏注册。
+
+**影响范围**:
+- `forge-report-ui` 所有通过 `icon.ionicons5` / `icon.carbon` 使用图标的组件
+- 编辑器顶部按钮、项目卡片下拉菜单、项目详情弹窗操作按钮
+- 所有表现为“图标位置有空白但没有图标”的 Naive UI 按钮/菜单
+
+## 15. Flyway 已执行版本脚本不能二次修改
+
+**发现日期**: 2026-05-19
+
+**问题描述**:
+应用启动时报错：
+
+```text
+FlywayValidateException: Migration checksum mismatch for migration version 1.0.1
+```
+
+典型表现是 `forge_schema_history` 中已经记录了 `V1.0.1` 的 checksum，但本地 `forge/db/migration/V1.0.1__*.sql` 又被修改，Flyway 在执行新版本前先做校验，因此后续 `V1.0.2` 不会继续执行。
+
+**根本原因**:
+Flyway 的版本化 migration 是不可变变更记录。脚本一旦在任意数据库执行成功并写入 `forge_schema_history`，后续改文件内容就会造成数据库记录的 checksum 与本地解析出的 checksum 不一致。
+
+**解决方案**:
+- 已执行过的 `Vx.y.z__*.sql` 禁止继续编辑。
+- 需要修正表结构、菜单、初始化数据时，新增更高版本脚本，例如 `V1.0.3__fix_dashboard_version_menu.sql`。
+- 如果确实要把当前本地脚本作为数据库认可版本，必须明确确认数据库现状无误后执行 `flyway repair`，或等价更新 `forge_schema_history`，这是数据库操作，不能作为常规开发手段。
+- 排查“新脚本不执行”时，先看启动日志是否有 `Validate failed`，它通常说明卡在旧版本校验，不是 `locations` 没扫到新脚本。
+
+**影响范围**:
+- `forge/db/migration` 下所有 Flyway 版本化 SQL
+- 所有启动时依赖 `forge-admin-server` 自动迁移的本地、测试、生产数据库

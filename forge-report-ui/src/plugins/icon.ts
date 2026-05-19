@@ -76,6 +76,7 @@ import {
   ArrowRedo as ArrowRedoIcon,
   RefreshOutline as RefreshOutlineIcon,
   SyncOutline as SyncOutlineIcon,
+  TimeOutline as TimeOutlineIcon,
   ChevronBack as ChevronBackIcon
 } from '@vicons/ionicons5'
 
@@ -268,6 +269,8 @@ const ionicons5 = {
   // 刷新
   RefreshOutlineIcon,
   SyncOutlineIcon,
+  // 历史版本
+  TimeOutlineIcon,
   // 折叠返回
   ChevronBackIcon
 }

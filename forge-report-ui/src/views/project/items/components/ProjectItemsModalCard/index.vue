@@ -80,6 +80,10 @@
             <template #icon><n-icon size="16"><BrowsersOutlineIcon /></n-icon></template>
             {{ $t('global.r_preview') }}
           </n-button>
+          <n-button class="action-btn" @click="handleVersions">
+            <template #icon><n-icon size="16"><TimeOutlineIcon /></n-icon></template>
+            版本历史
+          </n-button>
           <n-button class="action-btn" @click="handlePublish">
             <template #icon><n-icon size="16"><SendIcon /></n-icon></template>
             {{ cardData?.release ? '重新发布' : $t('global.r_publish') }}
@@ -99,10 +103,10 @@ import FgAuthImage from '@/components/FgAuthImage/index.vue'
 import { publishProjectApi, getProjectDetailApi } from '@/api/project'
 import { createTemplateFromProjectApi } from '@/api/project/template'
 
-const { HammerIcon, CloseIcon, BrowsersOutlineIcon, SendIcon, CopyIcon } = icon.ionicons5
+const { HammerIcon, CloseIcon, BrowsersOutlineIcon, SendIcon, CopyIcon, TimeOutlineIcon } = icon.ionicons5
 const { StackedMoveIcon } = icon.carbon
 const showRef = ref(false)
-const emit = defineEmits(['close', 'edit', 'move-directory'])
+const emit = defineEmits(['close', 'edit', 'move-directory', 'versions'])
 
 const props = defineProps({
   modalShow: { required: true, type: Boolean },
@@ -118,6 +122,11 @@ const closeHandle = () => emit('close')
 const handlePreview = () => {
   const p = fetchPathByName(PreviewEnum.CHART_PREVIEW_NAME, 'href')
   if (p) routerTurnByPath(p, [String(props.cardData?.id)], undefined, true)
+}
+
+const handleVersions = () => {
+  emit('versions', props.cardData)
+  closeHandle()
 }
 
 const handlePublish = async () => {

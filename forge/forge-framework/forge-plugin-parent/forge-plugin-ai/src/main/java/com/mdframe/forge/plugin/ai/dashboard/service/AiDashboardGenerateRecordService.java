@@ -1,14 +1,17 @@
 package com.mdframe.forge.plugin.ai.dashboard.service;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.ai.dashboard.domain.AiDashboardComponentLineage;
 import com.mdframe.forge.plugin.ai.dashboard.domain.AiDashboardGenerateRecord;
 import com.mdframe.forge.plugin.ai.dashboard.dto.AiDashboardComponentLineageDTO;
+import com.mdframe.forge.plugin.ai.dashboard.dto.AiDashboardGenerateRecordQuery;
 import com.mdframe.forge.plugin.ai.dashboard.dto.AiDashboardGenerateRecordSaveDTO;
 import com.mdframe.forge.plugin.ai.dashboard.mapper.AiDashboardComponentLineageMapper;
 import com.mdframe.forge.plugin.ai.dashboard.mapper.AiDashboardGenerateRecordMapper;
 import com.mdframe.forge.plugin.ai.dashboard.vo.AiDashboardDatasetImpactVO;
+import com.mdframe.forge.plugin.ai.dashboard.vo.AiDashboardGenerateRecordAuditVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,8 @@ public class AiDashboardGenerateRecordService
 
     private static final int DEFAULT_RECENT_LIMIT = 20;
     private static final int MAX_RECENT_LIMIT = 50;
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_LINEAGE_ITEMS = 200;
 
     private final AiDashboardGenerateRecordMapper recordMapper;
@@ -76,6 +81,23 @@ public class AiDashboardGenerateRecordService
                 normalizeId(businessDefinitionId),
                 normalizeId(projectId),
                 safeLimit);
+    }
+
+    public Page<AiDashboardGenerateRecordAuditVO> pageForAdmin(Integer pageNum, Integer pageSize,
+                                                               AiDashboardGenerateRecordQuery query) {
+        Page<AiDashboardGenerateRecordAuditVO> page = new Page<>(normalizePageNum(pageNum), normalizePageSize(pageSize));
+        return recordMapper.selectAdminPage(page, SessionHelper.getTenantId(), query == null ? new AiDashboardGenerateRecordQuery() : query);
+    }
+
+    public AiDashboardGenerateRecordAuditVO getAdminDetail(Long id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException("生成记录ID不能为空");
+        }
+        AiDashboardGenerateRecordAuditVO detail = recordMapper.selectAdminDetail(SessionHelper.getTenantId(), id);
+        if (detail == null) {
+            throw new BusinessException("生成记录不存在");
+        }
+        return detail;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -148,6 +170,17 @@ public class AiDashboardGenerateRecordService
             return DEFAULT_RECENT_LIMIT;
         }
         return Math.min(limit, MAX_RECENT_LIMIT);
+    }
+
+    private Long normalizePageNum(Integer pageNum) {
+        return pageNum == null || pageNum <= 0 ? 1L : pageNum.longValue();
+    }
+
+    private Long normalizePageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return (long) DEFAULT_PAGE_SIZE;
+        }
+        return (long) Math.min(pageSize, MAX_PAGE_SIZE);
     }
 
     private Long normalizeId(Long value) {

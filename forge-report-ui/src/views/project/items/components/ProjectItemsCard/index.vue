@@ -61,19 +61,19 @@ import { icon } from '@/plugins'
 import { Chartype } from '../../index.d'
 import { PreviewEnum } from '@/enums/pageEnum'
 import FgAuthImage from '@/components/FgAuthImage/index.vue'
-import { StorageEnum } from '@/enums/storageEnum'
 import { getProjectDetailApi, publishProjectApi } from '@/api/project'
 import { createTemplateFromProjectApi } from '@/api/project/template'
 
-const { EllipsisHorizontalCircleSharpIcon, TrashIcon, HammerIcon, BrowsersOutlineIcon, SendIcon, CopyIcon } = icon.ionicons5
+const { EllipsisHorizontalCircleSharpIcon, TrashIcon, HammerIcon, BrowsersOutlineIcon, SendIcon, CopyIcon, TimeOutlineIcon } = icon.ionicons5
 const { StackedMoveIcon } = icon.carbon
 
-const emit = defineEmits(['delete', 'resize', 'edit', 'refresh', 'move-directory'])
+const emit = defineEmits(['delete', 'resize', 'edit', 'refresh', 'move-directory', 'versions'])
 
 const props = defineProps({ cardData: Object as () => Chartype })
 
 const selectOptions = ref([
   { label: renderLang('global.r_preview'), key: 'preview', icon: renderIcon(BrowsersOutlineIcon) },
+  { label: '版本历史', key: 'versions', icon: renderIcon(TimeOutlineIcon) },
   { label: '调整目录', key: 'move-directory', icon: renderIcon(StackedMoveIcon) },
   { label: '发布为模板', key: 'publish-template', icon: renderIcon(CopyIcon) },
   { label: props.cardData?.release ? '重新发布' : renderLang('global.r_publish'), key: 'send', icon: renderIcon(SendIcon) },
@@ -107,6 +107,7 @@ const publishAsTemplate = async () => {
 const handleSelect = async (key: string) => {
   if (key === 'delete') emit('delete', props.cardData)
   else if (key === 'move-directory') emit('move-directory', props.cardData)
+  else if (key === 'versions') emit('versions', props.cardData)
   else if (key === 'preview') { const p = fetchPathByName(PreviewEnum.CHART_PREVIEW_NAME, 'href'); if (p) routerTurnByPath(p, [String(props.cardData?.id)], undefined, true) }
   else if (key === 'publish-template') {
     await publishAsTemplate()

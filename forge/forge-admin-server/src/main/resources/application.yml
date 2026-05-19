@@ -63,8 +63,9 @@ spring:
       # 允许对象忽略json中不存在的属性
       fail_on_unknown_properties: false
   flyway:
-    enabled: ${FORGE_FLYWAY_ENABLED:false}
-    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration}
+    enabled: ${FORGE_FLYWAY_ENABLED:true}
+    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration,filesystem:../db/migration,filesystem:forge/db/migration}
+    fail-on-missing-locations: false
     baseline-on-migrate: true
     baseline-version: 1.0.0
     table: forge_schema_history

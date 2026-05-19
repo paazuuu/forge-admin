@@ -2,7 +2,9 @@ package com.mdframe.forge.report.project.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.report.project.domain.ReportProject;
+import com.mdframe.forge.report.project.domain.ReportProjectVersion;
 import com.mdframe.forge.report.project.service.ReportProjectService;
+import com.mdframe.forge.report.project.service.ReportProjectVersionService;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class ReportProjectController {
 
     private final ReportProjectService projectService;
+    private final ReportProjectVersionService projectVersionService;
 
     /**
      * 分页查询项目列表
@@ -40,6 +43,25 @@ public class ReportProjectController {
     public RespInfo<ReportProject> getById(@PathVariable Long id) {
         ReportProject project = projectService.getById(id);
         return RespInfo.success(project);
+    }
+
+    /**
+     * 分页查询项目历史版本
+     */
+    @GetMapping("/{projectId}/versions")
+    public RespInfo<Page<ReportProjectVersion>> versions(
+            @PathVariable Long projectId,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        return RespInfo.success(projectVersionService.pageVersions(projectId, pageNum, pageSize));
+    }
+
+    /**
+     * 查询项目版本详情
+     */
+    @GetMapping("/version/{versionId}")
+    public RespInfo<ReportProjectVersion> getVersion(@PathVariable Long versionId) {
+        return RespInfo.success(projectVersionService.getVersionDetail(versionId));
     }
 
     /**
@@ -75,5 +97,13 @@ public class ReportProjectController {
     public RespInfo<Void> publish(@PathVariable Long id, @RequestParam String publishUrl) {
         projectService.publishProject(id, publishUrl);
         return RespInfo.success();
+    }
+
+    /**
+     * 回退项目到指定历史版本
+     */
+    @PostMapping("/version/{versionId}/rollback")
+    public RespInfo<ReportProjectVersion> rollbackVersion(@PathVariable Long versionId) {
+        return RespInfo.success(projectVersionService.rollbackVersion(versionId));
     }
 }

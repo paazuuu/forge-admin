@@ -11,15 +11,24 @@
       @click="item.event"
     >
       <template #icon>
-        <component :is="item.icon"></component>
+        <n-icon v-if="item.title === '版本'" size="16">
+          <TimeOutlineIcon />
+        </n-icon>
+        <component v-else :is="item.icon"></component>
       </template>
       <span>{{ item.title }}</span>
     </n-button>
+    <project-version-modal
+      v-model:show="versionModalVisible"
+      :project-id="currentProjectId"
+      :project-name="chartEditStore.getProjectName || chartEditStore.getEditCanvasConfig.projectName"
+      @rollback="handleVersionRollback"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { renderIcon, goDialog, fetchPathByName, openNewWindow, setSessionStorage, getSessionStorage, downloadTextFile } from '@/utils'
 import { captureProjectScreenshot } from '@/utils/capture'
 import { buildApiContractDocument, buildApiContractFileName } from '@/utils/apiContractExport'
@@ -31,11 +40,17 @@ import { syncData } from '../../ContentEdit/components/EditTools/hooks/useSyncUp
 import { icon } from '@/plugins'
 import { cloneDeep } from 'lodash'
 import { buildProjectPayload, getProjectDetailApi, publishProjectApi, updateProjectApi } from '@/api/project'
+import ProjectVersionModal from '@/components/ProjectVersionModal.vue'
 
-const { BrowsersOutlineIcon, SendIcon, AnalyticsIcon, DocumentTextIcon } = icon.ionicons5
+const { BrowsersOutlineIcon, SendIcon, AnalyticsIcon, DocumentTextIcon, TimeOutlineIcon } = icon.ionicons5
 const chartEditStore = useChartEditStore()
 
 const routerParamsInfo = useRoute()
+const versionModalVisible = ref(false)
+const currentProjectId = computed(() => {
+  const { id } = routerParamsInfo.params
+  return typeof id === 'string' ? id : id?.[0]
+})
 
 const syncProjectStorageToSession = (id: string, storageInfo: ReturnType<typeof chartEditStore.getProjectStorageInfo>) => {
   const sessionStorageInfo = getSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST) || []
@@ -201,6 +216,14 @@ const exportApiContractHandle = () => {
   })
 }
 
+const openVersionModal = () => {
+  versionModalVisible.value = true
+}
+
+const handleVersionRollback = () => {
+  window.location.reload()
+}
+
 const btnList = [
   {
     select: true,
@@ -214,6 +237,12 @@ const btnList = [
     title: '接口文档',
     icon: renderIcon(DocumentTextIcon),
     event: exportApiContractHandle
+  },
+  {
+    select: true,
+    title: '版本',
+    icon: renderIcon(TimeOutlineIcon),
+    event: openVersionModal
   },
   {
     select: true,

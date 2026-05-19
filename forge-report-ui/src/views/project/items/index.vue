@@ -99,6 +99,7 @@
                   @edit="editHandle"
                   @refresh="loadProjectList"
                   @move-directory="openMoveProjectDirectory"
+                  @versions="openVersionHistory"
                 />
               </div>
             </n-grid-item>
@@ -129,6 +130,14 @@
       @close="closeModal"
       @edit="editHandle"
       @move-directory="openMoveProjectDirectory"
+      @versions="openVersionHistory"
+    />
+
+    <project-version-modal
+      v-model:show="showVersionModal"
+      :project-id="versionProject?.id"
+      :project-name="versionProject?.title"
+      @rollback="loadProjectList"
     />
 
     <n-modal v-model:show="showMoveProjectModal" preset="card" title="调整所属目录" style="width: 520px">
@@ -167,6 +176,7 @@ import { DialogEnum } from '@/enums/pluginEnum'
 import { ProjectItemsCard } from './components/ProjectItemsCard'
 import { ProjectItemsModalCard } from './components/ProjectItemsModalCard'
 import { useModalDataInit } from './components/ProjectItemsList/hooks/useModal.hook'
+import ProjectVersionModal from '@/components/ProjectVersionModal.vue'
 import type { ChartList, Chartype } from './index.d'
 
 type DirectoryTreeNode = {
@@ -187,6 +197,8 @@ const directoryTreeRaw = ref<ReportDirectory[]>([])
 const directoryLookup = ref<Map<string, ReportDirectory>>(new Map())
 const projectCards = ref<ChartList>([])
 const movingProject = ref<Chartype | null>(null)
+const showVersionModal = ref(false)
+const versionProject = ref<Chartype | null>(null)
 
 const filters = reactive({
   projectName: ''
@@ -343,6 +355,11 @@ function openMoveProjectDirectory(cardData: Chartype) {
   movingProject.value = cardData
   moveProjectForm.directoryId = cardData.directoryId ? String(cardData.directoryId) : undefined
   showMoveProjectModal.value = true
+}
+
+function openVersionHistory(cardData: Chartype) {
+  versionProject.value = cardData
+  showVersionModal.value = true
 }
 
 async function handleSubmitMoveProject() {

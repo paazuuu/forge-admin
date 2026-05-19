@@ -62,11 +62,12 @@ spring.data:
         threads: 16
         nettyThreads: 32
   flyway:
-    enabled: ${FORGE_FLYWAY_ENABLED:false}
+    enabled: ${FORGE_FLYWAY_ENABLED:true}
     url: ${spring.datasource.dynamic.datasource.master.url}
     user: ${spring.datasource.dynamic.datasource.master.username}
     password: ${spring.datasource.dynamic.datasource.master.password}
-    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration}
+    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration,filesystem:../db/migration,filesystem:forge/db/migration}
+    fail-on-missing-locations: false
     baseline-on-migrate: true
     baseline-version: 1.0.0
     table: forge_schema_history

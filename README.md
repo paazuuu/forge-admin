@@ -345,13 +345,33 @@ find forge/db/seed/required -maxdepth 1 -type f -name '*.sql' | sort | while rea
 mysql -u root -p forge < forge/forge-report-server/sql/report-init.sql
 ```
 
-数据库变更约定：
+数据库变更规范：
 
-- 表结构变更统一新增到 `forge/db/migration/Vx.y.z__change_name.sql`。
+- 表结构、字段、索引、系统资源等正式变更统一新增到 `forge/db/migration/`。
+- Flyway 版本脚本命名为 `V<版本号>__<lower_snake_case_description>.sql`，例如 `V1.0.2__add_dashboard_version_table.sql`。
+- `V1.0.0__baseline.sql` 是历史基线，新脚本版本必须大于 `1.0.0`，且版本号单调递增。
+- 已写入 `forge_schema_history` 的脚本禁止修改；需要修正时新增下一个版本脚本。
 - 系统必需基础数据放入 `forge/db/seed/required/R__*.sql`。
 - 演示数据放入 `forge/db/seed/demo/D__*.sql`，默认不导入。
 - 可选模块数据放入 `forge/db/seed/optional/O__*.sql`。
-- SQL 必须幂等、显式列字段，禁止提交真实密码、token、API Key 或生产业务数据。
+- SQL 必须幂等或有防重复保护：`CREATE TABLE IF NOT EXISTS`、`INSERT ... SELECT ... WHERE NOT EXISTS`、新增列/索引前查 `information_schema`。
+- `INSERT` 必须显式列名；业务内置数据 `tenant_id` 使用 `1`，禁止写 `0`。
+- 权限资源类脚本（如 `sys_resource`、`sys_role_resource`）必须做 `NOT EXISTS` 防重复。
+- 禁止提交真实密码、Token、AK/SK、API Key 或生产业务数据。
+- 涉及数据修复、状态流转、资金、权限放开的 SQL，必须在变更说明中写清影响范围和回滚方式。
+
+Flyway 启动说明：
+
+- 主后台服务 `forge-admin-server` 启动时执行 `forge/db/migration`；单独启动 `forge-report-server` 不会执行这些迁移。
+- 默认扫描位置兼容不同启动目录：`filesystem:./db/migration,filesystem:../db/migration,filesystem:forge/db/migration`。
+- 如果设置了 `FORGE_FLYWAY_LOCATIONS` 或 `FORGE_FLYWAY_ENABLED`，环境变量会覆盖默认配置；迁移未执行时先检查这两个变量。
+- 可通过以下 SQL 查看执行状态：
+
+```sql
+SELECT installed_rank, version, description, success
+FROM forge_schema_history
+ORDER BY installed_rank DESC;
+```
 
 ### 3. 准备本地配置
 

@@ -38,6 +38,34 @@ export interface ProjectPageResponse {
   current: number
 }
 
+export interface ReportProjectVersion {
+  id: number | string
+  projectId: number | string
+  projectName?: string
+  versionNo?: number
+  versionName?: string
+  operationType?: 'publish' | 'rollback' | string
+  sourceVersionId?: number | string
+  publisherId?: number | string
+  publisherName?: string
+  publishTime?: string
+  publishUrl?: string
+  indexImg?: string
+  canvasWidth?: number
+  canvasHeight?: number
+  backgroundColor?: string
+  componentData?: string
+  remark?: string
+  createTime?: string
+}
+
+export interface ProjectVersionPageResponse {
+  records: ReportProjectVersion[]
+  total: number
+  size: number
+  current: number
+}
+
 export const getProjectPageApi = (params?: { pageNum?: number; pageSize?: number; projectName?: string; directoryId?: number | string }) => {
   return get('/forge-report-api/report/project/page', params) as unknown as Promise<{ code: number; data: ProjectPageResponse; msg: string }>
 }
@@ -60,6 +88,18 @@ export const deleteProjectApi = (id: string | number) => {
 
 export const publishProjectApi = (id: string | number, publishUrl: string) => {
   return post(`/forge-report-api/report/project/publish/${id}?publishUrl=${encodeURIComponent(publishUrl)}`) as unknown as Promise<{ code: number; data?: any; msg: string }>
+}
+
+export const getProjectVersionPageApi = (projectId: string | number, params?: { pageNum?: number; pageSize?: number }) => {
+  return get(`/forge-report-api/report/project/${projectId}/versions`, params) as unknown as Promise<{ code: number; data: ProjectVersionPageResponse; msg: string }>
+}
+
+export const getProjectVersionDetailApi = (versionId: string | number) => {
+  return get(`/forge-report-api/report/project/version/${versionId}`) as unknown as Promise<{ code: number; data: ReportProjectVersion; msg: string }>
+}
+
+export const rollbackProjectVersionApi = (versionId: string | number) => {
+  return post(`/forge-report-api/report/project/version/${versionId}/rollback`) as unknown as Promise<{ code: number; data: ReportProjectVersion; msg: string }>
 }
 
 export const getProjectDirectoryTreeApi = () => {

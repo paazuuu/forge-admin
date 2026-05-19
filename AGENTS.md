@@ -340,8 +340,49 @@ forge-admin-ui/src/
 - 字符集 `utf8mb4`，引擎 `InnoDB`
 - 金额字段用 `long`，单位**分**
 - 时间字段用 `LocalDateTime`
+
 ### 5.11 数据库脚本维护规范
-- [migration](forge/db/migration) 增量脚本放到这俩 参考flyway的规范
+
+所有数据库结构和内置数据变更必须走统一脚本，不允许只改实体、Mapper 或本地数据库。
+
+#### 目录约定
+
+| 目录 | 用途 |
+|------|------|
+| `forge/db/migration/` | Flyway 版本化迁移脚本，放表结构、索引、字段、系统资源等正式变更 |
+| `forge/db/seed/required/` | 系统运行必需初始化数据 |
+| `forge/db/seed/demo/` | 演示数据，默认不导入 |
+| `forge/db/seed/optional/` | 可选模块数据 |
+
+#### Flyway 命名规范
+
+- 版本脚本统一命名：`V<版本号>__<lower_snake_case_description>.sql`
+- 示例：`V1.0.2__add_dashboard_version_table.sql`
+- `V1.0.0__baseline.sql` 是历史基线，新变更版本必须大于 `1.0.0`
+- 版本号必须单调递增；同一版本号只能有一个脚本
+- 已经执行到数据库并进入 `forge_schema_history` 的脚本禁止修改；需要修正时新增下一个版本脚本
+
+#### SQL 编写规则
+
+- 脚本必须可重复执行或具备防重复保护：`CREATE TABLE IF NOT EXISTS`、`INSERT ... SELECT ... WHERE NOT EXISTS`、新增列/索引前查 `information_schema`
+- `INSERT` 必须显式写列名，禁止依赖表字段顺序
+- 业务内置数据 `tenant_id` 必须为 `1`，禁止写 `0`
+- `sys_resource`、`sys_role_resource` 等权限资源脚本必须做 `NOT EXISTS` 防重复
+- 生产敏感数据、真实密码、Token、AK/SK、API Key 禁止提交到 SQL
+- 涉及数据修复、状态流转、资金、权限放开的 SQL，必须在 Spec 中说明影响范围和回滚方式
+
+#### 启动与验证
+
+- `forge-admin-server` 启动时由 Flyway 执行 `forge/db/migration` 脚本；`forge-report-server` 单独启动不会执行这些迁移
+- 默认配置兼容不同启动目录：`filesystem:./db/migration,filesystem:../db/migration,filesystem:forge/db/migration`
+- 若设置了 `FORGE_FLYWAY_LOCATIONS` 或 `FORGE_FLYWAY_ENABLED`，会覆盖默认配置；迁移未执行时优先检查这两个环境变量
+- 验证迁移结果：
+
+```sql
+SELECT installed_rank, version, description, success
+FROM forge_schema_history
+ORDER BY installed_rank DESC;
+```
 
 ---
 

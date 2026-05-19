@@ -1,12 +1,13 @@
 import { getSessionStorage, getLocalStorage } from '@/utils'
 import { StorageEnum } from '@/enums/storageEnum'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
-import { getProjectDetailApi } from '@/api/project'
+import { getProjectDetailApi, getProjectVersionDetailApi } from '@/api/project'
 import { normalizeProjectStorage, resolveInitialPreviewPage } from '@/utils/reportPages'
 import type { ChartEditStorage, ReportPageTransition, ReportProjectStorage } from '@/store/modules/chartEditStore/chartEditStore.d'
 
 const PAGE_ID_QUERY_KEY = 'pageId'
 const MODAL_PAGE_ID_QUERY_KEY = 'modalPageId'
+const VERSION_ID_QUERY_KEY = 'versionId'
 
 export interface ChartEditStorageType extends ChartEditStorage {
   id: string
@@ -37,6 +38,7 @@ export const getPreviewHashInfo = () => {
   searchParams.forEach((value, key) => {
     if (key === PAGE_ID_QUERY_KEY) return
     if (key === MODAL_PAGE_ID_QUERY_KEY) return
+    if (key === VERSION_ID_QUERY_KEY) return
     pageContext[key] = parseQueryValue(value)
   })
   return {
@@ -44,6 +46,7 @@ export const getPreviewHashInfo = () => {
     id: (toPathArray && toPathArray[toPathArray.length - 1]) || '',
     pageId: searchParams.get(PAGE_ID_QUERY_KEY) || undefined,
     modalPageId: searchParams.get(MODAL_PAGE_ID_QUERY_KEY) || undefined,
+    versionId: searchParams.get(VERSION_ID_QUERY_KEY) || undefined,
     pageContext
   }
 }
@@ -70,9 +73,10 @@ const updatePreviewUrl = (
   replace = false
 ) => {
   if (typeof window === 'undefined') return
-  const { hashPath } = getPreviewHashInfo()
+  const { hashPath, versionId } = getPreviewHashInfo()
   const searchParams = new URLSearchParams()
   searchParams.set(PAGE_ID_QUERY_KEY, pageId)
+  if (versionId) searchParams.set(VERSION_ID_QUERY_KEY, versionId)
   Object.entries(context || {}).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return
     searchParams.set(key, formatQueryValue(value))
@@ -122,7 +126,19 @@ export const restorePreviewPageFromUrl = async () => {
 // 根据路由 id 获取存储数据的信息
 // 优先从 sessionStorage 读取，如果没有，尝试从 localStorage 读取，最后从后端读取
 export const getSessionStorageInfo = async () => {
-  const { id, pageId, pageContext } = getPreviewHashInfo()
+  const { id, pageId, pageContext, versionId } = getPreviewHashInfo()
+
+  if (versionId) {
+    const res = await getProjectVersionDetailApi(versionId)
+    const version = res?.data
+    if (version?.componentData) {
+      const parsed = JSON.parse(version.componentData)
+      const storage = applyStorage(parsed, String(version.projectId || id), pageId)
+      applyPreviewRuntime(pageContext)
+      return storage
+    }
+    return null
+  }
 
   const sessionList: Array<ChartEditStorageType | (ReportProjectStorage & { id: string })> = getSessionStorage(StorageEnum.GO_CHART_STORAGE_LIST)
   if (sessionList) {

@@ -27,6 +27,10 @@ export interface AIGenerateRequest {
   temperature?: number
   // 最大 token 数
   maxTokens?: number
+  // 使用的提示词模板 ID
+  promptTemplateId?: number | string
+  // 使用的提示词模板名称
+  promptTemplateName?: string
 }
 
 // AI 生成大屏 - 组件 Schema

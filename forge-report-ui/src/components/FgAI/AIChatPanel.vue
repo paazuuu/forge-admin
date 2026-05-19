@@ -171,6 +171,19 @@
         </template>
         最近生成记录
       </n-tooltip>
+      <n-tooltip placement="top" trigger="hover">
+        <template #trigger>
+          <n-button
+            size="tiny"
+            quaternary
+            :disabled="chatModeRef !== 'generate'"
+            @click="togglePromptTemplatePanel"
+          >
+            <template #icon><n-icon><DocumentTextIcon /></n-icon></template>
+          </n-button>
+        </template>
+        提示词模板
+      </n-tooltip>
     </div>
 
     <n-collapse-transition :show="showHistoryPanel">
@@ -229,6 +242,74 @@
                   </n-button>
                 </template>
                 删除记录
+              </n-tooltip>
+            </div>
+          </div>
+        </template>
+      </div>
+    </n-collapse-transition>
+
+    <n-collapse-transition :show="chatModeRef === 'generate' && showPromptTemplatePanel">
+      <div class="prompt-template-panel">
+        <div class="prompt-template-header">
+          <span>提示词模板</span>
+          <n-input
+            v-model:value="promptTemplateKeyword"
+            size="tiny"
+            clearable
+            placeholder="搜索模板"
+            :disabled="promptTemplateLoading"
+            @keydown.enter.prevent="loadPromptTemplates(true)"
+          />
+          <n-button size="tiny" quaternary :loading="promptTemplateLoading" @click="loadPromptTemplates(true)">
+            刷新
+          </n-button>
+        </div>
+        <div v-if="promptTemplateLoading && !promptTemplateItems.length" class="prompt-template-empty">
+          正在加载模板...
+        </div>
+        <div v-else-if="!promptTemplateItems.length" class="prompt-template-empty">
+          暂无可用模板
+        </div>
+        <template v-else>
+          <div
+            v-for="template in promptTemplateItems"
+            :key="template.id"
+            class="prompt-template-item"
+          >
+            <div class="prompt-template-main">
+              <div class="prompt-template-title">
+                <span>{{ template.templateName || '未命名模板' }}</span>
+                <span v-if="template.isRecommended === '1'" class="prompt-template-badge">推荐</span>
+              </div>
+              <div class="prompt-template-meta">
+                <span v-if="template.businessCategory">{{ template.businessCategory }}</span>
+                <span v-if="template.domainCategory">{{ template.domainCategory }}</span>
+                <span>{{ formatPromptTemplateCounts(template) }}</span>
+              </div>
+              <div class="prompt-template-summary">
+                {{ template.contentSummary || template.description || '暂无摘要' }}
+              </div>
+            </div>
+            <div class="prompt-template-actions">
+              <n-tooltip placement="top" trigger="hover">
+                <template #trigger>
+                  <n-button size="tiny" quaternary circle @click="previewPromptTemplate(template)">
+                    <template #icon><n-icon><EyeOutlineIcon /></n-icon></template>
+                  </n-button>
+                </template>
+                预览
+              </n-tooltip>
+              <n-button size="tiny" type="primary" ghost @click="applyPromptTemplate(template)">
+                使用
+              </n-button>
+              <n-tooltip placement="top" trigger="hover">
+                <template #trigger>
+                  <n-button size="tiny" quaternary circle @click="downloadPromptTemplate(template)">
+                    <template #icon><n-icon><DownloadOutlineIcon /></n-icon></template>
+                  </n-button>
+                </template>
+                下载
               </n-tooltip>
             </div>
           </div>
@@ -461,6 +542,40 @@
         </n-button>
       </div>
     </div>
+
+    <n-modal
+      v-model:show="promptTemplatePreviewVisible"
+      preset="card"
+      title="提示词模板预览"
+      style="width: min(820px, calc(100vw - 24px))"
+    >
+      <n-spin :show="promptTemplatePreviewLoading">
+        <div v-if="currentPromptTemplate" class="prompt-template-preview">
+          <div class="prompt-template-preview-title">
+            {{ currentPromptTemplate.templateName || '未命名模板' }}
+          </div>
+          <div class="prompt-template-preview-meta">
+            <span v-if="currentPromptTemplate.businessCategory">{{ currentPromptTemplate.businessCategory }}</span>
+            <span v-if="currentPromptTemplate.domainCategory">{{ currentPromptTemplate.domainCategory }}</span>
+            <span>{{ formatPromptTemplateCounts(currentPromptTemplate) }}</span>
+          </div>
+          <pre class="prompt-template-preview-content">{{ currentPromptTemplate.promptContent || currentPromptTemplate.contentSummary || '-' }}</pre>
+        </div>
+      </n-spin>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="promptTemplatePreviewVisible = false">
+            关闭
+          </n-button>
+          <n-button v-if="currentPromptTemplate" @click="downloadPromptTemplate(currentPromptTemplate)">
+            下载
+          </n-button>
+          <n-button v-if="currentPromptTemplate" type="primary" @click="applyPromptTemplate(currentPromptTemplate)">
+            使用
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -470,13 +585,18 @@ import {
   type AiDashboardComponentLineageItem,
   type AiDashboardGenerateRecord,
   type AiDashboardGenerateRecordSaveRequest,
+  type AiPromptTemplate,
   type AiProvider,
   aiChatStream,
   aiGenerateStream,
   deleteDashboardGenerateRecordApi,
+  downloadPromptTemplateApi,
   getDashboardGenerateRecentApi,
+  getPromptTemplateListApi,
   getProviderPageApi,
-  saveDashboardGenerateRecordApi
+  previewPromptTemplateApi,
+  saveDashboardGenerateRecordApi,
+  usePromptTemplateApi
 } from '@/api/ai'
 import {
   getDataBusinessAiContext,
@@ -508,9 +628,19 @@ import { useAIStore } from '@/store/modules/aiStore/aiStore'
 import { useChartEditStore } from '@/store/modules/chartEditStore/chartEditStore'
 import { fetchRouteParamsLocation } from '@/utils'
 
-const { SparklesIcon, SendIcon, AnalyticsIcon, PersonIcon, SettingsSharpIcon, CloseIcon, LayersIcon, RefreshOutlineIcon, Click } = icon.ionicons5
-const { Carbon3DCursorIcon } = icon.carbon
-
+const {
+  SparklesIcon,
+  SendIcon,
+  AnalyticsIcon,
+  PersonIcon,
+  SettingsSharpIcon,
+  CloseIcon,
+  LayersIcon,
+  RefreshOutlineIcon,
+  DocumentTextIcon,
+  EyeOutlineIcon,
+  DownloadOutlineIcon
+} = icon.ionicons5
 const emit = defineEmits(['applied'])
 
 const aiStore = useAIStore()
@@ -541,6 +671,15 @@ const businessContextExpanded = ref(false)
 const remoteGenerateRecords = ref<AiDashboardGenerateRecord[]>([])
 const historyLoading = ref(false)
 const historyLoaded = ref(false)
+const showPromptTemplatePanel = ref(false)
+const promptTemplateLoading = ref(false)
+const promptTemplateLoaded = ref(false)
+const promptTemplateKeyword = ref('')
+const promptTemplateItems = ref<AiPromptTemplate[]>([])
+const promptTemplatePreviewVisible = ref(false)
+const promptTemplatePreviewLoading = ref(false)
+const currentPromptTemplate = ref<AiPromptTemplate | null>(null)
+const activePromptTemplate = ref<AiPromptTemplate | null>(null)
 
 const quickPrompts = [
   '基于所选业务定义生成经营监控大屏',
@@ -887,6 +1026,9 @@ watch(selectedBusinessId, async value => {
 
 watch(chatModeRef, mode => {
   businessContextExpanded.value = false
+  if (mode !== 'generate') {
+    showPromptTemplatePanel.value = false
+  }
   if (mode === 'generate' && selectedBusinessId.value && !selectedBusinessReadiness.value) {
     loadSelectedBusinessContext()
       .then(context => {
@@ -1025,6 +1167,128 @@ function toggleHistoryPanel() {
   }
 }
 
+function togglePromptTemplatePanel() {
+  if (chatModeRef.value !== 'generate') return
+  showPromptTemplatePanel.value = !showPromptTemplatePanel.value
+  if (showPromptTemplatePanel.value) {
+    loadPromptTemplates()
+  }
+}
+
+async function loadPromptTemplates(force = false) {
+  if (promptTemplateLoaded.value && !force) return
+  promptTemplateLoading.value = true
+  try {
+    const res = await getPromptTemplateListApi({
+      usageScene: 'dashboard_generate',
+      keyword: promptTemplateKeyword.value.trim() || undefined,
+      limit: 30
+    })
+    promptTemplateItems.value = res?.data || []
+    promptTemplateLoaded.value = true
+  } catch (error: any) {
+    window['$message']?.warning('提示词模板加载失败: ' + (error?.message || '未知错误'))
+  } finally {
+    promptTemplateLoading.value = false
+  }
+}
+
+async function previewPromptTemplate(template: AiPromptTemplate) {
+  if (!template.id) return
+  promptTemplatePreviewVisible.value = true
+  promptTemplatePreviewLoading.value = true
+  currentPromptTemplate.value = null
+  try {
+    const res = await previewPromptTemplateApi(template.id)
+    currentPromptTemplate.value = res?.data || template
+  } catch (error: any) {
+    window['$message']?.warning('模板预览失败: ' + (error?.message || '未知错误'))
+  } finally {
+    promptTemplatePreviewLoading.value = false
+  }
+}
+
+async function applyPromptTemplate(template: AiPromptTemplate) {
+  if (!template.id) return
+  try {
+    const res = await usePromptTemplateApi(template.id)
+    const detail = res?.data || template
+    const promptContent = detail.promptContent || detail.contentSummary || ''
+    if (!promptContent.trim()) {
+      window['$message']?.warning('模板内容为空')
+      return
+    }
+    const existing = inputRef.value.trim()
+    inputRef.value = existing
+      ? `${promptContent.trim()}\n\n用户补充需求：\n${existing}`
+      : promptContent.trim()
+    activePromptTemplate.value = detail
+    chatModeRef.value = 'generate'
+    showPromptTemplatePanel.value = false
+    promptTemplatePreviewVisible.value = false
+    promptTemplateLoaded.value = false
+    void loadPromptTemplates(true)
+    window['$message']?.success('已使用提示词模板')
+  } catch (error: any) {
+    window['$message']?.error('使用模板失败: ' + (error?.message || '未知错误'))
+  }
+}
+
+async function downloadPromptTemplate(template: AiPromptTemplate) {
+  if (!template.id) return
+  try {
+    const res = await downloadPromptTemplateApi(template.id)
+    const detail = res?.data || template
+    savePromptTemplateAsMarkdown(detail)
+    if (currentPromptTemplate.value && String(currentPromptTemplate.value.id) === String(detail.id)) {
+      currentPromptTemplate.value = detail
+    }
+    promptTemplateLoaded.value = false
+    void loadPromptTemplates(true)
+  } catch (error: any) {
+    window['$message']?.error('下载模板失败: ' + (error?.message || '未知错误'))
+  }
+}
+
+function savePromptTemplateAsMarkdown(template: AiPromptTemplate) {
+  const content = [
+    `# ${template.templateName || '提示词模板'}`,
+    '',
+    `- 业务分类：${template.businessCategory || '-'}`,
+    `- 领域分类：${template.domainCategory || '-'}`,
+    `- 标签：${template.templateTags || '-'}`,
+    '',
+    '## 提示词内容',
+    '',
+    template.promptContent || template.contentSummary || '',
+    '',
+    '## 示例输入',
+    '',
+    template.exampleInput || '',
+    '',
+    '## 说明',
+    '',
+    template.description || ''
+  ].join('\n')
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${sanitizePromptTemplateFilename(template.templateName || 'prompt-template')}.md`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function sanitizePromptTemplateFilename(name: string) {
+  return String(name).replace(/[\\/:*?"<>|]/g, '_')
+}
+
+function formatPromptTemplateCounts(template: AiPromptTemplate) {
+  return `用 ${template.useCount || 0} / 测 ${template.testCount || 0} / 下 ${template.downloadCount || 0}`
+}
+
 function prependRemoteGenerateRecord(record?: AiDashboardGenerateRecord) {
   if (!record?.id) return
   remoteGenerateRecords.value = [
@@ -1082,6 +1346,7 @@ function buildLineageItems(summary?: GenerateValidationSummary): AiDashboardComp
 function useQuickPrompt(prompt: string) {
   inputRef.value = prompt
   chatModeRef.value = 'generate'
+  activePromptTemplate.value = null
 }
 
 function clearReferencedComponents() {
@@ -1667,6 +1932,7 @@ async function handleSend() {
       : ''
   )
   if (!content || aiStore.getGenerating) return
+  const selectedPromptTemplate = activePromptTemplate.value
   businessContextExpanded.value = false
 
   if (!selectedProvider.value || !selectedProviderId.value) {
@@ -1707,6 +1973,7 @@ async function handleSend() {
   const requestCanvasContext = buildCanvasContext()
   clearReferencedComponents()
   inputRef.value = ''
+  activePromptTemplate.value = null
   aiStore.setGenerating(true)
   resetStreamingState()
 
@@ -1751,7 +2018,9 @@ async function handleSend() {
       providerId: selectedProviderId.value,
       modelName,
       temperature: temperatureRef.value,
-      maxTokens: maxTokensRef.value || undefined
+      maxTokens: maxTokensRef.value || undefined,
+      promptTemplateId: selectedPromptTemplate?.id,
+      promptTemplateName: selectedPromptTemplate?.templateName
     }
     const buildGenerateRecordPayload = (
       overrides: Partial<AiDashboardGenerateRecordSaveRequest> = {}
@@ -2491,6 +2760,7 @@ $topHeight: 40px;
   .business-context-row,
   .business-context-tip,
   .ai-history-panel,
+  .prompt-template-panel,
   .config-grid,
   .selection-context,
   .provider-tip {
@@ -2816,6 +3086,151 @@ $topHeight: 40px;
     gap: 4px;
   }
 
+  .prompt-template-panel {
+    display: grid;
+    gap: 7px;
+    padding: 8px 10px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .prompt-template-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .prompt-template-empty {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed rgba(148, 163, 184, 0.18);
+    border-radius: 8px;
+    color: #7f8c8d;
+    font-size: 12px;
+  }
+
+  .prompt-template-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(81, 214, 169, 0.14);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  .prompt-template-main {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .prompt-template-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 12px;
+    font-weight: 700;
+
+    span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .prompt-template-badge {
+    flex-shrink: 0;
+    padding: 1px 5px;
+    border-radius: 999px;
+    color: #082016;
+    background: #51d6a9;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .prompt-template-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    color: #7f8c8d;
+    font-size: 11px;
+
+    span {
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+  }
+
+  .prompt-template-summary {
+    min-width: 0;
+    color: rgba(226, 232, 240, 0.62);
+    font-size: 11px;
+    line-height: 1.45;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .prompt-template-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .prompt-template-preview {
+    display: grid;
+    gap: 8px;
+  }
+
+  .prompt-template-preview-title {
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .prompt-template-preview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+
+    span {
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+  }
+
+  .prompt-template-preview-content {
+    max-height: 420px;
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.82);
+    color: rgba(230, 255, 248, 0.9);
+    font-size: 12px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
   .config-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2972,6 +3387,45 @@ $topHeight: 40px;
       }
     }
   }
+}
+
+.prompt-template-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.prompt-template-preview-title {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.prompt-template-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+
+  span {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+}
+
+.prompt-template-preview-content {
+  max-height: 420px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.82);
+  color: rgba(230, 255, 248, 0.9);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @keyframes blink {

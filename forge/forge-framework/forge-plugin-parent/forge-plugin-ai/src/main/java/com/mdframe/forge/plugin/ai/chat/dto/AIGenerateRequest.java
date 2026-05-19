@@ -21,4 +21,6 @@ public class AIGenerateRequest {
     private String modelName;
     private Double temperature;
     private Integer maxTokens;
+    private Long promptTemplateId;
+    private String promptTemplateName;
 }

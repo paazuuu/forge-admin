@@ -80,6 +80,8 @@ export interface AiGenerateStreamRequest {
   modelName?: string
   temperature?: number
   maxTokens?: number
+  promptTemplateId?: number | string
+  promptTemplateName?: string
 }
 
 export interface AiDashboardGenerateRecord {
@@ -169,6 +171,29 @@ export interface AiDashboardDatasetImpactItem {
   createTime?: string
 }
 
+export interface AiPromptTemplate {
+  id?: number | string
+  templateName?: string
+  templateCode?: string
+  usageScene?: string
+  businessCategory?: string
+  domainCategory?: string
+  templateTags?: string
+  description?: string
+  contentSummary?: string
+  promptContent?: string
+  exampleInput?: string
+  status?: string
+  isRecommended?: string
+  sortOrder?: number
+  useCount?: number
+  testCount?: number
+  downloadCount?: number
+  creatorName?: string
+  createTime?: string
+  updateTime?: string
+}
+
 // ==================== AI 生成 ====================
 
 /** AI 生成大屏 */
@@ -210,6 +235,28 @@ export const deleteDashboardGenerateRecordApi = (id: number | string) =>
 /** 查询数据集影响的大屏组件 */
 export const getDashboardDatasetImpactApi = (datasetId: number | string, params?: { limit?: number }) =>
   get(`/forge-report-api/ai/dashboard-generate-record/impact/dataset/${datasetId}`, params) as unknown as Promise<ApiResponse<AiDashboardDatasetImpactItem[]>>
+
+/** 查询启用的提示词模板 */
+export const getPromptTemplateListApi = (params?: {
+  keyword?: string
+  usageScene?: string
+  businessCategory?: string
+  domainCategory?: string
+  limit?: number
+}) =>
+  get('/forge-report-api/ai/prompt-template/list', params) as unknown as Promise<ApiResponse<AiPromptTemplate[]>>
+
+/** 预览提示词模板 */
+export const previewPromptTemplateApi = (id: number | string) =>
+  get(`/forge-report-api/ai/prompt-template/${id}/preview`) as unknown as Promise<ApiResponse<AiPromptTemplate>>
+
+/** 使用提示词模板并计数 */
+export const usePromptTemplateApi = (id: number | string) =>
+  post(`/forge-report-api/ai/prompt-template/${id}/use`) as unknown as Promise<ApiResponse<AiPromptTemplate>>
+
+/** 下载提示词模板并计数 */
+export const downloadPromptTemplateApi = (id: number | string) =>
+  post(`/forge-report-api/ai/prompt-template/${id}/download`) as unknown as Promise<ApiResponse<AiPromptTemplate>>
 
 // ==================== AI 供应商管理 ====================
 
