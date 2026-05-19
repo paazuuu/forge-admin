@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
+import com.mdframe.forge.plugin.generator.dto.CustomQueryExecuteDTO;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
 import com.mdframe.forge.starter.core.domain.PageQuery;
@@ -84,6 +85,37 @@ public class DynamicCrudService {
         applyDictTranslation(camelCaseRecords, config.getTransConfig());
         applyDesensitize(camelCaseRecords, config.getDesensitizeConfig());
         
+        page.setRecords(camelCaseRecords);
+        return page;
+    }
+
+    /**
+     * 自定义分页查询。
+     */
+    public Page<Map<String, Object>> selectCustomPage(String configKey, CustomQueryExecuteDTO request) {
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        Map<String, String> columnMapping = repository.getColumnMapping(tableName);
+        Set<String> allowedFields = buildAllowedCustomFields(config);
+
+        String orderBy = DynamicQueryGenerator.buildOrderByClause(
+                request.getOrderByColumn(), request.getIsAsc(), columnMapping);
+
+        Page<Map<String, Object>> page = repository.selectCustomPage(
+                tableName,
+                normalizePageNum(request.getPageNum()),
+                normalizePageSize(request.getPageSize()),
+                request.getFields(),
+                request.getConditions(),
+                allowedFields,
+                columnMapping,
+                orderBy
+        );
+
+        List<Map<String, Object>> camelCaseRecords = DynamicQueryGenerator.convertListToCamelCase(page.getRecords());
+        applyDecrypt(camelCaseRecords, config.getEncryptConfig());
+        applyDictTranslation(camelCaseRecords, config.getTransConfig());
+        applyDesensitize(camelCaseRecords, config.getDesensitizeConfig());
         page.setRecords(camelCaseRecords);
         return page;
     }
@@ -410,5 +442,25 @@ public class DynamicCrudService {
             throw new BusinessException("该配置不是配置驱动模式: " + configKey);
         }
         return config;
+    }
+
+    private Set<String> buildAllowedCustomFields(AiCrudConfig config) {
+        Set<String> fields = new HashSet<>();
+        fields.addAll(DynamicQueryGenerator.extractFieldNames(config.getSearchSchema(), objectMapper));
+        fields.addAll(DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper));
+        fields.addAll(DynamicQueryGenerator.extractFieldNames(config.getEditSchema(), objectMapper));
+        fields.add("id");
+        return fields;
+    }
+
+    private int normalizePageNum(Integer pageNum) {
+        return pageNum == null || pageNum < 1 ? 1 : pageNum;
+    }
+
+    private int normalizePageSize(Integer pageSize) {
+        if (pageSize == null || pageSize < 1) {
+            return 10;
+        }
+        return Math.min(pageSize, 100);
     }
 }

@@ -3,6 +3,7 @@
  */
 
 import AiCrudPage from './AiCrudPage.vue'
+import AiCustomQuery from './AiCustomQuery.vue'
 import AiCustomSelect from './AiCustomSelect.vue'
 import AiForm from './AiForm.vue'
 import AiFormItem from './AiFormItem.vue'
@@ -16,6 +17,7 @@ import * as SchemaHelper from './schemaHelper.js'
 // 导出组件
 export {
   AiCrudPage,
+  AiCustomQuery,
   AiCustomSelect,
   AiForm,
   AiFormItem,

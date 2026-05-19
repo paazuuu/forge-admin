@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.generator.service;
 
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
+import com.mdframe.forge.plugin.generator.dto.CustomQueryConditionDTO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
@@ -66,6 +67,40 @@ public class DynamicCrudRepository {
         
         List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
         
+        Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
+        page.setRecords(records);
+        return page;
+    }
+
+    /**
+     * 自定义分页查询。
+     */
+    public Page<Map<String, Object>> selectCustomPage(String tableName, int pageNum, int pageSize,
+                                                      List<String> selectedFields,
+                                                      List<CustomQueryConditionDTO> conditions,
+                                                      Set<String> allowedFields,
+                                                      Map<String, String> columnMapping,
+                                                      String orderBy) {
+        validateTableName(tableName);
+
+        StringBuilder whereClause = buildBaseWhereClause(tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        appendCustomConditions(whereClause, params, conditions, allowedFields, columnMapping);
+
+        String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+
+        String dataSql = buildSelectSql(
+                buildCustomSelectClause(selectedFields, allowedFields, columnMapping),
+                tableName,
+                whereClause
+        );
+        dataSql += buildOrderByClause(orderBy);
+        dataSql += " LIMIT :limit OFFSET :offset";
+        appendPageParams(params, pageNum, pageSize);
+
+        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
         return page;
@@ -150,10 +185,18 @@ public class DynamicCrudRepository {
 
     private List<?> normalizeInValues(Object value) {
         if (value instanceof List) {
-            return (List<?>) value;
+            List<?> values = ((List<?>) value).stream()
+                    .filter(Objects::nonNull)
+                    .filter(item -> !(item instanceof String) || StringUtils.isNotBlank((String) item))
+                    .toList();
+            return values.isEmpty() ? null : values;
         }
         if (value instanceof String) {
-            return Arrays.asList(((String) value).split(","));
+            List<String> values = Arrays.stream(((String) value).split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::isNotBlank)
+                    .toList();
+            return values.isEmpty() ? null : values;
         }
         return null;
     }
@@ -199,6 +242,134 @@ public class DynamicCrudRepository {
         }
     }
 
+    private void appendCustomConditions(StringBuilder whereClause, MapSqlParameterSource params,
+                                        List<CustomQueryConditionDTO> conditions,
+                                        Set<String> allowedFields,
+                                        Map<String, String> columnMapping) {
+        if (conditions == null || conditions.isEmpty()) {
+            return;
+        }
+
+        StringBuilder customClause = new StringBuilder();
+        int index = 0;
+        for (CustomQueryConditionDTO condition : conditions) {
+            if (condition == null || shouldSkipCustomCondition(condition, allowedFields)) {
+                continue;
+            }
+
+            String columnName = resolveSearchColumn(condition.getField(), columnMapping);
+            if (columnName == null || !isKnownColumn(columnName, columnMapping)) {
+                continue;
+            }
+
+            String operator = normalizeOperator(condition.getOperator());
+            String conditionSql = buildCustomConditionSql(params, columnName, operator, condition, index);
+            if (StringUtils.isBlank(conditionSql)) {
+                continue;
+            }
+
+            if (customClause.length() > 0) {
+                customClause.append(" ").append(resolveRelation(condition.getRelation())).append(" ");
+            }
+            customClause.append(conditionSql);
+            index++;
+        }
+
+        if (customClause.length() > 0) {
+            appendWhereJoiner(whereClause);
+            whereClause.append("(").append(customClause).append(")");
+        }
+    }
+
+    private boolean shouldSkipCustomCondition(CustomQueryConditionDTO condition, Set<String> allowedFields) {
+        if (StringUtils.isBlank(condition.getField()) || !allowedFields.contains(condition.getField())) {
+            return true;
+        }
+        String operator = normalizeOperator(condition.getOperator());
+        if ("is_null".equals(operator) || "is_not_null".equals(operator)) {
+            return false;
+        }
+        Object value = condition.getValue();
+        return value == null || (value instanceof String && StringUtils.isBlank((String) value));
+    }
+
+    private String normalizeOperator(String operator) {
+        String normalized = StringUtils.defaultIfBlank(operator, "eq").trim().toLowerCase();
+        return switch (normalized) {
+            case "=", "eq" -> "eq";
+            case "!=", "<>", "ne" -> "ne";
+            case "like", "left_like", "right_like", "gt", "ge", "gte", "lt", "le", "lte",
+                    "in", "between", "is_null", "is_not_null" -> normalized;
+            case ">", "<" -> "gt".equals(normalized) ? "gt" : normalized;
+            default -> throw new BusinessException("不支持的查询操作符: " + operator);
+        };
+    }
+
+    private String resolveRelation(String relation) {
+        return "OR".equalsIgnoreCase(relation) ? "OR" : "AND";
+    }
+
+    private String buildCustomConditionSql(MapSqlParameterSource params, String columnName, String operator,
+                                           CustomQueryConditionDTO condition, int index) {
+        String paramName = "custom_" + index + "_" + columnName;
+        Object value = condition.getValue();
+
+        return switch (operator) {
+            case "like" -> addCustomBinaryCondition(params, columnName, "LIKE", paramName, "%" + value + "%");
+            case "left_like" -> addCustomBinaryCondition(params, columnName, "LIKE", paramName, "%" + value);
+            case "right_like" -> addCustomBinaryCondition(params, columnName, "LIKE", paramName, value + "%");
+            case "eq" -> addCustomBinaryCondition(params, columnName, "=", paramName, value);
+            case "ne" -> addCustomBinaryCondition(params, columnName, "!=", paramName, value);
+            case "gt", ">" -> addCustomBinaryCondition(params, columnName, ">", paramName, value);
+            case "ge", "gte" -> addCustomBinaryCondition(params, columnName, ">=", paramName, value);
+            case "lt", "<" -> addCustomBinaryCondition(params, columnName, "<", paramName, value);
+            case "le", "lte" -> addCustomBinaryCondition(params, columnName, "<=", paramName, value);
+            case "in" -> addCustomInCondition(params, columnName, paramName, value);
+            case "between" -> addCustomBetweenCondition(params, columnName, paramName, condition);
+            case "is_null" -> columnName + " IS NULL";
+            case "is_not_null" -> columnName + " IS NOT NULL";
+            default -> throw new BusinessException("不支持的查询操作符: " + operator);
+        };
+    }
+
+    private String addCustomBinaryCondition(MapSqlParameterSource params, String columnName, String operator,
+                                            String paramName, Object value) {
+        params.addValue(paramName, value);
+        return columnName + " " + operator + " :" + paramName;
+    }
+
+    private String addCustomInCondition(MapSqlParameterSource params, String columnName, String paramName, Object value) {
+        List<?> values = normalizeInValues(value);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        params.addValue(paramName, values);
+        return columnName + " IN (:" + paramName + ")";
+    }
+
+    private String addCustomBetweenCondition(MapSqlParameterSource params, String columnName, String paramName,
+                                             CustomQueryConditionDTO condition) {
+        List<?> range = normalizeBetweenValues(condition);
+        if (range == null || range.size() < 2) {
+            return null;
+        }
+        params.addValue(paramName + "_start", range.get(0));
+        params.addValue(paramName + "_end", range.get(1));
+        return columnName + " BETWEEN :" + paramName + "_start AND :" + paramName + "_end";
+    }
+
+    private List<?> normalizeBetweenValues(CustomQueryConditionDTO condition) {
+        Object value = condition.getValue();
+        if (value instanceof List && ((List<?>) value).size() >= 2) {
+            return (List<?>) value;
+        }
+        if (condition.getValueEnd() == null
+                || (condition.getValueEnd() instanceof String && StringUtils.isBlank((String) condition.getValueEnd()))) {
+            return null;
+        }
+        return Arrays.asList(value, condition.getValueEnd());
+    }
+
     private boolean shouldSkipSearchField(String fieldName, Object value, Set<String> allowedSearchFields) {
         if (!allowedSearchFields.contains(fieldName)) {
             return true;
@@ -213,6 +384,39 @@ public class DynamicCrudRepository {
             return null;
         }
         return columnName;
+    }
+
+    private String buildCustomSelectClause(List<String> selectedFields, Set<String> allowedFields,
+                                           Map<String, String> columnMapping) {
+        if (selectedFields == null || selectedFields.isEmpty()) {
+            return "SELECT *";
+        }
+        LinkedHashSet<String> columns = new LinkedHashSet<>();
+        addSelectedColumn(columns, "id", allowedFields, columnMapping);
+        for (String fieldName : selectedFields) {
+            addSelectedColumn(columns, fieldName, allowedFields, columnMapping);
+        }
+        if (columns.isEmpty()) {
+            return "SELECT *";
+        }
+        return "SELECT " + String.join(", ", columns);
+    }
+
+    private void addSelectedColumn(Set<String> columns, String fieldName, Set<String> allowedFields,
+                                   Map<String, String> columnMapping) {
+        if (StringUtils.isBlank(fieldName) || !allowedFields.contains(fieldName)) {
+            return;
+        }
+        String columnName = columnMapping.getOrDefault(fieldName, DynamicQueryGenerator.camelToSnake(fieldName));
+        if (!isKnownColumn(columnName, columnMapping) || DynamicQueryGenerator.containsSqlInjection(columnName)) {
+            return;
+        }
+        validateIdentifier(columnName);
+        columns.add(columnName);
+    }
+
+    private boolean isKnownColumn(String columnName, Map<String, String> columnMapping) {
+        return columnMapping.containsValue(columnName);
     }
 
     private String resolveSearchType(String fieldName, Map<String, String> searchTypeMap) {

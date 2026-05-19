@@ -52,7 +52,7 @@
           :striped="striped"
           :bordered="bordered"
           :size="tableSize"
-          :render-mode="renderMode"
+          :render-mode="activeRenderMode"
           :card-props="cardProps"
           :show-render-mode-switch="showRenderModeSwitch"
           :max-height="computedMaxHeight"
@@ -106,6 +106,17 @@
                     </template>
                     {{ exportButtonText }}
                   </n-button>
+
+                  <AiCustomQuery
+                    v-if="enableCustomQuery && resolvedCustomQueryConfigKey"
+                    :config-key="resolvedCustomQueryConfigKey"
+                    :columns="props.columns"
+                    :search-schema="searchSchema"
+                    :edit-schema="editSchema"
+                    :render-mode="activeRenderMode"
+                    @apply="handleApplyCustomQuery"
+                    @clear="handleClearCustomQuery"
+                  />
 
                   <slot name="toolbar-end" />
                 </div>
@@ -278,9 +289,11 @@ import {
 } from '@vicons/ionicons5'
 import { NDropdown } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
+import { customQueryExecute } from '@/api/ai'
 import { request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
 import { aiCrudPageProps } from './AiCrudPageProps'
+import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
 import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
@@ -324,6 +337,9 @@ const searchParams = ref({})
 const dataSource = ref([])
 const tableLoading = ref(false)
 const selectedKeys = ref([])
+const customQueryPayload = ref(null)
+const customQueryFields = ref([])
+const activeRenderMode = ref(props.renderMode || 'table')
 
 // 分页
 const pagination = ref({
@@ -469,6 +485,35 @@ const rowKeyFn = computed(() => {
   return row => row[props.rowKey]
 })
 
+const resolvedCustomQueryConfigKey = computed(() => {
+  if (props.customQueryConfigKey) {
+    return props.customQueryConfigKey
+  }
+  const listApi = props.apiConfig?.list || ''
+  const match = listApi.match(/\/ai\/crud\/([^/]+)\/page/)
+  return match?.[1] || ''
+})
+
+function getColumnKey(col) {
+  return col?.prop || col?.key || col?.dataIndex || ''
+}
+
+function isActionColumnConfig(col) {
+  const key = getColumnKey(col)
+  return key === 'action' || key === 'actions'
+}
+
+const activeSourceColumns = computed(() => {
+  if (!customQueryFields.value.length) {
+    return props.columns
+  }
+  const actionColumns = props.columns.filter(isActionColumnConfig)
+  const orderedColumns = customQueryFields.value
+    .map(field => props.columns.find(col => getColumnKey(col) === field))
+    .filter(Boolean)
+  return [...orderedColumns, ...actionColumns]
+})
+
 /**
  * 表格列配置（添加操作列）
  */
@@ -481,7 +526,7 @@ const tableColumns = computed(() => {
     return key === 'action' || key === 'actions'
   }
 
-  props.columns.forEach((col) => {
+  activeSourceColumns.value.forEach((col) => {
     // 操作列：如果有 actions 配置，自动生成 render 函数
     if (isActionCol(col) && col.actions) {
       const actionCol = { ...col }
@@ -704,7 +749,7 @@ function parseApiConfig(key, defaultApi, defaultMethod = 'get', urlParams = {}) 
  * 加载列表数据
  */
 async function loadList() {
-  if (!props.api && !props.apiConfig.list) {
+  if (!customQueryPayload.value && !props.api && !props.apiConfig.list) {
     console.warn('未配置 API 地址')
     return
   }
@@ -737,42 +782,51 @@ async function loadList() {
     // 调用 beforeLoadList 钩子
     params = await callHook('beforeLoadList', params, data => data)
 
-    // 解析 API
-    const { method, url } = parseApiConfig('list', props.api, props.listMethod)
-
-    // 确定使用哪种请求方法
-    let requestMethod = method
-    // 如果方法明确指定为 postEncrypt，则使用加密请求，不管 isEncrypt 属性
-    const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
-    if (useEncrypt) {
-      requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
-    }
-    else {
-      requestMethod = method.toLowerCase()
-    }
-
     // 发送请求
     let response
-    if (useEncrypt && requestMethod === 'postEncrypt') {
-      // 使用加密请求
-      response = await postEncrypt(url, params)
+    if (customQueryPayload.value && resolvedCustomQueryConfigKey.value) {
+      response = await customQueryExecute(resolvedCustomQueryConfigKey.value, {
+        ...customQueryPayload.value,
+        pageNum: pagination.value.page,
+        pageSize: pagination.value.pageSize,
+      })
     }
     else {
-      // 使用普通请求
-      const requestConfig = {
-        method: requestMethod,
-        url,
-      }
+      // 解析 API
+      const { method, url } = parseApiConfig('list', props.api, props.listMethod)
 
-      if (requestMethod === 'get') {
-        requestConfig.params = params
+      // 确定使用哪种请求方法
+      let requestMethod = method
+      // 如果方法明确指定为 postEncrypt，则使用加密请求，不管 isEncrypt 属性
+      const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+      if (useEncrypt) {
+        requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
       }
       else {
-        requestConfig.data = params
-        requestConfig.params = props.publicQuery
+        requestMethod = method.toLowerCase()
       }
 
-      response = await request(requestConfig)
+      if (useEncrypt && requestMethod === 'postEncrypt') {
+        // 使用加密请求
+        response = await postEncrypt(url, params)
+      }
+      else {
+        // 使用普通请求
+        const requestConfig = {
+          method: requestMethod,
+          url,
+        }
+
+        if (requestMethod === 'get') {
+          requestConfig.params = params
+        }
+        else {
+          requestConfig.data = params
+          requestConfig.params = props.publicQuery
+        }
+
+        response = await request(requestConfig)
+      }
     }
 
     // 提取数据
@@ -842,10 +896,29 @@ function handleRefresh() {
   loadList()
 }
 
+function handleApplyCustomQuery(payload) {
+  customQueryPayload.value = payload
+  customQueryFields.value = payload?.fields || []
+  if (payload?.renderMode) {
+    activeRenderMode.value = payload.renderMode
+  }
+  pagination.value.page = 1
+  loadList()
+}
+
+function handleClearCustomQuery() {
+  customQueryPayload.value = null
+  customQueryFields.value = []
+  activeRenderMode.value = props.renderMode || 'table'
+  pagination.value.page = 1
+  loadList()
+}
+
 /**
  * 列表/卡片渲染模式切换
  */
 function handleRenderModeChange(mode) {
+  activeRenderMode.value = mode
   emit('render-mode-change', mode)
 }
 
@@ -873,6 +946,15 @@ watch(selectedKeys, (newKeys) => {
   const rows = tableRef.value?.getCheckedRows() || []
   emit('selection-change', { keys: newKeys, rows })
 })
+
+watch(
+  () => props.renderMode,
+  (mode) => {
+    if (!customQueryPayload.value) {
+      activeRenderMode.value = mode || 'table'
+    }
+  },
+)
 
 /**
  * 统一规范化编辑表单回填数据

@@ -317,6 +317,24 @@ export const aiCrudPageProps = {
   },
 
   /**
+   * 是否启用自定义查询
+   * @type {boolean}
+   */
+  enableCustomQuery: {
+    type: Boolean,
+    default: false,
+  },
+
+  /**
+   * 自定义查询对应的配置键。不传时会尝试从动态CRUD列表接口解析。
+   * @type {string}
+   */
+  customQueryConfigKey: {
+    type: String,
+    default: '',
+  },
+
+  /**
    * 导出按钮文本
    * @type {string}
    */

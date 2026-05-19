@@ -108,7 +108,7 @@ function transformFields(fields) {
           // 如果值是字符串，尝试转换成数字
           if (typeof vm.value === 'string') {
             const num = Number.parseFloat(vm.value)
-            if (!isNaN(num)) {
+            if (!Number.isNaN(num)) {
               vm.value = num
             }
           }
@@ -144,6 +144,8 @@ const crudProps = computed(() => {
     modalWidth: cfg.modalWidth || '800px',
     editGridCols: cfg.editGridCols || 1,
     searchGridCols: cfg.searchGridCols || 4,
+    enableCustomQuery: true,
+    customQueryConfigKey: cfg.configKey,
   }
 })
 
@@ -195,11 +197,7 @@ async function loadConfig() {
 
   try {
     const res = await crudConfigRender(configKey)
-    console.log('[DEBUG] 后端返回的CRUD配置原始响应：', res)
     const cfg = res.data
-    console.log('[DEBUG] 解析后的CRUD配置：', cfg)
-    console.log('[DEBUG] 列配置columnsSchema：', cfg.columnsSchema)
-    console.log('[DEBUG] 翻译配置transConfig：', cfg.transConfig)
     renderConfig.value = cfg
     // 更新当前 Tab 标题为菜单名/表描述
     const title = cfg.menuName || cfg.tableComment

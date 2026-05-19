@@ -35,7 +35,7 @@ public class DynamicQueryGenerator {
 
     /** SQL注入检测正则 */
     private static final Pattern SQL_INJECTION_PATTERN = Pattern.compile(
-        ".*(?:insert|update|delete|drop|truncate|exec|execute|union|select|into|from|where|and|or|--|;|'|\"|\\\\).*",
+        ".*(?:\\b(?:insert|update|delete|drop|truncate|exec|execute|union|select|into|from|where|and|or)\\b|--|;|'|\"|\\\\).*",
         Pattern.CASE_INSENSITIVE
     );
 
@@ -464,6 +464,10 @@ public class DynamicQueryGenerator {
                     JsonNode keyNode = item.get("key");
                     if (keyNode != null && !keyNode.isNull()) {
                         fields.add(keyNode.asText());
+                    }
+                    JsonNode propNode = item.get("prop");
+                    if (propNode != null && !propNode.isNull()) {
+                        fields.add(propNode.asText());
                     }
                 }
             }

@@ -410,3 +410,29 @@ export function crudConfigAiGenerate(data) {
 export function crudConfigAiGenerateFromTable(data) {
   return request.post('/ai/crud-config/ai/generateFromTable', data)
 }
+
+// ========== 自定义查询 ==========
+
+export function customQueryExecute(configKey, data) {
+  return request.post(`/ai/custom-query/${configKey}/execute`, data)
+}
+
+export function customQuerySchemeList(configKey) {
+  return request.get(`/ai/custom-query/${configKey}/scheme/list`)
+}
+
+export function customQuerySchemeGet(configKey, id) {
+  return request.get(`/ai/custom-query/${configKey}/scheme/${id}`)
+}
+
+export function customQuerySchemeAdd(configKey, data) {
+  return request.post(`/ai/custom-query/${configKey}/scheme`, data)
+}
+
+export function customQuerySchemeUpdate(configKey, data) {
+  return request.put(`/ai/custom-query/${configKey}/scheme`, data)
+}
+
+export function customQuerySchemeDelete(configKey, id) {
+  return request.delete(`/ai/custom-query/${configKey}/scheme/${id}`)
+}
