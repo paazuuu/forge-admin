@@ -9,7 +9,10 @@
     <!-- 左侧树形导航 -->
     <div class="tree-crud-left">
       <div class="tree-header">
-        {{ treeTitle }}
+        <span>{{ treeTitle }}</span>
+        <n-button text size="tiny" @click="clearTreeSelect">
+          全部
+        </n-button>
       </div>
       <n-spin :show="treeLoading">
         <n-tree
@@ -26,7 +29,11 @@
     </div>
     <!-- 右侧 CRUD 表格 -->
     <div class="tree-crud-right">
-      <AiCrudPage v-bind="mergedCrudProps" />
+      <AiCrudPage
+        v-bind="mergedCrudProps"
+        @submit-success="loadTreeData"
+        @delete="loadTreeData"
+      />
     </div>
   </div>
   <!-- 无树形配置时降级为标准 CRUD -->
@@ -60,19 +67,30 @@ const selectedId = ref(null)
 
 // 合并 crudProps，注入 parentId 过滤
 const mergedCrudProps = computed(() => {
-  if (!selectedId.value)
-    return props.crudProps
-  const apiConfig = { ...(props.crudProps.apiConfig || {}) }
-  // 将 parentId 注入到 list 接口的默认参数中
+  const parentField = treeConfig.value?.parentField || 'parentId'
+  const publicParams = { ...(props.crudProps.publicParams || {}) }
+  if (selectedId.value) {
+    publicParams[parentField] = selectedId.value
+  }
+
   return {
     ...props.crudProps,
-    apiConfig,
-    defaultSearchParams: {
-      ...(props.crudProps.defaultSearchParams || {}),
-      [treeConfig.value?.parentField || 'parentId']: selectedId.value,
-    },
+    publicParams,
+    beforeRenderForm: buildBeforeRenderForm(parentField),
   }
 })
+
+function buildBeforeRenderForm(parentField) {
+  return async (row) => {
+    const originalHook = props.crudProps.beforeRenderForm
+    const originalData = typeof originalHook === 'function' ? await originalHook(row) : null
+    const nextData = originalData && typeof originalData === 'object' ? { ...originalData } : {}
+    if (selectedId.value && !row) {
+      nextData[parentField] = selectedId.value
+    }
+    return nextData
+  }
+}
 
 async function loadTreeData() {
   if (!treeConfig.value)
@@ -105,6 +123,11 @@ function handleTreeSelect(keys) {
   selectedId.value = keys[0] ?? null
 }
 
+function clearTreeSelect() {
+  selectedKeys.value = []
+  selectedId.value = null
+}
+
 onMounted(() => {
   if (hasTree.value) {
     loadTreeData()
@@ -135,6 +158,9 @@ watch(() => props.crudProps?.apiConfig, () => {
 }
 
 .tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 13px;
   font-weight: 600;
   color: #374151;

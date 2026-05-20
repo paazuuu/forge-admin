@@ -3,9 +3,9 @@
     <div class="config-page-header">
       <div class="header-left">
         <h2 class="page-title">
-          CRUD 配置管理
+          CRUD 应用管理
         </h2>
-        <span class="page-desc">通过 JSON 配置驱动页面自动渲染，实现零代码业务开发</span>
+        <span class="page-desc">业务人员使用低代码搭建器，技术人员可进入高级 JSON 配置和代码下载</span>
       </div>
       <div class="header-right">
         <n-input
@@ -21,11 +21,17 @@
             </n-icon>
           </template>
         </n-input>
-        <n-button type="primary" @click="goToGenerator()">
+        <n-button type="primary" @click="goToLowcodeApps">
+          <template #icon>
+            <n-icon><ServerOutline /></n-icon>
+          </template>
+          低代码应用
+        </n-button>
+        <n-button @click="goToGenerator()">
           <template #icon>
             <n-icon><SparklesOutline /></n-icon>
           </template>
-          AI 生成配置
+          AI 辅助生成
         </n-button>
       </div>
     </div>
@@ -38,7 +44,7 @@
             :key="item.id"
             class="config-card"
             :class="{ disabled: item.status !== '0' }"
-            @click="handleEdit(item)"
+            @click="handleCardOpen(item)"
           >
             <div class="card-header">
               <div class="card-icon" :style="{ background: getIconBg(item.configKey) }">
@@ -55,8 +61,8 @@
                 </div>
               </div>
               <div class="card-badges">
-                <n-tag :type="item.mode === 'CONFIG' ? 'success' : 'info'" size="tiny">
-                  {{ item.mode === 'CONFIG' ? '配置驱动' : '代码生成' }}
+                <n-tag :type="item.buildMode === 'LOWCODE' ? 'success' : 'info'" size="tiny">
+                  {{ getBuildModeLabel(item) }}
                 </n-tag>
                 <n-tag v-if="item.status !== '0'" size="tiny" type="warning">
                   停用
@@ -81,6 +87,18 @@
               </div>
             </div>
             <div class="card-actions" @click.stop>
+              <n-button v-if="item.buildMode === 'LOWCODE'" size="tiny" type="primary" @click="openLowcodeBuilder(item.id)">
+                <template #icon>
+                  <n-icon><ServerOutline /></n-icon>
+                </template>
+                可视化搭建
+              </n-button>
+              <n-button size="tiny" @click="handleEdit(item)">
+                <template #icon>
+                  <n-icon><CreateOutline /></n-icon>
+                </template>
+                高级 JSON
+              </n-button>
               <n-button size="tiny" @click="goToGenerator(item.configKey)">
                 <template #icon>
                   <n-icon><SparklesOutline /></n-icon>
@@ -118,11 +136,11 @@
             <FolderOpenOutline />
           </n-icon>
           <p>暂无 CRUD 配置</p>
-          <n-button type="primary" @click="goToGenerator()">
+          <n-button type="primary" @click="goToLowcodeApps">
             <template #icon>
-              <n-icon><SparklesOutline /></n-icon>
+              <n-icon><ServerOutline /></n-icon>
             </template>
-            创建第一个配置
+            新建低代码应用
           </n-button>
         </div>
       </n-spin>
@@ -311,6 +329,7 @@
 <script setup>
 import {
   CloudDownloadOutline,
+  CreateOutline,
   EyeOutline,
   FolderOpenOutline,
   MenuOutline,
@@ -432,6 +451,28 @@ function handleSearch() {
 function goToGenerator(configKey) {
   const query = configKey ? { configKey } : {}
   router.push({ path: '/ai/crud-generator', query })
+}
+
+function goToLowcodeApps() {
+  router.push('/ai/lowcode-apps')
+}
+
+function openLowcodeBuilder(id) {
+  router.push(`/ai/lowcode-builder/${id}`)
+}
+
+function handleCardOpen(item) {
+  if (item.buildMode === 'LOWCODE') {
+    openLowcodeBuilder(item.id)
+    return
+  }
+  handleEdit(item)
+}
+
+function getBuildModeLabel(item) {
+  if (item.buildMode === 'LOWCODE')
+    return '低代码'
+  return item.mode === 'CONFIG' ? '配置驱动' : '代码生成'
 }
 
 function handlePreview(configKey) {
@@ -739,6 +780,7 @@ onMounted(() => {
 
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: auto;
   padding-top: 4px;

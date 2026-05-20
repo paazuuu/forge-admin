@@ -219,6 +219,31 @@ public RespInfo<GoviewProject> getById(@PathVariable Long id) {
 - 所有使用文件访问地址渲染图片的前端组件
 - 头像、favicon、素材预览、图片上传回显等场景
 
+## 7. Naive UI 当前版本不导出 NSegmented
+
+**发现日期**: 2026-05-19
+
+**问题描述**:
+在低代码页面搭建器中使用 `<n-segmented>` 后，`pnpm build` 失败：
+
+```text
+"NSegmented" is not exported by "naive-ui/es/index.mjs"
+```
+
+**解决方案**:
+当前项目 Naive UI 版本下不要使用 `n-segmented`。需要分段切换效果时，使用项目已支持的：
+
+```vue
+<n-radio-group v-model:value="value" size="small">
+  <n-radio-button value="simple-crud">标准单表</n-radio-button>
+  <n-radio-button value="tree-crud">左树右表</n-radio-button>
+</n-radio-group>
+```
+
+**影响范围**:
+- 所有新增 Vue 页面或组件中需要“分段选择器”的场景。
+- 前端生产构建 `pnpm build`。
+
 ## 7. SSE 流式对话前端解析不完整导致非实时输出
 
 **发现日期**: 2026-05-15

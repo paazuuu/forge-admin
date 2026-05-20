@@ -9,6 +9,8 @@ import com.mdframe.forge.plugin.system.dto.SysOrgQuery;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
 import com.mdframe.forge.plugin.system.service.ISysOrgService;
+import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
+import com.mdframe.forge.starter.trans.annotation.DictTranslate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,15 +28,29 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
     private final SysOrgMapper orgMapper;
 
     @Override
+    @DictTranslate
     public IPage<SysOrg> selectOrgPage(SysOrgQuery query) {
         Page<SysOrg> page = new Page<>(query.getPageNum(), query.getPageSize());
         return orgMapper.selectOrgPage(page, query);
     }
 
     @Override
+    @DictTranslate
     public List<SysOrg> selectOrgTree(SysOrgQuery query) {
         List<SysOrg> allOrgs = orgMapper.selectOrgList(query);
         return buildTree(allOrgs);
+    }
+    
+    @Override
+    @DictTranslate
+    public List<SysOrgTreeVO> selectOrgLazyTree(SysOrgQuery query) {
+        return orgMapper.selectOrgLazyTree(query);
+    }
+    
+    @Override
+    @DictTranslate
+    public List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId) {
+        return orgMapper.selectOrgChildrenByParentId(parentId);
     }
 
     /**

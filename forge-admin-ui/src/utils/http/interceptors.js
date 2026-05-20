@@ -94,7 +94,7 @@ export function setupInterceptors(axiosInstance) {
 
     // 二进制响应（下载、图片、附件等）不走 RespInfo code 判断
     if (isBinaryData(data)) {
-      return Promise.resolve(data)
+      return Promise.resolve(config?.rawResponse ? response : data)
     }
 
     // 非 JSON 响应直接返回

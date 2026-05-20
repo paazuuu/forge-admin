@@ -57,10 +57,10 @@ const methodOptions = [
 
 const apiFields = [
   { key: 'list', label: '列表接口', placeholder: '/xxx/page' },
-  { key: 'detail', label: '详情接口', placeholder: '/xxx/{id}' },
+  { key: 'detail', label: '详情接口', placeholder: '/xxx/:id' },
   { key: 'create', label: '新增接口', placeholder: '/xxx' },
   { key: 'update', label: '编辑接口', placeholder: '/xxx' },
-  { key: 'delete', label: '删除接口', placeholder: '/xxx/{id}' },
+  { key: 'delete', label: '删除接口', placeholder: '/xxx/:id' },
 ]
 
 // 解析 "get@/xxx/page" 格式

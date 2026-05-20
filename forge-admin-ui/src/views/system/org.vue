@@ -3,38 +3,39 @@
     <!-- 组织列表 -->
     <div class="org-content">
       <AiCrudPage
-        ref="crudRef"
-        api="/system/org"
-        :api-config="{
-          list: 'get@/system/org/tree',
+          ref="crudRef"
+          api="/system/org"
+          :api-config="{
+          list: 'get@/system/org/lazyTree',
           detail: 'post@/system/org/getById',
           add: 'post@/system/org/add',
           update: 'post@/system/org/edit',
           delete: 'post@/system/org/remove',
         }"
-        :search-schema="searchSchema"
-        :columns="tableColumns"
-        :edit-schema="editSchema"
-        :before-render-list="beforeRenderList"
-        :before-submit="beforeSubmit"
-        row-key="id"
-        :edit-grid-cols="2"
-        modal-width="900px"
-        :show-pagination="false"
-        :lazy="false"
-        add-button-text="新增组织"
-        :table-props="{
+          :search-schema="searchSchema"
+          :columns="tableColumns"
+          :edit-schema="editSchema"
+          :before-render-list="beforeRenderList"
+          :before-submit="beforeSubmit"
+          row-key="id"
+          :edit-grid-cols="2"
+          modal-width="900px"
+          :show-pagination="false"
+          :lazy="false"
+          add-button-text="新增组织"
+          :table-props="{
           expandedRowKeys: expandedKeys,
           onUpdateExpandedRowKeys: handleExpandedKeysUpdate,
+          onLoad: handleLoad,
         }"
       >
         <!-- 自定义工具栏 -->
         <template #toolbar-end>
-          <n-button @click="toggleExpandAll">
+          <n-button @click="toggleExpandLoaded">
             <template #icon>
-              <i :class="expandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
+              <i :class="expandLoaded ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
             </template>
-            {{ expandAll ? '折叠全部' : '展开全部' }}
+            {{ expandLoaded ? '折叠已加载' : '展开已加载' }}
           </n-button>
         </template>
       </AiCrudPage>
@@ -43,35 +44,25 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemOrg' })
 
+const { dict } = useDict('sys_org_type', 'sys_normal_disable')
+
 const crudRef = ref(null)
-const expandAll = ref(true)
+const expandLoaded = ref(false)
 const expandedKeys = ref([])
 const parentOrgOptions = ref([{ label: '顶级组织', value: 0, key: 0 }])
 const searchRegionOptions = ref([])
 const editRegionOptions = ref([])
+const defaultParentId = ref(0)
 
-// 组织类型选项
-const orgTypeOptions = [
-  { label: '公司', value: 1 },
-  { label: '部门', value: 2 },
-  { label: '小组', value: 3 },
-]
-
-// 组织状态选项
-const orgStatusOptions = [
-  { label: '正常', value: 1 },
-  { label: '禁用', value: 0 },
-]
-
-// 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'orgName',
     label: '组织名称',
@@ -97,7 +88,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择组织类型',
-      options: orgTypeOptions,
+      options: dict.value.sys_org_type || [],
     },
   },
   {
@@ -106,12 +97,11 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: orgStatusOptions,
+      options: dict.value.sys_normal_disable || [],
     },
   },
-]
+])
 
-// 表格列配置
 const tableColumns = computed(() => [
   {
     prop: 'orgName',
@@ -123,13 +113,7 @@ const tableColumns = computed(() => [
     label: '组织类型',
     width: 100,
     render: (row) => {
-      const typeMap = {
-        1: { text: '公司', type: 'success' },
-        2: { text: '部门', type: 'info' },
-        3: { text: '小组', type: 'warning' },
-      }
-      const config = typeMap[row.orgType] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, { options: dict.value.sys_org_type, value: row.orgType })
     },
   },
   {
@@ -168,8 +152,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(NTag, { type: row.orgStatus === 1 ? 'success' : 'error', size: 'small' }, { default: () => row.orgStatus === 1 ? '正常' : '禁用' },
-      )
+      return h(DictTag, { options: dict.value.sys_normal_disable, value: row.orgStatus })
     },
   },
   {
@@ -190,9 +173,7 @@ const tableColumns = computed(() => [
   },
 ])
 
-// 编辑表单配置
-const editSchema = ref([
-  // 基础信息
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
@@ -205,7 +186,7 @@ const editSchema = ref([
     field: 'parentId',
     label: '上级组织',
     type: 'treeSelect',
-    defaultValue: 0,
+    defaultValue: defaultParentId.value,
     props: {
       placeholder: '请选择上级组织',
       clearable: true,
@@ -230,7 +211,7 @@ const editSchema = ref([
     defaultValue: 2,
     rules: [{ required: true, type: 'number', message: '请选择组织类型', trigger: 'change' }],
     props: {
-      options: orgTypeOptions,
+      options: dict.value.sys_org_type || [],
     },
   },
   {
@@ -243,8 +224,6 @@ const editSchema = ref([
       min: 0,
     },
   },
-
-  // 负责人信息
   {
     type: 'divider',
     label: '负责人信息',
@@ -292,8 +271,6 @@ const editSchema = ref([
     },
     options: () => editRegionOptions.value,
   },
-
-  // 状态配置
   {
     type: 'divider',
     label: '状态配置',
@@ -308,7 +285,7 @@ const editSchema = ref([
     type: 'radio',
     defaultValue: 1,
     props: {
-      options: orgStatusOptions,
+      options: dict.value.sys_normal_disable || [],
     },
   },
   {
@@ -323,12 +300,10 @@ const editSchema = ref([
   },
 ])
 
-// 组件挂载时加载上级组织选项
 onMounted(() => {
   loadParentOrgOptions()
 })
 
-// 加载上级组织选项
 async function loadParentOrgOptions() {
   try {
     const res = await request.get('/system/org/tree')
@@ -339,8 +314,8 @@ async function loadParentOrgOptions() {
           value: item.id,
           key: item.id,
           children: item.children && item.children.length > 0
-            ? convertToTreeSelect(item.children)
-            : undefined,
+              ? convertToTreeSelect(item.children)
+              : undefined,
         }))
       }
       parentOrgOptions.value = [
@@ -348,7 +323,6 @@ async function loadParentOrgOptions() {
         ...convertToTreeSelect(res.data || []),
       ]
 
-      // 同时加载行政区划选项
       await loadRegionOptions()
     }
   }
@@ -357,15 +331,12 @@ async function loadParentOrgOptions() {
   }
 }
 
-// 加载行政区划选项（一次性加载内蒙完整区划树，含虚拟组织）
 async function loadRegionOptions() {
   try {
     const res = await request.get('/system/region/treeAll', { params: { rootCode: '150000', dataRight: true } })
     if (res.code === 200) {
       const data = res.data || []
-      // 搜索场景：虚拟节点可选（代表"该区域下所有"）
       searchRegionOptions.value = convertRegionToTreeSelect(data, false)
-      // 编辑场景：虚拟节点不可选（避免存入ALL后缀编码）
       editRegionOptions.value = convertRegionToTreeSelect(data, true)
     }
   }
@@ -374,8 +345,6 @@ async function loadRegionOptions() {
   }
 }
 
-// 将后端返回的树形数据转换为TreeSelect组件需要的格式
-// virtualDisabled: true=编辑表单（虚拟节点不可选），false=搜索筛选（虚拟节点可选）
 function convertRegionToTreeSelect(list, virtualDisabled = true) {
   return list.map((item) => {
     const node = {
@@ -393,7 +362,6 @@ function convertRegionToTreeSelect(list, virtualDisabled = true) {
   })
 }
 
-// 在区划树中根据code查找名称
 function findRegionName(options, code) {
   for (const item of options) {
     if (item.value === code)
@@ -407,90 +375,74 @@ function findRegionName(options, code) {
   return null
 }
 
-// 获取所有节点的 key
-function getAllKeys(list, keys = []) {
+function beforeRenderList(list) {
+  return list.map(item => ({
+    ...item,
+    isLeaf: !item.hasChildren,
+  }))
+}
+
+function handleLoad(node) {
+  return new Promise((resolve) => {
+    request.get(`/system/org/children/${node.id}`)
+    .then((res) => {
+      if (res.code === 200) {
+        node.children = (res.data || []).map(item => ({
+          ...item,
+          isLeaf: !item.hasChildren,
+        }))
+      }
+      resolve()
+    })
+    .catch(() => {
+      resolve()
+    })
+  })
+}
+
+function handleExpandedKeysUpdate(keys) {
+  expandedKeys.value = keys
+}
+
+function toggleExpandLoaded() {
+  expandLoaded.value = !expandLoaded.value
+  if (expandLoaded.value) {
+    const tableData = crudRef.value?.getTableData() || []
+    expandedKeys.value = getLoadedKeys(tableData)
+  }
+  else {
+    expandedKeys.value = []
+  }
+}
+
+function getLoadedKeys(list, keys = []) {
   list.forEach((item) => {
     keys.push(item.id)
     if (item.children && item.children.length > 0) {
-      getAllKeys(item.children, keys)
+      getLoadedKeys(item.children, keys)
     }
   })
   return keys
 }
 
-// 列表数据渲染前处理
-function beforeRenderList(list) {
-  console.log('加载的树形数据:', list)
-
-  // 如果默认展开，收集所有节点的 key
-  if (expandAll.value) {
-    expandedKeys.value = getAllKeys(list)
-  }
-
-  return list
-}
-
-// 表单提交前处理
-function beforeSubmit(formData) {
-  console.log('提交的表单数据:', formData)
-  return formData
-}
-
-// 处理表格展开状态更新
-function handleExpandedKeysUpdate(keys) {
-  expandedKeys.value = keys
-
-  // 根据当前展开的 key 数量判断是否全部展开
-  const tableData = crudRef.value?.getTableData() || []
-  const allKeys = getAllKeys(tableData)
-  expandAll.value = keys.length === allKeys.length
-}
-
-// 展开/折叠所有
-function toggleExpandAll() {
-  expandAll.value = !expandAll.value
-
-  if (expandAll.value) {
-    // 展开所有：获取当前表格数据的所有 key
-    const tableData = crudRef.value?.getTableData() || []
-    expandedKeys.value = getAllKeys(tableData)
-  }
-  else {
-    // 收起所有：清空展开的 key
-    expandedKeys.value = []
-  }
-}
-
-// 新增子组织
 async function handleAdd(row) {
   await loadParentOrgOptions()
 
-  const parentIdField = editSchema.value.find(f => f.field === 'parentId')
-  const originalDefaultValue = parentIdField?.defaultValue
-
-  if (row && parentIdField) {
-    parentIdField.defaultValue = row.id
-  }
+  defaultParentId.value = row ? row.id : 0
 
   crudRef.value?.showAdd()
 
   await nextTick()
   await nextTick()
 
-  if (parentIdField && originalDefaultValue !== undefined) {
-    parentIdField.defaultValue = originalDefaultValue
-  }
+  defaultParentId.value = 0
 }
 
-// 编辑
 async function handleEdit(row) {
-  // 加载上级组织选项
   await loadParentOrgOptions()
-
   crudRef.value?.showEdit(row)
 }
 
-// 删除
 function handleDelete(row) {
   window.$dialog.warning({
     title: '确认删除',
@@ -505,7 +457,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -516,18 +468,17 @@ function handleDelete(row) {
 <style scoped>
 .system-org-page {
   height: 100%;
-  //padding: 20px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
 }
 
-/* 组织列表内容 */
 .org-content {
   flex: 1;
   min-height: 0;
   background: #fff;
   border-radius: 12px;
-  //padding: 16px 20px;
+  padding: 16px 20px;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
@@ -535,7 +486,6 @@ function handleDelete(row) {
   height: 100%;
 }
 
-/* 深色模式 */
 .dark .org-content {
   background: #0f172a !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);

@@ -73,6 +73,30 @@ public class DynamicCrudRepository {
     }
 
     /**
+     * 限量查询列表，用于动态导出。
+     */
+    public List<Map<String, Object>> selectList(String tableName,
+                                                Map<String, Object> searchParams,
+                                                Set<String> allowedSearchFields,
+                                                Map<String, String> searchTypeMap,
+                                                Map<String, String> columnMapping,
+                                                String orderBy,
+                                                int limit) {
+        validateTableName(tableName);
+
+        StringBuilder whereClause = buildBaseWhereClause(tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
+
+        String dataSql = buildSelectSql("SELECT *", tableName, whereClause);
+        dataSql += buildOrderByClause(orderBy);
+        dataSql += " LIMIT :limit";
+        params.addValue("limit", Math.max(1, limit));
+
+        return namedJdbcTemplate.queryForList(dataSql, params);
+    }
+
+    /**
      * 自定义分页查询。
      */
     public Page<Map<String, Object>> selectCustomPage(String tableName, int pageNum, int pageSize,
@@ -587,6 +611,15 @@ public class DynamicCrudRepository {
             }
             return mapping;
         });
+    }
+
+    /**
+     * DDL 执行后清理动态表结构缓存，避免追加字段后运行时继续使用旧列集合。
+     */
+    public void clearTableMetadataCache(String tableName) {
+        delFlagCache.remove(tableName);
+        tableColumnsCache.remove(tableName);
+        columnMappingCache.remove(tableName);
     }
 
     /**

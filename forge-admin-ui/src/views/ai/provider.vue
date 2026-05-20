@@ -5,10 +5,10 @@
       api="/ai/provider"
       :api-config="{
         list: 'get@/ai/provider/page',
-        detail: 'get@/ai/provider/{id}',
+        detail: 'get@/ai/provider/:id',
         add: 'post@/ai/provider',
         update: 'put@/ai/provider',
-        delete: 'delete@/ai/provider/{id}',
+        delete: 'delete@/ai/provider/:id',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"

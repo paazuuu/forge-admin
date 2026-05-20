@@ -5,6 +5,7 @@ import com.mdframe.forge.plugin.system.dto.SysOrgDTO;
 import com.mdframe.forge.plugin.system.dto.SysOrgQuery;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.service.ISysOrgService;
+import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
 import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
@@ -42,6 +43,18 @@ public class SysOrgController {
     @GetMapping("/tree")
     public RespInfo<List<SysOrg>> tree(SysOrgQuery query) {
         List<SysOrg> list = orgService.selectOrgTree(query);
+        return RespInfo.success(list);
+    }
+    
+    @GetMapping("/lazyTree")
+    public RespInfo<List<SysOrgTreeVO>> lazyTree(SysOrgQuery query) {
+        List<SysOrgTreeVO> list = orgService.selectOrgLazyTree(query);
+        return RespInfo.success(list);
+    }
+    
+    @GetMapping("/children/{parentId}")
+    public RespInfo<List<SysOrgTreeVO>> children(@PathVariable Long parentId) {
+        List<SysOrgTreeVO> list = orgService.selectOrgChildrenByParentId(parentId);
         return RespInfo.success(list);
     }
 

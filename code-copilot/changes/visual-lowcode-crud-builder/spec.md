@@ -13,7 +13,7 @@
 - 平台内置业务组件库可拖拽拼装查询筛选区、数据录入表单、数据展示列表、批量导入、数据导出、批量删除、自定义查询等常见业务能力。
 - AI 继续作为辅助能力，但生成结果进入可视化模型和页面协议，而不是让用户直接编辑技术配置。
 - 运行时继续复用现有 `AiCrudPage`、动态 CRUD、字典、脱敏、加解密、菜单注册能力，避免重做已成熟链路。
-- 第一版聚焦单表 CRUD 应用，支持受控在线创建新业务表；主子表、流程编排和跨表聚合暂不纳入第一版。
+- 第一版聚焦单表 CRUD 应用，支持受控在线创建新业务表；树形表按“树形单表”实现；主子表、流程编排和跨表聚合暂不纳入第一版运行时。
 
 ## 2. 代码现状（Research Findings）
 ### 2.1 相关入口与链路
@@ -31,7 +31,7 @@
 - `DynamicCrudController` 已提供 `/ai/crud/{configKey}/page`、详情、新增、修改、删除接口，并统一加了 `@ApiEncrypt` / `@ApiDecrypt`。
 - `DynamicCrudService` 和 `DynamicCrudRepository` 通过配置驱动动态读写表，已有字段白名单、表名校验、列映射、脱敏、字典翻译和字段加解密处理。
 - `CrudGeneratorStreamService` 已支持 SSE 流式阶段输出，并可注入表结构和页面模板约束。
-- `AiCrudConfigGenerateService#buildDescriptionPrompt` 仍在提示词示例中使用 `{id}`，与 AiCrudPage `:id` 占位符规则不一致，需要在本次改造中修正。
+- `AiCrudConfigGenerateService#buildDescriptionPrompt` 原提示词示例使用 `{id}`，与 AiCrudPage `:id` 占位符规则不一致；本次已修正为 `:id`。
 
 ### 2.3 外部方案调研
 - `form-create-designer` 是开源 Vue 低代码表单设计器，仓库说明为 MIT License，支持拖拽、JSON 表单规则、扩展组件、表单验证、布局和 AI 助手等能力。
@@ -46,15 +46,19 @@
 - 发布会创建或更新菜单资源，属于权限影响范围，必须在 Spec 中标注并经人工确认后进入 `/apply`。
 
 ## 3. 功能点
-- [ ] 新增“低代码应用搭建器”入口，以四步工作台呈现：数据模型、页面搭建、实时预览、发布上线。
-- [ ] 数据模型设计器支持新增/编辑字段、字段类型、长度、必填、默认值、字典、枚举、敏感级别、加密策略、是否搜索、是否列表展示、是否表单录入。
-- [ ] 数据模型设计器支持两种模式：绑定已有表、创建新业务表。创建新表时生成 DDL 预览，发布时按权限执行。
-- [ ] 页面搭建器支持拖拽内置业务组件：查询筛选区、数据表格、编辑表单、详情区、工具栏、批量导入、数据导出、批量删除、自定义查询。
-- [ ] 组件属性面板以业务语言配置显示标题、字段来源、控件类型、排序、宽度、校验规则、字典映射、按钮显示、导入导出开关。
-- [ ] 实时预览将草稿 `modelSchema + pageSchema` 转换为 `AiCrudPage` 所需运行时配置，不要求保存发布即可预览。
-- [ ] 一键发布将草稿转换为正式 `AiCrudConfig`，保存发布版本，必要时执行安全 DDL，注册或更新菜单，启用运行时页面。
-- [ ] 支持版本记录和回滚：每次发布保留快照，回滚后恢复配置并更新菜单。
-- [ ] AI 生成升级为生成业务模型和页面布局协议，并允许对选中组件或字段做局部优化。
+- [x] 新增“低代码应用搭建器”入口，以四步工作台呈现：数据模型、页面搭建、实时预览、发布上线。
+- [x] 数据模型设计器支持新增/编辑字段、字段类型、长度、必填、默认值、字典、枚举、敏感级别、加密策略、是否搜索、是否列表展示、是否表单录入。
+- [x] 数据模型设计器支持两种模式：绑定已有表、创建新业务表。创建新表时生成 DDL 预览，发布时按权限执行。
+- [x] 页面搭建器支持拖拽内置业务组件：查询筛选区、数据表格、编辑表单、详情区、工具栏、批量导入、数据导出、批量删除、自定义查询。
+- [x] 组件属性面板以业务语言配置显示标题、字段来源、控件类型、排序、宽度、校验规则、字典映射、按钮显示、导入导出开关。
+- [x] 实时预览将草稿 `modelSchema + pageSchema` 转换为 `AiCrudPage` 所需运行时配置，不要求保存发布即可预览。
+- [x] 一键发布将草稿转换为正式 `AiCrudConfig`，保存发布版本，必要时执行安全 DDL，注册或更新菜单，启用运行时页面。
+- [x] 支持版本记录和回滚：每次发布保留快照，回滚后恢复配置并更新菜单。
+- [x] 动态 CRUD 支持导入模板、批量导入和数据导出；导入按 `editSchema` 白名单写入，字典字段支持“标签 -> 值”转换。
+- [x] 支持树形单表：模型协议包含 `appType=TREE/treeConfig`，页面模板支持左树右表，运行时新增 `/ai/crud/{configKey}/tree` 树接口。
+- [x] 动态导出兼容后台 Excel 列配置表：当存在同 `configKey` 的列配置时，用其覆盖导出顺序、表头和字典类型；动态查询链路仍保持字段白名单、字典翻译和脱敏。
+- [x] AI 生成接口兼容返回 `modelSchema/pageSchema/options/layoutType`，AI 降级时规则引擎同步生成基础低代码协议。
+- [ ] AI SSE 前端交互升级为展示业务模型和页面布局协议，并允许对选中组件或字段做局部优化。
 - [ ] 保留现有代码包下载能力，但降级为技术人员入口，业务人员默认只看到可视化搭建和发布。
 
 ## 4. 业务规则
@@ -70,7 +74,8 @@
 - 删除已发布应用前，如果菜单已被角色授权，仍沿用现有规则禁止直接删除。
 - 在线 DDL 发布必须具备独立权限，例如 `ai:lowcode:deploy-ddl`，并记录操作日志。
 - 第一版支持在线创建新表，不支持业务人员在线删除表；在线改表仅允许受控追加字段，不允许删除/改名字段。
-- 第一版仅支持单表 CRUD，所有字段必须来自同一个业务表。
+- 第一版支持标准单表和树形单表，所有字段必须来自同一个业务表。
+- 主子表协议字段已预留，但运行时暂不启用，选择 `MASTER_DETAIL` 时返回明确业务异常。
 - 发布菜单默认挂载到 `AI管理` 目录；后续可扩展为管理员选择父菜单。
 - 发布、回滚、删除属于权限影响操作，进入 `/apply` 前需要人工确认。
 
@@ -84,9 +89,17 @@
 ### 5.1 `modelSchema` 协议
 ```json
 {
+  "appType": "SINGLE",
   "tableMode": "EXISTING",
   "tableName": "biz_contract",
   "businessName": "合同管理",
+  "treeConfig": {
+    "keyField": "id",
+    "parentField": "parentId",
+    "labelField": "name",
+    "childrenField": "children",
+    "treeTitle": "树形导航"
+  },
   "fields": [
     {
       "field": "contractName",
@@ -152,6 +165,7 @@
 | 新增 | `/ai/crud/{configKey}/import` | POST | 动态 CRUD 批量导入 |
 | 新增 | `/ai/crud/{configKey}/export` | POST | 动态 CRUD 数据导出 |
 | 新增 | `/ai/crud/{configKey}/import-template` | GET | 动态 CRUD 导入模板下载 |
+| 新增 | `/ai/crud/{configKey}/tree` | GET | 树形单表左侧树数据 |
 | 修改 | `/ai/crud-generator/stream-generate` | POST | 支持输出 `modelSchema` 和 `pageSchema` 阶段 |
 
 ## 7. 影响范围
@@ -194,6 +208,7 @@
 - 继续复用 `/ai/crud/{configKey}` 动态 CRUD 运行时，避免为每个低代码应用生成 Java/Vue 文件。
 - 动态页面模板继续使用 `catalog + ai_page_template` 双注册机制。
 - 在线建表通过专门 DDL 服务生成和执行，只允许单表 `CREATE TABLE IF NOT EXISTS` 与受控追加字段。
+- 现有 `sys_excel_export_config/sys_excel_column_config` 面向固定 Service Bean + queryMethod 的导出配置；动态 CRUD 不直接复用固定 Bean 导出引擎，但按 `configKey` 读取列配置语义，覆盖动态导出列顺序、表头和字典类型。
 
 ## 11. 执行日志
 | Task | 状态 | 实际改动文件 | 备注 |
@@ -201,6 +216,17 @@
 | Spec 确认 | done | `code-copilot/changes/visual-lowcode-crud-builder/spec.md`, `code-copilot/changes/visual-lowcode-crud-builder/tasks.md` | 已确认单表、在线建表、Naive UI 自研 |
 | Task 1 | done | `forge/db/migration/V1.0.4__add_visual_lowcode_crud_builder.sql`, `AiCrudConfig.java`, `AiCrudConfigVersion.java`, `AiCrudConfigDTO.java`, `AiCrudConfigRenderVO.java`, `AiCrudConfigVersionMapper.java`, `AiCrudConfigVersionMapper.xml`, `AiCrudConfigService.java` | 数据库迁移、实体/DTO/VO、版本 Mapper 与基础渲染字段扩展；生成器模块编译通过 |
 | Task 2 | done | `LowcodeModelSchema.java`, `LowcodeFieldSchema.java`, `LowcodePageSchema.java`, `LowcodePageZone.java`, `LowcodeRuntimeConfig.java`, `LowcodeSchemaValidator.java`, `LowcodeRuntimeConfigBuilder.java`, `AiCrudConfigService.java` | 单表协议 DTO、校验器、运行时转换器和渲染链路接入；生成器模块编译通过 |
+| Task 3 | done | `LowcodeAppDraftDTO.java`, `LowcodePublishDTO.java`, `LowcodeAppDetailVO.java`, `LowcodeVersionVO.java`, `LowcodeAppService.java`, `LowcodePublishService.java`, `MenuRegisterAdapter.java`, `MenuRegisterAdapterImpl.java`, `AiCrudConfigService.java` | 草稿/发布分离、菜单注册、版本快照和回滚；正式运行页读取发布态运行时配置 |
+| Task 4 | done | `LowcodeDdlPreviewDTO.java`, `LowcodeDdlPreviewVO.java`, `LowcodeDdlService.java`, `LowcodeDdlRepository.java`, `DynamicCrudRepository.java` | 受控在线建表和追加字段，发布时需 DDL 权限与二次确认，DDL 后刷新动态表缓存 |
+| Task 5 | done | `LowcodeAppController.java`, `LowcodeModelController.java`, `AiCrudConfigMapper.java`, `AiCrudConfigMapper.xml` | 低代码应用分页、详情、草稿、预览、发布、版本、回滚、模型校验和 DDL 预览接口；admin 聚合编译通过 |
+| Task 6 | done | `DynamicCrudController.java`, `DynamicCrudExcelService.java`, `DynamicCrudService.java`, `DynamicCrudRepository.java`, `DynamicQueryGenerator.java`, `AiCrudPage.vue`, `http/interceptors.js` | 动态 CRUD Excel 模板、导入、导出闭环；字典导入按标签反查值，上传下载走统一请求链路 |
+| Task 7 | done | `src/api/lowcode-crud.js`, `src/views/ai/lowcode-apps.vue`, `src/views/ai/lowcode-builder.vue`, `src/router/index.js` | 低代码应用列表、四步工作台入口和动态搭建器路由；前端构建通过 |
+| Task 8 | done | `LowcodeModelDesigner.vue`, `ModelFieldTable.vue`, `ModelFieldPropertyPanel.vue`, `model-schema.js`, `FieldTypeSelect.vue`, `DictTypeSelect.vue` | Naive UI 自研单表模型设计器，支持字段配置、排序、复制、删除和模型校验 |
+| Task 9 | done | `LowcodePageBuilder.vue`, `ComponentPalette.vue`, `BuilderCanvas.vue`, `BuilderZone.vue`, `ComponentPropertyPanel.vue`, `page-schema.js` | 拖拽式页面区域搭建，生成查询区、列表区、表单区和详情区 pageSchema |
+| Task 10 | done | `LowcodePreviewPane.vue`, `PublishPanel.vue`, `VersionTimeline.vue`, `lowcode-builder.vue`, `crud-page.vue` | 结构预览、DDL 预览、一键发布和版本回滚面板；运行页接入低代码 options；前端构建通过 |
+| Task 12 | done | `V1.0.4__add_visual_lowcode_crud_builder.sql`, `crud-config.vue`, `crud-generator.vue`, `ApiConfigEditor.vue`, `provider.vue`, `model.vue`, `AiCrudConfigGenerateService.java`, `SchemaGenerator.java` | 低代码菜单和权限初始化，旧入口主路径收敛到低代码工作台，JSON/AI/下载保留为技术入口，API 占位符统一为 `:id` |
+| Task 13 | done | `test-spec.md`, `implementation-summary.md`, `forge-docs/guide/lowcode-crud-builder.md` | 补充测试规格、实现总结和使用说明；AI 协议深度升级后续单独迭代 |
+| Task 14 | done | `LowcodeTreeConfig.java`, `LowcodeModelSchema.java`, `LowcodeRuntimeConfigBuilder.java`, `LowcodeSchemaValidator.java`, `DynamicCrudController.java`, `DynamicCrudService.java`, `TreeCrudTemplate.vue`, `LowcodeModelDesigner.vue`, `LowcodePageBuilder.vue`, `ComponentPropertyPanel.vue`, `page-schema.js`, `model-schema.js` | 补齐树形单表协议、左树右表运行时、父级字段隐藏查询/写入、搭建器树形配置入口；主子表协议保留但运行时阻断 |
 
 ## 12. 审查结论
 待实现后审查。

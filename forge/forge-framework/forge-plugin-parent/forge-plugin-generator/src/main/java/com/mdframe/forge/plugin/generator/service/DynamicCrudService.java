@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryExecuteDTO;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeTreeConfig;
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -33,6 +34,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class DynamicCrudService {
+
+    private static final int MAX_EXPORT_ROWS = 10000;
+    private static final int MAX_TREE_ROWS = 5000;
 
     private final DynamicCrudRepository repository;
     private final AiCrudConfigService configService;
@@ -81,12 +85,60 @@ public class DynamicCrudService {
         List<Map<String, Object>> camelCaseRecords = DynamicQueryGenerator.convertListToCamelCase(page.getRecords());
         
         // 8. 读取链路统一先解密，再做翻译和脱敏，避免密文参与展示处理
-        applyDecrypt(camelCaseRecords, config.getEncryptConfig());
-        applyDictTranslation(camelCaseRecords, config.getTransConfig());
-        applyDesensitize(camelCaseRecords, config.getDesensitizeConfig());
+        applyReadPipeline(camelCaseRecords, config);
         
         page.setRecords(camelCaseRecords);
         return page;
+    }
+
+    /**
+     * 查询动态导出数据，复用动态 CRUD 的字段白名单、解密、字典翻译和脱敏链路。
+     */
+    public List<Map<String, Object>> selectExportRows(String configKey,
+                                                      DynamicCrudQuery query,
+                                                      Integer maxRows) {
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        Map<String, String> columnMapping = repository.getColumnMapping(tableName);
+        Set<String> allowedSearchFields = DynamicQueryGenerator.extractFieldNames(config.getSearchSchema(), objectMapper);
+        Map<String, String> searchTypeMap = DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper);
+        Map<String, Object> searchParams = query != null ? query.getSearchParams() : null;
+        int limit = normalizeExportLimit(maxRows);
+
+        List<Map<String, Object>> rows = repository.selectList(
+                tableName,
+                searchParams,
+                allowedSearchFields,
+                searchTypeMap,
+                columnMapping,
+                "id DESC",
+                limit
+        );
+
+        List<Map<String, Object>> camelCaseRows = DynamicQueryGenerator.convertListToCamelCase(rows);
+        applyReadPipeline(camelCaseRows, config);
+        return camelCaseRows;
+    }
+
+    /**
+     * 查询树形导航数据，供树形单表模板左侧树使用。
+     */
+    public List<Map<String, Object>> selectTree(String configKey) {
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        List<Map<String, Object>> rows = repository.selectList(
+                tableName,
+                null,
+                Collections.emptySet(),
+                Collections.emptyMap(),
+                repository.getColumnMapping(tableName),
+                "id ASC",
+                MAX_TREE_ROWS
+        );
+
+        List<Map<String, Object>> camelCaseRows = DynamicQueryGenerator.convertListToCamelCase(rows);
+        applyReadPipeline(camelCaseRows, config);
+        return buildTree(camelCaseRows, resolveTreeConfig(config));
     }
 
     /**
@@ -113,9 +165,7 @@ public class DynamicCrudService {
         );
 
         List<Map<String, Object>> camelCaseRecords = DynamicQueryGenerator.convertListToCamelCase(page.getRecords());
-        applyDecrypt(camelCaseRecords, config.getEncryptConfig());
-        applyDictTranslation(camelCaseRecords, config.getTransConfig());
-        applyDesensitize(camelCaseRecords, config.getDesensitizeConfig());
+        applyReadPipeline(camelCaseRecords, config);
         page.setRecords(camelCaseRecords);
         return page;
     }
@@ -136,9 +186,7 @@ public class DynamicCrudService {
         Map<String, Object> camelCaseRecord = DynamicQueryGenerator.convertMapToCamelCase(record);
         
         // 单条读取同样遵循“解密 -> 翻译 -> 脱敏”顺序
-        applyDecrypt(Collections.singletonList(camelCaseRecord), config.getEncryptConfig());
-        applyDictTranslation(Collections.singletonList(camelCaseRecord), config.getTransConfig());
-        applyDesensitize(Collections.singletonList(camelCaseRecord), config.getDesensitizeConfig());
+        applyReadPipeline(Collections.singletonList(camelCaseRecord), config);
         
         return camelCaseRecord;
     }
@@ -238,6 +286,134 @@ public class DynamicCrudService {
         
         // 执行删除
         repository.deleteById(tableName, id, logicDelete);
+    }
+
+    /**
+     * 暴露运行时配置给动态导入导出服务，仍统一走发布态校验。
+     */
+    public AiCrudConfig getRuntimeConfig(String configKey) {
+        return getConfig(configKey);
+    }
+
+    private void applyReadPipeline(List<Map<String, Object>> rows, AiCrudConfig config) {
+        applyDecrypt(rows, config.getEncryptConfig());
+        applyDictTranslation(rows, config.getTransConfig());
+        applyDesensitize(rows, config.getDesensitizeConfig());
+    }
+
+    private LowcodeTreeConfig resolveTreeConfig(AiCrudConfig config) {
+        LowcodeTreeConfig treeConfig = new LowcodeTreeConfig();
+        applyTreeConfigFromModel(config, treeConfig);
+        applyTreeConfigFromOptions(config, treeConfig);
+        if (StringUtils.isBlank(treeConfig.getKeyField())) {
+            treeConfig.setKeyField("id");
+        }
+        if (StringUtils.isBlank(treeConfig.getParentField())) {
+            treeConfig.setParentField("parentId");
+        }
+        if (StringUtils.isBlank(treeConfig.getLabelField())) {
+            treeConfig.setLabelField("name");
+        }
+        if (StringUtils.isBlank(treeConfig.getChildrenField())) {
+            treeConfig.setChildrenField("children");
+        }
+        return treeConfig;
+    }
+
+    private void applyTreeConfigFromModel(AiCrudConfig config, LowcodeTreeConfig target) {
+        if (StringUtils.isBlank(config.getModelSchema())) {
+            return;
+        }
+        try {
+            JsonNode treeNode = objectMapper.readTree(config.getModelSchema()).get("treeConfig");
+            applyTreeConfigNode(treeNode, target);
+        } catch (Exception e) {
+            log.warn("[DynamicCrudService] 解析modelSchema.treeConfig失败, configKey={}", config.getConfigKey(), e);
+        }
+    }
+
+    private void applyTreeConfigFromOptions(AiCrudConfig config, LowcodeTreeConfig target) {
+        if (StringUtils.isBlank(config.getOptions())) {
+            return;
+        }
+        try {
+            JsonNode treeNode = objectMapper.readTree(config.getOptions()).get("treeConfig");
+            applyTreeConfigNode(treeNode, target);
+        } catch (Exception e) {
+            log.warn("[DynamicCrudService] 解析options.treeConfig失败, configKey={}", config.getConfigKey(), e);
+        }
+    }
+
+    private void applyTreeConfigNode(JsonNode treeNode, LowcodeTreeConfig target) {
+        if (treeNode == null || !treeNode.isObject()) {
+            return;
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "keyField"))) {
+            target.setKeyField(text(treeNode, "keyField"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "parentField"))) {
+            target.setParentField(text(treeNode, "parentField"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "labelField"))) {
+            target.setLabelField(text(treeNode, "labelField"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "childrenField"))) {
+            target.setChildrenField(text(treeNode, "childrenField"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "treeTitle"))) {
+            target.setTreeTitle(text(treeNode, "treeTitle"));
+        }
+    }
+
+    private String text(JsonNode node, String fieldName) {
+        JsonNode value = node.get(fieldName);
+        return value == null || value.isNull() ? null : value.asText();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> buildTree(List<Map<String, Object>> rows, LowcodeTreeConfig treeConfig) {
+        Map<String, Map<String, Object>> nodeMap = new LinkedHashMap<>();
+        String keyField = treeConfig.getKeyField();
+        String parentField = treeConfig.getParentField();
+        String childrenField = treeConfig.getChildrenField();
+
+        for (Map<String, Object> row : rows) {
+            String key = normalizeTreeKey(row.get(keyField));
+            if (StringUtils.isBlank(key)) {
+                continue;
+            }
+            Map<String, Object> node = new LinkedHashMap<>(row);
+            node.put(childrenField, new ArrayList<Map<String, Object>>());
+            nodeMap.put(key, node);
+        }
+
+        List<Map<String, Object>> roots = new ArrayList<>();
+        for (Map<String, Object> node : nodeMap.values()) {
+            String key = normalizeTreeKey(node.get(keyField));
+            String parentKey = normalizeTreeKey(node.get(parentField));
+            Map<String, Object> parent = nodeMap.get(parentKey);
+            if (isRootParent(parentKey) || parent == null || key.equals(parentKey)) {
+                roots.add(node);
+                continue;
+            }
+            Object children = parent.get(childrenField);
+            if (children instanceof List<?> childList) {
+                ((List<Map<String, Object>>) childList).add(node);
+            }
+        }
+        return roots;
+    }
+
+    private boolean isRootParent(String parentKey) {
+        return StringUtils.isBlank(parentKey) || "0".equals(parentKey) || "null".equalsIgnoreCase(parentKey);
+    }
+
+    private String normalizeTreeKey(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return StringUtils.isBlank(text) ? null : text;
     }
 
     // ==================== 加解密处理 ====================
@@ -441,6 +617,9 @@ public class DynamicCrudService {
         if (!"CONFIG".equals(config.getMode())) {
             throw new BusinessException("该配置不是配置驱动模式: " + configKey);
         }
+        if ("LOWCODE".equals(config.getBuildMode()) && !"PUBLISHED".equals(config.getPublishStatus())) {
+            throw new BusinessException("低代码应用尚未发布: " + configKey);
+        }
         return config;
     }
 
@@ -462,5 +641,12 @@ public class DynamicCrudService {
             return 10;
         }
         return Math.min(pageSize, 100);
+    }
+
+    private int normalizeExportLimit(Integer maxRows) {
+        if (maxRows == null || maxRows < 1) {
+            return MAX_EXPORT_ROWS;
+        }
+        return Math.min(maxRows, MAX_EXPORT_ROWS);
     }
 }

@@ -498,10 +498,12 @@ public class DynamicQueryGenerator {
                     if (fieldNode == null || fieldNode.isNull()) continue;
                     String field = fieldNode.asText();
                     
-                    // 优先使用searchType字段
+                    // 优先使用 searchType 字段，兼容低代码协议里的 queryType 字段
                     JsonNode searchTypeNode = item.get("searchType");
                     if (searchTypeNode != null && !searchTypeNode.isNull()) {
                         typeMap.put(field, searchTypeNode.asText());
+                    } else if (item.has("queryType") && !item.get("queryType").isNull()) {
+                        typeMap.put(field, item.get("queryType").asText());
                     } else {
                         // 根据type自动推断
                         String type = item.has("type") ? item.get("type").asText("") : "";

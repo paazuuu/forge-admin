@@ -17,4 +17,11 @@ public interface MenuRegisterAdapter {
     default boolean hasRolePermission(Long menuResourceId) {
         return false;
     }
+
+    /**
+     * 低代码发布菜单默认挂载的 AI 管理目录。
+     */
+    default Long resolveDefaultLowcodeParentId() {
+        return 0L;
+    }
 }

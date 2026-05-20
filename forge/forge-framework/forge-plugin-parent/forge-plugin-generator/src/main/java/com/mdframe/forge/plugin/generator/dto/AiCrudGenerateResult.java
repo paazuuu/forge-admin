@@ -17,6 +17,10 @@ public class AiCrudGenerateResult {
     private String desensitizeConfig;
     private String encryptConfig;
     private String transConfig;
+    private String modelSchema;
+    private String pageSchema;
+    private String options;
+    private String layoutType;
     private String errorMessage;
     private boolean fallback;
 

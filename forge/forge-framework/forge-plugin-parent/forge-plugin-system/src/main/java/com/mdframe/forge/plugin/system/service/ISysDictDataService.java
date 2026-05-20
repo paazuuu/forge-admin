@@ -30,6 +30,16 @@ public interface ISysDictDataService extends IService<SysDictData> {
     List<SysDictData> selectDictDataByType(String dictType);
 
     /**
+     * 清除全部字典数据缓存
+     */
+    void clearDictDataCache();
+
+    /**
+     * 清除指定字典类型的数据缓存
+     */
+    void clearDictDataCache(String dictType);
+
+    /**
      * 根据ID查询字典数据详情
      */
     SysDictData selectDictDataById(Long dictCode);

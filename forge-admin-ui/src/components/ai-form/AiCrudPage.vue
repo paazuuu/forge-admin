@@ -240,13 +240,10 @@
       :mask-closable="false"
     >
       <n-upload
-        :action="importApi"
-        :headers="importHeaders"
         :data="importData"
+        :custom-request="handleImportRequest"
         :max="1"
         accept=".xlsx,.xls"
-        @finish="handleImportFinish"
-        @error="handleImportError"
       >
         <n-upload-dragger>
           <div style="margin-bottom: 12px">
@@ -1395,33 +1392,87 @@ function handleShowImport() {
 }
 
 /**
- * 导入完成
+ * 自定义导入请求，复用统一 axios 拦截器补齐认证和防重放头。
  */
-function handleImportFinish({ event }) {
-  const response = JSON.parse(event.target.response)
+async function handleImportRequest({ file, data, onFinish, onError, onProgress }) {
+  try {
+    const { method, url } = parseApiConfig('import', props.importApi, 'post')
+    const requestMethod = method === 'postEncrypt' ? 'post' : method.toLowerCase()
+    const formData = new FormData()
+    formData.append('file', file.file)
 
-  if (response.code === 200) {
-    window.$message.success('导入成功')
+    const extraData = { ...props.importData, ...(data || {}) }
+    Object.entries(extraData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, value)
+      }
+    })
+
+    const response = await request({
+      method: requestMethod,
+      url,
+      data: formData,
+      headers: props.importHeaders,
+      encrypt: false,
+      onUploadProgress: (event) => {
+        if (!event.total)
+          return
+        onProgress?.({ percent: Math.round((event.loaded / event.total) * 100) })
+      },
+    })
+
+    const result = response?.data || response
+    if (result?.success === false) {
+      window.$message.error(buildImportFailureMessage(result))
+      onError?.()
+      return
+    }
+
+    window.$message.success(result?.summary || '导入成功')
     importModalVisible.value = false
     loadList()
+    onFinish?.()
   }
-  else {
-    window.$message.error(response.msg || '导入失败')
+  catch (error) {
+    console.error('导入失败:', error)
+    window.$message.error(error?.message || '导入失败')
+    onError?.()
   }
 }
 
-/**
- * 导入失败
- */
-function handleImportError() {
-  window.$message.error('导入失败')
+function buildImportFailureMessage(result) {
+  const firstError = result?.errors?.[0]
+  if (!firstError) {
+    return result?.summary || '导入校验失败'
+  }
+  const label = firstError.label || firstError.field || '字段'
+  return `导入校验失败：第${firstError.rowNum || '-'}行 ${label}，${firstError.message || '数据不正确'}`
 }
 
 /**
  * 下载导入模板
  */
-function handleDownloadTemplate() {
-  window.open(props.importTemplateUrl, '_blank')
+async function handleDownloadTemplate() {
+  if (!props.importTemplateUrl && !props.apiConfig.importTemplate) {
+    window.$message.warning('未配置导入模板地址')
+    return
+  }
+
+  try {
+    const { method, url } = parseApiConfig('importTemplate', props.importTemplateUrl, 'get')
+    const response = await request({
+      method: method === 'postEncrypt' ? 'post' : method.toLowerCase(),
+      url,
+      responseType: 'blob',
+      rawResponse: true,
+      encrypt: false,
+    })
+    downloadBlobResponse(response, props.exportFileName || '导入模板.xlsx')
+  }
+  catch (error) {
+    console.error('下载导入模板失败:', error)
+    window.$message.error(error?.message || '下载导入模板失败')
+  }
 }
 
 /**
@@ -1448,26 +1499,61 @@ async function handleExport() {
     }
 
     // 发送请求
+    let response
     if (useEncrypt && requestMethod === 'postEncrypt') {
-      // 使用加密请求
-      await postEncrypt(url, params)
+      response = await postEncrypt(url, params, { responseType: 'blob', rawResponse: true })
     }
     else {
-      // 使用普通请求
-      await request({
+      response = await request({
         method: requestMethod,
         url,
         data: requestMethod === 'get' ? undefined : params,
         params: requestMethod === 'get' ? params : undefined,
+        responseType: 'blob',
+        rawResponse: true,
+        encrypt: false,
       })
     }
 
+    downloadBlobResponse(response, props.exportFileName || '导出数据.xlsx')
     window.$message.success('导出成功')
   }
   catch (error) {
     console.error('导出失败:', error)
     window.$message.error('导出失败')
   }
+}
+
+function downloadBlobResponse(response, fallbackName) {
+  const blob = response?.data instanceof Blob ? response.data : response
+  if (!(blob instanceof Blob)) {
+    throw new Error('下载响应不是文件流')
+  }
+
+  const fileName = resolveDownloadFileName(response, fallbackName)
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function resolveDownloadFileName(response, fallbackName) {
+  const disposition = response?.headers?.['content-disposition']
+    || response?.headers?.get?.('content-disposition')
+    || ''
+  const utf8Match = disposition.match(/filename\*=utf-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+  const normalMatch = disposition.match(/filename="?([^";]+)"?/i)
+  if (normalMatch?.[1]) {
+    return decodeURIComponent(normalMatch[1])
+  }
+  return fallbackName
 }
 
 /**

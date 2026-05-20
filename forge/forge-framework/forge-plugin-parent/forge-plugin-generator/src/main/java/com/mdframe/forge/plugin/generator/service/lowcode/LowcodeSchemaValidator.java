@@ -35,6 +35,7 @@ public class LowcodeSchemaValidator {
             "id", "tenant_id", "create_by", "create_time", "create_dept", "update_by", "update_time", "del_flag"
     );
     private static final Set<String> TABLE_MODES = Set.of("EXISTING", "CREATE");
+    private static final Set<String> APP_TYPES = Set.of("SINGLE", "TREE", "MASTER_DETAIL");
     private static final Set<String> DATA_TYPES = Set.of(
             "varchar", "char", "text", "longtext", "int", "bigint", "decimal", "date", "datetime", "time", "tinyint"
     );
@@ -58,6 +59,13 @@ public class LowcodeSchemaValidator {
         if (!TABLE_MODES.contains(tableMode)) {
             throw new BusinessException("不支持的数据表模式: " + modelSchema.getTableMode());
         }
+        String appType = StringUtils.defaultIfBlank(modelSchema.getAppType(), "SINGLE").toUpperCase(Locale.ROOT);
+        if (!APP_TYPES.contains(appType)) {
+            throw new BusinessException("不支持的应用类型: " + modelSchema.getAppType());
+        }
+        if ("MASTER_DETAIL".equals(appType)) {
+            throw new BusinessException("主子表低代码运行时尚未启用，请先使用单表或树形单表");
+        }
         validateTableName(modelSchema.getTableName());
         if (modelSchema.getFields() == null || modelSchema.getFields().isEmpty()) {
             throw new BusinessException("数据模型至少需要一个业务字段");
@@ -76,6 +84,11 @@ public class LowcodeSchemaValidator {
                 throw new BusinessException("数据库列名重复: " + column);
             }
         }
+        if ("TREE".equals(appType) && modelSchema.getTreeConfig() != null
+                && StringUtils.isNotBlank(modelSchema.getTreeConfig().getParentField())
+                && !fields.contains(modelSchema.getTreeConfig().getParentField())) {
+            throw new BusinessException("树形父级字段不存在: " + modelSchema.getTreeConfig().getParentField());
+        }
     }
 
     public void validatePage(LowcodePageSchema pageSchema, LowcodeModelSchema modelSchema) {
@@ -93,6 +106,7 @@ public class LowcodeSchemaValidator {
         for (LowcodePageZone zone : pageSchema.getZones()) {
             validateZone(zone, modelFields);
         }
+        validateTreeRuntime(modelSchema, pageSchema, modelFields);
     }
 
     private void validateTableName(String tableName) {
@@ -156,5 +170,68 @@ public class LowcodeSchemaValidator {
                 throw new BusinessException("页面区域引用了不存在的字段: " + ref);
             }
         }
+    }
+
+    private void validateTreeRuntime(LowcodeModelSchema modelSchema,
+                                     LowcodePageSchema pageSchema,
+                                     Set<String> modelFields) {
+        if (!isTreeRuntime(modelSchema, pageSchema)) {
+            return;
+        }
+        String parentField = resolveTreeParentField(modelSchema, pageSchema);
+        if (StringUtils.isBlank(parentField) || !modelFields.contains(parentField)) {
+            throw new BusinessException("树形表必须配置父级字段，请先添加 parentId/pid 等字段或在树形配置中指定父级字段");
+        }
+        String labelField = resolveTreeLabelField(modelSchema, pageSchema);
+        if (StringUtils.isNotBlank(labelField) && !modelFields.contains(labelField)) {
+            throw new BusinessException("树形显示字段不存在: " + labelField);
+        }
+    }
+
+    private boolean isTreeRuntime(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+        String appType = StringUtils.defaultIfBlank(modelSchema.getAppType(), "SINGLE").toUpperCase(Locale.ROOT);
+        return "TREE".equals(appType) || (pageSchema != null && "tree-crud".equals(pageSchema.getLayoutType()));
+    }
+
+    private String resolveTreeParentField(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+        String parentField = modelSchema.getTreeConfig() != null ? modelSchema.getTreeConfig().getParentField() : null;
+        parentField = StringUtils.defaultIfBlank(parentField, readPageTreeConfig(pageSchema, "parentField"));
+        if (StringUtils.isNotBlank(parentField)) {
+            return parentField;
+        }
+        return modelSchema.getFields().stream()
+                .map(LowcodeFieldSchema::getField)
+                .filter(field -> "parentId".equals(field) || "pid".equals(field) || "parentCode".equals(field))
+                .findFirst()
+                .orElse("parentId");
+    }
+
+    private String resolveTreeLabelField(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+        String labelField = modelSchema.getTreeConfig() != null ? modelSchema.getTreeConfig().getLabelField() : null;
+        labelField = StringUtils.defaultIfBlank(labelField, readPageTreeConfig(pageSchema, "labelField"));
+        if (StringUtils.isNotBlank(labelField)) {
+            return labelField;
+        }
+        return modelSchema.getFields().stream()
+                .map(LowcodeFieldSchema::getField)
+                .filter(field -> "name".equals(field) || "title".equals(field) || "label".equals(field))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String readPageTreeConfig(LowcodePageSchema pageSchema, String key) {
+        if (pageSchema == null || pageSchema.getZones() == null) {
+            return null;
+        }
+        return pageSchema.getZones().stream()
+                .filter(zone -> "table".equals(zone.getZoneKey()))
+                .map(LowcodePageZone::getProps)
+                .filter(props -> props != null && props.get("treeConfig") instanceof java.util.Map<?, ?>)
+                .map(props -> (java.util.Map<?, ?>) props.get("treeConfig"))
+                .map(treeConfig -> treeConfig.get(key))
+                .filter(value -> value != null && StringUtils.isNotBlank(String.valueOf(value)))
+                .map(String::valueOf)
+                .findFirst()
+                .orElse(null);
     }
 }

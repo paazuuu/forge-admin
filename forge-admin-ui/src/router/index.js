@@ -86,6 +86,12 @@ export const manualRoutes = [
     meta: { title: 'CRUD页面' },
   },
   {
+    name: 'AiLowcodeBuilderDynamic',
+    path: '/ai/lowcode-builder/:id?',
+    component: () => import('@/views/ai/lowcode-builder.vue'),
+    meta: { title: '低代码搭建器' },
+  },
+  {
     name: 'ReportSsoBridge',
     path: SSO_BRIDGE_ROUTE,
     component: () => import('@/views/report/design.vue'),

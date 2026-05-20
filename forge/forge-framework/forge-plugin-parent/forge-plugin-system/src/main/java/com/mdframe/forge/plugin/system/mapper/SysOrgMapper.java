@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.system.dto.SysOrgQuery;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
+import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -30,4 +31,8 @@ public interface SysOrgMapper extends BaseMapper<SysOrg> {
      * 查询组织及其子组织ID列表
      */
     List<Long> selectOrgAndChildrenIds(@Param("orgId") Long orgId);
+    
+    List<SysOrgTreeVO> selectOrgLazyTree(@Param("query") SysOrgQuery query);
+    
+    List<SysOrgTreeVO> selectOrgChildrenByParentId(@Param("parentId") Long parentId);
 }

@@ -133,21 +133,35 @@ const crudProps = computed(() => {
   if (!renderConfig.value)
     return {}
   const cfg = renderConfig.value
+  const options = cfg.options || {}
   return {
     searchSchema: transformFields(cfg.searchSchema),
     columns: transformColumns(cfg.columnsSchema, cfg.transConfig),
     editSchema: transformFields(cfg.editSchema),
     apiConfig: cfg.apiConfig || {},
-    options: cfg.options || {},
+    options,
     rowKey: cfg.rowKey || 'id',
-    modalType: cfg.modalType || 'drawer',
-    modalWidth: cfg.modalWidth || '800px',
-    editGridCols: cfg.editGridCols || 1,
-    searchGridCols: cfg.searchGridCols || 4,
-    enableCustomQuery: true,
+    modalType: options.modalType || cfg.modalType || 'drawer',
+    modalWidth: options.modalWidth || cfg.modalWidth || '800px',
+    editGridCols: options.editGridCols || cfg.editGridCols || 1,
+    searchGridCols: options.searchGridCols || cfg.searchGridCols || 4,
+    hideBatchDelete: !!options.hideBatchDelete,
+    showImport: !!options.showImport,
+    showExport: !!options.showExport,
+    importApi: extractApiUrl(cfg.apiConfig?.import),
+    exportApi: cfg.apiConfig?.export || '',
+    importTemplateUrl: extractApiUrl(cfg.apiConfig?.importTemplate),
+    enableCustomQuery: options.enableCustomQuery !== false,
     customQueryConfigKey: cfg.configKey,
   }
 })
+
+function extractApiUrl(apiConfigValue) {
+  if (!apiConfigValue)
+    return ''
+  const parts = String(apiConfigValue).split('@')
+  return parts.length > 1 ? parts.slice(1).join('@') : apiConfigValue
+}
 
 /**
  * 预加载所有用到的字典数据

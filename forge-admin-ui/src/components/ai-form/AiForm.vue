@@ -189,6 +189,10 @@ watch(() => props.value, (newVal) => {
 }, { immediate: true, deep: true })
 
 function isFieldVisible(field) {
+  if (field.hidden || field.visible === false) {
+    return false
+  }
+
   if (typeof field.vIf === 'function') {
     return field.vIf(formValue.value)
   }

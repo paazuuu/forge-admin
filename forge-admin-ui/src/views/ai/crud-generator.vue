@@ -132,11 +132,17 @@
                 </n-icon>
               </div>
               <div class="empty-chat-title">
-                AI CRUD 配置助手
+                AI 辅助配置
               </div>
               <div class="empty-chat-tip">
-                描述你的需求，AI 将自动生成搜索、表格、表单等完整配置
+                面向技术人员生成和优化 CRUD 配置；业务人员优先使用低代码工作台完成可视化搭建和发布
               </div>
+              <n-button size="small" type="primary" class="empty-chat-action" @click="router.push('/ai/lowcode-apps')">
+                <template #icon>
+                  <n-icon><ServerOutline /></n-icon>
+                </template>
+                进入低代码工作台
+              </n-button>
             </div>
             <div class="example-prompts">
               <div class="example-title">
@@ -535,7 +541,7 @@
 </template>
 
 <script setup>
-import { AddOutline, ArrowBackOutline, ChevronBackOutline, ChevronDownOutline, ChevronForwardOutline, ChevronUpOutline, CloseOutline, CopyOutline, DownloadOutline, PaperPlaneOutline, SaveOutline, SparklesOutline } from '@vicons/ionicons5'
+import { AddOutline, ArrowBackOutline, ChevronBackOutline, ChevronDownOutline, ChevronForwardOutline, ChevronUpOutline, CloseOutline, CopyOutline, DownloadOutline, PaperPlaneOutline, SaveOutline, ServerOutline, SparklesOutline } from '@vicons/ionicons5'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCrudGenerator } from '@/composables/useCrudGenerator'
@@ -1415,6 +1421,13 @@ onMounted(async () => {
   font-size: 16px;
   font-weight: 500;
   color: #334155;
+  max-width: 520px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.empty-chat-action {
+  min-width: 148px;
 }
 
 .example-prompts {

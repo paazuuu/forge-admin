@@ -22,7 +22,7 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
     public Long registerMenu(String menuName, Long parentId, String configKey, Integer sort) {
         SysResource resource = new SysResource();
         resource.setResourceName(menuName);
-        resource.setParentId(parentId);
+        resource.setParentId(parentId != null ? parentId : resolveDefaultLowcodeParentId());
         resource.setResourceType(2);
         resource.setSort(sort);
         resource.setPath("/ai/crud-page/" + configKey);
@@ -65,5 +65,15 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         LambdaQueryWrapper<SysRoleResource> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysRoleResource::getResourceId, menuResourceId);
         return roleResourceMapper.selectCount(wrapper) > 0;
+    }
+
+    @Override
+    public Long resolveDefaultLowcodeParentId() {
+        LambdaQueryWrapper<SysResource> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysResource::getResourceType, 1)
+                .eq(SysResource::getPath, "/ai")
+                .last("LIMIT 1");
+        SysResource aiRoot = resourceService.getOne(wrapper);
+        return aiRoot != null && aiRoot.getId() != null ? aiRoot.getId() : 0L;
     }
 }

@@ -3,6 +3,8 @@ package com.mdframe.forge.plugin.system.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.mdframe.forge.starter.core.domain.BaseEntity;
 import com.mdframe.forge.starter.tenant.core.TenantEntity;
+import com.mdframe.forge.starter.trans.annotation.DictTrans;
+import com.mdframe.forge.starter.trans.annotation.TransField;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -14,6 +16,7 @@ import java.util.List;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_org")
+@DictTrans
 public class SysOrg extends TenantEntity {
 
     private static final long serialVersionUID = 1L;
@@ -43,16 +46,18 @@ public class SysOrg extends TenantEntity {
      * 排序（值越小越靠前）
      */
     private Integer sort;
-
-    /**
-     * 组织类型（1-公司，2-部门，3-小组）
-     */
+    
+    @TransField(dictType = "sys_org_type")
     private Integer orgType;
-
-    /**
-     * 组织状态（0-禁用，1-正常）
-     */
+    
+    @TableField(exist = false)
+    private String orgTypeName;
+    
+    @TransField(dictType = "sys_normal_disable")
     private Integer orgStatus;
+    
+    @TableField(exist = false)
+    private String orgStatusName;
 
     /**
      * 负责人ID（关联sys_user.id）

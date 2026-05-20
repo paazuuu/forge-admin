@@ -192,10 +192,10 @@ public class SchemaGenerator {
     Map<String, String> buildApiConfig(String configKey) {
         Map<String, String> apiConfig = new LinkedHashMap<>();
         apiConfig.put("list", "get@/ai/crud/" + configKey + "/page");
-        apiConfig.put("detail", "get@/ai/crud/" + configKey + "/{id}");
+        apiConfig.put("detail", "get@/ai/crud/" + configKey + "/:id");
         apiConfig.put("create", "post@/ai/crud/" + configKey);
         apiConfig.put("update", "put@/ai/crud/" + configKey);
-        apiConfig.put("delete", "delete@/ai/crud/" + configKey + "/{id}");
+        apiConfig.put("delete", "delete@/ai/crud/" + configKey + "/:id");
         return apiConfig;
     }
 

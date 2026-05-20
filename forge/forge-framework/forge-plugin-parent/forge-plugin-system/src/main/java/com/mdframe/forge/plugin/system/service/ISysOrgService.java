@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.mdframe.forge.plugin.system.dto.SysOrgDTO;
 import com.mdframe.forge.plugin.system.dto.SysOrgQuery;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
+import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
 
 import java.util.List;
 
@@ -68,4 +69,9 @@ public interface ISysOrgService extends IService<SysOrg> {
      * @return 组织ID列表（包含指定组织及其所有子组织）
      */
     List<Long> selectOrgAndChildrenIds(Long orgId);
+    
+    List<SysOrgTreeVO> selectOrgLazyTree(SysOrgQuery query);
+    
+    List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId);
+    
 }

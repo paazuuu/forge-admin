@@ -54,6 +54,12 @@
             <artifactId>forge-starter-trans</artifactId>
         </dependency>
 
+        <!-- Starter Excel -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-excel</artifactId>
+        </dependency>
+
         <!-- Velocity模板引擎 -->
         <dependency>
             <groupId>org.apache.velocity</groupId>

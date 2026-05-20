@@ -49,8 +49,8 @@ public class LowcodeRuntimeConfigBuilder {
             runtimeConfig.setSearchSchema(objectMapper.writeValueAsString(buildSearchSchema(modelSchema, pageSchema)));
             runtimeConfig.setColumnsSchema(objectMapper.writeValueAsString(buildColumnsSchema(modelSchema, pageSchema)));
             runtimeConfig.setEditSchema(objectMapper.writeValueAsString(buildEditSchema(modelSchema, pageSchema)));
-            runtimeConfig.setApiConfig(objectMapper.writeValueAsString(buildApiConfig(configKey)));
-            runtimeConfig.setOptions(objectMapper.writeValueAsString(buildOptions(pageSchema)));
+            runtimeConfig.setApiConfig(objectMapper.writeValueAsString(buildApiConfig(configKey, modelSchema, pageSchema)));
+            runtimeConfig.setOptions(objectMapper.writeValueAsString(buildOptions(modelSchema, pageSchema)));
             runtimeConfig.setDictConfig(objectMapper.writeValueAsString(buildDictConfig(modelSchema)));
             runtimeConfig.setDesensitizeConfig(objectMapper.writeValueAsString(buildDesensitizeConfig(modelSchema)));
             runtimeConfig.setEncryptConfig(objectMapper.writeValueAsString(buildEncryptConfig(modelSchema)));
@@ -62,10 +62,12 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private List<Map<String, Object>> buildSearchSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
-        return resolveFields(modelSchema, pageSchema, "search", field -> Boolean.TRUE.equals(field.getSearchable()))
+        List<Map<String, Object>> fields = resolveFields(modelSchema, pageSchema, "search", field -> Boolean.TRUE.equals(field.getSearchable()))
                 .stream()
                 .map(this::buildSearchField)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
+        appendTreeRuntimeField(fields, modelSchema, pageSchema, "search");
+        return fields;
     }
 
     private List<Map<String, Object>> buildColumnsSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
@@ -86,16 +88,21 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private List<Map<String, Object>> buildEditSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
-        return resolveFields(modelSchema, pageSchema, "edit",
+        List<Map<String, Object>> fields = resolveFields(modelSchema, pageSchema, "edit",
                 field -> field.getFormVisible() == null || Boolean.TRUE.equals(field.getFormVisible()))
                 .stream()
                 .map(this::buildEditField)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
+        appendTreeRuntimeField(fields, modelSchema, pageSchema, "edit");
+        return fields;
     }
 
-    private Map<String, String> buildApiConfig(String configKey) {
+    private Map<String, String> buildApiConfig(String configKey, LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
         Map<String, String> apiConfig = new LinkedHashMap<>();
         apiConfig.put("list", "get@/ai/crud/" + configKey + "/page");
+        if (isTreeRuntime(modelSchema, pageSchema)) {
+            apiConfig.put("tree", "get@/ai/crud/" + configKey + "/tree");
+        }
         apiConfig.put("detail", "get@/ai/crud/" + configKey + "/:id");
         apiConfig.put("create", "post@/ai/crud/" + configKey);
         apiConfig.put("update", "put@/ai/crud/" + configKey);
@@ -106,7 +113,7 @@ public class LowcodeRuntimeConfigBuilder {
         return apiConfig;
     }
 
-    private Map<String, Object> buildOptions(LowcodePageSchema pageSchema) {
+    private Map<String, Object> buildOptions(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
         Map<String, Object> options = new LinkedHashMap<>();
         options.put("modalType", "drawer");
         options.put("modalWidth", "800px");
@@ -114,13 +121,118 @@ public class LowcodeRuntimeConfigBuilder {
         options.put("editGridCols", 1);
 
         LowcodePageZone tableZone = findZone(pageSchema, "table");
+        Object treeConfigOverrides = null;
         if (tableZone != null && tableZone.getProps() != null) {
             copyOption(tableZone.getProps(), options, "showImport");
             copyOption(tableZone.getProps(), options, "showExport");
             copyOption(tableZone.getProps(), options, "hideBatchDelete");
             copyOption(tableZone.getProps(), options, "enableCustomQuery");
+            treeConfigOverrides = tableZone.getProps().get("treeConfig");
+        }
+        if (isTreeRuntime(modelSchema, pageSchema)) {
+            options.put("treeConfig", buildTreeConfig(modelSchema, treeConfigOverrides));
         }
         return options;
+    }
+
+    private boolean isTreeRuntime(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+        String appType = StringUtils.defaultIfBlank(modelSchema.getAppType(), "SINGLE").toUpperCase(Locale.ROOT);
+        return "TREE".equals(appType) || "tree-crud".equals(pageSchema.getLayoutType());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildTreeConfig(LowcodeModelSchema modelSchema, Object overrides) {
+        Map<String, Object> treeConfig = new LinkedHashMap<>();
+        if (modelSchema.getTreeConfig() != null) {
+            putIfNotBlank(treeConfig, "keyField", modelSchema.getTreeConfig().getKeyField());
+            putIfNotBlank(treeConfig, "parentField", modelSchema.getTreeConfig().getParentField());
+            putIfNotBlank(treeConfig, "labelField", modelSchema.getTreeConfig().getLabelField());
+            putIfNotBlank(treeConfig, "childrenField", modelSchema.getTreeConfig().getChildrenField());
+            putIfNotBlank(treeConfig, "treeTitle", modelSchema.getTreeConfig().getTreeTitle());
+        }
+        if (overrides instanceof Map<?, ?> map) {
+            putIfNotBlank(treeConfig, "keyField", text(map.get("keyField")));
+            putIfNotBlank(treeConfig, "parentField", text(map.get("parentField")));
+            putIfNotBlank(treeConfig, "labelField", text(map.get("labelField")));
+            putIfNotBlank(treeConfig, "childrenField", text(map.get("childrenField")));
+            putIfNotBlank(treeConfig, "treeTitle", text(map.get("treeTitle")));
+        }
+        treeConfig.putIfAbsent("keyField", "id");
+        treeConfig.putIfAbsent("parentField", inferTreeParentField(modelSchema));
+        treeConfig.putIfAbsent("labelField", inferTreeLabelField(modelSchema));
+        treeConfig.putIfAbsent("childrenField", "children");
+        treeConfig.putIfAbsent("treeTitle", StringUtils.defaultIfBlank(modelSchema.getBusinessName(), "树形导航"));
+        return treeConfig;
+    }
+
+    private String text(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String inferTreeParentField(LowcodeModelSchema modelSchema) {
+        return modelSchema.getFields().stream()
+                .map(LowcodeFieldSchema::getField)
+                .filter(field -> "parentId".equals(field) || "pid".equals(field) || "parentCode".equals(field))
+                .findFirst()
+                .orElse("parentId");
+    }
+
+    private String inferTreeLabelField(LowcodeModelSchema modelSchema) {
+        return modelSchema.getFields().stream()
+                .map(LowcodeFieldSchema::getField)
+                .filter(field -> "name".equals(field) || "title".equals(field) || "label".equals(field))
+                .findFirst()
+                .orElseGet(() -> modelSchema.getFields().isEmpty() ? "name" : modelSchema.getFields().get(0).getField());
+    }
+
+    private void putIfNotBlank(Map<String, Object> target, String key, String value) {
+        if (StringUtils.isNotBlank(value)) {
+            target.put(key, value);
+        }
+    }
+
+    private void appendTreeRuntimeField(List<Map<String, Object>> fields,
+                                        LowcodeModelSchema modelSchema,
+                                        LowcodePageSchema pageSchema,
+                                        String zoneKey) {
+        if (!isTreeRuntime(modelSchema, pageSchema)) {
+            return;
+        }
+        String parentField = String.valueOf(buildTreeConfig(modelSchema, extractTreeConfigOverrides(pageSchema)).get("parentField"));
+        boolean exists = fields.stream().anyMatch(item -> parentField.equals(item.get("field"))
+                || parentField.equals(item.get("prop"))
+                || parentField.equals(item.get("dataIndex"))
+                || parentField.equals(item.get("key")));
+        if (exists) {
+            return;
+        }
+        LowcodeFieldSchema fieldSchema = findField(modelSchema, parentField);
+        if (fieldSchema == null) {
+            throw new BusinessException("树形父级字段不存在: " + parentField);
+        }
+        Map<String, Object> hiddenField = "edit".equals(zoneKey) ? buildEditField(fieldSchema) : buildSearchField(fieldSchema);
+        hiddenField.put("hidden", true);
+        hiddenField.put("queryType", "eq");
+        hiddenField.put("required", false);
+        fields.add(hiddenField);
+    }
+
+    private Object extractTreeConfigOverrides(LowcodePageSchema pageSchema) {
+        LowcodePageZone tableZone = findZone(pageSchema, "table");
+        if (tableZone == null || tableZone.getProps() == null) {
+            return null;
+        }
+        return tableZone.getProps().get("treeConfig");
+    }
+
+    private LowcodeFieldSchema findField(LowcodeModelSchema modelSchema, String fieldName) {
+        if (modelSchema == null || modelSchema.getFields() == null || StringUtils.isBlank(fieldName)) {
+            return null;
+        }
+        return modelSchema.getFields().stream()
+                .filter(field -> fieldName.equals(field.getField()))
+                .findFirst()
+                .orElse(null);
     }
 
     private List<Map<String, Object>> buildDictConfig(LowcodeModelSchema modelSchema) {

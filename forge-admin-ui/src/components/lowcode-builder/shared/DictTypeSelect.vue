@@ -1,0 +1,257 @@
+<template>
+  <div class="dict-type-select">
+    <n-input-group>
+      <n-select
+        :value="value"
+        :options="options"
+        :loading="loading"
+        tag
+        filterable
+        clearable
+        size="small"
+        placeholder="选择系统字典或输入新字典类型"
+        @focus="loadDictTypes"
+        @update:value="$emit('update:value', $event || '')"
+      />
+      <n-button size="small" @click="openCreateModal">
+        新增字典
+      </n-button>
+    </n-input-group>
+
+    <n-modal
+      v-model:show="createVisible"
+      title="新增字典"
+      preset="card"
+      style="width: 620px"
+      :mask-closable="false"
+    >
+      <n-form label-placement="top" size="small">
+        <n-grid :cols="2" :x-gap="12">
+          <n-form-item-gi label="字典名称">
+            <n-input v-model:value="dictForm.dictName" placeholder="例如：合同状态" />
+          </n-form-item-gi>
+          <n-form-item-gi label="字典类型">
+            <n-input
+              :value="dictForm.dictType"
+              placeholder="contract_status"
+              @update:value="dictForm.dictType = normalizeDictType($event)"
+            />
+          </n-form-item-gi>
+        </n-grid>
+        <n-form-item label="备注">
+          <n-input v-model:value="dictForm.remark" type="textarea" :rows="2" placeholder="可为空" />
+        </n-form-item>
+
+        <n-divider>字典项</n-divider>
+        <div class="dict-item-list">
+          <div
+            v-for="(item, index) in dictForm.items"
+            :key="index"
+            class="dict-item-row"
+          >
+            <n-input v-model:value="item.dictLabel" size="small" placeholder="标签，如：启用" />
+            <n-input v-model:value="item.dictValue" size="small" placeholder="值，如：1" />
+            <n-select v-model:value="item.listClass" size="small" :options="tagTypeOptions" />
+            <n-button text type="error" size="small" @click="removeDictItem(index)">
+              删除
+            </n-button>
+          </div>
+          <n-button dashed block size="small" @click="addDictItem">
+            添加字典项
+          </n-button>
+        </div>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="createVisible = false">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="saving" @click="saveDict">
+            保存到字典库
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { clearDictCache } from '@/composables/useDict'
+import { request } from '@/utils'
+
+const props = defineProps({
+  value: {
+    type: String,
+    default: '',
+  },
+  fields: {
+    type: Array,
+    default: () => [],
+  },
+})
+
+const emit = defineEmits(['update:value'])
+
+const loading = ref(false)
+const saving = ref(false)
+const createVisible = ref(false)
+const systemDictTypes = ref([])
+
+const tagTypeOptions = [
+  { label: '默认', value: 'default' },
+  { label: '成功', value: 'success' },
+  { label: '信息', value: 'info' },
+  { label: '警告', value: 'warning' },
+  { label: '错误', value: 'error' },
+]
+
+const dictForm = reactive(createDefaultDictForm())
+
+const options = computed(() => {
+  const map = new Map()
+  systemDictTypes.value.forEach((item) => {
+    if (item.dictType) {
+      map.set(item.dictType, {
+        label: item.dictName ? `${item.dictName}（${item.dictType}）` : item.dictType,
+        value: item.dictType,
+      })
+    }
+  })
+  props.fields.forEach((field) => {
+    if (field.dictType && !map.has(field.dictType)) {
+      map.set(field.dictType, { label: field.dictType, value: field.dictType })
+    }
+  })
+  if (props.value && !map.has(props.value)) {
+    map.set(props.value, { label: props.value, value: props.value })
+  }
+  return Array.from(map.values())
+})
+
+onMounted(loadDictTypes)
+
+async function loadDictTypes() {
+  loading.value = true
+  try {
+    const res = await request.get('/system/dict/type/list', {
+      params: { dictStatus: 1 },
+    })
+    systemDictTypes.value = Array.isArray(res.data) ? res.data : []
+  }
+  catch (error) {
+    console.error('[DictTypeSelect] 加载字典类型失败:', error)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+function openCreateModal() {
+  Object.assign(dictForm, createDefaultDictForm(props.value))
+  createVisible.value = true
+}
+
+function createDefaultDictForm(defaultType = '') {
+  return {
+    dictName: '',
+    dictType: normalizeDictType(defaultType),
+    remark: '',
+    items: [
+      { dictLabel: '启用', dictValue: '1', listClass: 'success' },
+      { dictLabel: '禁用', dictValue: '0', listClass: 'error' },
+    ],
+  }
+}
+
+function normalizeDictType(value) {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/\W/g, '_')
+    .replace(/_+/g, '_')
+    .toLowerCase()
+    .replace(/^[^a-z]+/, '')
+}
+
+function addDictItem() {
+  dictForm.items.push({
+    dictLabel: '',
+    dictValue: '',
+    listClass: 'default',
+  })
+}
+
+function removeDictItem(index) {
+  dictForm.items.splice(index, 1)
+}
+
+async function saveDict() {
+  if (!dictForm.dictName || !dictForm.dictType) {
+    window.$message?.warning('请填写字典名称和字典类型')
+    return
+  }
+  const items = dictForm.items
+    .map((item, index) => ({
+      ...item,
+      dictSort: index + 1,
+    }))
+    .filter(item => item.dictLabel && item.dictValue)
+  if (!items.length) {
+    window.$message?.warning('请至少添加一个字典项')
+    return
+  }
+
+  saving.value = true
+  try {
+    await request.post('/system/dict/type/add', {
+      dictName: dictForm.dictName,
+      dictType: dictForm.dictType,
+      dictStatus: 1,
+      remark: dictForm.remark,
+    })
+    for (const item of items) {
+      await request.post('/system/dict/data/add', {
+        dictType: dictForm.dictType,
+        dictLabel: item.dictLabel,
+        dictValue: item.dictValue,
+        dictSort: item.dictSort,
+        dictStatus: 1,
+        isDefault: 'N',
+        listClass: item.listClass || 'default',
+        parentDictCode: 0,
+      })
+    }
+    clearDictCache(dictForm.dictType)
+    emit('update:value', dictForm.dictType)
+    await loadDictTypes()
+    createVisible.value = false
+    window.$message?.success('字典已保存')
+  }
+  catch (error) {
+    window.$message?.error(error?.message || '保存字典失败')
+  }
+  finally {
+    saving.value = false
+  }
+}
+</script>
+
+<style scoped>
+.dict-type-select {
+  width: 100%;
+}
+
+.dict-item-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dict-item-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(100px, 0.8fr) 120px 48px;
+  gap: 8px;
+  align-items: center;
+}
+</style>

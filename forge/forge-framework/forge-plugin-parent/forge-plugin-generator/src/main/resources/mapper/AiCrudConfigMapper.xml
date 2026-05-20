@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="config_key" property="configKey"/>
+        <result column="table_name" property="tableName"/>
+        <result column="table_comment" property="tableComment"/>
+        <result column="app_name" property="appName"/>
+        <result column="search_schema" property="searchSchema"/>
+        <result column="columns_schema" property="columnsSchema"/>
+        <result column="edit_schema" property="editSchema"/>
+        <result column="api_config" property="apiConfig"/>
+        <result column="options" property="options"/>
+        <result column="mode" property="mode"/>
+        <result column="build_mode" property="buildMode"/>
+        <result column="status" property="status"/>
+        <result column="publish_status" property="publishStatus"/>
+        <result column="menu_name" property="menuName"/>
+        <result column="menu_parent_id" property="menuParentId"/>
+        <result column="menu_sort" property="menuSort"/>
+        <result column="menu_resource_id" property="menuResourceId"/>
+        <result column="dict_config" property="dictConfig"/>
+        <result column="desensitize_config" property="desensitizeConfig"/>
+        <result column="encrypt_config" property="encryptConfig"/>
+        <result column="trans_config" property="transConfig"/>
+        <result column="layout_type" property="layoutType"/>
+        <result column="model_schema" property="modelSchema"/>
+        <result column="page_schema" property="pageSchema"/>
+        <result column="draft_version" property="draftVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="publish_by" property="publishBy"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        config_key,
+        table_name,
+        table_comment,
+        app_name,
+        search_schema,
+        columns_schema,
+        edit_schema,
+        api_config,
+        options,
+        mode,
+        build_mode,
+        status,
+        publish_status,
+        menu_name,
+        menu_parent_id,
+        menu_sort,
+        menu_resource_id,
+        dict_config,
+        desensitize_config,
+        encrypt_config,
+        trans_config,
+        layout_type,
+        model_schema,
+        page_schema,
+        draft_version,
+        published_version,
+        publish_time,
+        publish_by,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND config_key = #{configKey}
+        LIMIT 1
+    </select>
+
+    <select id="selectLowcodePage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND mode = 'CONFIG'
+          AND build_mode = 'LOWCODE'
+        <if test="keyword != null and keyword != ''">
+          AND (
+            config_key LIKE CONCAT('%', #{keyword}, '%')
+            OR app_name LIKE CONCAT('%', #{keyword}, '%')
+            OR table_name LIKE CONCAT('%', #{keyword}, '%')
+            OR table_comment LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="publishStatus != null and publishStatus != ''">
+          AND publish_status = #{publishStatus}
+        </if>
+        ORDER BY update_time DESC, id DESC
+    </select>
+
+</mapper>

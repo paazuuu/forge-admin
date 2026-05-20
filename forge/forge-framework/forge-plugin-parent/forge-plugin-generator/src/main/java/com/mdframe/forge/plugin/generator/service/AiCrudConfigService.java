@@ -15,6 +15,7 @@ import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeRuntimeConfigBuilder;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -34,6 +35,10 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
     private final AiPageTemplateService pageTemplateService;
 
     public AiCrudConfig getByConfigKey(String configKey) {
+        Long tenantId = getCurrentTenantId();
+        if (tenantId != null) {
+            return baseMapper.selectByConfigKey(tenantId, configKey);
+        }
         return getOne(new LambdaQueryWrapper<AiCrudConfig>()
                 .eq(AiCrudConfig::getConfigKey, configKey));
     }
@@ -150,10 +155,13 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         if (!"CONFIG".equals(config.getMode())) {
             throw new BusinessException("该配置不是配置驱动模式");
         }
-        return buildRenderVO(config);
+        if ("LOWCODE".equals(config.getBuildMode()) && !"PUBLISHED".equals(config.getPublishStatus())) {
+            throw new BusinessException("低代码应用尚未发布");
+        }
+        return buildRenderConfig(config);
     }
 
-    private AiCrudConfigRenderVO buildRenderVO(AiCrudConfig config) {
+    public AiCrudConfigRenderVO buildRenderConfig(AiCrudConfig config) {
         AiCrudConfigRenderVO vo = new AiCrudConfigRenderVO();
         vo.setConfigKey(config.getConfigKey());
         vo.setTableName(config.getTableName());
@@ -185,7 +193,11 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
                 vo.setPageSchema(objectMapper.readValue(config.getPageSchema(), Object.class));
             }
             if (StringUtils.isNotBlank(config.getModelSchema()) && StringUtils.isNotBlank(config.getPageSchema())) {
-                applyLowcodeRuntimeConfig(config, vo);
+                if (hasStoredRuntimeConfig(config)) {
+                    applyStoredRuntimeConfig(config, vo);
+                } else {
+                    applyLowcodeRuntimeConfig(config, vo);
+                }
             } else {
                 applyLegacyRuntimeConfig(config, vo);
             }
@@ -194,6 +206,13 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             throw new BusinessException("配置JSON格式错误");
         }
         return vo;
+    }
+
+    private boolean hasStoredRuntimeConfig(AiCrudConfig config) {
+        return StringUtils.isNotBlank(config.getSearchSchema())
+                && StringUtils.isNotBlank(config.getColumnsSchema())
+                && StringUtils.isNotBlank(config.getEditSchema())
+                && StringUtils.isNotBlank(config.getApiConfig());
     }
 
     private void applyLowcodeRuntimeConfig(AiCrudConfig config, AiCrudConfigRenderVO vo) throws Exception {
@@ -214,6 +233,28 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         vo.setDesensitizeConfig(readJson(runtimeConfig.getDesensitizeConfig()));
         vo.setEncryptConfig(readJson(runtimeConfig.getEncryptConfig()));
         vo.setTransConfig(readJson(runtimeConfig.getTransConfig()));
+    }
+
+    private void applyStoredRuntimeConfig(AiCrudConfig config, AiCrudConfigRenderVO vo) throws Exception {
+        vo.setSearchSchema(readJson(config.getSearchSchema()));
+        vo.setColumnsSchema(readJson(config.getColumnsSchema()));
+        vo.setEditSchema(readJson(config.getEditSchema()));
+        vo.setApiConfig(readJson(config.getApiConfig()));
+        if (StringUtils.isNotBlank(config.getOptions())) {
+            vo.setOptions(readJson(config.getOptions()));
+        }
+        if (StringUtils.isNotBlank(config.getDictConfig())) {
+            vo.setDictConfig(readJson(config.getDictConfig()));
+        }
+        if (StringUtils.isNotBlank(config.getDesensitizeConfig())) {
+            vo.setDesensitizeConfig(readJson(config.getDesensitizeConfig()));
+        }
+        if (StringUtils.isNotBlank(config.getEncryptConfig())) {
+            vo.setEncryptConfig(readJson(config.getEncryptConfig()));
+        }
+        if (StringUtils.isNotBlank(config.getTransConfig())) {
+            vo.setTransConfig(readJson(config.getTransConfig()));
+        }
     }
 
     private void applyLegacyRuntimeConfig(AiCrudConfig config, AiCrudConfigRenderVO vo) throws Exception {
@@ -360,6 +401,14 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             objectMapper.readTree(json);
         } catch (Exception e) {
             throw new BusinessException(fieldName + " JSON格式不正确");
+        }
+    }
+
+    private Long getCurrentTenantId() {
+        try {
+            return SessionHelper.getTenantId();
+        } catch (Exception e) {
+            return null;
         }
     }
 }
