@@ -97,7 +97,7 @@
             </div>
             <div class="drawer-tags">
               <span class="status-tag" :class="currentTask?.status === 0 ? 'pending' : 'claimed'">
-                {{ currentTask?.status === 0 ? '待办' : '已签收' }}
+                {{ getLabel('flow_todo_status', currentTask?.status) }}
               </span>
               <span v-if="currentTask?.priority >= 2" class="priority-tag" :class="getPriorityClass(currentTask?.priority)">
                 {{ getPriorityText(currentTask?.priority) }}
@@ -340,9 +340,11 @@ import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowStats from '@/components/flow/FlowStats.vue'
 import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
+const { dict, getLabel } = useDict('flow_todo_status', 'flow_priority')
 const loading = ref(false)
 const dataSource = ref([])
 const pagination = reactive({
@@ -406,10 +408,7 @@ const delegateLoading = ref(false)
 const delegateTargetUser = ref(null)
 const delegateForm = reactive({ comment: '' })
 
-const statusOptions = [
-  { label: '待办', value: 0 },
-  { label: '已签收', value: 1 },
-]
+const statusOptions = computed(() => toNumberOptions(dict.value.flow_todo_status))
 
 // 优先级
 function getPriorityClass(p) {
@@ -420,8 +419,7 @@ function getPriorityClass(p) {
   return ''
 }
 function getPriorityText(p) {
-  const m = { 0: '低', 1: '普通', 2: '高', 3: '紧急' }
-  return m[p] || '普通'
+  return getLabel('flow_priority', p) || '普通'
 }
 
 // 表格列
@@ -448,7 +446,7 @@ const columns = [
     title: '状态',
     key: 'status',
     width: 70,
-    render: row => h('span', { class: ['status-tag-mini', row.status === 0 ? 'pending' : 'claimed'] }, row.status === 0 ? '待办' : '已签收'),
+    render: row => h('span', { class: ['status-tag-mini', row.status === 0 ? 'pending' : 'claimed'] }, getLabel('flow_todo_status', row.status)),
   },
   {
     title: '优先级',
@@ -477,6 +475,13 @@ const columns = [
     ]),
   },
 ]
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 function getRowProps(row) {
   return { style: 'cursor:pointer', onClick: () => openDrawer(row) }

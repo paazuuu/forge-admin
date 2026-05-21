@@ -4,7 +4,11 @@ public interface MenuRegisterAdapter {
 
     Long registerMenu(String menuName, Long parentId, String configKey, Integer sort);
 
-    void updateMenu(Long menuResourceId, String menuName, Integer sort);
+    default void updateMenu(Long menuResourceId, String menuName, Integer sort) {
+        updateMenu(menuResourceId, menuName, null, sort);
+    }
+
+    void updateMenu(Long menuResourceId, String menuName, Long parentId, Integer sort);
 
     void deleteMenu(Long menuResourceId);
 
@@ -23,5 +27,12 @@ public interface MenuRegisterAdapter {
      */
     default Long resolveDefaultLowcodeParentId() {
         return 0L;
+    }
+
+    /**
+     * 解析或创建某个业务领域下低代码应用默认挂载的菜单目录。
+     */
+    default Long resolveOrCreateDomainParentId(String domainCode, String domainName, Integer sort) {
+        return null;
     }
 }

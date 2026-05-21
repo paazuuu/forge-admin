@@ -172,26 +172,20 @@
 </template>
 
 <script setup>
-import { NButton, NSpace, NTag, NTreeSelect } from 'naive-ui'
-import { h, onMounted, reactive, ref } from 'vue'
+import { NButton, NSpace, NTreeSelect } from 'naive-ui'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
 import FlowModeler from '@/components/bpmn/FlowModeler.vue'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 const router = useRouter()
 
-// 状态选项
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const { dict } = useDict('sys_enable_disable', 'flow_process_form_type')
 
-// 表单类型选项
-const formTypeOptions = [
-  { label: '动态表单', value: 'dynamic' },
-  { label: '外置表单', value: 'external' },
-  { label: '无表单', value: 'none' },
-]
+const statusOptions = computed(() => toNumberOptions(dict.value.sys_enable_disable))
+const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])
 
 // 分类选项
 const categoryOptions = ref([])
@@ -212,17 +206,6 @@ const queryParams = reactive({
   category: null,
   status: null,
 })
-
-// 状态标签颜色
-const statusTagType = {
-  1: 'success',
-  0: 'default',
-}
-
-const statusText = {
-  1: '启用',
-  0: '禁用',
-}
 
 // 表格列
 const columns = [
@@ -245,10 +228,7 @@ const columns = [
     title: '表单类型',
     key: 'formType',
     width: 100,
-    render: (row) => {
-      const types = { dynamic: '动态表单', external: '外置表单', none: '无表单' }
-      return types[row.formType] || row.formType
-    },
+    render: row => h(DictTag, { dictType: 'flow_process_form_type', value: row.formType }),
   },
   {
     title: '使用次数',
@@ -259,12 +239,7 @@ const columns = [
     title: '状态',
     key: 'status',
     width: 80,
-    render: (row) => {
-      return h(NTag, {
-        type: statusTagType[row.status] || 'default',
-        size: 'small',
-      }, { default: () => statusText[row.status] || '未知' })
-    },
+    render: row => h(DictTag, { dictType: 'sys_enable_disable', value: row.status }),
   },
   {
     title: '描述',
@@ -328,6 +303,13 @@ const columns = [
     },
   },
 ]
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 数据源
 const dataSource = ref([])
@@ -504,7 +486,7 @@ async function handleSubmit() {
   try {
     await formRef.value?.validate()
   }
-  catch (error) {
+  catch {
     return
   }
 

@@ -52,12 +52,50 @@ export const sensitiveTypeOptions = [
   { label: '地址', value: 'ADDRESS' },
 ]
 
-export function createDefaultModelSchema() {
+export const auditFieldNames = [
+  'id',
+  'tenantId',
+  'createBy',
+  'createTime',
+  'createDept',
+  'updateBy',
+  'updateTime',
+  'delFlag',
+]
+
+export const auditColumnNames = [
+  'id',
+  'tenant_id',
+  'create_by',
+  'create_time',
+  'create_dept',
+  'update_by',
+  'update_time',
+  'del_flag',
+]
+
+export function createDefaultModelSchema(options = {}) {
+  const objectCode = options.objectCode || 'lowcode_demo'
+  const objectName = options.objectName || '低代码应用'
+  const tableName = options.tableName || 'biz_lowcode_demo'
+
   return {
-    appType: 'SINGLE',
-    tableMode: 'CREATE',
-    tableName: 'biz_lowcode_demo',
-    businessName: '低代码应用',
+    schemaVersion: 2,
+    domain: options.domain || {
+      id: null,
+      code: '',
+      name: '',
+    },
+    object: {
+      code: objectCode,
+      name: objectName,
+      description: '',
+      ...(options.object || {}),
+    },
+    appType: options.appType || 'SINGLE',
+    tableMode: options.tableMode || 'CREATE',
+    tableName,
+    businessName: objectName,
     treeConfig: {
       keyField: 'id',
       parentField: 'parentId',
@@ -76,6 +114,13 @@ export function createDefaultModelSchema() {
         queryType: 'eq',
       },
     ],
+    relations: [],
+    policies: {
+      dataScope: 'TENANT',
+      regionField: '',
+      auditEnabled: true,
+    },
+    children: [],
   }
 }
 
@@ -98,6 +143,8 @@ export function createDefaultField(field = 'fieldName', label = '字段名称') 
     sensitiveType: 'NONE',
     encryptAlgorithm: '',
     sortable: false,
+    primaryKey: false,
+    systemField: false,
     width: 160,
     remark: '',
   }
@@ -105,20 +152,33 @@ export function createDefaultField(field = 'fieldName', label = '字段名称') 
 
 export function normalizeFieldName(value) {
   const cleaned = String(value || '')
-    .replace(/[^a-zA-Z0-9_]/g, ' ')
-    .replace(/[_\s]+([a-zA-Z0-9])/g, (_, char) => char.toUpperCase())
-    .replace(/^[^a-zA-Z]+/, '')
+    .replace(/\W/g, ' ')
+    .replace(/[_\s]+([a-z0-9])/gi, (_, char) => char.toUpperCase())
+    .replace(/^[^a-z]+/i, '')
 
   if (!cleaned)
     return 'fieldName'
   return cleaned.charAt(0).toLowerCase() + cleaned.slice(1)
 }
 
+export function normalizeObjectCode(value, fallback = '') {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/\W/g, '_')
+    .replace(/_+/g, '_')
+    .toLowerCase()
+    .replace(/^[^a-z]+/, '')
+    .replace(/_+$/g, '')
+
+  return cleaned || fallback
+}
+
 export function normalizeTableName(value) {
   const cleaned = String(value || '')
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/\W/g, '_')
     .replace(/_+/g, '_')
     .toLowerCase()
     .replace(/^[^a-z]+/, '')
@@ -129,7 +189,7 @@ export function normalizeTableName(value) {
 export function camelToSnake(value) {
   return String(value || '')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/\W/g, '_')
     .replace(/_+/g, '_')
     .toLowerCase()
 }
@@ -144,4 +204,113 @@ export function isSameSchema(left, right) {
 
 export function createFieldFromIndex(index) {
   return createDefaultField(`field${index}`, `业务字段${index}`)
+}
+
+export function createFieldFromTemplate(template = {}) {
+  const fieldName = normalizeFieldName(template.field || template.columnName || 'fieldName')
+  return {
+    ...createDefaultField(fieldName, template.label || '字段名称'),
+    ...template,
+    field: fieldName,
+    columnName: template.columnName || camelToSnake(fieldName),
+    dataType: template.dataType || 'varchar',
+    length: template.length || 128,
+    precision: template.precision ?? 2,
+    required: Boolean(template.required),
+    searchable: Boolean(template.searchable),
+    listVisible: template.listVisible !== false,
+    formVisible: template.formVisible !== false,
+    componentType: template.componentType || 'input',
+    queryType: template.queryType || 'like',
+    sensitiveType: template.sensitiveType || 'NONE',
+    encryptAlgorithm: template.encryptAlgorithm || '',
+    sortable: Boolean(template.sortable),
+    width: template.width || 160,
+    remark: template.remark || '',
+  }
+}
+
+export function createFieldFromGenColumn(column = {}) {
+  const fieldName = normalizeFieldName(column.javaField || column.columnName || 'fieldName')
+  const dataType = resolveDataType(column.columnType, column.javaType)
+  return {
+    ...createDefaultField(fieldName, column.columnComment || fieldName),
+    field: fieldName,
+    columnName: column.columnName || camelToSnake(fieldName),
+    label: column.columnComment || fieldName,
+    dataType,
+    length: resolveColumnLength(column.columnType, dataType),
+    precision: resolveColumnPrecision(column.columnType),
+    required: Boolean(column.isRequired),
+    searchable: Boolean(column.isQuery),
+    listVisible: column.isList !== 0,
+    formVisible: column.isEdit !== 0,
+    componentType: resolveComponentType(column.htmlType, dataType),
+    queryType: resolveQueryType(column.queryType),
+    dictType: column.dictType || '',
+    sensitiveType: column.desensitizeType || 'NONE',
+    sortable: false,
+    primaryKey: Boolean(column.isPk),
+    systemField: isAuditField({ field: fieldName, columnName: column.columnName }),
+    width: dataType === 'datetime' ? 180 : 160,
+    remark: column.columnComment || '',
+  }
+}
+
+export function isAuditField(field = {}) {
+  return auditFieldNames.includes(field.field) || auditColumnNames.includes(field.columnName)
+}
+
+function resolveDataType(columnType = '', javaType = '') {
+  const type = String(columnType || '').toLowerCase()
+  const java = String(javaType || '').toLowerCase()
+  if (type.includes('bigint') || java.includes('long'))
+    return 'bigint'
+  if (type.includes('int') || java.includes('integer'))
+    return type.includes('tinyint') ? 'tinyint' : 'int'
+  if (type.includes('decimal') || type.includes('numeric') || java.includes('bigdecimal'))
+    return 'decimal'
+  if (type.includes('datetime') || type.includes('timestamp') || java.includes('localdatetime'))
+    return 'datetime'
+  if (type === 'date' || java.includes('localdate'))
+    return 'date'
+  if (type.includes('text') || type.includes('json'))
+    return 'text'
+  return 'varchar'
+}
+
+function resolveColumnLength(columnType = '', dataType = 'varchar') {
+  const match = String(columnType || '').match(/\((\d+)/)
+  if (match)
+    return Number(match[1])
+  if (dataType === 'text')
+    return null
+  return dataType === 'varchar' ? 128 : null
+}
+
+function resolveColumnPrecision(columnType = '') {
+  const match = String(columnType || '').match(/\(\d+\s*,\s*(\d+)\)/)
+  return match ? Number(match[1]) : 2
+}
+
+function resolveComponentType(htmlType = '', dataType = 'varchar') {
+  const type = String(htmlType || '').toLowerCase()
+  if (['textarea', 'select', 'radio', 'checkbox', 'switch', 'imageupload', 'fileupload'].includes(type))
+    return type === 'imageupload' ? 'imageUpload' : type === 'fileupload' ? 'fileUpload' : type
+  if (type.includes('date') || dataType === 'date')
+    return dataType === 'datetime' ? 'datetime' : 'date'
+  if (['int', 'bigint', 'decimal'].includes(dataType))
+    return 'number'
+  if (dataType === 'tinyint')
+    return 'switch'
+  return dataType === 'text' ? 'textarea' : 'input'
+}
+
+function resolveQueryType(queryType = '') {
+  const type = String(queryType || '').toLowerCase()
+  if (['eq', 'like', 'ge', 'le', 'between', 'in'].includes(type))
+    return type
+  if (type === '=' || type === 'equal')
+    return 'eq'
+  return type || 'like'
 }

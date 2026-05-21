@@ -64,7 +64,7 @@ public class LowcodeRuntimeConfigBuilder {
     private List<Map<String, Object>> buildSearchSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
         List<Map<String, Object>> fields = resolveFields(modelSchema, pageSchema, "search", field -> Boolean.TRUE.equals(field.getSearchable()))
                 .stream()
-                .map(this::buildSearchField)
+                .map(field -> buildSearchField(field, resolveFieldSetting(pageSchema, "search", field.getField())))
                 .collect(Collectors.toCollection(ArrayList::new));
         appendTreeRuntimeField(fields, modelSchema, pageSchema, "search");
         return fields;
@@ -74,7 +74,7 @@ public class LowcodeRuntimeConfigBuilder {
         List<Map<String, Object>> columns = resolveFields(modelSchema, pageSchema, "table",
                 field -> field.getListVisible() == null || Boolean.TRUE.equals(field.getListVisible()))
                 .stream()
-                .map(this::buildTableColumn)
+                .map(field -> buildTableColumn(field, resolveFieldSetting(pageSchema, "table", field.getField())))
                 .collect(Collectors.toCollection(ArrayList::new));
 
         Map<String, Object> actions = new LinkedHashMap<>();
@@ -297,11 +297,17 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private Map<String, Object> buildSearchField(LowcodeFieldSchema field) {
+        return buildSearchField(field, Map.of());
+    }
+
+    private Map<String, Object> buildSearchField(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
         Map<String, Object> item = new LinkedHashMap<>();
+        String queryType = StringUtils.defaultIfBlank(text(pageSetting.get("queryType")),
+                StringUtils.defaultIfBlank(field.getQueryType(), "eq")).toLowerCase(Locale.ROOT);
         item.put("field", field.getField());
         item.put("label", StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
-        item.put("type", resolveSearchComponentType(field));
-        item.put("queryType", StringUtils.defaultIfBlank(field.getQueryType(), "eq").toLowerCase(Locale.ROOT));
+        item.put("type", resolveSearchComponentType(field, queryType));
+        item.put("queryType", queryType);
         if (StringUtils.isNotBlank(field.getDictType())) {
             item.put("dictType", field.getDictType());
         }
@@ -309,12 +315,20 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private Map<String, Object> buildTableColumn(LowcodeFieldSchema field) {
+        return buildTableColumn(field, Map.of());
+    }
+
+    private Map<String, Object> buildTableColumn(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("key", field.getField());
         item.put("title", StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
         item.put("dataIndex", field.getField());
         if (field.getWidth() != null && field.getWidth() > 0) {
             item.put("width", field.getWidth());
+        }
+        Object sortable = pageSetting.get("sortable");
+        if (Boolean.TRUE.equals(sortable) || Boolean.TRUE.equals(field.getSortable())) {
+            item.put("sorter", true);
         }
         if (StringUtils.isNotBlank(field.getDictType())) {
             Map<String, Object> render = new LinkedHashMap<>();
@@ -323,6 +337,23 @@ public class LowcodeRuntimeConfigBuilder {
             item.put("render", render);
         }
         return item;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> resolveFieldSetting(LowcodePageSchema pageSchema, String zoneKey, String fieldName) {
+        LowcodePageZone zone = findZone(pageSchema, zoneKey);
+        if (zone == null || zone.getProps() == null || StringUtils.isBlank(fieldName)) {
+            return Map.of();
+        }
+        Object settings = zone.getProps().get("fieldSettings");
+        if (!(settings instanceof Map<?, ?> settingsMap)) {
+            return Map.of();
+        }
+        Object value = settingsMap.get(fieldName);
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
     }
 
     private Map<String, Object> buildEditField(LowcodeFieldSchema field) {
@@ -378,10 +409,16 @@ public class LowcodeRuntimeConfigBuilder {
         }
 
         Set<String> refs = new LinkedHashSet<>(zone.getFieldRefs());
-        return refs.stream()
+        List<LowcodeFieldSchema> selectedFields = refs.stream()
                 .map(fieldMap::get)
-                .filter(field -> field != null && fallbackPredicate.test(field))
+                .filter(field -> field != null)
                 .toList();
+        if (selectedFields.isEmpty()) {
+            return modelSchema.getFields().stream()
+                    .filter(fallbackPredicate)
+                    .toList();
+        }
+        return selectedFields;
     }
 
     private LowcodePageZone findZone(LowcodePageSchema pageSchema, String zoneKey) {
@@ -400,11 +437,10 @@ public class LowcodeRuntimeConfigBuilder {
         }
     }
 
-    private String resolveSearchComponentType(LowcodeFieldSchema field) {
+    private String resolveSearchComponentType(LowcodeFieldSchema field, String queryType) {
         if (StringUtils.isNotBlank(field.getDictType())) {
             return "select";
         }
-        String queryType = StringUtils.defaultIfBlank(field.getQueryType(), "eq").toLowerCase(Locale.ROOT);
         String componentType = StringUtils.defaultIfBlank(field.getComponentType(), "input");
         if ("between".equals(queryType) && ("date".equals(componentType) || "datetime".equals(componentType))) {
             return "daterange";

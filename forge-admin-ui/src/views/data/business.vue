@@ -200,8 +200,12 @@ import { computed, h, onMounted, reactive, ref } from 'vue'
 import { deleteDataBusiness } from '@/api/data/business'
 import { getDataDatasetList } from '@/api/data/dataset'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'DataBusiness' })
+
+const { dict } = useDict('sys_enable_disable')
 
 const crudRef = ref(null)
 const datasetOptions = ref([])
@@ -219,10 +223,7 @@ const businessStats = reactive({
   datasets: 0,
 })
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const statusOptions = computed(() => dict.value.sys_enable_disable || [])
 
 const statCards = computed(() => [
   {
@@ -306,11 +307,11 @@ const tableColumns = computed(() => [
     render: row => h('div', { class: 'business-name-card' }, [
       h('div', { class: 'business-name-row' }, [
         h('div', { class: 'business-name' }, row.businessName),
-        h(NTag, {
+        h(DictTag, {
+          dictType: 'sys_enable_disable',
+          dictValue: String(row.status),
           size: 'small',
-          bordered: false,
-          type: row.status === 1 ? 'success' : 'default',
-        }, { default: () => row.status === 1 ? '启用' : '禁用' }),
+        }),
       ]),
       h('div', { class: 'business-code' }, row.businessCode),
       h('div', { class: 'business-desc' }, row.businessDesc || '暂无业务定义描述'),

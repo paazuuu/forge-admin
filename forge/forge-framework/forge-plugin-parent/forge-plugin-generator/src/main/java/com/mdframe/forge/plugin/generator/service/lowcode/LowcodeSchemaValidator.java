@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -103,14 +104,15 @@ public class LowcodeSchemaValidator {
         Set<String> modelFields = modelSchema.getFields().stream()
                 .map(LowcodeFieldSchema::getField)
                 .collect(Collectors.toSet());
+        Set<String> pageFields = buildAllowedPageRefs(modelFields, pageSchema);
         for (LowcodePageZone zone : pageSchema.getZones()) {
-            validateZone(zone, modelFields);
+            validateZone(zone, pageFields);
         }
         validateTreeRuntime(modelSchema, pageSchema, modelFields);
     }
 
     private void validateTableName(String tableName) {
-        if (StringUtils.isBlank(tableName) || !TABLE_NAME_PATTERN.matcher(tableName).matches()) {
+        if (!isValidTableName(tableName)) {
             throw new BusinessException("表名格式不正确，仅允许小写字母、数字、下划线，且必须以小写字母开头");
         }
         for (String prefix : RESERVED_TABLE_PREFIXES) {
@@ -118,6 +120,10 @@ public class LowcodeSchemaValidator {
                 throw new BusinessException("业务表名不能使用系统保留前缀: " + prefix);
             }
         }
+    }
+
+    public boolean isValidTableName(String tableName) {
+        return StringUtils.isNotBlank(tableName) && TABLE_NAME_PATTERN.matcher(tableName).matches();
     }
 
     private void validateField(LowcodeFieldSchema fieldSchema) {
@@ -170,6 +176,46 @@ public class LowcodeSchemaValidator {
                 throw new BusinessException("页面区域引用了不存在的字段: " + ref);
             }
         }
+    }
+
+    private Set<String> buildAllowedPageRefs(Set<String> modelFields, LowcodePageSchema pageSchema) {
+        Set<String> pageFields = new HashSet<>(modelFields);
+        if (pageSchema == null || pageSchema.getModelRefs() == null) {
+            return pageFields;
+        }
+        for (var modelRef : pageSchema.getModelRefs()) {
+            if (modelRef == null || modelRef.getFields() == null) {
+                continue;
+            }
+            String modelCode = StringUtils.trimToEmpty(modelRef.getModelCode());
+            boolean primary = Boolean.TRUE.equals(modelRef.getPrimary())
+                    || StringUtils.equals(modelCode, pageSchema.getPrimaryModelCode());
+            for (Map<String, Object> field : modelRef.getFields()) {
+                String sourceField = readFieldText(field, "sourceField");
+                if (StringUtils.isBlank(sourceField)) {
+                    sourceField = readFieldText(field, "field");
+                }
+                String fieldRef = readFieldText(field, "fieldRef");
+                if (StringUtils.isNotBlank(fieldRef)) {
+                    pageFields.add(fieldRef);
+                }
+                if (primary && StringUtils.isNotBlank(sourceField)) {
+                    pageFields.add(sourceField);
+                }
+                if (StringUtils.isNotBlank(modelCode) && StringUtils.isNotBlank(sourceField)) {
+                    pageFields.add(modelCode + "." + sourceField);
+                    pageFields.add(modelCode + "__" + sourceField);
+                }
+            }
+        }
+        return pageFields;
+    }
+
+    private String readFieldText(Map<String, Object> field, String key) {
+        if (field == null || field.get(key) == null) {
+            return null;
+        }
+        return String.valueOf(field.get(key));
     }
 
     private void validateTreeRuntime(LowcodeModelSchema modelSchema,

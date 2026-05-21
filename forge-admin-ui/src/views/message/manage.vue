@@ -24,7 +24,7 @@
 
     <!-- 消息发送测试弹窗 -->
     <n-modal v-model:show="showSendModal" preset="card" title="消息发送测试" style="width: 600px">
-      <n-form ref="sendFormRef" :model="sendForm" label-width="100">
+      <n-form :model="sendForm" label-width="100">
         <n-form-item label="发送渠道" path="channel">
           <n-select
             v-model:value="sendForm.channel"
@@ -107,22 +107,16 @@
           {{ currentDetail?.message?.title }}
         </n-descriptions-item>
         <n-descriptions-item label="消息类型">
-          <NTag :type="getTypeColor(currentDetail?.message?.type)" size="small">
-            {{ getTypeText(currentDetail?.message?.type) }}
-          </NTag>
+          <DictTag dict-type="sys_message_type" :value="currentDetail?.message?.type" />
         </n-descriptions-item>
         <n-descriptions-item label="发送渠道">
-          <NTag :type="getChannelColor(currentDetail?.message?.sendChannel)" size="small">
-            {{ getChannelText(currentDetail?.message?.sendChannel) }}
-          </NTag>
+          <DictTag dict-type="sys_message_channel" :value="currentDetail?.message?.sendChannel" />
         </n-descriptions-item>
         <n-descriptions-item label="发送时间">
           {{ currentDetail?.message?.createTime }}
         </n-descriptions-item>
         <n-descriptions-item label="发送状态">
-          <NTag :type="getStatusColor(currentDetail?.sendRecord?.status)" size="small">
-            {{ getStatusText(currentDetail?.sendRecord?.status) }}
-          </NTag>
+          <DictTag dict-type="sys_message_send_status" :value="currentDetail?.sendRecord?.status" />
         </n-descriptions-item>
         <n-descriptions-item label="接收人数">
           {{ currentDetail?.sendRecord?.receiverCount }}
@@ -160,13 +154,20 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import messageApi from '@/api/message'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'MessageManage' })
+
+const MESSAGE_TYPE_DICT = 'sys_message_type'
+const MESSAGE_CHANNEL_DICT = 'sys_message_channel'
+const MESSAGE_SEND_SCOPE_DICT = 'sys_message_send_scope'
+const MESSAGE_SEND_STATUS_DICT = 'sys_message_send_status'
+const MESSAGE_READ_STATUS_DICT = 'sys_message_read_status'
 
 const crudRef = ref(null)
 const showSendModal = ref(false)
@@ -176,6 +177,19 @@ const showDetail = ref(false)
 const currentDetail = ref(null)
 const userOptions = ref([])
 const bizTypeOptions = ref([])
+
+const { dict } = useDict(
+  MESSAGE_TYPE_DICT,
+  MESSAGE_CHANNEL_DICT,
+  MESSAGE_SEND_SCOPE_DICT,
+  MESSAGE_SEND_STATUS_DICT,
+  MESSAGE_READ_STATUS_DICT,
+)
+
+const typeOptions = computed(() => dict.value[MESSAGE_TYPE_DICT] || [])
+const channelOptions = computed(() => dict.value[MESSAGE_CHANNEL_DICT] || [])
+const scopeOptions = computed(() => dict.value[MESSAGE_SEND_SCOPE_DICT] || [])
+const sendStatusOptions = computed(() => toNumberOptions(dict.value[MESSAGE_SEND_STATUS_DICT]))
 
 const sendForm = ref({
   channel: 'WEB',
@@ -194,7 +208,7 @@ const apiConfig = {
   detail: 'get@/api/message/manage/{id}/detail',
 }
 
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'type',
     label: '消息类型',
@@ -202,10 +216,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择消息类型',
       clearable: true,
-      options: [
-        { label: '系统消息', value: 'SYSTEM' },
-        { label: '自定义', value: 'CUSTOM' },
-      ],
+      options: typeOptions.value,
     },
   },
   {
@@ -215,11 +226,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择发送渠道',
       clearable: true,
-      options: [
-        { label: '站内信', value: 'WEB' },
-        { label: '短信', value: 'SMS' },
-        { label: '邮件', value: 'EMAIL' },
-      ],
+      options: channelOptions.value,
     },
   },
   {
@@ -229,11 +236,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择发送状态',
       clearable: true,
-      options: [
-        { label: '草稿', value: 0 },
-        { label: '已发送', value: 1 },
-        { label: '发送失败', value: 2 },
-      ],
+      options: sendStatusOptions.value,
     },
   },
   {
@@ -253,7 +256,7 @@ const searchSchema = [
       clearable: true,
     },
   },
-]
+])
 
 const tableColumns = computed(() => [
   {
@@ -266,10 +269,7 @@ const tableColumns = computed(() => [
     label: '消息类型',
     width: 100,
     render: (row) => {
-      return h(NTag, {
-        type: getTypeColor(row.type),
-        size: 'small',
-      }, { default: () => getTypeText(row.type) })
+      return h(DictTag, { dictType: MESSAGE_TYPE_DICT, value: row.type, size: 'small' })
     },
   },
   {
@@ -277,10 +277,7 @@ const tableColumns = computed(() => [
     label: '发送渠道',
     width: 100,
     render: (row) => {
-      return h(NTag, {
-        type: getChannelColor(row.channel),
-        size: 'small',
-      }, { default: () => getChannelText(row.channel) })
+      return h(DictTag, { dictType: MESSAGE_CHANNEL_DICT, value: row.channel, size: 'small' })
     },
   },
   {
@@ -288,10 +285,7 @@ const tableColumns = computed(() => [
     label: '发送状态',
     width: 100,
     render: (row) => {
-      return h(NTag, {
-        type: getStatusColor(row.status),
-        size: 'small',
-      }, { default: () => getStatusText(row.status) })
+      return h(DictTag, { dictType: MESSAGE_SEND_STATUS_DICT, value: row.status, size: 'small' })
     },
   },
   {
@@ -328,29 +322,9 @@ const receiverColumns = [
     title: '阅读状态',
     key: 'readFlag',
     width: 100,
-    render: row => h(NTag, {
-      type: row.readFlag === 1 ? 'success' : 'error',
-      size: 'small',
-    }, { default: () => row.readFlag === 1 ? '已读' : '未读' }),
+    render: row => h(DictTag, { dictType: MESSAGE_READ_STATUS_DICT, value: row.readFlag, size: 'small' }),
   },
   { title: '阅读时间', key: 'readTime', width: 180 },
-]
-
-const channelOptions = [
-  { label: '站内信', value: 'WEB' },
-  { label: '短信', value: 'SMS' },
-  { label: '邮件', value: 'EMAIL' },
-]
-
-const scopeOptions = [
-  { label: '指定人员', value: 'USERS' },
-  { label: '指定组织', value: 'ORG' },
-  { label: '全员', value: 'ALL' },
-]
-
-const typeOptions = [
-  { label: '系统消息', value: 'SYSTEM' },
-  { label: '自定义', value: 'CUSTOM' },
 ]
 
 function handleBeforeSearch(params) {
@@ -475,34 +449,11 @@ async function handleViewDetail(row) {
   }
 }
 
-function getTypeText(type) {
-  const map = { SYSTEM: '系统消息', SMS: '短信', EMAIL: '邮件', CUSTOM: '自定义' }
-  return map[type] || type
-}
-
-function getTypeColor(type) {
-  const map = { SYSTEM: 'info', SMS: 'warning', EMAIL: 'success', CUSTOM: 'default' }
-  return map[type] || 'default'
-}
-
-function getChannelText(channel) {
-  const map = { WEB: '站内信', SMS: '短信', EMAIL: '邮件', PUSH: '推送' }
-  return map[channel] || channel
-}
-
-function getChannelColor(channel) {
-  const map = { WEB: 'default', SMS: 'warning', EMAIL: 'success', PUSH: 'info' }
-  return map[channel] || 'default'
-}
-
-function getStatusText(status) {
-  const map = { 0: '草稿', 1: '已发送', 2: '发送失败' }
-  return map[status] || '未知'
-}
-
-function getStatusColor(status) {
-  const map = { 0: 'default', 1: 'success', 2: 'error' }
-  return map[status] || 'default'
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
 }
 
 loadUsers()

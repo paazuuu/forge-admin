@@ -47,9 +47,7 @@
           </div>
           <div class="detail-row">
             <span class="label">操作类型：</span>
-            <NTag :type="getOperationTypeTag(currentLog.operationType).type" size="small">
-              {{ getOperationTypeTag(currentLog.operationType).text }}
-            </NTag>
+            <DictTag :options="operationTypeOptions" :value="currentLog.operationType" size="small" />
           </div>
           <div class="detail-row">
             <span class="label">操作描述：</span>
@@ -57,9 +55,7 @@
           </div>
           <div class="detail-row">
             <span class="label">操作状态：</span>
-            <NTag :type="currentLog.operationStatus === 1 ? 'success' : 'error'" size="small">
-              {{ currentLog.operationStatus === 1 ? '成功' : '失败' }}
-            </NTag>
+            <DictTag :options="operationStatusOptions" :value="String(currentLog.operationStatus)" size="small" />
           </div>
           <div class="detail-row">
             <span class="label">操作时间：</span>
@@ -77,9 +73,7 @@
           </h4>
           <div class="detail-row">
             <span class="label">请求方法：</span>
-            <NTag size="small">
-              {{ currentLog.requestMethod || '-' }}
-            </NTag>
+            <DictTag :options="dict.sys_req_method" :value="currentLog.requestMethod" size="small" />
           </div>
           <div class="detail-row">
             <span class="label">请求URL：</span>
@@ -135,12 +129,18 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
 import { formatDateTime, request } from '@/utils'
 
 defineOptions({ name: 'OperationLog' })
+
+const { dict } = useDict('sys_operation_type', 'sys_common_status', 'sys_req_method')
+
+const operationTypeOptions = computed(() => dict.value.sys_operation_type || [])
+const operationStatusOptions = computed(() => dict.value.sys_common_status || [])
 
 const crudRef = ref(null)
 const detailVisible = ref(false)
@@ -161,7 +161,7 @@ function handleBeforeSearch(params) {
 }
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'username',
     label: '用户名',
@@ -185,15 +185,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择操作类型',
       clearable: true,
-      options: [
-        { label: '查询', value: 'QUERY' },
-        { label: '新增', value: 'INSERT' },
-        { label: '更新', value: 'UPDATE' },
-        { label: '删除', value: 'DELETE' },
-        { label: '导入', value: 'IMPORT' },
-        { label: '导出', value: 'EXPORT' },
-        { label: '其他', value: 'OTHER' },
-      ],
+      options: operationTypeOptions.value,
     },
   },
   {
@@ -203,10 +195,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择状态',
       clearable: true,
-      options: [
-        { label: '成功', value: 1 },
-        { label: '失败', value: 0 },
-      ],
+      options: operationStatusOptions.value,
     },
   },
   {
@@ -237,7 +226,6 @@ const searchSchema = [
     props: {
       type: 'datetimerange',
     },
-    // 时间范围转换为 startTime 和 endTime
     transform: (value) => {
       if (value && value.length === 2) {
         return {
@@ -248,7 +236,7 @@ const searchSchema = [
       return {}
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -268,8 +256,11 @@ const tableColumns = computed(() => [
     label: '操作类型',
     width: 90,
     render: (row) => {
-      const config = getOperationTypeTag(row.operationType)
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, {
+        options: operationTypeOptions.value,
+        value: row.operationType,
+        size: 'small',
+      })
     },
   },
   {
@@ -284,7 +275,11 @@ const tableColumns = computed(() => [
     label: '请求方法',
     width: 90,
     render: (row) => {
-      return h(NTag, { size: 'small' }, { default: () => row.requestMethod || '-' })
+      return h(DictTag, {
+        options: dict.value.sys_req_method || [],
+        value: row.requestMethod,
+        size: 'small',
+      })
     },
   },
   {
@@ -298,8 +293,11 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(NTag, { type: row.operationStatus === 1 ? 'success' : 'error', size: 'small' }, { default: () => row.operationStatus === 1 ? '成功' : '失败' },
-      )
+      return h(DictTag, {
+        options: operationStatusOptions.value,
+        value: String(row.operationStatus),
+        size: 'small',
+      })
     },
   },
   {
@@ -328,20 +326,6 @@ const tableColumns = computed(() => [
     ],
   },
 ])
-
-// 获取操作类型标签配置
-function getOperationTypeTag(operationType) {
-  const typeMap = {
-    QUERY: { text: '查询', type: 'info' },
-    INSERT: { text: '新增', type: 'success' },
-    UPDATE: { text: '更新', type: 'warning' },
-    DELETE: { text: '删除', type: 'error' },
-    IMPORT: { text: '导入', type: 'primary' },
-    EXPORT: { text: '导出', type: 'primary' },
-    OTHER: { text: '其他', type: 'default' },
-  }
-  return typeMap[operationType] || { text: operationType, type: 'default' }
-}
 
 // 格式化JSON
 function formatJson(jsonStr) {

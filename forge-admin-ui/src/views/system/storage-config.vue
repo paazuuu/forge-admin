@@ -86,27 +86,24 @@
 import { NButton, NDynamicTags, NInput, NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'StorageConfig' })
+
+const STORAGE_TYPE_DICT = 'sys_file_storage_type'
 
 const crudRef = ref(null)
 const inputRef = ref(null)
 const fileTypeInput = ref('')
 
-// 存储类型选项
-const storageTypeOptions = [
-  { label: '本地存储', value: 'local' },
-  { label: 'RustFS', value: 'rustfs' },
-  { label: 'MinIO', value: 'minio' },
-  { label: '阿里云OSS', value: 'aliyun' },
-  { label: '腾讯云COS', value: 'tencent' },
-  { label: '七牛云', value: 'qiniu' },
-  { label: 'AWS S3', value: 's3' },
-]
+const { dict } = useDict(STORAGE_TYPE_DICT)
+
+const storageTypeOptions = computed(() => dict.value[STORAGE_TYPE_DICT] || [])
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'configName',
     label: '配置名称',
@@ -121,7 +118,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择存储类型',
-      options: storageTypeOptions,
+      options: storageTypeOptions.value,
     },
   },
   {
@@ -136,7 +133,7 @@ const searchSchema = [
       ],
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -156,17 +153,11 @@ const tableColumns = computed(() => [
     label: '存储类型',
     width: 120,
     render: (row) => {
-      const typeMap = {
-        local: { text: '本地存储', type: 'default' },
-        rustfs: { text: 'RustFS存储', type: 'success' },
-        minio: { text: 'MinIO', type: 'info' },
-        aliyun: { text: '阿里云OSS', type: 'warning' },
-        tencent: { text: '腾讯云COS', type: 'success' },
-        qiniu: { text: '七牛云', type: 'error' },
-        s3: { text: 'AWS S3', type: 'primary' },
-      }
-      const config = typeMap[row.storageType] || { text: row.storageType, type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, {
+        options: storageTypeOptions.value,
+        value: row.storageType,
+        size: 'small',
+      })
     },
   },
   {
@@ -226,7 +217,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   // ==================== 基础信息 ====================
   {
     type: 'divider',
@@ -253,7 +244,7 @@ const editSchema = [
     rules: [{ required: true, message: '请选择存储类型', trigger: 'change' }],
     props: {
       placeholder: '请选择存储类型',
-      options: storageTypeOptions,
+      options: storageTypeOptions.value,
     },
   },
   {
@@ -461,7 +452,7 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
 
 // 编辑
 function handleEdit(row) {

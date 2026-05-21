@@ -40,33 +40,29 @@
 
 <script setup>
 import { TrashOutline } from '@vicons/ionicons5'
-import { NIcon, NTag } from 'naive-ui'
+import { NIcon } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemPost' })
+
+const POST_TYPE_DICT = 'sys_post_type'
+const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 
 const crudRef = ref(null)
 const orgOptions = ref([])
 const selectedKeys = ref([])
 
-// 岗位类型选项
-const postTypeOptions = [
-  { label: '管理岗', value: 1 },
-  { label: '技术岗', value: 2 },
-  { label: '业务岗', value: 3 },
-  { label: '其他', value: 4 },
-]
+const { dict } = useDict(POST_TYPE_DICT, NORMAL_DISABLE_DICT)
 
-// 岗位状态选项
-const postStatusOptions = [
-  { label: '正常', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const postTypeOptions = computed(() => toNumberOptions(dict.value[POST_TYPE_DICT]))
+const postStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'postName',
     label: '岗位名称',
@@ -89,7 +85,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择岗位类型',
-      options: postTypeOptions,
+      options: postTypeOptions.value,
     },
   },
   {
@@ -98,10 +94,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: postStatusOptions,
+      options: postStatusOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -120,14 +116,7 @@ const tableColumns = computed(() => [
     label: '岗位类型',
     width: 120,
     render: (row) => {
-      const typeMap = {
-        1: { text: '管理岗', type: 'success' },
-        2: { text: '技术岗', type: 'info' },
-        3: { text: '业务岗', type: 'warning' },
-        4: { text: '其他', type: 'default' },
-      }
-      const config = typeMap[row.postType] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, { dictType: POST_TYPE_DICT, value: row.postType, size: 'small' })
     },
   },
   {
@@ -140,8 +129,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 100,
     render: (row) => {
-      return h(NTag, { type: row.postStatus === 1 ? 'success' : 'error', size: 'small' }, { default: () => row.postStatus === 1 ? '正常' : '禁用' },
-      )
+      return h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.postStatus, size: 'small' })
     },
   },
   {
@@ -162,7 +150,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = ref([
+const editSchema = computed(() => [
   // 基础信息
   {
     type: 'divider',
@@ -209,7 +197,7 @@ const editSchema = ref([
     defaultValue: 2,
     rules: [{ required: true, type: 'number', message: '请选择岗位类型', trigger: 'change' }],
     props: {
-      options: postTypeOptions,
+      options: postTypeOptions.value,
     },
   },
   {
@@ -238,7 +226,7 @@ const editSchema = ref([
     type: 'radio',
     defaultValue: 1,
     props: {
-      options: postStatusOptions,
+      options: postStatusOptions.value,
     },
   },
   {
@@ -252,6 +240,13 @@ const editSchema = ref([
     },
   },
 ])
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 组件挂载时加载组织选项
 onMounted(() => {
@@ -304,7 +299,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -332,7 +327,7 @@ function handleBatchDelete() {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('批量删除失败')
       }
     },

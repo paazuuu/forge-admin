@@ -58,4 +58,12 @@ public class AiCrudConfig extends TenantEntity {
     private LocalDateTime publishTime;
     /** 发布人 */
     private Long publishBy;
+    /** 业务领域ID */
+    private Long domainId;
+    /** 业务领域编码 */
+    private String domainCode;
+    /** 业务对象编码 */
+    private String objectCode;
+    /** 业务对象名称 */
+    private String objectName;
 }

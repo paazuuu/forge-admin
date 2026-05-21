@@ -1,8 +1,9 @@
 <template>
   <div class="dict-type-select">
-    <n-input-group>
+    <div class="dict-select-row">
       <n-select
         :value="value"
+        class="dict-select-control"
         :options="options"
         :loading="loading"
         tag
@@ -13,10 +14,10 @@
         @focus="loadDictTypes"
         @update:value="$emit('update:value', $event || '')"
       />
-      <n-button size="small" @click="openCreateModal">
+      <n-button class="create-dict-button" size="small" secondary @click="openCreateModal">
         新增字典
       </n-button>
-    </n-input-group>
+    </div>
 
     <n-modal
       v-model:show="createVisible"
@@ -241,6 +242,28 @@ async function saveDict() {
 <style scoped>
 .dict-type-select {
   width: 100%;
+}
+
+.dict-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  align-items: start;
+  gap: 8px;
+}
+
+.dict-select-control {
+  min-width: 0;
+}
+
+.dict-select-control :deep(.n-base-selection) {
+  min-height: 28px;
+}
+
+.create-dict-button {
+  width: 88px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
 }
 
 .dict-item-list {

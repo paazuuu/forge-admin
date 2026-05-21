@@ -9,16 +9,51 @@
           {{ modelSchema.tableName }} · {{ visibleColumns.length }} 个列表字段
         </div>
       </div>
-      <n-button :loading="loading" @click="refreshPreview">
-        刷新预览
-      </n-button>
+      <n-space size="small">
+        <n-button :loading="loading" @click="refreshPreview">
+          后端校验
+        </n-button>
+        <n-button
+          :loading="runtimeLoading"
+          :disabled="!isPublished"
+          type="primary"
+          secondary
+          @click="toggleRuntimePreview"
+        >
+          {{ showRuntimePreview ? '配置预览' : '真实运行预览' }}
+        </n-button>
+        <n-button :disabled="!isPublished" @click="openRuntimePage">
+          打开运行页
+        </n-button>
+      </n-space>
     </div>
 
     <n-alert v-if="errorMsg" type="error" :bordered="false" class="preview-alert">
       {{ errorMsg }}
     </n-alert>
+    <n-alert v-if="runtimeError" type="error" :bordered="false" class="preview-alert">
+      {{ runtimeError }}
+    </n-alert>
+    <n-alert v-if="!isPublished" type="info" :bordered="false" class="preview-alert">
+      当前展示的是草稿配置预览。保存并发布后，可在这里切换到真实运行预览，加载数据库数据并验证新增、编辑、删除等交互动作。
+    </n-alert>
 
-    <div class="preview-surface">
+    <div v-if="showRuntimePreview" class="runtime-crud-preview">
+      <div class="runtime-preview-head">
+        <div>
+          <div class="band-title">
+            真实运行态预览
+          </div>
+          <p>当前区域连接已发布运行接口，页面动作会按正式低代码 CRUD 执行。</p>
+        </div>
+        <n-tag type="success" :bordered="false">
+          已发布
+        </n-tag>
+      </div>
+      <AiCrudPage v-bind="runtimeCrudProps" />
+    </div>
+
+    <div v-else class="preview-surface">
       <div class="preview-band runtime-surface">
         <div class="band-title">
           {{ pageSchema.layoutType === 'tree-crud' ? '左树右表运行态' : '列表页面运行态' }}
@@ -91,7 +126,7 @@
 
       <div v-if="formFields.length" class="preview-band">
         <div class="band-title">
-          数据录入表单
+          表单与详情
         </div>
         <div class="form-grid">
           <n-form-item
@@ -108,29 +143,22 @@
           </n-form-item>
         </div>
       </div>
-
-      <div v-if="detailFields.length" class="preview-band">
-        <div class="band-title">
-          查询详情页
-        </div>
-        <n-descriptions :column="2" bordered size="small">
-          <n-descriptions-item
-            v-for="field in detailFields"
-            :key="field.field"
-            :label="field.label"
-          >
-            {{ field.label }}示例
-          </n-descriptions-item>
-        </n-descriptions>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, h, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { crudConfigRender } from '@/api/ai'
 import { lowcodePreview } from '@/api/lowcode-crud'
-import { resolveFieldRefsFromFormCreateRules } from '@/components/lowcode-builder/page/page-schema'
+import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
+import DictTag from '@/components/DictTag.vue'
+import {
+  buildPageDesignModelSchema,
+  resolveFieldRefsFromFormCreateRules,
+} from '@/components/lowcode-builder/page/page-schema'
+import { getDictData } from '@/composables/useDict'
 
 const props = defineProps({
   appId: {
@@ -143,20 +171,28 @@ const props = defineProps({
   },
 })
 
+const router = useRouter()
 const loading = ref(false)
 const errorMsg = ref('')
+const runtimeLoading = ref(false)
+const runtimeError = ref('')
+const runtimeConfig = ref(null)
+const previewMode = ref('draft')
+const dictCache = ref({})
 
-const modelSchema = computed(() => props.draft.modelSchema || { fields: [] })
 const pageSchema = computed(() => props.draft.pageSchema || { zones: [] })
+const modelSchema = computed(() => {
+  return buildPageDesignModelSchema(props.draft.modelSchema || { fields: [] }, pageSchema.value.modelRefs || [])
+})
 const tableZone = computed(() => pageSchema.value.zones?.find(zone => zone.zoneKey === 'table'))
-const detailZone = computed(() => pageSchema.value.zones?.find(zone => zone.zoneKey === 'detail'))
+const isPublished = computed(() => props.draft.publishStatus === 'PUBLISHED')
+const showRuntimePreview = computed(() => Boolean(previewMode.value === 'runtime' && runtimeConfig.value))
 
 const fieldMap = computed(() => new Map((modelSchema.value.fields || []).map(field => [field.field, field])))
 
 const searchFields = computed(() => resolveFields('search', field => field.searchable))
 const visibleColumns = computed(() => resolveFields('table', field => field.listVisible !== false))
 const formFields = computed(() => resolveFields('edit', field => field.formVisible !== false))
-const detailFields = computed(() => detailZone.value?.enabled === false ? [] : resolveFields('detail', field => field.formVisible !== false))
 
 const tableColumns = computed(() => visibleColumns.value.map(field => ({
   key: field.field,
@@ -173,6 +209,17 @@ const sampleRows = computed(() => {
     return row
   })
 })
+
+const runtimeCrudProps = computed(() => buildRuntimeCrudProps(runtimeConfig.value))
+
+watch(
+  () => [props.draft.configKey, props.draft.publishStatus],
+  () => {
+    runtimeConfig.value = null
+    runtimeError.value = ''
+    previewMode.value = 'draft'
+  },
+)
 
 function resolveFields(zoneKey, fallback) {
   const zone = pageSchema.value.zones?.find(item => item.zoneKey === zoneKey)
@@ -241,7 +288,7 @@ async function refreshPreview() {
   errorMsg.value = ''
   try {
     await lowcodePreview(props.appId, props.draft)
-    window.$message?.success('预览配置校验通过')
+    window.$message?.success('草稿配置校验通过')
   }
   catch (e) {
     errorMsg.value = e?.message || '预览失败'
@@ -249,6 +296,146 @@ async function refreshPreview() {
   finally {
     loading.value = false
   }
+}
+
+async function toggleRuntimePreview() {
+  if (showRuntimePreview.value) {
+    previewMode.value = 'draft'
+    return
+  }
+  await loadRuntimePreview()
+}
+
+async function loadRuntimePreview() {
+  if (!isPublished.value) {
+    window.$message?.warning('应用发布后才能加载真实运行态')
+    return
+  }
+  if (!props.draft.configKey) {
+    window.$message?.warning('缺少应用编码，无法加载运行态')
+    return
+  }
+  runtimeLoading.value = true
+  runtimeError.value = ''
+  try {
+    const res = await crudConfigRender(props.draft.configKey)
+    runtimeConfig.value = res.data
+    await preloadDicts(runtimeConfig.value)
+    previewMode.value = 'runtime'
+  }
+  catch (e) {
+    runtimeError.value = e?.message || '真实运行态预览加载失败'
+  }
+  finally {
+    runtimeLoading.value = false
+  }
+}
+
+function openRuntimePage() {
+  if (!isPublished.value || !props.draft.configKey)
+    return
+  const route = router.resolve(`/ai/crud-page/${props.draft.configKey}`)
+  window.open(route.href, '_blank')
+}
+
+function buildRuntimeCrudProps(cfg) {
+  if (!cfg)
+    return {}
+  const options = cfg.options || {}
+  return {
+    searchSchema: transformFields(cfg.searchSchema),
+    columns: transformColumns(cfg.columnsSchema, cfg.transConfig),
+    editSchema: transformFields(cfg.editSchema),
+    apiConfig: cfg.apiConfig || {},
+    options,
+    rowKey: cfg.rowKey || 'id',
+    modalType: options.modalType || cfg.modalType || 'drawer',
+    modalWidth: options.modalWidth || cfg.modalWidth || '800px',
+    editGridCols: options.editGridCols || cfg.editGridCols || 1,
+    searchGridCols: options.searchGridCols || cfg.searchGridCols || 4,
+    hideBatchDelete: !!options.hideBatchDelete,
+    showImport: !!options.showImport,
+    showExport: !!options.showExport,
+    importApi: extractApiUrl(cfg.apiConfig?.import),
+    exportApi: cfg.apiConfig?.export || '',
+    importTemplateUrl: extractApiUrl(cfg.apiConfig?.importTemplate),
+    enableCustomQuery: options.enableCustomQuery !== false,
+    customQueryConfigKey: cfg.configKey,
+  }
+}
+
+function transformColumns(columns, transConfig) {
+  const transMap = {}
+  if (transConfig && typeof transConfig === 'object') {
+    for (const [field, conf] of Object.entries(transConfig))
+      transMap[field] = conf.targetField || `${field}Name`
+  }
+  return (columns || []).map((col) => {
+    const key = col.prop || col.key || col.dataIndex
+    const nextCol = { ...col, prop: key }
+    if (transMap[key]) {
+      const targetField = transMap[key]
+      nextCol.render = row => row[targetField] ?? row[key]
+      return nextCol
+    }
+    if (col.render && typeof col.render === 'object' && col.render.type === 'dictTag') {
+      nextCol.render = row => h(DictTag, {
+        dictType: col.render.dictType,
+        value: row[key],
+        size: 'small',
+      })
+    }
+    return nextCol
+  })
+}
+
+function transformFields(fields) {
+  return (fields || []).map((field) => {
+    const nextField = { ...field }
+    if (field.dictType && ['select', 'radio', 'checkbox'].includes(field.type)) {
+      nextField.props = {
+        ...(nextField.props || {}),
+        options: dictCache.value[field.dictType] || [],
+      }
+    }
+    if (['date', 'datetime', 'time'].includes(field.type?.toLowerCase?.() || '')) {
+      nextField.props = {
+        ...(nextField.props || {}),
+        format: 'yyyy-MM-dd HH:mm:ss',
+        valueFormat: 'yyyy-MM-dd HH:mm:ss',
+      }
+    }
+    return nextField
+  })
+}
+
+async function preloadDicts(cfg) {
+  const types = new Set()
+  ;(cfg?.columnsSchema || []).forEach((col) => {
+    if (col.render?.dictType)
+      types.add(col.render.dictType)
+  })
+  ;[...(cfg?.searchSchema || []), ...(cfg?.editSchema || [])].forEach((field) => {
+    if (field.dictType)
+      types.add(field.dictType)
+  })
+  for (const type of types) {
+    if (!dictCache.value[type]) {
+      try {
+        dictCache.value[type] = await getDictData(type)
+      }
+      catch (e) {
+        console.warn(`[lowcode-preview] 加载字典 ${type} 失败`, e)
+      }
+    }
+  }
+}
+
+function extractApiUrl(apiConfigValue) {
+  if (!apiConfigValue)
+    return ''
+  const parts = String(apiConfigValue).split('@')
+  return parts.length > 1 ? parts.slice(1).join('@') : apiConfigValue
 }
 </script>
 
@@ -288,6 +475,31 @@ async function refreshPreview() {
 .preview-surface {
   display: grid;
   gap: 14px;
+}
+
+.runtime-crud-preview {
+  display: grid;
+  gap: 12px;
+  min-height: 620px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.runtime-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.runtime-preview-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .preview-band {

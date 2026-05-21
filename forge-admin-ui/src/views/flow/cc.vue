@@ -72,9 +72,11 @@ import { computed, h, onMounted, reactive, ref } from 'vue'
 import flowApi from '@/api/flow'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowStats from '@/components/flow/FlowStats.vue'
+import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
+const { dict, getLabel } = useDict('flow_read_status')
 const loading = ref(false)
 const dataSource = ref([])
 const activeTab = ref('received')
@@ -92,7 +94,7 @@ const pagination = reactive({
 
 const queryParams = reactive({ isRead: null })
 
-const readOptions = [{ label: '未读', value: 0 }, { label: '已读', value: 1 }]
+const readOptions = computed(() => toNumberOptions(dict.value.flow_read_status))
 
 const todoCount = ref(0)
 const doneCount = ref(0)
@@ -125,13 +127,20 @@ const columns = computed(() => {
   }
 
   baseColumns.push(
-    { title: '阅读状态', key: 'isRead', width: 90, render: row => h('span', { class: ['read-tag', row.isRead === 1 ? 'read' : 'unread'] }, row.isRead === 1 ? '已读' : '未读') },
+    { title: '阅读状态', key: 'isRead', width: 90, render: row => h('span', { class: ['read-tag', row.isRead === 1 ? 'read' : 'unread'] }, getLabel('flow_read_status', row.isRead)) },
     { title: '抄送时间', key: 'ccTime', width: 160 },
     { title: '操作', key: 'actions', width: 100, render: row => activeTab.value === 'received' && row.isRead === 0 ? h(NButton, { size: 'small', type: 'primary', onClick: () => handleMarkRead(row.id) }, () => '标记已读') : null },
   )
 
   return baseColumns
 })
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 async function loadData() {
   loading.value = true

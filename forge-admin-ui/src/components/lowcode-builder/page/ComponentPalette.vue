@@ -103,13 +103,7 @@ const baseControls = computed(() => canvasComponentCatalog.filter((item) => {
 }))
 
 const availableFields = computed(() => {
-  if (props.selectedZoneKey === 'search')
-    return props.fields.filter(field => field.searchable)
-  if (props.selectedZoneKey === 'table')
-    return props.fields.filter(field => field.listVisible !== false)
-  if (props.selectedZoneKey === 'detail')
-    return props.fields.filter(field => field.formVisible !== false)
-  return props.fields.filter(field => field.formVisible !== false)
+  return props.fields
 })
 
 function handleComponentDragStart(event, item) {

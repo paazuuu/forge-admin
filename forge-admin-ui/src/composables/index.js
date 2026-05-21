@@ -1,4 +1,5 @@
 export * from './useAliveData'
+export * from './useDict'
 export * from './useFlow'
 export * from './useForm'
 export * from './useMenu'

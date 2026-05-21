@@ -320,6 +320,11 @@ forge-admin-ui/src/
 
 - 下拉选项、状态标签 **必须使用字典组件**（`DictSelect` / `DictTag` / `useDict`）
 - Schema 必须定义为 `computed`，确保字典异步加载后响应式更新
+- 业务枚举和可配置枚举必须维护到 `sys_dict_type` + `sys_dict_data`，禁止在前端页面写死 `options` 或标签映射
+- 新增内置字典必须通过 `forge/db/migration/` 的 Flyway 脚本写入，脚本需具备 `NOT EXISTS` 防重复保护，`tenant_id` 必须为 `1`
+- 字典类型命名使用小写下划线，系统级字典建议使用 `sys_` 前缀；文件存储类型统一使用 `sys_file_storage_type`
+- 前端读取字典时使用 `useDict('<dict_type>')`，表格回显优先使用 `DictTag`，下拉选项使用 `computed(() => dict.value.<dict_type> || [])`
+- 字典数据的 `dict_value` 必须与后端枚举/存储策略/业务状态值保持一致，`dict_label` 只负责展示文案，`list_class` 负责标签样式
 
 ### 5.8 API 规范
 

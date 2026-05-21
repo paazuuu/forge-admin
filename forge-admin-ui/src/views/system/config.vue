@@ -21,23 +21,22 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemConfig' })
 
+const { dict } = useDict('sys_config_type')
+
+const configTypeOptions = computed(() => dict.value.sys_config_type || [])
+
 const crudRef = ref(null)
 
-// 系统内置选项
-const configTypeOptions = [
-  { label: '是', value: 'Y' },
-  { label: '否', value: 'N' },
-]
-
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'configName',
     label: '参数名称',
@@ -60,10 +59,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择',
-      options: configTypeOptions,
+      options: configTypeOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -92,8 +91,11 @@ const tableColumns = computed(() => [
     label: '系统内置',
     width: 100,
     render: (row) => {
-      return h(NTag, { type: row.configType === 'Y' ? 'success' : 'default', size: 'small' }, { default: () => row.configType === 'Y' ? '是' : '否' },
-      )
+      return h(DictTag, {
+        options: configTypeOptions.value,
+        value: row.configType,
+        size: 'small',
+      })
     },
   },
   {
@@ -124,7 +126,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
@@ -169,7 +171,7 @@ const editSchema = [
     defaultValue: 'N',
     rules: [{ required: true, message: '请选择是否系统内置', trigger: 'change' }],
     props: {
-      options: configTypeOptions,
+      options: configTypeOptions.value,
     },
   },
   {
@@ -192,7 +194,7 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
 
 // 编辑
 function handleEdit(row) {

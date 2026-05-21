@@ -192,14 +192,17 @@
 
 <script setup>
 // 引入必要的组件
-import { NButton, NSpace, NTag } from 'naive-ui'
-import { h, onMounted, reactive, ref } from 'vue'
+import { NButton, NSpace } from 'naive-ui'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'FlowConditionRule' })
 
 const message = window.$message
+const { dict } = useDict('flow_rule_type', 'flow_rule_operator', 'sys_enable_disable')
 
 // 搜索表单
 const searchForm = reactive({
@@ -209,28 +212,9 @@ const searchForm = reactive({
 })
 
 // 选项
-const ruleTypeOptions = [
-  { label: '处理条件', value: 'approval' },
-  { label: '流转条件', value: 'flow' },
-  { label: '通知条件', value: 'notify' },
-]
-
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
-
-const operatorOptions = [
-  { label: '等于', value: 'eq' },
-  { label: '不等于', value: 'ne' },
-  { label: '大于', value: 'gt' },
-  { label: '大于等于', value: 'ge' },
-  { label: '小于', value: 'lt' },
-  { label: '小于等于', value: 'le' },
-  { label: '包含', value: 'contains' },
-  { label: '为空', value: 'empty' },
-  { label: '不为空', value: 'notEmpty' },
-]
+const ruleTypeOptions = computed(() => dict.value.flow_rule_type || [])
+const statusOptions = computed(() => toNumberOptions(dict.value.sys_enable_disable))
+const operatorOptions = computed(() => dict.value.flow_rule_operator || [])
 
 const fieldOptions = ref([
   { label: '金额', value: 'amount' },
@@ -269,8 +253,7 @@ const columns = [
     key: 'ruleType',
     width: 100,
     render(row) {
-      const item = ruleTypeOptions.find(o => o.value === row.ruleType)
-      return item ? item.label : row.ruleType
+      return h(DictTag, { dictType: 'flow_rule_type', value: row.ruleType })
     },
   },
   {
@@ -283,9 +266,7 @@ const columns = [
     key: 'status',
     width: 80,
     render(row) {
-      return h(NTag, { type: row.status === 1 ? 'success' : 'warning' }, {
-        default: () => row.status === 1 ? '启用' : '禁用',
-      })
+      return h(DictTag, { dictType: 'sys_enable_disable', value: row.status })
     },
   },
   {
@@ -344,6 +325,13 @@ const testForm = reactive({
 })
 const testResult = ref(null)
 const currentTestRule = ref(null)
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 加载流程模型列表
 async function loadModels() {
@@ -446,7 +434,7 @@ async function handleDelete(row) {
       loadData()
     }
   }
-  catch (error) {
+  catch {
     message.error('删除失败')
   }
 }
@@ -471,7 +459,7 @@ async function handleSubmit() {
       loadData()
     }
   }
-  catch (error) {
+  catch {
     message.error('操作失败')
   }
   finally {
@@ -519,7 +507,7 @@ async function handleTest() {
       testResult.value = res.data
     }
   }
-  catch (error) {
+  catch {
     message.error('测试失败，请检查数据格式')
   }
   finally {

@@ -4,8 +4,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfigVersion;
+import com.mdframe.forge.plugin.generator.domain.entity.AiLowcodeDomain;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDomainRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeObjectSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePolicySchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePublishDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRuntimeConfig;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigVersionMapper;
@@ -20,8 +24,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -34,10 +40,12 @@ public class LowcodePublishService {
     private static final String DEPLOY_SKIP_DDL = "SKIP_DDL";
     private static final String DEPLOY_ONLINE_CREATE_TABLE = "ONLINE_CREATE_TABLE";
     private static final String DDL_PERMISSION = "ai:lowcode:deploy-ddl";
+    private static final String GENERAL_DOMAIN_CODE = "general";
 
     private final ObjectMapper objectMapper;
     private final AiCrudConfigService configService;
     private final LowcodeAppService appService;
+    private final LowcodeDomainService domainService;
     private final LowcodeRuntimeConfigBuilder runtimeConfigBuilder;
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlService ddlService;
@@ -48,13 +56,17 @@ public class LowcodePublishService {
     public Long publish(Long id, LowcodePublishDTO dto) {
         AiCrudConfig config = appService.requireConfig(id);
         LowcodeModelSchema modelSchema = resolvePublishModel(config, dto);
+        PublishDomainContext domainContext = resolvePublishDomainContext(config, modelSchema);
+        applyDomainToModelSchema(modelSchema, domainContext, config.getConfigKey());
         LowcodePageSchema pageSchema = resolvePublishPage(config, dto, modelSchema);
         schemaValidator.validatePage(pageSchema, modelSchema);
         ensureTableReady(modelSchema, dto);
 
         LowcodeRuntimeConfig runtimeConfig = runtimeConfigBuilder.buildRuntimeConfig(config.getConfigKey(), modelSchema, pageSchema);
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig);
+        applyDomainToConfig(config, domainContext);
         applyMenuConfig(config, dto);
+        applyPublishMenuParent(config, dto, domainContext.domain());
         int versionNo = nextVersionNo(config);
         config.setPublishStatus("PUBLISHED");
         config.setPublishedVersion(versionNo);
@@ -79,9 +91,12 @@ public class LowcodePublishService {
 
         Map<String, Object> snapshot = readSnapshot(targetVersion.getPublishSnapshot());
         LowcodeModelSchema modelSchema = readVersionModel(targetVersion);
+        PublishDomainContext domainContext = resolveVersionDomainContext(config, targetVersion, snapshot, modelSchema);
+        applyDomainToModelSchema(modelSchema, domainContext, config.getConfigKey());
         LowcodePageSchema pageSchema = readVersionPage(targetVersion);
         LowcodeRuntimeConfig runtimeConfig = runtimeConfigBuilder.buildRuntimeConfig(config.getConfigKey(), modelSchema, pageSchema);
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig);
+        applyDomainToConfig(config, domainContext);
         applyVersionRuntimeFields(config, targetVersion, snapshot, runtimeConfig);
         applySnapshotMenuFields(config, snapshot);
 
@@ -183,14 +198,17 @@ public class LowcodePublishService {
                 StringUtils.defaultIfBlank(config.getAppName(), config.getTableComment()));
         Long parentId = config.getMenuParentId() != null
                 ? config.getMenuParentId()
-                : menuRegisterAdapter.resolveDefaultLowcodeParentId();
+                : resolveDomainMenuParentId(resolveDomainForConfig(config));
+        if (parentId == null) {
+            parentId = menuRegisterAdapter.resolveDefaultLowcodeParentId();
+        }
         Integer sort = config.getMenuSort() != null ? config.getMenuSort() : 0;
 
         if (config.getMenuResourceId() == null) {
             Long menuResourceId = menuRegisterAdapter.registerMenu(menuName, parentId, config.getConfigKey(), sort);
             config.setMenuResourceId(menuResourceId);
         } else {
-            menuRegisterAdapter.updateMenu(config.getMenuResourceId(), menuName, sort);
+            menuRegisterAdapter.updateMenu(config.getMenuResourceId(), menuName, parentId, sort);
         }
         config.setMenuName(menuName);
         config.setMenuParentId(parentId);
@@ -207,6 +225,10 @@ public class LowcodePublishService {
         version.setTenantId(resolveTenantId(config));
         version.setConfigId(config.getId());
         version.setConfigKey(config.getConfigKey());
+        version.setDomainId(config.getDomainId());
+        version.setDomainCode(config.getDomainCode());
+        version.setObjectCode(config.getObjectCode());
+        version.setObjectName(config.getObjectName());
         version.setVersionNo(versionNo);
         version.setVersionType(versionType);
         version.setModelSchema(config.getModelSchema());
@@ -263,6 +285,12 @@ public class LowcodePublishService {
         snapshot.put("tableComment", config.getTableComment());
         snapshot.put("appName", config.getAppName());
         snapshot.put("layoutType", config.getLayoutType());
+        snapshot.put("domainId", config.getDomainId());
+        snapshot.put("domainCode", config.getDomainCode());
+        snapshot.put("objectCode", config.getObjectCode());
+        snapshot.put("objectName", config.getObjectName());
+        snapshot.put("domain", buildDomainSnapshot(config));
+        snapshot.put("object", buildObjectSnapshot(config));
         snapshot.put("dictConfig", config.getDictConfig());
         snapshot.put("desensitizeConfig", config.getDesensitizeConfig());
         snapshot.put("encryptConfig", config.getEncryptConfig());
@@ -306,6 +334,10 @@ public class LowcodePublishService {
         vo.setId(version.getId());
         vo.setConfigId(version.getConfigId());
         vo.setConfigKey(version.getConfigKey());
+        vo.setDomainId(version.getDomainId());
+        vo.setDomainCode(version.getDomainCode());
+        vo.setObjectCode(version.getObjectCode());
+        vo.setObjectName(version.getObjectName());
         vo.setVersionNo(version.getVersionNo());
         vo.setVersionType(version.getVersionType());
         vo.setRemark(version.getRemark());
@@ -327,8 +359,218 @@ public class LowcodePublishService {
         return tenantId != null ? tenantId : 1L;
     }
 
+    private PublishDomainContext resolvePublishDomainContext(AiCrudConfig config, LowcodeModelSchema modelSchema) {
+        LowcodeDomainRef schemaDomain = modelSchema != null ? modelSchema.getDomain() : null;
+        LowcodeObjectSchema schemaObject = modelSchema != null ? modelSchema.getObject() : null;
+        Long domainId = firstNonNull(config.getDomainId(), schemaDomain != null ? schemaDomain.getId() : null);
+        String domainCode = StringUtils.firstNonBlank(config.getDomainCode(), schemaDomain != null ? schemaDomain.getCode() : null);
+        AiLowcodeDomain domain = resolveDomain(domainId, domainCode);
+        String objectCode = StringUtils.firstNonBlank(config.getObjectCode(),
+                schemaObject != null ? schemaObject.getCode() : null,
+                config.getConfigKey(),
+                modelSchema != null ? modelSchema.getTableName() : null);
+        String objectName = StringUtils.firstNonBlank(config.getObjectName(),
+                schemaObject != null ? schemaObject.getName() : null,
+                modelSchema != null ? modelSchema.getBusinessName() : null,
+                config.getAppName(),
+                config.getTableComment(),
+                objectCode);
+        return new PublishDomainContext(domain, objectCode, objectName);
+    }
+
+    private PublishDomainContext resolveVersionDomainContext(AiCrudConfig config,
+                                                             AiCrudConfigVersion version,
+                                                             Map<String, Object> snapshot,
+                                                             LowcodeModelSchema modelSchema) {
+        LowcodeDomainRef schemaDomain = modelSchema != null ? modelSchema.getDomain() : null;
+        LowcodeObjectSchema schemaObject = modelSchema != null ? modelSchema.getObject() : null;
+        Long domainId = firstNonNull(
+                version.getDomainId(),
+                numberAsLong(snapshot.get("domainId"), null),
+                schemaDomain != null ? schemaDomain.getId() : null,
+                config.getDomainId());
+        String domainCode = StringUtils.firstNonBlank(
+                version.getDomainCode(),
+                text(snapshot.get("domainCode")),
+                schemaDomain != null ? schemaDomain.getCode() : null,
+                config.getDomainCode());
+        AiLowcodeDomain domain = resolveDomain(domainId, domainCode);
+        String objectCode = StringUtils.firstNonBlank(
+                version.getObjectCode(),
+                text(snapshot.get("objectCode")),
+                schemaObject != null ? schemaObject.getCode() : null,
+                config.getObjectCode(),
+                config.getConfigKey());
+        String objectName = StringUtils.firstNonBlank(
+                version.getObjectName(),
+                text(snapshot.get("objectName")),
+                schemaObject != null ? schemaObject.getName() : null,
+                config.getObjectName(),
+                modelSchema != null ? modelSchema.getBusinessName() : null,
+                config.getAppName(),
+                config.getTableComment(),
+                objectCode);
+        return new PublishDomainContext(domain, objectCode, objectName);
+    }
+
+    private AiLowcodeDomain resolveDomainForConfig(AiCrudConfig config) {
+        return resolveDomain(config.getDomainId(), config.getDomainCode());
+    }
+
+    private AiLowcodeDomain resolveDomain(Long domainId, String domainCode) {
+        if (domainId != null) {
+            try {
+                return domainService.requireDomain(domainId);
+            } catch (BusinessException ignored) {
+                // 旧版本快照可能只保留编码，继续按编码和通用业务域兜底。
+            }
+        }
+        if (StringUtils.isNotBlank(domainCode)) {
+            AiLowcodeDomain domain = domainService.getByCode(domainCode);
+            if (domain != null) {
+                return domain;
+            }
+        }
+        AiLowcodeDomain generalDomain = domainService.getByCode(GENERAL_DOMAIN_CODE);
+        if (generalDomain == null) {
+            throw new BusinessException("通用业务域不存在，请先执行低代码业务领域迁移脚本");
+        }
+        return generalDomain;
+    }
+
+    private void applyDomainToModelSchema(LowcodeModelSchema modelSchema, PublishDomainContext context, String configKey) {
+        if (modelSchema == null || context == null || context.domain() == null) {
+            return;
+        }
+        normalizeModelCollections(modelSchema);
+        modelSchema.setSchemaVersion(2);
+
+        LowcodeDomainRef domainRef = modelSchema.getDomain() == null ? new LowcodeDomainRef() : modelSchema.getDomain();
+        domainRef.setId(context.domain().getId());
+        domainRef.setCode(context.domain().getDomainCode());
+        domainRef.setName(context.domain().getDomainName());
+        modelSchema.setDomain(domainRef);
+
+        LowcodeObjectSchema object = modelSchema.getObject() == null ? new LowcodeObjectSchema() : modelSchema.getObject();
+        object.setCode(context.objectCode());
+        object.setName(context.objectName());
+        if (StringUtils.isBlank(object.getDescription())) {
+            object.setDescription(StringUtils.defaultIfBlank(modelSchema.getBusinessName(), context.objectName()));
+        }
+        modelSchema.setObject(object);
+        ensureTableName(modelSchema, context.domain(), context.objectCode(), configKey);
+    }
+
+    private void ensureTableName(LowcodeModelSchema modelSchema, AiLowcodeDomain domain, String objectCode, String configKey) {
+        if (schemaValidator.isValidTableName(modelSchema.getTableName())) {
+            return;
+        }
+        String prefix = StringUtils.defaultIfBlank(domain.getTablePrefix(), "biz_");
+        String base = StringUtils.firstNonBlank(
+                objectCode,
+                modelSchema.getObject() == null ? null : modelSchema.getObject().getCode(),
+                configKey,
+                "runtime_model");
+        modelSchema.setTableName(normalizeTableName(prefix + base));
+    }
+
+    private String normalizeTableName(String value) {
+        String normalized = StringUtils.defaultString(value)
+                .trim()
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .replaceAll("[^A-Za-z0-9_]+", "_")
+                .replaceAll("_+", "_")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("^[^a-z]+", "")
+                .replaceAll("_+$", "");
+        if (StringUtils.isBlank(normalized)) {
+            normalized = "biz_lowcode_model";
+        }
+        if (normalized.length() > 64) {
+            normalized = normalized.substring(0, 64).replaceAll("_+$", "");
+        }
+        return StringUtils.defaultIfBlank(normalized, "biz_lowcode_model");
+    }
+
+    private void normalizeModelCollections(LowcodeModelSchema modelSchema) {
+        if (modelSchema.getFields() == null) {
+            modelSchema.setFields(new ArrayList<>());
+        }
+        if (modelSchema.getRelations() == null) {
+            modelSchema.setRelations(new ArrayList<>());
+        }
+        if (modelSchema.getPolicies() == null) {
+            modelSchema.setPolicies(new LowcodePolicySchema());
+        }
+        if (modelSchema.getChildren() == null) {
+            modelSchema.setChildren(new ArrayList<>());
+        }
+    }
+
+    private void applyDomainToConfig(AiCrudConfig config, PublishDomainContext context) {
+        if (context == null || context.domain() == null) {
+            return;
+        }
+        config.setDomainId(context.domain().getId());
+        config.setDomainCode(context.domain().getDomainCode());
+        config.setObjectCode(context.objectCode());
+        config.setObjectName(context.objectName());
+    }
+
+    private void applyPublishMenuParent(AiCrudConfig config, LowcodePublishDTO dto, AiLowcodeDomain domain) {
+        if (dto != null && dto.getMenuParentId() != null) {
+            config.setMenuParentId(dto.getMenuParentId());
+            return;
+        }
+        Long parentId = resolveDomainMenuParentId(domain);
+        config.setMenuParentId(parentId != null ? parentId : menuRegisterAdapter.resolveDefaultLowcodeParentId());
+    }
+
+    private Long resolveDomainMenuParentId(AiLowcodeDomain domain) {
+        if (domain == null) {
+            return null;
+        }
+        if (domain.getMenuParentId() != null) {
+            return domain.getMenuParentId();
+        }
+        Long parentId = menuRegisterAdapter.resolveOrCreateDomainParentId(
+                domain.getDomainCode(), domain.getDomainName(), domain.getSort());
+        if (parentId != null) {
+            domain.setMenuParentId(parentId);
+            domainService.updateById(domain);
+        }
+        return parentId;
+    }
+
+    private Map<String, Object> buildDomainSnapshot(AiCrudConfig config) {
+        Map<String, Object> domain = new LinkedHashMap<>();
+        domain.put("id", config.getDomainId());
+        domain.put("code", config.getDomainCode());
+        return domain;
+    }
+
+    private Map<String, Object> buildObjectSnapshot(AiCrudConfig config) {
+        Map<String, Object> object = new LinkedHashMap<>();
+        object.put("code", config.getObjectCode());
+        object.put("name", config.getObjectName());
+        return object;
+    }
+
     private String text(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        if (values == null) {
+            return null;
+        }
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private Long numberAsLong(Object value, Long defaultValue) {
@@ -349,5 +591,8 @@ public class LowcodePublishService {
             return Integer.valueOf(text);
         }
         return defaultValue;
+    }
+
+    private record PublishDomainContext(AiLowcodeDomain domain, String objectCode, String objectName) {
     }
 }

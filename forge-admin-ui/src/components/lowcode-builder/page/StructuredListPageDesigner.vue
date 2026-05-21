@@ -53,13 +53,12 @@
         </div>
       </div>
 
-      <FieldOrderEditor
+      <FieldConfigSummary
         title="查询字段"
+        :fields="searchFields"
+        :total="fields.length"
         empty-text="当前没有查询字段"
-        :fields="fields"
-        :selected-refs="searchZone?.fieldRefs || []"
-        :filter="candidate => candidate.searchable"
-        @update="updateZoneRefs('search', $event)"
+        @configure="openFieldModal('search')"
       />
     </section>
 
@@ -127,13 +126,12 @@
         class="preview-table"
       />
 
-      <FieldOrderEditor
+      <FieldConfigSummary
         title="列表字段"
+        :fields="tableFields"
+        :total="fields.length"
         empty-text="当前没有列表字段"
-        :fields="fields"
-        :selected-refs="tableZone?.fieldRefs || []"
-        :filter="candidate => candidate.listVisible !== false"
-        @update="updateZoneRefs('table', $event)"
+        @configure="openFieldModal('table')"
       />
 
       <template v-if="layoutType === 'tree-crud'">
@@ -166,48 +164,41 @@
       </template>
     </section>
 
-    <section class="surface-section">
-      <div class="section-head">
-        <div>
-          <div class="section-title">
-            查询详情页
-          </div>
-          <div class="section-desc">
-            详情页按字段顺序展示，只调整是否启用和字段顺序。
-          </div>
-        </div>
-        <NSwitch
-          :value="detailZone?.enabled !== false"
-          size="small"
-          @update:value="patchZone('detail', { enabled: $event })"
+    <n-modal v-model:show="fieldModalVisible" :mask-closable="false">
+      <n-card
+        class="field-config-modal"
+        :title="activeFieldEditor?.title"
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+      >
+        <FieldOrderEditor
+          v-if="activeFieldEditor"
+          :title="activeFieldEditor.title"
+          :empty-text="activeFieldEditor.emptyText"
+          :fields="fields"
+          :selected-refs="activeFieldEditor.selectedRefs"
+          :filter="() => true"
+          :mode="activeFieldEditor.mode"
+          :settings="activeFieldEditor.settings"
+          @update="updateZoneRefs(activeFieldEditor.zoneKey, $event)"
+          @update-settings="updateZoneFieldSetting(activeFieldEditor.zoneKey, $event)"
         />
-      </div>
-
-      <n-descriptions :column="2" bordered size="small" class="detail-preview">
-        <n-descriptions-item
-          v-for="detailField in detailFields"
-          :key="detailField.field"
-          :label="detailField.label || detailField.field"
-        >
-          {{ resolveSampleValue(detailField) }}
-        </n-descriptions-item>
-      </n-descriptions>
-
-      <FieldOrderEditor
-        title="详情字段"
-        empty-text="当前没有详情字段"
-        :fields="fields"
-        :selected-refs="detailZone?.fieldRefs || []"
-        :filter="candidate => candidate.formVisible !== false"
-        @update="updateZoneRefs('detail', $event)"
-      />
-    </section>
+        <template #footer>
+          <n-space justify="end">
+            <NButton @click="fieldModalVisible = false">
+              完成
+            </NButton>
+          </n-space>
+        </template>
+      </n-card>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NUpload } from 'naive-ui'
-import { computed, defineComponent, h } from 'vue'
+import { computed, defineComponent, h, ref } from 'vue'
 import draggable from 'vuedraggable'
 
 const props = defineProps({
@@ -226,6 +217,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const queryTypeOptions = [
+  { label: '等于', value: 'eq' },
+  { label: '包含', value: 'like' },
+  { label: '大于等于', value: 'ge' },
+  { label: '小于等于', value: 'le' },
+  { label: '区间', value: 'between' },
+  { label: '多值', value: 'in' },
+]
 
 const ComponentPreviewControl = defineComponent({
   name: 'ComponentPreviewControl',
@@ -292,6 +291,56 @@ const ComponentPreviewControl = defineComponent({
   },
 })
 
+const FieldConfigSummary = defineComponent({
+  name: 'FieldConfigSummary',
+  props: {
+    title: {
+      type: String,
+      required: true,
+    },
+    fields: {
+      type: Array,
+      default: () => [],
+    },
+    total: {
+      type: Number,
+      default: 0,
+    },
+    emptyText: {
+      type: String,
+      required: true,
+    },
+  },
+  emits: ['configure'],
+  setup(summaryProps, { emit }) {
+    return () => h('div', { class: 'field-config-summary' }, [
+      h('div', { class: 'summary-main' }, [
+        h('div', { class: 'summary-title' }, [
+          h('strong', null, summaryProps.title),
+          h('span', null, `${summaryProps.fields.length}/${summaryProps.total} 个字段`),
+        ]),
+        summaryProps.fields.length
+          ? h('div', { class: 'summary-chip-list' }, [
+              ...summaryProps.fields.slice(0, 10).map(field => h('span', {
+                key: field.field,
+                class: 'summary-chip',
+              }, field.label || field.field)),
+              summaryProps.fields.length > 10
+                ? h('span', { class: 'summary-chip muted' }, `+${summaryProps.fields.length - 10}`)
+                : null,
+            ])
+          : h('div', { class: 'summary-empty' }, summaryProps.emptyText),
+      ]),
+      h(NButton, {
+        size: 'small',
+        type: 'primary',
+        secondary: true,
+        onClick: () => emit('configure'),
+      }, { default: () => '配置字段' }),
+    ])
+  },
+})
+
 const FieldOrderEditor = defineComponent({
   name: 'FieldOrderEditor',
   props: {
@@ -315,8 +364,16 @@ const FieldOrderEditor = defineComponent({
       type: Function,
       required: true,
     },
+    mode: {
+      type: String,
+      default: '',
+    },
+    settings: {
+      type: Object,
+      default: () => ({}),
+    },
   },
-  emits: ['update'],
+  emits: ['update', 'updateSettings'],
   setup(editorProps, { emit }) {
     const fieldMap = computed(() => new Map(editorProps.fields.map(field => [field.field, field])))
     const selectedRows = computed(() => editorProps.selectedRefs.map(ref => fieldMap.value.get(ref)).filter(Boolean))
@@ -326,6 +383,15 @@ const FieldOrderEditor = defineComponent({
     const updateRows = rows => emit('update', rows.map(row => row.field))
     const remove = field => emit('update', editorProps.selectedRefs.filter(ref => ref !== field))
     const add = field => emit('update', [...editorProps.selectedRefs, field])
+    const updateSetting = (field, patch) => {
+      emit('updateSettings', {
+        field,
+        settings: {
+          ...(editorProps.settings?.[field] || {}),
+          ...patch,
+        },
+      })
+    }
     return () => h('div', { class: 'field-editor' }, [
       h('div', { class: 'field-editor-title' }, editorProps.title),
       selectedRows.value.length
@@ -337,10 +403,28 @@ const FieldOrderEditor = defineComponent({
             'class': 'selected-field-list',
             'onUpdate:modelValue': updateRows,
           }, {
-            item: ({ element }) => h('div', { class: 'selected-field-row' }, [
+            item: ({ element }) => h('div', { class: ['selected-field-row', editorProps.mode ? `mode-${editorProps.mode}` : ''] }, [
               h('span', { class: 'field-handle' }, '☰'),
               h('span', { class: 'field-name' }, element.label || element.field),
               h('span', { class: 'field-code' }, element.field),
+              editorProps.mode === 'search'
+                ? h(NSelect, {
+                    value: editorProps.settings?.[element.field]?.queryType || element.queryType || 'like',
+                    options: queryTypeOptions,
+                    size: 'tiny',
+                    onUpdateValue: value => updateSetting(element.field, { queryType: value }),
+                  })
+                : null,
+              editorProps.mode === 'table'
+                ? h('span', { class: 'field-inline-switch' }, [
+                    h('span', null, '排序'),
+                    h(NSwitch, {
+                      value: Boolean(editorProps.settings?.[element.field]?.sortable ?? element.sortable),
+                      size: 'small',
+                      onUpdateValue: value => updateSetting(element.field, { sortable: value }),
+                    }),
+                  ])
+                : null,
               h('button', { type: 'button', onClick: () => remove(element.field) }, '移除'),
             ]),
           })
@@ -359,15 +443,35 @@ const FieldOrderEditor = defineComponent({
 const fieldMap = computed(() => new Map(props.fields.map(field => [field.field, field])))
 const searchZone = computed(() => findZone('search'))
 const tableZone = computed(() => findZone('table'))
-const detailZone = computed(() => findZone('detail'))
+const fieldModalVisible = ref(false)
+const activeFieldZone = ref('search')
 const fieldOptions = computed(() => props.fields.map(field => ({
   label: field.label ? `${field.label}（${field.field}）` : field.field,
   value: field.field,
 })))
 const searchFields = computed(() => resolveFields(searchZone.value, field => field.searchable))
 const tableFields = computed(() => resolveFields(tableZone.value, field => field.listVisible !== false))
-const detailFields = computed(() => detailZone.value?.enabled === false ? [] : resolveFields(detailZone.value, field => field.formVisible !== false))
 const treeConfig = computed(() => tableZone.value?.props?.treeConfig || {})
+const activeFieldEditor = computed(() => {
+  if (activeFieldZone.value === 'table') {
+    return {
+      zoneKey: 'table',
+      title: '列表字段',
+      emptyText: '当前没有列表字段',
+      mode: 'table',
+      selectedRefs: tableZone.value?.fieldRefs || [],
+      settings: tableZone.value?.props?.fieldSettings || {},
+    }
+  }
+  return {
+    zoneKey: 'search',
+    title: '查询字段',
+    emptyText: '当前没有查询字段',
+    mode: 'search',
+    selectedRefs: searchZone.value?.fieldRefs || [],
+    settings: searchZone.value?.props?.fieldSettings || {},
+  }
+})
 const tableColumns = computed(() => [
   ...tableFields.value.map(field => ({
     key: field.field,
@@ -425,6 +529,26 @@ function updateTreeConfig(key, value) {
   })
 }
 
+function updateZoneFieldSetting(zoneKey, payload) {
+  const zone = findZone(zoneKey)
+  if (!zone || !payload?.field)
+    return
+  patchZone(zoneKey, {
+    props: {
+      ...(zone.props || {}),
+      fieldSettings: {
+        ...(zone.props?.fieldSettings || {}),
+        [payload.field]: payload.settings,
+      },
+    },
+  })
+}
+
+function openFieldModal(zoneKey) {
+  activeFieldZone.value = zoneKey
+  fieldModalVisible.value = true
+}
+
 function patchZone(zoneKey, patch) {
   const zones = (props.modelValue.zones || []).map((zone) => {
     if (zone.zoneKey !== zoneKey)
@@ -439,11 +563,11 @@ function patchZone(zoneKey, patch) {
 }
 
 function resetSearchFields() {
-  updateZoneRefs('search', props.fields.filter(field => field.searchable).map(field => field.field))
+  updateZoneRefs('search', props.fields.map(field => field.field))
 }
 
 function resetTableFields() {
-  updateZoneRefs('table', props.fields.filter(field => field.listVisible !== false).map(field => field.field))
+  updateZoneRefs('table', props.fields.map(field => field.field))
 }
 
 function resolveOptions(field) {
@@ -546,14 +670,75 @@ function resolveSampleValue(field, index = 0) {
   gap: 12px;
 }
 
-.detail-preview {
-  margin-bottom: 14px;
-}
-
 :deep(.field-editor) {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid #eef2f7;
+}
+
+.field-config-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.summary-main {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.summary-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-title strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.summary-title span,
+.summary-empty {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.summary-chip-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.summary-chip {
+  max-width: 128px;
+  min-height: 24px;
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-chip.muted {
+  color: #64748b;
+}
+
+.field-config-modal {
+  width: min(960px, calc(100vw - 48px));
 }
 
 :deep(.field-editor-title) {
@@ -572,7 +757,7 @@ function resolveSampleValue(field, index = 0) {
 
 :deep(.selected-field-row) {
   display: grid;
-  grid-template-columns: 16px auto auto auto;
+  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) auto;
   align-items: center;
   gap: 8px;
   min-height: 32px;
@@ -581,6 +766,21 @@ function resolveSampleValue(field, index = 0) {
   border-radius: 6px;
   background: #fff;
   font-size: 12px;
+}
+
+:deep(.selected-field-row.mode-search) {
+  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) 108px auto;
+}
+
+:deep(.selected-field-row.mode-table) {
+  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) 76px auto;
+}
+
+:deep(.field-inline-switch) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
 }
 
 :deep(.field-handle) {
@@ -622,6 +822,38 @@ function resolveSampleValue(field, index = 0) {
   border: 1px dashed #cbd5e1;
   border-radius: 6px;
   background: #f8fafc;
+}
+
+.field-config-modal :deep(.field-editor) {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.field-config-modal :deep(.selected-field-list) {
+  display: grid;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.field-config-modal :deep(.available-field-list) {
+  max-height: 180px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.field-config-modal :deep(.selected-field-row) {
+  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) auto;
+  min-height: 36px;
+}
+
+.field-config-modal :deep(.selected-field-row.mode-search) {
+  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) 132px auto;
+}
+
+.field-config-modal :deep(.selected-field-row.mode-table) {
+  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) 96px auto;
 }
 
 @media (max-width: 1280px) {

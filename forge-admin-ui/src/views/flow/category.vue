@@ -139,14 +139,14 @@
 
 <script setup>
 import { NButton, NIcon, NSpace, NTreeSelect } from 'naive-ui'
-import { h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import flowApi from '@/api/flow'
 import FlowCategoryStats from '@/components/flow/FlowCategoryStats.vue'
+import { useDict } from '@/composables/useDict'
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const { dict, getLabel } = useDict('sys_enable_disable')
+
+const statusOptions = computed(() => toNumberOptions(dict.value.sys_enable_disable))
 
 const queryParams = reactive({
   categoryName: '',
@@ -207,7 +207,7 @@ const columns = [
         e.stopPropagation()
         handleStatusChange(row, row.status === 1 ? 0 : 1)
       },
-    }, row.status === 1 ? '启用' : '禁用'),
+    }, getLabel('sys_enable_disable', row.status)),
   },
   {
     title: '创建时间',
@@ -245,6 +245,13 @@ const columns = [
     }),
   },
 ]
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 const dataSource = ref([])
 const loading = ref(false)
@@ -310,16 +317,6 @@ function handleFilter(status) {
     queryParams.status = status
   }
   fetchData()
-}
-
-function toggleExpand(key) {
-  const index = expandedRowKeys.value.indexOf(key)
-  if (index > -1) {
-    expandedRowKeys.value.splice(index, 1)
-  }
-  else {
-    expandedRowKeys.value.push(key)
-  }
 }
 
 function handleExpandedChange(keys) {

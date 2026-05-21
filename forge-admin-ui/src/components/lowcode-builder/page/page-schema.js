@@ -14,14 +14,14 @@ export const pageZoneCatalog = [
   {
     zoneKey: 'edit',
     componentKey: 'edit-form',
-    title: '编辑表单页',
-    desc: '新增、编辑、必填校验、自由排版',
+    title: '表单与详情页',
+    desc: '新增、编辑、详情展示共用字段',
   },
   {
     zoneKey: 'detail',
     componentKey: 'detail-panel',
-    title: '查询详情页',
-    desc: '只读详情字段与业务动作',
+    title: '详情页兼容区',
+    desc: '历史协议保留，新配置使用表单与详情页',
   },
 ]
 
@@ -175,8 +175,8 @@ export const canvasComponentCatalog = [
   {
     group: 'field',
     componentKey: 'detail-field',
-    title: '详情字段',
-    desc: '只读字段展示',
+    title: '只读展示字段',
+    desc: '历史详情区兼容组件',
     zones: ['detail'],
     defaultWidth: 300,
     defaultHeight: 58,
@@ -186,8 +186,11 @@ export const canvasComponentCatalog = [
 export function createDefaultPageSchema(modelSchema) {
   const fields = modelSchema?.fields || []
   const isTree = modelSchema?.appType === 'TREE'
+  const layoutType = isTree ? 'tree-crud' : 'simple-crud'
   const schema = {
-    layoutType: isTree ? 'tree-crud' : 'simple-crud',
+    layoutType,
+    listLayoutMode: 'grid',
+    listGridLayout: createDefaultListGridLayout(modelSchema, { layoutType }),
     zones: [
       {
         zoneKey: 'search',
@@ -294,10 +297,505 @@ export function syncPageSchemaWithModel(pageSchema, modelSchema) {
     }
   }
 
-  return {
-    layoutType: current.layoutType || 'simple-crud',
-    zones,
+  const listLayoutMode = current.listLayoutMode || 'grid'
+  const layoutType = current.layoutType || 'simple-crud'
+  let listGridLayout = current.listGridLayout
+  if (listLayoutMode === 'grid') {
+    if (!listGridLayout || !listGridLayout.items?.length) {
+      listGridLayout = bootstrapGridLayoutFromZones(zones, modelSchema, { layoutType })
+    }
+    listGridLayout = syncGridLayoutWithModel(listGridLayout, modelSchema)
   }
+  const finalZones = listLayoutMode === 'grid' && listGridLayout
+    ? applyGridLayoutToZones(zones, listGridLayout, modelSchema)
+    : zones
+
+  return {
+    ...current,
+    layoutType,
+    listLayoutMode,
+    listGridLayout,
+    zones: finalZones,
+  }
+}
+
+export function createPageModelRef(model = {}, options = {}) {
+  const schema = model.modelSchema || model
+  const modelCode = model.modelCode || schema?.object?.code || options.modelCode || ''
+  const modelName = model.modelName || schema?.object?.name || schema?.businessName || modelCode
+  const primary = Boolean(options.primary)
+
+  return {
+    modelId: isNumericId(model.id) ? Number(model.id) : null,
+    modelCode,
+    modelName,
+    primary,
+    fields: (schema?.fields || []).map(field => ({
+      ...field,
+      sourceField: field.field,
+      fieldRef: resolveModelFieldRef(modelCode, field.field, primary),
+      modelCode,
+      modelName,
+    })),
+  }
+}
+
+export function buildPageDesignModelSchema(modelSchema, modelRefs = []) {
+  const refs = Array.isArray(modelRefs) && modelRefs.length
+    ? modelRefs
+    : [createPageModelRef({ modelSchema }, { primary: true })]
+  const fields = refs.flatMap((modelRef) => {
+    const modelCode = modelRef.modelCode || ''
+    const modelName = modelRef.modelName || modelCode || '数据模型'
+    return (modelRef.fields || []).map((field) => {
+      const sourceField = field.sourceField || field.field
+      const fieldRef = field.fieldRef || resolveModelFieldRef(modelCode, sourceField, modelRef.primary)
+      return {
+        ...field,
+        field: fieldRef,
+        sourceField,
+        rawLabel: field.rawLabel || field.label || sourceField,
+        modelId: modelRef.modelId || null,
+        modelCode,
+        modelName,
+        label: `${modelName} / ${field.label || sourceField}`,
+      }
+    })
+  })
+
+  return {
+    ...(modelSchema || {}),
+    fields,
+    pageModelRefs: refs,
+  }
+}
+
+export function resolveModelFieldRef(modelCode, fieldName, primary = false) {
+  if (primary)
+    return fieldName || ''
+  return `${safeKey(modelCode || 'model')}__${fieldName || 'field'}`
+}
+
+export const LIST_PAGE_GRID_COLS = 12
+export const LIST_PAGE_GRID_ROW_HEIGHT = 32
+export const LIST_PAGE_GRID_GAP = 8
+
+export const listPageBlockCatalog = [
+  {
+    blockType: 'search-form',
+    group: 'data',
+    title: '查询表单',
+    desc: '查询字段集 + 查询/重置/收起',
+    defaultW: 12,
+    defaultH: 4,
+    multiField: true,
+    requireFields: true,
+    unique: true,
+  },
+  {
+    blockType: 'toolbar',
+    group: 'action',
+    title: '操作工具栏',
+    desc: '新增 / 导入 / 导出 / 自定义查询',
+    defaultW: 12,
+    defaultH: 1,
+    unique: true,
+  },
+  {
+    blockType: 'data-table',
+    group: 'data',
+    title: '数据列表',
+    desc: '配置展示列、排序、宽度',
+    defaultW: 12,
+    defaultH: 10,
+    multiField: true,
+    requireFields: true,
+    unique: true,
+  },
+  {
+    blockType: 'tree-panel',
+    group: 'data',
+    title: '左侧导航树',
+    desc: '左树右表场景使用',
+    defaultW: 3,
+    defaultH: 14,
+    unique: true,
+    onlyFor: ['tree-crud'],
+  },
+  {
+    blockType: 'stats-strip',
+    group: 'extra',
+    title: '指标卡片',
+    desc: '顶部 KPI / 统计条',
+    defaultW: 12,
+    defaultH: 2,
+  },
+  {
+    blockType: 'custom-html',
+    group: 'extra',
+    title: '说明文本',
+    desc: '富文本 / Markdown 提示',
+    defaultW: 6,
+    defaultH: 3,
+  },
+  {
+    blockType: 'sub-table-tabs',
+    group: 'extra',
+    title: '子表 Tab',
+    desc: '关联模型分页签',
+    defaultW: 12,
+    defaultH: 8,
+  },
+  {
+    blockType: 'section-divider',
+    group: 'extra',
+    title: '分组标题',
+    desc: '区块分隔与说明',
+    defaultW: 12,
+    defaultH: 1,
+  },
+]
+
+export function resolveListPageBlockMeta(blockType) {
+  return listPageBlockCatalog.find(item => item.blockType === blockType) || null
+}
+
+export function createDefaultListGridLayout(modelSchema, options = {}) {
+  const fields = modelSchema?.fields || []
+  const layoutType = options.layoutType || (modelSchema?.appType === 'TREE' ? 'tree-crud' : 'simple-crud')
+  const isTree = layoutType === 'tree-crud'
+  const items = []
+  const mainX = isTree ? 3 : 0
+  const mainW = isTree ? 9 : 12
+
+  if (isTree) {
+    items.push({
+      id: 'block_tree',
+      blockType: 'tree-panel',
+      gridX: 0,
+      gridY: 0,
+      gridW: 3,
+      gridH: 18,
+      label: '导航树',
+      props: {
+        treeTitle: `${modelSchema?.businessName || '业务'}树`,
+        keyField: modelSchema?.treeConfig?.keyField || 'id',
+        parentField: modelSchema?.treeConfig?.parentField || 'parentId',
+        labelField: modelSchema?.treeConfig?.labelField || (fields.find(f => f.field === 'name')?.field) || fields[0]?.field || '',
+        childrenField: modelSchema?.treeConfig?.childrenField || 'children',
+      },
+      fieldRefs: [],
+    })
+  }
+
+  let yCursor = 0
+  items.push({
+    id: 'block_search',
+    blockType: 'search-form',
+    gridX: mainX,
+    gridY: yCursor,
+    gridW: mainW,
+    gridH: 4,
+    label: '查询表单',
+    props: {
+      fieldSettings: {},
+      collapsible: true,
+    },
+    fieldRefs: fields.filter(f => f.searchable).map(f => f.field),
+  })
+  yCursor += 4
+
+  items.push({
+    id: 'block_toolbar',
+    blockType: 'toolbar',
+    gridX: mainX,
+    gridY: yCursor,
+    gridW: mainW,
+    gridH: 1,
+    label: '操作工具栏',
+    props: {
+      actions: ['add', 'import', 'export', 'custom-query'],
+    },
+    fieldRefs: [],
+  })
+  yCursor += 1
+
+  items.push({
+    id: 'block_table',
+    blockType: 'data-table',
+    gridX: mainX,
+    gridY: yCursor,
+    gridW: mainW,
+    gridH: 10,
+    label: '数据列表',
+    props: {
+      fieldSettings: {},
+    },
+    fieldRefs: fields.filter(f => f.listVisible !== false).map(f => f.field),
+  })
+
+  return {
+    cols: LIST_PAGE_GRID_COLS,
+    rowHeight: LIST_PAGE_GRID_ROW_HEIGHT,
+    gap: LIST_PAGE_GRID_GAP,
+    items,
+  }
+}
+
+export function syncGridLayoutWithModel(layout, modelSchema) {
+  const fieldSet = new Set((modelSchema?.fields || []).map(f => f.field))
+  const fallback = createDefaultListGridLayout(modelSchema)
+  const source = (layout?.items || []).length ? layout : fallback
+  const items = (source.items || []).map((item) => {
+    const meta = resolveListPageBlockMeta(item.blockType) || {}
+    const refs = (item.fieldRefs || []).filter(field => fieldSet.has(field))
+    return {
+      id: item.id || createBlockId(item.blockType),
+      blockType: item.blockType,
+      label: item.label || meta.title || item.blockType,
+      gridX: clampNumber(item.gridX, 0, LIST_PAGE_GRID_COLS - 1),
+      gridY: Math.max(0, Number(item.gridY) || 0),
+      gridW: clampNumber(item.gridW, 1, LIST_PAGE_GRID_COLS),
+      gridH: Math.max(1, Number(item.gridH) || meta.defaultH || 2),
+      props: { ...(item.props || {}) },
+      fieldRefs: refs,
+    }
+  })
+  return {
+    cols: Number(source.cols) || LIST_PAGE_GRID_COLS,
+    rowHeight: Number(source.rowHeight) || LIST_PAGE_GRID_ROW_HEIGHT,
+    gap: Number(source.gap) || LIST_PAGE_GRID_GAP,
+    items,
+  }
+}
+
+export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
+  const layoutType = options.layoutType || (modelSchema?.appType === 'TREE' ? 'tree-crud' : 'simple-crud')
+  const isTree = layoutType === 'tree-crud'
+  const search = (zones || []).find(z => z.zoneKey === 'search')
+  const table = (zones || []).find(z => z.zoneKey === 'table')
+  const items = []
+  const mainX = isTree ? 3 : 0
+  const mainW = isTree ? 9 : 12
+
+  if (isTree) {
+    const treeConfig = table?.props?.treeConfig || {}
+    items.push({
+      id: 'block_tree',
+      blockType: 'tree-panel',
+      gridX: 0,
+      gridY: 0,
+      gridW: 3,
+      gridH: 18,
+      label: '导航树',
+      props: {
+        treeTitle: treeConfig.treeTitle || `${modelSchema?.businessName || '业务'}树`,
+        keyField: treeConfig.keyField || 'id',
+        parentField: treeConfig.parentField || 'parentId',
+        labelField: treeConfig.labelField || '',
+        childrenField: treeConfig.childrenField || 'children',
+      },
+      fieldRefs: [],
+    })
+  }
+
+  let yCursor = 0
+  if (search?.enabled !== false) {
+    items.push({
+      id: 'block_search',
+      blockType: 'search-form',
+      gridX: mainX,
+      gridY: yCursor,
+      gridW: mainW,
+      gridH: 4,
+      label: '查询表单',
+      props: {
+        fieldSettings: search?.props?.fieldSettings || {},
+        collapsible: true,
+      },
+      fieldRefs: search?.fieldRefs || [],
+    })
+    yCursor += 4
+  }
+
+  const tableActions = []
+  if (table?.props?.showImport)
+    tableActions.push('import')
+  if (table?.props?.showExport)
+    tableActions.push('export')
+  if (table?.props?.enableCustomQuery !== false)
+    tableActions.push('custom-query')
+  tableActions.unshift('add')
+
+  items.push({
+    id: 'block_toolbar',
+    blockType: 'toolbar',
+    gridX: mainX,
+    gridY: yCursor,
+    gridW: mainW,
+    gridH: 1,
+    label: '操作工具栏',
+    props: { actions: Array.from(new Set(tableActions)) },
+    fieldRefs: [],
+  })
+  yCursor += 1
+
+  if (table?.enabled !== false) {
+    items.push({
+      id: 'block_table',
+      blockType: 'data-table',
+      gridX: mainX,
+      gridY: yCursor,
+      gridW: mainW,
+      gridH: 10,
+      label: '数据列表',
+      props: { fieldSettings: table?.props?.fieldSettings || {} },
+      fieldRefs: table?.fieldRefs || [],
+    })
+  }
+
+  return {
+    cols: LIST_PAGE_GRID_COLS,
+    rowHeight: LIST_PAGE_GRID_ROW_HEIGHT,
+    gap: LIST_PAGE_GRID_GAP,
+    items,
+  }
+}
+
+export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
+  const items = gridLayout?.items || []
+  const search = items.find(i => i.blockType === 'search-form')
+  const table = items.find(i => i.blockType === 'data-table')
+  const tree = items.find(i => i.blockType === 'tree-panel')
+  const toolbar = items.find(i => i.blockType === 'toolbar')
+  const fieldSet = new Set((modelSchema?.fields || []).map(f => f.field))
+
+  return (zones || []).map((zone) => {
+    if (zone.zoneKey === 'search') {
+      const refs = (search?.fieldRefs || []).filter(ref => fieldSet.has(ref))
+      return {
+        ...zone,
+        enabled: !!search,
+        fieldRefs: refs,
+        props: {
+          ...(zone.props || {}),
+          fieldSettings: search?.props?.fieldSettings || zone.props?.fieldSettings || {},
+        },
+      }
+    }
+    if (zone.zoneKey === 'table') {
+      const refs = (table?.fieldRefs || []).filter(ref => fieldSet.has(ref))
+      const actions = toolbar?.props?.actions || []
+      const nextProps = {
+        ...(zone.props || {}),
+        fieldSettings: table?.props?.fieldSettings || zone.props?.fieldSettings || {},
+        showImport: actions.includes('import'),
+        showExport: actions.includes('export'),
+        enableCustomQuery: actions.includes('custom-query'),
+      }
+      if (tree) {
+        nextProps.treeConfig = {
+          ...(zone.props?.treeConfig || {}),
+          treeTitle: tree.props?.treeTitle || zone.props?.treeConfig?.treeTitle,
+          keyField: tree.props?.keyField || zone.props?.treeConfig?.keyField || 'id',
+          parentField: tree.props?.parentField || zone.props?.treeConfig?.parentField || 'parentId',
+          labelField: tree.props?.labelField || zone.props?.treeConfig?.labelField || '',
+          childrenField: tree.props?.childrenField || zone.props?.treeConfig?.childrenField || 'children',
+        }
+      }
+      return {
+        ...zone,
+        enabled: !!table,
+        fieldRefs: refs,
+        props: nextProps,
+      }
+    }
+    return zone
+  })
+}
+
+export function ensureGridBlockId(blockType, existingIds = new Set()) {
+  let id = createBlockId(blockType)
+  while (existingIds.has(id))
+    id = createBlockId(blockType)
+  return id
+}
+
+export function createGridBlock(blockType, modelSchema, position = {}) {
+  const meta = resolveListPageBlockMeta(blockType)
+  if (!meta)
+    return null
+  const fields = modelSchema?.fields || []
+  const base = {
+    id: createBlockId(blockType),
+    blockType,
+    label: meta.title,
+    gridX: clampNumber(position.gridX ?? 0, 0, LIST_PAGE_GRID_COLS - 1),
+    gridY: Math.max(0, Number(position.gridY) || 0),
+    gridW: Math.min(meta.defaultW || 6, LIST_PAGE_GRID_COLS),
+    gridH: meta.defaultH || 2,
+    props: {},
+    fieldRefs: [],
+  }
+  if (blockType === 'search-form') {
+    base.fieldRefs = fields.filter(f => f.searchable).slice(0, 8).map(f => f.field)
+    base.props = { fieldSettings: {}, collapsible: true }
+  }
+  if (blockType === 'data-table') {
+    base.fieldRefs = fields.filter(f => f.listVisible !== false).map(f => f.field)
+    base.props = { fieldSettings: {} }
+  }
+  if (blockType === 'toolbar') {
+    base.props = { actions: ['add', 'import', 'export', 'custom-query'] }
+  }
+  if (blockType === 'tree-panel') {
+    base.props = {
+      treeTitle: `${modelSchema?.businessName || '业务'}树`,
+      keyField: 'id',
+      parentField: 'parentId',
+      labelField: fields.find(f => f.field === 'name')?.field || fields[0]?.field || '',
+      childrenField: 'children',
+    }
+  }
+  if (blockType === 'stats-strip') {
+    base.props = {
+      metrics: [
+        { label: '总数', value: '128', trend: '+8%' },
+        { label: '活跃', value: '92', trend: '+3%' },
+        { label: '本月新增', value: '21', trend: '+12%' },
+        { label: '异常', value: '3', trend: '-1' },
+      ],
+    }
+  }
+  if (blockType === 'custom-html') {
+    base.props = {
+      title: '说明',
+      content: '在此填写业务说明、操作指引或链接。',
+    }
+  }
+  if (blockType === 'sub-table-tabs') {
+    base.props = {
+      tabs: [
+        { key: 'detail', title: '基本信息' },
+        { key: 'related', title: '关联记录' },
+      ],
+    }
+  }
+  if (blockType === 'section-divider') {
+    base.props = { title: '分组标题' }
+  }
+  return base
+}
+
+function createBlockId(blockType) {
+  return `${safeKey(blockType || 'block')}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function clampNumber(value, min, max) {
+  const num = Number(value)
+  if (!Number.isFinite(num))
+    return min
+  return Math.min(Math.max(num, min), max)
 }
 
 export function resolveZoneTitle(zoneKey) {
@@ -630,6 +1128,10 @@ function createItemId(zoneKey, componentKey, fieldRef) {
     return `${zoneKey}_${safeKey(fieldRef)}`
   const suffix = Math.random().toString(36).slice(2, 8)
   return `${zoneKey}_${safeKey(componentKey)}_${Date.now()}_${suffix}`
+}
+
+function isNumericId(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
 }
 
 function safeKey(value) {

@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.dto.AiCrudConfigRenderVO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeAppDraftDTO;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeMoveDomainDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePublishDTO;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeAppService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodePublishService;
@@ -38,8 +39,11 @@ public class LowcodeAppController {
     @OperationLog(module = "低代码应用", type = OperationType.QUERY, desc = "分页查询低代码应用")
     public RespInfo<Page<LowcodeAppDetailVO>> page(PageQuery pageQuery,
                                                    @RequestParam(required = false) String keyword,
-                                                   @RequestParam(required = false) String publishStatus) {
-        return RespInfo.success(appService.page(pageQuery, keyword, publishStatus));
+                                                   @RequestParam(required = false) String publishStatus,
+                                                   @RequestParam(required = false) Long domainId,
+                                                   @RequestParam(required = false) String domainCode,
+                                                   @RequestParam(required = false) Boolean generalDomain) {
+        return RespInfo.success(appService.page(pageQuery, keyword, publishStatus, domainId, domainCode, generalDomain));
     }
 
     @GetMapping("/{id}")
@@ -52,6 +56,13 @@ public class LowcodeAppController {
     @OperationLog(module = "低代码应用", type = OperationType.UPDATE, desc = "保存低代码应用草稿")
     public RespInfo<Long> saveDraft(@RequestBody LowcodeAppDraftDTO dto) {
         return RespInfo.success(appService.saveDraft(dto));
+    }
+
+    @PutMapping("/{id}/move-domain")
+    @OperationLog(module = "低代码应用", type = OperationType.UPDATE, desc = "迁移低代码应用业务领域")
+    public RespInfo<Void> moveDomain(@PathVariable Long id, @RequestBody LowcodeMoveDomainDTO dto) {
+        appService.moveDomain(id, dto);
+        return RespInfo.success();
     }
 
     @PostMapping("/{id}/preview")

@@ -34,6 +34,20 @@ public interface SysResourceMapper extends BaseMapper<SysResource> {
     List<String> selectConfiguredApiUrls(@Param("method") String method);
 
     /**
+     * 按权限标识查询单个资源。
+     */
+    SysResource selectOneByPerms(@Param("tenantId") Long tenantId,
+                                 @Param("resourceType") Integer resourceType,
+                                 @Param("perms") String perms);
+
+    /**
+     * 按路由查询单个资源。
+     */
+    SysResource selectOneByPath(@Param("tenantId") Long tenantId,
+                                @Param("resourceType") Integer resourceType,
+                                @Param("path") String path);
+
+    /**
      * 按资源ID查询API权限匹配表达式。
      */
     List<String> selectApiPermissionPatternsByResourceIds(@Param("resourceIds") List<Long> resourceIds);

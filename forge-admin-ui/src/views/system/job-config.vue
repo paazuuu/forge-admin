@@ -121,13 +121,20 @@
 </template>
 
 <script setup>
-import { NButton, NInput, NPopover, NTag } from 'naive-ui'
+import { NButton, NInput, NPopover } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
 import { request } from '@/utils'
 import JobLogList from './job-log-list.vue'
 
 defineOptions({ name: 'JobConfig' })
+
+const { dict } = useDict('sys_job_status', 'sys_job_run_mode')
+
+const jobStatusOptions = computed(() => dict.value.sys_job_status || [])
+const jobRunModeOptions = computed(() => dict.value.sys_job_run_mode || [])
 
 const crudRef = ref(null)
 const logModalVisible = ref(false)
@@ -155,7 +162,7 @@ const commonCronList = [
 ]
 
 // 搜索表单
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'jobName',
     label: '任务名称',
@@ -180,13 +187,12 @@ const searchSchema = [
       placeholder: '请选择状态',
       options: [
         { label: '全部', value: null },
-        { label: '停止', value: 0 },
-        { label: '运行中', value: 1 },
+        ...jobStatusOptions.value,
       ],
       clearable: true,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -206,12 +212,11 @@ const tableColumns = computed(() => [
     label: '执行模式',
     width: 100,
     render: (row) => {
-      const modeMap = {
-        BEAN: { text: 'Bean', type: 'info' },
-        HANDLER: { text: 'Handler', type: 'success' },
-      }
-      const config = modeMap[row.executeMode] || { text: row.executeMode || '-', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, {
+        options: jobRunModeOptions.value,
+        value: row.executeMode,
+        size: 'small',
+      })
     },
   },
   {
@@ -245,12 +250,11 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 90,
     render: (row) => {
-      const statusMap = {
-        0: { text: '停止', type: 'warning' },
-        1: { text: '运行中', type: 'success' },
-      }
-      const config = statusMap[row.status] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, {
+        options: jobStatusOptions.value,
+        value: String(row.status),
+        size: 'small',
+      })
     },
   },
   {
@@ -277,7 +281,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基本信息',
@@ -320,10 +324,7 @@ const editSchema = [
     span: 2,
     rules: [{ required: true, message: '请选择执行模式', trigger: 'change' }],
     props: {
-      options: [
-        { label: 'Bean模式（本地调用）', value: 'BEAN' },
-        { label: 'Handler模式（扩展调用）', value: 'HANDLER' },
-      ],
+      options: jobRunModeOptions.value,
     },
   },
   {
@@ -376,13 +377,10 @@ const editSchema = [
     field: 'status',
     label: '任务状态',
     type: 'radio',
-    defaultValue: 0,
+    defaultValue: '0',
     span: 2,
     props: {
-      options: [
-        { label: '停止', value: 0 },
-        { label: '运行', value: 1 },
-      ],
+      options: jobStatusOptions.value,
     },
   },
   {
@@ -415,7 +413,7 @@ const editSchema = [
     span: 2,
     props: { placeholder: '失败时回调的WebHook地址（可选）' },
   },
-]
+])
 
 // 表单提交前处理
 function beforeSubmit(formData) {

@@ -3,10 +3,10 @@
     <div class="designer-head">
       <div>
         <div class="designer-title">
-          编辑表单页
+          表单与详情页
         </div>
         <div class="designer-meta">
-          FormCreate Designer · {{ selectedFieldRefs.length }} 个业务字段
+          新增、编辑、详情共用字段 · {{ selectedFieldRefs.length }} 个业务字段
         </div>
       </div>
       <n-space size="small" align="center">
@@ -18,7 +18,7 @@
         <n-button size="small" @click="resetFromModel">
           按模型重置
         </n-button>
-        <n-button size="small" type="primary" @click="flushDesigner">
+        <n-button size="small" type="primary" @click="applyDesignerConfig">
           应用表单配置
         </n-button>
       </n-space>
@@ -126,7 +126,7 @@ function resolveDesignerRules() {
     : []
   const refs = (props.zone?.fieldRefs?.length
     ? props.zone.fieldRefs
-    : props.fields.filter(field => field.formVisible !== false).map(field => field.field))
+    : props.fields.map(field => field.field))
     .filter(ref => fieldMap.value.has(ref))
 
   if (!sourceRules.length)
@@ -158,7 +158,7 @@ function queueFlush() {
 
 function flushDesigner() {
   if (!props.zone || !designerRef.value)
-    return
+    return false
   const rules = designerRef.value.getRule?.() || []
   const options = designerRef.value.getOptions?.() || designerRef.value.getOption?.() || resolveDesignerOptions()
   const refs = extractFieldRefs(rules, fieldMap.value)
@@ -171,11 +171,19 @@ function flushDesigner() {
       formCreateOptions: cloneValue(options),
     },
   })
+  return true
+}
+
+function applyDesignerConfig() {
+  if (flushDesigner())
+    window.$message?.success('表单与详情配置已应用')
+  else
+    window.$message?.warning('表单设计器尚未加载完成')
 }
 
 function handleSave() {
-  flushDesigner()
-  window.$message?.success('表单设计已应用到页面配置')
+  if (flushDesigner())
+    window.$message?.success('表单与详情配置已应用')
 }
 
 function updateEnabled(value) {
@@ -191,7 +199,6 @@ function resetFromModel() {
   if (!props.zone)
     return
   const refs = props.fields
-    .filter(field => field.formVisible !== false)
     .map(field => field.field)
   const rules = refs.map(ref => buildRuleFromField(fieldMap.value.get(ref)))
   emit('update:zone', {

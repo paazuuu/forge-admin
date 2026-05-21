@@ -1,178 +1,102 @@
 <template>
-  <div class="property-panel">
-    <div class="panel-title">
-      字段属性
-    </div>
-    <n-empty v-if="!field" description="请选择左侧字段" />
-    <n-form v-else label-placement="top" size="small" class="field-form">
-      <n-grid :cols="2" :x-gap="12">
-        <n-form-item-gi label="中文名称">
-          <n-input
-            :value="field.label"
-            placeholder="例如：合同名称"
-            @update:value="updateFieldProp('label', $event)"
-          />
-        </n-form-item-gi>
-        <n-form-item-gi label="字段名">
-          <n-input
-            :value="field.field"
-            placeholder="camelCase"
-            @update:value="handleFieldNameChange"
-          />
-        </n-form-item-gi>
-      </n-grid>
-
-      <n-form-item label="数据库列名">
-        <n-input
-          :value="field.columnName"
-          placeholder="lower_snake_case"
-          @update:value="updateFieldProp('columnName', $event)"
-        />
-      </n-form-item>
-
-      <n-grid :cols="2" :x-gap="12">
-        <n-form-item-gi label="数据类型">
-          <FieldTypeSelect
-            :value="field.dataType"
-            @update:value="updateFieldProp('dataType', $event)"
-          />
-        </n-form-item-gi>
-        <n-form-item-gi label="控件类型">
-          <n-select
-            :value="field.componentType"
-            :options="componentTypeOptions"
-            size="small"
-            @update:value="updateFieldProp('componentType', $event)"
-          />
-        </n-form-item-gi>
-      </n-grid>
-
-      <n-grid :cols="2" :x-gap="12">
-        <n-form-item-gi label="长度">
-          <n-input-number
-            :value="field.length"
-            :min="1"
-            :max="2048"
-            style="width: 100%"
-            @update:value="updateFieldProp('length', $event)"
-          />
-        </n-form-item-gi>
-        <n-form-item-gi label="小数位">
-          <n-input-number
-            :value="field.precision"
-            :min="0"
-            :max="12"
-            style="width: 100%"
-            @update:value="updateFieldProp('precision', $event)"
-          />
-        </n-form-item-gi>
-      </n-grid>
-
-      <n-divider>业务能力</n-divider>
-      <div class="switch-grid">
-        <div class="switch-item">
-          <span>必填</span>
-          <n-switch
-            :value="field.required"
-            size="small"
-            @update:value="updateFieldProp('required', $event)"
-          />
+  <aside class="property-panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">
+          字段属性
         </div>
-        <div class="switch-item">
-          <span>查询</span>
-          <n-switch
-            :value="field.searchable"
-            size="small"
-            @update:value="updateFieldProp('searchable', $event)"
-          />
-        </div>
-        <div class="switch-item">
-          <span>列表</span>
-          <n-switch
-            :value="field.listVisible"
-            size="small"
-            @update:value="updateFieldProp('listVisible', $event)"
-          />
-        </div>
-        <div class="switch-item">
-          <span>表单</span>
-          <n-switch
-            :value="field.formVisible"
-            size="small"
-            @update:value="updateFieldProp('formVisible', $event)"
-          />
+        <div class="panel-subtitle">
+          {{ field?.field || '未选择字段' }}
         </div>
       </div>
+    </div>
 
-      <n-grid :cols="2" :x-gap="12">
-        <n-form-item-gi label="查询方式">
-          <n-select
-            :value="field.queryType"
-            :options="queryTypeOptions"
-            size="small"
-            @update:value="updateFieldProp('queryType', $event)"
+    <n-empty v-if="!field" description="请选择中间字段行" />
+    <n-form v-else label-placement="top" size="small" class="field-form" :show-feedback="false">
+      <section class="form-section">
+        <div class="section-title">
+          数据库映射
+        </div>
+        <n-form-item label="数据库列名">
+          <n-input
+            :value="field.columnName"
+            placeholder="lower_snake"
+            @update:value="updateFieldProp('columnName', $event)"
           />
-        </n-form-item-gi>
-        <n-form-item-gi label="列宽">
-          <n-input-number
-            :value="field.width"
-            :min="80"
-            :max="520"
-            style="width: 100%"
-            @update:value="updateFieldProp('width', $event)"
-          />
-        </n-form-item-gi>
-      </n-grid>
+        </n-form-item>
+        <div class="switch-grid">
+          <div class="switch-item">
+            <span>主键字段</span>
+            <n-switch
+              :value="field.primaryKey || false"
+              size="small"
+              @update:value="updateFieldProp('primaryKey', $event)"
+            />
+          </div>
+          <div class="switch-item">
+            <span>系统字段</span>
+            <n-switch
+              :value="field.systemField || false"
+              size="small"
+              @update:value="updateFieldProp('systemField', $event)"
+            />
+          </div>
+        </div>
+      </section>
 
-      <n-divider>字典与安全</n-divider>
-      <n-form-item label="字典类型">
-        <DictTypeSelect
-          :value="field.dictType"
-          :fields="fields"
-          @update:value="updateFieldProp('dictType', $event)"
-        />
-      </n-form-item>
-      <n-grid :cols="2" :x-gap="12">
-        <n-form-item-gi label="敏感类型">
-          <n-select
-            :value="field.sensitiveType"
-            :options="sensitiveTypeOptions"
-            size="small"
-            @update:value="updateFieldProp('sensitiveType', $event)"
+      <section class="form-section">
+        <div class="section-title">
+          字典与安全
+        </div>
+        <div v-if="dictSuggestion || securitySuggestion" class="recommend-box">
+          <div v-if="dictSuggestion" class="recommend-line">
+            <span>推荐字典：{{ dictSuggestion.dictType }}</span>
+            <n-button text size="tiny" type="primary" @click="applyDictSuggestion">
+              应用
+            </n-button>
+          </div>
+          <div v-if="securitySuggestion" class="recommend-line">
+            <span>推荐脱敏：{{ securitySuggestion.sensitiveType || 'NONE' }}</span>
+            <n-button text size="tiny" type="primary" @click="applySecuritySuggestion">
+              应用
+            </n-button>
+          </div>
+        </div>
+        <n-form-item label="字典类型">
+          <DictTypeSelect
+            :value="field.dictType"
+            :fields="fields"
+            @update:value="updateFieldProp('dictType', $event)"
           />
-        </n-form-item-gi>
-        <n-form-item-gi label="加密算法">
-          <n-select
-            :value="field.encryptAlgorithm"
-            clearable
-            size="small"
-            :options="encryptOptions"
-            @update:value="updateFieldProp('encryptAlgorithm', $event || '')"
-          />
-        </n-form-item-gi>
-      </n-grid>
-
-      <n-form-item label="备注">
-        <n-input
-          :value="field.remark"
-          type="textarea"
-          :rows="2"
-          placeholder="字段说明，可为空"
-          @update:value="updateFieldProp('remark', $event)"
-        />
-      </n-form-item>
+        </n-form-item>
+        <n-grid :cols="2" :x-gap="10">
+          <n-form-item-gi label="敏感类型">
+            <n-select
+              :value="field.sensitiveType"
+              :options="sensitiveTypeOptions"
+              size="small"
+              @update:value="updateFieldProp('sensitiveType', $event)"
+            />
+          </n-form-item-gi>
+          <n-form-item-gi label="加密算法">
+            <n-select
+              :value="field.encryptAlgorithm"
+              clearable
+              size="small"
+              :options="encryptOptions"
+              @update:value="updateFieldProp('encryptAlgorithm', $event || '')"
+            />
+          </n-form-item-gi>
+        </n-grid>
+      </section>
     </n-form>
-  </div>
+  </aside>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import DictTypeSelect from '../shared/DictTypeSelect.vue'
-import FieldTypeSelect from '../shared/FieldTypeSelect.vue'
 import {
-  camelToSnake,
-  componentTypeOptions,
-  normalizeFieldName,
-  queryTypeOptions,
   sensitiveTypeOptions,
 } from './model-schema'
 
@@ -185,6 +109,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  domain: {
+    type: Object,
+    default: null,
+  },
 })
 
 const emit = defineEmits(['update:field'])
@@ -194,19 +122,31 @@ const encryptOptions = [
   { label: 'SM4', value: 'SM4' },
   { label: 'AES', value: 'AES' },
 ]
-
-function handleFieldNameChange(value) {
-  if (!props.field)
-    return
-  const nextField = normalizeFieldName(value)
-  patchField({
-    field: nextField,
-    columnName: camelToSnake(nextField),
-  })
-}
+const domainSchema = computed(() => props.domain?.domainSchema || {})
+const dictSuggestion = computed(() => findRecommendation(domainSchema.value.dictRecommendations || []))
+const securitySuggestion = computed(() => findRecommendation(domainSchema.value.securityPolicies || []))
 
 function updateFieldProp(key, value) {
+  if (key === 'dictType' && value) {
+    patchField({ dictType: value, componentType: 'select' })
+    return
+  }
   patchField({ [key]: value })
+}
+
+function applyDictSuggestion() {
+  if (!dictSuggestion.value)
+    return
+  patchField({ dictType: dictSuggestion.value.dictType, componentType: 'select' })
+}
+
+function applySecuritySuggestion() {
+  if (!securitySuggestion.value)
+    return
+  patchField({
+    sensitiveType: securitySuggestion.value.sensitiveType || 'NONE',
+    encryptAlgorithm: securitySuggestion.value.encryptAlgorithm || '',
+  })
 }
 
 function patchField(patch) {
@@ -217,39 +157,80 @@ function patchField(patch) {
     ...patch,
   })
 }
+
+function findRecommendation(items) {
+  if (!props.field)
+    return null
+  const text = `${props.field.field || ''} ${props.field.columnName || ''} ${props.field.label || ''}`.toLowerCase()
+  return items.find((item) => {
+    const pattern = String(item.fieldPattern || '').toLowerCase()
+    return pattern && text.includes(pattern)
+  }) || null
+}
 </script>
 
 <style scoped>
 .property-panel {
   height: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #fff;
   overflow: hidden;
 }
 
-.panel-title {
-  height: 42px;
+.panel-head {
   display: flex;
+  min-height: 50px;
   align-items: center;
+  justify-content: space-between;
   padding: 0 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #d8dee8;
+  background: #f8fafc;
+}
+
+.panel-title {
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
+}
+
+.panel-subtitle {
+  margin-top: 2px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
 }
 
 .field-form {
-  padding: 14px;
-  max-height: calc(100% - 42px);
+  display: grid;
+  max-height: calc(100% - 50px);
+  gap: 12px;
   overflow: auto;
+  padding: 12px;
+}
+
+.form-section {
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px solid #eef2f7;
+  padding-bottom: 12px;
+}
+
+.form-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.section-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .switch-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
 }
 
 .switch-item {
@@ -260,7 +241,25 @@ function patchField(patch) {
   padding: 0 10px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
-  font-size: 12px;
   color: #475569;
+  font-size: 12px;
+}
+
+.recommend-box {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 8px;
+}
+
+.recommend-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #1e40af;
+  font-size: 12px;
 }
 </style>

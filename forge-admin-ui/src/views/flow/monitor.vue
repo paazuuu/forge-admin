@@ -171,9 +171,7 @@
           {{ getErrorTypeText(currentErrorLog.errorType) }}
         </n-descriptions-item>
         <n-descriptions-item label="状态">
-          <NTag :type="getErrorStatusType(currentErrorLog.status)">
-            {{ getErrorStatusText(currentErrorLog.status) }}
-          </NTag>
+          <DictTag dict-type="flow_error_log_status" :value="currentErrorLog.status" />
         </n-descriptions-item>
         <n-descriptions-item label="重试次数">
           {{ currentErrorLog.retryCount || 0 }}
@@ -269,9 +267,7 @@
             {{ currentInstance.processName }}
           </n-descriptions-item>
           <n-descriptions-item label="流程状态">
-            <NTag :type="getStatusType(currentInstance.status)">
-              {{ getStatusText(currentInstance.status) }}
-            </NTag>
+            <DictTag dict-type="flow_instance_status" :value="currentInstance.status" />
           </n-descriptions-item>
           <n-descriptions-item label="发起人">
             {{ currentInstance.initiatorName }}
@@ -433,17 +429,20 @@
 <script setup>
 import * as echarts from 'echarts'
 import { NButton, NDropdown, NSpace, NTag } from 'naive-ui'
-import { h, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import ProcessDiagramViewer from '@/components/bpmn/ProcessDiagramViewer.vue'
 import UserSelectModal from '@/components/bpmn/UserSelectModal.vue'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'FlowMonitor' })
 
 const route = useRoute()
 const message = window.$message
+const { dict } = useDict('flow_instance_status', 'flow_error_log_status')
 
 // 统计数据
 const statistics = reactive({
@@ -463,14 +462,7 @@ const searchForm = reactive({
 })
 
 // 状态选项
-const statusOptions = [
-  { label: '运行中', value: 'running' },
-  { label: '已挂起', value: 'suspended' },
-  { label: '已通过', value: 'approved' },
-  { label: '已驳回', value: 'rejected' },
-  { label: '已取消', value: 'canceled' },
-  { label: '已终止', value: 'terminated' },
-]
+const statusOptions = computed(() => dict.value.flow_instance_status || [])
 
 // 表格数据
 const tableData = ref([])
@@ -512,9 +504,7 @@ const columns = [
     key: 'status',
     width: 80,
     render(row) {
-      const type = getStatusType(row.status)
-      const text = getStatusText(row.status)
-      return h(NTag, { type, size: 'small' }, { default: () => text })
+      return h(DictTag, { dictType: 'flow_instance_status', value: row.status })
     },
   },
   {
@@ -615,12 +605,7 @@ const instanceErrorPagination = reactive({
   showSizePicker: true,
   pageSizes: [10, 20, 50],
 })
-const errorStatusOptions = [
-  { label: '未处理', value: 0 },
-  { label: '已重试', value: 1 },
-  { label: '已解决', value: 2 },
-  { label: '重试失败', value: 3 },
-]
+const errorStatusOptions = computed(() => toNumberOptions(dict.value.flow_error_log_status))
 const errorDetailVisible = ref(false)
 const currentErrorLog = ref(null)
 const retryModalVisible = ref(false)
@@ -667,9 +652,7 @@ const errorColumns = [
     key: 'status',
     width: 100,
     render(row) {
-      const type = getErrorStatusType(row.status)
-      const text = getErrorStatusText(row.status)
-      return h(NTag, { type }, { default: () => text })
+      return h(DictTag, { dictType: 'flow_error_log_status', value: row.status })
     },
   },
   {
@@ -694,14 +677,11 @@ const errorColumns = [
   },
 ]
 
-function getErrorStatusType(status) {
-  const map = { 0: 'error', 1: 'success', 2: 'default', 3: 'warning' }
-  return map[status] || 'default'
-}
-
-function getErrorStatusText(status) {
-  const map = { 0: '未处理', 1: '已重试', 2: '已解决', 3: '重试失败' }
-  return map[status] || '未知'
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
 }
 
 function getErrorStageText(stage) {
@@ -1389,7 +1369,7 @@ async function refreshCharts() {
           type: 'bar',
           barWidth: '30%',
           barGap: '20%',
-          data: trendData.created.length > 0 ? trendData.created : new Array(chartPeriod.value).fill(0),
+          data: trendData.created.length > 0 ? trendData.created : Array.from({ length: chartPeriod.value }).fill(0),
           itemStyle: { borderRadius: [4, 4, 0, 0] },
           emphasis: { itemStyle: { borderRadius: [4, 4, 0, 0] } },
         },
@@ -1397,7 +1377,7 @@ async function refreshCharts() {
           name: '完成流程',
           type: 'bar',
           barWidth: '30%',
-          data: trendData.completed.length > 0 ? trendData.completed : new Array(chartPeriod.value).fill(0),
+          data: trendData.completed.length > 0 ? trendData.completed : Array.from({ length: chartPeriod.value }).fill(0),
           itemStyle: { borderRadius: [4, 4, 0, 0] },
           emphasis: { itemStyle: { borderRadius: [4, 4, 0, 0] } },
         },
@@ -1455,32 +1435,6 @@ async function refreshCharts() {
 function handleResize() {
   taskChart?.resize()
   processChart?.resize()
-}
-
-// 获取状态类型
-function getStatusType(status) {
-  const map = {
-    running: 'info',
-    suspended: 'warning',
-    approved: 'success',
-    rejected: 'error',
-    canceled: 'default',
-    terminated: 'error',
-  }
-  return map[status] || 'default'
-}
-
-// 获取状态文本
-function getStatusText(status) {
-  const map = {
-    running: '审批中',
-    suspended: '已挂起',
-    approved: '已通过',
-    rejected: '已驳回',
-    canceled: '已取消',
-    terminated: '已终止',
-  }
-  return map[status] || status || '未知'
 }
 
 // 获取时间线类型

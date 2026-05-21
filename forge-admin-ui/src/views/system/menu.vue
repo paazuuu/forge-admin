@@ -203,11 +203,19 @@ import { AiCrudPage } from '@/components/ai-form'
 import IconRenderer from '@/components/IconRenderer.vue'
 import IconSelector from '@/components/IconSelector.vue'
 import ImageUpload from '@/components/image-upload/index.vue'
+import { useDict } from '@/composables'
 import { usePermissionStore, useUserStore } from '@/store'
 import { request } from '@/utils'
 import { getMenuRouteOptions } from '@/utils/menu-route-options'
 
 defineOptions({ name: 'SystemMenu' })
+
+const { dict } = useDict('sys_resource_type', 'sys_show_hide', 'sys_req_method', 'sys_link_open_target')
+
+const resourceTypeOptions = computed(() => dict.value.sys_resource_type || [])
+const visibleOptions = computed(() => dict.value.sys_show_hide || [])
+const apiMethodOptions = computed(() => dict.value.sys_req_method || [])
+const openTargetOptions = computed(() => dict.value.sys_link_open_target || [])
 
 const permissionStore = usePermissionStore()
 const userStore = useUserStore()
@@ -257,14 +265,6 @@ onBeforeUnmount(() => {
   }
   pageRef.value?.closest?.('.nexus-page')?.classList.remove('menu-page-host-no-scroll')
 })
-
-// 资源类型选项
-const resourceTypeOptions = [
-  { label: '目录', value: 1 },
-  { label: '菜单', value: 2 },
-  { label: '按钮', value: 3 },
-  { label: 'API接口', value: 4 },
-]
 
 const routeOptions = getMenuRouteOptions()
 
@@ -454,27 +454,9 @@ function handleClientTabChange(clientCode) {
   scheduleTableHeightUpdate()
 }
 
-// 显示状态选项
-const visibleOptions = [
-  { label: '显示', value: 1 },
-  { label: '隐藏', value: 0 },
-]
-
-// API请求方法选项
-const apiMethodOptions = [
-  { label: 'GET', value: 'GET' },
-  { label: 'POST', value: 'POST' },
-  { label: 'PUT', value: 'PUT' },
-  { label: 'DELETE', value: 'DELETE' },
-]
-
-const openTargetOptions = [
-  { label: '当前页', value: '_self' },
-  { label: '新窗口', value: '_blank' },
-]
-
 function getOpenTargetDisplayName(openTarget) {
-  return openTargetOptions.find(item => item.value === openTarget)?.label || '当前页'
+  const options = openTargetOptions.value || []
+  return options.find(item => item.value === openTarget)?.label || '当前页'
 }
 
 function isImageIconValue(value) {
@@ -564,7 +546,7 @@ function handleListLoaded(payload = {}) {
 }
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'resourceName',
     label: '资源名称',
@@ -579,7 +561,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择资源类型',
-      options: resourceTypeOptions,
+      options: resourceTypeOptions.value,
     },
   },
   {
@@ -588,10 +570,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: visibleOptions,
+      options: visibleOptions.value,
     },
   },
-]
+])
 
 // 资源类型样式配置
 const typeStyleMap = {
@@ -909,7 +891,7 @@ const editSchema = computed(() => [
     type: 'radio',
     span: 1,
     defaultValue: '_self',
-    props: { options: openTargetOptions },
+    props: { options: openTargetOptions.value },
     vIf: formData => formData.resourceType === 2 && formData.ssoEnabled === 1,
   },
   {
@@ -953,7 +935,7 @@ const editSchema = computed(() => [
     type: 'select',
     span: 1,
     defaultValue: 'GET',
-    props: { placeholder: '请求方法', options: apiMethodOptions },
+    props: { placeholder: '请求方法', options: apiMethodOptions.value },
     vIf: formData => formData.resourceType === 4,
   },
   {

@@ -37,9 +37,7 @@
               {{ [currentRecord.providerName, currentRecord.modelName].filter(Boolean).join(' / ') || '-' }}
             </n-descriptions-item>
             <n-descriptions-item label="生成状态">
-              <NTag :type="getStatusMeta(currentRecord.status).type" size="small">
-                {{ getStatusMeta(currentRecord.status).label }}
-              </NTag>
+              <DictTag dict-type="ai_dashboard_generate_status" :dict-value="currentRecord.status" size="small" />
             </n-descriptions-item>
             <n-descriptions-item label="生成时间">
               {{ currentRecord.createTime || '-' }}
@@ -73,9 +71,9 @@
       </n-spin>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="detailVisible = false">
+          <NButton @click="detailVisible = false">
             关闭
-          </n-button>
+          </NButton>
         </n-space>
       </template>
     </n-modal>
@@ -83,12 +81,16 @@
 </template>
 
 <script setup>
-import { NButton, NEllipsis, NTag } from 'naive-ui'
+import { NButton, NEllipsis } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { formatDateTime, request } from '@/utils'
 
 defineOptions({ name: 'AiDashboardGenerateRecord' })
+
+const { dict } = useDict('ai_dashboard_generate_status')
 
 const crudRef = ref(null)
 const recordStats = ref({
@@ -98,19 +100,7 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const currentRecord = ref(null)
 
-const statusOptions = [
-  { label: '成功', value: 'success' },
-  { label: '失败', value: 'failed' },
-  { label: '解析失败', value: 'parse_failed' },
-  { label: '已停止', value: 'stopped' },
-]
-
-const statusMetaMap = {
-  success: { label: '成功', type: 'success' },
-  failed: { label: '失败', type: 'error' },
-  parse_failed: { label: '解析失败', type: 'warning' },
-  stopped: { label: '已停止', type: 'default' },
-}
+const statusOptions = computed(() => dict.value.ai_dashboard_generate_status || [])
 
 const searchSchema = [
   {
@@ -206,8 +196,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 100,
     render(row) {
-      const meta = getStatusMeta(row.status)
-      return h(NTag, { type: meta.type, size: 'small', bordered: false }, { default: () => meta.label })
+      return h(DictTag, { dictType: 'ai_dashboard_generate_status', dictValue: row.status, size: 'small' })
     },
   },
   {
@@ -266,10 +255,6 @@ function handleBeforeSearch(params) {
 
 function handleLoadSuccess({ total }) {
   recordStats.value.total = total || 0
-}
-
-function getStatusMeta(status) {
-  return statusMetaMap[status] || { label: status || '未知', type: 'default' }
 }
 
 function getUserLabel(row) {

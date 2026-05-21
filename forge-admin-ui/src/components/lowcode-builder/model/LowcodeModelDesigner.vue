@@ -1,57 +1,234 @@
 <template>
-  <div class="model-designer">
+  <div class="model-designer" :class="{ 'fields-active': activeTab === 'fields' }">
     <div class="model-main">
-      <div class="model-toolbar">
-        <n-form label-placement="top" size="small" class="model-form" :show-feedback="false">
-          <div class="model-form-grid">
-            <n-form-item label="应用类型">
-              <n-select
-                v-model:value="localModel.appType"
-                :options="appTypeOptions"
-                @update:value="handleAppTypeChange"
-              />
-            </n-form-item>
-            <n-form-item label="建表方式">
-              <n-select v-model:value="localModel.tableMode" :options="tableModeOptions" />
-            </n-form-item>
-            <n-form-item label="业务名称">
-              <n-input v-model:value="localModel.businessName" placeholder="例如：合同管理" />
-            </n-form-item>
-            <n-form-item label="数据表">
-              <n-input
-                :value="localModel.tableName"
-                placeholder="biz_contract"
-                @update:value="localModel.tableName = normalizeTableName($event)"
-              />
-            </n-form-item>
-            <div class="model-actions">
-              <n-space justify="end">
-                <n-button @click="addField">
+      <div class="model-summary">
+        <div>
+          <div class="summary-kicker">
+            {{ localModel.domain?.name || domain?.domainName || '未选择业务领域' }} / 数据模型
+          </div>
+          <h2>{{ localModel.object?.name || localModel.businessName || '未命名模型' }}</h2>
+          <p>{{ localModel.object?.description || '维护模型基础信息、字段、关系和规则。' }}</p>
+        </div>
+        <div class="summary-metrics">
+          <div>
+            <strong>{{ localModel.fields?.length || 0 }}</strong>
+            <span>字段</span>
+          </div>
+          <div>
+            <strong>{{ localModel.relations?.length || 0 }}</strong>
+            <span>关系</span>
+          </div>
+          <div>
+            <strong>{{ requiredCount }}</strong>
+            <span>必填</span>
+          </div>
+        </div>
+      </div>
+
+      <n-tabs v-model:value="activeTab" type="line" animated class="model-tabs">
+        <n-tab-pane v-if="showBasicTab" name="basic" tab="模型基础信息">
+          <section class="designer-section">
+            <div class="section-head">
+              <div>
+                <strong>基础信息</strong>
+                <span>定义业务对象、表名、模型类型和描述。</span>
+              </div>
+            </div>
+            <n-form label-placement="top" size="small" class="basic-form" :show-feedback="false">
+              <n-form-item label="模型名称">
+                <n-input v-model:value="localModel.object.name" placeholder="例如：客户档案" />
+              </n-form-item>
+              <n-form-item label="模型编码">
+                <n-input
+                  :value="localModel.object.code"
+                  placeholder="customer_archive"
+                  @update:value="localModel.object.code = normalizeObjectCode($event)"
+                />
+              </n-form-item>
+              <n-form-item label="业务名称">
+                <n-input v-model:value="localModel.businessName" placeholder="例如：客户档案" />
+              </n-form-item>
+              <n-form-item label="数据表">
+                <n-input
+                  :value="localModel.tableName"
+                  placeholder="biz_customer_archive"
+                  @update:value="localModel.tableName = normalizeTableName($event)"
+                />
+              </n-form-item>
+              <n-form-item label="应用类型">
+                <n-select
+                  v-model:value="localModel.appType"
+                  :options="appTypeOptions"
+                  @update:value="handleAppTypeChange"
+                />
+              </n-form-item>
+              <n-form-item class="span-2" label="模型描述">
+                <n-input
+                  v-model:value="localModel.object.description"
+                  type="textarea"
+                  :autosize="{ minRows: 3, maxRows: 5 }"
+                  placeholder="描述该模型承载的业务数据、状态流转和关键约束"
+                />
+              </n-form-item>
+            </n-form>
+          </section>
+        </n-tab-pane>
+
+        <n-tab-pane name="fields" tab="字段设计">
+          <section class="designer-section">
+            <div class="section-toolbar">
+              <n-space>
+                <n-button type="primary" @click="addField">
                   <template #icon>
                     <n-icon><AddOutline /></n-icon>
                   </template>
-                  新增字段
+                  添加字段
                 </n-button>
-                <n-button :loading="validating" @click="validateModel">
-                  校验模型
+                <n-button :disabled="!fieldTemplateCount" @click="addDomainFieldTemplates">
+                  引入领域字段模板
                 </n-button>
               </n-space>
+              <n-button :loading="validating" @click="validateModel">
+                校验模型
+              </n-button>
             </div>
-          </div>
-        </n-form>
-      </div>
-      <ModelFieldTable
-        :fields="localModel.fields"
-        :selected-index="selectedIndex"
-        @update:fields="handleFieldsUpdate"
-        @select="selectedIndex = $event"
-        @copy="copyField"
-        @remove="removeField"
-      />
+            <div v-if="fieldTemplateCount" class="domain-hint">
+              当前领域可引入 {{ fieldTemplateCount }} 个字段模板，审计字段会自动过滤。
+            </div>
+            <ModelFieldTable
+              :fields="localModel.fields"
+              :selected-index="selectedIndex"
+              @update:fields="handleFieldsUpdate"
+              @select="selectedIndex = $event"
+              @copy="copyField"
+              @remove="removeField"
+            />
+            <ModelFieldPropertyPanel
+              :field="currentField"
+              :fields="localModel.fields"
+              :domain="domain"
+              class="field-property-panel"
+              @update:field="handleFieldUpdate"
+            />
+          </section>
+        </n-tab-pane>
+
+        <n-tab-pane name="relations" tab="关联配置">
+          <section class="designer-section">
+            <div class="section-toolbar">
+              <div class="section-title">
+                业务对象关系
+              </div>
+              <n-button type="primary" @click="addRelation">
+                添加关系
+              </n-button>
+            </div>
+            <div v-if="localModel.relations?.length" class="relation-list">
+              <div v-for="(relation, index) in localModel.relations" :key="index" class="relation-row">
+                <n-select
+                  :value="relation.relationType"
+                  :options="relationTypeOptions"
+                  size="small"
+                  @update:value="updateRelation(index, { relationType: $event })"
+                />
+                <n-select
+                  :value="relation.targetObjectCode"
+                  size="small"
+                  filterable
+                  :options="targetModelOptions"
+                  placeholder="选择目标模型"
+                  @update:value="handleTargetModelChange(index, $event)"
+                />
+                <n-select
+                  :value="relation.sourceField"
+                  :options="fieldOptions"
+                  size="small"
+                  placeholder="源字段"
+                  @update:value="updateRelation(index, { sourceField: $event })"
+                />
+                <n-select
+                  :value="relation.targetField"
+                  size="small"
+                  filterable
+                  :options="targetFieldOptions(relation)"
+                  placeholder="目标字段"
+                  @update:value="updateRelation(index, { targetField: $event })"
+                />
+                <n-select
+                  :value="relation.displayField"
+                  size="small"
+                  filterable
+                  clearable
+                  :options="targetFieldOptions(relation)"
+                  placeholder="展示字段"
+                  @update:value="updateRelation(index, { displayField: $event || '' })"
+                />
+                <n-button text size="small" class="text-error" @click="removeRelation(index)">
+                  删除
+                </n-button>
+              </div>
+            </div>
+            <n-empty v-else description="暂无关联关系" />
+          </section>
+        </n-tab-pane>
+
+        <n-tab-pane name="rules" tab="校验规则">
+          <section class="designer-section rules-grid">
+            <div class="rule-card">
+              <div class="rule-card-title">
+                数据策略
+              </div>
+              <n-form label-placement="top" size="small" :show-feedback="false">
+                <n-form-item label="数据范围">
+                  <n-select v-model:value="localModel.policies.dataScope" :options="dataScopeOptions" />
+                </n-form-item>
+                <n-form-item label="区划字段">
+                  <n-select v-model:value="localModel.policies.regionField" clearable :options="fieldOptions" />
+                </n-form-item>
+                <n-form-item label="审计字段">
+                  <n-switch v-model:value="localModel.policies.auditEnabled" />
+                </n-form-item>
+              </n-form>
+            </div>
+            <div class="rule-card">
+              <div class="rule-card-title">
+                树形模型
+              </div>
+              <n-form label-placement="top" size="small" :show-feedback="false">
+                <n-form-item label="主键字段">
+                  <n-select v-model:value="localModel.treeConfig.keyField" :options="fieldOptions" />
+                </n-form-item>
+                <n-form-item label="父级字段">
+                  <n-select v-model:value="localModel.treeConfig.parentField" :options="fieldOptions" />
+                </n-form-item>
+                <n-form-item label="显示字段">
+                  <n-select v-model:value="localModel.treeConfig.labelField" :options="fieldOptions" />
+                </n-form-item>
+              </n-form>
+            </div>
+          </section>
+        </n-tab-pane>
+
+        <n-tab-pane name="extensions" tab="扩展配置">
+          <section class="designer-section placeholder-board">
+            <div class="placeholder-title">
+              扩展配置
+            </div>
+            <div class="placeholder-grid">
+              <div>索引配置</div>
+              <div>导入导出</div>
+              <div>流程绑定</div>
+              <div>指标沉淀</div>
+            </div>
+          </section>
+        </n-tab-pane>
+      </n-tabs>
     </div>
     <ModelFieldPropertyPanel
+      v-if="activeTab !== 'fields'"
       :field="currentField"
       :fields="localModel.fields"
+      :domain="domain"
       class="model-side"
       @update:field="handleFieldUpdate"
     />
@@ -67,9 +244,11 @@ import {
   cloneSchema,
   createDefaultField,
   createFieldFromIndex,
+  createFieldFromTemplate,
+  isAuditField,
   isSameSchema,
+  normalizeObjectCode,
   normalizeTableName,
-  tableModeOptions,
 } from './model-schema'
 import ModelFieldPropertyPanel from './ModelFieldPropertyPanel.vue'
 import ModelFieldTable from './ModelFieldTable.vue'
@@ -79,6 +258,18 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  domain: {
+    type: Object,
+    default: null,
+  },
+  dataModels: {
+    type: Array,
+    default: () => [],
+  },
+  showBasicTab: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'validated'])
@@ -86,8 +277,30 @@ const emit = defineEmits(['update:modelValue', 'validated'])
 const localModel = ref(cloneSchema(props.modelValue))
 const selectedIndex = ref(0)
 const validating = ref(false)
+const activeTab = ref(props.showBasicTab ? 'basic' : 'fields')
 
+const domainSchema = computed(() => props.domain?.domainSchema || {})
 const currentField = computed(() => localModel.value.fields?.[selectedIndex.value] || null)
+const requiredCount = computed(() => (localModel.value.fields || []).filter(field => field.required).length)
+const fieldTemplateCount = computed(() => (domainSchema.value.fieldTemplates || []).length)
+const fieldOptions = computed(() => (localModel.value.fields || []).map(field => ({
+  label: `${field.label || field.field} (${field.field})`,
+  value: field.field,
+})))
+const targetModelOptions = computed(() => props.dataModels.map(model => ({
+  label: `${model.modelName || model.modelCode} (${model.modelCode})`,
+  value: model.modelCode,
+})))
+const relationTypeOptions = [
+  { label: '引用', value: 'REFERENCE' },
+  { label: '一对多', value: 'ONE_TO_MANY' },
+  { label: '一对一', value: 'ONE_TO_ONE' },
+]
+const dataScopeOptions = [
+  { label: '租户隔离', value: 'TENANT' },
+  { label: '区划权限', value: 'REGION' },
+  { label: '部门权限', value: 'DEPT' },
+]
 
 watch(
   () => props.modelValue,
@@ -95,6 +308,7 @@ watch(
     if (isSameSchema(value, localModel.value))
       return
     localModel.value = cloneSchema(value)
+    ensureModelCollections()
     if (selectedIndex.value >= localModel.value.fields.length)
       selectedIndex.value = Math.max(localModel.value.fields.length - 1, 0)
   },
@@ -102,29 +316,111 @@ watch(
 )
 
 watch(
-  localModel,
-  (value) => {
-    if (!isSameSchema(value, props.modelValue)) {
-      emit('update:modelValue', cloneSchema(value))
+  () => props.domain,
+  (domain) => {
+    if (!domain)
+      return
+    localModel.value.domain = {
+      id: domain.id,
+      code: domain.domainCode,
+      name: domain.domainName,
     }
   },
   { deep: true },
 )
 
+watch(
+  () => props.showBasicTab,
+  (value) => {
+    if (!value && activeTab.value === 'basic')
+      activeTab.value = 'fields'
+  },
+)
+
+watch(
+  localModel,
+  (value) => {
+    if (!isSameSchema(value, props.modelValue))
+      emit('update:modelValue', cloneSchema(value))
+  },
+  { deep: true },
+)
+
+ensureModelCollections()
+
 function handleFieldsUpdate(fields) {
-  localModel.value.fields = fields
+  localModel.value.fields = fields.map((field, index) => {
+    const oldField = localModel.value.fields?.[index]
+    if (oldField && oldField.field === field.field && oldField.label === field.label && oldField.columnName === field.columnName)
+      return field
+    return withDomainRecommendations(field)
+  })
 }
 
 function handleFieldUpdate(field) {
   if (selectedIndex.value < 0)
     return
-  localModel.value.fields.splice(selectedIndex.value, 1, field)
+  const oldField = localModel.value.fields[selectedIndex.value]
+  const changedName = oldField?.field !== field.field || oldField?.label !== field.label || oldField?.columnName !== field.columnName
+  localModel.value.fields.splice(selectedIndex.value, 1, changedName ? withDomainRecommendations(field) : field)
 }
 
 function addField() {
-  const next = createFieldFromIndex((localModel.value.fields?.length || 0) + 1)
+  const next = withDomainRecommendations(createFieldFromIndex((localModel.value.fields?.length || 0) + 1))
   localModel.value.fields.push(next)
   selectedIndex.value = localModel.value.fields.length - 1
+  activeTab.value = 'fields'
+}
+
+function addDomainFieldTemplates() {
+  const templates = domainSchema.value.fieldTemplates || []
+  if (!templates.length) {
+    window.$message?.warning('当前领域没有字段模板')
+    return
+  }
+  const fields = localModel.value.fields || []
+  let added = 0
+  for (const template of templates) {
+    const field = withDomainRecommendations(createFieldFromTemplate(template))
+    if (isAuditField(field))
+      continue
+    if (fields.some(item => item.field === field.field || item.columnName === field.columnName))
+      continue
+    fields.push(field)
+    added += 1
+  }
+  localModel.value.fields = fields
+  if (added > 0) {
+    selectedIndex.value = fields.length - 1
+    window.$message?.success(`已引入 ${added} 个领域字段`)
+  }
+  else {
+    window.$message?.info('没有可新增的领域字段')
+  }
+}
+
+function withDomainRecommendations(field) {
+  const next = { ...field }
+  const dictRecommendation = findRecommendation(domainSchema.value.dictRecommendations || [], next)
+  if (dictRecommendation && !next.dictType)
+    next.dictType = dictRecommendation.dictType
+
+  const securityPolicy = findRecommendation(domainSchema.value.securityPolicies || [], next)
+  if (securityPolicy) {
+    if (!next.sensitiveType || next.sensitiveType === 'NONE')
+      next.sensitiveType = securityPolicy.sensitiveType || 'NONE'
+    if (!next.encryptAlgorithm)
+      next.encryptAlgorithm = securityPolicy.encryptAlgorithm || ''
+  }
+  return next
+}
+
+function findRecommendation(items, field) {
+  const text = `${field.field || ''} ${field.columnName || ''} ${field.label || ''}`.toLowerCase()
+  return items.find((item) => {
+    const pattern = String(item.fieldPattern || '').toLowerCase()
+    return pattern && text.includes(pattern)
+  })
 }
 
 function handleAppTypeChange(value) {
@@ -135,9 +431,8 @@ function handleAppTypeChange(value) {
 
 function ensureTreeModel() {
   const fields = localModel.value.fields || []
-  if (!localModel.value.treeConfig) {
+  if (!localModel.value.treeConfig)
     localModel.value.treeConfig = {}
-  }
 
   const parentField = localModel.value.treeConfig.parentField || 'parentId'
   if (!fields.some(field => field.field === parentField)) {
@@ -181,6 +476,75 @@ function removeField(index) {
   selectedIndex.value = Math.max(Math.min(selectedIndex.value, localModel.value.fields.length - 1), 0)
 }
 
+function addRelation() {
+  localModel.value.relations.push({
+    relationType: 'REFERENCE',
+    targetObjectCode: '',
+    sourceField: currentField.value?.field || '',
+    targetField: 'id',
+    displayField: '',
+  })
+  activeTab.value = 'relations'
+}
+
+function handleTargetModelChange(index, modelCode) {
+  const targetModel = props.dataModels.find(model => model.modelCode === modelCode)
+  const targetFields = targetModel?.modelSchema?.fields || []
+  const idField = targetFields.find(field => field.field === 'id')?.field
+  const firstField = targetFields[0]?.field || ''
+  const nameField = targetFields.find(field => ['name', 'title', 'label'].includes(field.field))?.field
+    || targetFields.find(field => field.field !== idField)?.field
+    || ''
+  updateRelation(index, {
+    targetObjectCode: modelCode || '',
+    targetField: idField || firstField,
+    displayField: nameField,
+  })
+}
+
+function updateRelation(index, patch) {
+  localModel.value.relations.splice(index, 1, {
+    ...localModel.value.relations[index],
+    ...patch,
+  })
+}
+
+function removeRelation(index) {
+  localModel.value.relations.splice(index, 1)
+}
+
+function targetFieldOptions(relation) {
+  const targetModel = props.dataModels.find(model => model.modelCode === relation?.targetObjectCode)
+  return (targetModel?.modelSchema?.fields || []).map(field => ({
+    label: `${field.label || field.field} (${field.field})`,
+    value: field.field,
+  }))
+}
+
+function ensureModelCollections() {
+  if (!localModel.value.schemaVersion)
+    localModel.value.schemaVersion = 2
+  if (!localModel.value.domain)
+    localModel.value.domain = { id: null, code: '', name: '' }
+  if (!localModel.value.object)
+    localModel.value.object = { code: '', name: localModel.value.businessName || '', description: '' }
+  if (!localModel.value.fields)
+    localModel.value.fields = []
+  if (!localModel.value.relations)
+    localModel.value.relations = []
+  if (!localModel.value.policies)
+    localModel.value.policies = { dataScope: 'TENANT', regionField: '', auditEnabled: true }
+  if (!localModel.value.treeConfig) {
+    localModel.value.treeConfig = {
+      keyField: 'id',
+      parentField: 'parentId',
+      labelField: 'name',
+      childrenField: 'children',
+      treeTitle: '树形导航',
+    }
+  }
+}
+
 async function validateModel() {
   validating.value = true
   try {
@@ -200,54 +564,249 @@ async function validateModel() {
 <style scoped>
 .model-designer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 16px;
-  min-height: 560px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  min-height: calc(100vh - 226px);
+}
+
+.model-designer.fields-active {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .model-main {
   min-width: 0;
 }
 
-.model-toolbar {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+.field-property-panel {
+  height: auto;
+  margin-top: 12px;
+}
+
+.field-property-panel :deep(.field-form) {
+  max-height: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.field-property-panel :deep(.form-section) {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.model-summary,
+.designer-section {
+  border: 1px solid #d8dee8;
   border-radius: 8px;
-  padding: 14px;
+  background: #fff;
+}
+
+.model-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+}
+
+.summary-kicker {
+  color: #2563eb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.model-summary h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.model-summary p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 8px;
+}
+
+.summary-metrics div {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 8px;
+  text-align: center;
+}
+
+.summary-metrics strong {
+  color: #1d4ed8;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.summary-metrics span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.model-tabs {
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 12px 12px;
+}
+
+.designer-section {
+  padding: 12px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.model-form {
-  width: 100%;
-}
-
-.model-form-grid {
+.section-head div {
   display: grid;
-  grid-template-columns: 150px 150px minmax(180px, 1fr) minmax(180px, 1fr) auto;
-  gap: 12px;
-  align-items: end;
+  gap: 3px;
 }
 
-.model-actions {
-  min-width: 190px;
-  padding-bottom: 1px;
+.section-head strong,
+.section-title,
+.rule-card-title,
+.placeholder-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.section-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.basic-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.span-2 {
+  grid-column: 1 / -1;
+}
+
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.domain-hint {
+  margin-bottom: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.relation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.relation-row {
+  display: grid;
+  grid-template-columns: 120px minmax(120px, 1fr) minmax(120px, 1fr) 120px minmax(120px, 1fr) 52px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rule-card {
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.rule-card-title {
+  margin-bottom: 10px;
+}
+
+.placeholder-board {
+  display: grid;
+  gap: 12px;
+}
+
+.placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.placeholder-grid div {
+  min-height: 72px;
+  border: 1px dashed #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #1e40af;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 12px;
 }
 
 .model-side {
-  min-height: 560px;
+  min-height: calc(100vh - 226px);
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1260px) {
   .model-designer {
     grid-template-columns: 1fr;
   }
 
-  .model-form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .relation-row {
+    grid-template-columns: 1fr;
   }
 
-  .model-actions {
-    grid-column: 1 / -1;
+  .rules-grid,
+  .placeholder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .model-summary {
+    flex-direction: column;
+  }
+
+  .summary-metrics,
+  .basic-form {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .section-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

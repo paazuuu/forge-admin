@@ -20,6 +20,16 @@ public class LowcodePublishDTO {
 
     private Integer menuSort;
 
+    private Long domainId;
+
+    private String domainCode;
+
+    private String domainName;
+
+    private String objectCode;
+
+    private String objectName;
+
     private String remark;
 
     /** 允许发布时传入最新草稿，未传则使用已保存草稿 */

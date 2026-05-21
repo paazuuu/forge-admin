@@ -13,5 +13,11 @@ public class LowcodePageSchema {
 
     private String layoutType;
 
+    private Long primaryModelId;
+
+    private String primaryModelCode;
+
+    private List<LowcodePageModelRef> modelRefs = new ArrayList<>();
+
     private List<LowcodePageZone> zones = new ArrayList<>();
 }

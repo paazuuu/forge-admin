@@ -33,6 +33,10 @@
         <result column="published_version" property="publishedVersion"/>
         <result column="publish_time" property="publishTime"/>
         <result column="publish_by" property="publishBy"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="object_name" property="objectName"/>
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
         <result column="create_dept" property="createDept"/>
@@ -71,6 +75,10 @@
         published_version,
         publish_time,
         publish_by,
+        domain_id,
+        domain_code,
+        object_code,
+        object_name,
         create_by,
         create_time,
         create_dept,
@@ -100,10 +108,22 @@
             OR app_name LIKE CONCAT('%', #{keyword}, '%')
             OR table_name LIKE CONCAT('%', #{keyword}, '%')
             OR table_comment LIKE CONCAT('%', #{keyword}, '%')
+            OR domain_code LIKE CONCAT('%', #{keyword}, '%')
+            OR object_code LIKE CONCAT('%', #{keyword}, '%')
+            OR object_name LIKE CONCAT('%', #{keyword}, '%')
           )
         </if>
         <if test="publishStatus != null and publishStatus != ''">
           AND publish_status = #{publishStatus}
+        </if>
+        <if test="domainId != null">
+          AND domain_id = #{domainId}
+        </if>
+        <if test="domainCode != null and domainCode != ''">
+          AND domain_code = #{domainCode}
+        </if>
+        <if test="generalDomain != null and generalDomain">
+          AND domain_code = 'general'
         </if>
         ORDER BY update_time DESC, id DESC
     </select>

@@ -312,9 +312,17 @@
 import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemRole' })
+
+const USER_TYPE_DICT = 'sys_user_type'
+const USER_STATUS_DICT = 'sys_user_status'
+const ROLE_DATA_SCOPE_DICT = 'sys_role_data_scope'
+const NORMAL_DISABLE_DICT = 'sys_normal_disable'
+const YES_NO_DICT = 'sys_yes_no'
 
 const crudRef = ref(null)
 const treeRef = ref(null)
@@ -349,12 +357,12 @@ const userPagination = ref({
   itemCount: 0,
 })
 
-// 用户状态选项
-const userStatusOptions = [
-  { label: '正常', value: 1 },
-  { label: '禁用', value: 0 },
-  { label: '锁定', value: 2 },
-]
+const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, ROLE_DATA_SCOPE_DICT, NORMAL_DISABLE_DICT, YES_NO_DICT)
+
+const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
+const dataScopeOptions = computed(() => toNumberOptions(dict.value[ROLE_DATA_SCOPE_DICT]))
+const roleStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
+const yesNoOptions = computed(() => toNumberOptions(dict.value[YES_NO_DICT]))
 
 // 计算分页配置
 const userPaginationConfig = computed(() => ({
@@ -467,24 +475,8 @@ function renderTreeLabel({ option }) {
   ])
 }
 
-// 数据范围选项
-const dataScopeOptions = [
-  { label: '全部数据', value: 1 },
-  { label: '本租户数据', value: 2 },
-  { label: '本组织数据', value: 3 },
-  { label: '本组织及子组织', value: 4 },
-  { label: '个人数据', value: 5 },
-  { label: '本行政区划数据', value: 7 },
-]
-
-// 角色状态选项
-const roleStatusOptions = [
-  { label: '正常', value: 1 },
-  { label: '禁用', value: 0 },
-]
-
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'roleName',
     label: '角色名称',
@@ -507,10 +499,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: roleStatusOptions,
+      options: roleStatusOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -529,8 +521,7 @@ const tableColumns = computed(() => [
     label: '数据范围',
     width: 150,
     render: (row) => {
-      const option = dataScopeOptions.find(opt => opt.value === row.dataScope)
-      return option ? option.label : '-'
+      return h(DictTag, { dictType: ROLE_DATA_SCOPE_DICT, value: row.dataScope, size: 'small' })
     },
   },
   {
@@ -543,8 +534,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(NTag, { type: row.roleStatus === 1 ? 'success' : 'error', size: 'small' }, { default: () => row.roleStatus === 1 ? '正常' : '禁用' },
-      )
+      return h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.roleStatus, size: 'small' })
     },
   },
   {
@@ -552,8 +542,7 @@ const tableColumns = computed(() => [
     label: '系统角色',
     width: 100,
     render: (row) => {
-      return h(NTag, { type: row.isSystem === 1 ? 'warning' : 'default', size: 'small' }, { default: () => row.isSystem === 1 ? '是' : '否' },
-      )
+      return h(DictTag, { dictType: YES_NO_DICT, value: row.isSystem, size: 'small' })
     },
   },
   {
@@ -576,7 +565,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     field: 'roleName',
     label: '角色名称',
@@ -603,7 +592,7 @@ const editSchema = [
     rules: [{ required: true, type: 'number', message: '请选择数据范围', trigger: 'change' }],
     props: {
       placeholder: '请选择数据范围',
-      options: dataScopeOptions,
+      options: dataScopeOptions.value,
     },
   },
   {
@@ -630,7 +619,7 @@ const editSchema = [
     type: 'radio',
     defaultValue: 1,
     props: {
-      options: roleStatusOptions,
+      options: roleStatusOptions.value,
     },
   },
   {
@@ -639,10 +628,7 @@ const editSchema = [
     type: 'radio',
     defaultValue: 0,
     props: {
-      options: [
-        { label: '否', value: 0 },
-        { label: '是', value: 1 },
-      ],
+      options: yesNoOptions.value,
     },
   },
   {
@@ -655,7 +641,7 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
 
 // 用户表格列配置（用于角色用户列表）
 const userTableColumns = [
@@ -684,12 +670,7 @@ const userTableColumns = [
     key: 'userType',
     width: 120,
     render: (row) => {
-      const typeMap = {
-        0: '系统管理员',
-        1: '租户管理员',
-        2: '普通用户',
-      }
-      return h(NTag, { type: 'info', size: 'small' }, { default: () => typeMap[row.userType] || '未知' })
+      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small' })
     },
   },
   {
@@ -697,13 +678,7 @@ const userTableColumns = [
     key: 'userStatus',
     width: 80,
     render: (row) => {
-      const statusMap = {
-        0: { text: '禁用', type: 'error' },
-        1: { text: '正常', type: 'success' },
-        2: { text: '锁定', type: 'warning' },
-      }
-      const config = statusMap[row.userStatus] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small' })
     },
   },
   {
@@ -719,6 +694,13 @@ const userTableColumns = [
     },
   },
 ]
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 表单提交前处理
 function beforeSubmit(formData) {

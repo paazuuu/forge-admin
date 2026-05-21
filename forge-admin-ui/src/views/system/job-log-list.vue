@@ -42,8 +42,10 @@
 </template>
 
 <script setup>
-import { NButton, NEllipsis, NTag } from 'naive-ui'
-import { h, onMounted, ref } from 'vue'
+import { NButton, NEllipsis } from 'naive-ui'
+import { computed, h, onMounted, ref } from 'vue'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
 import { request } from '@/utils'
 
 const props = defineProps({
@@ -53,16 +55,17 @@ const props = defineProps({
   },
 })
 
+const { dict } = useDict('sys_common_status')
+
+const statusOptions = computed(() => [
+  { label: '全部', value: null },
+  ...dict.value.sys_common_status || [],
+])
+
 const loading = ref(false)
 const logList = ref([])
 const searchStatus = ref(null)
 const dateRange = ref(null)
-
-const statusOptions = [
-  { label: '全部', value: null },
-  { label: '执行成功', value: 1 },
-  { label: '执行失败', value: 0 },
-]
 
 const pagination = ref({
   page: 1,
@@ -111,12 +114,11 @@ const columns = [
     key: 'status',
     width: 100,
     render: (row) => {
-      const statusMap = {
-        0: { text: '执行失败', type: 'error' },
-        1: { text: '执行成功', type: 'success' },
-      }
-      const config = statusMap[row.status] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, {
+        options: dict.value.sys_common_status || [],
+        value: String(row.status),
+        size: 'small',
+      })
     },
   },
   {

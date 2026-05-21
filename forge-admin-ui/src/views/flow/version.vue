@@ -56,9 +56,7 @@
               {{ versionDetail.versionName || '-' }}
             </NDescriptionsItem>
             <NDescriptionsItem label="版本标记">
-              <NTag :type="tagMeta(versionDetail.versionTag).type" size="small">
-                {{ tagMeta(versionDetail.versionTag).text }}
-              </NTag>
+              <DictTag dict-type="flow_version_tag" :value="versionDetail.versionTag" />
             </NDescriptionsItem>
             <NDescriptionsItem label="发布人">
               {{ versionDetail.publishBy || '-' }}
@@ -192,8 +190,10 @@
 <script setup>
 import BpmnJS from 'bpmn-js/lib/NavigatedViewer'
 import { NButton, NDropdown, NTag } from 'naive-ui'
-import { h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import versionApi from '@/api/version'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/store'
 import { generateUUID } from '@/utils/common'
 import VersionCompare from './versionCompare.vue'
@@ -214,12 +214,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'refresh'])
 
-const versionTagOptions = [
-  { label: '草稿', value: 'draft' },
-  { label: '测试', value: 'test' },
-  { label: '正式发布', value: 'release' },
-  { label: '已废弃', value: 'deprecated' },
-]
+const { dict } = useDict('flow_version_tag')
+
+const versionTagOptions = computed(() => dict.value.flow_version_tag || [])
 
 const visible = ref(true)
 const loading = ref(false)
@@ -290,10 +287,7 @@ const columns = [
     title: '版本标记',
     key: 'versionTag',
     width: 120,
-    render: (row) => {
-      const tag = tagMeta(row.versionTag)
-      return h(NTag, { type: tag.type, size: 'small' }, { default: () => tag.text })
-    },
+    render: row => h(DictTag, { dictType: 'flow_version_tag', value: row.versionTag }),
   },
   { title: '变更说明', key: 'changeDescription', minWidth: 180, ellipsis: { tooltip: true } },
   { title: '发布人', key: 'publishBy', width: 110 },
@@ -348,16 +342,6 @@ function handleMoreAction(key, row) {
     delete: () => handleDelete(row),
   }
   map[key]?.()
-}
-
-function tagMeta(value) {
-  const tagMap = {
-    draft: { type: 'default', text: '草稿' },
-    test: { type: 'info', text: '测试' },
-    release: { type: 'success', text: '正式发布' },
-    deprecated: { type: 'warning', text: '已废弃' },
-  }
-  return tagMap[value] || { type: 'default', text: value || '-' }
 }
 
 function isCurrentVersion(version) {

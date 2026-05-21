@@ -15,5 +15,9 @@ public interface AiCrudConfigMapper extends BaseMapper<AiCrudConfig> {
     Page<AiCrudConfig> selectLowcodePage(Page<AiCrudConfig> page,
                                          @Param("tenantId") Long tenantId,
                                          @Param("keyword") String keyword,
-                                         @Param("publishStatus") String publishStatus);
+                                         @Param("publishStatus") String publishStatus,
+                                         @Param("domainId") Long domainId,
+                                         @Param("domainCode") String domainCode,
+                                         @Param("generalDomain") Boolean generalDomain);
+
 }

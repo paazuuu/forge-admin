@@ -100,6 +100,26 @@
           )
     </select>
 
+    <!-- 按权限标识查询单个资源 -->
+    <select id="selectOneByPerms" resultType="com.mdframe.forge.plugin.system.entity.SysResource">
+        SELECT *
+        FROM sys_resource
+        WHERE tenant_id = #{tenantId}
+          AND resource_type = #{resourceType}
+          AND perms = #{perms}
+        LIMIT 1
+    </select>
+
+    <!-- 按路由查询单个资源 -->
+    <select id="selectOneByPath" resultType="com.mdframe.forge.plugin.system.entity.SysResource">
+        SELECT *
+        FROM sys_resource
+        WHERE tenant_id = #{tenantId}
+          AND resource_type = #{resourceType}
+          AND path = #{path}
+        LIMIT 1
+    </select>
+
     <!-- 按资源ID查询API权限匹配表达式：方法明确时使用 METHOD path，方法为空时仅使用 path -->
     <select id="selectApiPermissionPatternsByResourceIds" resultType="java.lang.String">
         SELECT DISTINCT

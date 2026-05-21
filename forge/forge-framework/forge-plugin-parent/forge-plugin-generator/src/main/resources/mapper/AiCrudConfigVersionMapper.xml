@@ -7,6 +7,10 @@
         <result column="tenant_id" property="tenantId"/>
         <result column="config_id" property="configId"/>
         <result column="config_key" property="configKey"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="object_name" property="objectName"/>
         <result column="version_no" property="versionNo"/>
         <result column="version_type" property="versionType"/>
         <result column="model_schema" property="modelSchema"/>
@@ -30,6 +34,10 @@
         tenant_id,
         config_id,
         config_key,
+        domain_id,
+        domain_code,
+        object_code,
+        object_name,
         version_no,
         version_type,
         model_schema,

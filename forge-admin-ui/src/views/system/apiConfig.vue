@@ -66,9 +66,7 @@
             {{ currentConfig.apiCode }}
           </n-descriptions-item>
           <n-descriptions-item label="请求方式">
-            <NTag :type="getMethodColor(currentConfig.reqMethod)" size="small">
-              {{ currentConfig.reqMethod }}
-            </NTag>
+            <DictTag :options="reqMethodOptions" :value="currentConfig.reqMethod" size="small" />
           </n-descriptions-item>
           <n-descriptions-item label="请求路径" :span="2">
             {{ currentConfig.urlPath }}
@@ -83,32 +81,22 @@
             {{ currentConfig.serviceId || '-' }}
           </n-descriptions-item>
           <n-descriptions-item label="需认证/鉴权">
-            <NTag :type="currentConfig.authFlag === 1 ? 'success' : 'default'" size="small">
-              {{ currentConfig.authFlag === 1 ? '是' : '否' }}
-            </NTag>
+            <DictTag :options="yesNoOptions" :value="String(currentConfig.authFlag)" size="small" />
           </n-descriptions-item>
           <n-descriptions-item label="需报文加解密">
-            <NTag :type="currentConfig.encryptFlag === 1 ? 'success' : 'default'" size="small">
-              {{ currentConfig.encryptFlag === 1 ? '是' : '否' }}
-            </NTag>
+            <DictTag :options="yesNoOptions" :value="String(currentConfig.encryptFlag)" size="small" />
           </n-descriptions-item>
           <n-descriptions-item label="启用租户隔离">
-            <NTag :type="currentConfig.tenantFlag === 1 ? 'success' : 'default'" size="small">
-              {{ currentConfig.tenantFlag === 1 ? '启用' : '不启用' }}
-            </NTag>
+            <DictTag :options="yesNoOptions" :value="String(currentConfig.tenantFlag)" size="small" />
           </n-descriptions-item>
           <n-descriptions-item label="开启限流">
-            <NTag :type="currentConfig.limitFlag === 1 ? 'warning' : 'default'" size="small">
-              {{ currentConfig.limitFlag === 1 ? '开启' : '关闭' }}
-            </NTag>
+            <DictTag :options="yesNoOptions" :value="String(currentConfig.limitFlag)" size="small" />
           </n-descriptions-item>
           <n-descriptions-item label="脱敏字段" :span="2">
             {{ currentConfig.sensitiveFields || '-' }}
           </n-descriptions-item>
           <n-descriptions-item label="状态">
-            <NTag :type="currentConfig.status === 1 ? 'success' : 'error'" size="small">
-              {{ currentConfig.status === 1 ? '正常' : '停用' }}
-            </NTag>
+            <DictTag :options="statusOptions" :value="String(currentConfig.status)" size="small" />
           </n-descriptions-item>
           <n-descriptions-item label="创建时间">
             {{ currentConfig.createTime }}
@@ -130,12 +118,19 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
 import { request } from '@/utils'
 
 defineOptions({ name: 'ApiConfig' })
+
+const { dict } = useDict('sys_req_method', 'sys_yes_no', 'sys_normal_disable')
+
+const reqMethodOptions = computed(() => dict.value.sys_req_method || [])
+const yesNoOptions = computed(() => dict.value.sys_yes_no || [])
+const statusOptions = computed(() => dict.value.sys_normal_disable || [])
 
 const crudRef = ref(null)
 const detailVisible = ref(false)
@@ -143,41 +138,8 @@ const currentConfig = ref(null)
 const refreshLoading = ref(false)
 const registerLoading = ref(false)
 
-// 请求方式选项
-const reqMethodOptions = [
-  { label: 'GET', value: 'GET' },
-  { label: 'POST', value: 'POST' },
-  { label: 'PUT', value: 'PUT' },
-  { label: 'DELETE', value: 'DELETE' },
-  { label: 'ALL', value: 'ALL' },
-]
-
-// 是否选项
-const yesNoOptions = [
-  { label: '需要', value: 1 },
-  { label: '不需要', value: 0 },
-]
-
-// 状态选项
-const statusOptions = [
-  { label: '正常', value: 1 },
-  { label: '停用', value: 0 },
-]
-
-// 获取请求方式颜色
-function getMethodColor(method) {
-  const colorMap = {
-    GET: 'info',
-    POST: 'success',
-    PUT: 'warning',
-    DELETE: 'error',
-    ALL: 'default',
-  }
-  return colorMap[method] || 'default'
-}
-
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'apiName',
     label: '接口名称',
@@ -200,7 +162,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择',
-      options: reqMethodOptions,
+      options: reqMethodOptions.value,
       clearable: true,
     },
   },
@@ -226,11 +188,11 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择',
-      options: statusOptions,
+      options: statusOptions.value,
       clearable: true,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -256,8 +218,11 @@ const tableColumns = computed(() => [
     label: '请求方式',
     width: 90,
     render: (row) => {
-      return h(NTag, { type: getMethodColor(row.reqMethod), size: 'small' }, { default: () => row.reqMethod },
-      )
+      return h(DictTag, {
+        options: reqMethodOptions.value,
+        value: row.reqMethod,
+        size: 'small',
+      })
     },
   },
   {
@@ -287,8 +252,11 @@ const tableColumns = computed(() => [
     label: '需认证',
     width: 80,
     render: (row) => {
-      return h(NTag, { type: row.authFlag === 1 ? 'success' : 'default', size: 'small' }, { default: () => row.authFlag === 1 ? '是' : '否' },
-      )
+      return h(DictTag, {
+        options: yesNoOptions.value,
+        value: String(row.authFlag),
+        size: 'small',
+      })
     },
   },
   {
@@ -296,8 +264,11 @@ const tableColumns = computed(() => [
     label: '需加解密',
     width: 90,
     render: (row) => {
-      return h(NTag, { type: row.encryptFlag === 1 ? 'success' : 'default', size: 'small' }, { default: () => row.encryptFlag === 1 ? '是' : '否' },
-      )
+      return h(DictTag, {
+        options: yesNoOptions.value,
+        value: String(row.encryptFlag),
+        size: 'small',
+      })
     },
   },
   {
@@ -305,8 +276,11 @@ const tableColumns = computed(() => [
     label: '租户隔离',
     width: 90,
     render: (row) => {
-      return h(NTag, { type: row.tenantFlag === 1 ? 'success' : 'default', size: 'small' }, { default: () => row.tenantFlag === 1 ? '启用' : '不启用' },
-      )
+      return h(DictTag, {
+        options: yesNoOptions.value,
+        value: String(row.tenantFlag),
+        size: 'small',
+      })
     },
   },
   {
@@ -314,8 +288,11 @@ const tableColumns = computed(() => [
     label: '限流',
     width: 80,
     render: (row) => {
-      return h(NTag, { type: row.limitFlag === 1 ? 'warning' : 'default', size: 'small' }, { default: () => row.limitFlag === 1 ? '开启' : '关闭' },
-      )
+      return h(DictTag, {
+        options: yesNoOptions.value,
+        value: String(row.limitFlag),
+        size: 'small',
+      })
     },
   },
   {
@@ -323,8 +300,11 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(NTag, { type: row.status === 1 ? 'success' : 'error', size: 'small' }, { default: () => row.status === 1 ? '正常' : '停用' },
-      )
+      return h(DictTag, {
+        options: statusOptions.value,
+        value: String(row.status),
+        size: 'small',
+      })
     },
   },
   {
@@ -346,7 +326,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
@@ -379,7 +359,7 @@ const editSchema = [
     type: 'select',
     rules: [{ required: true, message: '请选择请求方式', trigger: 'change' }],
     props: {
-      options: reqMethodOptions,
+      options: reqMethodOptions.value,
       placeholder: '请选择请求方式',
     },
   },
@@ -430,9 +410,9 @@ const editSchema = [
     field: 'authFlag',
     label: '需认证/鉴权',
     type: 'select',
-    defaultValue: 1,
+    defaultValue: '1',
     props: {
-      options: yesNoOptions,
+      options: yesNoOptions.value,
       clearable: false,
     },
   },
@@ -440,9 +420,9 @@ const editSchema = [
     field: 'encryptFlag',
     label: '需报文加解密',
     type: 'select',
-    defaultValue: 0,
+    defaultValue: '0',
     props: {
-      options: yesNoOptions,
+      options: yesNoOptions.value,
       clearable: false,
     },
   },
@@ -450,9 +430,9 @@ const editSchema = [
     field: 'tenantFlag',
     label: '启用租户隔离',
     type: 'select',
-    defaultValue: 0,
+    defaultValue: '0',
     props: {
-      options: yesNoOptions,
+      options: yesNoOptions.value,
       clearable: false,
     },
   },
@@ -460,9 +440,9 @@ const editSchema = [
     field: 'limitFlag',
     label: '开启限流',
     type: 'select',
-    defaultValue: 0,
+    defaultValue: '0',
     props: {
-      options: yesNoOptions,
+      options: yesNoOptions.value,
       clearable: false,
     },
   },
@@ -488,9 +468,9 @@ const editSchema = [
     field: 'status',
     label: '状态',
     type: 'select',
-    defaultValue: 1,
+    defaultValue: '1',
     props: {
-      options: statusOptions,
+      options: statusOptions.value,
       clearable: false,
     },
   },
@@ -504,7 +484,7 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
 
 // 查看详情
 async function handleView(row) {

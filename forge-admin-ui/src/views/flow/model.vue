@@ -78,7 +78,7 @@
               <i :class="iconName(item)" />
             </div>
             <span class="status-tag" :class="statusClass(item.status)">
-              {{ statusText[item.status] }}
+              {{ getLabel('flow_model_status', item.status) }}
             </span>
           </div>
           <div class="card-body">
@@ -288,25 +288,19 @@
 <script setup>
 import { CopyOutline, CreateOutline, EllipsisVertical, PauseCircleOutline, PlayCircleOutline, TimeOutline, TrashOutline } from '@vicons/ionicons5'
 import { NIcon, NTreeSelect } from 'naive-ui'
-import { h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
 import FlowModelStats from '@/components/flow/FlowModelStats.vue'
+import { useDict } from '@/composables/useDict'
 import VersionHistory from './version.vue'
 
 const router = useRouter()
 
-const statusOptions = [
-  { label: '设计中', value: 0 },
-  { label: '已部署', value: 1 },
-  { label: '已挂起', value: 2 },
-  { label: '已禁用', value: 3 },
-]
-const formTypeOptions = [
-  { label: '动态表单', value: 'dynamic' },
-  { label: '外置表单', value: 'external' },
-  { label: '无表单', value: 'none' },
-]
+const { dict, getLabel } = useDict('flow_model_status', 'flow_process_form_type')
+
+const statusOptions = computed(() => toNumberOptions(dict.value.flow_model_status))
+const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])
 const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
 
@@ -319,11 +313,16 @@ function buildTreeSelectOptions(treeData) {
   }))
 }
 
-const statusText = { 0: '设计中', 1: '已部署', 2: '已挂起', 3: '已禁用' }
-
 function statusClass(status) {
   const cls = { 0: 'designing', 1: 'deployed', 2: 'suspended', 3: 'disabled' }
   return cls[status] || 'default'
+}
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
 }
 
 const iconColorClasses = ['icon-bg-0', 'icon-bg-1', 'icon-bg-2', 'icon-bg-3', 'icon-bg-4', 'icon-bg-5']

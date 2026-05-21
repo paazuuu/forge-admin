@@ -259,7 +259,7 @@
 </template>
 
 <script setup>
-import { NButton, NInput, NInputNumber, NSelect, NTag } from 'naive-ui'
+import { NButton, NInput, NInputNumber, NSelect } from 'naive-ui'
 import { computed, h, reactive, ref } from 'vue'
 import { getDataConnectionList } from '@/api/data/connection'
 import {
@@ -269,10 +269,14 @@ import {
   syncDataDimensionItems,
 } from '@/api/data/dimension'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
 import SqlEditor from '@/components/SqlEditor.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'DataDimension' })
+
+const { dict } = useDict('data_dimension_source_type', 'sys_enable_disable')
 
 const crudRef = ref(null)
 const connectionOptions = ref([])
@@ -302,15 +306,9 @@ const dimensionStats = reactive({
   active: 0,
 })
 
-const sourceTypeOptions = [
-  { label: '手动维护', value: 'MANUAL' },
-  { label: 'SQL同步', value: 'SQL' },
-]
+const sourceTypeOptions = computed(() => dict.value.data_dimension_source_type || [])
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const statusOptions = computed(() => dict.value.sys_enable_disable || [])
 
 const statCards = computed(() => [
   {
@@ -347,11 +345,11 @@ const tableColumns = computed(() => [
     render: row => h('div', { class: 'dimension-name-card' }, [
       h('div', { class: 'dimension-name-row' }, [
         h('div', { class: 'dimension-name' }, row.dimensionName),
-        h(NTag, {
+        h(DictTag, {
+          dictType: 'data_dimension_source_type',
+          dictValue: row.sourceType,
           size: 'small',
-          bordered: false,
-          type: row.sourceType === 'SQL' ? 'warning' : 'info',
-        }, { default: () => getSourceTypeLabel(row.sourceType) }),
+        }),
       ]),
       h('div', { class: 'dimension-code' }, row.dimensionCode),
       h('div', { class: 'dimension-desc' }, row.description || '暂无描述'),
@@ -387,11 +385,11 @@ const tableColumns = computed(() => [
     prop: 'status',
     label: '状态',
     width: 100,
-    render: row => h(NTag, {
+    render: row => h(DictTag, {
+      dictType: 'sys_enable_disable',
+      dictValue: String(row.status),
       size: 'small',
-      bordered: false,
-      type: row.status === 1 ? 'success' : 'default',
-    }, { default: () => row.status === 1 ? '启用' : '禁用' }),
+    }),
   },
   { prop: 'lastSyncTime', label: '最近同步', width: 170, render: row => row.lastSyncTime || '-' },
   { prop: 'updateTime', label: '更新时间', width: 170 },
@@ -530,16 +528,16 @@ const itemColumns = computed(() => [
     width: 120,
     render: row => itemModalEditable.value
       ? h(NSelect, {
-          value: row.status ?? 1,
-          options: statusOptions,
+          value: String(row.status ?? 1),
+          options: statusOptions.value,
           size: 'small',
-          onUpdateValue: value => row.status = value,
+          onUpdateValue: value => row.status = Number(value),
         })
-      : h(NTag, {
+      : h(DictTag, {
+          dictType: 'sys_enable_disable',
+          dictValue: String(row.status),
           size: 'small',
-          bordered: false,
-          type: row.status === 1 ? 'success' : 'default',
-        }, { default: () => row.status === 1 ? '启用' : '禁用' }),
+        }),
   },
   {
     title: '排序',
@@ -691,7 +689,8 @@ function getSourceGuide(sourceType) {
 }
 
 function getSourceTypeLabel(sourceType) {
-  return sourceTypeOptions.find(item => item.value === sourceType)?.label || '手动维护'
+  const item = dict.value.data_dimension_source_type?.find(d => d.value === sourceType)
+  return item?.label || '手动维护'
 }
 
 function getConnectionName(connectionId) {

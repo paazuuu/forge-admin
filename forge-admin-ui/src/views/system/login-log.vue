@@ -43,15 +43,11 @@
           </h4>
           <div class="detail-row">
             <span class="label">登录类型：</span>
-            <NTag :type="getLoginTypeTag(currentLog.loginType).type" size="small">
-              {{ getLoginTypeTag(currentLog.loginType).text }}
-            </NTag>
+            <DictTag :options="loginTypeOptions" :value="currentLog.loginType" size="small" />
           </div>
           <div class="detail-row">
             <span class="label">登录状态：</span>
-            <NTag :type="currentLog.loginStatus === 1 ? 'success' : 'error'" size="small">
-              {{ currentLog.loginStatus === 1 ? '成功' : '失败' }}
-            </NTag>
+            <DictTag :options="loginStatusOptions" :value="String(currentLog.loginStatus)" size="small" />
           </div>
           <div class="detail-row">
             <span class="label">登录时间：</span>
@@ -59,11 +55,7 @@
           </div>
           <div class="detail-row">
             <span class="label">客户端：</span>
-            <span class="value">
-              <NTag :type="getClientTag(currentLog.clientCode).type" size="small">
-                {{ getClientTag(currentLog.clientCode).text }}
-              </NTag>
-            </span>
+            <DictTag :options="clientTypeOptions" :value="currentLog.clientCode" size="small" />
           </div>
           <div class="detail-row">
             <span class="label">登录IP：</span>
@@ -105,12 +97,19 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
 import { formatDateTime, request } from '@/utils'
 
 defineOptions({ name: 'LoginLog' })
+
+const { dict } = useDict('sys_login_type', 'sys_common_status', 'sys_client_type')
+
+const loginTypeOptions = computed(() => dict.value.sys_login_type || [])
+const loginStatusOptions = computed(() => dict.value.sys_common_status || [])
+const clientTypeOptions = computed(() => dict.value.sys_client_type || [])
 
 const crudRef = ref(null)
 const detailVisible = ref(false)
@@ -131,7 +130,7 @@ function handleBeforeSearch(params) {
 }
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'username',
     label: '用户名',
@@ -147,13 +146,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择登录类型',
       clearable: true,
-      options: [
-        { label: '登录', value: 'LOGIN' },
-        { label: '登出', value: 'LOGOUT' },
-        { label: '注册', value: 'REGISTER' },
-        { label: '被踢下线', value: 'KICKOUT' },
-        { label: '被顶下线', value: 'REPLACED' },
-      ],
+      options: loginTypeOptions.value,
     },
   },
   {
@@ -163,10 +156,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择状态',
       clearable: true,
-      options: [
-        { label: '成功', value: 1 },
-        { label: '失败', value: 0 },
-      ],
+      options: loginStatusOptions.value,
     },
   },
   {
@@ -184,12 +174,7 @@ const searchSchema = [
     props: {
       placeholder: '请选择客户端',
       clearable: true,
-      options: [
-        { label: '桌面端', value: 'pc' },
-        { label: '移动APP', value: 'app' },
-        { label: '网页H5', value: 'h5' },
-        { label: '微信', value: 'wechat' },
-      ],
+      options: clientTypeOptions.value,
     },
   },
   {
@@ -214,7 +199,7 @@ const searchSchema = [
       return {}
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -228,8 +213,11 @@ const tableColumns = computed(() => [
     label: '登录类型',
     width: 100,
     render: (row) => {
-      const tag = getLoginTypeTag(row.loginType)
-      return h(NTag, { type: tag.type, size: 'small' }, { default: () => tag.text })
+      return h(DictTag, {
+        options: loginTypeOptions.value,
+        value: row.loginType,
+        size: 'small',
+      })
     },
   },
   {
@@ -237,11 +225,11 @@ const tableColumns = computed(() => [
     label: '登录状态',
     width: 100,
     render: (row) => {
-      return h(
-        NTag,
-        { type: row.loginStatus === 1 ? 'success' : 'error', size: 'small' },
-        { default: () => row.loginStatus === 1 ? '成功' : '失败' },
-      )
+      return h(DictTag, {
+        options: loginStatusOptions.value,
+        value: String(row.loginStatus),
+        size: 'small',
+      })
     },
   },
   {
@@ -249,8 +237,11 @@ const tableColumns = computed(() => [
     label: '客户端',
     width: 100,
     render: (row) => {
-      const tag = getClientTag(row.clientCode)
-      return h(NTag, { type: tag.type, size: 'small' }, { default: () => tag.text })
+      return h(DictTag, {
+        options: clientTypeOptions.value,
+        value: row.clientCode,
+        size: 'small',
+      })
     },
   },
   {
@@ -302,29 +293,6 @@ const tableColumns = computed(() => [
     ],
   },
 ])
-
-// 获取登录类型标签配置
-function getLoginTypeTag(loginType) {
-  const typeMap = {
-    LOGIN: { text: '登录', type: 'success' },
-    LOGOUT: { text: '登出', type: 'info' },
-    REGISTER: { text: '注册', type: 'warning' },
-    KICKOUT: { text: '踢下线', type: 'error' },
-    REPLACED: { text: '顶下线', type: 'error' },
-  }
-  return typeMap[loginType] || { text: loginType, type: 'default' }
-}
-
-// 获取客户端标签配置
-function getClientTag(clientCode) {
-  const clientMap = {
-    pc: { text: '桌面端', type: 'info' },
-    app: { text: '移动APP', type: 'success' },
-    h5: { text: '网页H5', type: 'warning' },
-    wechat: { text: '微信', type: 'success' },
-  }
-  return clientMap[clientCode] || { text: clientCode || '-', type: 'default' }
-}
 
 // 查看详情
 async function handleViewDetail(row) {

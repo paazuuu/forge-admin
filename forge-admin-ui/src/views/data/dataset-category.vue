@@ -167,8 +167,12 @@ import {
   getDataDatasetCategoryTree,
   updateDataDatasetCategory,
 } from '@/api/data/dataset'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'DataDatasetCategory' })
+
+const { dict } = useDict('sys_enable_disable')
 
 const router = useRouter()
 const loading = ref(false)
@@ -196,10 +200,7 @@ const formData = reactive({
   description: '',
 })
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const statusOptions = computed(() => dict.value.sys_enable_disable || [])
 
 const formRules = {
   categoryCode: {
@@ -298,11 +299,11 @@ const tableColumns = computed(() => [
     title: '状态',
     key: 'status',
     width: 120,
-    render: row => h(NTag, {
+    render: row => h(DictTag, {
+      dictType: 'sys_enable_disable',
+      dictValue: String(row.status),
       size: 'small',
-      bordered: false,
-      type: row.status === 1 ? 'success' : 'default',
-    }, { default: () => row.status === 1 ? '启用' : '禁用' }),
+    }),
   },
   {
     title: '更新时间',

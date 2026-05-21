@@ -1559,10 +1559,23 @@ import {
 import { getDataDimensionList } from '@/api/data/dimension'
 import { AiCrudPage } from '@/components/ai-form'
 import DatasetParamSchemaEditor from '@/components/data/DatasetParamSchemaEditor.vue'
+import DictTag from '@/components/DictTag.vue'
 import SqlEditor from '@/components/SqlEditor.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'DataDataset' })
+
+const { dict } = useDict(
+  'data_dataset_type',
+  'sys_enable_disable',
+  'data_dataset_publish_status',
+  'data_dataset_access_mode',
+  'data_acl_subject_type',
+  'data_acl_access_level',
+  'data_field_role',
+  'data_field_sensitive_level',
+)
 
 const router = useRouter()
 const crudRef = ref(null)
@@ -1640,46 +1653,25 @@ const datasetStats = reactive({
   editable: 0,
 })
 
-const datasetTypeOptions = [
-  { label: '单表数据集', value: 'TABLE' },
-  { label: 'SQL数据集', value: 'SQL' },
-]
+const datasetTypeOptions = computed(() => dict.value.data_dataset_type || [])
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const statusOptions = computed(() => dict.value.sys_enable_disable || [])
 
 const resultEncodingOptions = [
   { label: 'UTF-8', value: 'UTF-8' },
   { label: 'GBK', value: 'GBK' },
 ]
 
-const publishStatusOptions = [
-  { label: '未发布', value: 0 },
-  { label: '已发布', value: 1 },
-  { label: '已下架', value: 2 },
-]
+const publishStatusOptions = computed(() => dict.value.data_dataset_publish_status || [])
 
 const datasetImpactLimit = 10
 const datasetImpactVisibleLimit = 6
 
-const accessModeOptions = [
-  { label: '公开', value: 'PUBLIC' },
-  { label: '私有', value: 'PRIVATE' },
-]
+const accessModeOptions = computed(() => dict.value.data_dataset_access_mode || [])
 
-const aclSubjectTypeOptions = [
-  { label: '角色', value: 'ROLE' },
-  { label: '用户', value: 'USER' },
-  { label: '组织', value: 'ORG' },
-]
+const aclSubjectTypeOptions = computed(() => dict.value.data_acl_subject_type || [])
 
-const accessLevelOptions = [
-  { label: '查看', value: 'VIEW' },
-  { label: '查询', value: 'QUERY' },
-  { label: '管理', value: 'MANAGE' },
-]
+const accessLevelOptions = computed(() => dict.value.data_acl_access_level || [])
 
 const rowScopeAttributeOptions = [
   { label: '租户 ID', value: 'tenantColumn', caption: '匹配当前登录租户' },
@@ -1701,16 +1693,9 @@ const dataTypeOptions = [
   { label: '布尔 BOOLEAN', value: 'BOOLEAN' },
 ]
 
-const fieldRoleOptions = [
-  { label: '维度', value: 'DIMENSION' },
-  { label: '指标', value: 'MEASURE' },
-]
+const fieldRoleOptions = computed(() => dict.value.data_field_role || [])
 
-const sensitiveLevelOptions = [
-  { label: '不脱敏', value: 'NONE' },
-  { label: '脱敏展示', value: 'MASK' },
-  { label: '隐藏字段', value: 'HIDDEN' },
-]
+const sensitiveLevelOptions = computed(() => dict.value.data_field_sensitive_level || [])
 
 const maskRuleOptions = [
   { label: '默认：保留前2后2', value: '__DEFAULT__' },
@@ -1913,31 +1898,31 @@ const tableColumns = computed(() => [
     prop: 'publishStatus',
     label: '发布状态',
     width: 110,
-    render: row => h(NTag, {
+    render: row => h(DictTag, {
+      dictType: 'data_dataset_publish_status',
+      dictValue: String(row.publishStatus),
       size: 'small',
-      bordered: false,
-      type: getPublishStatusTagType(row.publishStatus),
-    }, { default: () => getPublishStatusLabel(row.publishStatus) }),
+    }),
   },
   {
     prop: 'accessMode',
     label: '访问权限',
     width: 110,
-    render: row => h(NTag, {
+    render: row => h(DictTag, {
+      dictType: 'data_dataset_access_mode',
+      dictValue: row.accessMode,
       size: 'small',
-      bordered: false,
-      type: row.accessMode === 'PRIVATE' ? 'warning' : 'success',
-    }, { default: () => getAccessModeLabel(row.accessMode) }),
+    }),
   },
   {
     prop: 'status',
     label: '可用状态',
     width: 110,
-    render: row => h(NTag, {
+    render: row => h(DictTag, {
+      dictType: 'sys_enable_disable',
+      dictValue: String(row.status),
       size: 'small',
-      bordered: false,
-      type: row.status === 1 ? 'success' : 'default',
-    }, { default: () => row.status === 1 ? '启用' : '禁用' }),
+    }),
   },
   { prop: 'maxRows', label: '最大行数', width: 100 },
   { prop: 'updateTime', label: '更新时间', width: 170 },
@@ -1988,7 +1973,7 @@ const fieldColumns = computed(() => [
     title: '字段角色',
     key: 'fieldRole',
     width: 140,
-    render: row => renderFieldSelect(row, 'fieldRole', fieldRoleOptions, {
+    render: row => renderFieldSelect(row, 'fieldRole', fieldRoleOptions.value, {
       placeholder: '字段角色',
       onChange: (value) => {
         if (value !== 'DIMENSION') {
@@ -2043,7 +2028,7 @@ const fieldColumns = computed(() => [
     title: '脱敏策略',
     key: 'sensitiveLevel',
     width: 150,
-    render: row => renderFieldSelect(row, 'sensitiveLevel', sensitiveLevelOptions, { placeholder: '脱敏策略' }),
+    render: row => renderFieldSelect(row, 'sensitiveLevel', sensitiveLevelOptions.value, { placeholder: '脱敏策略' }),
   },
   {
     title: '脱敏规则',
@@ -2185,21 +2170,13 @@ async function scrollToStepSection(step) {
 }
 
 function getPublishStatusLabel(status) {
-  return publishStatusOptions.find(item => item.value === status)?.label || '未发布'
-}
-
-function getPublishStatusTagType(status) {
-  if (status === 1) {
-    return 'success'
-  }
-  if (status === 2) {
-    return 'warning'
-  }
-  return 'default'
+  const item = dict.value.data_dataset_publish_status?.find(d => d.value === String(status))
+  return item?.label || '未发布'
 }
 
 function getAccessModeLabel(accessMode) {
-  return accessMode === 'PRIVATE' ? '私有' : '公开'
+  const item = dict.value.data_dataset_access_mode?.find(d => d.value === accessMode)
+  return item?.label || '公开'
 }
 
 function getDatasetCreatorLabel(formData) {
@@ -2233,7 +2210,8 @@ function getDatasetSourceGuide(formData) {
 }
 
 function getDatasetTypeLabel(datasetType) {
-  return datasetType === 'SQL' ? 'SQL 数据集' : '单表数据集'
+  const item = dict.value.data_dataset_type?.find(d => d.value === datasetType)
+  return item?.label || '单表数据集'
 }
 
 function getDatasetSourceSubject(formData) {
@@ -2980,8 +2958,8 @@ function handleAclAccessLevelChange(item, value, updateValue) {
 }
 
 function getAclItemLabel(item) {
-  const subjectTypeLabel = aclSubjectTypeOptions.find(option => option.value === item?.subjectType)?.label || '授权主体'
-  const accessLevelLabel = accessLevelOptions.find(option => option.value === item?.accessLevel)?.label || '查询'
+  const subjectTypeLabel = aclSubjectTypeOptions.value.find(option => option.value === item?.subjectType)?.label || '授权主体'
+  const accessLevelLabel = accessLevelOptions.value.find(option => option.value === item?.accessLevel)?.label || '查询'
   if (!item?.subjectId) {
     return `${subjectTypeLabel} · 待选择 · ${accessLevelLabel}`
   }

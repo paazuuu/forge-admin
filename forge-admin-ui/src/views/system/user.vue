@@ -304,9 +304,15 @@
 import { NTag } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemUser' })
+
+const USER_TYPE_DICT = 'sys_user_type'
+const USER_STATUS_DICT = 'sys_user_status'
+const USER_SEX_DICT = 'sys_user_sex'
 
 const crudRef = ref(null)
 const treeRef = ref(null)
@@ -359,29 +365,14 @@ const orgTreeExpandedKeys = ref([])
 const searchRegionOptions = ref([])
 const editRegionOptions = ref([])
 
-// 用户类型选项
-const userTypeOptions = [
-  { label: '系统管理员', value: 0 },
-  { label: '租户管理员', value: 1 },
-  { label: '普通用户', value: 2 },
-]
+const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, USER_SEX_DICT)
 
-// 用户状态选项
-const userStatusOptions = [
-  { label: '正常', value: 1 },
-  { label: '禁用', value: 0 },
-  { label: '锁定', value: 2 },
-]
-
-// 性别选项
-const genderOptions = [
-  { label: '未知', value: 0 },
-  { label: '男', value: 1 },
-  { label: '女', value: 2 },
-]
+const userTypeOptions = computed(() => toNumberOptions(dict.value[USER_TYPE_DICT]))
+const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
+const genderOptions = computed(() => toNumberOptions(dict.value[USER_SEX_DICT]))
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'username',
     label: '用户名',
@@ -423,10 +414,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: userStatusOptions,
+      options: userStatusOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -445,8 +436,7 @@ const tableColumns = computed(() => [
     label: '用户类型',
     width: 120,
     render: (row) => {
-      const option = userTypeOptions.find(opt => opt.value === row.userType)
-      return option ? option.label : '-'
+      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small' })
     },
   },
   {
@@ -464,8 +454,7 @@ const tableColumns = computed(() => [
     label: '性别',
     width: 80,
     render: (row) => {
-      const option = genderOptions.find(opt => opt.value === row.gender)
-      return option ? option.label : '-'
+      return h(DictTag, { dictType: USER_SEX_DICT, value: row.gender, size: 'small' })
     },
   },
   {
@@ -484,13 +473,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      const statusMap = {
-        0: { text: '禁用', type: 'error' },
-        1: { text: '正常', type: 'success' },
-        2: { text: '锁定', type: 'warning' },
-      }
-      const config = statusMap[row.userStatus] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small' })
     },
   },
   {
@@ -524,7 +507,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
@@ -570,7 +553,7 @@ const editSchema = [
     rules: [{ required: true, type: 'number', message: '请选择用户类型', trigger: 'change' }],
     props: {
       placeholder: '请选择用户类型',
-      options: userTypeOptions,
+      options: userTypeOptions.value,
     },
   },
   {
@@ -621,7 +604,7 @@ const editSchema = [
     type: 'radio',
     defaultValue: 0,
     props: {
-      options: genderOptions,
+      options: genderOptions.value,
     },
   },
   {
@@ -657,7 +640,7 @@ const editSchema = [
     type: 'radio',
     defaultValue: 1,
     props: {
-      options: userStatusOptions,
+      options: userStatusOptions.value,
     },
   },
   {
@@ -670,7 +653,14 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 组件挂载时加载左侧组织树
 onMounted(() => {

@@ -27,6 +27,14 @@ public class AiCrudConfigVersion extends TenantEntity {
 
     private String configKey;
 
+    private Long domainId;
+
+    private String domainCode;
+
+    private String objectCode;
+
+    private String objectName;
+
     private Integer versionNo;
 
     /** 版本类型：publish 发布，rollback 回滚 */

@@ -16,6 +16,14 @@ public class LowcodeVersionVO {
 
     private String configKey;
 
+    private Long domainId;
+
+    private String domainCode;
+
+    private String objectCode;
+
+    private String objectName;
+
     private Integer versionNo;
 
     private String versionType;

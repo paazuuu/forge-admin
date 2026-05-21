@@ -147,27 +147,21 @@
 </template>
 
 <script setup>
-import { NButton, NPopconfirm, NSpace, NSwitch, NTag } from 'naive-ui'
-import { h, onMounted, reactive, ref } from 'vue'
+import { NButton, NPopconfirm, NSpace, NSwitch } from 'naive-ui'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import api from '@/api/flow'
+import DictTag from '@/components/DictTag.vue'
 import FormDesigner from '@/components/form-designer/FormDesigner.vue'
 import FormPreview from '@/components/form-designer/FormPreview.vue'
+import { useDict } from '@/composables/useDict'
 
 // 使用全局 message 实例
 const message = window.$message
 
-// 状态选项
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const { dict } = useDict('sys_enable_disable', 'flow_form_type')
 
-// 表单类型选项
-const formTypeOptions = [
-  { label: '动态表单', value: 'dynamic' },
-  { label: '外部表单', value: 'external' },
-  { label: '内置表单', value: 'builtin' },
-]
+const statusOptions = computed(() => toNumberOptions(dict.value.sys_enable_disable))
+const formTypeOptions = computed(() => dict.value.flow_form_type || [])
 
 // 查询参数
 const queryParams = reactive({
@@ -250,15 +244,7 @@ const columns = [
     title: '表单类型',
     key: 'formType',
     width: 100,
-    render: (row) => {
-      const typeMap = {
-        dynamic: { text: '动态表单', type: 'info' },
-        external: { text: '外部表单', type: 'warning' },
-        builtin: { text: '内置表单', type: 'success' },
-      }
-      const type = typeMap[row.formType] || { text: row.formType, type: 'default' }
-      return h(NTag, { type: type.type, size: 'small' }, { default: () => type.text })
-    },
+    render: row => h(DictTag, { dictType: 'flow_form_type', value: row.formType }),
   },
   {
     title: '状态',
@@ -336,6 +322,13 @@ const columns = [
     },
   },
 ]
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 加载数据
 async function loadData() {

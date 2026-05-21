@@ -5,8 +5,20 @@
         发布配置
       </div>
       <n-form label-placement="left" label-width="92" size="small">
+        <n-form-item label="业务领域">
+          <n-input :value="props.draft.domainName || props.draft.domainCode || '-'" disabled />
+        </n-form-item>
+        <n-form-item label="主数据模型">
+          <n-input :value="props.draft.objectName || props.draft.objectCode || '-'" disabled />
+        </n-form-item>
+        <n-form-item label="引用模型">
+          <n-input :value="modelSummary" disabled />
+        </n-form-item>
         <n-form-item label="菜单名称">
           <n-input v-model:value="form.menuName" placeholder="发布后的菜单名称" />
+        </n-form-item>
+        <n-form-item label="菜单父级">
+          <MenuParentSelect v-model:value="form.menuParentId" />
         </n-form-item>
         <n-form-item label="菜单排序">
           <n-input-number v-model:value="form.menuSort" :min="0" style="width: 100%" />
@@ -66,13 +78,14 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   lowcodeDdlPreview,
   lowcodePublish,
   lowcodeRollback,
   lowcodeVersions,
 } from '@/api/lowcode-crud'
+import MenuParentSelect from '../shared/MenuParentSelect.vue'
 import VersionTimeline from './VersionTimeline.vue'
 
 const props = defineProps({
@@ -86,10 +99,11 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['published', 'rolled-back'])
+const emit = defineEmits(['published', 'rolledBack'])
 
 const form = reactive({
   menuName: '',
+  menuParentId: null,
   menuSort: 0,
   deployMode: 'SKIP_DDL',
   confirmOnlineDdl: false,
@@ -99,11 +113,18 @@ const ddlLoading = ref(false)
 const publishing = ref(false)
 const versions = ref([])
 const versionLoading = ref(false)
+const modelSummary = computed(() => {
+  const refs = props.draft.pageSchema?.modelRefs || []
+  if (!refs.length)
+    return props.draft.objectName || props.draft.objectCode || '-'
+  return refs.map(item => item.modelName || item.modelCode).filter(Boolean).join('、')
+})
 
 watch(
   () => props.draft,
   (value) => {
     form.menuName = value.menuName || value.appName || value.modelSchema?.businessName || ''
+    form.menuParentId = value.menuParentId || null
     form.menuSort = value.menuSort || 0
   },
   { immediate: true, deep: true },
@@ -137,7 +158,13 @@ async function publish() {
     await lowcodePublish(props.appId, {
       deployMode: form.deployMode,
       confirmOnlineDdl: form.confirmOnlineDdl,
+      domainId: props.draft.domainId,
+      domainCode: props.draft.domainCode,
+      domainName: props.draft.domainName,
+      objectCode: props.draft.objectCode,
+      objectName: props.draft.objectName,
       menuName: form.menuName,
+      menuParentId: form.menuParentId,
       menuSort: form.menuSort,
       modelSchema: props.draft.modelSchema,
       pageSchema: props.draft.pageSchema,
@@ -173,7 +200,7 @@ async function rollback(versionId) {
   await lowcodeRollback(props.appId, versionId)
   window.$message?.success('回滚成功')
   await loadVersions()
-  emit('rolled-back')
+  emit('rolledBack')
 }
 </script>
 

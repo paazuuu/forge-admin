@@ -60,7 +60,7 @@
               <div class="status-dot" :class="getStatusDotClass(currentTask?.status)" />
               <span class="drawer-title">{{ currentTask?.title || '流程详情' }}</span>
             </div>
-            <span class="status-tag" :class="getStatusTagClass(currentTask?.status)">{{ statusMap[currentTask?.status]?.text ?? '未知' }}</span>
+            <span class="status-tag" :class="getStatusTagClass(currentTask?.status)">{{ getStatusText(currentTask?.status) }}</span>
           </div>
         </template>
 
@@ -75,7 +75,7 @@
                   <span class="info-label">当前任务</span><span class="info-value highlight">{{ currentTask.taskName || '已结束' }}</span>
                 </div>
                 <div class="info-item">
-                  <span class="info-label">流程状态</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ statusMap[currentTask.status]?.text ?? '未知' }}</span>
+                  <span class="info-label">流程状态</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
                 </div>
               </div>
             </div>
@@ -153,9 +153,11 @@ import ProcessDiagramViewer from '@/components/bpmn/ProcessDiagramViewer.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowStats from '@/components/flow/FlowStats.vue'
 import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
+const { dict, getLabel } = useDict('flow_started_status')
 const loading = ref(false)
 const dataSource = ref([])
 const pagination = reactive({
@@ -203,23 +205,7 @@ const withdrawComment = ref('')
 const withdrawLoading = ref(false)
 const canWithdraw = computed(() => currentTask.value && [0, 1].includes(currentTask.value.status))
 
-const statusMap = {
-  0: { text: '审批中', type: 'warning' },
-  1: { text: '已签收', type: 'info' },
-  2: { text: '已通过', type: 'success' },
-  3: { text: '已驳回', type: 'error' },
-  4: { text: '已转办', type: 'warning' },
-  5: { text: '已委派', type: 'info' },
-  6: { text: '已撤回', type: 'default' },
-}
-
-const statusOptions = [
-  { label: '审批中', value: 0 },
-  { label: '已签收', value: 1 },
-  { label: '已通过', value: 2 },
-  { label: '已驳回', value: 3 },
-  { label: '已撤回', value: 6 },
-]
+const statusOptions = computed(() => toNumberOptions(dict.value.flow_started_status).filter(item => [0, 1, 2, 3, 6].includes(item.value)))
 
 function getStatusDotClass(status) {
   const cls = { 0: 'warning', 1: 'info', 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default' }
@@ -229,6 +215,10 @@ function getStatusDotClass(status) {
 function getStatusTagClass(status) {
   const cls = { 0: 'warning', 1: 'info', 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default' }
   return cls[status] || 'default'
+}
+
+function getStatusText(status) {
+  return getLabel('flow_started_status', status) || '未知'
 }
 
 const columns = [
@@ -255,7 +245,7 @@ const columns = [
     title: '状态',
     key: 'status',
     width: 80,
-    render: row => h('span', { class: ['status-tag-mini', getStatusTagClass(row.status)] }, statusMap[row.status]?.text ?? '未知'),
+    render: row => h('span', { class: ['status-tag-mini', getStatusTagClass(row.status)] }, getStatusText(row.status)),
   },
   { title: '发起时间', key: 'createTime', width: 150 },
   {
@@ -273,6 +263,13 @@ const columns = [
     }, () => '查看进度'),
   },
 ]
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 function getRowProps(row) {
   return { style: 'cursor:pointer', onClick: () => openDrawer(row) }

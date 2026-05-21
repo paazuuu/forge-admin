@@ -120,9 +120,15 @@
 import { NStatistic, NTag } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemNotice' })
+
+const NOTICE_TYPE_DICT = 'sys_notice_type'
+const NOTICE_STATUS_DICT = 'sys_notice_status'
+const YES_NO_DICT = 'sys_yes_no'
 
 const crudRef = ref(null)
 const showStatisticsModal = ref(false)
@@ -131,28 +137,14 @@ const readUserList = ref([])
 const unreadUserList = ref([])
 const orgTreeOptions = ref([])
 
-// 公告类型选项
-const noticeTypeOptions = [
-  { label: '通知公告', value: 'NOTICE' },
-  { label: '系统公告', value: 'ANNOUNCEMENT' },
-  { label: '新闻动态', value: 'NEWS' },
-]
+const { dict } = useDict(NOTICE_TYPE_DICT, NOTICE_STATUS_DICT, YES_NO_DICT)
 
-// 发布状态选项
-const publishStatusOptions = [
-  { label: '草稿', value: 0 },
-  { label: '已发布', value: 1 },
-  { label: '已撤回', value: 2 },
-]
-
-// 是否置顶选项
-const isTopOptions = [
-  { label: '否', value: 0 },
-  { label: '是', value: 1 },
-]
+const noticeTypeOptions = computed(() => dict.value[NOTICE_TYPE_DICT] || [])
+const publishStatusOptions = computed(() => toNumberOptions(dict.value[NOTICE_STATUS_DICT]))
+const isTopOptions = computed(() => toNumberOptions(dict.value[YES_NO_DICT]))
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'noticeTitle',
     label: '公告标题',
@@ -167,7 +159,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择公告类型',
-      options: noticeTypeOptions,
+      options: noticeTypeOptions.value,
     },
   },
   {
@@ -176,10 +168,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择发布状态',
-      options: publishStatusOptions,
+      options: publishStatusOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -204,13 +196,7 @@ const tableColumns = computed(() => [
     label: '公告类型',
     width: 120,
     render: (row) => {
-      const typeMap = {
-        NOTICE: { text: '通知公告', type: 'info' },
-        ANNOUNCEMENT: { text: '系统公告', type: 'warning' },
-        NEWS: { text: '新闻动态', type: 'success' },
-      }
-      const config = typeMap[row.noticeType] || { text: row.noticeType, type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, { dictType: NOTICE_TYPE_DICT, value: row.noticeType, size: 'small' })
     },
   },
   {
@@ -218,13 +204,7 @@ const tableColumns = computed(() => [
     label: '发布状态',
     width: 100,
     render: (row) => {
-      const statusMap = {
-        0: { text: '草稿', type: 'default' },
-        1: { text: '已发布', type: 'success' },
-        2: { text: '已撤回', type: 'warning' },
-      }
-      const config = statusMap[row.publishStatus] || { text: '未知', type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, { dictType: NOTICE_STATUS_DICT, value: row.publishStatus, size: 'small' })
     },
   },
   {
@@ -275,7 +255,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
@@ -300,7 +280,7 @@ const editSchema = [
     rules: [{ required: true, message: '请选择公告类型', trigger: 'change' }],
     props: {
       placeholder: '请选择公告类型',
-      options: noticeTypeOptions,
+      options: noticeTypeOptions.value,
     },
   },
   {
@@ -381,7 +361,7 @@ const editSchema = [
     type: 'radio',
     defaultValue: 0,
     props: {
-      options: isTopOptions,
+      options: isTopOptions.value,
     },
   },
   {
@@ -404,7 +384,14 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 已读用户列表表格列
 const readUserColumns = [
@@ -469,7 +456,7 @@ async function handleViewStatistics(row) {
 
     showStatisticsModal.value = true
   }
-  catch (error) {
+  catch {
     window.$message.error('加载统计数据失败')
   }
 }
@@ -496,7 +483,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -520,7 +507,7 @@ function handlePublish(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('发布失败')
       }
     },
@@ -544,7 +531,7 @@ function handleRevoke(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('撤回失败')
       }
     },
@@ -575,7 +562,7 @@ function handleTop(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error(`${title}失败`)
       }
     },

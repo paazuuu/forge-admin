@@ -16,26 +16,19 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
-import { h } from 'vue'
+import { computed, h } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'FlowSpelTemplate' })
 
-const categoryOptions = [
-  { label: '通用', value: 'general' },
-  { label: '部门', value: 'dept' },
-  { label: '角色', value: 'role' },
-  { label: '行政区划', value: 'region' },
-  { label: '自定义', value: 'custom' },
-]
+const { dict } = useDict('flow_spel_category', 'sys_enable_disable')
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const categoryOptions = computed(() => dict.value.flow_spel_category || [])
+const statusOptions = computed(() => toNumberOptions(dict.value.sys_enable_disable))
 
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'templateName',
     label: '模板名称',
@@ -46,17 +39,17 @@ const searchSchema = [
     field: 'category',
     label: '分类',
     type: 'select',
-    props: { options: categoryOptions, clearable: true, placeholder: '请选择分类' },
+    props: { options: categoryOptions.value, clearable: true, placeholder: '请选择分类' },
   },
   {
     field: 'status',
     label: '状态',
     type: 'select',
-    props: { options: statusOptions, clearable: true, placeholder: '请选择状态' },
+    props: { options: statusOptions.value, clearable: true, placeholder: '请选择状态' },
   },
-]
+])
 
-const tableColumns = [
+const tableColumns = computed(() => [
   { prop: 'templateName', label: '模板名称', width: 150 },
   { prop: 'templateCode', label: '模板编码', width: 120 },
   {
@@ -69,23 +62,19 @@ const tableColumns = [
     prop: 'category',
     label: '分类',
     width: 100,
-    render: (row) => {
-      const item = categoryOptions.find(o => o.value === row.category)
-      return item ? item.label : row.category
-    },
+    render: row => h(DictTag, { dictType: 'flow_spel_category', value: row.category }),
   },
   {
     prop: 'status',
     label: '状态',
     width: 80,
-    render: row =>
-      h(NTag, { type: row.status === 1 ? 'success' : 'warning', size: 'small' }, () => row.status === 1 ? '启用' : '禁用'),
+    render: row => h(DictTag, { dictType: 'sys_enable_disable', value: row.status }),
   },
   { prop: 'sort', label: '排序', width: 80 },
   { prop: 'createTime', label: '创建时间', width: 160 },
-]
+])
 
-const editSchema = [
+const editSchema = computed(() => [
   {
     field: 'templateName',
     label: '模板名称',
@@ -120,7 +109,7 @@ const editSchema = [
     field: 'category',
     label: '分类',
     type: 'select',
-    props: { options: categoryOptions, placeholder: '请选择分类' },
+    props: { options: categoryOptions.value, placeholder: '请选择分类' },
   },
   {
     field: 'exampleParams',
@@ -151,5 +140,12 @@ const editSchema = [
     type: 'textarea',
     props: { rows: 2, placeholder: '请输入备注' },
   },
-]
+])
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 </script>

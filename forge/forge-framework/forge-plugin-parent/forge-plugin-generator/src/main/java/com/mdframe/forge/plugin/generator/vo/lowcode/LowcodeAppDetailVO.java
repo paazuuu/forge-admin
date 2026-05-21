@@ -20,6 +20,16 @@ public class LowcodeAppDetailVO {
 
     private String appName;
 
+    private Long domainId;
+
+    private String domainCode;
+
+    private String domainName;
+
+    private String objectCode;
+
+    private String objectName;
+
     private String mode;
 
     private String buildMode;

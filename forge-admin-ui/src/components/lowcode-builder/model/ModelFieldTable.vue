@@ -1,15 +1,20 @@
 <template>
   <div class="field-table">
     <div class="table-head">
-      <span>字段</span>
-      <span>数据库列</span>
-      <span>类型</span>
-      <span>显示</span>
+      <span>字段名称</span>
+      <span>字段编码</span>
+      <span>字段备注</span>
+      <span>数据类型</span>
+      <span>长度</span>
+      <span>小数位</span>
+      <span>是否必填</span>
+      <span>默认值</span>
+      <span>关联配置</span>
       <span>操作</span>
     </div>
     <draggable
       :model-value="fields"
-      item-key="field"
+      :item-key="fieldRowKey"
       handle=".drag-handle"
       animation="160"
       class="table-body"
@@ -17,80 +22,74 @@
     >
       <template #item="{ element, index }">
         <div class="field-row" :class="{ active: selectedIndex === index }" @click="$emit('select', index)">
-          <div class="field-main">
+          <div class="field-name-cell">
             <n-button text size="tiny" class="drag-handle" @click.stop>
               <template #icon>
                 <n-icon><ReorderFourOutline /></n-icon>
               </template>
             </n-button>
-            <div class="field-edit-stack">
-              <n-input
-                :value="element.label"
-                size="small"
-                placeholder="字段名称"
-                @click.stop
-                @update:value="updateField(index, { label: $event })"
-              />
-              <n-input
-                :value="element.field"
-                size="small"
-                placeholder="fieldName"
-                @click.stop
-                @update:value="handleFieldNameChange(index, $event)"
-              />
-            </div>
-          </div>
-          <div>
             <n-input
-              :value="element.columnName"
+              :value="element.label"
               size="small"
-              placeholder="column_name"
+              placeholder="字段名称"
               @click.stop
-              @update:value="updateField(index, { columnName: $event })"
+              @update:value="updateField(index, { label: $event })"
             />
           </div>
-          <div class="field-edit-stack">
-            <n-select
-              :value="element.dataType"
-              size="small"
-              :options="dataTypeOptions"
-              @click.stop
-              @update:value="updateField(index, { dataType: $event })"
-            />
-            <n-select
-              :value="element.componentType"
-              size="small"
-              :options="componentTypeOptions"
-              @click.stop
-              @update:value="updateField(index, { componentType: $event })"
-            />
-          </div>
-          <div class="field-flags">
-            <n-checkbox
-              :checked="element.searchable"
-              size="small"
-              @click.stop
-              @update:checked="updateField(index, { searchable: $event })"
-            >
-              查
-            </n-checkbox>
-            <n-checkbox
-              :checked="element.listVisible"
-              size="small"
-              @click.stop
-              @update:checked="updateField(index, { listVisible: $event })"
-            >
-              列
-            </n-checkbox>
-            <n-checkbox
-              :checked="element.formVisible"
-              size="small"
-              @click.stop
-              @update:checked="updateField(index, { formVisible: $event })"
-            >
-              表
-            </n-checkbox>
-          </div>
+          <n-input
+            :value="element.field"
+            size="small"
+            placeholder="fieldName"
+            @click.stop
+            @blur="normalizeFieldCode(index, element.field)"
+            @update:value="handleFieldCodeInput(index, $event)"
+          />
+          <n-input
+            :value="element.remark"
+            size="small"
+            placeholder="字段说明"
+            @click.stop
+            @update:value="updateField(index, { remark: $event })"
+          />
+          <n-select
+            :value="element.dataType"
+            size="small"
+            :options="dataTypeOptions"
+            @click.stop
+            @update:value="handleDataTypeChange(index, $event)"
+          />
+          <n-input-number
+            :value="element.length"
+            size="small"
+            :min="1"
+            :max="2048"
+            :show-button="false"
+            @click.stop
+            @update:value="updateField(index, { length: $event })"
+          />
+          <n-input-number
+            :value="element.precision"
+            size="small"
+            :min="0"
+            :max="12"
+            :show-button="false"
+            @click.stop
+            @update:value="updateField(index, { precision: $event })"
+          />
+          <n-switch
+            :value="element.required"
+            size="small"
+            @click.stop
+            @update:value="updateField(index, { required: $event })"
+          />
+          <n-input
+            :value="element.defaultValue ?? ''"
+            size="small"
+            placeholder="-"
+            @click.stop
+            @update:value="updateField(index, { defaultValue: $event === '' ? null : $event })"
+          />
+          <span class="muted">{{ relationText(element) }}</span>
           <div class="field-actions" @click.stop>
             <n-button text size="tiny" class="text-primary" @click="$emit('copy', index)">
               复制
@@ -113,7 +112,7 @@
 <script setup>
 import { ReorderFourOutline } from '@vicons/ionicons5'
 import draggable from 'vuedraggable'
-import { camelToSnake, componentTypeOptions, dataTypeOptions, normalizeFieldName } from './model-schema'
+import { camelToSnake, dataTypeOptions, normalizeFieldName } from './model-schema'
 
 const props = defineProps({
   fields: {
@@ -133,18 +132,46 @@ function updateField(index, patch) {
   emit('update:fields', fields)
 }
 
-function handleFieldNameChange(index, value) {
+function fieldRowKey(field) {
+  return props.fields.indexOf(field)
+}
+
+function handleFieldCodeInput(index, value) {
+  updateField(index, {
+    field: value,
+    columnName: camelToSnake(value),
+  })
+}
+
+function normalizeFieldCode(index, value) {
   const nextField = normalizeFieldName(value)
   updateField(index, {
     field: nextField,
     columnName: camelToSnake(nextField),
   })
 }
+
+function handleDataTypeChange(index, value) {
+  const componentType = ['int', 'bigint', 'decimal'].includes(value)
+    ? 'number'
+    : ['date', 'datetime'].includes(value)
+        ? value
+        : props.fields[index]?.componentType || 'input'
+  updateField(index, { dataType: value, componentType })
+}
+
+function relationText(field) {
+  if (field.relationLabel)
+    return field.relationLabel
+  if (field.dictType)
+    return field.dictType
+  return '-'
+}
 </script>
 
 <style scoped>
 .field-table {
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d8dee8;
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
@@ -153,29 +180,39 @@ function handleFieldNameChange(index, value) {
 .table-head,
 .field-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) minmax(150px, 0.9fr) minmax(150px, 0.9fr) 150px 96px;
+  grid-template-columns:
+    minmax(136px, 1.15fr)
+    minmax(132px, 1fr)
+    minmax(150px, 0.95fr)
+    112px
+    84px
+    84px
+    78px
+    104px
+    104px
+    88px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .table-head {
-  height: 38px;
-  padding: 0 14px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid #d8dee8;
   background: #f8fafc;
   color: #64748b;
   font-size: 12px;
   font-weight: 600;
-  border-bottom: 1px solid #e5e7eb;
 }
 
 .table-body {
-  min-height: 280px;
+  min-height: 320px;
 }
 
 .field-row {
-  min-height: 76px;
-  padding: 8px 14px;
-  border-bottom: 1px solid #f1f5f9;
+  min-height: 58px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #eef2f7;
   cursor: pointer;
 }
 
@@ -188,15 +225,10 @@ function handleFieldNameChange(index, value) {
   background: #f8fbff;
 }
 
-.field-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.field-edit-stack {
+.field-name-cell {
   display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
   gap: 6px;
   min-width: 0;
 }
@@ -207,10 +239,20 @@ function handleFieldNameChange(index, value) {
   gap: 6px;
 }
 
-.field-flags {
-  display: grid;
-  grid-template-columns: repeat(3, auto);
-  align-items: center;
-  gap: 6px;
+.muted {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-table {
+  overflow-x: auto;
+}
+
+.table-head,
+.field-row {
+  min-width: 1120px;
 }
 </style>

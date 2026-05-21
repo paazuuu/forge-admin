@@ -63,21 +63,23 @@
 
 <script setup>
 import { TrashOutline } from '@vicons/ionicons5'
-import { NIcon, NTag } from 'naive-ui'
+import { NIcon } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request, resolveRenderableFileUrl } from '@/utils'
 
 defineOptions({ name: 'SystemTenant' })
 
+const NORMAL_DISABLE_DICT = 'sys_normal_disable'
+
 const crudRef = ref(null)
 const selectedKeys = ref([])
 
-// 租户状态选项
-const tenantStatusOptions = [
-  { label: '正常', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const { dict } = useDict(NORMAL_DISABLE_DICT)
+
+const tenantStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
 
 // 系统布局选项（与布局设置保持一致）
 const systemLayoutOptions = [
@@ -132,7 +134,7 @@ const systemLayoutOptions = [
 ]
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'tenantName',
     label: '租户名称',
@@ -163,10 +165,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: tenantStatusOptions,
+      options: tenantStatusOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -203,8 +205,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 100,
     render: (row) => {
-      return h(NTag, { type: row.tenantStatus === 1 ? 'success' : 'error', size: 'small' }, { default: () => row.tenantStatus === 1 ? '正常' : '禁用' },
-      )
+      return h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.tenantStatus, size: 'small' })
     },
   },
   {
@@ -225,7 +226,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = ref([
+const editSchema = computed(() => [
   // ==================== 基础信息 ====================
   {
     type: 'divider',
@@ -245,7 +246,7 @@ const editSchema = ref([
     label: '租户状态',
     type: 'radio',
     defaultValue: 1,
-    props: { options: tenantStatusOptions },
+    props: { options: tenantStatusOptions.value },
   },
   {
     field: 'contactPerson',
@@ -493,6 +494,13 @@ const editSchema = ref([
   },
 ])
 
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
+
 // 编辑
 function handleEdit(row) {
   crudRef.value?.showEdit(row)
@@ -513,7 +521,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -541,7 +549,7 @@ function handleBatchDelete() {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('批量删除失败')
       }
     },
@@ -555,8 +563,6 @@ function handleSelectionChange({ keys }) {
 
 // 提交成功后处理 - 重新加载租户配置并应用
 async function handleSubmitSuccess() {
-  console.log('租户配置保存成功，重新加载配置...')
-
   // 重新加载租户配置
   const { useTenantStore, useUserStore, useAppStore } = await import('@/store')
   const tenantStore = useTenantStore()
@@ -567,8 +573,6 @@ async function handleSubmitSuccess() {
   const tenantConfig = await tenantStore.loadTenantConfig(userStore.userInfo?.tenantId)
 
   if (tenantConfig) {
-    console.log('最新租户配置:', tenantConfig)
-
     // 应用系统布局
     if (tenantConfig.systemLayout) {
       appStore.setLayout(tenantConfig.systemLayout)
@@ -612,7 +616,6 @@ async function handleSubmitSuccess() {
         },
       }
 
-      console.log('合并后的主题配置:', mergedConfig)
       appStore.setThemeConfig(mergedConfig)
     }
 
@@ -645,8 +648,6 @@ async function handleSubmitSuccess() {
 
 // 提交前处理 - 将主题配置字段组装成 JSON
 function handleBeforeSubmit(formData) {
-  console.log('提交前的表单数据:', formData)
-
   // 检查是否有任何主题配置字段
   const hasThemeConfig = formData.theme_header_backgroundColor
     || formData.theme_header_textColor
@@ -695,7 +696,6 @@ function handleBeforeSubmit(formData) {
 
     // 将主题配置转换为 JSON 字符串
     formData.themeConfig = JSON.stringify(themeConfig)
-    console.log('组装的主题配置:', formData.themeConfig)
   }
 
   // 删除临时字段
@@ -716,22 +716,16 @@ function handleBeforeSubmit(formData) {
   delete formData.theme_sideMenu_width
   delete formData.theme_sideMenu_collapsedWidth
 
-  console.log('处理后的表单数据:', formData)
   return formData
 }
 
 // 详情渲染前处理 - 将 JSON 拆解到各个字段
 function handleBeforeRenderDetail(data) {
-  console.log('详情数据:', data)
-
   if (data.themeConfig) {
     try {
       const themeConfig = typeof data.themeConfig === 'string'
         ? JSON.parse(data.themeConfig)
         : data.themeConfig
-
-      console.log('解析的主题配置:', themeConfig)
-
       // 拆解到各个字段
       data.systemTheme = themeConfig.primaryColor // 主题颜色
       data.theme_header_backgroundColor = themeConfig.header?.backgroundColor || themeConfig.primaryColor
@@ -750,8 +744,6 @@ function handleBeforeRenderDetail(data) {
       data.theme_sideMenu_iconColorActive = themeConfig.sideMenu?.iconColorActive
       data.theme_sideMenu_width = themeConfig.sideMenu?.width
       data.theme_sideMenu_collapsedWidth = themeConfig.sideMenu?.collapsedWidth
-
-      console.log('拆解后的数据:', data)
     }
     catch (error) {
       console.error('解析主题配置失败:', error)

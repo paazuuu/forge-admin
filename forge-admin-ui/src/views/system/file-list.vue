@@ -436,13 +436,21 @@
 import { NButton, NDivider, NDropdown, NImage, NInput, NModal, NSelect, NTag } from 'naive-ui'
 import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/store'
 import { downloadFile, request, resolveFileAccessUrl, resolveRenderableFileUrl } from '@/utils'
 
 defineOptions({ name: 'FileList' })
 
+const STORAGE_TYPE_DICT = 'sys_file_storage_type'
+
 const crudRef = ref(null)
 const authStore = useAuthStore()
+const { dict } = useDict(STORAGE_TYPE_DICT, 'sys_file_group_type')
+
+const storageTypeOptions = computed(() => dict.value[STORAGE_TYPE_DICT] || [])
+const groupTypeOptions = computed(() => dict.value.sys_file_group_type || [])
 const showPreviewModal = ref(false)
 const previewUrl = ref('')
 const previewType = ref('')
@@ -482,16 +490,6 @@ const storageConfigOptions = computed(() => {
 const totalFiles = ref(0)
 const imageCount = ref(0)
 const documentCount = ref(0)
-
-// 分组类型选项
-const groupTypeOptions = [
-  { label: '默认', value: 'default' },
-  { label: '文档', value: 'document' },
-  { label: '图片', value: 'image' },
-  { label: '视频', value: 'video' },
-  { label: '音频', value: 'audio' },
-  { label: '压缩包', value: 'archive' },
-]
 
 // 当前分组标题
 const currentGroupTitle = computed(() => {
@@ -649,19 +647,8 @@ const uploadData = computed(() => {
   }
 })
 
-// 存储类型选项
-const storageTypeOptions = [
-  { label: '本地存储', value: 'local' },
-  { label: 'RustFS存储', value: 'rustfs' },
-  { label: 'MinIO', value: 'minio' },
-  { label: '阿里云OSS', value: 'aliyun' },
-  { label: '腾讯云COS', value: 'tencent' },
-  { label: '七牛云', value: 'qiniu' },
-  { label: 'AWS S3', value: 's3' },
-]
-
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'originalName',
     label: '文件名',
@@ -676,7 +663,7 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择存储类型',
-      options: storageTypeOptions,
+      options: storageTypeOptions.value,
     },
   },
   {
@@ -700,10 +687,10 @@ const searchSchema = [
       ],
     },
   },
-]
+])
 
 // 表格列配置
-const tableColumns = [
+const tableColumns = computed(() => [
   {
     prop: 'id',
     label: 'ID',
@@ -751,17 +738,11 @@ const tableColumns = [
     label: '存储类型',
     width: 120,
     render: (row) => {
-      const typeMap = {
-        local: { text: '本地存储', type: 'default' },
-        rustfs: { text: 'RustFS', type: 'success' },
-        minio: { text: 'MinIO', type: 'info' },
-        aliyun: { text: '阿里云', type: 'warning' },
-        tencent: { text: '腾讯云', type: 'success' },
-        qiniu: { text: '七牛云', type: 'error' },
-        s3: { text: 'AWS S3', type: 'primary' },
-      }
-      const config = typeMap[row.storageType] || { text: row.storageType, type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.text })
+      return h(DictTag, {
+        options: storageTypeOptions.value,
+        value: row.storageType,
+        size: 'small',
+      })
     },
   },
   {
@@ -786,7 +767,7 @@ const tableColumns = [
     fixed: 'right',
     render: row => renderFileActions(row),
   },
-]
+])
 
 // 分组图标映射
 const groupIconMap = {
@@ -1245,7 +1226,7 @@ async function confirmRename() {
       window.$message?.error(res?.msg || '重命名失败')
     }
   }
-  catch (e) {
+  catch {
     window.$message?.error('重命名失败')
   }
   finally {

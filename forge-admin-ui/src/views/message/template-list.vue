@@ -19,39 +19,34 @@
 </template>
 
 <script setup>
-import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'MessageTemplate' })
 
+const MESSAGE_TYPE_DICT = 'sys_message_type'
+const MESSAGE_CHANNEL_DICT = 'sys_message_channel'
+const ENABLE_DISABLE_DICT = 'sys_enable_disable'
+
 const crudRef = ref(null)
 
-// 消息类型选项
-const messageTypeOptions = [
-  { label: '系统消息', value: 'SYSTEM' },
-  { label: '短信', value: 'SMS' },
-  { label: '邮件', value: 'EMAIL' },
-  { label: '自定义', value: 'CUSTOM' },
-]
+const { dict } = useDict(MESSAGE_TYPE_DICT, MESSAGE_CHANNEL_DICT, ENABLE_DISABLE_DICT)
 
-// 发送渠道选项
-const channelOptions = [
-  { label: '站内信', value: 'WEB' },
-  { label: '短信', value: 'SMS' },
-  { label: '邮件', value: 'EMAIL' },
-  { label: '推送', value: 'PUSH' },
-]
+const messageTypeOptions = computed(() => dict.value[MESSAGE_TYPE_DICT] || [])
+const channelOptions = computed(() => dict.value[MESSAGE_CHANNEL_DICT] || [])
+const enabledOptions = computed(() => toNumberOptions(dict.value[ENABLE_DISABLE_DICT]))
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'type',
     label: '消息类型',
     type: 'select',
     props: {
       placeholder: '请选择消息类型',
-      options: messageTypeOptions,
+      options: messageTypeOptions.value,
     },
   },
   {
@@ -62,7 +57,7 @@ const searchSchema = [
       placeholder: '请输入模板编码或名称',
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -81,14 +76,7 @@ const tableColumns = computed(() => [
     label: '消息类型',
     width: 100,
     render: (row) => {
-      const typeMap = {
-        SYSTEM: { label: '系统消息', type: 'info' },
-        SMS: { label: '短信', type: 'warning' },
-        EMAIL: { label: '邮件', type: 'success' },
-        CUSTOM: { label: '自定义', type: 'default' },
-      }
-      const config = typeMap[row.type] || { label: row.type, type: 'default' }
-      return h(NTag, { type: config.type, size: 'small' }, { default: () => config.label })
+      return h(DictTag, { dictType: MESSAGE_TYPE_DICT, value: row.type, size: 'small' })
     },
   },
   {
@@ -101,13 +89,7 @@ const tableColumns = computed(() => [
     label: '默认渠道',
     width: 100,
     render: (row) => {
-      const channelMap = {
-        WEB: '站内信',
-        SMS: '短信',
-        EMAIL: '邮件',
-        PUSH: '推送',
-      }
-      return channelMap[row.defaultChannel] || row.defaultChannel
+      return h(DictTag, { dictType: MESSAGE_CHANNEL_DICT, value: row.defaultChannel, size: 'small' })
     },
   },
   {
@@ -115,10 +97,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(NTag, {
-        type: row.enabled === 1 ? 'success' : 'error',
-        size: 'small',
-      }, { default: () => row.enabled === 1 ? '启用' : '禁用' })
+      return h(DictTag, { dictType: ENABLE_DISABLE_DICT, value: row.enabled, size: 'small' })
     },
   },
   {
@@ -139,7 +118,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
@@ -174,7 +153,7 @@ const editSchema = [
     defaultValue: 'SYSTEM',
     rules: [{ required: true, message: '请选择消息类型', trigger: 'change' }],
     props: {
-      options: messageTypeOptions,
+      options: messageTypeOptions.value,
     },
   },
   {
@@ -183,7 +162,7 @@ const editSchema = [
     type: 'select',
     defaultValue: 'WEB',
     props: {
-      options: channelOptions,
+      options: channelOptions.value,
     },
   },
   {
@@ -193,7 +172,7 @@ const editSchema = [
     span: 2,
     rules: [{ required: true, message: '请输入标题模板', trigger: 'blur' }],
     props: {
-      placeholder: '请输入标题模板，支持${变量}占位符',
+      placeholder: '请输入标题模板，支持变量占位符',
       rows: 2,
     },
   },
@@ -204,7 +183,7 @@ const editSchema = [
     span: 2,
     rules: [{ required: true, message: '请输入内容模板', trigger: 'blur' }],
     props: {
-      placeholder: '请输入内容模板，支持${变量}占位符',
+      placeholder: '请输入内容模板，支持变量占位符',
       rows: 6,
     },
   },
@@ -214,10 +193,7 @@ const editSchema = [
     type: 'radio',
     defaultValue: 1,
     props: {
-      options: [
-        { label: '启用', value: 1 },
-        { label: '禁用', value: 0 },
-      ],
+      options: enabledOptions.value,
     },
   },
   {
@@ -230,7 +206,14 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
+
+function toNumberOptions(options = []) {
+  return options.map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 编辑
 function handleEdit(row) {

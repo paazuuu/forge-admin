@@ -243,8 +243,12 @@ import {
   testDataConnectionTemp,
 } from '@/api/data/connection'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'DataConnection' })
+
+const { dict } = useDict('data_db_type', 'sys_enable_disable')
 
 const crudRef = ref(null)
 const tableModalVisible = ref(false)
@@ -273,12 +277,7 @@ const connectionStats = reactive({
   engineKinds: 0,
 })
 
-const dbTypeOptions = [
-  { label: 'MySQL', value: 'MYSQL' },
-  { label: 'Oracle', value: 'ORACLE' },
-  { label: 'PostgreSQL', value: 'POSTGRESQL' },
-  { label: 'SQLServer', value: 'SQLSERVER' },
-]
+const dbTypeOptions = computed(() => dict.value.data_db_type || [])
 
 const driverClassMap = {
   MYSQL: 'com.mysql.cj.jdbc.Driver',
@@ -287,10 +286,7 @@ const driverClassMap = {
   SQLSERVER: 'com.microsoft.sqlserver.jdbc.SQLServerDriver',
 }
 
-const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 },
-]
+const statusOptions = computed(() => dict.value.sys_enable_disable || [])
 
 const statCards = computed(() => [
   {
@@ -361,11 +357,11 @@ const tableColumns = computed(() => [
     prop: 'status',
     label: '状态',
     width: 110,
-    render: row => h(NTag, {
+    render: row => h(DictTag, {
+      dictType: 'sys_enable_disable',
+      dictValue: String(row.status),
       size: 'small',
-      bordered: false,
-      type: row.status === 1 ? 'success' : 'default',
-    }, { default: () => getStatusLabel(row.status) }),
+    }),
   },
   {
     prop: 'updateTime',
@@ -812,27 +808,18 @@ async function handleViewFields(row) {
 }
 
 function getDbTypeLabel(dbType) {
-  return dbTypeOptions.find(item => item.value === dbType)?.label || dbType || '未设置'
+  const item = dict.value.data_db_type?.find(d => d.value === dbType)
+  return item?.label || dbType || '未设置'
 }
 
 function getDbTypeTagType(dbType) {
-  if (dbType === 'MYSQL') {
-    return 'success'
-  }
-  if (dbType === 'POSTGRESQL') {
-    return 'info'
-  }
-  if (dbType === 'SQLSERVER') {
-    return 'warning'
-  }
-  if (dbType === 'ORACLE') {
-    return 'default'
-  }
-  return 'default'
+  const item = dict.value.data_db_type?.find(d => d.value === dbType)
+  return item?.listClass || 'default'
 }
 
 function getStatusLabel(status) {
-  return status === 1 ? '启用' : '禁用'
+  const item = dict.value.sys_enable_disable?.find(d => d.value === String(status))
+  return item?.label || (status === 1 ? '启用' : '禁用')
 }
 
 function getDriverShortName(driverClassName) {

@@ -35,9 +35,7 @@
       <div v-if="currentNotice" class="notice-detail">
         <div class="detail-header">
           <n-space>
-            <NTag :type="getNoticeTypeColor(currentNotice.noticeType)">
-              {{ currentNotice.noticeTypeName }}
-            </NTag>
+            <DictTag dict-type="sys_notice_type" :value="currentNotice.noticeType" />
             <span class="text-gray-500">发布人：{{ currentNotice.publisherName }}</span>
             <span class="text-gray-500">发布时间：{{ currentNotice.publishTime }}</span>
           </n-space>
@@ -75,24 +73,25 @@
 import { NBadge, NTag } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'NoticeList' })
+
+const NOTICE_TYPE_DICT = 'sys_notice_type'
 
 const crudRef = ref(null)
 const showDetailModal = ref(false)
 const currentNotice = ref(null)
 const unreadCount = ref(0)
 
-// 公告类型选项
-const noticeTypeOptions = [
-  { label: '通知公告', value: 'NOTICE' },
-  { label: '系统公告', value: 'ANNOUNCEMENT' },
-  { label: '新闻动态', value: 'NEWS' },
-]
+const { dict } = useDict(NOTICE_TYPE_DICT)
+
+const noticeTypeOptions = computed(() => dict.value[NOTICE_TYPE_DICT] || [])
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'noticeTitle',
     label: '标题',
@@ -107,10 +106,10 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择类型',
-      options: noticeTypeOptions,
+      options: noticeTypeOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -134,13 +133,7 @@ const tableColumns = computed(() => [
     label: '类型',
     width: 100,
     render: (row) => {
-      const typeMap = {
-        NOTICE: '通知公告',
-        ANNOUNCEMENT: '系统公告',
-        NEWS: '新闻动态',
-      }
-      const typeName = typeMap[row.noticeType] || row.noticeType
-      return h(NTag, { type: getNoticeTypeColor(row.noticeType) }, { default: () => typeName })
+      return h(DictTag, { dictType: NOTICE_TYPE_DICT, value: row.noticeType, size: 'small' })
     },
   },
   {
@@ -164,16 +157,6 @@ const tableColumns = computed(() => [
   },
 ])
 
-// 获取公告类型颜色
-function getNoticeTypeColor(type) {
-  const colorMap = {
-    NOTICE: 'info',
-    ANNOUNCEMENT: 'warning',
-    NEWS: 'success',
-  }
-  return colorMap[type] || 'default'
-}
-
 // 查看详情
 async function handleView(row) {
   try {
@@ -190,7 +173,7 @@ async function handleView(row) {
       }
     }
   }
-  catch (error) {
+  catch {
     window.$message.error('获取详情失败')
   }
 }

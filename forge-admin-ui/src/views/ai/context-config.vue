@@ -20,23 +20,19 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'AiContextConfig' })
 
+const { dict } = useDict('ai_context_type', 'sys_normal_disable')
+
 const crudRef = ref(null)
 
-const configTypeOptions = [
-  { label: 'SPEC', value: 'SPEC' },
-  { label: 'SAMPLE', value: 'SAMPLE' },
-  { label: 'RULE', value: 'RULE' },
-]
-
-const statusOptions = [
-  { label: '正常', value: '0' },
-  { label: '停用', value: '1' },
-]
+const configTypeOptions = computed(() => dict.value.ai_context_type || [])
+const statusOptions = computed(() => dict.value.sys_normal_disable || [])
 
 const searchSchema = [
   {
@@ -53,17 +49,16 @@ const tableColumns = computed(() => [
   { prop: 'agentCode', label: 'Agent编码', width: 150 },
   { prop: 'configName', label: '配置名称', width: 150 },
   { prop: 'configType', label: '类型', width: 80, render: (row) => {
-    const opt = configTypeOptions.find(o => o.value === row.configType)
-    return opt ? opt.label : row.configType
+    return h(DictTag, { dictType: 'ai_context_type', dictValue: row.configType, size: 'small' })
   } },
   { prop: 'configContent', label: '内容', minWidth: 200, ellipsis: true },
   { prop: 'sort', label: '排序', width: 70 },
   { prop: 'status', label: '状态', width: 70, render: (row) => {
-    return row.status === '0' ? '正常' : '停用'
+    return h(DictTag, { dictType: 'sys_normal_disable', dictValue: row.status, size: 'small' })
   } },
 ])
 
-const editSchema = [
+const editSchema = computed(() => [
   {
     field: 'agentCode',
     label: 'Agent编码',
@@ -83,7 +78,7 @@ const editSchema = [
     label: '类型',
     type: 'select',
     defaultValue: 'SPEC',
-    props: { options: configTypeOptions, placeholder: '请选择类型' },
+    props: { options: configTypeOptions.value, placeholder: '请选择类型' },
   },
   {
     field: 'configContent',
@@ -104,8 +99,8 @@ const editSchema = [
     field: 'status',
     label: '状态',
     type: 'select',
-    defaultValue: '0',
-    props: { options: statusOptions, placeholder: '请选择状态' },
+    defaultValue: '1',
+    props: { options: statusOptions.value, placeholder: '请选择状态' },
   },
-]
+])
 </script>

@@ -81,12 +81,16 @@
 </template>
 
 <script setup>
-import { NEllipsis, NTag } from 'naive-ui'
+import { NEllipsis } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 defineOptions({ name: 'AiPromptTemplate' })
+
+const { dict } = useDict('ai_prompt_usage_scene', 'ai_prompt_status', 'ai_prompt_recommended')
 
 const crudRef = ref(null)
 const previewVisible = ref(false)
@@ -94,22 +98,9 @@ const previewLoading = ref(false)
 const previewTitle = ref('提示词模板预览')
 const currentTemplate = ref(null)
 
-const usageSceneOptions = [
-  { label: 'AI大屏生成', value: 'dashboard_generate' },
-  { label: '通用对话', value: 'chat' },
-  { label: '代码生成', value: 'code_generate' },
-  { label: '流程编排', value: 'flow_design' },
-]
-
-const statusOptions = [
-  { label: '启用', value: '0' },
-  { label: '停用', value: '1' },
-]
-
-const recommendedOptions = [
-  { label: '推荐', value: '1' },
-  { label: '普通', value: '0' },
-]
+const usageSceneOptions = computed(() => dict.value.ai_prompt_usage_scene || [])
+const statusOptions = computed(() => dict.value.ai_prompt_status || [])
+const recommendedOptions = computed(() => dict.value.ai_prompt_recommended || [])
 
 const searchSchema = [
   {
@@ -164,7 +155,7 @@ const tableColumns = computed(() => [
     label: '适用场景',
     width: 120,
     render(row) {
-      return h(NTag, { type: 'info', size: 'small', bordered: false }, { default: () => getUsageSceneLabel(row.usageScene) })
+      return h(DictTag, { dictType: 'ai_prompt_usage_scene', dictValue: row.usageScene, size: 'small' })
     },
   },
   {
@@ -204,11 +195,7 @@ const tableColumns = computed(() => [
     label: '推荐',
     width: 80,
     render(row) {
-      return h(NTag, {
-        type: row.isRecommended === '1' ? 'success' : 'default',
-        size: 'small',
-        bordered: false,
-      }, { default: () => row.isRecommended === '1' ? '推荐' : '普通' })
+      return h(DictTag, { dictType: 'ai_prompt_recommended', dictValue: row.isRecommended, size: 'small' })
     },
   },
   {
@@ -216,11 +203,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render(row) {
-      return h(NTag, {
-        type: row.status === '0' ? 'success' : 'error',
-        size: 'small',
-        bordered: false,
-      }, { default: () => row.status === '0' ? '启用' : '停用' })
+      return h(DictTag, { dictType: 'ai_prompt_status', dictValue: row.status, size: 'small' })
     },
   },
   {
@@ -369,7 +352,8 @@ function beforeSubmit(formData) {
 }
 
 function getUsageSceneLabel(value) {
-  return usageSceneOptions.find(item => item.value === value)?.label || value || '-'
+  const item = dict.value.ai_prompt_usage_scene?.find(d => d.value === value)
+  return item?.label || value || '-'
 }
 
 async function fetchTemplateDetail(row, action = 'preview') {
