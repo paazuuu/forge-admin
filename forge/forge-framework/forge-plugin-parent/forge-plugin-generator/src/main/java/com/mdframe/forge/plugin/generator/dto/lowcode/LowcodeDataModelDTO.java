@@ -25,4 +25,10 @@ public class LowcodeDataModelDTO {
     private Boolean masterData;
 
     private LowcodeModelSchema modelSchema;
+
+    /** true 表示保存模型配置后同步表结构；false/null 表示仅保存模型配置。 */
+    private Boolean syncDdl;
+
+    /** 同步表结构二次确认标记。 */
+    private Boolean confirmSyncDdl;
 }

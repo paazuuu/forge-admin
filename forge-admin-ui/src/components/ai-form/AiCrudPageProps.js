@@ -191,6 +191,15 @@ export const aiCrudPageProps = {
   },
 
   /**
+   * 主子表模板下的子表编辑配置。
+   * @type {Array<object>}
+   */
+  childrenConfig: {
+    type: Array,
+    default: () => [],
+  },
+
+  /**
    * 编辑表单栅格列数
    * @type {number}
    */
@@ -332,6 +341,15 @@ export const aiCrudPageProps = {
   customQueryConfigKey: {
     type: String,
     default: '',
+  },
+
+  /**
+   * 自定义工具栏按钮配置。
+   * @type {Array<object>}
+   */
+  toolbarActions: {
+    type: Array,
+    default: () => [],
   },
 
   /**

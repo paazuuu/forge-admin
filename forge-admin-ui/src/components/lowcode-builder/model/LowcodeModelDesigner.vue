@@ -11,12 +11,12 @@
         </div>
         <div class="summary-metrics">
           <div>
-            <strong>{{ localModel.fields?.length || 0 }}</strong>
-            <span>字段</span>
+            <strong>{{ businessFieldCount }}</strong>
+            <span>业务字段</span>
           </div>
           <div>
-            <strong>{{ localModel.relations?.length || 0 }}</strong>
-            <span>关系</span>
+            <strong>{{ systemFieldCount }}</strong>
+            <span>系统字段</span>
           </div>
           <div>
             <strong>{{ requiredCount }}</strong>
@@ -93,7 +93,7 @@
               </n-button>
             </div>
             <div v-if="fieldTemplateCount" class="domain-hint">
-              当前领域可引入 {{ fieldTemplateCount }} 个字段模板，审计字段会自动过滤。
+              当前领域可引入 {{ fieldTemplateCount }} 个字段模板，ID、租户和审计字段由系统固定维护。
             </div>
             <ModelFieldTable
               :fields="localModel.fields"
@@ -183,10 +183,19 @@
                   <n-select v-model:value="localModel.policies.dataScope" :options="dataScopeOptions" />
                 </n-form-item>
                 <n-form-item label="区划字段">
-                  <n-select v-model:value="localModel.policies.regionField" clearable :options="fieldOptions" />
+                  <n-select v-model:value="localModel.policies.regionField" clearable :options="businessFieldOptions" />
+                </n-form-item>
+                <n-form-item label="主键策略">
+                  <n-input :value="`${localModel.policies.primaryKeyField || 'id'} / ${localModel.policies.primaryKeyStrategy || 'AUTO_INCREMENT'}`" disabled />
+                </n-form-item>
+                <n-form-item label="租户字段">
+                  <n-input :value="localModel.policies.tenantField || 'tenantId'" disabled />
+                </n-form-item>
+                <n-form-item label="逻辑删除字段">
+                  <n-input :value="localModel.policies.logicDeleteField || 'delFlag'" disabled />
                 </n-form-item>
                 <n-form-item label="审计字段">
-                  <n-switch v-model:value="localModel.policies.auditEnabled" />
+                  <n-switch :value="true" disabled />
                 </n-form-item>
               </n-form>
             </div>
@@ -210,16 +219,56 @@
         </n-tab-pane>
 
         <n-tab-pane name="extensions" tab="扩展配置">
-          <section class="designer-section placeholder-board">
-            <div class="placeholder-title">
-              扩展配置
+          <section class="designer-section">
+            <div class="section-toolbar">
+              <div>
+                <div class="section-title">
+                  索引配置
+                </div>
+                <p class="section-desc">关联字段会自动创建普通索引，也可以维护单字段或联合索引。</p>
+              </div>
+              <n-button type="primary" @click="addIndex">
+                添加索引
+              </n-button>
             </div>
-            <div class="placeholder-grid">
-              <div>索引配置</div>
-              <div>导入导出</div>
-              <div>流程绑定</div>
-              <div>指标沉淀</div>
+            <div v-if="relationIndexFields.length" class="domain-hint">
+              自动关联索引：{{ relationIndexFields.join('、') }}
             </div>
+            <div v-if="localModel.indexes?.length" class="index-list">
+              <div v-for="(index, idx) in localModel.indexes" :key="idx" class="index-row">
+                <n-input
+                  :value="index.indexName"
+                  size="small"
+                  placeholder="索引名，留空自动生成"
+                  @update:value="updateIndex(idx, { indexName: normalizeIndexName($event) })"
+                />
+                <n-select
+                  :value="index.indexType || (index.unique ? 'UNIQUE' : 'NORMAL')"
+                  size="small"
+                  :options="indexTypeOptions"
+                  @update:value="updateIndex(idx, { indexType: $event, unique: $event === 'UNIQUE' })"
+                />
+                <n-select
+                  :value="index.fields || []"
+                  multiple
+                  filterable
+                  size="small"
+                  placeholder="选择索引字段，可多选"
+                  :options="businessFieldOptions"
+                  @update:value="updateIndex(idx, { fields: $event })"
+                />
+                <n-input
+                  :value="index.remark"
+                  size="small"
+                  placeholder="说明"
+                  @update:value="updateIndex(idx, { remark: $event })"
+                />
+                <n-button text size="small" class="text-error" @click="removeIndex(idx)">
+                  删除
+                </n-button>
+              </div>
+            </div>
+            <n-empty v-else description="暂无自定义索引" />
           </section>
         </n-tab-pane>
       </n-tabs>
@@ -243,10 +292,15 @@ import {
   appTypeOptions,
   cloneSchema,
   createDefaultField,
+  createDefaultIndex,
   createFieldFromIndex,
   createFieldFromTemplate,
+  ensureSystemFields,
+  indexTypeOptions,
   isAuditField,
+  isLockedSystemField,
   isSameSchema,
+  isSystemField,
   normalizeObjectCode,
   normalizeTableName,
 } from './model-schema'
@@ -281,16 +335,27 @@ const activeTab = ref(props.showBasicTab ? 'basic' : 'fields')
 
 const domainSchema = computed(() => props.domain?.domainSchema || {})
 const currentField = computed(() => localModel.value.fields?.[selectedIndex.value] || null)
-const requiredCount = computed(() => (localModel.value.fields || []).filter(field => field.required).length)
+const businessFieldCount = computed(() => (localModel.value.fields || []).filter(field => !isSystemField(field)).length)
+const systemFieldCount = computed(() => (localModel.value.fields || []).filter(field => isSystemField(field)).length)
+const requiredCount = computed(() => (localModel.value.fields || []).filter(field => field.required && !isSystemField(field)).length)
 const fieldTemplateCount = computed(() => (domainSchema.value.fieldTemplates || []).length)
 const fieldOptions = computed(() => (localModel.value.fields || []).map(field => ({
   label: `${field.label || field.field} (${field.field})`,
   value: field.field,
 })))
+const businessFieldOptions = computed(() => (localModel.value.fields || [])
+  .filter(field => !isSystemField(field))
+  .map(field => ({
+    label: `${field.label || field.field} (${field.field})`,
+    value: field.field,
+  })))
 const targetModelOptions = computed(() => props.dataModels.map(model => ({
   label: `${model.modelName || model.modelCode} (${model.modelCode})`,
   value: model.modelCode,
 })))
+const relationIndexFields = computed(() => Array.from(new Set((localModel.value.relations || [])
+  .map(relation => relation.sourceField)
+  .filter(Boolean))))
 const relationTypeOptions = [
   { label: '引用', value: 'REFERENCE' },
   { label: '一对多', value: 'ONE_TO_MANY' },
@@ -349,26 +414,32 @@ watch(
 ensureModelCollections()
 
 function handleFieldsUpdate(fields) {
-  localModel.value.fields = fields.map((field, index) => {
+  const normalized = fields.map((field, index) => {
     const oldField = localModel.value.fields?.[index]
     if (oldField && oldField.field === field.field && oldField.label === field.label && oldField.columnName === field.columnName)
       return field
     return withDomainRecommendations(field)
   })
+  localModel.value.fields = ensureSystemFields(normalized, true)
 }
 
 function handleFieldUpdate(field) {
   if (selectedIndex.value < 0)
     return
   const oldField = localModel.value.fields[selectedIndex.value]
+  if (isLockedSystemField(oldField))
+    return
   const changedName = oldField?.field !== field.field || oldField?.label !== field.label || oldField?.columnName !== field.columnName
   localModel.value.fields.splice(selectedIndex.value, 1, changedName ? withDomainRecommendations(field) : field)
+  localModel.value.fields = ensureSystemFields(localModel.value.fields, true)
 }
 
 function addField() {
   const next = withDomainRecommendations(createFieldFromIndex((localModel.value.fields?.length || 0) + 1))
-  localModel.value.fields.push(next)
-  selectedIndex.value = localModel.value.fields.length - 1
+  const insertIndex = businessInsertIndex()
+  localModel.value.fields.splice(insertIndex, 0, next)
+  localModel.value.fields = ensureSystemFields(localModel.value.fields, true)
+  selectedIndex.value = localModel.value.fields.findIndex(field => field.field === next.field)
   activeTab.value = 'fields'
 }
 
@@ -391,7 +462,8 @@ function addDomainFieldTemplates() {
   }
   localModel.value.fields = fields
   if (added > 0) {
-    selectedIndex.value = fields.length - 1
+    localModel.value.fields = ensureSystemFields(fields, true)
+    selectedIndex.value = Math.max(localModel.value.fields.findIndex(field => field.field === fields[fields.length - 1]?.field), 0)
     window.$message?.success(`已引入 ${added} 个领域字段`)
   }
   else {
@@ -463,16 +535,26 @@ function ensureTreeModel() {
 
 function copyField(index) {
   const source = localModel.value.fields[index]
+  if (isLockedSystemField(source)) {
+    window.$message?.warning('系统字段不能复制')
+    return
+  }
   const copy = cloneSchema(source)
   copy.field = `${source.field}Copy`
   copy.columnName = `${source.columnName}_copy`
   copy.label = `${source.label}副本`
-  localModel.value.fields.splice(index + 1, 0, copy)
-  selectedIndex.value = index + 1
+  localModel.value.fields.splice(Math.min(index + 1, businessInsertIndex()), 0, copy)
+  localModel.value.fields = ensureSystemFields(localModel.value.fields, true)
+  selectedIndex.value = Math.max(localModel.value.fields.findIndex(field => field.field === copy.field), 0)
 }
 
 function removeField(index) {
+  if (isLockedSystemField(localModel.value.fields[index])) {
+    window.$message?.warning('系统字段不能删除')
+    return
+  }
   localModel.value.fields.splice(index, 1)
+  localModel.value.fields = ensureSystemFields(localModel.value.fields, true)
   selectedIndex.value = Math.max(Math.min(selectedIndex.value, localModel.value.fields.length - 1), 0)
 }
 
@@ -513,12 +595,43 @@ function removeRelation(index) {
   localModel.value.relations.splice(index, 1)
 }
 
+function addIndex() {
+  localModel.value.indexes.push(createDefaultIndex((localModel.value.indexes || []).length + 1))
+}
+
+function updateIndex(index, patch) {
+  localModel.value.indexes.splice(index, 1, {
+    ...localModel.value.indexes[index],
+    ...patch,
+  })
+}
+
+function removeIndex(index) {
+  localModel.value.indexes.splice(index, 1)
+}
+
 function targetFieldOptions(relation) {
   const targetModel = props.dataModels.find(model => model.modelCode === relation?.targetObjectCode)
   return (targetModel?.modelSchema?.fields || []).map(field => ({
     label: `${field.label || field.field} (${field.field})`,
     value: field.field,
   }))
+}
+
+function businessInsertIndex() {
+  const fields = localModel.value.fields || []
+  const index = fields.findIndex((field, fieldIndex) => fieldIndex > 0 && isSystemField(field))
+  return index >= 0 ? index : fields.length
+}
+
+function normalizeIndexName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\W/g, '_')
+    .replace(/_+/g, '_')
+    .toLowerCase()
+    .replace(/^[^a-z]+/, '')
+    .slice(0, 64)
 }
 
 function ensureModelCollections() {
@@ -530,10 +643,26 @@ function ensureModelCollections() {
     localModel.value.object = { code: '', name: localModel.value.businessName || '', description: '' }
   if (!localModel.value.fields)
     localModel.value.fields = []
+  localModel.value.fields = ensureSystemFields(localModel.value.fields, true)
   if (!localModel.value.relations)
     localModel.value.relations = []
-  if (!localModel.value.policies)
-    localModel.value.policies = { dataScope: 'TENANT', regionField: '', auditEnabled: true }
+  if (!localModel.value.indexes)
+    localModel.value.indexes = []
+  localModel.value.policies = {
+    dataScope: 'TENANT',
+    regionField: '',
+    auditEnabled: true,
+    primaryKeyStrategy: 'AUTO_INCREMENT',
+    primaryKeyField: 'id',
+    tenantField: 'tenantId',
+    logicDeleteField: 'delFlag',
+    ...(localModel.value.policies || {}),
+  }
+  localModel.value.policies.auditEnabled = true
+  localModel.value.policies.primaryKeyStrategy = 'AUTO_INCREMENT'
+  localModel.value.policies.primaryKeyField = 'id'
+  localModel.value.policies.tenantField = 'tenantId'
+  localModel.value.policies.logicDeleteField = 'delFlag'
   if (!localModel.value.treeConfig) {
     localModel.value.treeConfig = {
       keyField: 'id',
@@ -693,6 +822,12 @@ async function validateModel() {
   font-size: 12px;
 }
 
+.section-desc {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
 .basic-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -723,12 +858,30 @@ async function validateModel() {
 
 .relation-list {
   display: grid;
+  max-height: 460px;
   gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .relation-row {
   display: grid;
   grid-template-columns: 120px minmax(120px, 1fr) minmax(120px, 1fr) 120px minmax(120px, 1fr) 52px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.index-list {
+  display: grid;
+  gap: 8px;
+}
+
+.index-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 112px minmax(220px, 1.6fr) minmax(120px, 1fr) 52px;
   gap: 8px;
   align-items: center;
   border: 1px solid #eef2f7;
@@ -784,6 +937,10 @@ async function validateModel() {
   }
 
   .relation-row {
+    grid-template-columns: 1fr;
+  }
+
+  .index-row {
     grid-template-columns: 1fr;
   }
 

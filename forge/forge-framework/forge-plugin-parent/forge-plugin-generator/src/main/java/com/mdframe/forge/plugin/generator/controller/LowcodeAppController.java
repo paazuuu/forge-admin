@@ -52,6 +52,13 @@ public class LowcodeAppController {
         return RespInfo.success(appService.getDetail(id));
     }
 
+    @DeleteMapping("/{id}")
+    @OperationLog(module = "低代码应用", type = OperationType.DELETE, desc = "删除低代码应用")
+    public RespInfo<Void> delete(@PathVariable Long id) {
+        appService.delete(id);
+        return RespInfo.success();
+    }
+
     @PostMapping("/draft")
     @OperationLog(module = "低代码应用", type = OperationType.UPDATE, desc = "保存低代码应用草稿")
     public RespInfo<Long> saveDraft(@RequestBody LowcodeAppDraftDTO dto) {

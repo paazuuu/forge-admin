@@ -103,6 +103,9 @@
                 <n-button size="small" @click="openMoveDomain(app)">
                   迁移
                 </n-button>
+                <n-button size="small" type="error" secondary @click="deleteApp(app)">
+                  删除
+                </n-button>
               </div>
             </article>
           </div>
@@ -150,6 +153,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   lowcodeAppPage,
+  lowcodeDeleteApp,
   lowcodeDomainTree,
 } from '@/api/lowcode-crud'
 import DomainEditorDrawer from '@/components/lowcode-builder/domain/DomainEditorDrawer.vue'
@@ -301,6 +305,27 @@ async function handleDomainSaved() {
 function openMoveDomain(app) {
   movingApp.value = app
   moveVisible.value = true
+}
+
+function deleteApp(app) {
+  window.$dialog.warning({
+    title: '确认删除应用',
+    content: `确定删除低代码应用“${app.appName || app.configKey}”吗？已发布菜单会同步删除，若菜单已被角色授权将无法删除。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await lowcodeDeleteApp(app.id)
+        window.$message?.success('应用已删除')
+        if (apps.value.length === 1 && pageNum.value > 1)
+          pageNum.value -= 1
+        await refreshAll()
+      }
+      catch (error) {
+        window.$message?.error(error?.message || '应用删除失败')
+      }
+    },
+  })
 }
 
 async function handleMoved() {

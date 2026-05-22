@@ -4,14 +4,14 @@
       发布版本
     </div>
     <n-spin :show="loading">
-      <n-empty v-if="!versions.length" description="暂无发布版本" />
+      <n-empty v-if="!visibleVersions.length" description="暂无发布版本" />
       <n-timeline v-else>
         <n-timeline-item
-          v-for="item in versions"
+          v-for="item in visibleVersions"
           :key="item.id"
           :type="item.versionType === 'rollback' ? 'warning' : 'success'"
           :title="`版本 ${item.versionNo}`"
-          :content="item.remark || item.versionType"
+          :content="resolveContent(item)"
           :time="formatTime(item.createTime)"
         >
           <template #footer>
@@ -26,12 +26,17 @@
           </template>
         </n-timeline-item>
       </n-timeline>
+      <div v-if="versions.length > maxVisible" class="version-more">
+        仅显示最近 {{ maxVisible }} 个版本，共 {{ versions.length }} 个
+      </div>
     </n-spin>
   </div>
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   versions: {
     type: Array,
     default: () => [],
@@ -43,6 +48,15 @@ defineProps({
 })
 
 defineEmits(['rollback'])
+
+const maxVisible = 5
+const visibleVersions = computed(() => (props.versions || []).slice(0, maxVisible))
+
+function resolveContent(item) {
+  const action = item.remark || (item.versionType === 'rollback' ? '回滚发布' : '发布上线')
+  const time = formatTime(item.createTime)
+  return time ? `${action} · 发布时间 ${time}` : action
+}
 
 function formatTime(value) {
   if (!value)
@@ -64,5 +78,12 @@ function formatTime(value) {
   font-weight: 700;
   color: #0f172a;
   margin-bottom: 12px;
+}
+
+.version-more {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
 }
 </style>

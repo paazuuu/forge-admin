@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.util.*;
@@ -32,6 +34,13 @@ public class DynamicCrudRepository {
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
 
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
+    private static final Pattern SAFE_ALIAS = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,127}$");
+
+    public record JoinField(String fieldName, String tableAlias, String columnName) {
+    }
+
+    public record JoinSpec(String tableName, String tableAlias, String joinColumn, String mainColumn) {
+    }
     
     // 缓存：表名 -> 是否有del_flag列
     private final ConcurrentHashMap<String, Boolean> delFlagCache = new ConcurrentHashMap<>();
@@ -70,6 +79,59 @@ public class DynamicCrudRepository {
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
         return page;
+    }
+
+    /**
+     * 多模型左连接分页查询。selectFields 的 fieldName 会作为返回字段别名，调用方无需再做 snake_case 转换。
+     */
+    public Page<Map<String, Object>> selectJoinedPage(String mainTableName,
+                                                      List<JoinField> selectFields,
+                                                      List<JoinSpec> joins,
+                                                      int pageNum,
+                                                      int pageSize,
+                                                      Map<String, Object> searchParams,
+                                                      Set<String> allowedSearchFields,
+                                                      Map<String, String> searchTypeMap,
+                                                      Map<String, String> fieldColumnMapping,
+                                                      String orderBy) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
+
+        String fromClause = buildJoinedFromClause(mainTableName, joins);
+        String countSql = "SELECT COUNT(*) " + fromClause + buildWhereSql(whereClause);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+
+        String dataSql = buildJoinSelectClause(selectFields) + " " + fromClause + buildWhereSql(whereClause)
+                + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
+        appendPageParams(params, pageNum, pageSize);
+        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+
+        Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
+        page.setRecords(records);
+        return page;
+    }
+
+    /**
+     * 多模型左连接详情查询。
+     */
+    public Map<String, Object> selectJoinedById(String mainTableName,
+                                                Long id,
+                                                List<JoinField> selectFields,
+                                                List<JoinSpec> joins) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = new StringBuilder("t0.id = :id");
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendIdParam(params, id);
+
+        String sql = buildJoinSelectClause(selectFields) + " " + buildJoinedFromClause(mainTableName, joins)
+                + buildWhereSql(whereClause) + " LIMIT 1";
+        List<Map<String, Object>> results = namedJdbcTemplate.queryForList(sql, params);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     /**
@@ -448,14 +510,22 @@ public class DynamicCrudRepository {
     }
 
     private StringBuilder buildBaseWhereClause(String tableName) {
+        return buildBaseWhereClause(tableName, null);
+    }
+
+    private StringBuilder buildBaseWhereClause(String tableName, String tableAlias) {
         StringBuilder whereClause = new StringBuilder();
-        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName, tableAlias);
         return whereClause;
     }
 
     private MapSqlParameterSource buildBaseQueryParams() {
+        return buildBaseQueryParams(null);
+    }
+
+    private MapSqlParameterSource buildBaseQueryParams(String tableAlias) {
         MapSqlParameterSource params = new MapSqlParameterSource();
-        appendBaseQueryConditions(new StringBuilder(), params, null);
+        appendBaseQueryConditions(new StringBuilder(), params, null, tableAlias);
         return params;
     }
 
@@ -490,9 +560,14 @@ public class DynamicCrudRepository {
     }
 
     private void appendBaseQueryConditions(StringBuilder whereClause, MapSqlParameterSource params, String tableName) {
-        appendTenantWhereClause(whereClause, params);
+        appendBaseQueryConditions(whereClause, params, tableName, null);
+    }
+
+    private void appendBaseQueryConditions(StringBuilder whereClause, MapSqlParameterSource params,
+                                           String tableName, String tableAlias) {
+        appendTenantWhereClause(whereClause, params, tableAlias);
         if (tableName != null && hasDelFlag(tableName)) {
-            appendWhereCondition(whereClause, "del_flag = '0'");
+            appendWhereCondition(whereClause, qualifyColumn(tableAlias, "del_flag") + " = '0'");
         }
     }
 
@@ -510,6 +585,21 @@ public class DynamicCrudRepository {
         return results.isEmpty() ? null : results.get(0);
     }
 
+    public List<Map<String, Object>> selectListByColumn(String tableName, String columnName, Object value) {
+        validateTableName(tableName);
+        validateIdentifier(columnName);
+        if (value == null) {
+            return List.of();
+        }
+
+        StringBuilder whereClause = new StringBuilder(columnName + " = :value");
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        params.addValue("value", value);
+        String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY id ASC";
+        return namedJdbcTemplate.queryForList(sql, params);
+    }
+
     // ==================== 新增操作 ====================
 
     /**
@@ -520,6 +610,19 @@ public class DynamicCrudRepository {
 
         Map<String, Object> insertData = prepareInsertData(tableName, data);
         return namedJdbcTemplate.update(buildInsertSql(tableName, insertData), toSqlParams(insertData));
+    }
+
+    /**
+     * 新增记录并返回自增主键。
+     */
+    public Long insertReturningId(String tableName, Map<String, Object> data) {
+        validateTableName(tableName);
+
+        Map<String, Object> insertData = prepareInsertData(tableName, data);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedJdbcTemplate.update(buildInsertSql(tableName, insertData), toSqlParams(insertData), keyHolder, new String[] { "id" });
+        Number key = keyHolder.getKey();
+        return key == null ? null : key.longValue();
     }
 
     // ==================== 更新操作 ====================
@@ -536,6 +639,21 @@ public class DynamicCrudRepository {
         return namedJdbcTemplate.update(sql, params);
     }
 
+    public Long selectFirstIdByColumn(String tableName, String columnName, Object value) {
+        validateTableName(tableName);
+        validateIdentifier(columnName);
+        if (value == null) {
+            return null;
+        }
+        StringBuilder whereClause = new StringBuilder(columnName + " = :value");
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        params.addValue("value", value);
+        String sql = buildSelectSql("SELECT id", tableName, whereClause) + " ORDER BY id ASC LIMIT 1";
+        List<Long> ids = namedJdbcTemplate.queryForList(sql, params, Long.class);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
     // ==================== 删除操作 ====================
 
     /**
@@ -547,6 +665,23 @@ public class DynamicCrudRepository {
         MapSqlParameterSource params = toIdParam(id);
         String sql = appendTenantCondition(buildDeleteSql(tableName, logicDelete), params);
         return namedJdbcTemplate.update(sql, params);
+    }
+
+    public int deleteByColumn(String tableName, String columnName, Object value, boolean logicDelete) {
+        validateTableName(tableName);
+        validateIdentifier(columnName);
+        if (value == null) {
+            return 0;
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        params.addValue("value", value);
+        String sql;
+        if (logicDelete) {
+            sql = "UPDATE " + tableName + " SET del_flag = '1', update_time = NOW() WHERE " + columnName + " = :value";
+        } else {
+            sql = "DELETE FROM " + tableName + " WHERE " + columnName + " = :value";
+        }
+        return namedJdbcTemplate.update(appendTenantCondition(sql, params), params);
     }
 
     // ==================== 工具方法 ====================
@@ -651,12 +786,84 @@ public class DynamicCrudRepository {
         return sql;
     }
 
+    private String buildWhereSql(StringBuilder whereClause) {
+        return whereClause.length() > 0 ? " WHERE " + whereClause : "";
+    }
+
+    private String buildJoinSelectClause(List<JoinField> fields) {
+        LinkedHashSet<String> selectItems = new LinkedHashSet<>();
+        for (JoinField field : fields) {
+            selectItems.add(qualifyColumn(field.tableAlias(), field.columnName()) + " AS `" + field.fieldName() + "`");
+        }
+        return "SELECT " + String.join(", ", selectItems);
+    }
+
+    private String buildJoinedFromClause(String mainTableName, List<JoinSpec> joins) {
+        StringBuilder sql = new StringBuilder("FROM ")
+                .append(mainTableName)
+                .append(" t0");
+        Long tenantId = TenantContextHolder.getTenantId();
+        for (JoinSpec join : joins) {
+            sql.append(" LEFT JOIN ")
+                    .append(join.tableName())
+                    .append(" ")
+                    .append(join.tableAlias())
+                    .append(" ON ")
+                    .append(qualifyColumn(join.tableAlias(), join.joinColumn()))
+                    .append(" = ")
+                    .append(qualifyColumn("t0", join.mainColumn()));
+            if (tenantId != null && getTableColumns(join.tableName()).contains("tenant_id")) {
+                sql.append(" AND ").append(qualifyColumn(join.tableAlias(), "tenant_id")).append(" = :tenantId");
+            }
+            if (hasDelFlag(join.tableName())) {
+                sql.append(" AND ").append(qualifyColumn(join.tableAlias(), "del_flag")).append(" = '0'");
+            }
+        }
+        return sql.toString();
+    }
+
+    private void validateJoinQuery(String mainTableName, List<JoinField> selectFields, List<JoinSpec> joins) {
+        validateTableName(mainTableName);
+        validateIdentifier("t0");
+        if (selectFields == null || selectFields.isEmpty()) {
+            throw new BusinessException("左连接查询字段不能为空");
+        }
+        for (JoinField field : selectFields) {
+            validateIdentifier(field.tableAlias());
+            validateIdentifier(field.columnName());
+            validateAlias(field.fieldName());
+        }
+        for (JoinSpec join : joins) {
+            validateTableName(join.tableName());
+            validateIdentifier(join.tableAlias());
+            validateIdentifier(join.joinColumn());
+            validateIdentifier(join.mainColumn());
+        }
+    }
+
+    private void validateAlias(String alias) {
+        if (StringUtils.isBlank(alias) || !SAFE_ALIAS.matcher(alias).matches()) {
+            throw new BusinessException("非法字段别名: " + alias);
+        }
+    }
+
+    private String qualifyColumn(String tableAlias, String columnName) {
+        if (StringUtils.isBlank(tableAlias)) {
+            return columnName;
+        }
+        return tableAlias + "." + columnName;
+    }
+
     private void appendTenantWhereClause(StringBuilder whereClause, MapSqlParameterSource params) {
+        appendTenantWhereClause(whereClause, params, null);
+    }
+
+    private void appendTenantWhereClause(StringBuilder whereClause, MapSqlParameterSource params, String tableAlias) {
         Long tenantId = TenantContextHolder.getTenantId();
         if (tenantId == null) {
             return;
         }
-        appendWhereCondition(whereClause, "tenant_id = :tenantId");
+        appendWhereCondition(whereClause, qualifyColumn(tableAlias, "tenant_id") + " = :tenantId");
         params.addValue("tenantId", tenantId);
     }
 

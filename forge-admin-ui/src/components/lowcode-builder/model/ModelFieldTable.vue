@@ -16,28 +16,34 @@
       :model-value="fields"
       :item-key="fieldRowKey"
       handle=".drag-handle"
+      :move="canMoveField"
       animation="160"
       class="table-body"
       @update:model-value="$emit('update:fields', $event)"
     >
       <template #item="{ element, index }">
-        <div class="field-row" :class="{ active: selectedIndex === index }" @click="$emit('select', index)">
+        <div class="field-row" :class="{ active: selectedIndex === index, system: isSystemField(element) }" @click="$emit('select', index)">
           <div class="field-name-cell">
-            <n-button text size="tiny" class="drag-handle" @click.stop>
+            <n-button text size="tiny" class="drag-handle" :disabled="isLockedSystemField(element)" @click.stop>
               <template #icon>
                 <n-icon><ReorderFourOutline /></n-icon>
               </template>
             </n-button>
             <n-input
               :value="element.label"
+              :disabled="isLockedSystemField(element)"
               size="small"
               placeholder="字段名称"
               @click.stop
               @update:value="updateField(index, { label: $event })"
             />
+            <n-tag v-if="isSystemField(element)" size="small" :bordered="false">
+              系统
+            </n-tag>
           </div>
           <n-input
             :value="element.field"
+            :disabled="isLockedSystemField(element)"
             size="small"
             placeholder="fieldName"
             @click.stop
@@ -46,6 +52,7 @@
           />
           <n-input
             :value="element.remark"
+            :disabled="isLockedSystemField(element)"
             size="small"
             placeholder="字段说明"
             @click.stop
@@ -53,6 +60,7 @@
           />
           <n-select
             :value="element.dataType"
+            :disabled="isLockedSystemField(element)"
             size="small"
             :options="dataTypeOptions"
             @click.stop
@@ -60,6 +68,7 @@
           />
           <n-input-number
             :value="element.length"
+            :disabled="isLockedSystemField(element)"
             size="small"
             :min="1"
             :max="2048"
@@ -69,6 +78,7 @@
           />
           <n-input-number
             :value="element.precision"
+            :disabled="isLockedSystemField(element)"
             size="small"
             :min="0"
             :max="12"
@@ -78,12 +88,14 @@
           />
           <n-switch
             :value="element.required"
+            :disabled="isLockedSystemField(element)"
             size="small"
             @click.stop
             @update:value="updateField(index, { required: $event })"
           />
           <n-input
             :value="element.defaultValue ?? ''"
+            :disabled="isLockedSystemField(element)"
             size="small"
             placeholder="-"
             @click.stop
@@ -91,12 +103,12 @@
           />
           <span class="muted">{{ relationText(element) }}</span>
           <div class="field-actions" @click.stop>
-            <n-button text size="tiny" class="text-primary" @click="$emit('copy', index)">
+            <n-button text size="tiny" class="text-primary" :disabled="isLockedSystemField(element)" @click="$emit('copy', index)">
               复制
             </n-button>
             <n-popconfirm @positive-click="$emit('remove', index)">
               <template #trigger>
-                <n-button text size="tiny" class="text-error">
+                <n-button text size="tiny" class="text-error" :disabled="isLockedSystemField(element)">
                   删除
                 </n-button>
               </template>
@@ -112,7 +124,7 @@
 <script setup>
 import { ReorderFourOutline } from '@vicons/ionicons5'
 import draggable from 'vuedraggable'
-import { camelToSnake, dataTypeOptions, normalizeFieldName } from './model-schema'
+import { camelToSnake, dataTypeOptions, isLockedSystemField, isSystemField, normalizeFieldName } from './model-schema'
 
 const props = defineProps({
   fields: {
@@ -128,6 +140,8 @@ const props = defineProps({
 const emit = defineEmits(['update:fields', 'select', 'copy', 'remove'])
 
 function updateField(index, patch) {
+  if (isLockedSystemField(props.fields[index]))
+    return
   const fields = props.fields.map((field, fieldIndex) => fieldIndex === index ? { ...field, ...patch } : field)
   emit('update:fields', fields)
 }
@@ -158,6 +172,10 @@ function handleDataTypeChange(index, value) {
         ? value
         : props.fields[index]?.componentType || 'input'
   updateField(index, { dataType: value, componentType })
+}
+
+function canMoveField(event) {
+  return !isLockedSystemField(event.draggedContext?.element)
 }
 
 function relationText(field) {
@@ -227,10 +245,19 @@ function relationText(field) {
 
 .field-name-cell {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.field-row.system {
+  background: #f8fafc;
+}
+
+.field-row.system:hover,
+.field-row.system.active {
+  background: #eef6ff;
 }
 
 .field-actions {

@@ -183,10 +183,77 @@ export const canvasComponentCatalog = [
   },
 ]
 
+const hiddenPageFieldNames = new Set(['tenantId', 'delFlag'])
+const hiddenPageColumnNames = new Set(['tenant_id', 'del_flag'])
+const readonlySystemFieldNames = new Set([
+  'id',
+  'tenantId',
+  'createBy',
+  'createTime',
+  'createDept',
+  'updateBy',
+  'updateTime',
+  'delFlag',
+])
+const readonlySystemColumnNames = new Set([
+  'id',
+  'tenant_id',
+  'create_by',
+  'create_time',
+  'create_dept',
+  'update_by',
+  'update_time',
+  'del_flag',
+])
+
+export function isHiddenPageField(field = {}) {
+  const fieldName = field.sourceField || field.field
+  return hiddenPageFieldNames.has(fieldName)
+    || hiddenPageFieldNames.has(field.field)
+    || hiddenPageColumnNames.has(field.columnName)
+}
+
+export function isReadonlySystemField(field = {}) {
+  const fieldName = field.sourceField || field.field
+  return Boolean(field.systemField)
+    || Boolean(field.readonly)
+    || readonlySystemFieldNames.has(fieldName)
+    || readonlySystemFieldNames.has(field.field)
+    || readonlySystemColumnNames.has(field.columnName)
+}
+
+export function isPageFieldVisible(field = {}, zoneKey = 'table') {
+  if (!field || isHiddenPageField(field))
+    return false
+  if (zoneKey === 'edit')
+    return !isReadonlySystemField(field) && field.formVisible !== false
+  if (zoneKey === 'detail')
+    return field.formVisible !== false
+  if (zoneKey === 'search')
+    return !isReadonlySystemField(field)
+  if (zoneKey === 'table')
+    return field.listVisible !== false
+  return true
+}
+
+function filterPageFields(fields = [], zoneKey = 'table') {
+  return (fields || []).filter(field => isPageFieldVisible(field, zoneKey))
+}
+
+function isChildPageModelField(field = {}) {
+  const sourceField = field.sourceField || field.field
+  return Boolean(field.modelCode) && field.field !== sourceField
+}
+
+function mergePageFieldRefs(...groups) {
+  return Array.from(new Set(groups.flat().filter(Boolean)))
+}
+
 export function createDefaultPageSchema(modelSchema) {
   const fields = modelSchema?.fields || []
   const isTree = modelSchema?.appType === 'TREE'
-  const layoutType = isTree ? 'tree-crud' : 'simple-crud'
+  const isMasterDetail = modelSchema?.appType === 'MASTER_DETAIL'
+  const layoutType = isTree ? 'tree-crud' : isMasterDetail ? 'master-detail-crud' : 'simple-crud'
   const schema = {
     layoutType,
     listLayoutMode: 'grid',
@@ -196,19 +263,20 @@ export function createDefaultPageSchema(modelSchema) {
         zoneKey: 'search',
         componentKey: 'search-form',
         enabled: true,
-        fieldRefs: fields.filter(field => field.searchable).map(field => field.field),
+        fieldRefs: filterPageFields(fields, 'search').map(field => field.field),
         props: {},
       },
       {
         zoneKey: 'table',
         componentKey: 'data-table',
         enabled: true,
-        fieldRefs: fields.filter(field => field.listVisible !== false).map(field => field.field),
+        fieldRefs: filterPageFields(fields, 'table').map(field => field.field),
         props: {
           showImport: true,
           showExport: true,
           hideBatchDelete: false,
           enableCustomQuery: true,
+          customActions: [],
           ...(isTree
             ? {
                 treeConfig: {
@@ -226,14 +294,14 @@ export function createDefaultPageSchema(modelSchema) {
         zoneKey: 'edit',
         componentKey: 'edit-form',
         enabled: true,
-        fieldRefs: fields.filter(field => field.formVisible !== false).map(field => field.field),
+        fieldRefs: filterPageFields(fields, 'edit').map(field => field.field),
         props: {},
       },
       {
         zoneKey: 'detail',
         componentKey: 'detail-panel',
         enabled: false,
-        fieldRefs: fields.filter(field => field.formVisible !== false).map(field => field.field),
+        fieldRefs: filterPageFields(fields, 'detail').map(field => field.field),
         props: {},
       },
     ],
@@ -244,24 +312,34 @@ export function createDefaultPageSchema(modelSchema) {
 export function syncPageSchemaWithModel(pageSchema, modelSchema) {
   const current = pageSchema || createDefaultPageSchema(modelSchema)
   const fields = modelSchema?.fields || []
-  const fieldSet = new Set(fields.map(field => field.field))
+  const layoutType = current.layoutType || (modelSchema?.appType === 'TREE'
+    ? 'tree-crud'
+    : modelSchema?.appType === 'MASTER_DETAIL' ? 'master-detail-crud' : 'simple-crud')
   const zones = (current.zones || []).map((zone) => {
+    const zoneFields = filterPageFields(fields, zone.zoneKey)
+    const zoneFieldSet = new Set(zoneFields.map(field => field.field))
+    const childEditRefs = zone.zoneKey === 'edit' && layoutType === 'master-detail-crud'
+      ? zoneFields.filter(field => isChildPageModelField(field)).map(field => field.field)
+      : []
+    const childEditSet = new Set(childEditRefs)
     const props = zone.props || {}
     const normalizedZone = {
       ...zone,
-      fieldRefs: (zone.fieldRefs || []).filter(field => fieldSet.has(field)),
+      fieldRefs: (zone.fieldRefs || []).filter(field => zoneFieldSet.has(field)),
       props,
     }
     const canvas = normalizeZoneCanvas(normalizedZone, modelSchema)
     const formCreateRefs = normalizedZone.zoneKey === 'edit'
-      ? resolveFieldRefsFromFormCreateRules(props.formCreateRule, fieldSet)
+      ? resolveFieldRefsFromFormCreateRules(props.formCreateRule, zoneFieldSet)
       : []
-    const explicitRefs = (normalizedZone.fieldRefs || []).filter(field => fieldSet.has(field))
+    const explicitRefs = (normalizedZone.fieldRefs || []).filter(field => zoneFieldSet.has(field))
+    const explicitChildRefs = explicitRefs.filter(ref => childEditSet.has(ref))
+    const canvasRefs = resolveFieldRefsFromCanvas(canvas).filter(field => zoneFieldSet.has(field))
     const fieldRefs = formCreateRefs.length
-      ? formCreateRefs
+      ? mergePageFieldRefs(formCreateRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
       : explicitRefs.length
-        ? explicitRefs
-        : resolveFieldRefsFromCanvas(canvas).filter(field => fieldSet.has(field))
+        ? mergePageFieldRefs(explicitRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
+        : mergePageFieldRefs(canvasRefs, childEditRefs)
     return {
       ...normalizedZone,
       fieldRefs,
@@ -282,14 +360,19 @@ export function syncPageSchemaWithModel(pageSchema, modelSchema) {
         props: {},
       }
       const canvas = normalizeZoneCanvas(zone, modelSchema)
+      const zoneFields = filterPageFields(fields, zone.zoneKey)
+      const zoneFieldSet = new Set(zoneFields.map(field => field.field))
+      const childEditRefs = zone.zoneKey === 'edit' && layoutType === 'master-detail-crud'
+        ? zoneFields.filter(field => isChildPageModelField(field)).map(field => field.field)
+        : []
       const formCreateRefs = zone.zoneKey === 'edit'
-        ? resolveFieldRefsFromFormCreateRules(zone.props?.formCreateRule, fieldSet)
+        ? resolveFieldRefsFromFormCreateRules(zone.props?.formCreateRule, zoneFieldSet)
         : []
       zones.push({
         ...zone,
         fieldRefs: formCreateRefs.length
-          ? formCreateRefs
-          : resolveFieldRefsFromCanvas(canvas).filter(field => fieldSet.has(field)),
+          ? mergePageFieldRefs(formCreateRefs, childEditRefs)
+          : resolveFieldRefsFromCanvas(canvas).filter(field => zoneFieldSet.has(field)),
         props: {
           canvas,
         },
@@ -298,7 +381,6 @@ export function syncPageSchemaWithModel(pageSchema, modelSchema) {
   }
 
   const listLayoutMode = current.listLayoutMode || 'grid'
-  const layoutType = current.layoutType || 'simple-crud'
   let listGridLayout = current.listGridLayout
   if (listLayoutMode === 'grid') {
     if (!listGridLayout || !listGridLayout.items?.length) {
@@ -329,14 +411,18 @@ export function createPageModelRef(model = {}, options = {}) {
     modelId: isNumericId(model.id) ? Number(model.id) : null,
     modelCode,
     modelName,
+    tableName: schema?.tableName || model.tableName || '',
+    relations: Array.isArray(schema?.relations) ? clonePlain(schema.relations) : [],
     primary,
-    fields: (schema?.fields || []).map(field => ({
-      ...field,
-      sourceField: field.field,
-      fieldRef: resolveModelFieldRef(modelCode, field.field, primary),
-      modelCode,
-      modelName,
-    })),
+    fields: (schema?.fields || [])
+      .filter(field => !isHiddenPageField(field))
+      .map(field => ({
+        ...field,
+        sourceField: field.field,
+        fieldRef: resolveModelFieldRef(modelCode, field.field, primary),
+        modelCode,
+        modelName,
+      })),
   }
 }
 
@@ -347,7 +433,7 @@ export function buildPageDesignModelSchema(modelSchema, modelRefs = []) {
   const fields = refs.flatMap((modelRef) => {
     const modelCode = modelRef.modelCode || ''
     const modelName = modelRef.modelName || modelCode || '数据模型'
-    return (modelRef.fields || []).map((field) => {
+    return (modelRef.fields || []).filter(field => !isHiddenPageField(field)).map((field) => {
       const sourceField = field.sourceField || field.field
       const fieldRef = field.fieldRef || resolveModelFieldRef(modelCode, sourceField, modelRef.primary)
       return {
@@ -358,7 +444,8 @@ export function buildPageDesignModelSchema(modelSchema, modelRefs = []) {
         modelId: modelRef.modelId || null,
         modelCode,
         modelName,
-        label: `${modelName} / ${field.label || sourceField}`,
+        label: field.label || sourceField,
+        sourceLabel: modelName,
       }
     })
   })
@@ -398,7 +485,7 @@ export const listPageBlockCatalog = [
     title: '操作工具栏',
     desc: '新增 / 导入 / 导出 / 自定义查询',
     defaultW: 12,
-    defaultH: 1,
+    defaultH: 2,
     unique: true,
   },
   {
@@ -501,7 +588,7 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
       fieldSettings: {},
       collapsible: true,
     },
-    fieldRefs: fields.filter(f => f.searchable).map(f => f.field),
+    fieldRefs: filterPageFields(fields, 'search').map(f => f.field),
   })
   yCursor += 4
 
@@ -511,14 +598,15 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
     gridX: mainX,
     gridY: yCursor,
     gridW: mainW,
-    gridH: 1,
+    gridH: 2,
     label: '操作工具栏',
     props: {
       actions: ['add', 'import', 'export', 'custom-query'],
+      customActions: [],
     },
     fieldRefs: [],
   })
-  yCursor += 1
+  yCursor += 2
 
   items.push({
     id: 'block_table',
@@ -531,7 +619,7 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
     props: {
       fieldSettings: {},
     },
-    fieldRefs: fields.filter(f => f.listVisible !== false).map(f => f.field),
+    fieldRefs: filterPageFields(fields, 'table').map(f => f.field),
   })
 
   return {
@@ -543,11 +631,13 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
 }
 
 export function syncGridLayoutWithModel(layout, modelSchema) {
-  const fieldSet = new Set((modelSchema?.fields || []).map(f => f.field))
+  const tableFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'table').map(f => f.field))
+  const searchFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'search').map(f => f.field))
   const fallback = createDefaultListGridLayout(modelSchema)
   const source = (layout?.items || []).length ? layout : fallback
   const items = (source.items || []).map((item) => {
     const meta = resolveListPageBlockMeta(item.blockType) || {}
+    const fieldSet = item.blockType === 'search-form' ? searchFieldSet : tableFieldSet
     const refs = (item.fieldRefs || []).filter(field => fieldSet.has(field))
     return {
       id: item.id || createBlockId(item.blockType),
@@ -556,7 +646,7 @@ export function syncGridLayoutWithModel(layout, modelSchema) {
       gridX: clampNumber(item.gridX, 0, LIST_PAGE_GRID_COLS - 1),
       gridY: Math.max(0, Number(item.gridY) || 0),
       gridW: clampNumber(item.gridW, 1, LIST_PAGE_GRID_COLS),
-      gridH: Math.max(1, Number(item.gridH) || meta.defaultH || 2),
+      gridH: Math.max(resolveBlockMinGridH(item.blockType, meta), Number(item.gridH) || meta.defaultH || 2),
       props: { ...(item.props || {}) },
       fieldRefs: refs,
     }
@@ -633,12 +723,15 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
     gridX: mainX,
     gridY: yCursor,
     gridW: mainW,
-    gridH: 1,
+    gridH: 2,
     label: '操作工具栏',
-    props: { actions: Array.from(new Set(tableActions)) },
+    props: {
+      actions: Array.from(new Set(tableActions)),
+      customActions: table?.props?.customActions || [],
+    },
     fieldRefs: [],
   })
-  yCursor += 1
+  yCursor += 2
 
   if (table?.enabled !== false) {
     items.push({
@@ -668,11 +761,12 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
   const table = items.find(i => i.blockType === 'data-table')
   const tree = items.find(i => i.blockType === 'tree-panel')
   const toolbar = items.find(i => i.blockType === 'toolbar')
-  const fieldSet = new Set((modelSchema?.fields || []).map(f => f.field))
+  const searchFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'search').map(f => f.field))
+  const tableFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'table').map(f => f.field))
 
   return (zones || []).map((zone) => {
     if (zone.zoneKey === 'search') {
-      const refs = (search?.fieldRefs || []).filter(ref => fieldSet.has(ref))
+      const refs = (search?.fieldRefs || []).filter(ref => searchFieldSet.has(ref))
       return {
         ...zone,
         enabled: !!search,
@@ -684,7 +778,7 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
       }
     }
     if (zone.zoneKey === 'table') {
-      const refs = (table?.fieldRefs || []).filter(ref => fieldSet.has(ref))
+      const refs = (table?.fieldRefs || []).filter(ref => tableFieldSet.has(ref))
       const actions = toolbar?.props?.actions || []
       const nextProps = {
         ...(zone.props || {}),
@@ -692,6 +786,7 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
         showImport: actions.includes('import'),
         showExport: actions.includes('export'),
         enableCustomQuery: actions.includes('custom-query'),
+        customActions: toolbar?.props?.customActions || zone.props?.customActions || [],
       }
       if (tree) {
         nextProps.treeConfig = {
@@ -738,15 +833,15 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
     fieldRefs: [],
   }
   if (blockType === 'search-form') {
-    base.fieldRefs = fields.filter(f => f.searchable).slice(0, 8).map(f => f.field)
+    base.fieldRefs = filterPageFields(fields, 'search').slice(0, 8).map(f => f.field)
     base.props = { fieldSettings: {}, collapsible: true }
   }
   if (blockType === 'data-table') {
-    base.fieldRefs = fields.filter(f => f.listVisible !== false).map(f => f.field)
+    base.fieldRefs = filterPageFields(fields, 'table').map(f => f.field)
     base.props = { fieldSettings: {} }
   }
   if (blockType === 'toolbar') {
-    base.props = { actions: ['add', 'import', 'export', 'custom-query'] }
+    base.props = { actions: ['add', 'import', 'export', 'custom-query'], customActions: [] }
   }
   if (blockType === 'tree-panel') {
     base.props = {
@@ -796,6 +891,16 @@ function clampNumber(value, min, max) {
   if (!Number.isFinite(num))
     return min
   return Math.min(Math.max(num, min), max)
+}
+
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value ?? null))
+}
+
+function resolveBlockMinGridH(blockType, meta = {}) {
+  if (blockType === 'toolbar')
+    return Math.max(2, Number(meta.defaultH) || 2)
+  return 1
 }
 
 export function resolveZoneTitle(zoneKey) {
@@ -870,7 +975,7 @@ export function normalizeZoneCanvas(zone, modelSchema) {
   const sourceItems = Array.isArray(oldCanvas.items) && oldCanvas.items.length
     ? oldCanvas.items
     : defaultCanvas.items
-  const fieldSet = new Set(fields.map(field => field.field))
+  const fieldSet = new Set(filterPageFields(fields, zone?.zoneKey).map(field => field.field))
   const items = sourceItems
     .map(item => normalizeCanvasItem(item, zone?.zoneKey, fields))
     .filter(item => !item.fieldRef || fieldSet.has(item.fieldRef))
@@ -1087,12 +1192,12 @@ function createDefaultCanvasForZone(zoneKey, allFields, fieldRefs = [], modelSch
 function resolveDefaultFields(zoneKey, fields, fieldRefs) {
   const refSet = new Set(fieldRefs || [])
   if (refSet.size)
-    return fields.filter(field => refSet.has(field.field))
+    return fields.filter(field => refSet.has(field.field) && isPageFieldVisible(field, zoneKey))
   if (zoneKey === 'search')
-    return fields.filter(field => field.searchable)
+    return filterPageFields(fields, 'search')
   if (zoneKey === 'table')
-    return fields.filter(field => field.listVisible !== false)
-  return fields.filter(field => field.formVisible !== false)
+    return filterPageFields(fields, 'table')
+  return filterPageFields(fields, zoneKey)
 }
 
 function normalizeCanvasItem(item, zoneKey, fields) {

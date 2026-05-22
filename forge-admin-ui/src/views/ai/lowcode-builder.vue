@@ -36,7 +36,7 @@
           </template>
           保存草稿
         </n-button>
-        <n-button type="primary" :disabled="!draft.id" @click="currentStep = 'publish'">
+        <n-button type="primary" :disabled="!canPreview" :loading="saving" @click="openPublishStep">
           <template #icon>
             <n-icon><RocketOutline /></n-icon>
           </template>
@@ -289,6 +289,7 @@ import {
 import {
   cloneSchema,
   createDefaultModelSchema,
+  ensureSystemFields,
   normalizeObjectCode,
   normalizeTableName,
 } from '@/components/lowcode-builder/model/model-schema'
@@ -297,6 +298,7 @@ import {
   buildPageDesignModelSchema,
   createDefaultPageSchema,
   createPageModelRef,
+  isHiddenPageField,
   syncPageSchemaWithModel,
 } from '@/components/lowcode-builder/page/page-schema'
 import LowcodePreviewPane from '@/components/lowcode-builder/preview/LowcodePreviewPane.vue'
@@ -347,6 +349,7 @@ const stepItems = [
 const layoutOptions = [
   { label: '标准 CRUD', value: 'simple-crud' },
   { label: '左树右表', value: 'tree-crud' },
+  { label: '主子表', value: 'master-detail-crud' },
 ]
 const selectedDataModels = computed(() => selectedModelKeys.value
   .map(key => dataModels.value.find(model => resolveModelKey(model) === key))
@@ -377,7 +380,7 @@ const fieldPools = computed(() => selectedDataModels.value.map(model => ({
   key: resolveModelKey(model),
   name: model.modelName,
   code: model.modelCode,
-  fields: model.modelSchema?.fields || [],
+  fields: (model.modelSchema?.fields || []).filter(field => !isHiddenPageField(field)),
 })))
 
 onMounted(async () => {
@@ -400,16 +403,6 @@ watch(
     else if (route.query.domainId) {
       await selectDomainById(route.query.domainId, { resetDraft: true })
     }
-  },
-)
-
-watch(
-  () => draft.pageSchema.layoutType,
-  (value) => {
-    if (value === 'tree-crud')
-      draft.modelSchema.appType = 'TREE'
-    else if (draft.modelSchema.appType === 'TREE')
-      draft.modelSchema.appType = 'SINGLE'
   },
 )
 
@@ -621,31 +614,31 @@ function deriveAppCode(force = false) {
   draft.configKey = normalizeObjectCode(`${defaults.configKeyPrefix || ''}${base}`)
 }
 
-async function saveDraft() {
+async function saveDraft(options = {}) {
   if (!selectedDomain.value || !draft.domainId) {
     window.$message?.warning('请先选择业务领域')
-    return
+    return null
   }
   if (!draft.id && selectedDomain.value.status !== 'ENABLED') {
     window.$message?.warning('停用领域不能新建应用')
-    return
+    return null
   }
   if (!selectedDataModels.value.length) {
     window.$message?.warning('请至少选择一个数据模型')
-    return
+    return null
   }
   if (!primaryModel.value) {
     window.$message?.warning('请指定主数据模型')
-    return
+    return null
   }
   if (!draft.appName) {
     window.$message?.warning('请填写应用名称')
-    return
+    return null
   }
   deriveAppCode()
   if (!draft.configKey) {
     window.$message?.warning('请填写应用编码')
-    return
+    return null
   }
   saving.value = true
   try {
@@ -666,21 +659,31 @@ async function saveDraft() {
       pageSchema: cloneSchema(draft.pageSchema),
     })
     const id = res.data
-    window.$message?.success('草稿已保存')
+    if (!options.silent)
+      window.$message?.success('草稿已保存')
     if (!appId.value && id) {
       draft.id = id
-      router.replace(`/ai/lowcode-builder/${id}`)
+      await router.replace(`/ai/lowcode-builder/${id}`)
     }
     else {
       await reloadDetail()
     }
+    return id || draft.id
   }
   catch (e) {
     window.$message?.error(e?.message || '保存草稿失败')
+    return null
   }
   finally {
     saving.value = false
   }
+}
+
+async function openPublishStep() {
+  const id = draft.id || await saveDraft({ silent: true })
+  if (!id)
+    return
+  currentStep.value = 'publish'
 }
 
 function normalizeRuntimeModel(modelSchema, model) {
@@ -696,6 +699,7 @@ function normalizeRuntimeModel(modelSchema, model) {
     name: model.modelName || modelSchema.object?.name || '',
   }
   modelSchema.businessName = model.modelName || modelSchema.businessName || ''
+  modelSchema.fields = ensureSystemFields(modelSchema.fields || [], true)
   if (!isValidTableName(modelSchema.tableName))
     modelSchema.tableName = buildRuntimeTableName(modelSchema, model)
   if (!modelSchema.relations)

@@ -167,6 +167,8 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         vo.setTableName(config.getTableName());
         vo.setTableComment(config.getTableComment());
         vo.setAppName(config.getAppName());
+        vo.setMenuName(config.getMenuName());
+        vo.setObjectName(config.getObjectName());
         vo.setPublishStatus(config.getPublishStatus());
         vo.setPublishedVersion(config.getPublishedVersion());
         vo.setRowKey("id");

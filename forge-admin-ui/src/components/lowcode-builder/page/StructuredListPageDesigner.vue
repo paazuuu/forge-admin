@@ -178,7 +178,7 @@
           :empty-text="activeFieldEditor.emptyText"
           :fields="fields"
           :selected-refs="activeFieldEditor.selectedRefs"
-          :filter="() => true"
+          :filter="activeFieldEditor.filter"
           :mode="activeFieldEditor.mode"
           :settings="activeFieldEditor.settings"
           @update="updateZoneRefs(activeFieldEditor.zoneKey, $event)"
@@ -200,6 +200,7 @@
 import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NUpload } from 'naive-ui'
 import { computed, defineComponent, h, ref } from 'vue'
 import draggable from 'vuedraggable'
+import { isPageFieldVisible } from './page-schema'
 
 const props = defineProps({
   modelValue: {
@@ -405,7 +406,12 @@ const FieldOrderEditor = defineComponent({
           }, {
             item: ({ element }) => h('div', { class: ['selected-field-row', editorProps.mode ? `mode-${editorProps.mode}` : ''] }, [
               h('span', { class: 'field-handle' }, '☰'),
-              h('span', { class: 'field-name' }, element.label || element.field),
+              h('span', { class: 'field-name' }, [
+                h('span', null, element.label || element.field),
+                element.sourceLabel || element.modelName
+                  ? h('small', null, element.sourceLabel || element.modelName)
+                  : null,
+              ]),
               h('span', { class: 'field-code' }, element.field),
               editorProps.mode === 'search'
                 ? h(NSelect, {
@@ -434,7 +440,10 @@ const FieldOrderEditor = defineComponent({
             key: field.field,
             type: 'button',
             onClick: () => add(field.field),
-          }, `${field.label || field.field}`)))
+          }, [
+            h('span', null, field.label || field.field),
+            field.sourceLabel || field.modelName ? h('small', null, field.sourceLabel || field.modelName) : null,
+          ])))
         : null,
     ])
   },
@@ -461,6 +470,7 @@ const activeFieldEditor = computed(() => {
       mode: 'table',
       selectedRefs: tableZone.value?.fieldRefs || [],
       settings: tableZone.value?.props?.fieldSettings || {},
+      filter: field => isPageFieldVisible(field, 'table'),
     }
   }
   return {
@@ -470,6 +480,7 @@ const activeFieldEditor = computed(() => {
     mode: 'search',
     selectedRefs: searchZone.value?.fieldRefs || [],
     settings: searchZone.value?.props?.fieldSettings || {},
+    filter: field => isPageFieldVisible(field, 'search'),
   }
 })
 const tableColumns = computed(() => [
@@ -563,11 +574,11 @@ function patchZone(zoneKey, patch) {
 }
 
 function resetSearchFields() {
-  updateZoneRefs('search', props.fields.map(field => field.field))
+  updateZoneRefs('search', props.fields.filter(field => isPageFieldVisible(field, 'search')).map(field => field.field))
 }
 
 function resetTableFields() {
-  updateZoneRefs('table', props.fields.map(field => field.field))
+  updateZoneRefs('table', props.fields.filter(field => isPageFieldVisible(field, 'table')).map(field => field.field))
 }
 
 function resolveOptions(field) {
@@ -789,8 +800,17 @@ function resolveSampleValue(field, index = 0) {
 }
 
 :deep(.field-name) {
+  display: grid;
+  gap: 2px;
   color: #0f172a;
   font-weight: 600;
+}
+
+:deep(.field-name small),
+:deep(.available-field-list small) {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 :deep(.field-code) {
@@ -817,6 +837,8 @@ function resolveSampleValue(field, index = 0) {
 }
 
 :deep(.available-field-list button) {
+  display: inline-grid;
+  gap: 2px;
   min-height: 30px;
   padding: 0 10px;
   border: 1px dashed #cbd5e1;

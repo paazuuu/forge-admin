@@ -24,6 +24,7 @@
         v-for="field in visibleSchema"
         :key="field.field"
         :span="field.span || 1"
+        :style="field.gridStyle"
       >
         <AiFormItem
           :field="field"

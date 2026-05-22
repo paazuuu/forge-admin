@@ -77,6 +77,12 @@ public class LowcodeAppService {
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        requireConfig(id);
+        configService.deleteConfig(id);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public void moveDomain(Long id, LowcodeMoveDomainDTO dto) {
         if (dto == null) {
             throw new BusinessException("迁移目标不能为空");
@@ -107,6 +113,7 @@ public class LowcodeAppService {
         previewConfig.setTableName(modelSchema.getTableName());
         previewConfig.setTableComment(modelSchema.getBusinessName());
         previewConfig.setAppName(resolveAppName(existing, draft, modelSchema));
+        previewConfig.setMenuName(resolveMenuName(existing, draft, previewConfig.getAppName()));
         previewConfig.setMode("CONFIG");
         previewConfig.setBuildMode("LOWCODE");
         previewConfig.setStatus("0");
@@ -115,6 +122,16 @@ public class LowcodeAppService {
         previewConfig.setModelSchema(writeJson(modelSchema, "modelSchema"));
         previewConfig.setPageSchema(writeJson(pageSchema, "pageSchema"));
         return configService.buildRenderConfig(previewConfig);
+    }
+
+    private String resolveMenuName(AiCrudConfig existing, LowcodeAppDraftDTO draft, String fallback) {
+        if (draft != null && StringUtils.isNotBlank(draft.getMenuName())) {
+            return draft.getMenuName();
+        }
+        if (existing != null && StringUtils.isNotBlank(existing.getMenuName())) {
+            return existing.getMenuName();
+        }
+        return fallback;
     }
 
     AiCrudConfig requireConfig(Long id) {
@@ -143,8 +160,9 @@ public class LowcodeAppService {
 
     LowcodePageSchema buildDefaultPageSchema(LowcodeModelSchema modelSchema) {
         LowcodePageSchema pageSchema = new LowcodePageSchema();
-        boolean treeApp = "TREE".equals(StringUtils.defaultIfBlank(modelSchema.getAppType(), "SINGLE").toUpperCase(Locale.ROOT));
-        pageSchema.setLayoutType(treeApp ? "tree-crud" : "simple-crud");
+        String appType = StringUtils.defaultIfBlank(modelSchema.getAppType(), "SINGLE").toUpperCase(Locale.ROOT);
+        boolean treeApp = "TREE".equals(appType);
+        pageSchema.setLayoutType(treeApp ? "tree-crud" : "MASTER_DETAIL".equals(appType) ? "master-detail-crud" : "simple-crud");
         pageSchema.getZones().add(buildZone("search", "search-form", true,
                 modelSchema.getFields().stream()
                         .filter(field -> Boolean.TRUE.equals(field.getSearchable()))

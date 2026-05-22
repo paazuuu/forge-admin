@@ -10,6 +10,7 @@ export const appTypeOptions = [
 
 export const dataTypeOptions = [
   { label: '短文本', value: 'varchar' },
+  { label: '定长文本', value: 'char' },
   { label: '长文本', value: 'text' },
   { label: '整数', value: 'int' },
   { label: '长整数', value: 'bigint' },
@@ -74,6 +75,120 @@ export const auditColumnNames = [
   'del_flag',
 ]
 
+export const systemFieldDefinitions = [
+  {
+    field: 'id',
+    columnName: 'id',
+    label: 'ID',
+    dataType: 'bigint',
+    componentType: 'number',
+    required: true,
+    searchable: true,
+    listVisible: true,
+    formVisible: false,
+    primaryKey: true,
+    autoIncrement: true,
+    width: 100,
+    remark: '自增主键，系统生成',
+  },
+  {
+    field: 'tenantId',
+    columnName: 'tenant_id',
+    label: '租户ID',
+    dataType: 'bigint',
+    componentType: 'number',
+    required: true,
+    searchable: false,
+    listVisible: false,
+    formVisible: false,
+    width: 120,
+    remark: '租户隔离字段，系统写入',
+  },
+  {
+    field: 'createBy',
+    columnName: 'create_by',
+    label: '创建人',
+    dataType: 'bigint',
+    componentType: 'number',
+    searchable: false,
+    listVisible: false,
+    formVisible: false,
+    width: 120,
+    remark: '审计字段，系统写入',
+  },
+  {
+    field: 'createTime',
+    columnName: 'create_time',
+    label: '创建时间',
+    dataType: 'datetime',
+    componentType: 'datetime',
+    required: true,
+    searchable: true,
+    listVisible: true,
+    formVisible: false,
+    sortable: true,
+    width: 180,
+    remark: '审计字段，系统写入',
+  },
+  {
+    field: 'createDept',
+    columnName: 'create_dept',
+    label: '创建部门',
+    dataType: 'bigint',
+    componentType: 'number',
+    searchable: false,
+    listVisible: false,
+    formVisible: false,
+    width: 120,
+    remark: '审计字段，系统写入',
+  },
+  {
+    field: 'updateBy',
+    columnName: 'update_by',
+    label: '更新人',
+    dataType: 'bigint',
+    componentType: 'number',
+    searchable: false,
+    listVisible: false,
+    formVisible: false,
+    width: 120,
+    remark: '审计字段，系统写入',
+  },
+  {
+    field: 'updateTime',
+    columnName: 'update_time',
+    label: '更新时间',
+    dataType: 'datetime',
+    componentType: 'datetime',
+    required: true,
+    searchable: false,
+    listVisible: true,
+    formVisible: false,
+    sortable: true,
+    width: 180,
+    remark: '审计字段，系统写入',
+  },
+  {
+    field: 'delFlag',
+    columnName: 'del_flag',
+    label: '删除标志',
+    dataType: 'char',
+    length: 1,
+    componentType: 'input',
+    required: true,
+    searchable: false,
+    listVisible: false,
+    formVisible: false,
+    width: 100,
+    remark: '逻辑删除字段，系统维护',
+  },
+]
+
+export const indexTypeOptions = [
+  { label: '普通索引', value: 'NORMAL' },
+  { label: '唯一索引', value: 'UNIQUE' },
+]
+
 export function createDefaultModelSchema(options = {}) {
   const objectCode = options.objectCode || 'lowcode_demo'
   const objectName = options.objectName || '低代码应用'
@@ -103,7 +218,7 @@ export function createDefaultModelSchema(options = {}) {
       childrenField: 'children',
       treeTitle: '树形导航',
     },
-    fields: [
+    fields: ensureSystemFields([
       createDefaultField('name', '名称'),
       {
         ...createDefaultField('status', '状态'),
@@ -113,12 +228,17 @@ export function createDefaultModelSchema(options = {}) {
         dictType: 'common_status',
         queryType: 'eq',
       },
-    ],
+    ], options.tenantEnabled !== false),
     relations: [],
+    indexes: [],
     policies: {
       dataScope: 'TENANT',
       regionField: '',
       auditEnabled: true,
+      primaryKeyStrategy: 'AUTO_INCREMENT',
+      primaryKeyField: 'id',
+      tenantField: 'tenantId',
+      logicDeleteField: 'delFlag',
     },
     children: [],
   }
@@ -145,8 +265,65 @@ export function createDefaultField(field = 'fieldName', label = '字段名称') 
     sortable: false,
     primaryKey: false,
     systemField: false,
+    readonly: false,
+    autoIncrement: false,
     width: 160,
     remark: '',
+  }
+}
+
+export function createSystemField(definition = {}) {
+  return {
+    ...createDefaultField(definition.field, definition.label),
+    ...definition,
+    field: definition.field,
+    columnName: definition.columnName,
+    required: Boolean(definition.required),
+    defaultValue: null,
+    queryType: definition.queryType || 'eq',
+    dictType: '',
+    sensitiveType: 'NONE',
+    encryptAlgorithm: '',
+    primaryKey: Boolean(definition.primaryKey),
+    systemField: true,
+    readonly: true,
+    autoIncrement: Boolean(definition.autoIncrement),
+    sortable: Boolean(definition.sortable),
+    width: definition.width || 120,
+    remark: definition.remark || '系统字段',
+  }
+}
+
+export function ensureSystemFields(fields = [], tenantEnabled = true) {
+  const businessFields = (fields || []).filter(field => !isAuditField(field))
+  const idField = createSystemField(systemFieldDefinitions[0])
+  const systemFields = systemFieldDefinitions
+    .slice(1)
+    .filter(field => tenantEnabled || field.field !== 'tenantId')
+    .map(createSystemField)
+  return [idField, ...businessFields, ...systemFields]
+}
+
+export function isSystemField(field = {}) {
+  return Boolean(field.systemField) || isAuditField(field)
+}
+
+export function isReservedSystemField(field = {}) {
+  return isAuditField(field)
+}
+
+export function isLockedSystemField(field = {}) {
+  return isReservedSystemField(field) || Boolean(field.readonly)
+}
+
+export function createDefaultIndex(index = 1) {
+  return {
+    indexName: '',
+    indexType: 'NORMAL',
+    fields: [],
+    unique: false,
+    auto: false,
+    remark: `业务索引${index}`,
   }
 }
 
@@ -208,6 +385,9 @@ export function createFieldFromIndex(index) {
 
 export function createFieldFromTemplate(template = {}) {
   const fieldName = normalizeFieldName(template.field || template.columnName || 'fieldName')
+  const systemDefinition = systemFieldDefinitions.find(item => item.field === fieldName || item.columnName === template.columnName)
+  if (systemDefinition)
+    return createSystemField(systemDefinition)
   return {
     ...createDefaultField(fieldName, template.label || '字段名称'),
     ...template,
@@ -225,6 +405,10 @@ export function createFieldFromTemplate(template = {}) {
     sensitiveType: template.sensitiveType || 'NONE',
     encryptAlgorithm: template.encryptAlgorithm || '',
     sortable: Boolean(template.sortable),
+    primaryKey: false,
+    systemField: false,
+    readonly: false,
+    autoIncrement: false,
     width: template.width || 160,
     remark: template.remark || '',
   }
@@ -252,6 +436,8 @@ export function createFieldFromGenColumn(column = {}) {
     sortable: false,
     primaryKey: Boolean(column.isPk),
     systemField: isAuditField({ field: fieldName, columnName: column.columnName }),
+    readonly: isAuditField({ field: fieldName, columnName: column.columnName }),
+    autoIncrement: Boolean(column.isPk) && String(column.extra || column.columnExtra || '').toLowerCase().includes('auto_increment'),
     width: dataType === 'datetime' ? 180 : 160,
     remark: column.columnComment || '',
   }

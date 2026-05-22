@@ -118,6 +118,16 @@
                     @clear="handleClearCustomQuery"
                   />
 
+                  <n-button
+                    v-for="action in toolbarActions"
+                    :key="action.key || action.label"
+                    size="small"
+                    :type="resolveButtonType(action)"
+                    @click="handleActionClick(action, null)"
+                  >
+                    {{ action.label }}
+                  </n-button>
+
                   <slot name="toolbar-end" />
                 </div>
 
@@ -168,6 +178,12 @@
           <slot :name="`form-${slotName}`" v-bind="slotProps" />
         </template>
       </AiForm>
+      <ChildTableEditor
+        v-if="hasChildrenConfig"
+        ref="childFormRef"
+        v-model:value="childFormData"
+        :children-config="childrenConfig"
+      />
 
       <!-- 弹窗底部按钮 -->
       <template v-if="!hideModalFooter" #footer>
@@ -212,6 +228,12 @@
             <slot :name="`form-${slotName}`" v-bind="slotProps" />
           </template>
         </AiForm>
+        <ChildTableEditor
+          v-if="hasChildrenConfig"
+          ref="childFormRef"
+          v-model:value="childFormData"
+          :children-config="childrenConfig"
+        />
 
         <!-- 抽屉底部按钮 -->
         <template v-if="!hideModalFooter" #footer>
@@ -286,9 +308,11 @@ import {
 } from '@vicons/ionicons5'
 import { NDropdown } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
 import { request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
+import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { aiCrudPageProps } from './AiCrudPageProps'
 import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
@@ -315,7 +339,9 @@ const emit = defineEmits([
   'modal-open', // 弹窗打开
   'modal-close', // 弹窗关闭
   'render-mode-change', // 列表/卡片模式切换
+  'custom-action', // 自定义按钮点击
 ])
+const router = useRouter()
 
 /**
  * ==================== Refs ====================
@@ -323,6 +349,7 @@ const emit = defineEmits([
 const searchRef = ref(null)
 const tableRef = ref(null)
 const formRef = ref(null)
+const childFormRef = ref(null)
 
 /**
  * ==================== 响应式数据 ====================
@@ -350,6 +377,7 @@ const modalVisible = ref(false)
 const modalTitle = ref('')
 const modalStatus = ref('') // 'add' | 'edit'
 const formData = ref({})
+const childFormData = ref({})
 const confirmLoading = ref(false)
 const currentRow = ref(null)
 
@@ -397,7 +425,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
           e?.preventDefault()
           if (action.onClick)
             action.onClick(row)
-          else handleActionClick(action.key, row)
+          else handleActionClick(action, row)
         },
       }, action.label))
       return nodes
@@ -425,7 +453,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
         e?.preventDefault()
         if (action.onClick)
           action.onClick(row)
-        else handleActionClick(action.key, row)
+        else handleActionClick(action, row)
       },
     }, action.label))
     return nodes
@@ -441,7 +469,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
         const action = visibleActions.find(a => (a.key || a.label) === key)
         if (action?.onClick)
           action.onClick(row)
-        else handleActionClick(key, row)
+        else handleActionClick(action || key, row)
       },
     }, {
       default: () => h('a', {
@@ -455,8 +483,9 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
 /**
  * 处理操作列按钮点击（内置 key 映射）
  */
-function handleActionClick(key, row) {
-  switch (key) {
+function handleActionClick(actionOrKey, row) {
+  const action = typeof actionOrKey === 'string' ? { key: actionOrKey, label: actionOrKey } : actionOrKey || {}
+  switch (action.key) {
     case 'edit':
       handleEdit(row)
       break
@@ -464,8 +493,51 @@ function handleActionClick(key, row) {
       handleDelete(row)
       break
     default:
+      handleConfiguredAction(action, row)
       break
   }
+}
+
+function handleConfiguredAction(action, row) {
+  emit('custom-action', { action, row })
+  if (action.confirmText && !window.confirm(resolveActionText(action.confirmText, row)))
+    return
+  const actionType = action.actionType || 'route'
+  if (actionType === 'refresh') {
+    loadList()
+    return
+  }
+  if (actionType === 'route' && action.routePath) {
+    const path = resolveActionText(action.routePath, row)
+    if ((action.openTarget || '_self') === '_blank') {
+      const route = router.resolve(path)
+      window.open(route.href, '_blank')
+    }
+    else {
+      router.push(path)
+    }
+    return
+  }
+  if (actionType === 'external' && action.routePath) {
+    window.open(resolveActionText(action.routePath, row), action.openTarget || '_blank')
+  }
+}
+
+function resolveActionText(template, row) {
+  let text = String(template || '')
+  const data = row || {}
+  Object.keys(data).forEach((key) => {
+    text = text.replaceAll(`:${key}`, data[key])
+    text = text.replaceAll(`\${${key}}`, data[key])
+  })
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : 'id'
+  if (data[rowKey] !== undefined)
+    text = text.replaceAll(':id', data[rowKey])
+  return text
+}
+
+function resolveButtonType(action) {
+  return action?.type && action.type !== 'default' ? action.type : undefined
 }
 
 /**
@@ -613,6 +685,10 @@ const formSlots = computed(() => {
   return props.editSchema
     .filter(field => field.type === 'slot')
     .map(field => field.slotName || field.field)
+})
+
+const hasChildrenConfig = computed(() => {
+  return Array.isArray(props.childrenConfig) && props.childrenConfig.some(child => child?.fields?.length)
 })
 
 /**
@@ -1013,6 +1089,65 @@ function normalizeEditData(data) {
   return result
 }
 
+function isMasterDetailPayload(data) {
+  return data && typeof data === 'object' && ('main' in data || 'children' in data)
+}
+
+function resolveChildKey(child) {
+  return child.key || child.modelCode || child.tableName || 'children'
+}
+
+function buildInitialChildrenData() {
+  const result = {}
+  ;(props.childrenConfig || []).forEach((child) => {
+    result[resolveChildKey(child)] = []
+  })
+  return result
+}
+
+function normalizeChildrenData(children) {
+  const source = children && typeof children === 'object' ? children : {}
+  const result = {}
+  ;(props.childrenConfig || []).forEach((child) => {
+    const key = resolveChildKey(child)
+    result[key] = Array.isArray(source[key]) ? source[key] : []
+  })
+  return result
+}
+
+function applyDetailData(data) {
+  if (hasChildrenConfig.value && isMasterDetailPayload(data)) {
+    formData.value = normalizeEditData(data.main || {})
+    childFormData.value = normalizeChildrenData(data.children)
+    return
+  }
+  formData.value = normalizeEditData(data)
+  childFormData.value = buildInitialChildrenData()
+}
+
+function buildMasterDetailSubmitData(data) {
+  if (!hasChildrenConfig.value) {
+    return data
+  }
+  const payload = isMasterDetailPayload(data)
+    ? {
+        main: { ...(data.main || {}) },
+        children: normalizeChildrenData(data.children),
+      }
+    : {
+        main: { ...(data || {}) },
+        children: childFormRef.value?.getValue?.() || childFormData.value || {},
+      }
+  if (modalStatus.value === 'edit') {
+    const key = typeof props.rowKey === 'string' ? props.rowKey : 'id'
+    const idValue = payload.main?.[key] ?? currentRow.value?.[key]
+    if (idValue !== undefined && idValue !== null) {
+      payload.main[key] = idValue
+    }
+  }
+  return payload
+}
+
 /**
  * 新增
  */
@@ -1042,10 +1177,18 @@ async function handleAdd() {
 
   // 合并默认值和钩子返回的数据
   if (formDataFromHook && typeof formDataFromHook === 'object') {
-    formData.value = { ...initialData, ...formDataFromHook }
+    if (hasChildrenConfig.value && isMasterDetailPayload(formDataFromHook)) {
+      formData.value = { ...initialData, ...(formDataFromHook.main || {}) }
+      childFormData.value = normalizeChildrenData(formDataFromHook.children)
+    }
+    else {
+      formData.value = { ...initialData, ...formDataFromHook }
+      childFormData.value = buildInitialChildrenData()
+    }
   }
   else {
     formData.value = initialData
+    childFormData.value = buildInitialChildrenData()
   }
 
   emit('add')
@@ -1072,7 +1215,7 @@ async function handleEdit(row) {
   else {
     // 调用 beforeRenderDetail 钩子
     const data = await callHook('beforeRenderDetail', processedRow || row, data => data)
-    formData.value = normalizeEditData(data)
+    applyDetailData(data)
   }
 
   modalVisible.value = true
@@ -1136,7 +1279,7 @@ async function loadDetail(row) {
 
     // 调用 beforeRenderDetail 钩子
     const data = await callHook('beforeRenderDetail', response.data, data => data)
-    formData.value = normalizeEditData(data)
+    applyDetailData(data)
   }
   catch (error) {
     console.error('加载详情失败:', error)
@@ -1265,6 +1408,7 @@ async function handleModalConfirm() {
   try {
     await nextTick()
     await formRef.value?.validate()
+    await childFormRef.value?.validate?.()
 
     // 调用 beforeSubmit 钩子
     const latestFormData = formRef.value?.getFormData?.() || formData.value
@@ -1274,6 +1418,7 @@ async function handleModalConfirm() {
     if (data === false) {
       return
     }
+    data = buildMasterDetailSubmitData(data)
 
     // 统一处理时间戳，转换为标准日期格式
     data = JSON.parse(JSON.stringify(data), (key, value) => {
@@ -1378,6 +1523,7 @@ function handleModalCancel() {
  */
 function handleModalClose() {
   formData.value = {}
+  childFormData.value = {}
   currentRow.value = null
   formRef.value?.restoreValidation()
 

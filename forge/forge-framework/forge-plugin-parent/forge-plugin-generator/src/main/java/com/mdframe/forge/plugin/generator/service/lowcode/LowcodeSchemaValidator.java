@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.generator.service.lowcode;
 
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeIndexSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageZone;
@@ -64,9 +65,6 @@ public class LowcodeSchemaValidator {
         if (!APP_TYPES.contains(appType)) {
             throw new BusinessException("不支持的应用类型: " + modelSchema.getAppType());
         }
-        if ("MASTER_DETAIL".equals(appType)) {
-            throw new BusinessException("主子表低代码运行时尚未启用，请先使用单表或树形单表");
-        }
         validateTableName(modelSchema.getTableName());
         if (modelSchema.getFields() == null || modelSchema.getFields().isEmpty()) {
             throw new BusinessException("数据模型至少需要一个业务字段");
@@ -74,6 +72,7 @@ public class LowcodeSchemaValidator {
 
         Set<String> fields = new HashSet<>();
         Set<String> columns = new HashSet<>();
+        int businessFieldCount = 0;
         for (LowcodeFieldSchema fieldSchema : modelSchema.getFields()) {
             validateField(fieldSchema);
             String field = fieldSchema.getField();
@@ -84,12 +83,19 @@ public class LowcodeSchemaValidator {
             if (!columns.add(column)) {
                 throw new BusinessException("数据库列名重复: " + column);
             }
+            if (!isSystemField(fieldSchema)) {
+                businessFieldCount++;
+            }
+        }
+        if (businessFieldCount == 0) {
+            throw new BusinessException("数据模型至少需要一个业务字段");
         }
         if ("TREE".equals(appType) && modelSchema.getTreeConfig() != null
                 && StringUtils.isNotBlank(modelSchema.getTreeConfig().getParentField())
                 && !fields.contains(modelSchema.getTreeConfig().getParentField())) {
             throw new BusinessException("树形父级字段不存在: " + modelSchema.getTreeConfig().getParentField());
         }
+        validateIndexes(modelSchema, fields);
     }
 
     public void validatePage(LowcodePageSchema pageSchema, LowcodeModelSchema modelSchema) {
@@ -130,6 +136,10 @@ public class LowcodeSchemaValidator {
         if (fieldSchema == null) {
             throw new BusinessException("字段配置不能为空");
         }
+        if (isSystemField(fieldSchema)) {
+            validateSystemField(fieldSchema);
+            return;
+        }
         if (StringUtils.isBlank(fieldSchema.getField()) || !FIELD_NAME_PATTERN.matcher(fieldSchema.getField()).matches()) {
             throw new BusinessException("字段名格式不正确: " + fieldSchema.getField());
         }
@@ -157,6 +167,61 @@ public class LowcodeSchemaValidator {
         String sensitiveType = StringUtils.defaultIfBlank(fieldSchema.getSensitiveType(), "NONE").toUpperCase(Locale.ROOT);
         if (!SENSITIVE_TYPES.contains(sensitiveType)) {
             throw new BusinessException("不支持的敏感类型: " + fieldSchema.getSensitiveType());
+        }
+    }
+
+    private boolean isSystemField(LowcodeFieldSchema fieldSchema) {
+        if (fieldSchema == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(fieldSchema.getSystemField())
+                || BASE_FIELDS.contains(fieldSchema.getField())
+                || BASE_COLUMNS.contains(fieldSchema.getColumnName());
+    }
+
+    private void validateSystemField(LowcodeFieldSchema fieldSchema) {
+        if (!BASE_FIELDS.contains(fieldSchema.getField()) || !BASE_COLUMNS.contains(fieldSchema.getColumnName())) {
+            throw new BusinessException("系统字段配置不正确: " + fieldSchema.getField());
+        }
+        if ("id".equals(fieldSchema.getField())) {
+            if (!"id".equals(fieldSchema.getColumnName())
+                    || !Boolean.TRUE.equals(fieldSchema.getPrimaryKey())
+                    || !Boolean.TRUE.equals(fieldSchema.getAutoIncrement())) {
+                throw new BusinessException("低代码业务表必须使用 id 自增主键");
+            }
+        }
+        if (!Boolean.TRUE.equals(fieldSchema.getReadonly())) {
+            throw new BusinessException("系统字段必须为只读字段: " + fieldSchema.getField());
+        }
+    }
+
+    private void validateIndexes(LowcodeModelSchema modelSchema, Set<String> modelFields) {
+        if (modelSchema.getIndexes() == null) {
+            return;
+        }
+        Set<String> indexNames = new HashSet<>();
+        for (LowcodeIndexSchema index : modelSchema.getIndexes()) {
+            if (index == null || index.getFields() == null || index.getFields().isEmpty()) {
+                continue;
+            }
+            String indexType = StringUtils.defaultIfBlank(index.getIndexType(), "NORMAL").toUpperCase(Locale.ROOT);
+            if (!Set.of("NORMAL", "UNIQUE").contains(indexType)) {
+                throw new BusinessException("不支持的索引类型: " + index.getIndexType());
+            }
+            if (StringUtils.isNotBlank(index.getIndexName()) && !COLUMN_NAME_PATTERN.matcher(index.getIndexName()).matches()) {
+                throw new BusinessException("索引名格式不正确: " + index.getIndexName());
+            }
+            if (StringUtils.isNotBlank(index.getIndexName()) && !indexNames.add(index.getIndexName())) {
+                throw new BusinessException("索引名重复: " + index.getIndexName());
+            }
+            for (String field : index.getFields()) {
+                if (!modelFields.contains(field)) {
+                    throw new BusinessException("索引引用了不存在的字段: " + field);
+                }
+                if (BASE_FIELDS.contains(field)) {
+                    throw new BusinessException("系统字段不允许作为自定义索引字段: " + field);
+                }
+            }
         }
     }
 

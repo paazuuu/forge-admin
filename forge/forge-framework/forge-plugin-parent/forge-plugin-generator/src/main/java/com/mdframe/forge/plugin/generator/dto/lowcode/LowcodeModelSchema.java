@@ -35,6 +35,9 @@ public class LowcodeModelSchema {
     /** 领域内业务对象关系协议，当前运行时暂不改变单表查询行为 */
     private List<LowcodeRelationSchema> relations = new ArrayList<>();
 
+    /** 用户自定义索引协议，支持单字段和联合索引。 */
+    private List<LowcodeIndexSchema> indexes = new ArrayList<>();
+
     private LowcodePolicySchema policies = new LowcodePolicySchema();
 
     /** 主子表协议预留，当前运行时暂不启用 */

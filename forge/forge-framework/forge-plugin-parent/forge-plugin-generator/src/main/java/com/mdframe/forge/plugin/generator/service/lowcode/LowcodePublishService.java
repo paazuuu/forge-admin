@@ -150,7 +150,10 @@ public class LowcodePublishService {
             return;
         }
         if (!ddlService.tableExists(modelSchema.getTableName())) {
-            throw new BusinessException("数据表不存在，请先由DBA建表，或选择在线建表发布");
+            throw new BusinessException("数据表不存在，请先在数据模型页同步表结构");
+        }
+        if (!ddlService.hasAutoIncrementPrimaryId(modelSchema.getTableName())) {
+            throw new BusinessException("数据表缺少 id 自增主键，请先在数据模型页修正表结构");
         }
     }
 

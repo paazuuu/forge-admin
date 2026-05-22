@@ -24,6 +24,13 @@ const catalog = {
     icon: 'mdi:file-tree',
     component: () => import('@/components/page-templates/TreeCrudTemplate.vue'),
   },
+
+  /** 主子表 CRUD：主表表单 + 子表明细行 */
+  'master-detail-crud': {
+    label: '主子表 CRUD',
+    icon: 'mdi:table-multiple',
+    component: () => import('@/components/page-templates/MasterDetailCrudTemplate.vue'),
+  },
 }
 
 /**

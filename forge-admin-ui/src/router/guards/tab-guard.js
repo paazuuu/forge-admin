@@ -16,6 +16,22 @@ function findTitleFromAllMenus(allMenus, targetPath) {
   return found?.label || found?.name || null
 }
 
+function isGenericCrudTitle(title, path) {
+  return path?.startsWith('/ai/crud-page/') && (!title || title === 'CRUD页面')
+}
+
+function isCrudRuntimePath(path) {
+  return path?.startsWith('/ai/crud-page/')
+}
+
+function shouldUpdateExistingTitle(existingTitle, nextTitle, path) {
+  if (!nextTitle || existingTitle === nextTitle)
+    return false
+  if (isCrudRuntimePath(path))
+    return isGenericCrudTitle(existingTitle, path) && !isGenericCrudTitle(nextTitle, path)
+  return true
+}
+
 export function createTabGuard(router) {
   router.afterEach(async (to) => {
     if (EXCLUDE_TAB.includes(to.path))
@@ -29,6 +45,9 @@ export function createTabGuard(router) {
 
     // 1. 优先使用 route.meta.title（由 permission-guard 注册路由时设置）
     let title = to.meta?.title
+    if (isGenericCrudTitle(title, to.path) && permissionStore.allMenus?.length) {
+      title = findTitleFromAllMenus(permissionStore.allMenus, to.path) || title
+    }
 
     if (to.path === '/home') {
       title = '首页'
@@ -64,9 +83,8 @@ export function createTabGuard(router) {
     if (!existingTab) {
       tabStore.addTab({ name, path, title: title || path, icon, keepAlive, key: path })
     }
-    else if (title && existingTab.title !== title) {
-      // 如果 tab 已存在但 title 为空，自动更新
-      existingTab.title = title
+    else if (shouldUpdateExistingTitle(existingTab.title, title, to.path)) {
+      tabStore.updateTabTitle(path, title)
     }
     tabStore.setActiveTab(path)
   })

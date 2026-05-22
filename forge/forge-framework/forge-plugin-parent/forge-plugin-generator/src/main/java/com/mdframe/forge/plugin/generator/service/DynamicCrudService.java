@@ -6,6 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryExecuteDTO;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRelationSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeTreeConfig;
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
 import com.mdframe.forge.starter.core.domain.PageQuery;
@@ -20,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -37,6 +42,35 @@ public class DynamicCrudService {
 
     private static final int MAX_EXPORT_ROWS = 10000;
     private static final int MAX_TREE_ROWS = 5000;
+    private static final String MASTER_DETAIL_LAYOUT = "master-detail-crud";
+    private static final Set<String> IMMUTABLE_WRITE_FIELDS = Set.of(
+            "id", "tenantId", "tenant_id", "createBy", "create_by", "createTime", "create_time",
+            "createDept", "create_dept", "updateBy", "update_by", "updateTime", "update_time", "delFlag", "del_flag"
+    );
+
+    private record RuntimeFieldRef(String fieldName,
+                                   String modelCode,
+                                   String sourceField,
+                                   String columnName,
+                                   String tableName,
+                                   String tableAlias,
+                                   boolean primary) {
+    }
+
+    private record RuntimeChildRelation(String modelCode,
+                                        String tableName,
+                                        String tableAlias,
+                                        String childFkColumn,
+                                        String mainColumn,
+                                        Map<String, RuntimeFieldRef> fields) {
+    }
+
+    private record RuntimeJoinContext(Map<String, RuntimeFieldRef> fields,
+                                      List<RuntimeChildRelation> childRelations,
+                                      List<DynamicCrudRepository.JoinField> selectFields,
+                                      List<DynamicCrudRepository.JoinSpec> joins,
+                                      Map<String, String> fieldColumnMapping) {
+    }
 
     private final DynamicCrudRepository repository;
     private final AiCrudConfigService configService;
@@ -64,6 +98,24 @@ public class DynamicCrudService {
         
         // 4. 构建搜索条件
         Map<String, Object> searchParams = (query != null) ? query.getSearchParams() : null;
+
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        if (joinContext != null) {
+            Page<Map<String, Object>> page = repository.selectJoinedPage(
+                    tableName,
+                    joinContext.selectFields(),
+                    joinContext.joins(),
+                    pageQuery.getPageNum(),
+                    pageQuery.getPageSize(),
+                    searchParams,
+                    allowedSearchFields,
+                    searchTypeMap,
+                    joinContext.fieldColumnMapping(),
+                    buildJoinOrderBy(pageQuery.getOrderByColumn(), pageQuery.getIsAsc(), joinContext)
+            );
+            applyReadPipeline(page.getRecords(), config);
+            return page;
+        }
         
         // 5. 构建排序
         String orderBy = DynamicQueryGenerator.buildOrderByClause(
@@ -104,6 +156,24 @@ public class DynamicCrudService {
         Map<String, String> searchTypeMap = DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper);
         Map<String, Object> searchParams = query != null ? query.getSearchParams() : null;
         int limit = normalizeExportLimit(maxRows);
+
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        if (joinContext != null) {
+            Page<Map<String, Object>> page = repository.selectJoinedPage(
+                    tableName,
+                    joinContext.selectFields(),
+                    joinContext.joins(),
+                    1,
+                    limit,
+                    searchParams,
+                    allowedSearchFields,
+                    searchTypeMap,
+                    joinContext.fieldColumnMapping(),
+                    "t0.id DESC"
+            );
+            applyReadPipeline(page.getRecords(), config);
+            return page.getRecords();
+        }
 
         List<Map<String, Object>> rows = repository.selectList(
                 tableName,
@@ -176,6 +246,19 @@ public class DynamicCrudService {
     public Map<String, Object> selectById(String configKey, Long id) {
         AiCrudConfig config = getConfig(configKey);
         String tableName = config.getTableName();
+
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        if (isMasterDetailRuntime(config) && joinContext != null) {
+            return selectMasterDetailById(config, id, joinContext);
+        }
+        if (joinContext != null) {
+            Map<String, Object> record = repository.selectJoinedById(tableName, id, joinContext.selectFields(), joinContext.joins());
+            if (record == null) {
+                return null;
+            }
+            applyReadPipeline(Collections.singletonList(record), config);
+            return record;
+        }
         
         Map<String, Object> record = repository.selectById(tableName, id);
         if (record == null) {
@@ -196,6 +279,7 @@ public class DynamicCrudService {
     /**
      * 新增
      */
+    @Transactional(rollbackFor = Exception.class)
     public void insert(String configKey, Map<String, Object> data) {
         AiCrudConfig config = getConfig(configKey);
         String tableName = config.getTableName();
@@ -205,10 +289,23 @@ public class DynamicCrudService {
         
         // 获取允许写入的字段
         Set<String> allowedFields = DynamicQueryGenerator.extractFieldNames(config.getEditSchema(), objectMapper);
+
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        if (isMasterDetailRuntime(config) && joinContext != null) {
+            insertMasterDetailData(config, data, allowedFields, joinContext);
+            return;
+        }
+        if (joinContext != null) {
+            insertJoinedData(config, data, allowedFields, joinContext);
+            return;
+        }
         
         // 过滤并转换字段名
         Map<String, Object> filteredData = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : data.entrySet()) {
+            if (isImmutableWriteField(entry.getKey())) {
+                continue;
+            }
             if (allowedFields.contains(entry.getKey())) {
                 String columnName = columnMapping.getOrDefault(entry.getKey(), DynamicQueryGenerator.camelToSnake(entry.getKey()));
                 filteredData.put(columnName, entry.getValue());
@@ -231,12 +328,13 @@ public class DynamicCrudService {
     /**
      * 更新
      */
+    @Transactional(rollbackFor = Exception.class)
     public void updateById(String configKey, Map<String, Object> data) {
         AiCrudConfig config = getConfig(configKey);
         String tableName = config.getTableName();
         
         // 获取ID
-        Object idValue = data.get("id");
+        Object idValue = resolvePayloadId(data);
         if (idValue == null) {
             throw new BusinessException("更新操作缺少id");
         }
@@ -247,12 +345,22 @@ public class DynamicCrudService {
         
         // 获取允许写入的字段
         Set<String> allowedFields = DynamicQueryGenerator.extractFieldNames(config.getEditSchema(), objectMapper);
+
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        if (isMasterDetailRuntime(config) && joinContext != null) {
+            updateMasterDetailData(config, id, data, allowedFields, joinContext);
+            return;
+        }
+        if (joinContext != null) {
+            updateJoinedData(config, id, data, allowedFields, joinContext);
+            return;
+        }
         
         // 过滤并转换字段名
         Map<String, Object> filteredData = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : data.entrySet()) {
             String key = entry.getKey();
-            if ("id".equals(key) || "tenantId".equals(key) || "tenant_id".equals(key)) {
+            if (isImmutableWriteField(key)) {
                 continue;
             }
             if (allowedFields.contains(key)) {
@@ -270,6 +378,344 @@ public class DynamicCrudService {
         
         // 执行更新
         repository.updateById(tableName, id, filteredData);
+    }
+
+    private Map<String, Object> selectMasterDetailById(AiCrudConfig config,
+                                                       Long id,
+                                                       RuntimeJoinContext joinContext) {
+        Map<String, Object> record = repository.selectById(config.getTableName(), id);
+        if (record == null) {
+            return null;
+        }
+        Map<String, Object> main = DynamicQueryGenerator.convertMapToCamelCase(record);
+        applyReadPipeline(Collections.singletonList(main), config);
+
+        Map<String, Object> children = new LinkedHashMap<>();
+        for (RuntimeChildRelation relation : joinContext.childRelations()) {
+            Object relationValue = resolveMainRelationValue(relation, record, id, record);
+            if (relationValue == null) {
+                children.put(relation.modelCode(), List.of());
+                continue;
+            }
+            List<Map<String, Object>> rows = repository.selectListByColumn(
+                    relation.tableName(), relation.childFkColumn(), relationValue);
+            children.put(relation.modelCode(), DynamicQueryGenerator.convertListToCamelCase(rows));
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("main", main);
+        result.put("children", children);
+        return result;
+    }
+
+    private void insertMasterDetailData(AiCrudConfig config,
+                                        Map<String, Object> data,
+                                        Set<String> allowedFields,
+                                        RuntimeJoinContext joinContext) {
+        Map<String, Object> mainPayload = extractMainPayload(data);
+        Map<String, Object> primaryData = filterPrimaryWriteData(mainPayload, allowedFields, joinContext);
+        if (primaryData.isEmpty()) {
+            throw new BusinessException("没有可写入的主表字段");
+        }
+
+        applyEncrypt(primaryData, config.getEncryptConfig());
+        Long mainId = repository.insertReturningId(config.getTableName(), primaryData);
+        Map<String, Object> currentMainRecord = null;
+        Map<String, Object> childrenPayload = extractChildrenPayload(data);
+        for (RuntimeChildRelation relation : joinContext.childRelations()) {
+            List<Map<String, Object>> childRows = normalizeChildRows(childrenPayload.get(relation.modelCode()));
+            if (childRows.isEmpty()) {
+                continue;
+            }
+            if (currentMainRecord == null && !"id".equals(relation.mainColumn()) && !primaryData.containsKey(relation.mainColumn())) {
+                currentMainRecord = repository.selectById(config.getTableName(), mainId);
+            }
+            Object relationValue = resolveMainRelationValue(relation, primaryData, mainId, currentMainRecord);
+            if (relationValue == null) {
+                continue;
+            }
+            for (Map<String, Object> row : childRows) {
+                Map<String, Object> childData = filterChildWriteData(row, relation);
+                if (!hasWritableChildData(childData)) {
+                    continue;
+                }
+                childData.put(relation.childFkColumn(), relationValue);
+                repository.insert(relation.tableName(), childData);
+            }
+        }
+    }
+
+    private void updateMasterDetailData(AiCrudConfig config,
+                                        Long id,
+                                        Map<String, Object> data,
+                                        Set<String> allowedFields,
+                                        RuntimeJoinContext joinContext) {
+        Map<String, Object> mainPayload = extractMainPayload(data);
+        Map<String, Object> primaryData = filterPrimaryWriteData(mainPayload, allowedFields, joinContext);
+        if (!primaryData.isEmpty()) {
+            applyEncrypt(primaryData, config.getEncryptConfig());
+            repository.updateById(config.getTableName(), id, primaryData);
+        }
+
+        Map<String, Object> childrenPayload = extractChildrenPayload(data);
+        Map<String, Object> currentMainRecord = null;
+        boolean childrenChanged = false;
+        for (RuntimeChildRelation relation : joinContext.childRelations()) {
+            if (!childrenPayload.containsKey(relation.modelCode())) {
+                continue;
+            }
+            if (currentMainRecord == null && !"id".equals(relation.mainColumn()) && !primaryData.containsKey(relation.mainColumn())) {
+                currentMainRecord = repository.selectById(config.getTableName(), id);
+            }
+            Object relationValue = resolveMainRelationValue(relation, primaryData, id, currentMainRecord);
+            if (relationValue == null) {
+                continue;
+            }
+            childrenChanged = true;
+            repository.deleteByColumn(
+                    relation.tableName(),
+                    relation.childFkColumn(),
+                    relationValue,
+                    repository.hasDelFlag(relation.tableName())
+            );
+            for (Map<String, Object> row : normalizeChildRows(childrenPayload.get(relation.modelCode()))) {
+                Map<String, Object> childData = filterChildWriteData(row, relation);
+                if (!hasWritableChildData(childData)) {
+                    continue;
+                }
+                childData.put(relation.childFkColumn(), relationValue);
+                repository.insert(relation.tableName(), childData);
+            }
+        }
+
+        if (primaryData.isEmpty() && !childrenChanged) {
+            throw new BusinessException("没有可更新的字段");
+        }
+    }
+
+    private Map<String, Object> filterPrimaryWriteData(Map<String, Object> data,
+                                                       Set<String> allowedFields,
+                                                       RuntimeJoinContext joinContext) {
+        Map<String, Object> primaryData = new LinkedHashMap<>();
+        if (data == null || data.isEmpty()) {
+            return primaryData;
+        }
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            String key = entry.getKey();
+            if (isImmutableWriteField(key) || !allowedFields.contains(key)) {
+                continue;
+            }
+            RuntimeFieldRef fieldRef = joinContext.fields().get(key);
+            if (fieldRef == null || !fieldRef.primary()) {
+                continue;
+            }
+            primaryData.put(fieldRef.columnName(), entry.getValue());
+        }
+        return primaryData;
+    }
+
+    private Map<String, Object> filterChildWriteData(Map<String, Object> data, RuntimeChildRelation relation) {
+        Map<String, Object> childData = new LinkedHashMap<>();
+        if (data == null || data.isEmpty()) {
+            return childData;
+        }
+        for (RuntimeFieldRef fieldRef : relation.fields().values()) {
+            if (fieldRef.primary() || isImmutableWriteField(fieldRef.fieldName()) || isImmutableWriteField(fieldRef.sourceField())) {
+                continue;
+            }
+            if (fieldRef.columnName().equals(relation.childFkColumn())) {
+                continue;
+            }
+            Object value = firstPresent(data, fieldRef.sourceField(), fieldRef.fieldName(), fieldRef.columnName());
+            if (value != null) {
+                childData.put(fieldRef.columnName(), value);
+            }
+        }
+        return childData;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractMainPayload(Map<String, Object> data) {
+        if (data != null && data.get("main") instanceof Map<?, ?> main) {
+            return (Map<String, Object>) main;
+        }
+        return data == null ? Map.of() : data;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractChildrenPayload(Map<String, Object> data) {
+        if (data != null && data.get("children") instanceof Map<?, ?> children) {
+            return (Map<String, Object>) children;
+        }
+        return Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizeChildRows(Object value) {
+        if (value instanceof List<?> rows) {
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Object row : rows) {
+                if (row instanceof Map<?, ?> map) {
+                    result.add((Map<String, Object>) map);
+                }
+            }
+            return result;
+        }
+        if (value instanceof Map<?, ?> map) {
+            return List.of((Map<String, Object>) map);
+        }
+        return List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object resolvePayloadId(Map<String, Object> data) {
+        if (data == null) {
+            return null;
+        }
+        Object idValue = data.get("id");
+        if (idValue != null) {
+            return idValue;
+        }
+        Object main = data.get("main");
+        if (main instanceof Map<?, ?> map) {
+            return ((Map<String, Object>) map).get("id");
+        }
+        return null;
+    }
+
+    private Object firstPresent(Map<String, Object> data, String... keys) {
+        for (String key : keys) {
+            if (StringUtils.isNotBlank(key) && data.containsKey(key)) {
+                return data.get(key);
+            }
+        }
+        return null;
+    }
+
+    private void insertJoinedData(AiCrudConfig config,
+                                  Map<String, Object> data,
+                                  Set<String> allowedFields,
+                                  RuntimeJoinContext joinContext) {
+        Map<String, Object> primaryData = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> childDataMap = new LinkedHashMap<>();
+        splitRuntimeWriteData(data, allowedFields, joinContext, primaryData, childDataMap);
+        if (primaryData.isEmpty()) {
+            throw new BusinessException("没有可写入的主表字段");
+        }
+        applyEncrypt(primaryData, config.getEncryptConfig());
+        Long mainId = repository.insertReturningId(config.getTableName(), primaryData);
+        for (RuntimeChildRelation relation : joinContext.childRelations()) {
+            Map<String, Object> childData = childDataMap.get(relation.modelCode());
+            if (!hasWritableChildData(childData)) {
+                continue;
+            }
+            Object relationValue = resolveMainRelationValue(relation, primaryData, mainId, null);
+            if (relationValue == null) {
+                continue;
+            }
+            childData.put(relation.childFkColumn(), relationValue);
+            repository.insert(relation.tableName(), childData);
+        }
+    }
+
+    private void updateJoinedData(AiCrudConfig config,
+                                  Long id,
+                                  Map<String, Object> data,
+                                  Set<String> allowedFields,
+                                  RuntimeJoinContext joinContext) {
+        Map<String, Object> primaryData = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> childDataMap = new LinkedHashMap<>();
+        splitRuntimeWriteData(data, allowedFields, joinContext, primaryData, childDataMap);
+
+        if (!primaryData.isEmpty()) {
+            applyEncrypt(primaryData, config.getEncryptConfig());
+            repository.updateById(config.getTableName(), id, primaryData);
+        }
+
+        Map<String, Object> currentMainRecord = null;
+        for (RuntimeChildRelation relation : joinContext.childRelations()) {
+            Map<String, Object> childData = childDataMap.get(relation.modelCode());
+            if (!hasWritableChildData(childData)) {
+                continue;
+            }
+            if (currentMainRecord == null && !"id".equals(relation.mainColumn()) && !primaryData.containsKey(relation.mainColumn())) {
+                currentMainRecord = repository.selectById(config.getTableName(), id);
+            }
+            Object relationValue = resolveMainRelationValue(relation, primaryData, id, currentMainRecord);
+            if (relationValue == null) {
+                continue;
+            }
+            childData.put(relation.childFkColumn(), relationValue);
+            Long childId = repository.selectFirstIdByColumn(relation.tableName(), relation.childFkColumn(), relationValue);
+            if (childId == null) {
+                repository.insert(relation.tableName(), childData);
+            } else {
+                repository.updateById(relation.tableName(), childId, childData);
+            }
+        }
+
+        if (primaryData.isEmpty() && childDataMap.values().stream().noneMatch(this::hasWritableChildData)) {
+            throw new BusinessException("没有可更新的字段");
+        }
+    }
+
+    private void splitRuntimeWriteData(Map<String, Object> data,
+                                       Set<String> allowedFields,
+                                       RuntimeJoinContext joinContext,
+                                       Map<String, Object> primaryData,
+                                       Map<String, Map<String, Object>> childDataMap) {
+        if (data == null || data.isEmpty()) {
+            return;
+        }
+        Map<String, RuntimeChildRelation> relationMap = joinContext.childRelations().stream()
+                .collect(Collectors.toMap(RuntimeChildRelation::modelCode, relation -> relation, (left, right) -> left, LinkedHashMap::new));
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            String key = entry.getKey();
+            if (isImmutableWriteField(key) || !allowedFields.contains(key)) {
+                continue;
+            }
+            RuntimeFieldRef fieldRef = joinContext.fields().get(key);
+            if (fieldRef == null) {
+                continue;
+            }
+            if (fieldRef.primary()) {
+                primaryData.put(fieldRef.columnName(), entry.getValue());
+                continue;
+            }
+            RuntimeChildRelation relation = relationMap.get(fieldRef.modelCode());
+            if (relation == null) {
+                continue;
+            }
+            childDataMap.computeIfAbsent(fieldRef.modelCode(), ignored -> new LinkedHashMap<>())
+                    .put(fieldRef.columnName(), entry.getValue());
+        }
+    }
+
+    private boolean hasWritableChildData(Map<String, Object> childData) {
+        if (childData == null || childData.isEmpty()) {
+            return false;
+        }
+        return childData.values().stream().anyMatch(value -> value != null && !(value instanceof String text && StringUtils.isBlank(text)));
+    }
+
+    private Object resolveMainRelationValue(RuntimeChildRelation relation,
+                                            Map<String, Object> primaryData,
+                                            Long mainId,
+                                            Map<String, Object> currentMainRecord) {
+        if ("id".equals(relation.mainColumn())) {
+            return mainId;
+        }
+        if (primaryData.containsKey(relation.mainColumn())) {
+            return primaryData.get(relation.mainColumn());
+        }
+        if (currentMainRecord != null) {
+            return currentMainRecord.get(relation.mainColumn());
+        }
+        return null;
+    }
+
+    private boolean isImmutableWriteField(String key) {
+        return IMMUTABLE_WRITE_FIELDS.contains(key);
     }
 
     // ==================== 删除操作 ====================
@@ -293,6 +739,270 @@ public class DynamicCrudService {
      */
     public AiCrudConfig getRuntimeConfig(String configKey) {
         return getConfig(configKey);
+    }
+
+    private RuntimeJoinContext buildRuntimeJoinContext(AiCrudConfig config) {
+        if (!"LOWCODE".equals(config.getBuildMode())
+                || StringUtils.isBlank(config.getPageSchema())
+                || StringUtils.isBlank(config.getModelSchema())) {
+            return null;
+        }
+        LowcodePageSchema pageSchema = readPageSchema(config);
+        if (pageSchema == null || pageSchema.getModelRefs() == null || pageSchema.getModelRefs().size() <= 1) {
+            return null;
+        }
+        LowcodeModelSchema modelSchema = readModelSchema(config);
+        if (modelSchema == null) {
+            return null;
+        }
+
+        LowcodePageModelRef primaryRef = pageSchema.getModelRefs().stream()
+                .filter(ref -> Boolean.TRUE.equals(ref.getPrimary()))
+                .findFirst()
+                .orElse(pageSchema.getModelRefs().get(0));
+        String primaryModelCode = StringUtils.defaultIfBlank(pageSchema.getPrimaryModelCode(), primaryRef.getModelCode());
+        if (StringUtils.isBlank(primaryModelCode)) {
+            primaryModelCode = modelSchema.getObject() == null ? null : modelSchema.getObject().getCode();
+        }
+        if (StringUtils.isBlank(primaryModelCode)) {
+            return null;
+        }
+
+        Map<String, RuntimeFieldRef> fields = new LinkedHashMap<>();
+        Map<String, String> fieldColumnMapping = new LinkedHashMap<>();
+        List<DynamicCrudRepository.JoinField> selectFields = new ArrayList<>();
+
+        addPrimaryRuntimeFields(config.getTableName(), primaryModelCode, fields, fieldColumnMapping, selectFields);
+
+        List<RuntimeChildRelation> childRelations = new ArrayList<>();
+        List<DynamicCrudRepository.JoinSpec> joins = new ArrayList<>();
+        List<LowcodeRelationSchema> primaryRelations = mergeRelations(modelSchema.getRelations(), primaryRef.getRelations());
+        Map<String, String> primaryColumnMapping = repository.getColumnMapping(config.getTableName());
+        int aliasIndex = 1;
+        for (LowcodePageModelRef ref : pageSchema.getModelRefs()) {
+            if (ref == null || Boolean.TRUE.equals(ref.getPrimary()) || StringUtils.isBlank(ref.getModelCode())) {
+                continue;
+            }
+            if (StringUtils.isBlank(ref.getTableName()) || !repository.tableExists(ref.getTableName())) {
+                log.warn("[DynamicCrudService] 引用模型缺少可用表名，跳过左连接, configKey={}, modelCode={}",
+                        config.getConfigKey(), ref.getModelCode());
+                continue;
+            }
+            RuntimeChildRelation relation = buildChildRelation(primaryModelCode, ref, primaryRelations,
+                    "t" + aliasIndex, primaryColumnMapping, fields, fieldColumnMapping, selectFields);
+            if (relation == null) {
+                log.warn("[DynamicCrudService] 未找到引用模型关联关系，跳过左连接, configKey={}, modelCode={}",
+                        config.getConfigKey(), ref.getModelCode());
+                continue;
+            }
+            childRelations.add(relation);
+            joins.add(new DynamicCrudRepository.JoinSpec(
+                    relation.tableName(), relation.tableAlias(), relation.childFkColumn(), relation.mainColumn()));
+            aliasIndex++;
+        }
+
+        if (childRelations.isEmpty()) {
+            return null;
+        }
+        return new RuntimeJoinContext(fields, childRelations, selectFields, joins, fieldColumnMapping);
+    }
+
+    private boolean isMasterDetailRuntime(AiCrudConfig config) {
+        return config != null && MASTER_DETAIL_LAYOUT.equals(config.getLayoutType());
+    }
+
+    private void addPrimaryRuntimeFields(String tableName,
+                                         String modelCode,
+                                         Map<String, RuntimeFieldRef> fields,
+                                         Map<String, String> fieldColumnMapping,
+                                         List<DynamicCrudRepository.JoinField> selectFields) {
+        List<String> columns = new ArrayList<>(repository.getTableColumns(tableName));
+        columns.sort(Comparator.naturalOrder());
+        for (String column : columns) {
+            String fieldName = DynamicQueryGenerator.snakeToCamel(column);
+            RuntimeFieldRef fieldRef = new RuntimeFieldRef(fieldName, modelCode, fieldName, column, tableName, "t0", true);
+            fields.putIfAbsent(fieldName, fieldRef);
+            fieldColumnMapping.put(fieldName, "t0." + column);
+            selectFields.add(new DynamicCrudRepository.JoinField(fieldName, "t0", column));
+        }
+    }
+
+    private RuntimeChildRelation buildChildRelation(String primaryModelCode,
+                                                    LowcodePageModelRef ref,
+                                                    List<LowcodeRelationSchema> primaryRelations,
+                                                    String tableAlias,
+                                                    Map<String, String> primaryColumnMapping,
+                                                    Map<String, RuntimeFieldRef> fields,
+                                                    Map<String, String> fieldColumnMapping,
+                                                    List<DynamicCrudRepository.JoinField> selectFields) {
+        Map<String, String> childColumnMapping = repository.getColumnMapping(ref.getTableName());
+        LowcodeRelationSchema relation = findRelationToPrimary(ref.getRelations(), primaryModelCode);
+        boolean relationFromPrimary = false;
+        if (relation == null) {
+            LowcodeRelationSchema primaryRelation = findRelationFromPrimary(primaryRelations, ref.getModelCode());
+            LowcodeRelationSchema inferredRelation = inferRelation(primaryModelCode, ref);
+            if (shouldPreferInferredChildRelation(primaryRelation, inferredRelation, childColumnMapping)) {
+                relation = inferredRelation;
+            } else {
+                relation = primaryRelation != null ? primaryRelation : inferredRelation;
+                relationFromPrimary = primaryRelation != null && relation == primaryRelation;
+            }
+        }
+        if (relation == null) {
+            return null;
+        }
+
+        String mainField = relationFromPrimary ? relation.getSourceField() : relation.getTargetField();
+        String childField = relationFromPrimary ? relation.getTargetField() : relation.getSourceField();
+        String mainColumn = resolvePrimaryColumn(mainField, primaryColumnMapping);
+        String childColumn = resolveChildColumn(childField, childColumnMapping);
+        if (StringUtils.isBlank(mainColumn) || StringUtils.isBlank(childColumn)) {
+            return null;
+        }
+
+        Map<String, RuntimeFieldRef> childFields = new LinkedHashMap<>();
+        for (Map<String, Object> source : ref.getFields()) {
+            String sourceField = StringUtils.defaultIfBlank(text(source.get("sourceField")), text(source.get("field")));
+            if (StringUtils.isBlank(sourceField)) {
+                continue;
+            }
+            String fieldName = StringUtils.defaultIfBlank(text(source.get("fieldRef")), safeKey(ref.getModelCode()) + "__" + sourceField);
+            String columnName = resolveChildColumn(StringUtils.defaultIfBlank(text(source.get("columnName")), sourceField), childColumnMapping);
+            if (StringUtils.isBlank(columnName)) {
+                continue;
+            }
+            RuntimeFieldRef fieldRef = new RuntimeFieldRef(
+                    fieldName, ref.getModelCode(), sourceField, columnName, ref.getTableName(), tableAlias, false);
+            fields.putIfAbsent(fieldName, fieldRef);
+            childFields.put(fieldName, fieldRef);
+            fieldColumnMapping.put(fieldName, tableAlias + "." + columnName);
+            selectFields.add(new DynamicCrudRepository.JoinField(fieldName, tableAlias, columnName));
+        }
+        if (childFields.isEmpty()) {
+            return null;
+        }
+        return new RuntimeChildRelation(ref.getModelCode(), ref.getTableName(), tableAlias, childColumn, mainColumn, childFields);
+    }
+
+    private boolean shouldPreferInferredChildRelation(LowcodeRelationSchema primaryRelation,
+                                                      LowcodeRelationSchema inferredRelation,
+                                                      Map<String, String> childColumnMapping) {
+        if (primaryRelation == null || inferredRelation == null) {
+            return false;
+        }
+        String configuredChildColumn = resolveChildColumn(primaryRelation.getTargetField(), childColumnMapping);
+        String inferredChildColumn = resolveChildColumn(inferredRelation.getSourceField(), childColumnMapping);
+        return "id".equals(configuredChildColumn) && StringUtils.isNotBlank(inferredChildColumn)
+                && !"id".equals(inferredChildColumn);
+    }
+
+    private String resolvePrimaryColumn(String fieldName, Map<String, String> primaryColumnMapping) {
+        if (StringUtils.isBlank(fieldName)) {
+            return null;
+        }
+        String column = primaryColumnMapping.getOrDefault(fieldName, DynamicQueryGenerator.camelToSnake(fieldName));
+        return primaryColumnMapping.containsValue(column) ? column : null;
+    }
+
+    private String resolveChildColumn(String fieldName, Map<String, String> childColumnMapping) {
+        if (StringUtils.isBlank(fieldName)) {
+            return null;
+        }
+        String column = childColumnMapping.getOrDefault(fieldName, DynamicQueryGenerator.camelToSnake(fieldName));
+        return childColumnMapping.containsValue(column) ? column : null;
+    }
+
+    private LowcodeRelationSchema findRelationFromPrimary(List<LowcodeRelationSchema> relations, String targetModelCode) {
+        if (relations == null) {
+            return null;
+        }
+        return relations.stream()
+                .filter(relation -> relation != null && targetModelCode.equals(relation.getTargetObjectCode()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private LowcodeRelationSchema findRelationToPrimary(List<LowcodeRelationSchema> relations, String primaryModelCode) {
+        if (relations == null) {
+            return null;
+        }
+        return relations.stream()
+                .filter(relation -> relation != null && primaryModelCode.equals(relation.getTargetObjectCode()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private LowcodeRelationSchema inferRelation(String primaryModelCode, LowcodePageModelRef ref) {
+        String expectedCamel = DynamicQueryGenerator.snakeToCamel(primaryModelCode) + "Id";
+        String expectedSnake = DynamicQueryGenerator.camelToSnake(primaryModelCode) + "_id";
+        for (Map<String, Object> field : ref.getFields()) {
+            String sourceField = StringUtils.defaultIfBlank(text(field.get("sourceField")), text(field.get("field")));
+            String columnName = StringUtils.defaultIfBlank(text(field.get("columnName")), sourceField);
+            if (expectedCamel.equals(sourceField) || expectedSnake.equals(columnName)) {
+                LowcodeRelationSchema relation = new LowcodeRelationSchema();
+                relation.setRelationType("ONE_TO_MANY");
+                relation.setSourceField(sourceField);
+                relation.setTargetObjectCode(primaryModelCode);
+                relation.setTargetField("id");
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    private List<LowcodeRelationSchema> mergeRelations(List<LowcodeRelationSchema> first, List<LowcodeRelationSchema> second) {
+        List<LowcodeRelationSchema> result = new ArrayList<>();
+        if (first != null) {
+            result.addAll(first);
+        }
+        if (second != null) {
+            result.addAll(second);
+        }
+        return result;
+    }
+
+    private String buildJoinOrderBy(String orderByColumn, String isAsc, RuntimeJoinContext joinContext) {
+        if (StringUtils.isBlank(orderByColumn)) {
+            return "t0.id DESC";
+        }
+        List<String> columns = Arrays.stream(orderByColumn.split(","))
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .map(column -> joinContext.fieldColumnMapping().get(column))
+                .filter(StringUtils::isNotBlank)
+                .toList();
+        if (columns.isEmpty()) {
+            return "t0.id DESC";
+        }
+        String direction = "asc".equalsIgnoreCase(isAsc) ? "ASC" : "DESC";
+        return String.join(", ", columns) + " " + direction;
+    }
+
+    private LowcodePageSchema readPageSchema(AiCrudConfig config) {
+        try {
+            return objectMapper.readValue(config.getPageSchema(), LowcodePageSchema.class);
+        } catch (Exception e) {
+            log.warn("[DynamicCrudService] 解析pageSchema失败, configKey={}", config.getConfigKey(), e);
+            return null;
+        }
+    }
+
+    private LowcodeModelSchema readModelSchema(AiCrudConfig config) {
+        try {
+            return objectMapper.readValue(config.getModelSchema(), LowcodeModelSchema.class);
+        } catch (Exception e) {
+            log.warn("[DynamicCrudService] 解析modelSchema失败, configKey={}", config.getConfigKey(), e);
+            return null;
+        }
+    }
+
+    private String text(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String safeKey(String value) {
+        String key = StringUtils.defaultIfBlank(value, "model").replaceAll("[^A-Za-z0-9_]", "_");
+        return StringUtils.defaultIfBlank(key, "model");
     }
 
     private void applyReadPipeline(List<Map<String, Object>> rows, AiCrudConfig config) {

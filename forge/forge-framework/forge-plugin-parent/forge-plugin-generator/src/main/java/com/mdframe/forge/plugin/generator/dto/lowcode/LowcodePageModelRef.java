@@ -18,7 +18,11 @@ public class LowcodePageModelRef {
 
     private String modelName;
 
+    private String tableName;
+
     private Boolean primary;
+
+    private List<LowcodeRelationSchema> relations = new ArrayList<>();
 
     private List<Map<String, Object>> fields = new ArrayList<>();
 }

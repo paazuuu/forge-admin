@@ -10,6 +10,7 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDomainRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeObjectSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePolicySchema;
 import com.mdframe.forge.plugin.generator.mapper.AiLowcodeModelMapper;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeDataModelVO;
 import com.mdframe.forge.starter.core.domain.PageQuery;
@@ -20,6 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -34,6 +36,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
     private static final Pattern MODEL_CODE_PATTERN = Pattern.compile("^[a-z][a-z0-9_]{1,47}$");
     private static final String STATUS_ENABLED = "ENABLED";
     private static final String STATUS_DISABLED = "DISABLED";
+    private static final String DDL_PERMISSION = "ai:lowcode:deploy-ddl";
     private static final Set<String> AUDIT_FIELDS = Set.of(
             "id", "tenantId", "createBy", "createTime", "createDept", "updateBy", "updateTime", "delFlag"
     );
@@ -44,6 +47,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
     private final ObjectMapper objectMapper;
     private final LowcodeDomainService domainService;
     private final LowcodeSchemaValidator schemaValidator;
+    private final LowcodeDdlService ddlService;
 
     public Page<LowcodeDataModelVO> page(PageQuery pageQuery, Long domainId, String keyword,
                                          String status, Boolean masterData) {
@@ -86,6 +90,9 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
             save(model);
         } else {
             updateById(model);
+        }
+        if (Boolean.TRUE.equals(dto.getSyncDdl())) {
+            syncTableStructure(model, dto);
         }
         return model.getId();
     }
@@ -167,16 +174,82 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
         }
         if (StringUtils.isBlank(result.getTableMode())) {
             result.setTableMode("CREATE");
+        } else {
+            result.setTableMode(result.getTableMode().toUpperCase());
         }
         if (StringUtils.isBlank(result.getTableName())) {
             result.setTableName(StringUtils.defaultIfBlank(domain.getTablePrefix(), "biz_") + modelCode);
         }
-        if (result.getFields() != null) {
-            result.setFields(result.getFields().stream()
-                    .filter(field -> !isAuditField(field))
-                    .toList());
+        normalizePolicies(result);
+        result.setFields(normalizeModelFields(result.getFields()));
+        if (result.getIndexes() == null) {
+            result.setIndexes(new ArrayList<>());
         }
         return result;
+    }
+
+    private List<LowcodeFieldSchema> normalizeModelFields(List<LowcodeFieldSchema> fields) {
+        List<LowcodeFieldSchema> result = new ArrayList<>();
+        result.add(systemField("id", "id", "ID", "bigint", "number", true, true, true, true, true, false, 100,
+                "自增主键，系统生成"));
+        if (fields != null) {
+            fields.stream()
+                    .filter(field -> field != null && !isAuditField(field))
+                    .forEach(result::add);
+        }
+        result.add(systemField("tenantId", "tenant_id", "租户ID", "bigint", "number", true, false, true, false,
+                false, false, 120, "租户隔离字段，系统写入"));
+        result.add(systemField("createBy", "create_by", "创建人", "bigint", "number", false, false, true, false,
+                false, false, 120, "审计字段，系统写入"));
+        result.add(systemField("createTime", "create_time", "创建时间", "datetime", "datetime", true, false, true, false,
+                true, false, 180, "审计字段，系统写入"));
+        result.add(systemField("createDept", "create_dept", "创建部门", "bigint", "number", false, false, true, false,
+                false, false, 120, "审计字段，系统写入"));
+        result.add(systemField("updateBy", "update_by", "更新人", "bigint", "number", false, false, true, false,
+                false, false, 120, "审计字段，系统写入"));
+        result.add(systemField("updateTime", "update_time", "更新时间", "datetime", "datetime", true, false, true, false,
+                true, false, 180, "审计字段，系统写入"));
+        result.add(systemField("delFlag", "del_flag", "删除标志", "char", "input", true, false, true, false,
+                false, false, 100, "逻辑删除字段，系统维护"));
+        return result;
+    }
+
+    private LowcodeFieldSchema systemField(String field, String columnName, String label, String dataType,
+                                           String componentType, boolean required, boolean primaryKey,
+                                           boolean readonly, boolean searchable, boolean listVisible,
+                                           boolean formVisible, int width, String remark) {
+        LowcodeFieldSchema schema = new LowcodeFieldSchema();
+        schema.setField(field);
+        schema.setColumnName(columnName);
+        schema.setLabel(label);
+        schema.setDataType(dataType);
+        schema.setLength("char".equals(dataType) ? 1 : null);
+        schema.setPrecision(null);
+        schema.setRequired(required);
+        schema.setSearchable(searchable);
+        schema.setListVisible(listVisible);
+        schema.setFormVisible(formVisible);
+        schema.setComponentType(componentType);
+        schema.setQueryType("eq");
+        schema.setSensitiveType("NONE");
+        schema.setPrimaryKey(primaryKey);
+        schema.setSystemField(true);
+        schema.setReadonly(readonly);
+        schema.setAutoIncrement(primaryKey);
+        schema.setSortable("id".equals(field) || field.endsWith("Time"));
+        schema.setWidth(width);
+        schema.setRemark(remark);
+        return schema;
+    }
+
+    private void normalizePolicies(LowcodeModelSchema schema) {
+        LowcodePolicySchema policies = schema.getPolicies() == null ? new LowcodePolicySchema() : schema.getPolicies();
+        policies.setAuditEnabled(true);
+        policies.setPrimaryKeyStrategy("AUTO_INCREMENT");
+        policies.setPrimaryKeyField("id");
+        policies.setTenantField("tenantId");
+        policies.setLogicDeleteField("delFlag");
+        schema.setPolicies(policies);
     }
 
     private boolean isAuditField(LowcodeFieldSchema field) {
@@ -184,6 +257,16 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
             return false;
         }
         return AUDIT_FIELDS.contains(field.getField()) || AUDIT_COLUMNS.contains(field.getColumnName());
+    }
+
+    private void syncTableStructure(AiLowcodeModel model, LowcodeDataModelDTO dto) {
+        if (!Boolean.TRUE.equals(dto.getConfirmSyncDdl())) {
+            throw new BusinessException("同步表结构需要二次确认");
+        }
+        if (!SessionHelper.hasPermission(DDL_PERMISSION)) {
+            throw new BusinessException("缺少同步表结构权限: " + DDL_PERMISSION);
+        }
+        ddlService.executeCreateTable(readModelSchema(model.getModelSchema()));
     }
 
     private LowcodeDataModelVO toVO(AiLowcodeModel model) {
@@ -199,7 +282,11 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
         vo.setStatus(model.getStatus());
         vo.setTenantEnabled(model.getTenantEnabled());
         vo.setMasterData(model.getMasterData());
-        vo.setModelSchema(readModelSchema(model.getModelSchema()));
+        LowcodeModelSchema modelSchema = readModelSchema(model.getModelSchema());
+        if (domain != null) {
+            modelSchema = normalizeModelSchema(modelSchema, domain, model.getModelCode(), model.getModelName());
+        }
+        vo.setModelSchema(modelSchema);
         vo.setCreateTime(model.getCreateTime());
         vo.setUpdateTime(model.getUpdateTime());
         return vo;

@@ -35,7 +35,7 @@
     <main class="canvas-panel" @dragover.prevent @drop="handleCanvasDrop">
       <div class="canvas-toolbar">
         <div class="toolbar-info">
-          <strong>列表页面 · {{ layoutType === 'tree-crud' ? '左树右表' : '标准单表' }}</strong>
+          <strong>列表页面 · {{ layoutTitle }}</strong>
           <span>{{ blocks.length }} 个区块 · {{ totalRows }} 行 × 12 列</span>
         </div>
         <n-space size="small">
@@ -199,6 +199,79 @@
                 </n-space>
               </n-checkbox-group>
             </n-form-item>
+            <n-divider>自定义操作按钮</n-divider>
+            <div class="custom-action-editor">
+              <div class="custom-action-head">
+                <span>名称</span>
+                <span>编码</span>
+                <span>位置</span>
+                <span>样式</span>
+                <span>交互</span>
+                <span>目标地址</span>
+              </div>
+              <div
+                v-for="(action, idx) in (selectedBlock.props?.customActions || [])"
+                :key="action.key || idx"
+                class="custom-action-row"
+              >
+                <n-input
+                  :value="action.label"
+                  size="small"
+                  placeholder="按钮名称"
+                  @update:value="updateCustomAction(idx, { label: $event })"
+                />
+                <n-input
+                  :value="action.key"
+                  size="small"
+                  placeholder="唯一编码"
+                  @update:value="updateCustomAction(idx, { key: normalizeActionKey($event) })"
+                />
+                <n-select
+                  :value="action.position || 'toolbar'"
+                  size="small"
+                  :options="actionPositionOptions"
+                  @update:value="updateCustomAction(idx, { position: $event })"
+                />
+                <n-select
+                  :value="action.type || 'default'"
+                  size="small"
+                  :options="actionTypeOptions"
+                  @update:value="updateCustomAction(idx, { type: $event })"
+                />
+                <n-select
+                  :value="action.actionType || 'route'"
+                  size="small"
+                  :options="actionBehaviorOptions"
+                  @update:value="updateCustomAction(idx, { actionType: $event })"
+                />
+                <n-input
+                  :value="action.routePath"
+                  size="small"
+                  :disabled="(action.actionType || 'route') === 'refresh'"
+                  :placeholder="actionPathPlaceholder(action)"
+                  @update:value="updateCustomAction(idx, { routePath: $event })"
+                />
+                <n-button size="tiny" quaternary type="error" @click="removeCustomAction(idx)">
+                  删
+                </n-button>
+                <n-select
+                  :value="action.openTarget || '_self'"
+                  size="small"
+                  :disabled="(action.actionType || 'route') === 'refresh'"
+                  :options="actionOpenTargetOptions"
+                  @update:value="updateCustomAction(idx, { openTarget: $event })"
+                />
+                <n-input
+                  :value="action.confirmText"
+                  size="small"
+                  placeholder="确认提示，可用 :id"
+                  @update:value="updateCustomAction(idx, { confirmText: $event })"
+                />
+              </div>
+              <n-button size="small" dashed block @click="addCustomAction">
+                + 添加自定义按钮
+              </n-button>
+            </div>
           </template>
 
           <!-- Tree panel -->
@@ -346,7 +419,10 @@
               <template #item="{ element }">
                 <div class="selected-row">
                   <span class="f-handle">☰</span>
-                  <span class="f-name">{{ element.label || element.field }}</span>
+                  <span class="f-name">
+                    {{ element.label || element.field }}
+                    <small v-if="element.sourceLabel || element.modelName">{{ element.sourceLabel || element.modelName }}</small>
+                  </span>
                   <span class="f-code">{{ element.field }}</span>
                   <button type="button" class="f-remove" @click="toggleField(element.field, false)">
                     移除
@@ -370,7 +446,8 @@
                 class="available-item"
                 @click="toggleField(field.field, true)"
               >
-                + {{ field.label || field.field }}
+                <span>{{ field.label || field.field }}</span>
+                <small v-if="field.sourceLabel || field.modelName">{{ field.sourceLabel || field.modelName }}</small>
               </button>
               <span v-if="!availableFields.length" class="empty">所有字段已选择</span>
             </div>
@@ -389,6 +466,7 @@ import {
   createDefaultListGridLayout,
   createGridBlock,
   LIST_PAGE_GRID_COLS,
+  isPageFieldVisible,
   listPageBlockCatalog,
   resolveListPageBlockMeta,
   syncGridLayoutWithModel,
@@ -418,6 +496,27 @@ const emit = defineEmits(['update:modelValue'])
 const colWidth = 78
 const rowHeight = 32
 const gap = 8
+const actionPositionOptions = [
+  { label: '工具栏', value: 'toolbar' },
+  { label: '行操作列', value: 'row' },
+]
+const actionTypeOptions = [
+  { label: '默认', value: 'default' },
+  { label: '主要', value: 'primary' },
+  { label: '信息', value: 'info' },
+  { label: '成功', value: 'success' },
+  { label: '警告', value: 'warning' },
+  { label: '危险', value: 'error' },
+]
+const actionBehaviorOptions = [
+  { label: '站内跳转', value: 'route' },
+  { label: '外部链接', value: 'external' },
+  { label: '刷新列表', value: 'refresh' },
+]
+const actionOpenTargetOptions = [
+  { label: '当前页', value: '_self' },
+  { label: '新窗口', value: '_blank' },
+]
 
 const canvasRef = ref(null)
 const selectedBlockId = ref(null)
@@ -439,10 +538,19 @@ const canvasStyle = computed(() => ({
 }))
 
 const selectedBlock = computed(() => blocks.value.find(b => b.id === selectedBlockId.value) || null)
+const layoutTitle = computed(() => {
+  if (props.layoutType === 'tree-crud')
+    return '左树右表'
+  if (props.layoutType === 'master-detail-crud')
+    return '主子表'
+  return '标准单表'
+})
 const selectedBlockMeta = computed(() => selectedBlock.value ? resolveListPageBlockMeta(selectedBlock.value.blockType) : null)
 
-const fieldOptions = computed(() => props.fields.map(f => ({
-  label: f.label ? `${f.label}（${f.field}）` : f.field,
+const fieldOptions = computed(() => props.fields
+  .filter(field => isPageFieldVisible(field, 'table'))
+  .map(f => ({
+  label: f.sourceLabel || f.modelName ? `${f.label || f.field} · ${f.sourceLabel || f.modelName}` : (f.label ? `${f.label}（${f.field}）` : f.field),
   value: f.field,
 })))
 
@@ -465,8 +573,9 @@ const selectedFieldsList = computed(() => (selectedBlock.value?.fieldRefs || [])
   .filter(Boolean))
 const availableFields = computed(() => {
   const set = new Set(selectedBlock.value?.fieldRefs || [])
-  return props.fields.filter(f => !set.has(f.field))
+  return props.fields.filter(f => isPageFieldVisible(f, selectedBlockZoneKey.value) && !set.has(f.field))
 })
+const selectedBlockZoneKey = computed(() => selectedBlock.value?.blockType === 'search-form' ? 'search' : 'table')
 
 watch(
   () => props.modelValue,
@@ -715,6 +824,50 @@ function removeMetric(idx) {
   const list = [...(selectedBlock.value?.props?.metrics || [])]
   list.splice(idx, 1)
   patchBlockProps(selectedBlock.value.id, { metrics: list })
+}
+
+function addCustomAction() {
+  const list = [...(selectedBlock.value?.props?.customActions || [])]
+  list.push({
+    key: `custom_${Date.now()}`,
+    label: '自定义按钮',
+    position: 'row',
+    type: 'primary',
+    actionType: 'route',
+    routePath: '',
+    openTarget: '_self',
+  })
+  patchBlockProps(selectedBlock.value.id, { customActions: list })
+}
+
+function updateCustomAction(idx, patch) {
+  const list = [...(selectedBlock.value?.props?.customActions || [])]
+  list[idx] = { ...list[idx], ...patch }
+  patchBlockProps(selectedBlock.value.id, { customActions: list })
+}
+
+function removeCustomAction(idx) {
+  const list = [...(selectedBlock.value?.props?.customActions || [])]
+  list.splice(idx, 1)
+  patchBlockProps(selectedBlock.value.id, { customActions: list })
+}
+
+function normalizeActionKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/\W/g, '_')
+    .replace(/_+/g, '_')
+    .toLowerCase()
+    .replace(/^[^a-z]+/, '')
+}
+
+function actionPathPlaceholder(action = {}) {
+  if ((action.actionType || 'route') === 'external')
+    return 'https://example.com/:id'
+  if ((action.actionType || 'route') === 'refresh')
+    return '刷新列表无需地址'
+  return '/ai/xxx/:id'
 }
 
 // Tab editing
@@ -975,6 +1128,34 @@ function removeTab(idx) {
   gap: 6px;
 }
 
+.custom-action-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.custom-action-head {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(78px, 1fr) 86px 76px 92px minmax(120px, 1.4fr) auto;
+  gap: 4px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.custom-action-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(78px, 1fr) 86px 76px 92px minmax(120px, 1.4fr) auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.custom-action-row > :nth-child(8) {
+  grid-column: 1 / 3;
+}
+
+.custom-action-row > :nth-child(9) {
+  grid-column: 3 / 8;
+}
+
 .metric-row {
   display: grid;
   grid-template-columns: 1fr 1fr 80px auto;
@@ -1020,8 +1201,17 @@ function removeTab(idx) {
 }
 
 .f-name {
+  display: grid;
+  gap: 2px;
   color: #0f172a;
   font-weight: 600;
+}
+
+.f-name small,
+.available-item small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .f-code {
@@ -1046,6 +1236,8 @@ function removeTab(idx) {
 }
 
 .available-item {
+  display: inline-grid;
+  gap: 2px;
   padding: 4px 10px;
   border: 1px dashed #cbd5e1;
   border-radius: 6px;

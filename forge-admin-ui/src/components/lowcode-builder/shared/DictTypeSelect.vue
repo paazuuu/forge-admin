@@ -6,6 +6,7 @@
         class="dict-select-control"
         :options="options"
         :loading="loading"
+        :disabled="disabled"
         tag
         filterable
         clearable
@@ -14,7 +15,7 @@
         @focus="loadDictTypes"
         @update:value="$emit('update:value', $event || '')"
       />
-      <n-button class="create-dict-button" size="small" secondary @click="openCreateModal">
+      <n-button class="create-dict-button" size="small" secondary :disabled="disabled" @click="openCreateModal">
         新增字典
       </n-button>
     </div>
@@ -90,6 +91,10 @@ const props = defineProps({
   fields: {
     type: Array,
     default: () => [],
+  },
+  disabled: {
+    type: Boolean,
+    default: false,
   },
 })
 

@@ -44,6 +44,10 @@ export function lowcodeAppDetail(id) {
   return request.get(`/ai/lowcode/app/${id}`)
 }
 
+export function lowcodeDeleteApp(id) {
+  return request.delete(`/ai/lowcode/app/${id}`)
+}
+
 export function lowcodeSaveDraft(data) {
   return request.post('/ai/lowcode/app/draft', data)
 }

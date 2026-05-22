@@ -9,6 +9,8 @@ public class AiCrudConfigRenderVO {
     private String tableName;
     private String tableComment;
     private String appName;
+    private String menuName;
+    private String objectName;
     private Object searchSchema;
     private Object columnsSchema;
     private Object editSchema;

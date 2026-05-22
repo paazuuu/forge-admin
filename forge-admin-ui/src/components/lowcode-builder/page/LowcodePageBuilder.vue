@@ -54,6 +54,7 @@
       <FormCreateDesignerAdapter
         :zone="editZone"
         :fields="fields"
+        :layout-type="localSchema.layoutType"
         @update:zone="handleZoneUpdate"
       />
     </div>
@@ -91,6 +92,7 @@ const builderTab = ref('list')
 const layoutOptions = [
   { label: '标准单表', value: 'simple-crud' },
   { label: '左树右表', value: 'tree-crud' },
+  { label: '主子表', value: 'master-detail-crud' },
 ]
 
 const fields = computed(() => props.modelSchema?.fields || [])

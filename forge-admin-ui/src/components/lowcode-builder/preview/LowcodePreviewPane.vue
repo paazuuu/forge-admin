@@ -112,6 +112,15 @@
                 <n-button v-if="tableZone?.props?.showImport" size="small" disabled>
                   批量导入
                 </n-button>
+                <n-button
+                  v-for="action in customToolbarActions"
+                  :key="action.key"
+                  size="small"
+                  :type="action.type === 'default' ? undefined : action.type"
+                  disabled
+                >
+                  {{ action.label }}
+                </n-button>
               </n-space>
             </div>
             <n-data-table
@@ -124,7 +133,7 @@
         </div>
       </div>
 
-      <div v-if="formFields.length" class="preview-band">
+      <div v-if="formFields.length || childFieldGroups.length" class="preview-band">
         <div class="band-title">
           表单与详情
         </div>
@@ -142,6 +151,18 @@
             <n-input v-else disabled :placeholder="field.componentType" />
           </n-form-item>
         </div>
+        <div v-if="childFieldGroups.length" class="child-preview-groups">
+          <div v-for="group in childFieldGroups" :key="group.key" class="child-preview-group">
+            <div class="child-preview-title">
+              {{ group.name }}
+            </div>
+            <div class="child-preview-table">
+              <span v-for="field in group.fields" :key="field.field">
+                {{ field.label || field.field }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -156,6 +177,7 @@ import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import DictTag from '@/components/DictTag.vue'
 import {
   buildPageDesignModelSchema,
+  isPageFieldVisible,
   resolveFieldRefsFromFormCreateRules,
 } from '@/components/lowcode-builder/page/page-schema'
 import { getDictData } from '@/composables/useDict'
@@ -192,13 +214,43 @@ const fieldMap = computed(() => new Map((modelSchema.value.fields || []).map(fie
 
 const searchFields = computed(() => resolveFields('search', field => field.searchable))
 const visibleColumns = computed(() => resolveFields('table', field => field.listVisible !== false))
-const formFields = computed(() => resolveFields('edit', field => field.formVisible !== false))
+const editFields = computed(() => resolveFields('edit', field => field.formVisible !== false))
+const primaryModelCode = computed(() => pageSchema.value.primaryModelCode
+  || pageSchema.value.modelRefs?.find(ref => ref.primary)?.modelCode
+  || props.draft.modelSchema?.object?.code
+  || '')
+const formFields = computed(() => editFields.value.filter(field => isPrimaryFormField(field)))
+const childFieldGroups = computed(() => {
+  if (pageSchema.value.layoutType !== 'master-detail-crud')
+    return []
+  const groupMap = new Map()
+  editFields.value.filter(field => !isPrimaryFormField(field)).forEach((field) => {
+    const key = field.modelCode || 'children'
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        key,
+        name: field.modelName || key,
+        fields: [],
+      })
+    }
+    groupMap.get(key).fields.push(field)
+  })
+  return Array.from(groupMap.values())
+})
+const customToolbarActions = computed(() => resolveCustomActions('toolbar'))
+const customRowActions = computed(() => resolveCustomActions('row'))
 
 const tableColumns = computed(() => visibleColumns.value.map(field => ({
   key: field.field,
   title: field.label || field.field,
   minWidth: field.width || 140,
-})).concat({ key: 'actions', title: '操作', width: 140, fixed: 'right' }))
+})).concat({
+  key: 'actions',
+  title: '操作',
+  width: Math.max(140, (2 + customRowActions.value.length) * 54),
+  fixed: 'right',
+  render: row => renderDraftActions(row),
+}))
 
 const sampleRows = computed(() => {
   return Array.from({ length: 3 }).map((_, index) => {
@@ -227,15 +279,21 @@ function resolveFields(zoneKey, fallback) {
     ? resolveFieldRefsFromFormCreateRules(zone?.props?.formCreateRule, new Set(fieldMap.value.keys()))
     : []
   if (formCreateRefs.length)
-    return formCreateRefs.map(ref => fieldMap.value.get(ref)).filter(Boolean)
+    return formCreateRefs.map(ref => fieldMap.value.get(ref)).filter(field => field && isPageFieldVisible(field, zoneKey))
   if (zone?.fieldRefs?.length) {
-    return uniqueRefs(zone.fieldRefs).map(ref => fieldMap.value.get(ref)).filter(Boolean)
+    return uniqueRefs(zone.fieldRefs).map(ref => fieldMap.value.get(ref)).filter(field => field && isPageFieldVisible(field, zoneKey))
   }
   const canvasRefs = resolveCanvasRefs(zone, zoneKey)
   if (canvasRefs.length) {
-    return canvasRefs.map(ref => fieldMap.value.get(ref)).filter(Boolean)
+    return canvasRefs.map(ref => fieldMap.value.get(ref)).filter(field => field && isPageFieldVisible(field, zoneKey))
   }
-  return (modelSchema.value.fields || []).filter(fallback)
+  return (modelSchema.value.fields || []).filter(field => fallback(field) && isPageFieldVisible(field, zoneKey))
+}
+
+function isPrimaryFormField(field) {
+  if (pageSchema.value.layoutType !== 'master-detail-crud')
+    return true
+  return !field.modelCode || field.modelCode === primaryModelCode.value
 }
 
 function resolveCanvasRefs(zone, zoneKey) {
@@ -277,6 +335,23 @@ function resolveSampleValue(field, index = 0) {
   if (field.componentType === 'datetime' || field.dataType === 'datetime')
     return '2026-05-20 09:30:00'
   return field.label ? `${field.label}示例${index + 1}` : `示例${index + 1}`
+}
+
+function resolveCustomActions(position) {
+  return (tableZone.value?.props?.customActions || [])
+    .filter(action => (action.position || 'toolbar') === position)
+}
+
+function renderDraftActions(row) {
+  const actions = [
+    { key: 'edit', label: '编辑', type: 'primary' },
+    { key: 'delete', label: '删除', type: 'error' },
+    ...customRowActions.value,
+  ]
+  return h('div', { class: 'draft-action-column' }, actions.map((action, index) => [
+    index > 0 ? h('span', { class: 'draft-action-divider' }, ' | ') : null,
+    h('span', { class: ['draft-action-link', `type-${action.type || 'default'}`] }, action.label),
+  ]).flat().filter(Boolean))
 }
 
 async function refreshPreview() {
@@ -346,6 +421,7 @@ function buildRuntimeCrudProps(cfg) {
     searchSchema: transformFields(cfg.searchSchema),
     columns: transformColumns(cfg.columnsSchema, cfg.transConfig),
     editSchema: transformFields(cfg.editSchema),
+    childrenConfig: transformChildrenConfig(options.masterDetailConfig?.children || []),
     apiConfig: cfg.apiConfig || {},
     options,
     rowKey: cfg.rowKey || 'id',
@@ -361,6 +437,7 @@ function buildRuntimeCrudProps(cfg) {
     importTemplateUrl: extractApiUrl(cfg.apiConfig?.importTemplate),
     enableCustomQuery: options.enableCustomQuery !== false,
     customQueryConfigKey: cfg.configKey,
+    toolbarActions: options.toolbarActions || [],
   }
 }
 
@@ -409,6 +486,13 @@ function transformFields(fields) {
   })
 }
 
+function transformChildrenConfig(children = []) {
+  return (children || []).map(child => ({
+    ...child,
+    fields: transformFields(child.fields || []),
+  }))
+}
+
 async function preloadDicts(cfg) {
   const types = new Set()
   ;(cfg?.columnsSchema || []).forEach((col) => {
@@ -418,6 +502,12 @@ async function preloadDicts(cfg) {
   ;[...(cfg?.searchSchema || []), ...(cfg?.editSchema || [])].forEach((field) => {
     if (field.dictType)
       types.add(field.dictType)
+  })
+  ;(cfg?.options?.masterDetailConfig?.children || []).forEach((child) => {
+    ;(child.fields || []).forEach((field) => {
+      if (field.dictType)
+        types.add(field.dictType)
+    })
   })
   for (const type of types) {
     if (!dictCache.value[type]) {
@@ -595,11 +685,76 @@ function extractApiUrl(apiConfigValue) {
   margin-bottom: 0;
 }
 
+.draft-action-column {
+  white-space: nowrap;
+}
+
+.draft-action-link {
+  color: #2563eb;
+  cursor: default;
+  font-size: 12px;
+}
+
+.draft-action-link.type-error,
+.draft-action-link.type-danger {
+  color: #dc2626;
+}
+
+.draft-action-link.type-warning {
+  color: #d97706;
+}
+
+.draft-action-link.type-success {
+  color: #16a34a;
+}
+
+.draft-action-divider {
+  color: #cbd5e1;
+}
+
 .search-grid,
 .form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.child-preview-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border-top: 1px solid #eef2f7;
+  padding-top: 12px;
+}
+
+.child-preview-group {
+  display: grid;
+  gap: 8px;
+}
+
+.child-preview-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.child-preview-table {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.child-preview-table span {
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  padding: 5px 8px;
 }
 
 @media (max-width: 1180px) {

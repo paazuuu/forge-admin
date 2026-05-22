@@ -68,6 +68,15 @@
         <n-button v-if="hasAction('custom-query')" size="small" text type="primary" disabled>
           自定义查询
         </n-button>
+        <n-button
+          v-for="action in toolbarCustomActions"
+          :key="action.key"
+          size="small"
+          :type="action.type === 'default' ? undefined : action.type"
+          disabled
+        >
+          {{ action.label }}
+        </n-button>
         <span v-if="!(block.props?.actions?.length)" class="block-empty inline">
           未启用任何工具按钮
         </span>
@@ -213,6 +222,8 @@ const tableColumns = computed(() => [
   })),
   { key: '__actions', title: '操作', width: 96, fixed: 'right' },
 ])
+const toolbarCustomActions = computed(() => (props.block.props?.customActions || [])
+  .filter(action => (action.position || 'toolbar') === 'toolbar'))
 
 const sampleRows = computed(() => Array.from({ length: 3 }).map((_, idx) => {
   const row = { __actions: '编辑' }

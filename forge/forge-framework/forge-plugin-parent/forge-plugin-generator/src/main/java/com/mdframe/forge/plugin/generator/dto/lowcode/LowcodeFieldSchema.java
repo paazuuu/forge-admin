@@ -43,6 +43,18 @@ public class LowcodeFieldSchema {
 
     private Boolean sortable;
 
+    /** 是否主键字段；低代码业务表固定为 id。 */
+    private Boolean primaryKey;
+
+    /** 是否系统字段，系统字段只读展示，不参与业务字段 DDL 追加。 */
+    private Boolean systemField;
+
+    /** 是否只读字段，只读字段不能由用户在运行态表单中修改。 */
+    private Boolean readonly;
+
+    /** 是否自增字段，当前仅 id 字段固定启用。 */
+    private Boolean autoIncrement;
+
     private Integer width;
 
     private String remark;

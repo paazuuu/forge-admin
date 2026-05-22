@@ -134,10 +134,12 @@ const crudProps = computed(() => {
     return {}
   const cfg = renderConfig.value
   const options = cfg.options || {}
+  const masterDetailConfig = options.masterDetailConfig || {}
   return {
     searchSchema: transformFields(cfg.searchSchema),
     columns: transformColumns(cfg.columnsSchema, cfg.transConfig),
     editSchema: transformFields(cfg.editSchema),
+    childrenConfig: transformChildrenConfig(masterDetailConfig.children || []),
     apiConfig: cfg.apiConfig || {},
     options,
     rowKey: cfg.rowKey || 'id',
@@ -153,6 +155,7 @@ const crudProps = computed(() => {
     importTemplateUrl: extractApiUrl(cfg.apiConfig?.importTemplate),
     enableCustomQuery: options.enableCustomQuery !== false,
     customQueryConfigKey: cfg.configKey,
+    toolbarActions: options.toolbarActions || [],
   }
 })
 
@@ -161,6 +164,17 @@ function extractApiUrl(apiConfigValue) {
     return ''
   const parts = String(apiConfigValue).split('@')
   return parts.length > 1 ? parts.slice(1).join('@') : apiConfigValue
+}
+
+function resolveRuntimeTitle(cfg = {}) {
+  return cfg.menuName || cfg.appName || cfg.objectName || cfg.tableComment || cfg.configKey
+}
+
+function transformChildrenConfig(children = []) {
+  return (children || []).map(child => ({
+    ...child,
+    fields: transformFields(child.fields || []),
+  }))
 }
 
 /**
@@ -179,6 +193,14 @@ async function preloadDicts(cfg) {
   ;[...(cfg.searchSchema || []), ...(cfg.editSchema || [])].forEach((field) => {
     if (field.dictType)
       types.add(field.dictType)
+  })
+
+  const children = cfg.options?.masterDetailConfig?.children || []
+  children.forEach((child) => {
+    ;(child.fields || []).forEach((field) => {
+      if (field.dictType)
+        types.add(field.dictType)
+    })
   })
 
   for (const type of types) {
@@ -213,14 +235,12 @@ async function loadConfig() {
     const res = await crudConfigRender(configKey)
     const cfg = res.data
     renderConfig.value = cfg
-    // 更新当前 Tab 标题为菜单名/表描述
-    const title = cfg.menuName || cfg.tableComment
+    // 动态 CRUD 的 Tab/浏览器标题以发布菜单名为准，避免再次点击 Tab 时回退成主模型名。
+    const title = resolveRuntimeTitle(cfg)
     if (title) {
-      const currentPath = route.fullPath
-      const existingTab = tabStore.tabs.find(t => t.path === currentPath)
-      if (existingTab) {
-        existingTab.title = title
-      }
+      route.meta.title = title
+      document.title = `${title} | ${import.meta.env.VITE_TITLE}`
+      tabStore.updateTabTitle(route.fullPath, title)
     }
     await preloadDicts(cfg)
     // 加载模板组件

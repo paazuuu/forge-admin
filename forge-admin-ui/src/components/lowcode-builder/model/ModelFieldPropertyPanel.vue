@@ -13,6 +13,9 @@
 
     <n-empty v-if="!field" description="请选择中间字段行" />
     <n-form v-else label-placement="top" size="small" class="field-form" :show-feedback="false">
+      <n-alert v-if="readonlyField" type="info" :bordered="false" class="readonly-alert">
+        系统字段由平台维护，仅用于展示真实表结构，不能手动修改。
+      </n-alert>
       <section class="form-section">
         <div class="section-title">
           数据库映射
@@ -20,6 +23,7 @@
         <n-form-item label="数据库列名">
           <n-input
             :value="field.columnName"
+            :disabled="readonlyField"
             placeholder="lower_snake"
             @update:value="updateFieldProp('columnName', $event)"
           />
@@ -29,6 +33,7 @@
             <span>主键字段</span>
             <n-switch
               :value="field.primaryKey || false"
+              :disabled="readonlyField"
               size="small"
               @update:value="updateFieldProp('primaryKey', $event)"
             />
@@ -37,6 +42,7 @@
             <span>系统字段</span>
             <n-switch
               :value="field.systemField || false"
+              :disabled="readonlyField"
               size="small"
               @update:value="updateFieldProp('systemField', $event)"
             />
@@ -66,6 +72,7 @@
           <DictTypeSelect
             :value="field.dictType"
             :fields="fields"
+            :disabled="readonlyField"
             @update:value="updateFieldProp('dictType', $event)"
           />
         </n-form-item>
@@ -74,6 +81,7 @@
             <n-select
               :value="field.sensitiveType"
               :options="sensitiveTypeOptions"
+              :disabled="readonlyField"
               size="small"
               @update:value="updateFieldProp('sensitiveType', $event)"
             />
@@ -82,6 +90,7 @@
             <n-select
               :value="field.encryptAlgorithm"
               clearable
+              :disabled="readonlyField"
               size="small"
               :options="encryptOptions"
               @update:value="updateFieldProp('encryptAlgorithm', $event || '')"
@@ -97,6 +106,7 @@
 import { computed } from 'vue'
 import DictTypeSelect from '../shared/DictTypeSelect.vue'
 import {
+  isLockedSystemField,
   sensitiveTypeOptions,
 } from './model-schema'
 
@@ -125,8 +135,11 @@ const encryptOptions = [
 const domainSchema = computed(() => props.domain?.domainSchema || {})
 const dictSuggestion = computed(() => findRecommendation(domainSchema.value.dictRecommendations || []))
 const securitySuggestion = computed(() => findRecommendation(domainSchema.value.securityPolicies || []))
+const readonlyField = computed(() => isLockedSystemField(props.field))
 
 function updateFieldProp(key, value) {
+  if (readonlyField.value)
+    return
   if (key === 'dictType' && value) {
     patchField({ dictType: value, componentType: 'select' })
     return
@@ -135,13 +148,13 @@ function updateFieldProp(key, value) {
 }
 
 function applyDictSuggestion() {
-  if (!dictSuggestion.value)
+  if (!dictSuggestion.value || readonlyField.value)
     return
   patchField({ dictType: dictSuggestion.value.dictType, componentType: 'select' })
 }
 
 function applySecuritySuggestion() {
-  if (!securitySuggestion.value)
+  if (!securitySuggestion.value || readonlyField.value)
     return
   patchField({
     sensitiveType: securitySuggestion.value.sensitiveType || 'NONE',
@@ -150,7 +163,7 @@ function applySecuritySuggestion() {
 }
 
 function patchField(patch) {
-  if (!props.field)
+  if (!props.field || readonlyField.value)
     return
   emit('update:field', {
     ...props.field,
@@ -207,6 +220,10 @@ function findRecommendation(items) {
   gap: 12px;
   overflow: auto;
   padding: 12px;
+}
+
+.readonly-alert {
+  grid-column: 1 / -1;
 }
 
 .form-section {

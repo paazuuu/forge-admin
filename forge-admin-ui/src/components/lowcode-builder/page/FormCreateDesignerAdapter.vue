@@ -6,7 +6,7 @@
           表单与详情页
         </div>
         <div class="designer-meta">
-          新增、编辑、详情共用字段 · {{ selectedFieldRefs.length }} 个业务字段
+          {{ designerMetaText }}
         </div>
       </div>
       <n-space size="small" align="center">
@@ -22,6 +22,31 @@
           应用表单配置
         </n-button>
       </n-space>
+    </div>
+
+    <div v-if="showMasterDetailPanel" class="master-detail-panel">
+      <div class="master-detail-summary">
+        <strong>主子表编辑</strong>
+        <span>主表字段使用下方表单设计，子表字段生成明细表格</span>
+      </div>
+      <div v-if="childFieldGroups.length" class="child-detail-groups">
+        <div v-for="group in childFieldGroups" :key="group.key" class="child-detail-group">
+          <div class="child-detail-head">
+            <strong>{{ group.modelName }}</strong>
+            <span>{{ group.fields.length }} 个字段</span>
+          </div>
+          <div class="child-field-strip">
+            <span
+              v-for="field in group.fields"
+              :key="field.field"
+              class="child-field-chip"
+            >
+              {{ field.rawLabel || field.label || field.sourceField || field.field }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <n-empty v-else size="small" description="当前编辑页未配置子表字段" />
     </div>
 
     <div class="designer-body">
@@ -48,6 +73,7 @@ import FcDesigner from '@form-create/designer'
 import formCreate from '@form-create/element-ui'
 import ElementPlus from 'element-plus'
 import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { isPageFieldVisible } from './page-schema'
 import 'element-plus/dist/index.css'
 import '@form-create/element-ui/src/style/index.css'
 
@@ -59,6 +85,10 @@ const props = defineProps({
   fields: {
     type: Array,
     default: () => [],
+  },
+  layoutType: {
+    type: String,
+    default: 'simple-crud',
   },
 })
 
@@ -83,16 +113,62 @@ const designerConfig = {
   formOptions: buildDefaultOptions(),
 }
 
-const fieldMap = computed(() => new Map(props.fields.map(field => [field.field, field])))
-const selectedFieldRefs = computed(() => {
+const editableFields = computed(() => props.fields.filter(field => isPageFieldVisible(field, 'edit')))
+const isMasterDetailLayout = computed(() => props.layoutType === 'master-detail-crud')
+const primaryEditableFields = computed(() => {
+  if (!isMasterDetailLayout.value)
+    return editableFields.value
+  return editableFields.value.filter(field => !isChildModelField(field))
+})
+const childEditableFields = computed(() => {
+  if (!isMasterDetailLayout.value)
+    return []
+  return editableFields.value.filter(field => isChildModelField(field))
+})
+const fieldMap = computed(() => new Map(primaryEditableFields.value.map(field => [field.field, field])))
+const childFieldMap = computed(() => new Map(childEditableFields.value.map(field => [field.field, field])))
+const selectedPrimaryFieldRefs = computed(() => {
   const refs = extractFieldRefs(props.zone?.props?.formCreateRule || [], fieldMap.value)
   if (refs.length)
     return refs
   return (props.zone?.fieldRefs || []).filter(ref => fieldMap.value.has(ref))
 })
+const selectedChildFieldRefs = computed(() => {
+  if (!isMasterDetailLayout.value)
+    return []
+  const refs = (props.zone?.fieldRefs || []).filter(ref => childFieldMap.value.has(ref))
+  if (refs.length)
+    return refs
+  return childEditableFields.value.map(field => field.field)
+})
+const selectedFieldRefs = computed(() => mergeFieldRefs(selectedPrimaryFieldRefs.value, selectedChildFieldRefs.value))
+const childFieldGroups = computed(() => {
+  const groups = new Map()
+  selectedChildFieldRefs.value.forEach((ref) => {
+    const field = childFieldMap.value.get(ref)
+    if (!field)
+      return
+    const key = field.modelCode || 'children'
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        modelName: field.modelName || field.sourceLabel || key,
+        fields: [],
+      })
+    }
+    groups.get(key).fields.push(field)
+  })
+  return Array.from(groups.values())
+})
+const showMasterDetailPanel = computed(() => isMasterDetailLayout.value)
+const designerMetaText = computed(() => {
+  if (!isMasterDetailLayout.value)
+    return `新增、编辑、详情共用字段 · ${selectedFieldRefs.value.length} 个业务字段`
+  return `主表字段 ${selectedPrimaryFieldRefs.value.length} 个 · 子表 ${childFieldGroups.value.length} 个 / 明细字段 ${selectedChildFieldRefs.value.length} 个`
+})
 
 watch(
-  () => [props.zone?.zoneKey, props.zone?.props?.formCreateRule, props.fields],
+  () => [props.zone?.zoneKey, props.zone?.props?.formCreateRule, props.fields, props.layoutType],
   () => loadDesignerRules(),
   { deep: true },
 )
@@ -126,7 +202,7 @@ function resolveDesignerRules() {
     : []
   const refs = (props.zone?.fieldRefs?.length
     ? props.zone.fieldRefs
-    : props.fields.map(field => field.field))
+    : primaryEditableFields.value.map(field => field.field))
     .filter(ref => fieldMap.value.has(ref))
 
   if (!sourceRules.length)
@@ -161,7 +237,7 @@ function flushDesigner() {
     return false
   const rules = designerRef.value.getRule?.() || []
   const options = designerRef.value.getOptions?.() || designerRef.value.getOption?.() || resolveDesignerOptions()
-  const refs = extractFieldRefs(rules, fieldMap.value)
+  const refs = mergeFieldRefs(extractFieldRefs(rules, fieldMap.value), selectedChildFieldRefs.value)
   emit('update:zone', {
     ...props.zone,
     fieldRefs: refs,
@@ -198,9 +274,10 @@ function updateEnabled(value) {
 function resetFromModel() {
   if (!props.zone)
     return
-  const refs = props.fields
-    .map(field => field.field)
-  const rules = refs.map(ref => buildRuleFromField(fieldMap.value.get(ref)))
+  const primaryRefs = primaryEditableFields.value.map(field => field.field)
+  const childRefs = childEditableFields.value.map(field => field.field)
+  const refs = mergeFieldRefs(primaryRefs, childRefs)
+  const rules = primaryRefs.map(ref => buildRuleFromField(fieldMap.value.get(ref)))
   emit('update:zone', {
     ...props.zone,
     fieldRefs: refs,
@@ -324,12 +401,28 @@ function buildPlaceholder(field, label) {
 }
 
 function normalizeRules(rules, fields) {
-  return cloneValue(rules).map(rule => normalizeRule(rule, fields)).filter(Boolean)
+  const seenFields = new Set()
+  return cloneValue(rules).map(rule => normalizeRule(rule, fields, seenFields)).filter(Boolean)
 }
 
-function normalizeRule(rule, fields) {
+function isChildModelField(field = {}) {
+  const sourceField = field.sourceField || field.field
+  return Boolean(field.modelCode) && field.field !== sourceField
+}
+
+function mergeFieldRefs(...groups) {
+  return Array.from(new Set(groups.flat().filter(Boolean)))
+}
+
+function normalizeRule(rule, fields, seenFields) {
   if (!rule || typeof rule !== 'object')
     return null
+  if (rule.field && !fields.has(rule.field))
+    return null
+  if (rule.field && seenFields.has(rule.field))
+    return null
+  if (rule.field)
+    seenFields.add(rule.field)
   const field = rule.field && fields.get(rule.field)
   const nextRule = field
     ? {
@@ -343,7 +436,7 @@ function normalizeRule(rule, fields) {
       }
     : { ...rule }
   if (Array.isArray(nextRule.children))
-    nextRule.children = nextRule.children.map(child => normalizeRule(child, fields)).filter(Boolean)
+    nextRule.children = nextRule.children.map(child => normalizeRule(child, fields, seenFields)).filter(Boolean)
   return nextRule
 }
 
@@ -393,7 +486,7 @@ function installDesignerPlugins() {
 .form-create-adapter {
   min-height: 704px;
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   border: 1px solid #dbe3ee;
   border-radius: 8px;
   background: #fff;
@@ -401,6 +494,7 @@ function installDesignerPlugins() {
 }
 
 .designer-head {
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -420,6 +514,80 @@ function installDesignerPlugins() {
   margin-top: 2px;
   font-size: 12px;
   color: #64748b;
+}
+
+.master-detail-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.master-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.master-detail-summary strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.child-detail-groups {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.child-detail-group {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.child-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.child-detail-head strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.child-field-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.child-field-chip {
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 24px;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .designer-body {

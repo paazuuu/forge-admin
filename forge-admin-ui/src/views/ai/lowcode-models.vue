@@ -26,33 +26,13 @@
             <n-icon><SearchOutline /></n-icon>
           </template>
         </n-input>
-        <n-input
-          v-model:value="modelKeyword"
-          clearable
-          size="small"
-          placeholder="搜索当前领域模型"
-          :disabled="!selectedDomain"
-          @keyup.enter="loadModels"
-          @clear="loadModels"
-        />
-        <n-spin :show="domainLoading || modelLoading">
+        <n-spin :show="domainLoading">
           <div class="asset-tree">
-            <div class="tree-action-row">
-              <button type="button" class="tree-action" @click="openDomainEditor">
-                <n-icon class="tree-icon">
-                  <FolderOpenOutline />
-                </n-icon>
-                <strong>新建业务域</strong>
-              </button>
-              <n-button size="tiny" type="primary" @click="openDomainEditor">
-                +
-              </n-button>
-            </div>
             <template v-for="domain in visibleDomains" :key="domain.id">
               <button
                 type="button"
                 class="tree-domain"
-                :class="{ active: selectedDomainId === domain.id && !currentModel.id, disabled: domain.status === 'DISABLED' }"
+                :class="{ active: selectedDomainId === domain.id, disabled: domain.status === 'DISABLED' }"
                 :style="{ '--indent': domain.level }"
                 @click="selectDomain(domain)"
               >
@@ -83,46 +63,55 @@
                   停用
                 </n-tag>
               </button>
-              <template v-if="selectedDomainId === domain.id">
-                <button
-                  v-for="model in models"
-                  :key="model.id"
-                  type="button"
-                  class="tree-model"
-                  :class="{ active: currentModel.id === model.id }"
-                  @click="openModel(model)"
-                >
-                  <span class="model-indent" />
-                  <span class="tree-glyph">
-                    <n-icon><DocumentTextOutline /></n-icon>
-                  </span>
-                  <span class="node-main">
-                    <strong>{{ model.modelName }}</strong>
-                    <code>{{ model.modelCode }}</code>
-                  </span>
-                  <n-tag size="small" :type="model.status === 'ENABLED' ? 'success' : 'warning'" :bordered="false">
-                    {{ dict.lowcode_model_status?.find(d => d.value === model.status)?.label || '启用' }}
-                  </n-tag>
-                </button>
-                <button
-                  v-if="canCreateModel"
-                  type="button"
-                  class="tree-model create"
-                  @click="createModel"
-                >
-                  <span class="model-indent" />
-                  <span class="tree-glyph">
-                    <n-icon><AddCircleOutline /></n-icon>
-                  </span>
-                  <span class="node-main">
-                    <strong>新建数据模型</strong>
-                    <code>{{ domain.domainCode }}</code>
-                  </span>
-                </button>
-                <n-empty v-if="!models.length && !modelLoading" size="small" description="该领域暂无模型" />
-              </template>
             </template>
           </div>
+        </n-spin>
+      </section>
+
+      <section class="nav-block model-list-block">
+        <div class="nav-head compact">
+          <div>
+            <h2>当前领域数据模型</h2>
+            <span>{{ selectedDomain?.domainName || '未选择业务域' }}</span>
+          </div>
+        </div>
+        <n-input
+          v-model:value="modelKeyword"
+          clearable
+          size="small"
+          placeholder="搜索当前领域模型"
+          :disabled="!selectedDomain"
+          @keyup.enter="loadModels"
+          @clear="loadModels"
+        />
+        <n-spin :show="modelLoading">
+          <div v-if="models.length" class="model-list">
+            <button
+              v-for="model in models"
+              :key="model.id"
+              type="button"
+              class="tree-model"
+              :class="{ active: currentModel.id === model.id }"
+              @click="openModel(model)"
+            >
+              <span class="tree-glyph">
+                <n-icon><DocumentTextOutline /></n-icon>
+              </span>
+              <span class="node-main">
+                <strong>{{ model.modelName }}</strong>
+                <code>{{ model.modelCode }}</code>
+              </span>
+              <n-tag size="small" :type="model.status === 'ENABLED' ? 'success' : 'warning'" :bordered="false">
+                {{ dict.lowcode_model_status?.find(d => d.value === model.status)?.label || '启用' }}
+              </n-tag>
+            </button>
+          </div>
+          <n-empty
+            v-else
+            size="small"
+            :description="selectedDomain ? '该领域暂无模型' : '请先选择业务域'"
+            class="model-empty"
+          />
         </n-spin>
       </section>
     </aside>
@@ -137,11 +126,20 @@
           <p>{{ selectedDomain ? `${selectedDomain.domainName} / ${currentModel.modelCode || '未设置编码'}` : '先选择业务领域，再维护领域下的数据模型。' }}</p>
         </div>
         <n-space>
+          <n-button :disabled="!canCreateModel" type="primary" secondary @click="createModel">
+            新建模型
+          </n-button>
           <n-button @click="loadModels">
             刷新
           </n-button>
-          <n-button :loading="saving" type="primary" :disabled="!selectedDomain" @click="saveModel">
-            保存模型
+          <n-button :loading="ddlLoading" :disabled="!selectedDomain" @click="previewDdl">
+            DDL 预览
+          </n-button>
+          <n-button :loading="saving" :disabled="!selectedDomain" @click="saveModel(false)">
+            保存配置
+          </n-button>
+          <n-button :loading="syncSaving" type="primary" :disabled="!selectedDomain" @click="saveModel(true)">
+            保存并同步表结构
           </n-button>
         </n-space>
       </header>
@@ -228,6 +226,23 @@
           </n-form>
         </section>
 
+        <section v-if="ddlPreview" class="ddl-panel">
+          <div class="section-title">
+            DDL 预览
+          </div>
+          <n-alert
+            v-for="warning in ddlPreview.warnings"
+            :key="warning"
+            type="warning"
+            :bordered="false"
+            class="ddl-warning"
+          >
+            {{ warning }}
+          </n-alert>
+          <pre v-for="ddl in ddlPreview.ddlStatements" :key="ddl" class="ddl-code">{{ ddl }}</pre>
+          <n-empty v-if="!ddlPreview.ddlStatements?.length" description="当前没有需要执行的 DDL" />
+        </section>
+
         <LowcodeModelDesigner
           v-model="currentModel.modelSchema"
           :domain="selectedDomain"
@@ -248,7 +263,6 @@
 
 <script setup>
 import {
-  AddCircleOutline,
   AddOutline,
   ChevronDownOutline,
   ChevronForwardOutline,
@@ -261,6 +275,7 @@ import {
   genTableColumnList,
   genTablePage,
   lowcodeCreateModel,
+  lowcodeDdlPreview,
   lowcodeDomainDefaults,
   lowcodeDomainTree,
   lowcodeModelDetail,
@@ -270,10 +285,10 @@ import {
 import DomainEditorDrawer from '@/components/lowcode-builder/domain/DomainEditorDrawer.vue'
 import LowcodeModelDesigner from '@/components/lowcode-builder/model/LowcodeModelDesigner.vue'
 import {
-  auditFieldNames,
   cloneSchema,
   createDefaultField,
   createDefaultModelSchema,
+  ensureSystemFields,
   isAuditField,
   normalizeFieldName,
   normalizeObjectCode,
@@ -288,6 +303,8 @@ const { dict } = useDict('lowcode_model_status')
 const domainLoading = ref(false)
 const modelLoading = ref(false)
 const saving = ref(false)
+const syncSaving = ref(false)
+const ddlLoading = ref(false)
 const domains = ref([])
 const models = ref([])
 const selectedDomainId = ref(null)
@@ -303,6 +320,7 @@ const tableModels = ref([])
 const tableModelLoading = ref(false)
 const selectedTableModelId = ref(null)
 const syncingTable = ref(false)
+const ddlPreview = ref(null)
 const tableModelOptions = computed(() => tableModels.value.map(item => ({
   label: `${item.tableComment || item.tableName}（${item.tableName}）`,
   value: item.tableId,
@@ -403,7 +421,7 @@ async function openModel(model) {
   applyModel(res.data)
 }
 
-async function saveModel() {
+async function saveModel(syncDdl = false) {
   if (!selectedDomain.value) {
     window.$message?.warning('请先选择业务领域')
     return
@@ -416,9 +434,14 @@ async function saveModel() {
     window.$message?.warning('请填写模型编码')
     return
   }
+  if (syncDdl && !window.confirm('确认保存模型配置并同步表结构到数据库？已有表只会追加缺失业务字段。'))
+    return
   syncModelIdentity()
-  currentModel.modelSchema.fields = (currentModel.modelSchema.fields || []).filter(field => !isAuditField(field))
-  saving.value = true
+  currentModel.modelSchema.fields = ensureSystemFields(currentModel.modelSchema.fields || [], true)
+  if (syncDdl)
+    syncSaving.value = true
+  else
+    saving.value = true
   try {
     const payload = {
       id: currentModel.id,
@@ -430,10 +453,13 @@ async function saveModel() {
       tenantEnabled: currentModel.tenantEnabled,
       masterData: currentModel.masterData,
       modelSchema: cloneSchema(currentModel.modelSchema),
+      syncDdl,
+      confirmSyncDdl: syncDdl,
     }
     const res = currentModel.id ? await lowcodeUpdateModel(payload) : await lowcodeCreateModel(payload)
     currentModel.id = res.data || currentModel.id
-    window.$message?.success('模型已保存')
+    window.$message?.success(syncDdl ? '模型已保存，表结构已同步' : '模型配置已保存')
+    ddlPreview.value = null
     await loadModels()
   }
   catch (e) {
@@ -441,6 +467,27 @@ async function saveModel() {
   }
   finally {
     saving.value = false
+    syncSaving.value = false
+  }
+}
+
+async function previewDdl() {
+  if (!selectedDomain.value) {
+    window.$message?.warning('请先选择业务领域')
+    return
+  }
+  syncModelIdentity()
+  currentModel.modelSchema.fields = ensureSystemFields(currentModel.modelSchema.fields || [], true)
+  ddlLoading.value = true
+  try {
+    const res = await lowcodeDdlPreview(cloneSchema(currentModel.modelSchema))
+    ddlPreview.value = res.data
+  }
+  catch (e) {
+    window.$message?.error(e?.message || 'DDL 预览失败')
+  }
+  finally {
+    ddlLoading.value = false
   }
 }
 
@@ -496,19 +543,24 @@ async function syncFromSelectedTableModel() {
     }
     if (!currentModel.modelSchema)
       currentModel.modelSchema = createModelSchema(selectedDomain.value)
-    if (table.tableName)
+    if (table.tableName) {
+      currentModel.modelCode = normalizeObjectCode(table.tableName)
       currentModel.modelSchema.tableName = normalizeTableName(table.tableName)
-    if (!currentModel.modelDesc && table.tableComment)
+    }
+    if (table.tableComment) {
+      currentModel.modelName = table.tableComment
       currentModel.modelDesc = table.tableComment
+    }
     currentModel.modelSchema.tableMode = 'EXISTING'
     currentModel.modelSchema.sourceTable = {
       tableId: table.tableId,
       tableName: table.tableName,
       tableComment: table.tableComment || '',
     }
-    currentModel.modelSchema.fields = columns
-      .filter(col => !auditFieldNames.includes(normalizeFieldName(col.javaField || col.columnName)))
-      .map(col => mapTableColumnToField(col))
+    currentModel.modelSchema.fields = ensureSystemFields(
+      columns.map(col => mapTableColumnToField(col)),
+      true,
+    )
     syncModelIdentity()
     window.$message?.success(`已同步 ${currentModel.modelSchema.fields.length} 个字段`)
   }
@@ -539,6 +591,10 @@ function mapTableColumnToField(column) {
     dictType: column.dictType || '',
     sensitiveType: column.desensitizeType || 'NONE',
     primaryKey: column.isPk === 1 || column.isPk === '1',
+    systemField: isAuditField({ field: fieldName, columnName: column.columnName }),
+    readonly: isAuditField({ field: fieldName, columnName: column.columnName }),
+    autoIncrement: (column.isPk === 1 || column.isPk === '1')
+      && String(column.extra || column.columnExtra || '').toLowerCase().includes('auto_increment'),
     sortable: false,
     remark: column.columnComment || '',
   }
@@ -628,6 +684,9 @@ function syncModelIdentity() {
   if (!currentModel.modelSchema.domain)
     currentModel.modelSchema.domain = {}
   currentModel.modelSchema.schemaVersion = 2
+  currentModel.modelSchema.fields = ensureSystemFields(currentModel.modelSchema.fields || [], true)
+  if (!currentModel.modelSchema.indexes)
+    currentModel.modelSchema.indexes = []
   currentModel.modelSchema.domain = {
     id: selectedDomain.value?.id || currentModel.domainId,
     code: selectedDomain.value?.domainCode || currentModel.domainCode,
@@ -639,6 +698,21 @@ function syncModelIdentity() {
     name: currentModel.modelName,
   }
   currentModel.modelSchema.businessName = currentModel.modelName
+  currentModel.modelSchema.policies = {
+    dataScope: 'TENANT',
+    regionField: '',
+    auditEnabled: true,
+    primaryKeyStrategy: 'AUTO_INCREMENT',
+    primaryKeyField: 'id',
+    tenantField: 'tenantId',
+    logicDeleteField: 'delFlag',
+    ...(currentModel.modelSchema.policies || {}),
+  }
+  currentModel.modelSchema.policies.auditEnabled = true
+  currentModel.modelSchema.policies.primaryKeyStrategy = 'AUTO_INCREMENT'
+  currentModel.modelSchema.policies.primaryKeyField = 'id'
+  currentModel.modelSchema.policies.tenantField = 'tenantId'
+  currentModel.modelSchema.policies.logicDeleteField = 'delFlag'
   if (!currentModel.modelSchema.tableName && currentModel.modelCode)
     currentModel.modelSchema.tableName = normalizeTableName(`${selectedDomain.value?.tablePrefix || 'biz_'}${currentModel.modelCode}`)
 }
@@ -748,6 +822,7 @@ async function handleDomainSaved() {
 .nav-block,
 .page-header,
 .basic-panel,
+.ddl-panel,
 .empty-panel {
   border: 1px solid #d8dee8;
   border-radius: 8px;
@@ -781,19 +856,11 @@ async function handleDomainSaved() {
 
 .asset-tree {
   display: grid;
-  max-height: calc(100vh - 190px);
+  max-height: min(420px, calc(100vh - 330px));
   gap: 4px;
   overflow: auto;
 }
 
-.tree-action-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.tree-action,
 .tree-domain,
 .tree-model {
   display: grid;
@@ -808,17 +875,6 @@ async function handleDomainSaved() {
   cursor: pointer;
   padding: 5px 8px;
   text-align: left;
-}
-
-.tree-action {
-  grid-template-columns: 22px minmax(0, 1fr);
-  border-color: #dbeafe;
-  background: #f8fbff;
-}
-
-.tree-icon {
-  color: #2563eb;
-  font-size: 16px;
 }
 
 .tree-domain {
@@ -840,6 +896,32 @@ async function handleDomainSaved() {
 .tree-model.create {
   border-style: dashed;
   color: #2563eb;
+}
+
+.model-list {
+  display: grid;
+  max-height: 320px;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.model-list .tree-model {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  border-color: #e5e7eb;
+  background: #fbfdff;
+}
+
+.model-list .tree-model.active {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.nav-head.compact {
+  align-items: flex-start;
+}
+
+.model-empty {
+  padding: 20px 0;
 }
 
 .tree-domain.disabled {
@@ -944,6 +1026,10 @@ async function handleDomainSaved() {
   padding: 14px;
 }
 
+.ddl-panel {
+  padding: 14px;
+}
+
 .section-title {
   margin-bottom: 12px;
   color: #0f172a;
@@ -971,6 +1057,22 @@ async function handleDomainSaved() {
   gap: 8px;
   width: 100%;
   align-items: center;
+}
+
+.ddl-warning {
+  margin-bottom: 10px;
+}
+
+.ddl-code {
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px;
+  white-space: pre-wrap;
 }
 
 .designer-panel {

@@ -39,6 +39,15 @@ export const useTabStore = defineStore('tab', {
         }
       }
     },
+    updateTabTitle(path, title) {
+      if (!path || !title)
+        return
+      const tab = this.tabs.find(item => item.path === path || item.key === path)
+      if (!tab || tab.title === title)
+        return
+      tab.title = title
+      setSessionStorage(TABS_KEY, this.tabs)
+    },
     // 修改 removeTab 方法，删除对应的缓存视图
     removeTab(key) {
       const index = this.tabs.findIndex(item => item.key === key)

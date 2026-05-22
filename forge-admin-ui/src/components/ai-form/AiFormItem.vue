@@ -20,6 +20,7 @@
     :label-width="field.labelWidth"
     :show-label="field.showLabel !== false"
     :show-feedback="field.showFeedback !== false"
+    :style="field.formItemStyle"
   >
     <!-- 输入框 -->
     <n-input
