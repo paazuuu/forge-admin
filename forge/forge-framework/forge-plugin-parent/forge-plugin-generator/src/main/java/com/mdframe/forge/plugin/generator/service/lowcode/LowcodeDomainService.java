@@ -40,7 +40,9 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
 
     private static final long ROOT_PARENT_ID = 0L;
     private static final Pattern DOMAIN_CODE_PATTERN = Pattern.compile("^[a-z][a-z0-9_]{1,47}$");
-    private static final Pattern PREFIX_PATTERN = Pattern.compile("^[a-z][a-z0-9_]*_$");
+    private static final Pattern PREFIX_PATTERN = Pattern.compile("^[a-z][a-z0-9_]*$");
+    private static final String DEFAULT_APP_TYPE = "SINGLE";
+    private static final String DEFAULT_LAYOUT_TYPE = "simple-crud";
     private static final Set<String> AUDIT_FIELDS = Set.of(
             "id", "tenantId", "createBy", "createTime", "createDept", "updateBy", "updateTime", "delFlag"
     );
@@ -213,10 +215,8 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
 
         String status = StringUtils.defaultIfBlank(dto.getStatus(), STATUS_ENABLED);
         validateStatus(status);
-        String tablePrefix = StringUtils.defaultIfBlank(dto.getTablePrefix(), "biz_" + domainCode + "_");
-        String configKeyPrefix = StringUtils.defaultIfBlank(dto.getConfigKeyPrefix(), domainCode + "_");
-        validatePrefix(tablePrefix, "默认表名前缀");
-        validatePrefix(configKeyPrefix, "默认配置键前缀");
+        String tablePrefix = normalizePrefix(StringUtils.defaultIfBlank(dto.getTablePrefix(), "biz_" + domainCode + "_"), "默认表名前缀");
+        String configKeyPrefix = normalizePrefix(StringUtils.defaultIfBlank(dto.getConfigKeyPrefix(), domainCode + "_"), "默认配置键前缀");
 
         LowcodeDomainSchema domainSchema = normalizeSchema(dto.getDomainSchema(), tablePrefix, configKeyPrefix, dto);
         domain.setTenantId(tenantId);
@@ -230,8 +230,8 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         domain.setMenuParentId(dto.getMenuParentId());
         domain.setTablePrefix(tablePrefix);
         domain.setConfigKeyPrefix(configKeyPrefix);
-        domain.setDefaultAppType(StringUtils.defaultIfBlank(dto.getDefaultAppType(), "SINGLE"));
-        domain.setDefaultLayoutType(StringUtils.defaultIfBlank(dto.getDefaultLayoutType(), "simple-crud"));
+        domain.setDefaultAppType(DEFAULT_APP_TYPE);
+        domain.setDefaultLayoutType(DEFAULT_LAYOUT_TYPE);
         domain.setDefaultTableMode(StringUtils.defaultIfBlank(dto.getDefaultTableMode(), "CREATE"));
         domain.setDomainSchema(writeSchema(domainSchema));
     }
@@ -263,8 +263,8 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         if (StringUtils.isBlank(result.getNaming().getObjectCodeStyle())) {
             result.getNaming().setObjectCodeStyle("lower_snake");
         }
-        result.getDefaults().setAppType(StringUtils.defaultIfBlank(dto.getDefaultAppType(), "SINGLE"));
-        result.getDefaults().setLayoutType(StringUtils.defaultIfBlank(dto.getDefaultLayoutType(), "simple-crud"));
+        result.getDefaults().setAppType(null);
+        result.getDefaults().setLayoutType(null);
         result.getDefaults().setTableMode(StringUtils.defaultIfBlank(dto.getDefaultTableMode(), "CREATE"));
         result.getDefaults().setMenuParentId(dto.getMenuParentId());
         return result;
@@ -287,10 +287,12 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         }
     }
 
-    private void validatePrefix(String prefix, String label) {
-        if (StringUtils.isBlank(prefix) || !PREFIX_PATTERN.matcher(prefix).matches()) {
-            throw new BusinessException(label + "格式不正确（小写字母开头，仅含小写字母+数字+下划线，并以下划线结尾）");
+    private String normalizePrefix(String prefix, String label) {
+        String value = StringUtils.trimToEmpty(prefix);
+        if (StringUtils.isBlank(value) || !PREFIX_PATTERN.matcher(value).matches()) {
+            throw new BusinessException(label + "格式不正确（小写字母开头，仅含小写字母+数字+下划线）");
         }
+        return value.endsWith("_") ? value : value + "_";
     }
 
     private void validateStatus(String status) {

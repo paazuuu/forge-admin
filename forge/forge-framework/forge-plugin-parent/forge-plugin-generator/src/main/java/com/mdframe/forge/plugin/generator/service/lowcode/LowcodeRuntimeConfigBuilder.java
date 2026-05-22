@@ -136,13 +136,11 @@ public class LowcodeRuntimeConfigBuilder {
         options.put("editGridCols", resolveEditGridCols(pageSchema));
 
         LowcodePageZone tableZone = findZone(pageSchema, "table");
-        Object treeConfigOverrides = null;
         if (tableZone != null && tableZone.getProps() != null) {
             copyOption(tableZone.getProps(), options, "showImport");
             copyOption(tableZone.getProps(), options, "showExport");
             copyOption(tableZone.getProps(), options, "hideBatchDelete");
             copyOption(tableZone.getProps(), options, "enableCustomQuery");
-            treeConfigOverrides = tableZone.getProps().get("treeConfig");
         }
         options.put("toolbarActions", resolveCustomActions(pageSchema, "toolbar"));
         options.put("rowActions", resolveCustomActions(pageSchema, "row"));
@@ -152,7 +150,7 @@ public class LowcodeRuntimeConfigBuilder {
             options.put("masterDetailConfig", buildMasterDetailConfig(modelSchema, pageSchema));
         }
         if (isTreeRuntime(modelSchema, pageSchema)) {
-            options.put("treeConfig", buildTreeConfig(modelSchema, treeConfigOverrides));
+            options.put("treeConfig", buildTreeConfig(modelSchema, extractTreeConfigOverrides(pageSchema)));
         }
         return options;
     }
@@ -511,7 +509,7 @@ public class LowcodeRuntimeConfigBuilder {
         }
         LowcodeFieldSchema fieldSchema = findField(modelSchema, parentField);
         if (fieldSchema == null) {
-            throw new BusinessException("树形父级字段不存在: " + parentField);
+            return;
         }
         Map<String, Object> hiddenField = "edit".equals(zoneKey) ? buildEditField(fieldSchema) : buildSearchField(fieldSchema);
         hiddenField.put("hidden", true);
@@ -522,10 +520,33 @@ public class LowcodeRuntimeConfigBuilder {
 
     private Object extractTreeConfigOverrides(LowcodePageSchema pageSchema) {
         LowcodePageZone tableZone = findZone(pageSchema, "table");
-        if (tableZone == null || tableZone.getProps() == null) {
+        if (tableZone != null && tableZone.getProps() != null && tableZone.getProps().get("treeConfig") != null) {
+            return tableZone.getProps().get("treeConfig");
+        }
+        return extractGridTreeConfigOverrides(pageSchema);
+    }
+
+    private Object extractGridTreeConfigOverrides(LowcodePageSchema pageSchema) {
+        if (pageSchema == null || pageSchema.getListGridLayout() == null) {
             return null;
         }
-        return tableZone.getProps().get("treeConfig");
+        Object items = pageSchema.getListGridLayout().get("items");
+        if (!(items instanceof List<?> itemList)) {
+            return null;
+        }
+        for (Object item : itemList) {
+            if (!(item instanceof Map<?, ?> block)) {
+                continue;
+            }
+            if (!"tree-panel".equals(String.valueOf(block.get("blockType")))) {
+                continue;
+            }
+            Object props = block.get("props");
+            if (props instanceof Map<?, ?>) {
+                return props;
+            }
+        }
+        return null;
     }
 
     private LowcodeFieldSchema findField(LowcodeModelSchema modelSchema, String fieldName) {
@@ -609,8 +630,13 @@ public class LowcodeRuntimeConfigBuilder {
                 StringUtils.defaultIfBlank(field.getQueryType(), "eq")).toLowerCase(Locale.ROOT);
         item.put("field", field.getField());
         item.put("label", StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
-        item.put("type", resolveSearchComponentType(field, queryType));
+        String componentType = resolveSearchComponentType(field, queryType);
+        item.put("type", componentType);
         item.put("queryType", queryType);
+        if ("daterange".equals(componentType) || "datetimerange".equals(componentType) || "timerange".equals(componentType)) {
+            item.put("startPlaceholder", "开始" + StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
+            item.put("endPlaceholder", "结束" + StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
+        }
         if (StringUtils.isNotBlank(field.getDictType())) {
             item.put("dictType", field.getDictType());
         }
@@ -852,7 +878,32 @@ public class LowcodeRuntimeConfigBuilder {
             putIfNotBlank(action, "routePath", text(source.get("routePath")));
             putIfNotBlank(action, "openTarget", StringUtils.defaultIfBlank(text(source.get("openTarget")), "_self"));
             putIfNotBlank(action, "confirmText", text(source.get("confirmText")));
+            List<Map<String, Object>> params = resolveActionParams(source.get("params"));
+            if (!params.isEmpty()) {
+                action.put("params", params);
+            }
             result.add(action);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> resolveActionParams(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> source)) {
+                continue;
+            }
+            String name = text(source.get("name"));
+            if (StringUtils.isBlank(name)) {
+                continue;
+            }
+            Map<String, Object> param = new LinkedHashMap<>();
+            param.put("name", name);
+            param.put("value", StringUtils.defaultString(text(source.get("value"))));
+            result.add(param);
         }
         return result;
     }
@@ -1047,15 +1098,30 @@ public class LowcodeRuntimeConfigBuilder {
         if (StringUtils.isNotBlank(field.getDictType())) {
             return "select";
         }
-        String componentType = StringUtils.defaultIfBlank(field.getComponentType(), "input");
-        if ("between".equals(queryType) && ("date".equals(componentType) || "datetime".equals(componentType))) {
-            return "daterange";
+        String componentType = StringUtils.defaultIfBlank(field.getComponentType(), field.getDataType());
+        componentType = StringUtils.defaultIfBlank(componentType, "input");
+        if ("between".equals(queryType)) {
+            if ("datetime".equals(componentType)) {
+                return "datetimerange";
+            }
+            if ("date".equals(componentType)) {
+                return "daterange";
+            }
+            if ("time".equals(componentType)) {
+                return "timerange";
+            }
         }
         if ("number".equals(componentType)) {
             return "number";
         }
-        if ("date".equals(componentType) || "datetime".equals(componentType)) {
+        if ("date".equals(componentType)) {
             return "date";
+        }
+        if ("datetime".equals(componentType)) {
+            return "datetime";
+        }
+        if ("time".equals(componentType)) {
+            return "time";
         }
         return "input";
     }
@@ -1075,6 +1141,7 @@ public class LowcodeRuntimeConfigBuilder {
         String componentType = resolveEditComponentType(field);
         if ("select".equals(componentType) || "radio".equals(componentType) || "checkbox".equals(componentType)
                 || "date".equals(componentType) || "datetime".equals(componentType) || "time".equals(componentType)
+                || "daterange".equals(componentType) || "datetimerange".equals(componentType) || "timerange".equals(componentType)
                 || "treeSelect".equals(componentType) || "cascader".equals(componentType)) {
             return "请选择" + label;
         }

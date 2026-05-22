@@ -114,7 +114,7 @@ public class LowcodeSchemaValidator {
         for (LowcodePageZone zone : pageSchema.getZones()) {
             validateZone(zone, pageFields);
         }
-        validateTreeRuntime(modelSchema, pageSchema, modelFields);
+        validateTreeRuntime(modelSchema, pageSchema, modelFields, pageFields);
     }
 
     private void validateTableName(String tableName) {
@@ -285,18 +285,23 @@ public class LowcodeSchemaValidator {
 
     private void validateTreeRuntime(LowcodeModelSchema modelSchema,
                                      LowcodePageSchema pageSchema,
-                                     Set<String> modelFields) {
+                                     Set<String> modelFields,
+                                     Set<String> pageFields) {
         if (!isTreeRuntime(modelSchema, pageSchema)) {
             return;
         }
         String parentField = resolveTreeParentField(modelSchema, pageSchema);
-        if (StringUtils.isBlank(parentField) || !modelFields.contains(parentField)) {
+        if (StringUtils.isBlank(parentField) || !isValidTreeField(parentField, modelFields, pageFields)) {
             throw new BusinessException("树形表必须配置父级字段，请先添加 parentId/pid 等字段或在树形配置中指定父级字段");
         }
         String labelField = resolveTreeLabelField(modelSchema, pageSchema);
-        if (StringUtils.isNotBlank(labelField) && !modelFields.contains(labelField)) {
+        if (StringUtils.isNotBlank(labelField) && !isValidTreeField(labelField, modelFields, pageFields)) {
             throw new BusinessException("树形显示字段不存在: " + labelField);
         }
+    }
+
+    private boolean isValidTreeField(String field, Set<String> modelFields, Set<String> pageFields) {
+        return modelFields.contains(field) || pageFields.contains(field);
     }
 
     private boolean isTreeRuntime(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
@@ -305,8 +310,9 @@ public class LowcodeSchemaValidator {
     }
 
     private String resolveTreeParentField(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
-        String parentField = modelSchema.getTreeConfig() != null ? modelSchema.getTreeConfig().getParentField() : null;
-        parentField = StringUtils.defaultIfBlank(parentField, readPageTreeConfig(pageSchema, "parentField"));
+        String parentField = readPageTreeConfig(pageSchema, "parentField");
+        parentField = StringUtils.defaultIfBlank(parentField,
+                modelSchema.getTreeConfig() != null ? modelSchema.getTreeConfig().getParentField() : null);
         if (StringUtils.isNotBlank(parentField)) {
             return parentField;
         }
@@ -318,8 +324,9 @@ public class LowcodeSchemaValidator {
     }
 
     private String resolveTreeLabelField(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
-        String labelField = modelSchema.getTreeConfig() != null ? modelSchema.getTreeConfig().getLabelField() : null;
-        labelField = StringUtils.defaultIfBlank(labelField, readPageTreeConfig(pageSchema, "labelField"));
+        String labelField = readPageTreeConfig(pageSchema, "labelField");
+        labelField = StringUtils.defaultIfBlank(labelField,
+                modelSchema.getTreeConfig() != null ? modelSchema.getTreeConfig().getLabelField() : null);
         if (StringUtils.isNotBlank(labelField)) {
             return labelField;
         }
@@ -331,10 +338,10 @@ public class LowcodeSchemaValidator {
     }
 
     private String readPageTreeConfig(LowcodePageSchema pageSchema, String key) {
-        if (pageSchema == null || pageSchema.getZones() == null) {
+        if (pageSchema == null) {
             return null;
         }
-        return pageSchema.getZones().stream()
+        String zoneValue = pageSchema.getZones() == null ? null : pageSchema.getZones().stream()
                 .filter(zone -> "table".equals(zone.getZoneKey()))
                 .map(LowcodePageZone::getProps)
                 .filter(props -> props != null && props.get("treeConfig") instanceof java.util.Map<?, ?>)
@@ -344,5 +351,33 @@ public class LowcodeSchemaValidator {
                 .map(String::valueOf)
                 .findFirst()
                 .orElse(null);
+        return StringUtils.defaultIfBlank(zoneValue, readGridTreeConfig(pageSchema, key));
+    }
+
+    private String readGridTreeConfig(LowcodePageSchema pageSchema, String key) {
+        if (pageSchema == null || pageSchema.getListGridLayout() == null) {
+            return null;
+        }
+        Object items = pageSchema.getListGridLayout().get("items");
+        if (!(items instanceof List<?> itemList)) {
+            return null;
+        }
+        for (Object item : itemList) {
+            if (!(item instanceof java.util.Map<?, ?> block)) {
+                continue;
+            }
+            if (!"tree-panel".equals(String.valueOf(block.get("blockType")))) {
+                continue;
+            }
+            Object props = block.get("props");
+            if (!(props instanceof java.util.Map<?, ?> propMap)) {
+                continue;
+            }
+            Object value = propMap.get(key);
+            if (value != null && StringUtils.isNotBlank(String.valueOf(value))) {
+                return String.valueOf(value);
+            }
+        }
+        return null;
     }
 }

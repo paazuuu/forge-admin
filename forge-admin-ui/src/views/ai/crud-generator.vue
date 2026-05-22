@@ -135,7 +135,7 @@
                 AI 辅助配置
               </div>
               <div class="empty-chat-tip">
-                面向技术人员生成和优化 CRUD 配置；业务人员优先使用低代码工作台完成可视化搭建和发布
+                面向技术人员生成和优化页面配置；业务人员优先使用低代码工作台完成可视化搭建和发布
               </div>
               <n-button size="small" type="primary" class="empty-chat-action" @click="router.push('/ai/lowcode-apps')">
                 <template #icon>
@@ -232,7 +232,7 @@
               v-model:value="inputText"
               type="textarea"
               :rows="3"
-              placeholder="详细描述你需要的 CRUD 页面功能，如：员工管理系统，包含姓名、工号、部门、职位、入职日期、手机号、邮箱、状态等字段"
+              placeholder="详细描述你需要的管理页面功能，如：员工管理系统，包含姓名、工号、部门、职位、入职日期、手机号、邮箱、状态等字段"
               style="flex: 1"
               @keydown.enter.exact.prevent="sendMessage"
             />
@@ -566,13 +566,10 @@ const {
   configKey,
   tableName,
   generating,
-  generatedFiles,
   activeFile,
   inputText,
   sessionList,
   displayContent,
-  reasoningContent,
-  isReasoningPhase,
 
   layoutType,
   templateList,
@@ -607,7 +604,6 @@ const messageListRef = ref(null)
 const sidebarCollapsed = ref(false)
 const previewCollapsed = ref(false)
 const activeTabGroup = ref('core')
-const showAdvancedInput = ref(false)
 const showModelPanel = ref(false)
 
 const currentProviderLabel = computed(() => {
@@ -700,7 +696,10 @@ const configKeyError = ref('')
 const tableNameError = ref('')
 
 function validateConfigKey(val) {
-  if (!val) { configKeyError.value = ''; return }
+  if (!val) {
+    configKeyError.value = ''
+    return
+  }
   if (/[\u4E00-\u9FA5]/.test(val)) {
     configKeyError.value = '页面标识不能包含中文'
   }
@@ -713,7 +712,10 @@ function validateConfigKey(val) {
 }
 
 function validateTableName(val) {
-  if (!val) { tableNameError.value = ''; return }
+  if (!val) {
+    tableNameError.value = ''
+    return
+  }
   if (/[\u4E00-\u9FA5]/.test(val)) {
     tableNameError.value = '表名不能包含中文'
   }
@@ -736,75 +738,6 @@ const currentFileContent = computed({
 const tableOptions = ref([])
 const showImportModal = ref(false)
 const showMenuModal = ref(false)
-
-function getSchemaLabel(key) {
-  const labelMap = {
-    searchSchema: '搜索配置',
-    columnsSchema: '表格列配置',
-    editSchema: '编辑表单配置',
-    apiConfig: '接口配置',
-    dictConfig: '字典配置',
-    desensitizeConfig: '脱敏配置',
-    encryptConfig: '加解密配置',
-    transConfig: '翻译配置',
-    createTableSql: '建表SQL',
-    tableStructure: '表结构',
-  }
-  return labelMap[key] || key
-}
-
-async function regenerateSingleSchema(schemaKey) {
-  if (generating.value) {
-    warning('正在生成中，请等待完成')
-    return
-  }
-  if (!configKey.value) {
-    warning('请先输入 configKey')
-    return
-  }
-  if (!inputText.value.trim() && !description.value) {
-    warning('请先输入需求描述')
-    return
-  }
-
-  const schemaLabel = getSchemaLabel(schemaKey)
-  const prompt = `请只生成"${schemaLabel}"部分的配置，其他部分不需要生成。${inputText.value || description.value}`
-
-  generating.value = true
-  activeFile.value = schemaKey
-  currentReceivingFile.value = schemaKey
-
-  displayContent.value[schemaKey] = ''
-  generatedFiles.value[schemaKey] = ''
-
-  const request = {
-    sessionId: sessionId.value || generateSessionId(),
-    configKey: configKey.value,
-    tableName: tableName.value || undefined,
-    description: prompt,
-    singleSchema: schemaKey,
-  }
-
-  messages.value.push({
-    role: 'user',
-    content: `[重新生成${schemaLabel}] ${inputText.value || description.value}`,
-    createTime: new Date().toISOString(),
-  })
-
-  messages.value.push({
-    role: 'assistant',
-    content: `正在重新生成${schemaLabel}...`,
-    streaming: true,
-    createTime: new Date().toISOString(),
-  })
-
-  abortController.value = streamGenerate(
-    request,
-    handleSSEChunk,
-    handleSSEComplete,
-    handleSSEError,
-  )
-}
 
 async function loadTableOptions() {
   try {
@@ -1036,7 +969,7 @@ onMounted(async () => {
 
 <style scoped>
 /* ============================================
-   AI CRUD Generator — 浅色科技蓝 Scoped 样式
+   AI 页面生成器 — 浅色科技蓝 Scoped 样式
    冰蓝基底 + 靛青/天蓝渐变 - 干净高级的科技感
    ============================================ */
 

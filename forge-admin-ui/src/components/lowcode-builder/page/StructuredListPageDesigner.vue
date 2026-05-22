@@ -32,6 +32,7 @@
           >
             <ComponentPreviewControl
               :field="queryField"
+              :query-type="resolveSearchQueryType(queryField)"
               :options="resolveOptions(queryField)"
               disabled
             />
@@ -197,7 +198,7 @@
 </template>
 
 <script setup>
-import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NUpload } from 'naive-ui'
+import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NTimePicker, NUpload } from 'naive-ui'
 import { computed, defineComponent, h, ref } from 'vue'
 import draggable from 'vuedraggable'
 import { isPageFieldVisible } from './page-schema'
@@ -242,12 +243,17 @@ const ComponentPreviewControl = defineComponent({
       type: Boolean,
       default: false,
     },
+    queryType: {
+      type: String,
+      default: '',
+    },
   },
   setup(controlProps) {
     return () => {
       const field = controlProps.field
       const label = field.label || field.field
       const componentType = field.componentType
+      const previewType = resolveSearchControlType(field, controlProps.queryType)
       if (componentType === 'number' || ['int', 'bigint', 'decimal'].includes(field.dataType)) {
         return h(NInputNumber, {
           disabled: controlProps.disabled,
@@ -256,10 +262,41 @@ const ComponentPreviewControl = defineComponent({
           style: 'width: 100%',
         })
       }
-      if (['date', 'datetime'].includes(componentType) || ['date', 'datetime'].includes(field.dataType)) {
+      if (['daterange', 'datetimerange'].includes(previewType)) {
         return h(NDatePicker, {
           disabled: controlProps.disabled,
-          type: componentType === 'datetime' || field.dataType === 'datetime' ? 'datetime' : 'date',
+          type: previewType,
+          startPlaceholder: `开始${label}`,
+          endPlaceholder: `结束${label}`,
+          style: 'width: 100%',
+        })
+      }
+      if (previewType === 'timerange') {
+        return h('div', { class: 'preview-time-range' }, [
+          h(NTimePicker, {
+            disabled: controlProps.disabled,
+            placeholder: `开始${label}`,
+            style: 'width: 100%',
+          }),
+          h('span', null, '至'),
+          h(NTimePicker, {
+            disabled: controlProps.disabled,
+            placeholder: `结束${label}`,
+            style: 'width: 100%',
+          }),
+        ])
+      }
+      if (['date', 'datetime'].includes(previewType)) {
+        return h(NDatePicker, {
+          disabled: controlProps.disabled,
+          type: previewType,
+          placeholder: `请选择${label}`,
+          style: 'width: 100%',
+        })
+      }
+      if (previewType === 'time') {
+        return h(NTimePicker, {
+          disabled: controlProps.disabled,
           placeholder: `请选择${label}`,
           style: 'width: 100%',
         })
@@ -515,6 +552,29 @@ function resolveFields(zone, fallback) {
   return refs.map(ref => fieldMap.value.get(ref)).filter(Boolean)
 }
 
+function resolveSearchQueryType(field) {
+  return searchZone.value?.props?.fieldSettings?.[field.field]?.queryType || field.queryType || 'like'
+}
+
+function resolveSearchControlType(field, queryType = '') {
+  const componentType = field.componentType || field.dataType
+  if (queryType === 'between') {
+    if (componentType === 'datetime')
+      return 'datetimerange'
+    if (componentType === 'date')
+      return 'daterange'
+    if (componentType === 'time')
+      return 'timerange'
+  }
+  if (componentType === 'datetime')
+    return 'datetime'
+  if (componentType === 'date')
+    return 'date'
+  if (componentType === 'time')
+    return 'time'
+  return componentType
+}
+
 function updateZoneRefs(zoneKey, refs) {
   patchZone(zoneKey, { fieldRefs: refs })
 }
@@ -660,6 +720,18 @@ function resolveSampleValue(field, index = 0) {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+:deep(.preview-time-range) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+:deep(.preview-time-range span) {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .table-toolbar {

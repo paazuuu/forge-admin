@@ -111,7 +111,8 @@ public class LowcodeDdlService {
     }
 
     private List<String> buildAddColumnSql(LowcodeModelSchema modelSchema, List<String> warnings) {
-        Set<String> existingColumns = ddlRepository.listColumns(modelSchema.getTableName());
+        Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata = ddlRepository.listColumnMetadata(modelSchema.getTableName());
+        Set<String> existingColumns = columnMetadata.keySet();
         List<String> ddlList = new ArrayList<>();
         appendMissingSystemColumns(modelSchema.getTableName(), existingColumns, ddlList);
         for (LowcodeFieldSchema field : businessFields(modelSchema)) {
@@ -119,12 +120,37 @@ public class LowcodeDdlService {
                 continue;
             }
             ddlList.add("ALTER TABLE `" + modelSchema.getTableName() + "` ADD COLUMN "
-                    + buildColumnDefinition(field, true));
+                    + buildColumnDefinition(field, false));
         }
+        appendRequiredColumnChanges(modelSchema, columnMetadata, ddlList, warnings);
         appendMissingIndexes(modelSchema, ddlRepository.listIndexes(modelSchema.getTableName()), ddlList, warnings);
-        warnings.add("已有表在线变更仅追加缺失系统字段和业务字段，不会删除、重命名或修改已有字段类型");
-        warnings.add("为避免历史数据写入失败，已有表追加字段统一按可空列生成，表单必填仍由运行时校验");
+        warnings.add("已有表在线变更仅追加缺失字段、索引，并同步业务字段是否必填，不会删除或重命名字段");
+        warnings.add("字段改为必填会执行 NOT NULL 变更；如果历史数据存在空值，数据库可能拒绝执行，请先清洗数据或设置默认值");
         return ddlList;
+    }
+
+    private void appendRequiredColumnChanges(LowcodeModelSchema modelSchema,
+                                             Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata,
+                                             List<String> ddlList,
+                                             List<String> warnings) {
+        for (LowcodeFieldSchema field : businessFields(modelSchema)) {
+            validateIdentifier(field.getColumnName(), "字段列名");
+            LowcodeDdlRepository.ColumnMetadata metadata = columnMetadata.get(field.getColumnName());
+            if (metadata == null) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(metadata.generationExpression())) {
+                warnings.add("字段 " + field.getLabel() + " 是生成列，跳过是否必填同步");
+                continue;
+            }
+            boolean currentRequired = "NO".equalsIgnoreCase(metadata.isNullable());
+            boolean expectedRequired = Boolean.TRUE.equals(field.getRequired());
+            if (currentRequired == expectedRequired) {
+                continue;
+            }
+            ddlList.add("ALTER TABLE `" + modelSchema.getTableName() + "` MODIFY COLUMN "
+                    + buildExistingColumnDefinition(metadata, expectedRequired));
+        }
     }
 
     private void appendMissingSystemColumns(String tableName, Set<String> existingColumns, List<String> ddlList) {
@@ -285,6 +311,61 @@ public class LowcodeDdlService {
                 + " COMMENT '" + escapeSqlComment(StringUtils.defaultIfBlank(field.getLabel(), field.getColumnName())) + "'";
     }
 
+    private String buildExistingColumnDefinition(LowcodeDdlRepository.ColumnMetadata metadata, boolean required) {
+        validateIdentifier(metadata.columnName(), "字段列名");
+        StringBuilder definition = new StringBuilder();
+        definition.append("`").append(metadata.columnName()).append("` ").append(metadata.columnType());
+        definition.append(required ? " NOT NULL" : " NULL");
+        appendDefaultValue(definition, metadata.columnDefault(), !required);
+        appendExtra(definition, metadata.extra());
+        definition.append(" COMMENT '").append(escapeSqlComment(metadata.columnComment())).append("'");
+        return definition.toString();
+    }
+
+    private void appendDefaultValue(StringBuilder definition, Object defaultValue, boolean nullable) {
+        if (defaultValue == null) {
+            if (nullable) {
+                definition.append(" DEFAULT NULL");
+            }
+            return;
+        }
+        String value = String.valueOf(defaultValue);
+        if ("NULL".equalsIgnoreCase(value)) {
+            if (nullable) {
+                definition.append(" DEFAULT NULL");
+            }
+            return;
+        }
+        if (isExpressionDefault(value)) {
+            definition.append(" DEFAULT ").append(value);
+            return;
+        }
+        definition.append(" DEFAULT '").append(escapeSqlComment(value)).append("'");
+    }
+
+    private boolean isExpressionDefault(String value) {
+        String normalized = StringUtils.defaultString(value).trim().toUpperCase(Locale.ROOT);
+        return normalized.equals("CURRENT_TIMESTAMP")
+                || normalized.equals("CURRENT_TIMESTAMP()")
+                || normalized.equals("CURRENT_DATE")
+                || normalized.equals("CURRENT_DATE()")
+                || normalized.equals("CURRENT_TIME")
+                || normalized.equals("CURRENT_TIME()")
+                || normalized.startsWith("B'")
+                || normalized.startsWith("X'");
+    }
+
+    private void appendExtra(StringBuilder definition, String extra) {
+        String normalized = StringUtils.defaultString(extra).trim();
+        if (StringUtils.isBlank(normalized)) {
+            return;
+        }
+        String upper = normalized.toUpperCase(Locale.ROOT);
+        if (upper.contains("ON UPDATE CURRENT_TIMESTAMP")) {
+            definition.append(" ON UPDATE CURRENT_TIMESTAMP");
+        }
+    }
+
     private String resolveSqlType(LowcodeFieldSchema field, String dataType) {
         return switch (dataType) {
             case "varchar" -> "varchar(" + normalizeLength(field, 255, 1, 2048) + ")";
@@ -340,10 +421,13 @@ public class LowcodeDdlService {
         if (normalized.startsWith("ALTER TABLE") && normalized.contains(" ADD COLUMN ")) {
             return;
         }
+        if (normalized.startsWith("ALTER TABLE") && normalized.contains(" MODIFY COLUMN ")) {
+            return;
+        }
         if (normalized.startsWith("ALTER TABLE") && (normalized.contains(" ADD KEY ") || normalized.contains(" ADD UNIQUE KEY "))) {
             return;
         }
-        throw new BusinessException("仅允许执行受控 CREATE TABLE 或 ALTER TABLE ADD COLUMN 语句");
+        throw new BusinessException("仅允许执行受控 CREATE TABLE、ALTER TABLE ADD/MODIFY COLUMN 或 ADD KEY 语句");
     }
 
     private List<LowcodeFieldSchema> businessFields(LowcodeModelSchema modelSchema) {

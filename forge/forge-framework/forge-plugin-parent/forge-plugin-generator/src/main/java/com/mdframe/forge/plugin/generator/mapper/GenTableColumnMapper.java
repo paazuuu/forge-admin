@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 代码生成表字段配置Mapper接口
@@ -29,4 +30,11 @@ public interface GenTableColumnMapper extends BaseMapper<GenTableColumn> {
             "AND table_name = #{tableName} " +
             "ORDER BY ordinal_position")
     List<GenTableColumn> selectDbTableColumnsByName(@Param("tableName") String tableName);
+
+    /**
+     * 按数据模型字段配置同步表模型字段必填状态。
+     */
+    int updateRequiredByTableRef(@Param("tableId") Long tableId,
+                                 @Param("tableName") String tableName,
+                                 @Param("columns") List<Map<String, Object>> columns);
 }

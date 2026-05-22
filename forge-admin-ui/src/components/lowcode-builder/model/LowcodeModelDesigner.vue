@@ -38,22 +38,15 @@
               <n-form-item label="模型名称">
                 <n-input v-model:value="localModel.object.name" placeholder="例如：客户档案" />
               </n-form-item>
-              <n-form-item label="模型编码">
+              <n-form-item label="模型编码 / 数据表名">
                 <n-input
                   :value="localModel.object.code"
-                  placeholder="customer_archive"
-                  @update:value="localModel.object.code = normalizeObjectCode($event)"
+                  placeholder="tf_f_order"
+                  @update:value="updateModelCode"
                 />
               </n-form-item>
               <n-form-item label="业务名称">
                 <n-input v-model:value="localModel.businessName" placeholder="例如：客户档案" />
-              </n-form-item>
-              <n-form-item label="数据表">
-                <n-input
-                  :value="localModel.tableName"
-                  placeholder="biz_customer_archive"
-                  @update:value="localModel.tableName = normalizeTableName($event)"
-                />
               </n-form-item>
               <n-form-item label="应用类型">
                 <n-select
@@ -116,56 +109,87 @@
         <n-tab-pane name="relations" tab="关联配置">
           <section class="designer-section">
             <div class="section-toolbar">
-              <div class="section-title">
-                业务对象关系
+              <div>
+                <div class="section-title">
+                  业务对象关系
+                </div>
+                <p class="section-desc">
+                  用于说明当前模型如何关联其它模型，常见场景是订单关联客户、明细关联主表。
+                </p>
               </div>
               <n-button type="primary" @click="addRelation">
                 添加关系
               </n-button>
             </div>
+            <div class="relation-guide">
+              <strong>配置示例：</strong>
+              当前模型“订单”里有字段 customerId，目标模型选择“客户”，本模型字段选 customerId，关联对象字段选 id，回显字段选客户名称。
+            </div>
             <div v-if="localModel.relations?.length" class="relation-list">
               <div v-for="(relation, index) in localModel.relations" :key="index" class="relation-row">
-                <n-select
-                  :value="relation.relationType"
-                  :options="relationTypeOptions"
-                  size="small"
-                  @update:value="updateRelation(index, { relationType: $event })"
-                />
-                <n-select
-                  :value="relation.targetObjectCode"
-                  size="small"
-                  filterable
-                  :options="targetModelOptions"
-                  placeholder="选择目标模型"
-                  @update:value="handleTargetModelChange(index, $event)"
-                />
-                <n-select
-                  :value="relation.sourceField"
-                  :options="fieldOptions"
-                  size="small"
-                  placeholder="源字段"
-                  @update:value="updateRelation(index, { sourceField: $event })"
-                />
-                <n-select
-                  :value="relation.targetField"
-                  size="small"
-                  filterable
-                  :options="targetFieldOptions(relation)"
-                  placeholder="目标字段"
-                  @update:value="updateRelation(index, { targetField: $event })"
-                />
-                <n-select
-                  :value="relation.displayField"
-                  size="small"
-                  filterable
-                  clearable
-                  :options="targetFieldOptions(relation)"
-                  placeholder="展示字段"
-                  @update:value="updateRelation(index, { displayField: $event || '' })"
-                />
-                <n-button text size="small" class="text-error" @click="removeRelation(index)">
-                  删除
-                </n-button>
+                <div class="relation-field">
+                  <span>关系类型</span>
+                  <n-select
+                    :value="relation.relationType"
+                    :options="relationTypeOptions"
+                    size="small"
+                    @update:value="updateRelation(index, { relationType: $event })"
+                  />
+                  <small>{{ relationTypeHint(relation.relationType) }}</small>
+                </div>
+                <div class="relation-field">
+                  <span>关联对象</span>
+                  <n-select
+                    :value="relation.targetObjectCode"
+                    size="small"
+                    filterable
+                    :options="targetModelOptions"
+                    placeholder="选择要关联的模型"
+                    @update:value="handleTargetModelChange(index, $event)"
+                  />
+                  <small>被当前模型引用，或承载子记录的模型。</small>
+                </div>
+                <div class="relation-field">
+                  <span>本模型字段</span>
+                  <n-select
+                    :value="relation.sourceField"
+                    :options="businessFieldOptions"
+                    size="small"
+                    placeholder="选择本模型里的关联字段"
+                    @update:value="updateRelation(index, { sourceField: $event })"
+                  />
+                  <small>通常是 customerId、parentId、orderId 这类外键字段。</small>
+                </div>
+                <div class="relation-field">
+                  <span>关联对象字段</span>
+                  <n-select
+                    :value="relation.targetField"
+                    size="small"
+                    filterable
+                    :options="targetFieldOptions(relation)"
+                    placeholder="通常选择 id"
+                    @update:value="updateRelation(index, { targetField: $event })"
+                  />
+                  <small>本模型字段会与这个字段匹配，通常是关联对象的 id。</small>
+                </div>
+                <div class="relation-field">
+                  <span>回显字段</span>
+                  <n-select
+                    :value="relation.displayField"
+                    size="small"
+                    filterable
+                    clearable
+                    :options="targetFieldOptions(relation)"
+                    placeholder="选择列表/表单展示字段"
+                    @update:value="updateRelation(index, { displayField: $event || '' })"
+                  />
+                  <small>页面上用于显示名称，如客户名称、部门名称，可不填。</small>
+                </div>
+                <div class="relation-action">
+                  <n-button text size="small" class="text-error" @click="removeRelation(index)">
+                    删除
+                  </n-button>
+                </div>
               </div>
             </div>
             <n-empty v-else description="暂无关联关系" />
@@ -225,7 +249,9 @@
                 <div class="section-title">
                   索引配置
                 </div>
-                <p class="section-desc">关联字段会自动创建普通索引，也可以维护单字段或联合索引。</p>
+                <p class="section-desc">
+                  关联字段会自动创建普通索引，也可以维护单字段或联合索引。
+                </p>
               </div>
               <n-button type="primary" @click="addIndex">
                 添加索引
@@ -361,6 +387,11 @@ const relationTypeOptions = [
   { label: '一对多', value: 'ONE_TO_MANY' },
   { label: '一对一', value: 'ONE_TO_ONE' },
 ]
+const relationTypeHints = {
+  REFERENCE: '当前模型保存对方 ID，如订单保存客户 ID。',
+  ONE_TO_MANY: '当前模型是主表，对方模型是多条子记录。',
+  ONE_TO_ONE: '当前模型与对方模型一条对一条扩展。',
+}
 const dataScopeOptions = [
   { label: '租户隔离', value: 'TENANT' },
   { label: '区划权限', value: 'REGION' },
@@ -610,12 +641,22 @@ function removeIndex(index) {
   localModel.value.indexes.splice(index, 1)
 }
 
+function updateModelCode(value) {
+  const code = normalizeObjectCode(value)
+  localModel.value.object.code = code
+  localModel.value.tableName = normalizeTableName(code)
+}
+
 function targetFieldOptions(relation) {
   const targetModel = props.dataModels.find(model => model.modelCode === relation?.targetObjectCode)
   return (targetModel?.modelSchema?.fields || []).map(field => ({
     label: `${field.label || field.field} (${field.field})`,
     value: field.field,
   }))
+}
+
+function relationTypeHint(type) {
+  return relationTypeHints[type] || '选择当前模型与关联对象的业务关系。'
 }
 
 function businessInsertIndex() {
@@ -663,6 +704,8 @@ function ensureModelCollections() {
   localModel.value.policies.primaryKeyField = 'id'
   localModel.value.policies.tenantField = 'tenantId'
   localModel.value.policies.logicDeleteField = 'delFlag'
+  if (!localModel.value.tableName && localModel.value.object?.code)
+    localModel.value.tableName = normalizeTableName(localModel.value.object.code)
   if (!localModel.value.treeConfig) {
     localModel.value.treeConfig = {
       keyField: 'id',
@@ -856,6 +899,17 @@ async function validateModel() {
   padding: 8px 10px;
 }
 
+.relation-guide {
+  margin-bottom: 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 10px;
+}
+
 .relation-list {
   display: grid;
   max-height: 460px;
@@ -866,12 +920,37 @@ async function validateModel() {
 
 .relation-row {
   display: grid;
-  grid-template-columns: 120px minmax(120px, 1fr) minmax(120px, 1fr) 120px minmax(120px, 1fr) 52px;
-  gap: 8px;
-  align-items: center;
+  grid-template-columns: 132px minmax(160px, 1.1fr) minmax(160px, 1.1fr) minmax(160px, 1.1fr) minmax(160px, 1.1fr) 52px;
+  gap: 10px;
+  align-items: start;
   border: 1px solid #eef2f7;
   border-radius: 8px;
   padding: 8px;
+}
+
+.relation-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.relation-field > span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.relation-field > small {
+  min-height: 34px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.relation-action {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
 }
 
 .index-list {

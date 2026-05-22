@@ -101,10 +101,12 @@ public class DynamicCrudRepository {
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
-        String countSql = "SELECT COUNT(*) " + fromClause + buildWhereSql(whereClause);
+        boolean distinctMainRows = selectsOnlyMainTable(selectFields);
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+                + fromClause + buildWhereSql(whereClause);
         Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
 
-        String dataSql = buildJoinSelectClause(selectFields) + " " + fromClause + buildWhereSql(whereClause)
+        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause + buildWhereSql(whereClause)
                 + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
         appendPageParams(params, pageNum, pageSize);
         List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
@@ -174,6 +176,7 @@ public class DynamicCrudRepository {
         appendCustomConditions(whereClause, params, conditions, allowedFields, columnMapping);
 
         String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
+        logDynamicSql("自定义查询统计", countSql, params);
         Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
 
         String dataSql = buildSelectSql(
@@ -184,7 +187,44 @@ public class DynamicCrudRepository {
         dataSql += buildOrderByClause(orderBy);
         dataSql += " LIMIT :limit OFFSET :offset";
         appendPageParams(params, pageNum, pageSize);
+        logDynamicSql("自定义查询数据", dataSql, params);
 
+        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+
+        Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
+        page.setRecords(records);
+        return page;
+    }
+
+    /**
+     * 多模型自定义分页查询，支持使用子表字段作为展示字段或查询条件。
+     */
+    public Page<Map<String, Object>> selectJoinedCustomPage(String mainTableName,
+                                                            List<JoinField> selectFields,
+                                                            List<JoinSpec> joins,
+                                                            int pageNum,
+                                                            int pageSize,
+                                                            List<CustomQueryConditionDTO> conditions,
+                                                            Set<String> allowedFields,
+                                                            Map<String, String> fieldColumnMapping,
+                                                            String orderBy) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendCustomConditions(whereClause, params, conditions, allowedFields, fieldColumnMapping);
+
+        String fromClause = buildJoinedFromClause(mainTableName, joins);
+        boolean distinctMainRows = selectsOnlyMainTable(selectFields);
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+                + fromClause + buildWhereSql(whereClause);
+        logDynamicSql("自定义查询统计(左连接)", countSql, params);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+
+        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
+                + buildWhereSql(whereClause) + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
+        appendPageParams(params, pageNum, pageSize);
+        logDynamicSql("自定义查询数据(左连接)", dataSql, params);
         List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
 
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
@@ -397,7 +437,7 @@ public class DynamicCrudRepository {
 
     private String buildCustomConditionSql(MapSqlParameterSource params, String columnName, String operator,
                                            CustomQueryConditionDTO condition, int index) {
-        String paramName = "custom_" + index + "_" + columnName;
+        String paramName = "custom_" + index + "_" + columnName.replace(".", "_");
         Object value = condition.getValue();
 
         return switch (operator) {
@@ -791,11 +831,19 @@ public class DynamicCrudRepository {
     }
 
     private String buildJoinSelectClause(List<JoinField> fields) {
+        return buildJoinSelectClause(fields, false);
+    }
+
+    private String buildJoinSelectClause(List<JoinField> fields, boolean distinct) {
         LinkedHashSet<String> selectItems = new LinkedHashSet<>();
         for (JoinField field : fields) {
             selectItems.add(qualifyColumn(field.tableAlias(), field.columnName()) + " AS `" + field.fieldName() + "`");
         }
-        return "SELECT " + String.join(", ", selectItems);
+        return "SELECT " + (distinct ? "DISTINCT " : "") + String.join(", ", selectItems);
+    }
+
+    private boolean selectsOnlyMainTable(List<JoinField> fields) {
+        return fields != null && fields.stream().allMatch(field -> "t0".equals(field.tableAlias()));
     }
 
     private String buildJoinedFromClause(String mainTableName, List<JoinSpec> joins) {
@@ -948,6 +996,11 @@ public class DynamicCrudRepository {
         MapSqlParameterSource params = new MapSqlParameterSource();
         params.addValue(paramName, value);
         return params;
+    }
+
+    private void logDynamicSql(String scene, String sql, MapSqlParameterSource params) {
+        log.info("[DynamicCrudRepository] {} SQL: {}", scene, sql);
+        log.info("[DynamicCrudRepository] {} 参数: {}", scene, params == null ? Map.of() : params.getValues());
     }
 
     private Map<String, Object> prepareInsertData(String tableName, Map<String, Object> data) {

@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="showModal"
     preset="card"
-    title="AI 生成 CRUD 配置"
+    title="AI 生成页面配置"
     style="width: 700px"
     :mask-closable="false"
   >
@@ -23,7 +23,7 @@
     </n-alert>
 
     <n-spin :show="generating">
-      <n-form ref="formRef" :model="formData" label-placement="left" label-width="100">
+      <n-form :model="formData" label-placement="left" label-width="100">
         <n-form-item label="生成方式" path="mode">
           <n-radio-group v-model:value="formData.mode">
             <n-radio value="description">
@@ -50,7 +50,7 @@
             v-model:value="formData.description"
             type="textarea"
             :rows="4"
-            placeholder="请描述需要生成的CRUD页面功能，如：员工管理，包含姓名、部门、职位、入职日期等字段"
+            placeholder="请描述需要生成的管理页面功能，如：员工管理，包含姓名、部门、职位、入职日期等字段"
           />
         </n-form-item>
 

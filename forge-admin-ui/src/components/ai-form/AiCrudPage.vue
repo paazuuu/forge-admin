@@ -310,9 +310,9 @@ import { NDropdown } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
+import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
-import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { aiCrudPageProps } from './AiCrudPageProps'
 import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
@@ -500,7 +500,7 @@ function handleActionClick(actionOrKey, row) {
 
 function handleConfiguredAction(action, row) {
   emit('custom-action', { action, row })
-  if (action.confirmText && !window.confirm(resolveActionText(action.confirmText, row)))
+  if (action.confirmText && !confirmConfiguredAction(resolveActionText(action.confirmText, row)))
     return
   const actionType = action.actionType || 'route'
   if (actionType === 'refresh') {
@@ -508,7 +508,7 @@ function handleConfiguredAction(action, row) {
     return
   }
   if (actionType === 'route' && action.routePath) {
-    const path = resolveActionText(action.routePath, row)
+    const path = buildActionTarget(action, row)
     if ((action.openTarget || '_self') === '_blank') {
       const route = router.resolve(path)
       window.open(route.href, '_blank')
@@ -519,8 +519,32 @@ function handleConfiguredAction(action, row) {
     return
   }
   if (actionType === 'external' && action.routePath) {
-    window.open(resolveActionText(action.routePath, row), action.openTarget || '_blank')
+    window.open(buildActionTarget(action, row), action.openTarget || '_blank')
   }
+}
+
+function confirmConfiguredAction(message) {
+  const nativeConfirm = globalThis?.confirm
+  return typeof nativeConfirm !== 'function' || nativeConfirm(message)
+}
+
+function buildActionTarget(action, row) {
+  let target = resolveActionText(action.routePath, row)
+  const params = Array.isArray(action.params) ? action.params : []
+  const query = new URLSearchParams()
+  params.forEach((param) => {
+    const name = String(param?.name || '').trim()
+    if (!name)
+      return
+    const value = resolveActionText(param.value, row)
+    if (value !== '')
+      query.append(name, value)
+  })
+  const queryString = query.toString()
+  if (!queryString)
+    return target
+  target += target.includes('?') ? '&' : '?'
+  return `${target}${queryString}`
 }
 
 function resolveActionText(template, row) {
@@ -1673,7 +1697,7 @@ async function handleExport() {
 function downloadBlobResponse(response, fallbackName) {
   const blob = response?.data instanceof Blob ? response.data : response
   if (!(blob instanceof Blob)) {
-    throw new Error('下载响应不是文件流')
+    throw new TypeError('下载响应不是文件流')
   }
 
   const fileName = resolveDownloadFileName(response, fallbackName)

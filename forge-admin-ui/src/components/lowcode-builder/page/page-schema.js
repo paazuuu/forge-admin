@@ -386,7 +386,7 @@ export function syncPageSchemaWithModel(pageSchema, modelSchema) {
     if (!listGridLayout || !listGridLayout.items?.length) {
       listGridLayout = bootstrapGridLayoutFromZones(zones, modelSchema, { layoutType })
     }
-    listGridLayout = syncGridLayoutWithModel(listGridLayout, modelSchema)
+    listGridLayout = syncGridLayoutWithModel(listGridLayout, modelSchema, { layoutType })
   }
   const finalZones = listLayoutMode === 'grid' && listGridLayout
     ? applyGridLayoutToZones(zones, listGridLayout, modelSchema)
@@ -532,6 +532,7 @@ export const listPageBlockCatalog = [
     desc: '关联模型分页签',
     defaultW: 12,
     defaultH: 8,
+    onlyFor: ['master-detail-crud'],
   },
   {
     blockType: 'section-divider',
@@ -626,16 +627,23 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
     cols: LIST_PAGE_GRID_COLS,
     rowHeight: LIST_PAGE_GRID_ROW_HEIGHT,
     gap: LIST_PAGE_GRID_GAP,
+    layoutType,
     items,
   }
 }
 
-export function syncGridLayoutWithModel(layout, modelSchema) {
+export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
   const tableFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'table').map(f => f.field))
   const searchFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'search').map(f => f.field))
-  const fallback = createDefaultListGridLayout(modelSchema)
+  const layoutType = options.layoutType || layout?.layoutType || (modelSchema?.appType === 'TREE'
+    ? 'tree-crud'
+    : modelSchema?.appType === 'MASTER_DETAIL' ? 'master-detail-crud' : 'simple-crud')
+  const fallback = createDefaultListGridLayout(modelSchema, { layoutType })
   const source = (layout?.items || []).length ? layout : fallback
-  const items = (source.items || []).map((item) => {
+  const items = (source.items || []).filter((item) => {
+    const meta = resolveListPageBlockMeta(item.blockType) || {}
+    return !meta.onlyFor || meta.onlyFor.includes(layoutType)
+  }).map((item) => {
     const meta = resolveListPageBlockMeta(item.blockType) || {}
     const fieldSet = item.blockType === 'search-form' ? searchFieldSet : tableFieldSet
     const refs = (item.fieldRefs || []).filter(field => fieldSet.has(field))
@@ -655,6 +663,7 @@ export function syncGridLayoutWithModel(layout, modelSchema) {
     cols: Number(source.cols) || LIST_PAGE_GRID_COLS,
     rowHeight: Number(source.rowHeight) || LIST_PAGE_GRID_ROW_HEIGHT,
     gap: Number(source.gap) || LIST_PAGE_GRID_GAP,
+    layoutType,
     items,
   }
 }
@@ -751,6 +760,7 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
     cols: LIST_PAGE_GRID_COLS,
     rowHeight: LIST_PAGE_GRID_ROW_HEIGHT,
     gap: LIST_PAGE_GRID_GAP,
+    layoutType,
     items,
   }
 }

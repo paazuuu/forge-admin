@@ -34,7 +34,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
     /**
      * 数据权限配置缓存（key: mapperMethod, value: config）
      */
-    private final Cache<String, SysDataScopeConfig> configCache = Caffeine.newBuilder()
+    private final Cache<String, Optional<SysDataScopeConfig>> configCache = Caffeine.newBuilder()
             .maximumSize(500)
             .expireAfterWrite(30, TimeUnit.MINUTES)
             .build();
@@ -130,9 +130,9 @@ public class DataScopeServiceImpl implements IDataScopeService {
     @Override
     public SysDataScopeConfig getDataScopeConfig(String mapperId) {
         // 优先从缓存获取
-        SysDataScopeConfig config = configCache.getIfPresent(mapperId);
-        if (config != null) {
-            return config;
+        Optional<SysDataScopeConfig> cachedConfig = configCache.getIfPresent(mapperId);
+        if (cachedConfig != null) {
+            return cachedConfig.orElse(null);
         }
         
         // 从数据库查询
@@ -140,12 +140,10 @@ public class DataScopeServiceImpl implements IDataScopeService {
         wrapper.eq(SysDataScopeConfig::getMapperMethod, mapperId)
                .eq(SysDataScopeConfig::getEnabled, 1);
         
-        config = dataScopeConfigMapper.selectOne(wrapper);
+        SysDataScopeConfig config = dataScopeConfigMapper.selectOne(wrapper);
         
-        // 放入缓存
-        if (config != null) {
-            configCache.put(mapperId, config);
-        }
+        // 放入缓存。未配置 mapper 也缓存，避免每次查询都访问 sys_data_scope_config。
+        configCache.put(mapperId, Optional.ofNullable(config));
         
         return config;
     }

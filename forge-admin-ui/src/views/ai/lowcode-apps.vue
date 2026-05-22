@@ -21,6 +21,9 @@
           <n-button @click="router.push('/ai/lowcode-models')">
             数据模型设计
           </n-button>
+          <n-button @click="triggerAppImport">
+            导入配置
+          </n-button>
           <n-button @click="refreshAll">
             刷新
           </n-button>
@@ -103,6 +106,9 @@
                 <n-button size="small" @click="openMoveDomain(app)">
                   迁移
                 </n-button>
+                <n-button size="small" @click="exportApp(app)">
+                  导出
+                </n-button>
                 <n-button size="small" type="error" secondary @click="deleteApp(app)">
                   删除
                 </n-button>
@@ -145,6 +151,14 @@
       :domains="domains"
       @moved="handleMoved"
     />
+
+    <input
+      ref="appImportInputRef"
+      class="hidden-file-input"
+      type="file"
+      accept="application/json,.json"
+      @change="handleAppImportFile"
+    >
   </div>
 </template>
 
@@ -152,13 +166,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  lowcodeAppDetail,
   lowcodeAppPage,
   lowcodeDeleteApp,
   lowcodeDomainTree,
+  lowcodeSaveDraft,
 } from '@/api/lowcode-crud'
 import DomainEditorDrawer from '@/components/lowcode-builder/domain/DomainEditorDrawer.vue'
 import DomainTreePanel from '@/components/lowcode-builder/domain/DomainTreePanel.vue'
 import MoveDomainModal from '@/components/lowcode-builder/domain/MoveDomainModal.vue'
+import { cloneSchema, normalizeObjectCode } from '@/components/lowcode-builder/model/model-schema'
 import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'AiLowcodeApps' })
@@ -182,6 +199,7 @@ const domainEditorVisible = ref(false)
 const editingDomain = ref(null)
 const moveVisible = ref(false)
 const movingApp = ref(null)
+const appImportInputRef = ref(null)
 
 const statusOptions = computed(() => dict.value.lowcode_app_publish_status || [])
 
@@ -293,6 +311,87 @@ function openRuntime(configKey) {
   window.open(route.href, '_blank')
 }
 
+async function exportApp(app) {
+  try {
+    const res = await lowcodeAppDetail(app.id)
+    const detail = res.data || {}
+    downloadJson({
+      type: 'LOWCODE_APP_CONFIG',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      app: {
+        id: null,
+        configKey: detail.configKey,
+        appName: detail.appName,
+        domainCode: detail.domainCode,
+        domainName: detail.domainName,
+        objectCode: detail.objectCode,
+        objectName: detail.objectName,
+        menuName: detail.menuName,
+        menuParentId: detail.menuParentId,
+        menuSort: detail.menuSort,
+        modelSchema: cloneSchema(detail.modelSchema || {}),
+        pageSchema: cloneSchema(detail.pageSchema || {}),
+      },
+    }, `${detail.configKey || 'app'}-app-config.json`)
+  }
+  catch (e) {
+    window.$message?.error(e?.message || '导出应用配置失败')
+  }
+}
+
+function triggerAppImport() {
+  appImportInputRef.value?.click()
+}
+
+async function handleAppImportFile(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file)
+    return
+  try {
+    const payload = JSON.parse(await file.text())
+    const app = payload.app || payload
+    if (!app?.modelSchema || !app?.pageSchema) {
+      window.$message?.warning('应用配置文件格式不正确')
+      return
+    }
+    const domain = selectedDomain.value
+    if (!domain && !app.domainId && !app.domainCode) {
+      window.$message?.warning('请先选择业务领域，再导入应用配置')
+      return
+    }
+    const configKey = buildImportedConfigKey(app.configKey || app.modelSchema?.object?.code || 'app')
+    const res = await lowcodeSaveDraft({
+      id: null,
+      domainId: domain?.id || app.domainId || null,
+      domainCode: domain?.domainCode || app.domainCode || '',
+      domainName: domain?.domainName || app.domainName || '',
+      objectCode: app.objectCode || app.modelSchema?.object?.code || '',
+      objectName: app.objectName || app.modelSchema?.object?.name || app.modelSchema?.businessName || '',
+      configKey,
+      appName: app.appName || app.modelSchema?.businessName || configKey,
+      menuName: app.menuName || app.appName || app.modelSchema?.businessName || configKey,
+      menuParentId: domain?.menuParentId || app.menuParentId || null,
+      menuSort: app.menuSort || 0,
+      modelSchema: cloneSchema(app.modelSchema),
+      pageSchema: cloneSchema(app.pageSchema),
+    })
+    window.$message?.success('应用配置已导入')
+    await refreshAll()
+    if (res.data)
+      openBuilder(res.data)
+  }
+  catch (e) {
+    window.$message?.error(e?.message || '导入应用配置失败')
+  }
+}
+
+function buildImportedConfigKey(sourceKey) {
+  const suffix = new Date().toISOString().slice(11, 19).replace(/\D/g, '')
+  return normalizeObjectCode(`${sourceKey || 'app'}_import_${suffix}`).slice(0, 64)
+}
+
 function openDomainEditor(domain) {
   editingDomain.value = domain ? { ...domain } : null
   domainEditorVisible.value = true
@@ -349,6 +448,16 @@ function formatTime(value) {
     return ''
   const date = new Date(value)
   return `${date.getMonth() + 1}-${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function downloadJson(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 </script>
 
@@ -547,6 +656,10 @@ function formatTime(value) {
   display: flex;
   justify-content: center;
   padding: 18px 0 2px;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 @media (max-width: 1380px) {

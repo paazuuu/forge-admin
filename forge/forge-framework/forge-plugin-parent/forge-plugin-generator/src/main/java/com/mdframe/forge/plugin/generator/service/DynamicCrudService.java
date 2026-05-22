@@ -100,10 +100,10 @@ public class DynamicCrudService {
         Map<String, Object> searchParams = (query != null) ? query.getSearchParams() : null;
 
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
-        if (joinContext != null) {
+        if (joinContext != null && requiresJoinedPageQuery(config, pageQuery, searchParams, joinContext)) {
             Page<Map<String, Object>> page = repository.selectJoinedPage(
                     tableName,
-                    joinContext.selectFields(),
+                    buildRuntimeSelectFields(joinContext, DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper), true),
                     joinContext.joins(),
                     pageQuery.getPageNum(),
                     pageQuery.getPageSize(),
@@ -158,10 +158,10 @@ public class DynamicCrudService {
         int limit = normalizeExportLimit(maxRows);
 
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
-        if (joinContext != null) {
+        if (joinContext != null && requiresJoinedExportQuery(config, searchParams, joinContext)) {
             Page<Map<String, Object>> page = repository.selectJoinedPage(
                     tableName,
-                    joinContext.selectFields(),
+                    buildRuntimeSelectFields(joinContext, DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper), true),
                     joinContext.joins(),
                     1,
                     limit,
@@ -219,6 +219,26 @@ public class DynamicCrudService {
         String tableName = config.getTableName();
         Map<String, String> columnMapping = repository.getColumnMapping(tableName);
         Set<String> allowedFields = buildAllowedCustomFields(config);
+
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        if (joinContext != null) {
+            allowedFields.addAll(joinContext.fields().keySet());
+            if (requiresJoinedCustomQuery(request, joinContext)) {
+                Page<Map<String, Object>> page = repository.selectJoinedCustomPage(
+                        tableName,
+                        buildRuntimeSelectFields(joinContext, request.getFields(), true),
+                        joinContext.joins(),
+                        normalizePageNum(request.getPageNum()),
+                        normalizePageSize(request.getPageSize()),
+                        request.getConditions(),
+                        allowedFields,
+                        joinContext.fieldColumnMapping(),
+                        buildJoinOrderBy(request.getOrderByColumn(), request.getIsAsc(), joinContext)
+                );
+                applyReadPipeline(page.getRecords(), config);
+                return page;
+            }
+        }
 
         String orderBy = DynamicQueryGenerator.buildOrderByClause(
                 request.getOrderByColumn(), request.getIsAsc(), columnMapping);
@@ -976,6 +996,134 @@ public class DynamicCrudService {
         }
         String direction = "asc".equalsIgnoreCase(isAsc) ? "ASC" : "DESC";
         return String.join(", ", columns) + " " + direction;
+    }
+
+    private boolean requiresJoinedPageQuery(AiCrudConfig config,
+                                            PageQuery pageQuery,
+                                            Map<String, Object> searchParams,
+                                            RuntimeJoinContext joinContext) {
+        return containsChildField(DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper), joinContext)
+                || containsActiveChildSearchField(searchParams, joinContext)
+                || containsChildField(splitFields(pageQuery.getOrderByColumn()), joinContext);
+    }
+
+    private boolean requiresJoinedExportQuery(AiCrudConfig config,
+                                              Map<String, Object> searchParams,
+                                              RuntimeJoinContext joinContext) {
+        return containsChildField(DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper), joinContext)
+                || containsActiveChildSearchField(searchParams, joinContext);
+    }
+
+    private boolean requiresJoinedCustomQuery(CustomQueryExecuteDTO request, RuntimeJoinContext joinContext) {
+        if (request == null) {
+            return false;
+        }
+        if (containsChildField(request.getFields(), joinContext)) {
+            return true;
+        }
+        if (containsChildField(splitFields(request.getOrderByColumn()), joinContext)) {
+            return true;
+        }
+        if (request.getConditions() == null) {
+            return false;
+        }
+        for (var condition : request.getConditions()) {
+            if (condition != null && isChildRuntimeField(condition.getField(), joinContext)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<DynamicCrudRepository.JoinField> buildRuntimeSelectFields(RuntimeJoinContext joinContext,
+                                                                           Collection<String> requestedFields,
+                                                                           boolean defaultPrimaryFields) {
+        LinkedHashSet<String> fieldNames = new LinkedHashSet<>();
+        fieldNames.add("id");
+        if (requestedFields != null) {
+            requestedFields.stream()
+                    .filter(StringUtils::isNotBlank)
+                    .forEach(fieldNames::add);
+        }
+        if (fieldNames.size() == 1 && defaultPrimaryFields) {
+            joinContext.fields().values().stream()
+                    .filter(RuntimeFieldRef::primary)
+                    .map(RuntimeFieldRef::fieldName)
+                    .forEach(fieldNames::add);
+        }
+
+        List<DynamicCrudRepository.JoinField> selectFields = new ArrayList<>();
+        for (String fieldName : fieldNames) {
+            RuntimeFieldRef fieldRef = joinContext.fields().get(fieldName);
+            if (fieldRef == null) {
+                continue;
+            }
+            selectFields.add(new DynamicCrudRepository.JoinField(
+                    fieldRef.fieldName(), fieldRef.tableAlias(), fieldRef.columnName()));
+        }
+        if (selectFields.isEmpty()) {
+            joinContext.fields().values().stream()
+                    .filter(RuntimeFieldRef::primary)
+                    .map(fieldRef -> new DynamicCrudRepository.JoinField(
+                            fieldRef.fieldName(), fieldRef.tableAlias(), fieldRef.columnName()))
+                    .forEach(selectFields::add);
+        }
+        return selectFields;
+    }
+
+    private boolean containsChildField(Collection<String> fieldNames, RuntimeJoinContext joinContext) {
+        if (fieldNames == null || fieldNames.isEmpty()) {
+            return false;
+        }
+        for (String fieldName : fieldNames) {
+            if (isChildRuntimeField(fieldName, joinContext)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsActiveChildSearchField(Map<String, Object> searchParams, RuntimeJoinContext joinContext) {
+        if (searchParams == null || searchParams.isEmpty()) {
+            return false;
+        }
+        for (Map.Entry<String, Object> entry : searchParams.entrySet()) {
+            if (hasQueryValue(entry.getValue()) && isChildRuntimeField(entry.getKey(), joinContext)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isChildRuntimeField(String fieldName, RuntimeJoinContext joinContext) {
+        if (StringUtils.isBlank(fieldName) || joinContext == null) {
+            return false;
+        }
+        RuntimeFieldRef fieldRef = joinContext.fields().get(fieldName);
+        return fieldRef != null && !fieldRef.primary();
+    }
+
+    private List<String> splitFields(String fields) {
+        if (StringUtils.isBlank(fields)) {
+            return List.of();
+        }
+        return Arrays.stream(fields.split(","))
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .toList();
+    }
+
+    private boolean hasQueryValue(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof String text) {
+            return StringUtils.isNotBlank(text);
+        }
+        if (value instanceof Collection<?> collection) {
+            return !collection.isEmpty();
+        }
+        return true;
     }
 
     private LowcodePageSchema readPageSchema(AiCrudConfig config) {

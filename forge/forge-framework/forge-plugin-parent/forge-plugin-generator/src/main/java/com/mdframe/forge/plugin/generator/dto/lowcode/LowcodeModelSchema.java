@@ -24,6 +24,9 @@ public class LowcodeModelSchema {
     /** EXISTING-绑定已有表，CREATE-在线创建新表 */
     private String tableMode;
 
+    /** 绑定已有表时的代码生成表模型引用。 */
+    private LowcodeSourceTableRef sourceTable;
+
     private String tableName;
 
     private String businessName;

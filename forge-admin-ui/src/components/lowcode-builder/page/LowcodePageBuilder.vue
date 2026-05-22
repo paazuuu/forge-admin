@@ -139,6 +139,7 @@ watch(
     const synced = syncGridLayoutWithModel(
       localSchema.value.listGridLayout || createDefaultListGridLayout(props.modelSchema, { layoutType: localSchema.value.layoutType }),
       props.modelSchema,
+      { layoutType: localSchema.value.layoutType },
     )
     applyGridLayoutChange(synced)
   },
@@ -156,7 +157,7 @@ function handleGridLayoutUpdate(layout) {
 }
 
 function applyGridLayoutChange(layout) {
-  const synced = syncGridLayoutWithModel(layout, props.modelSchema)
+  const synced = syncGridLayoutWithModel(layout, props.modelSchema, { layoutType: localSchema.value.layoutType })
   const zones = applyGridLayoutToZones(localSchema.value.zones || [], synced, props.modelSchema)
   localSchema.value = {
     ...localSchema.value,

@@ -200,76 +200,20 @@
               </n-checkbox-group>
             </n-form-item>
             <n-divider>自定义操作按钮</n-divider>
-            <div class="custom-action-editor">
-              <div class="custom-action-head">
-                <span>名称</span>
-                <span>编码</span>
-                <span>位置</span>
-                <span>样式</span>
-                <span>交互</span>
-                <span>目标地址</span>
+            <div class="custom-action-summary">
+              <div v-if="customActionList.length" class="action-chip-list">
+                <span
+                  v-for="action in customActionList"
+                  :key="action.key"
+                  class="action-chip"
+                >
+                  {{ action.label || action.key }}
+                  <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
+                </span>
               </div>
-              <div
-                v-for="(action, idx) in (selectedBlock.props?.customActions || [])"
-                :key="action.key || idx"
-                class="custom-action-row"
-              >
-                <n-input
-                  :value="action.label"
-                  size="small"
-                  placeholder="按钮名称"
-                  @update:value="updateCustomAction(idx, { label: $event })"
-                />
-                <n-input
-                  :value="action.key"
-                  size="small"
-                  placeholder="唯一编码"
-                  @update:value="updateCustomAction(idx, { key: normalizeActionKey($event) })"
-                />
-                <n-select
-                  :value="action.position || 'toolbar'"
-                  size="small"
-                  :options="actionPositionOptions"
-                  @update:value="updateCustomAction(idx, { position: $event })"
-                />
-                <n-select
-                  :value="action.type || 'default'"
-                  size="small"
-                  :options="actionTypeOptions"
-                  @update:value="updateCustomAction(idx, { type: $event })"
-                />
-                <n-select
-                  :value="action.actionType || 'route'"
-                  size="small"
-                  :options="actionBehaviorOptions"
-                  @update:value="updateCustomAction(idx, { actionType: $event })"
-                />
-                <n-input
-                  :value="action.routePath"
-                  size="small"
-                  :disabled="(action.actionType || 'route') === 'refresh'"
-                  :placeholder="actionPathPlaceholder(action)"
-                  @update:value="updateCustomAction(idx, { routePath: $event })"
-                />
-                <n-button size="tiny" quaternary type="error" @click="removeCustomAction(idx)">
-                  删
-                </n-button>
-                <n-select
-                  :value="action.openTarget || '_self'"
-                  size="small"
-                  :disabled="(action.actionType || 'route') === 'refresh'"
-                  :options="actionOpenTargetOptions"
-                  @update:value="updateCustomAction(idx, { openTarget: $event })"
-                />
-                <n-input
-                  :value="action.confirmText"
-                  size="small"
-                  placeholder="确认提示，可用 :id"
-                  @update:value="updateCustomAction(idx, { confirmText: $event })"
-                />
-              </div>
-              <n-button size="small" dashed block @click="addCustomAction">
-                + 添加自定义按钮
+              <span v-else class="empty">暂未配置自定义操作</span>
+              <n-button size="small" type="primary" secondary block @click="openCustomActionModal">
+                配置自定义操作（{{ customActionList.length }}）
               </n-button>
             </div>
           </template>
@@ -417,13 +361,20 @@
               @update:model-value="handleSelectedReorder"
             >
               <template #item="{ element }">
-                <div class="selected-row">
+                <div class="selected-row" :class="{ search: selectedBlock.blockType === 'search-form' }">
                   <span class="f-handle">☰</span>
                   <span class="f-name">
                     {{ element.label || element.field }}
                     <small v-if="element.sourceLabel || element.modelName">{{ element.sourceLabel || element.modelName }}</small>
                   </span>
                   <span class="f-code">{{ element.field }}</span>
+                  <n-select
+                    v-if="selectedBlock.blockType === 'search-form'"
+                    :value="resolveFieldSetting(element.field).queryType || element.queryType || 'like'"
+                    size="tiny"
+                    :options="queryTypeOptions"
+                    @update:value="updateFieldSetting(element.field, { queryType: $event })"
+                  />
                   <button type="button" class="f-remove" @click="toggleField(element.field, false)">
                     移除
                   </button>
@@ -455,6 +406,157 @@
         </div>
       </n-drawer-content>
     </n-drawer>
+
+    <n-modal v-model:show="customActionModalOpen" :mask-closable="false">
+      <n-card
+        class="custom-action-modal"
+        title="配置自定义操作"
+        :bordered="false"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="action-modal-layout">
+          <div class="action-modal-list">
+            <button
+              v-for="(action, idx) in customActionList"
+              :key="action.key || idx"
+              type="button"
+              class="action-list-item"
+              :class="{ active: activeActionIndex === idx }"
+              @click="activeActionIndex = idx"
+            >
+              <span>{{ action.label || '自定义按钮' }}</span>
+              <small>{{ action.key || '未设置编码' }}</small>
+            </button>
+            <button type="button" class="action-add-item" @click="addCustomAction">
+              + 添加操作
+            </button>
+          </div>
+
+          <div v-if="activeAction" class="action-editor-panel">
+            <div class="action-editor-head">
+              <div>
+                <div class="action-editor-title">
+                  {{ activeAction.label || '自定义按钮' }}
+                </div>
+                <div class="action-editor-desc">
+                  支持站内跳转、外部链接、刷新列表；目标地址和参数值可使用 :id 或 ${field} 占位符。
+                </div>
+              </div>
+              <n-button quaternary type="error" @click="removeCustomAction(activeActionIndex)">
+                删除
+              </n-button>
+            </div>
+
+            <n-form size="small" label-placement="top" :show-feedback="false">
+              <div class="action-form-grid">
+                <n-form-item label="按钮名称">
+                  <n-input
+                    :value="activeAction.label"
+                    placeholder="例如：查看详情"
+                    @update:value="updateActiveCustomAction({ label: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="唯一编码">
+                  <n-input
+                    :value="activeAction.key"
+                    placeholder="view_detail"
+                    @update:value="updateActiveCustomAction({ key: normalizeActionKey($event) })"
+                  />
+                </n-form-item>
+                <n-form-item label="显示位置">
+                  <n-select
+                    :value="activeAction.position || 'toolbar'"
+                    :options="actionPositionOptions"
+                    @update:value="updateActiveCustomAction({ position: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="按钮样式">
+                  <n-select
+                    :value="activeAction.type || 'default'"
+                    :options="actionTypeOptions"
+                    @update:value="updateActiveCustomAction({ type: $event })"
+                  />
+                </n-form-item>
+              </div>
+
+              <div class="action-form-grid">
+                <n-form-item label="交互方式">
+                  <n-select
+                    :value="activeAction.actionType || 'route'"
+                    :options="actionBehaviorOptions"
+                    @update:value="updateActiveCustomAction({ actionType: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="打开方式">
+                  <n-select
+                    :value="activeAction.openTarget || '_self'"
+                    :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                    :options="actionOpenTargetOptions"
+                    @update:value="updateActiveCustomAction({ openTarget: $event })"
+                  />
+                </n-form-item>
+              </div>
+
+              <n-form-item label="目标地址">
+                <n-input
+                  :value="activeAction.routePath"
+                  :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                  :placeholder="actionPathPlaceholder(activeAction)"
+                  @update:value="updateActiveCustomAction({ routePath: $event })"
+                />
+              </n-form-item>
+
+              <n-form-item label="确认提示">
+                <n-input
+                  :value="activeAction.confirmText"
+                  placeholder="例如：确认处理 :id 吗？留空则不提示"
+                  @update:value="updateActiveCustomAction({ confirmText: $event })"
+                />
+              </n-form-item>
+
+              <n-form-item label="参数映射">
+                <div class="action-param-editor">
+                  <div
+                    v-for="(param, paramIdx) in (activeAction.params || [])"
+                    :key="paramIdx"
+                    class="action-param-row"
+                  >
+                    <n-input
+                      :value="param.name"
+                      placeholder="参数名，如 id"
+                      @update:value="updateActionParam(paramIdx, { name: normalizeParamName($event) })"
+                    />
+                    <n-input
+                      :value="param.value"
+                      placeholder="参数值，如 :id / ${name}"
+                      @update:value="updateActionParam(paramIdx, { value: $event })"
+                    />
+                    <n-button quaternary type="error" @click="removeActionParam(paramIdx)">
+                      删除
+                    </n-button>
+                  </div>
+                  <n-button size="small" dashed block @click="addActionParam">
+                    + 添加参数
+                  </n-button>
+                </div>
+              </n-form-item>
+            </n-form>
+          </div>
+          <div v-else class="action-empty-panel">
+            请选择或添加一个自定义操作
+          </div>
+        </div>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="customActionModalOpen = false">
+              完成
+            </n-button>
+          </n-space>
+        </template>
+      </n-card>
+    </n-modal>
   </div>
 </template>
 
@@ -465,8 +567,8 @@ import GridBlockRenderer from './GridBlockRenderer.vue'
 import {
   createDefaultListGridLayout,
   createGridBlock,
-  LIST_PAGE_GRID_COLS,
   isPageFieldVisible,
+  LIST_PAGE_GRID_COLS,
   listPageBlockCatalog,
   resolveListPageBlockMeta,
   syncGridLayoutWithModel,
@@ -517,14 +619,25 @@ const actionOpenTargetOptions = [
   { label: '当前页', value: '_self' },
   { label: '新窗口', value: '_blank' },
 ]
+const queryTypeOptions = [
+  { label: '等于', value: 'eq' },
+  { label: '包含', value: 'like' },
+  { label: '大于等于', value: 'ge' },
+  { label: '小于等于', value: 'le' },
+  { label: '区间', value: 'between' },
+  { label: '多值', value: 'in' },
+]
 
 const canvasRef = ref(null)
 const selectedBlockId = ref(null)
 const fieldDrawerOpen = ref(false)
+const customActionModalOpen = ref(false)
+const activeActionIndex = ref(0)
 
 const localLayout = ref(syncGridLayoutWithModel(
   props.modelValue || createDefaultListGridLayout(props.modelSchema, { layoutType: props.layoutType }),
   props.modelSchema,
+  { layoutType: props.layoutType },
 ))
 
 const blocks = computed(() => localLayout.value.items || [])
@@ -538,6 +651,8 @@ const canvasStyle = computed(() => ({
 }))
 
 const selectedBlock = computed(() => blocks.value.find(b => b.id === selectedBlockId.value) || null)
+const customActionList = computed(() => selectedBlock.value?.props?.customActions || [])
+const activeAction = computed(() => customActionList.value[activeActionIndex.value] || null)
 const layoutTitle = computed(() => {
   if (props.layoutType === 'tree-crud')
     return '左树右表'
@@ -550,9 +665,9 @@ const selectedBlockMeta = computed(() => selectedBlock.value ? resolveListPageBl
 const fieldOptions = computed(() => props.fields
   .filter(field => isPageFieldVisible(field, 'table'))
   .map(f => ({
-  label: f.sourceLabel || f.modelName ? `${f.label || f.field} · ${f.sourceLabel || f.modelName}` : (f.label ? `${f.label}（${f.field}）` : f.field),
-  value: f.field,
-})))
+    label: f.sourceLabel || f.modelName ? `${f.label || f.field} · ${f.sourceLabel || f.modelName}` : (f.label ? `${f.label}（${f.field}）` : f.field),
+    value: f.field,
+  })))
 
 const groupedBlocks = computed(() => {
   const groups = [
@@ -568,6 +683,7 @@ const groupedBlocks = computed(() => {
 })
 
 const fieldMap = computed(() => new Map(props.fields.map(f => [f.field, f])))
+const selectedBlockZoneKey = computed(() => selectedBlock.value?.blockType === 'search-form' ? 'search' : 'table')
 const selectedFieldsList = computed(() => (selectedBlock.value?.fieldRefs || [])
   .map(ref => fieldMap.value.get(ref))
   .filter(Boolean))
@@ -575,12 +691,11 @@ const availableFields = computed(() => {
   const set = new Set(selectedBlock.value?.fieldRefs || [])
   return props.fields.filter(f => isPageFieldVisible(f, selectedBlockZoneKey.value) && !set.has(f.field))
 })
-const selectedBlockZoneKey = computed(() => selectedBlock.value?.blockType === 'search-form' ? 'search' : 'table')
 
 watch(
   () => props.modelValue,
   (value) => {
-    const next = syncGridLayoutWithModel(value, props.modelSchema)
+    const next = syncGridLayoutWithModel(value, props.modelSchema, { layoutType: props.layoutType })
     if (JSON.stringify(next) !== JSON.stringify(localLayout.value))
       localLayout.value = next
   },
@@ -590,9 +705,16 @@ watch(
 watch(
   () => props.modelSchema,
   () => {
-    localLayout.value = syncGridLayoutWithModel(localLayout.value, props.modelSchema)
+    localLayout.value = syncGridLayoutWithModel(localLayout.value, props.modelSchema, { layoutType: props.layoutType })
   },
   { deep: true },
+)
+
+watch(
+  () => props.layoutType,
+  () => {
+    localLayout.value = syncGridLayoutWithModel(localLayout.value, props.modelSchema, { layoutType: props.layoutType })
+  },
 )
 
 watch(
@@ -810,6 +932,24 @@ function handleSelectedReorder(rows) {
   patchBlock(selectedBlock.value.id, { fieldRefs: rows.map(r => r.field) })
 }
 
+function resolveFieldSetting(fieldName) {
+  return selectedBlock.value?.props?.fieldSettings?.[fieldName] || {}
+}
+
+function updateFieldSetting(fieldName, settingPatch) {
+  if (!selectedBlock.value)
+    return
+  patchBlockProps(selectedBlock.value.id, {
+    fieldSettings: {
+      ...(selectedBlock.value.props?.fieldSettings || {}),
+      [fieldName]: {
+        ...(selectedBlock.value.props?.fieldSettings?.[fieldName] || {}),
+        ...settingPatch,
+      },
+    },
+  })
+}
+
 // Metric editing
 function updateMetric(idx, patch) {
   const list = [...(selectedBlock.value?.props?.metrics || [])]
@@ -836,8 +976,11 @@ function addCustomAction() {
     actionType: 'route',
     routePath: '',
     openTarget: '_self',
+    params: [],
   })
   patchBlockProps(selectedBlock.value.id, { customActions: list })
+  activeActionIndex.value = list.length - 1
+  customActionModalOpen.value = true
 }
 
 function updateCustomAction(idx, patch) {
@@ -850,6 +993,35 @@ function removeCustomAction(idx) {
   const list = [...(selectedBlock.value?.props?.customActions || [])]
   list.splice(idx, 1)
   patchBlockProps(selectedBlock.value.id, { customActions: list })
+  activeActionIndex.value = Math.max(0, Math.min(activeActionIndex.value, list.length - 1))
+}
+
+function openCustomActionModal() {
+  activeActionIndex.value = customActionList.value.length ? 0 : -1
+  customActionModalOpen.value = true
+}
+
+function updateActiveCustomAction(patch) {
+  if (activeActionIndex.value < 0)
+    return
+  updateCustomAction(activeActionIndex.value, patch)
+}
+
+function addActionParam() {
+  const params = [...(activeAction.value?.params || []), { name: '', value: '' }]
+  updateActiveCustomAction({ params })
+}
+
+function updateActionParam(idx, patch) {
+  const params = [...(activeAction.value?.params || [])]
+  params[idx] = { ...params[idx], ...patch }
+  updateActiveCustomAction({ params })
+}
+
+function removeActionParam(idx) {
+  const params = [...(activeAction.value?.params || [])]
+  params.splice(idx, 1)
+  updateActiveCustomAction({ params })
 }
 
 function normalizeActionKey(value) {
@@ -860,6 +1032,20 @@ function normalizeActionKey(value) {
     .replace(/_+/g, '_')
     .toLowerCase()
     .replace(/^[^a-z]+/, '')
+}
+
+function normalizeParamName(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^\w.-]/g, '')
+}
+
+function actionPositionText(position) {
+  return actionPositionOptions.find(item => item.value === (position || 'toolbar'))?.label || '工具栏'
+}
+
+function actionBehaviorText(actionType) {
+  return actionBehaviorOptions.find(item => item.value === (actionType || 'route'))?.label || '站内跳转'
 }
 
 function actionPathPlaceholder(action = {}) {
@@ -1128,32 +1314,140 @@ function removeTab(idx) {
   gap: 6px;
 }
 
-.custom-action-editor {
+.custom-action-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.action-chip-list {
   display: grid;
   gap: 6px;
 }
 
-.custom-action-head {
+.action-chip {
   display: grid;
-  grid-template-columns: minmax(70px, 1fr) minmax(78px, 1fr) 86px 76px 92px minmax(120px, 1.4fr) auto;
-  gap: 4px;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.action-chip small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.custom-action-modal {
+  width: min(1040px, calc(100vw - 48px));
+}
+
+.action-modal-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 520px;
+}
+
+.action-modal-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding-right: 12px;
+  border-right: 1px solid #e5e7eb;
+}
+
+.action-list-item,
+.action-add-item {
+  display: grid;
+  gap: 2px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-list-item.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.action-list-item span {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.action-list-item small {
   color: #64748b;
   font-size: 11px;
 }
 
-.custom-action-row {
+.action-add-item {
+  place-items: center;
+  border-style: dashed;
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.action-editor-panel {
+  min-width: 0;
+}
+
+.action-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.action-editor-title {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.action-editor-desc {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.action-form-grid {
   display: grid;
-  grid-template-columns: minmax(70px, 1fr) minmax(78px, 1fr) 86px 76px 92px minmax(120px, 1.4fr) auto;
-  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.action-param-editor {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.action-param-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto;
+  gap: 8px;
   align-items: center;
 }
 
-.custom-action-row > :nth-child(8) {
-  grid-column: 1 / 3;
-}
-
-.custom-action-row > :nth-child(9) {
-  grid-column: 3 / 8;
+.action-empty-panel {
+  display: grid;
+  place-items: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .metric-row {
@@ -1193,6 +1487,10 @@ function removeTab(idx) {
   border-radius: 6px;
   background: #fff;
   font-size: 12px;
+}
+
+.selected-row.search {
+  grid-template-columns: 16px minmax(110px, 1fr) minmax(80px, 1fr) 108px auto;
 }
 
 .f-handle {

@@ -168,7 +168,7 @@ function normalizeFieldCode(index, value) {
 function handleDataTypeChange(index, value) {
   const componentType = ['int', 'bigint', 'decimal'].includes(value)
     ? 'number'
-    : ['date', 'datetime'].includes(value)
+    : ['date', 'datetime', 'time'].includes(value)
         ? value
         : props.fields[index]?.componentType || 'input'
   updateField(index, { dataType: value, componentType })

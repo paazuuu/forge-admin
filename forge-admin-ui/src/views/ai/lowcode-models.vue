@@ -129,6 +129,12 @@
           <n-button :disabled="!canCreateModel" type="primary" secondary @click="createModel">
             新建模型
           </n-button>
+          <n-button :disabled="!selectedDomain" @click="triggerModelImport">
+            导入配置
+          </n-button>
+          <n-button :disabled="!selectedDomain || !currentModel.modelName" @click="exportCurrentModel">
+            导出配置
+          </n-button>
           <n-button @click="loadModels">
             刷新
           </n-button>
@@ -165,10 +171,10 @@
                 @update:value="syncModelIdentity"
               />
             </n-form-item>
-            <n-form-item label="模型编码">
+            <n-form-item label="模型编码 / 数据表名">
               <n-input
                 :value="currentModel.modelCode"
-                placeholder="customer_archive"
+                placeholder="tf_f_order"
                 @update:value="updateModelCode"
               />
             </n-form-item>
@@ -194,13 +200,6 @@
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 4 }"
                 placeholder="描述模型承载的数据范围、口径和业务边界"
-              />
-            </n-form-item>
-            <n-form-item label="数据表">
-              <n-input
-                :value="currentModel.modelSchema.tableName"
-                placeholder="biz_customer_archive"
-                @update:value="updateTableName"
               />
             </n-form-item>
             <n-form-item class="span-2" label="同步已有表模型">
@@ -258,6 +257,13 @@
       :domains="domains"
       @saved="handleDomainSaved"
     />
+    <input
+      ref="modelImportInputRef"
+      class="hidden-file-input"
+      type="file"
+      accept="application/json,.json"
+      @change="handleModelImportFile"
+    >
   </div>
 </template>
 
@@ -313,6 +319,7 @@ const domainKeyword = ref('')
 const modelKeyword = ref('')
 const domainEditorVisible = ref(false)
 const expandedDomainIds = ref(new Set())
+const modelImportInputRef = ref(null)
 
 const currentModel = reactive(createEmptyModel())
 
@@ -431,11 +438,14 @@ async function saveModel(syncDdl = false) {
     return
   }
   if (!currentModel.modelCode) {
-    window.$message?.warning('请填写模型编码')
+    window.$message?.warning('请填写模型编码 / 数据表名')
     return
   }
-  if (syncDdl && !window.confirm('确认保存模型配置并同步表结构到数据库？已有表只会追加缺失业务字段。'))
-    return
+  if (syncDdl) {
+    const confirmed = await confirmSyncDdl()
+    if (!confirmed)
+      return
+  }
   syncModelIdentity()
   currentModel.modelSchema.fields = ensureSystemFields(currentModel.modelSchema.fields || [], true)
   if (syncDdl)
@@ -469,6 +479,91 @@ async function saveModel(syncDdl = false) {
     saving.value = false
     syncSaving.value = false
   }
+}
+
+function confirmSyncDdl() {
+  return new Promise((resolve) => {
+    if (!window.$dialog) {
+      resolve(false)
+      return
+    }
+    window.$dialog.warning({
+      title: '确认同步表结构',
+      content: '确认保存模型配置并同步表结构到数据库？已有表只会追加缺失业务字段。',
+      positiveText: '确认同步',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    })
+  })
+}
+
+function triggerModelImport() {
+  if (!selectedDomain.value) {
+    window.$message?.warning('请先选择业务领域')
+    return
+  }
+  modelImportInputRef.value?.click()
+}
+
+function exportCurrentModel() {
+  syncModelIdentity()
+  downloadJson({
+    type: 'LOWCODE_MODEL_CONFIG',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    model: {
+      id: null,
+      domainCode: currentModel.domainCode,
+      domainName: currentModel.domainName,
+      modelCode: currentModel.modelCode,
+      modelName: currentModel.modelName,
+      modelDesc: currentModel.modelDesc,
+      status: currentModel.status,
+      tenantEnabled: currentModel.tenantEnabled,
+      masterData: currentModel.masterData,
+      modelSchema: cloneSchema(currentModel.modelSchema),
+    },
+  }, `${currentModel.modelCode || 'model'}-model-config.json`)
+}
+
+async function handleModelImportFile(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file)
+    return
+  try {
+    const payload = JSON.parse(await file.text())
+    const model = payload.model || payload
+    if (!model?.modelSchema) {
+      window.$message?.warning('模型配置文件格式不正确')
+      return
+    }
+    applyImportedModel(model)
+    window.$message?.success('模型配置已导入，请检查后保存')
+  }
+  catch (e) {
+    window.$message?.error(e?.message || '导入模型配置失败')
+  }
+}
+
+function applyImportedModel(model) {
+  const schema = cloneSchema(model.modelSchema || {})
+  currentModel.id = null
+  currentModel.domainId = selectedDomain.value?.id || null
+  currentModel.domainCode = selectedDomain.value?.domainCode || ''
+  currentModel.domainName = selectedDomain.value?.domainName || ''
+  currentModel.modelCode = normalizeObjectCode(model.modelCode || schema.object?.code || schema.tableName || '')
+  currentModel.modelName = model.modelName || schema.object?.name || schema.businessName || ''
+  currentModel.modelDesc = model.modelDesc || schema.object?.description || ''
+  currentModel.status = model.status || 'ENABLED'
+  currentModel.tenantEnabled = model.tenantEnabled !== false
+  currentModel.masterData = Boolean(model.masterData)
+  currentModel.modelSchema = schema
+  currentModel.modelSchema.fields = ensureSystemFields(currentModel.modelSchema.fields || [], currentModel.tenantEnabled)
+  syncModelIdentity()
+  ddlPreview.value = null
 }
 
 async function previewDdl() {
@@ -512,13 +607,14 @@ function applyModel(model = {}) {
 
 function updateModelCode(value) {
   currentModel.modelCode = normalizeObjectCode(value)
+  syncTableNameFromModelCode()
   syncModelIdentity()
 }
 
-function updateTableName(value) {
+function syncTableNameFromModelCode() {
   if (!currentModel.modelSchema)
     currentModel.modelSchema = createModelSchema(selectedDomain.value)
-  currentModel.modelSchema.tableName = normalizeTableName(value)
+  currentModel.modelSchema.tableName = normalizeTableName(currentModel.modelCode)
 }
 
 function handleTableModelSelect(tableId) {
@@ -714,7 +810,7 @@ function syncModelIdentity() {
   currentModel.modelSchema.policies.tenantField = 'tenantId'
   currentModel.modelSchema.policies.logicDeleteField = 'delFlag'
   if (!currentModel.modelSchema.tableName && currentModel.modelCode)
-    currentModel.modelSchema.tableName = normalizeTableName(`${selectedDomain.value?.tablePrefix || 'biz_'}${currentModel.modelCode}`)
+    currentModel.modelSchema.tableName = normalizeTableName(currentModel.modelCode)
 }
 
 function createEmptyModel(domain = null) {
@@ -745,7 +841,7 @@ function createModelSchema(domain = null) {
     objectCode: '',
     objectName: '',
     tableName: '',
-    appType: domain?.defaultAppType || 'SINGLE',
+    appType: 'SINGLE',
   })
   modelSchema.object.code = ''
   modelSchema.object.name = ''
@@ -800,6 +896,16 @@ function openDomainEditor() {
 async function handleDomainSaved() {
   domainEditorVisible.value = false
   await loadDomains()
+}
+
+function downloadJson(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 </script>
 
@@ -1057,6 +1163,10 @@ async function handleDomainSaved() {
   gap: 8px;
   width: 100%;
   align-items: center;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 .ddl-warning {

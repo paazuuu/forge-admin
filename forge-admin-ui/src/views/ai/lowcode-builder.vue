@@ -45,227 +45,233 @@
       </n-space>
     </header>
 
-    <div class="app-shell">
-      <main class="app-main">
-        <section v-if="!selectedDomain" class="empty-canvas">
-          <div class="empty-illustration">
-            <n-icon><FolderOpenOutline /></n-icon>
-          </div>
-          <h2>从低代码应用页新建应用</h2>
-          <p>应用页面归属于业务领域。请先在低代码应用页选择领域并点击新建应用，再选择一个或多个数据模型设计页面。</p>
-          <n-space justify="center">
-            <n-button type="primary" @click="router.push('/ai/lowcode-apps')">
-              返回低代码应用
-            </n-button>
-            <n-button @click="router.push('/ai/lowcode-models')">
-              进入数据模型设计
-            </n-button>
-          </n-space>
-        </section>
-
-        <template v-else>
-          <n-alert
-            v-if="selectedDomain.status === 'DISABLED' && !draft.id"
-            type="warning"
-            :bordered="false"
-            class="status-alert"
-          >
-            当前业务领域已停用，不能新建应用。可以查看已有应用，或回到低代码应用页启用后再创建。
-          </n-alert>
-
-          <section class="domain-context">
-            <div class="context-main">
-              <div class="context-code">
-                {{ selectedDomain.domainCode }}
-              </div>
-              <h2>{{ selectedDomain.domainName }}</h2>
-              <p>{{ selectedDomain.domainDesc || selectedDomain.domainSchema?.aiContext?.description || '该领域尚未维护业务说明。' }}</p>
+    <n-spin :show="pageLoading" description="正在加载低代码应用..." class="builder-spin">
+      <div class="app-shell">
+        <main class="app-main">
+          <section v-if="!selectedDomain" class="empty-canvas">
+            <div class="empty-illustration">
+              <n-icon><FolderOpenOutline /></n-icon>
             </div>
-            <div class="metric-strip">
-              <div>
-                <span>已选模型</span>
-                <strong>{{ selectedDataModels.length }}</strong>
-              </div>
-              <div>
-                <span>主模型</span>
-                <strong>{{ primaryModel?.modelName || '-' }}</strong>
-              </div>
-              <div>
-                <span>页面字段</span>
-                <strong>{{ boundFieldCount }}</strong>
-              </div>
-            </div>
+            <h2>从低代码应用页新建应用</h2>
+            <p>应用页面归属于业务领域。请先在低代码应用页选择领域并点击新建应用，再选择一个或多个数据模型设计页面。</p>
+            <n-space justify="center">
+              <n-button type="primary" @click="router.push('/ai/lowcode-apps')">
+                返回低代码应用
+              </n-button>
+              <n-button @click="router.push('/ai/lowcode-models')">
+                进入数据模型设计
+              </n-button>
+            </n-space>
           </section>
 
-          <section class="app-config">
-            <div class="step-strip">
-              <button
-                v-for="step in stepItems"
-                :key="step.value"
-                type="button"
-                class="step-node"
-                :class="{ active: currentStep === step.value }"
-                @click="currentStep = step.value"
-              >
-                <strong>{{ step.title }}</strong>
-                <span>{{ step.desc }}</span>
-              </button>
-            </div>
+          <template v-else>
+            <n-alert
+              v-if="selectedDomain.status === 'DISABLED' && !draft.id"
+              type="warning"
+              :bordered="false"
+              class="status-alert"
+            >
+              当前业务领域已停用，不能新建应用。可以查看已有应用，或回到低代码应用页启用后再创建。
+            </n-alert>
 
-            <n-form label-placement="top" size="small" class="app-form" :show-feedback="false">
-              <n-form-item label="应用名称">
-                <n-input
-                  :value="draft.appName"
-                  placeholder="例如：客户经营看板"
-                  @update:value="updateAppName"
-                />
-              </n-form-item>
-              <n-form-item label="应用编码">
-                <n-input
-                  :value="draft.configKey"
-                  :disabled="!!appId"
-                  placeholder="customer_operation"
-                  @update:value="updateConfigKey"
-                />
-              </n-form-item>
-              <n-form-item label="所属业务域">
-                <n-input :value="selectedDomain.domainName" disabled />
-              </n-form-item>
-              <n-form-item label="页面模板">
-                <n-select v-model:value="draft.pageSchema.layoutType" :options="layoutOptions" />
-              </n-form-item>
-              <n-form-item label="发布菜单">
-                <n-input v-model:value="draft.menuName" placeholder="默认同应用名称" />
-              </n-form-item>
-              <n-form-item label="菜单父级">
-                <MenuParentSelect v-model:value="draft.menuParentId" />
-              </n-form-item>
-            </n-form>
-          </section>
-
-          <section class="model-source-panel">
-            <div class="source-head">
-              <div>
-                <div class="section-title">
-                  应用数据源
+            <section class="domain-context">
+              <div class="context-main">
+                <div class="context-code">
+                  {{ selectedDomain.domainCode }}
                 </div>
-                <p>选择该应用页面会使用的数据模型，并指定一个主模型承接当前发布运行时。</p>
+                <h2>{{ selectedDomain.domainName }}</h2>
+                <p>{{ selectedDomain.domainDesc || selectedDomain.domainSchema?.aiContext?.description || '该领域尚未维护业务说明。' }}</p>
               </div>
-              <n-space>
-                <n-button :loading="dataModelLoading" @click="loadDataModels">
-                  刷新模型
-                </n-button>
-                <n-button @click="router.push('/ai/lowcode-models')">
-                  维护数据模型
-                </n-button>
-              </n-space>
-            </div>
-            <div class="source-select-row">
-              <n-select
-                :value="selectedModelKeys"
-                multiple
-                filterable
-                clearable
-                :loading="dataModelLoading"
-                :options="modelOptions"
-                placeholder="选择一个或多个数据模型"
-                @update:value="handleModelSelectionChange"
-              />
-            </div>
-            <div v-if="selectedDataModels.length" class="selected-model-grid">
-              <button
-                v-for="model in selectedDataModels"
-                :key="resolveModelKey(model)"
-                type="button"
-                class="selected-model-card"
-                :class="{ primary: resolveModelKey(model) === primaryModelKey }"
-                @click="setPrimaryModel(resolveModelKey(model))"
-              >
-                <span class="model-card-head">
-                  <span>
-                    <strong>{{ model.modelName }}</strong>
-                    <code>{{ model.modelCode }}</code>
-                  </span>
-                  <n-tag
-                    size="small"
-                    :type="resolveModelKey(model) === primaryModelKey ? 'success' : 'default'"
-                    :bordered="false"
-                  >
-                    {{ resolveModelKey(model) === primaryModelKey ? '主模型' : '引用模型' }}
-                  </n-tag>
-                </span>
-                <span class="model-card-meta">
-                  {{ model.modelSchema?.fields?.length || 0 }} 个字段
-                  <span v-if="model.masterData"> · 主数据</span>
-                  <span v-if="model.tenantEnabled"> · 多租户</span>
-                </span>
-              </button>
-            </div>
-            <n-empty
-              v-else
-              size="small"
-              description="当前应用尚未选择数据模型"
-              class="model-empty"
-            />
-          </section>
+              <div class="metric-strip">
+                <div>
+                  <span>已选模型</span>
+                  <strong>{{ selectedDataModels.length }}</strong>
+                </div>
+                <div>
+                  <span>主模型</span>
+                  <strong>{{ primaryModel?.modelName || '-' }}</strong>
+                </div>
+                <div>
+                  <span>页面字段</span>
+                  <strong>{{ boundFieldCount }}</strong>
+                </div>
+              </div>
+            </section>
 
-          <section class="stage-panel">
-            <div v-show="currentStep === 'source'" class="source-stage">
-              <div class="field-pool-head">
+            <section class="app-config">
+              <div class="step-strip">
+                <button
+                  v-for="step in stepItems"
+                  :key="step.value"
+                  type="button"
+                  class="step-node"
+                  :class="{ active: currentStep === step.value }"
+                  @click="currentStep = step.value"
+                >
+                  <strong>{{ step.title }}</strong>
+                  <span>{{ step.desc }}</span>
+                </button>
+              </div>
+
+              <n-form label-placement="top" size="small" class="app-form" :show-feedback="false">
+                <n-form-item label="应用名称">
+                  <n-input
+                    :value="draft.appName"
+                    placeholder="例如：客户经营看板"
+                    @update:value="updateAppName"
+                  />
+                </n-form-item>
+                <n-form-item label="应用编码">
+                  <n-input
+                    :value="draft.configKey"
+                    :disabled="!!appId"
+                    placeholder="customer_operation"
+                    @update:value="updateConfigKey"
+                  />
+                </n-form-item>
+                <n-form-item label="所属业务域">
+                  <n-input :value="selectedDomain.domainName" disabled />
+                </n-form-item>
+                <n-form-item label="页面模板">
+                  <n-select
+                    v-model:value="draft.pageSchema.layoutType"
+                    :options="layoutOptions"
+                    @update:value="handleLayoutTypeChange"
+                  />
+                </n-form-item>
+                <n-form-item label="发布菜单">
+                  <n-input v-model:value="draft.menuName" placeholder="默认同应用名称" />
+                </n-form-item>
+                <n-form-item label="菜单父级">
+                  <MenuParentSelect v-model:value="draft.menuParentId" />
+                </n-form-item>
+              </n-form>
+            </section>
+
+            <section class="model-source-panel">
+              <div class="source-head">
                 <div>
                   <div class="section-title">
-                    模型字段池
+                    应用数据源
                   </div>
-                  <p>页面设计阶段可从这些字段中选择绑定来源。</p>
+                  <p>标准列表使用一个数据模型；左树右表和主子表可选择多个数据模型，并指定一个主模型承接当前发布运行时。</p>
                 </div>
-                <n-tag :bordered="false">
-                  {{ pageDesignFields.length }} 个可用字段
-                </n-tag>
+                <n-space>
+                  <n-button :loading="dataModelLoading" @click="loadDataModels">
+                    刷新模型
+                  </n-button>
+                  <n-button @click="router.push('/ai/lowcode-models')">
+                    维护数据模型
+                  </n-button>
+                </n-space>
               </div>
-              <div v-if="fieldPools.length" class="field-pool-grid">
-                <div v-for="pool in fieldPools" :key="pool.key" class="field-pool-card">
-                  <div class="pool-title">
-                    <strong>{{ pool.name }}</strong>
-                    <code>{{ pool.code }}</code>
-                  </div>
-                  <div class="field-chip-list">
-                    <span
-                      v-for="field in pool.fields.slice(0, 16)"
-                      :key="field.field"
-                      class="field-chip"
+              <div class="source-select-row">
+                <n-select
+                  :value="selectedModelValue"
+                  :multiple="allowMultipleModels"
+                  filterable
+                  clearable
+                  :loading="dataModelLoading"
+                  :options="modelOptions"
+                  :placeholder="allowMultipleModels ? '选择一个或多个数据模型' : '选择一个数据模型'"
+                  @update:value="handleModelSelectionChange"
+                />
+              </div>
+              <div v-if="selectedDataModels.length" class="selected-model-grid">
+                <button
+                  v-for="model in selectedDataModels"
+                  :key="resolveModelKey(model)"
+                  type="button"
+                  class="selected-model-card"
+                  :class="{ primary: resolveModelKey(model) === primaryModelKey }"
+                  @click="setPrimaryModel(resolveModelKey(model))"
+                >
+                  <span class="model-card-head">
+                    <span>
+                      <strong>{{ model.modelName }}</strong>
+                      <code>{{ model.modelCode }}</code>
+                    </span>
+                    <n-tag
+                      size="small"
+                      :type="resolveModelKey(model) === primaryModelKey ? 'success' : 'default'"
+                      :bordered="false"
                     >
-                      {{ field.label || field.field }}
-                    </span>
-                    <span v-if="pool.fields.length > 16" class="field-chip muted">
-                      +{{ pool.fields.length - 16 }}
-                    </span>
+                      {{ resolveModelKey(model) === primaryModelKey ? '主模型' : '引用模型' }}
+                    </n-tag>
+                  </span>
+                  <span class="model-card-meta">
+                    {{ model.modelSchema?.fields?.length || 0 }} 个字段
+                    <span v-if="model.masterData"> · 主数据</span>
+                    <span v-if="model.tenantEnabled"> · 多租户</span>
+                  </span>
+                </button>
+              </div>
+              <n-empty
+                v-else
+                size="small"
+                description="当前应用尚未选择数据模型"
+                class="model-empty"
+              />
+            </section>
+
+            <section class="stage-panel">
+              <div v-show="currentStep === 'source'" class="source-stage">
+                <div class="field-pool-head">
+                  <div>
+                    <div class="section-title">
+                      模型字段池
+                    </div>
+                    <p>页面设计阶段可从这些字段中选择绑定来源。</p>
+                  </div>
+                  <n-tag :bordered="false">
+                    {{ pageDesignFields.length }} 个可用字段
+                  </n-tag>
+                </div>
+                <div v-if="fieldPools.length" class="field-pool-grid">
+                  <div v-for="pool in fieldPools" :key="pool.key" class="field-pool-card">
+                    <div class="pool-title">
+                      <strong>{{ pool.name }}</strong>
+                      <code>{{ pool.code }}</code>
+                    </div>
+                    <div class="field-chip-list">
+                      <span
+                        v-for="field in pool.fields.slice(0, 16)"
+                        :key="field.field"
+                        class="field-chip"
+                      >
+                        {{ field.label || field.field }}
+                      </span>
+                      <span v-if="pool.fields.length > 16" class="field-chip muted">
+                        +{{ pool.fields.length - 16 }}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                <n-empty v-else description="请先选择数据模型" />
               </div>
-              <n-empty v-else description="请先选择数据模型" />
-            </div>
 
-            <LowcodePageBuilder
-              v-show="currentStep === 'page'"
-              v-model="draft.pageSchema"
-              :model-schema="pageDesignModelSchema"
-            />
-            <LowcodePreviewPane
-              v-show="currentStep === 'preview'"
-              :app-id="appId"
-              :draft="draft"
-            />
-            <PublishPanel
-              v-show="currentStep === 'publish'"
-              :app-id="appId"
-              :draft="draft"
-              @published="reloadDetail"
-              @rolled-back="reloadDetail"
-            />
-          </section>
-        </template>
-      </main>
-    </div>
+              <LowcodePageBuilder
+                v-show="currentStep === 'page'"
+                v-model="draft.pageSchema"
+                :model-schema="pageDesignModelSchema"
+              />
+              <LowcodePreviewPane
+                v-show="currentStep === 'preview'"
+                :app-id="appId"
+                :draft="draft"
+              />
+              <PublishPanel
+                v-show="currentStep === 'publish'"
+                :app-id="appId"
+                :draft="draft"
+                @published="reloadDetail"
+                @rolled-back="reloadDetail"
+              />
+            </section>
+          </template>
+        </main>
+      </div>
+    </n-spin>
   </div>
 </template>
 
@@ -312,6 +318,7 @@ const router = useRouter()
 
 const currentStep = ref('source')
 const saving = ref(false)
+const pageBootLoading = ref(true)
 const domainLoading = ref(false)
 const dataModelLoading = ref(false)
 const dataModels = ref([])
@@ -322,6 +329,7 @@ const primaryModelKey = ref(null)
 const appCodeTouched = ref(false)
 
 const appId = computed(() => route.params.id || null)
+const pageLoading = computed(() => pageBootLoading.value || domainLoading.value)
 const emptyRuntimeModel = createEmptyRuntimeModel()
 const draft = reactive({
   id: null,
@@ -347,13 +355,15 @@ const stepItems = [
   { value: 'publish', title: '发布上线', desc: '菜单 / DDL / 版本' },
 ]
 const layoutOptions = [
-  { label: '标准 CRUD', value: 'simple-crud' },
+  { label: '标准列表', value: 'simple-crud' },
   { label: '左树右表', value: 'tree-crud' },
   { label: '主子表', value: 'master-detail-crud' },
 ]
 const selectedDataModels = computed(() => selectedModelKeys.value
   .map(key => dataModels.value.find(model => resolveModelKey(model) === key))
   .filter(Boolean))
+const allowMultipleModels = computed(() => ['tree-crud', 'master-detail-crud'].includes(draft.pageSchema?.layoutType))
+const selectedModelValue = computed(() => allowMultipleModels.value ? selectedModelKeys.value : selectedModelKeys.value[0] || null)
 const primaryModel = computed(() => selectedDataModels.value.find(model => resolveModelKey(model) === primaryModelKey.value) || selectedDataModels.value[0] || null)
 const pageDesignModelSchema = computed(() => buildPageDesignModelSchema(draft.modelSchema, draft.pageSchema?.modelRefs || []))
 const pageDesignFields = computed(() => pageDesignModelSchema.value.fields || [])
@@ -384,12 +394,17 @@ const fieldPools = computed(() => selectedDataModels.value.map(model => ({
 })))
 
 onMounted(async () => {
-  if (appId.value) {
-    await reloadDetail()
-    return
+  try {
+    if (appId.value) {
+      await reloadDetail()
+      return
+    }
+    if (route.query.domainId)
+      await selectDomainById(route.query.domainId, { resetDraft: true })
   }
-  if (route.query.domainId)
-    await selectDomainById(route.query.domainId, { resetDraft: true })
+  finally {
+    pageBootLoading.value = false
+  }
 })
 
 watch(
@@ -398,12 +413,29 @@ watch(
     if (value === oldValue)
       return
     if (value) {
-      await reloadDetail()
+      pageBootLoading.value = true
+      try {
+        await reloadDetail()
+      }
+      finally {
+        pageBootLoading.value = false
+      }
     }
     else if (route.query.domainId) {
-      await selectDomainById(route.query.domainId, { resetDraft: true })
+      pageBootLoading.value = true
+      try {
+        await selectDomainById(route.query.domainId, { resetDraft: true })
+      }
+      finally {
+        pageBootLoading.value = false
+      }
     }
   },
+)
+
+watch(
+  () => draft.pageSchema?.layoutType,
+  () => enforceModelSelectionLimit(),
 )
 
 async function selectDomainById(domainId, options = {}) {
@@ -544,10 +576,28 @@ function ensureDataModelFromRef(ref) {
 }
 
 function handleModelSelectionChange(keys) {
-  selectedModelKeys.value = keys || []
+  const nextKeys = Array.isArray(keys) ? keys : keys ? [keys] : []
+  selectedModelKeys.value = allowMultipleModels.value ? nextKeys : nextKeys.slice(-1)
   if (!selectedModelKeys.value.includes(primaryModelKey.value))
     primaryModelKey.value = selectedModelKeys.value[0] || null
   syncSelectedModelsToDraft()
+}
+
+function handleLayoutTypeChange(value) {
+  draft.pageSchema.layoutType = value
+  enforceModelSelectionLimit()
+  syncSelectedModelsToDraft()
+}
+
+function enforceModelSelectionLimit() {
+  if (allowMultipleModels.value || selectedModelKeys.value.length <= 1)
+    return
+  const retainedKey = selectedModelKeys.value.includes(primaryModelKey.value)
+    ? primaryModelKey.value
+    : selectedModelKeys.value[0]
+  selectedModelKeys.value = retainedKey ? [retainedKey] : []
+  primaryModelKey.value = retainedKey || null
+  window.$message?.info('标准列表只支持一个数据模型，已保留主模型')
 }
 
 function setPrimaryModel(key) {
@@ -805,7 +855,7 @@ function resolveDomainDefaults(domain) {
   return {
     tablePrefix: domain?.tablePrefix || schema.naming?.tablePrefix || (domain?.domainCode ? `biz_${domain.domainCode}_` : 'biz_'),
     configKeyPrefix: domain?.configKeyPrefix || schema.naming?.configKeyPrefix || (domain?.domainCode ? `${domain.domainCode}_` : ''),
-    layoutType: domain?.defaultLayoutType || schema.defaults?.layoutType || 'simple-crud',
+    layoutType: 'simple-crud',
     menuParentId: domain?.menuParentId || schema.defaults?.menuParentId || null,
   }
 }
@@ -873,6 +923,15 @@ function resolveDomainDefaults(domain) {
 .app-shell {
   display: block;
   padding: 14px;
+}
+
+.builder-spin {
+  display: block;
+  min-height: calc(100vh - 73px);
+}
+
+:deep(.builder-spin > .n-spin-content) {
+  min-height: calc(100vh - 73px);
 }
 
 .domain-context,

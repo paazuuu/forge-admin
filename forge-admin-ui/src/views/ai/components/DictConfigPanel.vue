@@ -132,7 +132,7 @@ function extractDictTypes(schemas) {
         }
       }
     }
-    catch (e) {}
+    catch {}
   }
   return set
 }
@@ -166,7 +166,7 @@ function parseDictConfig() {
     }
     return map
   }
-  catch (e) {
+  catch {
     return new Map()
   }
 }
@@ -286,7 +286,6 @@ function addOption(idx) {
   ]
   items[idx] = item
   dictItems.value = items
-  console.log('[DictConfigPanel] addOption', idx, 'options count:', item.options.length)
 }
 
 function removeOption(idx, oi) {
@@ -297,7 +296,6 @@ function removeOption(idx, oi) {
   }
   items[idx] = item
   dictItems.value = items
-  console.log('[DictConfigPanel] removeOption', idx, oi, 'options count:', item.options?.length || 0)
 }
 
 /**
@@ -453,7 +451,7 @@ async function saveAllDicts() {
           dictType: item.dictType,
           dictName: item.dictName || item.dictType,
           dictStatus: 1,
-          remark: 'AI CRUD 生成器自动创建',
+          remark: 'AI 页面生成器自动创建',
         })
         item.isExisting = true
         existingDictTypes.value.add(item.dictType)

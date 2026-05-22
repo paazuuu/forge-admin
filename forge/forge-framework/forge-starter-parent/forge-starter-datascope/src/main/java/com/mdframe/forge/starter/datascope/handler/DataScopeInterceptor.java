@@ -9,7 +9,6 @@ import com.mdframe.forge.starter.datascope.context.DataScopeContextHolder;
 import com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig;
 import com.mdframe.forge.starter.datascope.enums.DataScopeType;
 import com.mdframe.forge.starter.datascope.service.IDataScopeService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
@@ -39,6 +38,8 @@ import java.util.Set;
  */
 @Slf4j
 public class DataScopeInterceptor implements InnerInterceptor {
+
+    private static final String DATA_SCOPE_MAPPER_PACKAGE = "com.mdframe.forge.starter.datascope.mapper.";
     
     @Override
     public void beforeQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds,
@@ -49,28 +50,12 @@ public class DataScopeInterceptor implements InnerInterceptor {
             log.debug("数据权限拦截器：已设置跳过标记，跳过权限控制");
             return;
         }
-        // 2. 获取Mapper方法全路径
+
         String mapperId = ms.getId();
-        log.info("mapperId:{}", mapperId);
-        if (mapperId.contains("com.mdframe.forge.starter.datascope.mapper")) {
+        if (mapperId.startsWith(DATA_SCOPE_MAPPER_PACKAGE)) {
             return;
         }
-        IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
-        
-        // 1. 获取当前用户数据权限上下文
-        DataScopeContext context = null;
-        try {
-            context = dataScopeService.getCurrentUserDataScope();
-        } catch (Exception e) {
-            // 获取用户上下文失败（可能是后台任务），跳过权限控制
-            //log.debug("数据权限拦截器：获取用户上下文失败，可能是后台任务，跳过权限控制", e);
-            return;
-        }
-        
-        if (context == null || context.getUserId() == null) {
-            log.debug("数据权限拦截器：未获取到用户信息，跳过权限控制");
-            return;
-        }
+        log.debug("数据权限拦截器：mapperId={}", mapperId);
         
         // 3. 处理分页count查询（方法名以_mpCount或_COUNT结尾）
         // 需要根据原方法名查询配置
@@ -82,9 +67,25 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
         
         // 4. 查询该方法的数据权限配置
+        IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
         SysDataScopeConfig config = dataScopeService.getDataScopeConfig(actualMapperId);
         if (config == null || config.getEnabled() == 0) {
             log.debug("数据权限拦截器：方法 {} 未配置数据权限或已禁用", actualMapperId);
+            return;
+        }
+
+        // 1. 获取当前用户数据权限上下文。先确认 mapper 配置存在，避免无权限配置的普通查询反复计算角色数据范围。
+        DataScopeContext context = null;
+        try {
+            context = dataScopeService.getCurrentUserDataScope();
+        } catch (Exception e) {
+            // 获取用户上下文失败（可能是后台任务），跳过权限控制
+            //log.debug("数据权限拦截器：获取用户上下文失败，可能是后台任务，跳过权限控制", e);
+            return;
+        }
+
+        if (context == null || context.getUserId() == null) {
+            log.debug("数据权限拦截器：未获取到用户信息，跳过权限控制");
             return;
         }
         
@@ -481,4 +482,3 @@ public class DataScopeInterceptor implements InnerInterceptor {
         return p;
     }
 }
-

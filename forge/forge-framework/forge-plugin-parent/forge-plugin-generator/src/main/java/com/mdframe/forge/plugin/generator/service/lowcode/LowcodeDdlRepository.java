@@ -41,6 +41,24 @@ public class LowcodeDdlRepository {
         return new HashSet<>(columns);
     }
 
+    public Map<String, ColumnMetadata> listColumnMetadata(String tableName) {
+        List<ColumnMetadata> columns = jdbcTemplate.query("""
+                SELECT column_name, column_type, is_nullable, column_default, extra, column_comment, generation_expression
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = ?
+                """, (rs, rowNum) -> new ColumnMetadata(
+                rs.getString("column_name"),
+                rs.getString("column_type"),
+                rs.getString("is_nullable"),
+                rs.getObject("column_default"),
+                rs.getString("extra"),
+                rs.getString("column_comment"),
+                rs.getString("generation_expression")
+        ), tableName);
+        return columns.stream().collect(java.util.stream.Collectors.toMap(ColumnMetadata::columnName, column -> column));
+    }
+
     public Set<String> listIndexes(String tableName) {
         List<String> indexes = jdbcTemplate.queryForList("""
                 SELECT DISTINCT index_name
@@ -80,5 +98,9 @@ public class LowcodeDdlRepository {
 
     private String text(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    public record ColumnMetadata(String columnName, String columnType, String isNullable, Object columnDefault,
+                                 String extra, String columnComment, String generationExpression) {
     }
 }

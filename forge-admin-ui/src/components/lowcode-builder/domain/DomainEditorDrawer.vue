@@ -35,16 +35,10 @@
           </div>
           <div class="two-col">
             <n-form-item label="表名前缀">
-              <n-input v-model:value="form.tablePrefix" placeholder="biz_contract_" />
+              <n-input v-model:value="form.tablePrefix" placeholder="tf_f_order" />
             </n-form-item>
             <n-form-item label="配置键前缀">
               <n-input v-model:value="form.configKeyPrefix" placeholder="contract_" />
-            </n-form-item>
-            <n-form-item label="应用类型">
-              <n-select v-model:value="form.defaultAppType" :options="appTypeOptions" />
-            </n-form-item>
-            <n-form-item label="页面模板">
-              <n-input v-model:value="form.defaultLayoutType" placeholder="simple-crud" />
             </n-form-item>
             <n-form-item label="菜单父级">
               <MenuParentSelect v-model:value="form.menuParentId" />
@@ -118,12 +112,6 @@ const drawerShow = computed({
   set: value => emit('update:show', value),
 })
 
-const appTypeOptions = [
-  { label: '单表应用', value: 'SINGLE' },
-  { label: '树形单表', value: 'TREE' },
-  { label: '主子表预留', value: 'MASTER_DETAIL' },
-]
-
 const parentOptions = computed(() => flattenDomains(props.domains)
   .filter(item => item.id !== form.id)
   .map(item => ({
@@ -152,8 +140,6 @@ function createBlankForm() {
     menuParentId: null,
     tablePrefix: '',
     configKeyPrefix: '',
-    defaultAppType: 'SINGLE',
-    defaultLayoutType: 'simple-crud',
   }
 }
 
@@ -173,8 +159,6 @@ function createBlankSchema() {
       objectCodeStyle: 'lower_snake',
     },
     defaults: {
-      appType: 'SINGLE',
-      layoutType: 'simple-crud',
       menuParentId: null,
     },
     fieldTemplates: [],
@@ -189,6 +173,10 @@ function resetForm(domain) {
   const nextSchema = cloneSchema(domain?.domainSchema || createBlankSchema())
   if (nextSchema.defaults)
     delete nextSchema.defaults.tableMode
+  if (nextSchema.defaults) {
+    delete nextSchema.defaults.appType
+    delete nextSchema.defaults.layoutType
+  }
   if (nextSchema.naming)
     delete nextSchema.naming.tableMode
   Object.assign(schema, createBlankSchema(), nextSchema)
@@ -207,8 +195,6 @@ async function save() {
     schema.aiContext.constraints = splitLines(constraintsText.value)
     schema.naming.tablePrefix = form.tablePrefix
     schema.naming.configKeyPrefix = form.configKeyPrefix
-    schema.defaults.appType = form.defaultAppType
-    schema.defaults.layoutType = form.defaultLayoutType
     schema.defaults.menuParentId = form.menuParentId
 
     const payload = {
@@ -223,8 +209,6 @@ async function save() {
       menuParentId: form.menuParentId,
       tablePrefix: form.tablePrefix,
       configKeyPrefix: form.configKeyPrefix,
-      defaultAppType: form.defaultAppType,
-      defaultLayoutType: form.defaultLayoutType,
       domainSchema: cloneSchema(schema),
     }
     if (form.id)

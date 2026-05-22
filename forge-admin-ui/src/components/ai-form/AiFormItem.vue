@@ -220,6 +220,24 @@
       v-on="getComponentEvents(field)"
     />
 
+    <!-- 日期时间范围选择 -->
+    <n-date-picker
+      v-else-if="field.type === 'datetimerange'"
+      :value="value"
+      type="datetimerange"
+      :placeholder="field.placeholder"
+      :start-placeholder="field.startPlaceholder || '开始时间'"
+      :end-placeholder="field.endPlaceholder || '结束时间'"
+      :disabled="disabledHandler(field)"
+      :clearable="field.clearable !== false"
+      style="width: 100%"
+      v-bind="field.props"
+      :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
+      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
+      @update:value="handleUpdate"
+      v-on="getComponentEvents(field)"
+    />
+
     <!-- 月份选择 -->
     <n-date-picker
       v-else-if="field.type === 'month'"
@@ -266,6 +284,35 @@
       @update:value="handleUpdate"
       v-on="getComponentEvents(field)"
     />
+
+    <!-- 时间范围选择 -->
+    <div v-else-if="field.type === 'timerange'" class="time-range-picker">
+      <n-time-picker
+        :value="resolveRangeValue(value, 0)"
+        :placeholder="field.startPlaceholder || '开始时间'"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :format="field.props?.format || field.format || 'HH:mm:ss'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
+        @update:value="handleRangeUpdate(0, $event)"
+        v-on="getComponentEvents(field)"
+      />
+      <span class="time-range-separator">至</span>
+      <n-time-picker
+        :value="resolveRangeValue(value, 1)"
+        :placeholder="field.endPlaceholder || '结束时间'"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :format="field.props?.format || field.format || 'HH:mm:ss'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
+        @update:value="handleRangeUpdate(1, $event)"
+        v-on="getComponentEvents(field)"
+      />
+    </div>
 
     <!-- 文件上传 -->
     <n-upload
@@ -636,6 +683,16 @@ function handleUpdate(newValue) {
   emit('update:value', newValue)
 }
 
+function resolveRangeValue(value, index) {
+  return Array.isArray(value) ? value[index] ?? null : null
+}
+
+function handleRangeUpdate(index, nextValue) {
+  const next = Array.isArray(props.value) ? [...props.value] : [null, null]
+  next[index] = nextValue
+  emit('update:value', next)
+}
+
 /**
  * 处理文件上传变化
  */
@@ -693,3 +750,17 @@ function handleUploadRemove(field, file) {
   }
 }
 </script>
+
+<style scoped>
+.time-range-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.time-range-separator {
+  color: #64748b;
+  font-size: 12px;
+}
+</style>

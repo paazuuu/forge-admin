@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.GenTableColumnMapper">
+
+    <update id="updateRequiredByTableRef">
+        UPDATE gen_table_column c
+        INNER JOIN gen_table t ON t.table_id = c.table_id
+        SET c.is_required = CASE c.column_name
+        <foreach collection="columns" item="column">
+            WHEN #{column.columnName} THEN #{column.required}
+        </foreach>
+            ELSE c.is_required
+        END,
+        c.update_time = NOW()
+        WHERE
+        <choose>
+            <when test="tableId != null">
+                t.table_id = #{tableId}
+            </when>
+            <otherwise>
+                t.table_name = #{tableName}
+            </otherwise>
+        </choose>
+          AND c.column_name IN
+        <foreach collection="columns" item="column" open="(" separator="," close=")">
+            #{column.columnName}
+        </foreach>
+    </update>
+
+</mapper>

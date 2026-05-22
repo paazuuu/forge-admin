@@ -4,7 +4,7 @@
     <div class="page-header">
       <div class="header-left">
         <span class="header-title">页面模板</span>
-        <span class="header-desc">管理 AI CRUD 生成器的页面模板，每个模板可配置专属 AI 提示词约束</span>
+        <span class="header-desc">管理 AI 页面生成器的页面模板，每个模板可配置专属 AI 提示词约束</span>
       </div>
       <n-button type="primary" size="small" @click="openCreateModal">
         <template #icon>
@@ -168,13 +168,13 @@
               <n-input
                 v-model:value="formData.templateKey"
                 :disabled="isEdit"
-                placeholder="如 simple-crud（仅小写字母、数字、短横线）"
+                placeholder="如 simple-list（仅小写字母、数字、短横线）"
               />
             </n-form-item>
           </n-grid-item>
           <n-grid-item>
             <n-form-item label="模板名称" path="templateName">
-              <n-input v-model:value="formData.templateName" placeholder="如 标准 CRUD" />
+              <n-input v-model:value="formData.templateName" placeholder="如 标准列表" />
             </n-form-item>
           </n-grid-item>
           <n-grid-item :span="2">
@@ -214,7 +214,7 @@
                   placeholder="{&quot;modalType&quot;:&quot;drawer&quot;,&quot;modalWidth&quot;:&quot;800px&quot;,&quot;searchGridCols&quot;:4}"
                   class="mono-input"
                 />
-                <span class="json-hint">JSON 格式，将作为 crud-page 渲染时的默认参数</span>
+                <span class="json-hint">JSON 格式，将作为运行页面渲染时的默认参数</span>
               </div>
             </n-form-item>
           </n-grid-item>
@@ -436,15 +436,24 @@ async function toggleEnabled(tpl) {
 function parseJson(str) {
   if (!str)
     return {}
-  try { return JSON.parse(str) }
-  catch { return {} }
+  try {
+    return JSON.parse(str)
+  }
+  catch {
+    return {}
+  }
 }
 
 function isValidJson(str) {
   if (!str)
     return true
-  try { JSON.parse(str); return true }
-  catch { return false }
+  try {
+    JSON.parse(str)
+    return true
+  }
+  catch {
+    return false
+  }
 }
 
 function truncate(str, len) {
@@ -453,7 +462,7 @@ function truncate(str, len) {
   return str.length > len ? `${str.slice(0, len)}...` : str
 }
 
-function resolveIcon(icon) {
+function resolveIcon(_icon) {
   // 简单返回 icon 字符串，由 n-icon 结合 iconify 渲染
   // 若项目未引入 iconify，则回退到 SparklesOutline
   return SparklesOutline

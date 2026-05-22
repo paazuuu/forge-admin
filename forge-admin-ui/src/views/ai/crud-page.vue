@@ -116,17 +116,32 @@ function transformFields(fields) {
       }
     }
 
-    // 日期/时间类型字段配置格式化，直接返回标准时间字符串
-    if (['date', 'datetime', 'time'].includes(field.type?.toLowerCase())) {
+    const timeProps = resolveDateTimeProps(field.type)
+    if (timeProps) {
       newField.props = {
         ...(newField.props || {}),
-        format: 'yyyy-MM-dd HH:mm:ss',
-        valueFormat: 'yyyy-MM-dd HH:mm:ss',
+        ...timeProps,
       }
     }
 
     return newField
   })
+}
+
+function resolveDateTimeProps(type) {
+  switch (String(type || '').toLowerCase()) {
+    case 'date':
+    case 'daterange':
+      return { format: 'yyyy-MM-dd', valueFormat: 'yyyy-MM-dd' }
+    case 'datetime':
+    case 'datetimerange':
+      return { format: 'yyyy-MM-dd HH:mm:ss', valueFormat: 'yyyy-MM-dd HH:mm:ss' }
+    case 'time':
+    case 'timerange':
+      return { format: 'HH:mm:ss', valueFormat: 'HH:mm:ss' }
+    default:
+      return null
+  }
 }
 
 const crudProps = computed(() => {
@@ -235,7 +250,7 @@ async function loadConfig() {
     const res = await crudConfigRender(configKey)
     const cfg = res.data
     renderConfig.value = cfg
-    // 动态 CRUD 的 Tab/浏览器标题以发布菜单名为准，避免再次点击 Tab 时回退成主模型名。
+    // 动态页面的 Tab/浏览器标题以发布菜单名为准，避免再次点击 Tab 时回退成主模型名。
     const title = resolveRuntimeTitle(cfg)
     if (title) {
       route.meta.title = title

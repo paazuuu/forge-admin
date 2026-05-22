@@ -54,7 +54,6 @@
         ref="designerRef"
         :height="designerHeight"
         :config="designerConfig"
-        @save="handleSave"
         @create="queueFlush"
         @copy="queueFlush"
         @delete="queueFlush"
@@ -106,7 +105,7 @@ const designerConfig = {
   showLanguage: false,
   showDevice: false,
   showComponentName: false,
-  showSaveBtn: true,
+  showSaveBtn: false,
   showPreviewBtn: true,
   showJsonPreview: true,
   exitConfirm: false,
@@ -255,11 +254,6 @@ function applyDesignerConfig() {
     window.$message?.success('表单与详情配置已应用')
   else
     window.$message?.warning('表单设计器尚未加载完成')
-}
-
-function handleSave() {
-  if (flushDesigner())
-    window.$message?.success('表单与详情配置已应用')
 }
 
 function updateEnabled(value) {

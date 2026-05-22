@@ -47,14 +47,6 @@
                 <span>配置键前缀</span>
                 <code>{{ selectedDomain.configKeyPrefix || schema.naming?.configKeyPrefix || '-' }}</code>
               </div>
-              <div class="rule-line">
-                <span>应用类型</span>
-                <code>{{ selectedDomain.defaultAppType || schema.defaults?.appType || '-' }}</code>
-              </div>
-              <div class="rule-line">
-                <span>页面模板</span>
-                <code>{{ selectedDomain.defaultLayoutType || schema.defaults?.layoutType || '-' }}</code>
-              </div>
             </div>
           </div>
 

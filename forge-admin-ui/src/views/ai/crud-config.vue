@@ -3,7 +3,7 @@
     <div class="config-page-header">
       <div class="header-left">
         <h2 class="page-title">
-          CRUD 应用管理
+          应用配置管理
         </h2>
         <span class="page-desc">业务人员使用低代码搭建器，技术人员可进入高级 JSON 配置和代码下载</span>
       </div>
@@ -135,7 +135,7 @@
           <n-icon :size="48" color="#D1D5DB">
             <FolderOpenOutline />
           </n-icon>
-          <p>暂无 CRUD 配置</p>
+          <p>暂无应用配置</p>
           <n-button type="primary" @click="goToLowcodeApps">
             <template #icon>
               <n-icon><ServerOutline /></n-icon>

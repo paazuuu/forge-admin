@@ -17,6 +17,7 @@ export const dataTypeOptions = [
   { label: '小数', value: 'decimal' },
   { label: '日期', value: 'date' },
   { label: '日期时间', value: 'datetime' },
+  { label: '时间', value: 'time' },
   { label: '开关值', value: 'tinyint' },
 ]
 
@@ -30,6 +31,7 @@ export const componentTypeOptions = [
   { label: '开关', value: 'switch' },
   { label: '日期', value: 'date' },
   { label: '日期时间', value: 'datetime' },
+  { label: '时间', value: 'time' },
   { label: '图片上传', value: 'imageUpload' },
   { label: '文件上传', value: 'fileUpload' },
 ]
@@ -458,6 +460,8 @@ function resolveDataType(columnType = '', javaType = '') {
     return 'decimal'
   if (type.includes('datetime') || type.includes('timestamp') || java.includes('localdatetime'))
     return 'datetime'
+  if (type === 'time' || java.includes('localtime'))
+    return 'time'
   if (type === 'date' || java.includes('localdate'))
     return 'date'
   if (type.includes('text') || type.includes('json'))
@@ -483,8 +487,8 @@ function resolveComponentType(htmlType = '', dataType = 'varchar') {
   const type = String(htmlType || '').toLowerCase()
   if (['textarea', 'select', 'radio', 'checkbox', 'switch', 'imageupload', 'fileupload'].includes(type))
     return type === 'imageupload' ? 'imageUpload' : type === 'fileupload' ? 'fileUpload' : type
-  if (type.includes('date') || dataType === 'date')
-    return dataType === 'datetime' ? 'datetime' : 'date'
+  if (type.includes('date') || ['date', 'datetime', 'time'].includes(dataType))
+    return ['date', 'datetime', 'time'].includes(dataType) ? dataType : 'date'
   if (['int', 'bigint', 'decimal'].includes(dataType))
     return 'number'
   if (dataType === 'tinyint')

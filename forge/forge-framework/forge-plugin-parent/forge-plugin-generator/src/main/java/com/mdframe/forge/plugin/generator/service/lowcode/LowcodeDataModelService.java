@@ -12,6 +12,7 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeObjectSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePolicySchema;
 import com.mdframe.forge.plugin.generator.mapper.AiLowcodeModelMapper;
+import com.mdframe.forge.plugin.generator.mapper.GenTableColumnMapper;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeDataModelVO;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -22,7 +23,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -48,6 +52,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
     private final LowcodeDomainService domainService;
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlService ddlService;
+    private final GenTableColumnMapper genTableColumnMapper;
 
     public Page<LowcodeDataModelVO> page(PageQuery pageQuery, Long domainId, String keyword,
                                          String status, Boolean masterData) {
@@ -91,6 +96,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
         } else {
             updateById(model);
         }
+        syncGenTableColumnRequired(readModelSchema(model.getModelSchema()));
         if (Boolean.TRUE.equals(dto.getSyncDdl())) {
             syncTableStructure(model, dto);
         }
@@ -267,6 +273,39 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
             throw new BusinessException("缺少同步表结构权限: " + DDL_PERMISSION);
         }
         ddlService.executeCreateTable(readModelSchema(model.getModelSchema()));
+    }
+
+    private void syncGenTableColumnRequired(LowcodeModelSchema modelSchema) {
+        Long sourceTableId = resolveSourceTableId(modelSchema);
+        if (modelSchema == null
+                || (sourceTableId == null && StringUtils.isBlank(modelSchema.getTableName()))
+                || modelSchema.getFields() == null) {
+            return;
+        }
+        Set<String> syncedColumns = new HashSet<>();
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (LowcodeFieldSchema field : modelSchema.getFields()) {
+            if (field == null || isAuditField(field) || StringUtils.isBlank(field.getColumnName())) {
+                continue;
+            }
+            if (!syncedColumns.add(field.getColumnName())) {
+                continue;
+            }
+            Map<String, Object> column = new LinkedHashMap<>();
+            column.put("columnName", field.getColumnName());
+            column.put("required", Boolean.TRUE.equals(field.getRequired()) ? 1 : 0);
+            columns.add(column);
+        }
+        if (!columns.isEmpty()) {
+            genTableColumnMapper.updateRequiredByTableRef(sourceTableId, modelSchema.getTableName(), columns);
+        }
+    }
+
+    private Long resolveSourceTableId(LowcodeModelSchema modelSchema) {
+        if (modelSchema == null || modelSchema.getSourceTable() == null) {
+            return null;
+        }
+        return modelSchema.getSourceTable().getTableId();
     }
 
     private LowcodeDataModelVO toVO(AiLowcodeModel model) {

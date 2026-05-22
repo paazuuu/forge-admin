@@ -214,12 +214,12 @@ const formRules = computed(() => {
   const rules = {}
   conditionVisibleSchema.value.forEach((field) => {
     if (field.rules) {
-      rules[field.field] = field.rules
+      rules[field.field] = normalizeFieldRules(field, field.rules)
     }
     else if (field.required) {
       const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
       const isNumericType = field.type === 'number' || field.type === 'inputNumber'
-      const isDateType = ['date', 'datetime', 'daterange', 'month', 'year', 'time'].includes(field.type)
+      const isDateType = isDateLikeType(field.type)
       const rule = {
         required: true,
         message: field.requiredMessage || `请${inputTypes.includes(field.type) ? '输入' : '选择'}${field.label}`,
@@ -250,6 +250,36 @@ const formRules = computed(() => {
   })
   return rules
 })
+
+function isDateLikeType(type) {
+  return ['date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange'].includes(type)
+}
+
+function hasFormValue(value) {
+  if (Array.isArray(value))
+    return value.length > 0 && value.every(item => item !== null && item !== undefined && item !== '')
+  return value !== null && value !== undefined && value !== ''
+}
+
+function normalizeFieldRules(field, fieldRules) {
+  const rules = Array.isArray(fieldRules) ? fieldRules : [fieldRules]
+  if (!isDateLikeType(field.type) && field.type !== 'number' && field.type !== 'inputNumber')
+    return fieldRules
+
+  return rules.map((sourceRule) => {
+    if (!sourceRule?.required || sourceRule.validator)
+      return sourceRule
+    const rule = { ...sourceRule }
+    rule.validator = (_rule, value) => {
+      if (!hasFormValue(value))
+        return new Error(rule.message || field.requiredMessage || `请选择${field.label}`)
+      return true
+    }
+    rule.trigger = rule.trigger || 'change'
+    delete rule.required
+    return rule
+  })
+}
 
 // 可见的表单字段
 const visibleSchema = computed(() => {

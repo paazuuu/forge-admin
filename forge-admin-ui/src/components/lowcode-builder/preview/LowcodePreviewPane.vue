@@ -44,7 +44,7 @@
           <div class="band-title">
             真实运行态预览
           </div>
-          <p>当前区域连接已发布运行接口，页面动作会按正式低代码 CRUD 执行。</p>
+          <p>当前区域连接已发布运行接口，页面动作会按正式应用配置执行。</p>
         </div>
         <n-tag type="success" :bordered="false">
           已发布
@@ -82,8 +82,35 @@
                   :label="field.label"
                   :show-feedback="false"
                 >
-                  <n-input v-if="!field.dictType" disabled :placeholder="`请输入${field.label}`" />
-                  <n-select v-else disabled placeholder="请选择" />
+                  <n-select v-if="field.dictType" disabled placeholder="请选择" />
+                  <n-date-picker
+                    v-else-if="['daterange', 'datetimerange'].includes(resolveSearchPreviewType(field))"
+                    disabled
+                    :type="resolveSearchPreviewType(field)"
+                    style="width: 100%"
+                  />
+                  <div v-else-if="resolveSearchPreviewType(field) === 'timerange'" class="preview-time-range">
+                    <n-time-picker disabled style="width: 100%" />
+                    <span>至</span>
+                    <n-time-picker disabled style="width: 100%" />
+                  </div>
+                  <n-date-picker
+                    v-else-if="['date', 'datetime'].includes(resolveSearchPreviewType(field))"
+                    disabled
+                    :type="resolveSearchPreviewType(field)"
+                    style="width: 100%"
+                  />
+                  <n-time-picker
+                    v-else-if="resolveSearchPreviewType(field) === 'time'"
+                    disabled
+                    style="width: 100%"
+                  />
+                  <n-input-number
+                    v-else-if="field.componentType === 'number' || ['int', 'bigint', 'decimal'].includes(field.dataType)"
+                    disabled
+                    style="width: 100%"
+                  />
+                  <n-input v-else disabled :placeholder="`请输入${field.label}`" />
                 </n-form-item>
               </div>
               <div class="query-actions">
@@ -342,7 +369,29 @@ function resolveCustomActions(position) {
     .filter(action => (action.position || 'toolbar') === position)
 }
 
-function renderDraftActions(row) {
+function resolveSearchPreviewType(field) {
+  const setting = pageSchema.value.zones?.find(item => item.zoneKey === 'search')?.props?.fieldSettings?.[field.field]
+    || {}
+  const queryType = setting.queryType || field.queryType
+  const componentType = field.componentType || field.dataType
+  if (queryType === 'between') {
+    if (componentType === 'datetime')
+      return 'datetimerange'
+    if (componentType === 'date')
+      return 'daterange'
+    if (componentType === 'time')
+      return 'timerange'
+  }
+  if (componentType === 'datetime')
+    return 'datetime'
+  if (componentType === 'date')
+    return 'date'
+  if (componentType === 'time')
+    return 'time'
+  return 'input'
+}
+
+function renderDraftActions(_row) {
   const actions = [
     { key: 'edit', label: '编辑', type: 'primary' },
     { key: 'delete', label: '删除', type: 'error' },
@@ -475,15 +524,31 @@ function transformFields(fields) {
         options: dictCache.value[field.dictType] || [],
       }
     }
-    if (['date', 'datetime', 'time'].includes(field.type?.toLowerCase?.() || '')) {
+    const timeProps = resolveDateTimeProps(field.type)
+    if (timeProps) {
       nextField.props = {
         ...(nextField.props || {}),
-        format: 'yyyy-MM-dd HH:mm:ss',
-        valueFormat: 'yyyy-MM-dd HH:mm:ss',
+        ...timeProps,
       }
     }
     return nextField
   })
+}
+
+function resolveDateTimeProps(type) {
+  switch (String(type || '').toLowerCase()) {
+    case 'date':
+    case 'daterange':
+      return { format: 'yyyy-MM-dd', valueFormat: 'yyyy-MM-dd' }
+    case 'datetime':
+    case 'datetimerange':
+      return { format: 'yyyy-MM-dd HH:mm:ss', valueFormat: 'yyyy-MM-dd HH:mm:ss' }
+    case 'time':
+    case 'timerange':
+      return { format: 'HH:mm:ss', valueFormat: 'HH:mm:ss' }
+    default:
+      return null
+  }
 }
 
 function transformChildrenConfig(children = []) {
@@ -664,6 +729,18 @@ function extractApiUrl(apiConfigValue) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.preview-time-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.preview-time-range span {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .band-title {
