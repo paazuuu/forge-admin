@@ -178,7 +178,7 @@
         v-model:show="showModal"
         preset="card"
         :title="modalTitle"
-        style="width: 620px"
+        style="width: min(620px, calc(100vw - 32px))"
         :mask-closable="false"
       >
         <n-form
@@ -642,6 +642,10 @@ onMounted(() => {
   gap: 14px;
   padding: 18px;
   background: #f5f7fb;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .page-header {
@@ -654,6 +658,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .header-left {
@@ -702,22 +707,26 @@ onMounted(() => {
 
 .search-input {
   width: 240px;
+  max-width: 100%;
 }
 
 .category-select {
   width: 148px;
+  max-width: 100%;
 }
 
 .status-select {
   width: 124px;
+  max-width: 100%;
 }
 
 .model-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: start;
   gap: 12px;
   padding: 4px;
+  min-width: 0;
 }
 
 .model-card {
@@ -747,6 +756,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .card-icon {
@@ -807,6 +817,8 @@ onMounted(() => {
   font-weight: 500;
   line-height: 1;
   border: 1px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .status-tag.designing {
@@ -881,6 +893,7 @@ onMounted(() => {
   border-top: 1px solid #eef2f7;
   gap: 8px;
   min-height: 32px;
+  min-width: 0;
 }
 
 .card-meta {
@@ -898,12 +911,17 @@ onMounted(() => {
   font-size: 11px;
   color: #64748b;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-actions {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .card-actions .n-button {
@@ -925,6 +943,12 @@ onMounted(() => {
   justify-content: end;
   flex-shrink: 0;
   padding-top: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.pagination-wrapper :deep(.n-pagination) {
+  min-width: max-content;
 }
 
 .notify-section {
@@ -950,26 +974,47 @@ onMounted(() => {
 
 .model-list-spin {
   display: flex;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .model-list-spin :deep(.n-spin-container) {
   flex: 1;
+  min-width: 0;
 }
 
 @media (max-width: 1500px) {
   .model-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1180px) {
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .model-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .header-right {
-    overflow-x: auto;
-    padding-bottom: 2px;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    flex: 1 1 220px;
+  }
+
+  .category-select {
+    flex: 0 1 160px;
+  }
+
+  .status-select {
+    flex: 0 1 128px;
   }
 }
 
@@ -978,25 +1023,49 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .model-grid {
-    grid-template-columns: 1fr;
+  .header-right {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
   }
 
+  .header-right > :deep(.n-button),
   .search-input,
   .category-select,
   .status-select {
-    width: 160px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .model-grid {
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    min-width: 540px;
   }
 
   .card-footer {
-    flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
 
+  .card-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
   .card-actions {
-    width: 100%;
     justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .card-actions .n-button {
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-right {
+    grid-template-columns: 1fr;
   }
 }
 </style>

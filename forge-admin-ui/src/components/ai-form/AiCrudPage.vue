@@ -318,6 +318,9 @@ import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
 import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
+import DictTag from '@/components/DictTag.vue'
+import AuthImage from '@/components/common/AuthImage.vue'
+import { getFileUrl } from '@/utils/file'
 
 /**
  * ==================== Props 定义 ====================
@@ -665,7 +668,6 @@ const tableColumns = computed(() => {
   }
 
   activeSourceColumns.value.forEach((col) => {
-    // 操作列：如果有 actions 配置，自动生成 render 函数
     if (isActionCol(col) && col.actions) {
       const actionCol = { ...col }
       delete actionCol.actions
@@ -675,16 +677,15 @@ const tableColumns = computed(() => {
       cols.push(actionCol)
       return
     }
-    // 操作列有自定义 render 函数，直接使用（如 crud-config.vue 中的自定义操作列）
     if (isActionCol(col) && col.render) {
       cols.push(col)
       return
     }
-    // 操作列既无 actions 也无 render（AI可能生成了空占位操作列），跳过——后面会自动追加默认操作列
     if (isActionCol(col) && !col.actions && !col.render) {
       return
     }
-    cols.push(col)
+    const resolvedCol = resolveColumnRender(col)
+    cols.push(resolvedCol)
   })
 
   // 如果没有操作列且没有隐藏，添加默认操作列
@@ -708,6 +709,47 @@ const tableColumns = computed(() => {
 
   return cols
 })
+
+function resolveColumnRender(col) {
+  const nextCol = { ...col }
+  if (!col.render || typeof col.render === 'function') {
+    return nextCol
+  }
+  if (typeof col.render !== 'object') {
+    return nextCol
+  }
+  const key = col.prop || col.key || col.dataIndex
+  const renderType = col.render.type
+  if (renderType === 'dictTag') {
+    nextCol.render = row => h(DictTag, {
+      dictType: col.render.dictType,
+      value: row[key],
+      size: 'small',
+    })
+  } else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+    const targetField = col.render.targetField || `${key}Name`
+    nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+  } else if (renderType === 'imageUpload') {
+    nextCol.render = row => {
+      const value = row[key]
+      if (!value) return '-'
+      const fileIds = String(value).split(',').filter(Boolean)
+      if (fileIds.length === 0) return '-'
+      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' },
+        fileIds.map(fileId => h(AuthImage, { fileId, style: 'width: 32px; height: 32px; border-radius: 4px; object-fit: cover;' })))
+    }
+  } else if (renderType === 'fileUpload') {
+    nextCol.render = row => {
+      const value = row[key]
+      if (!value) return '-'
+      const nameField = col.render.targetField || `${key}Name`
+      const name = row[nameField]
+      if (name) return name
+      return String(value).split(',').filter(Boolean).length + ' 个文件'
+    }
+  }
+  return nextCol
+}
 
 /**
  * 分页配置

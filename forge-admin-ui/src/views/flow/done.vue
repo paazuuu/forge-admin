@@ -92,6 +92,12 @@
                 <div class="info-item">
                   <span class="info-label">审批意见</span><span class="info-value">{{ currentTask.comment || '-' }}</span>
                 </div>
+                <div class="info-item">
+                  <span class="info-label">审批签名</span>
+                  <div class="info-value signature-value">
+                    <SignatureImage :value="currentTask.signature" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -137,6 +143,7 @@ import ProcessDiagramViewer from '@/components/bpmn/ProcessDiagramViewer.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowStats from '@/components/flow/FlowStats.vue'
 import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import SignatureImage from '@/components/flow/SignatureImage.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
@@ -187,12 +194,12 @@ const approvalHistory = ref([])
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_done_status).filter(item => item.value !== 6))
 
 function getStatusDotClass(status) {
-  const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default' }
+  const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default', 7: 'warning', 8: 'error' }
   return cls[status] || 'default'
 }
 
 function getStatusTagClass(status) {
-  const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default' }
+  const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default', 7: 'warning', 8: 'error' }
   return cls[status] || 'default'
 }
 
@@ -226,6 +233,12 @@ const columns = [
     render: row => h('span', { class: ['status-tag-mini', getStatusTagClass(row.status)] }, getStatusText(row.status)),
   },
   { title: '审批意见', key: 'comment', width: 140, ellipsis: { tooltip: true } },
+  {
+    title: '审批签名',
+    key: 'signature',
+    width: 120,
+    render: row => h(SignatureImage, { value: row.signature, compact: true }),
+  },
   { title: '完成时间', key: 'completeTime', width: 150 },
   {
     title: '操作',
@@ -571,6 +584,11 @@ onMounted(() => {
 .info-value.highlight {
   color: #0369a1;
   font-weight: 600;
+}
+.signature-value {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
 }
 .user-item {
   align-items: flex-start;

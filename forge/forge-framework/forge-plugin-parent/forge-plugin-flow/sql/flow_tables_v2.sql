@@ -91,8 +91,9 @@ CREATE TABLE IF NOT EXISTS sys_flow_task (
     owner VARCHAR(64) COMMENT '任务拥有人',
     due_date DATETIME COMMENT '截止日期',
     priority INT DEFAULT 50 COMMENT '优先级（0-100）',
-    status TINYINT DEFAULT 0 COMMENT '状态（0-待办/1-已签收/2-已通过/3-已驳回/4-已转办/5-已委派/6-已撤回）',
+    status TINYINT DEFAULT 0 COMMENT '状态（0-待办/1-已签收/2-已通过/3-已驳回/4-已转办/5-已委派/6-已撤回/7-已退回/8-已终结）',
     comment TEXT COMMENT '审批意见',
+    signature TEXT COMMENT '审批签名',
     attachment_urls TEXT COMMENT '附件URL（逗号分隔）',
     start_user_id VARCHAR(64) COMMENT '流程发起人',
     start_user_name VARCHAR(100) COMMENT '发起人姓名',
@@ -240,10 +241,15 @@ CREATE TABLE IF NOT EXISTS sys_flow_node_config (
     timeout_action VARCHAR(50) COMMENT '超时动作(auto_pass/auto_reject/notify)',
     
     -- 其他配置
+    allow_approve TINYINT DEFAULT 1 COMMENT '允许通过',
     allow_delegate TINYINT DEFAULT 1 COMMENT '允许转办',
     allow_transfer TINYINT DEFAULT 1 COMMENT '允许转交',
     allow_add_sign TINYINT DEFAULT 0 COMMENT '允许加签',
     allow_counter_sign TINYINT DEFAULT 0 COMMENT '允许减签',
+    allow_return TINYINT DEFAULT 0 COMMENT '允许退回上一审批节点',
+    allow_terminate TINYINT DEFAULT 0 COMMENT '允许终结流程',
+    require_signature TINYINT DEFAULT 0 COMMENT '办理时需要签名',
+    require_comment TINYINT DEFAULT 1 COMMENT '办理时需要审批意见',
     
     -- 表单权限
     form_permission TEXT COMMENT '表单字段权限配置JSON',

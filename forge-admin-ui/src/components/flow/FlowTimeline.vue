@@ -29,6 +29,10 @@
           <i class="i-material-symbols:chat-bubble-outline" />
           <span>{{ item.comment }}</span>
         </div>
+        <div v-if="item.signature" class="timeline-comment signature">
+          <i class="i-material-symbols:draw" />
+          <SignatureImage :value="String(item.signature)" />
+        </div>
       </div>
     </div>
   </div>
@@ -36,6 +40,7 @@
 
 <script setup>
 import UserAvatar from '@/components/common/UserAvatar.vue'
+import SignatureImage from '@/components/flow/SignatureImage.vue'
 
 defineProps({
   items: { type: Array, default: () => [] },
@@ -44,9 +49,9 @@ defineProps({
 function getNodeType(action) {
   if (action === 'approve' || action === 'start')
     return 'success'
-  if (action === 'reject')
+  if (action === 'reject' || action === 'terminate')
     return 'error'
-  if (action === 'delegate')
+  if (action === 'delegate' || action === 'return')
     return 'warning'
   return 'default'
 }
@@ -56,6 +61,8 @@ function getActionIcon(action) {
     approve: 'i-material-symbols:check-circle',
     reject: 'i-material-symbols:cancel',
     delegate: 'i-material-symbols:arrow-forward',
+    return: 'i-material-symbols:keyboard-return',
+    terminate: 'i-material-symbols:stop-circle',
     claim: 'i-material-symbols:assignment-ind',
     start: 'i-material-symbols:play-circle',
     withdraw: 'i-material-symbols:undo',
@@ -69,6 +76,8 @@ function getActionText(action) {
     approve: '同意',
     reject: '驳回',
     delegate: '转办',
+    return: '退回',
+    terminate: '终结',
     claim: '签收',
     start: '发起',
     withdraw: '撤回',
@@ -80,9 +89,9 @@ function getActionText(action) {
 function getActionClass(action) {
   if (action === 'approve' || action === 'start')
     return 'success'
-  if (action === 'reject')
+  if (action === 'reject' || action === 'terminate')
     return 'error'
-  if (action === 'delegate')
+  if (action === 'delegate' || action === 'return')
     return 'warning'
   return 'info'
 }

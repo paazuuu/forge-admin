@@ -863,13 +863,33 @@ public class LowcodeRuntimeConfigBuilder {
     private Map<String, Object> buildTransConfig(LowcodeModelSchema modelSchema) {
         Map<String, Object> result = new LinkedHashMap<>();
         for (LowcodeFieldSchema field : modelSchema.getFields()) {
-            if (StringUtils.isBlank(field.getDictType())) {
-                continue;
+            String componentType = StringUtils.defaultIfBlank(field.getComponentType(), "input");
+            if (StringUtils.isNotBlank(field.getDictType())) {
+                Map<String, Object> rule = new LinkedHashMap<>();
+                rule.put("dictType", field.getDictType());
+                rule.put("targetField", field.getField() + "Name");
+                result.put(field.getField(), rule);
+            } else if ("orgTreeSelect".equals(componentType)) {
+                Map<String, Object> rule = new LinkedHashMap<>();
+                rule.put("type", "orgName");
+                rule.put("targetField", field.getField() + "Name");
+                result.put(field.getField(), rule);
+            } else if ("userSelect".equals(componentType)) {
+                Map<String, Object> rule = new LinkedHashMap<>();
+                rule.put("type", "userName");
+                rule.put("targetField", field.getField() + "Name");
+                result.put(field.getField(), rule);
+            } else if ("regionTreeSelect".equals(componentType)) {
+                Map<String, Object> rule = new LinkedHashMap<>();
+                rule.put("type", "regionName");
+                rule.put("targetField", field.getField() + "Name");
+                result.put(field.getField(), rule);
+            } else if ("fileUpload".equals(componentType) || "imageUpload".equals(componentType)) {
+                Map<String, Object> rule = new LinkedHashMap<>();
+                rule.put("type", componentType);
+                rule.put("targetField", field.getField() + "Name");
+                result.put(field.getField(), rule);
             }
-            Map<String, Object> rule = new LinkedHashMap<>();
-            rule.put("dictType", field.getDictType());
-            rule.put("targetField", field.getField() + "Name");
-            result.put(field.getField(), rule);
         }
         return result;
     }
@@ -920,10 +940,34 @@ public class LowcodeRuntimeConfigBuilder {
         if (Boolean.TRUE.equals(sortable) || Boolean.TRUE.equals(field.getSortable())) {
             item.put("sorter", true);
         }
+        String componentType = StringUtils.defaultIfBlank(field.getComponentType(), "input");
         if (StringUtils.isNotBlank(field.getDictType())) {
             Map<String, Object> render = new LinkedHashMap<>();
             render.put("type", "dictTag");
             render.put("dictType", field.getDictType());
+            item.put("render", render);
+        } else if ("orgTreeSelect".equals(componentType)) {
+            Map<String, Object> render = new LinkedHashMap<>();
+            render.put("type", "orgName");
+            render.put("targetField", field.getField() + "Name");
+            item.put("render", render);
+        } else if ("userSelect".equals(componentType)) {
+            Map<String, Object> render = new LinkedHashMap<>();
+            render.put("type", "userName");
+            render.put("targetField", field.getField() + "Name");
+            item.put("render", render);
+        } else if ("regionTreeSelect".equals(componentType)) {
+            Map<String, Object> render = new LinkedHashMap<>();
+            render.put("type", "regionName");
+            render.put("targetField", field.getField() + "Name");
+            item.put("render", render);
+        } else if ("fileUpload".equals(componentType)) {
+            Map<String, Object> render = new LinkedHashMap<>();
+            render.put("type", "fileUpload");
+            item.put("render", render);
+        } else if ("imageUpload".equals(componentType)) {
+            Map<String, Object> render = new LinkedHashMap<>();
+            render.put("type", "imageUpload");
             item.put("render", render);
         }
         return item;

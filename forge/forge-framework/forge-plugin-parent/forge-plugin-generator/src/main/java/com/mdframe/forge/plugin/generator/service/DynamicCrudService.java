@@ -98,6 +98,7 @@ public class DynamicCrudService {
         
         // 4. 构建搜索条件
         Map<String, Object> searchParams = (query != null) ? query.getSearchParams() : null;
+        searchParams = expandIncludeChildrenParams(searchParams, tableName, allowedSearchFields, searchTypeMap);
 
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
         if (joinContext != null && requiresJoinedPageQuery(config, pageQuery, searchParams, joinContext)) {
@@ -1469,6 +1470,44 @@ public class DynamicCrudService {
 
     // ==================== 字典翻译 ====================
 
+    private Map<String, Object> expandIncludeChildrenParams(Map<String, Object> searchParams,
+                                                             String tableName,
+                                                             Set<String> allowedSearchFields,
+                                                             Map<String, String> searchTypeMap) {
+        if (searchParams == null || searchParams.isEmpty()) {
+            return searchParams;
+        }
+        Map<String, Object> expanded = new LinkedHashMap<>(searchParams);
+        List<String> keysToRemove = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : searchParams.entrySet()) {
+            String key = entry.getKey();
+            if (!key.endsWith("_includeChildren")) continue;
+            if (!Boolean.TRUE.equals(entry.getValue())) continue;
+            String baseField = key.substring(0, key.length() - "_includeChildren".length());
+            if (!allowedSearchFields.contains(baseField)) continue;
+            Object baseValue = searchParams.get(baseField);
+            if (baseValue == null) continue;
+            keysToRemove.add(key);
+            String parentColumn = searchTypeMap != null
+                    ? DynamicQueryGenerator.camelToSnake(baseField)
+                    : baseField;
+            List<Map<String, Object>> children = repository.selectListByColumn(tableName, parentColumn, baseValue);
+            if (children == null || children.isEmpty()) continue;
+            List<Object> ids = new ArrayList<>();
+            ids.add(baseValue);
+            for (Map<String, Object> child : children) {
+                Object childId = child.get("id");
+                if (childId != null) ids.add(childId);
+            }
+            expanded.put(baseField, ids);
+            searchTypeMap.put(baseField, "in");
+        }
+        for (String key : keysToRemove) {
+            expanded.remove(key);
+        }
+        return expanded;
+    }
+
     /**
      * 应用字典翻译
      */
@@ -1480,26 +1519,83 @@ public class DynamicCrudService {
             JsonNode configNode = objectMapper.readTree(transConfigJson);
             if (!configNode.isObject()) return;
 
+            Map<String, List<String>> orgIdBuckets = new LinkedHashMap<>();
+            Map<String, List<String>> userIdBuckets = new LinkedHashMap<>();
+            Map<String, List<String>> fileIdBuckets = new LinkedHashMap<>();
+            Map<String, List<String>> regionCodeBuckets = new LinkedHashMap<>();
+
             for (Map<String, Object> row : rows) {
                 for (Map.Entry<String, JsonNode> entry : configNode.properties()) {
-                    String sourceField = entry.getKey(); // camelCase字段名
+                    String sourceField = entry.getKey();
                     JsonNode ruleNode = entry.getValue();
                     if (!row.containsKey(sourceField) || row.get(sourceField) == null) continue;
 
-                    String dictType = ruleNode.has("dictType") ? ruleNode.get("dictType").asText() : "";
+                    String transType = ruleNode.has("type") ? ruleNode.get("type").asText("") : "";
+                    String dictType = ruleNode.has("dictType") ? ruleNode.get("dictType").asText("") : "";
                     String targetField = ruleNode.has("targetField") ? ruleNode.get("targetField").asText()
                             : sourceField + "Name";
-                    if (StringUtils.isBlank(dictType)) continue;
 
-                    String key = String.valueOf(row.get(sourceField));
-                    String label = dictValueProvider.getLabel(dictType, key);
-                    if (label != null) {
-                        row.put(targetField, label);
+                    if (StringUtils.isNotBlank(dictType)) {
+                        String key = String.valueOf(row.get(sourceField));
+                        String label = dictValueProvider.getLabel(dictType, key);
+                        if (label != null) {
+                            row.put(targetField, label);
+                        }
+                    } else if ("orgName".equals(transType)) {
+                        String orgId = String.valueOf(row.get(sourceField));
+                        orgIdBuckets.computeIfAbsent(sourceField, k -> new ArrayList<>()).add(orgId);
+                    } else if ("userName".equals(transType)) {
+                        String userId = String.valueOf(row.get(sourceField));
+                        userIdBuckets.computeIfAbsent(sourceField, k -> new ArrayList<>()).add(userId);
+                    } else if ("regionName".equals(transType)) {
+                        String regionCode = String.valueOf(row.get(sourceField));
+                        regionCodeBuckets.computeIfAbsent(sourceField, k -> new ArrayList<>()).add(regionCode);
+                    } else if ("fileUpload".equals(transType) || "imageUpload".equals(transType)) {
+                        String fileId = String.valueOf(row.get(sourceField));
+                        fileIdBuckets.computeIfAbsent(sourceField, k -> new ArrayList<>()).add(fileId);
                     }
                 }
             }
+
+            applyBatchTranslation(rows, orgIdBuckets, "orgName",
+                    (ids) -> dictValueProvider.batchGetOrgNames(ids));
+            applyBatchTranslation(rows, userIdBuckets, "userName",
+                    (ids) -> dictValueProvider.batchGetUserNames(ids));
+            applyBatchTranslation(rows, regionCodeBuckets, "regionName",
+                    (ids) -> dictValueProvider.batchGetRegionNames(ids));
+            applyBatchTranslation(rows, fileIdBuckets, "fileUpload",
+                    (ids) -> dictValueProvider.batchGetFileNames(ids));
         } catch (Exception e) {
-            log.warn("[DynamicCrudService] 字典翻译失败", e);
+            log.warn("[DynamicCrudService] 翻译处理失败", e);
+        }
+    }
+
+    private void applyBatchTranslation(List<Map<String, Object>> rows,
+                                       Map<String, List<String>> fieldBuckets,
+                                       String transType,
+                                       java.util.function.Function<List<String>, Map<String, String>> batchLoader) {
+        for (Map.Entry<String, List<String>> bucket : fieldBuckets.entrySet()) {
+            String sourceField = bucket.getKey();
+            List<String> ids = bucket.getValue().stream().distinct().toList();
+            if (ids.isEmpty()) continue;
+            Map<String, String> nameMap;
+            try {
+                nameMap = batchLoader.apply(ids);
+            } catch (Exception e) {
+                log.warn("[DynamicCrudService] 批量翻译失败, type={}, field={}", transType, sourceField, e);
+                continue;
+            }
+            if (nameMap == null || nameMap.isEmpty()) continue;
+            String targetField = sourceField + "Name";
+            for (Map<String, Object> row : rows) {
+                Object value = row.get(sourceField);
+                if (value == null) continue;
+                String key = String.valueOf(value);
+                String name = nameMap.get(key);
+                if (name != null) {
+                    row.put(targetField, name);
+                }
+            }
         }
     }
 

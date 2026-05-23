@@ -157,6 +157,8 @@ function handleFieldDragStart(event, field) {
     componentKey: resolveDefaultFieldComponentKey(field, props.selectedZoneKey),
     fieldRef: field.field,
     label: field.label || field.field,
+    modelCode: field.modelCode || '',
+    modelName: field.modelName || '',
   }))
 }
 

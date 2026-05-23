@@ -109,6 +109,41 @@
           "name": "candidateGroupNames",
           "isAttr": true,
           "type": "String"
+        },
+        {
+          "name": "allowApprove",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "allowReject",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "allowDelegate",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "allowReturn",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "allowTerminate",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "requireSignature",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "requireComment",
+          "isAttr": true,
+          "type": "Boolean"
         }
       ]
     },

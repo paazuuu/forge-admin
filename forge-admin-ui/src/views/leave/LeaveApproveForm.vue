@@ -82,14 +82,22 @@
       </template>
 
       <n-form :model="approveData" label-placement="top" size="medium">
-        <n-form-item label="审批意见" required>
+        <n-form-item label="审批意见" :required="requireComment">
           <n-input
             v-model:value="approveData.comment"
             type="textarea"
             :rows="3"
-            placeholder="请输入审批意见（必填）"
+            :placeholder="requireComment ? '请输入审批意见' : '请输入审批意见（可选）'"
             :maxlength="500"
             show-count
+          />
+        </n-form-item>
+
+        <n-form-item v-if="requireSignature" label="审批签名" required>
+          <SignaturePad
+            ref="signaturePadRef"
+            v-model="approveData.signature"
+            :business-id="taskId || businessKey || processInstanceId || ''"
           />
         </n-form-item>
 
@@ -113,6 +121,7 @@
 
       <div class="action-buttons">
         <n-popconfirm
+          v-if="canApprove"
           positive-text="确认通过"
           negative-text="取消"
           @positive-click="handleApprove"
@@ -129,6 +138,7 @@
         </n-popconfirm>
 
         <n-popconfirm
+          v-if="canReject"
           positive-text="确认驳回"
           negative-text="取消"
           @positive-click="handleReject"
@@ -166,6 +176,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import leaveApi from '@/api/leave'
+import SignaturePad from '@/components/flow/SignaturePad.vue'
 
 const props = defineProps({
   /** 任务 ID */
@@ -180,6 +191,8 @@ const props = defineProps({
   processDefKey: { type: String, default: null },
   /** 流程变量（包含申请人填写的表单数据） */
   variables: { type: Object, default: () => ({}) },
+  /** 审批动作权限和办理要求 */
+  approvalPolicy: { type: Object, default: () => ({}) },
   /** 是否只读 */
   readOnly: { type: Boolean, default: false },
 })
@@ -189,6 +202,7 @@ const emit = defineEmits(['submit', 'cancel'])
 const detailLoading = ref(false)
 const submitting = ref(false)
 const approveFileList = ref([])
+const signaturePadRef = ref(null)
 
 // 请假详情（优先从 variables 取，不足时通过 businessKey 加载）
 const leaveInfo = reactive({
@@ -205,6 +219,10 @@ const leaveInfo = reactive({
 // 只读模式下的审批结论
 const approveResult = computed(() => props.variables?.approveResult)
 const approveComment = computed(() => props.variables?.approveComment)
+const canApprove = computed(() => props.approvalPolicy?.allowApprove !== false)
+const canReject = computed(() => props.approvalPolicy?.allowReject !== false)
+const requireComment = computed(() => props.approvalPolicy?.requireComment !== false)
+const requireSignature = computed(() => props.approvalPolicy?.requireSignature === true)
 
 // 附件解析
 const attachments = computed(() => {
@@ -220,7 +238,7 @@ const attachments = computed(() => {
 })
 
 // 审批表单
-const approveData = reactive({ comment: '' })
+const approveData = reactive({ comment: '', signature: '' })
 
 // 加载申请详情
 async function loadDetail() {
@@ -263,36 +281,96 @@ async function loadDetail() {
   }
 }
 
-// 同意
-function handleApprove() {
-  if (!approveData.comment?.trim()) {
-    window.$message?.warning('请输入审批意见')
-    return
+function hasApprovalSignature() {
+  return Boolean(approveData.signature?.trim()) || Boolean(signaturePadRef.value?.hasSignature?.())
+}
+
+async function resolveApprovalSignature() {
+  if (!requireSignature.value)
+    return approveData.signature || ''
+  if (!signaturePadRef.value?.upload)
+    return approveData.signature || ''
+
+  try {
+    return await signaturePadRef.value.upload()
   }
-  emit('submit', {
-    action: 'approve',
-    comment: approveData.comment,
-    variables: {
-      approveResult: 'approve',
-      approveComment: approveData.comment,
-    },
-  })
+  catch (error) {
+    throw new Error(error?.message || '签名图片保存失败')
+  }
+}
+
+// 同意
+async function handleApprove() {
+  if (!validateApprovalInput('approve'))
+    return
+  submitting.value = true
+  try {
+    const signature = await resolveApprovalSignature()
+    approveData.signature = signature
+    emit('submit', {
+      action: 'approve',
+      comment: approveData.comment,
+      signature,
+      variables: {
+        approveResult: 'approve',
+        approveComment: approveData.comment,
+        signature,
+      },
+    })
+  }
+  catch (error) {
+    window.$message?.error(error?.message || '签名图片保存失败')
+  }
+  finally {
+    submitting.value = false
+  }
+}
+
+function validateApprovalInput(action) {
+  if (requireComment.value && !approveData.comment?.trim()) {
+    window.$message?.warning('请输入审批意见')
+    return false
+  }
+  if (requireSignature.value && !hasApprovalSignature()) {
+    window.$message?.warning('请完成手写签名')
+    return false
+  }
+  if (action === 'approve' && !canApprove.value) {
+    window.$message?.warning('当前节点不允许通过')
+    return false
+  }
+  if (action === 'reject' && !canReject.value) {
+    window.$message?.warning('当前节点不允许拒绝')
+    return false
+  }
+  return true
 }
 
 // 驳回
-function handleReject() {
-  if (!approveData.comment?.trim()) {
-    window.$message?.warning('请输入驳回原因')
+async function handleReject() {
+  if (!validateApprovalInput('reject'))
     return
+  submitting.value = true
+  try {
+    const signature = await resolveApprovalSignature()
+    approveData.signature = signature
+    emit('submit', {
+      action: 'reject',
+      comment: approveData.comment,
+      signature,
+      variables: {
+        approveResult: 'reject',
+        approveComment: approveData.comment,
+        signature,
+      },
+    })
   }
-  emit('submit', {
-    action: 'reject',
-    comment: approveData.comment,
-    variables: {
-      approveResult: 'reject',
-      approveComment: approveData.comment,
-    },
-  })
+  catch (error) {
+    window.$message?.error(error?.message || '签名图片保存失败')
+  }
+  finally {
+    submitting.value = false
+  }
 }
 
 // 预览附件
@@ -306,7 +384,7 @@ function formatTime(val) {
   if (!val)
     return '-'
   const d = new Date(val)
-  return isNaN(d.getTime()) ? String(val) : d.toLocaleString('zh-CN', { hour12: false })
+  return Number.isNaN(d.getTime()) ? String(val) : d.toLocaleString('zh-CN', { hour12: false })
 }
 
 const leaveTypeMap = {
@@ -316,8 +394,13 @@ const leaveTypeMap = {
   marriage: { text: '婚假', type: 'info' },
   maternity: { text: '产假', type: 'error' },
 }
-function getLeaveTypeText(t) { return leaveTypeMap[t]?.text || t || '-' }
-function getLeaveTypeTag(t) { return leaveTypeMap[t]?.type || 'default' }
+function getLeaveTypeText(t) {
+  return leaveTypeMap[t]?.text || t || '-'
+}
+
+function getLeaveTypeTag(t) {
+  return leaveTypeMap[t]?.type || 'default'
+}
 
 onMounted(() => loadDetail())
 </script>

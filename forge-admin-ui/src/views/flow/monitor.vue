@@ -297,7 +297,7 @@
             <p>
               处理结果：
               <NTag :type="getTimelineType(item.action)" size="small">
-                {{ { approve: '同意', reject: '驳回', start: '发起', claim: '签收', delegate: '转办', withdraw: '撤回', pending: '待处理' }[item.action] || item.action || '处理中' }}
+                {{ { approve: '同意', reject: '驳回', return: '退回', terminate: '终结', start: '发起', claim: '签收', delegate: '转办', withdraw: '撤回', pending: '待处理' }[item.action] || item.action || '处理中' }}
               </NTag>
             </p>
             <p v-if="item.comment">
@@ -689,6 +689,8 @@ function getErrorStageText(stage) {
     TASK_APPROVE: '审批通过',
     TASK_REJECT: '审批驳回',
     TASK_DELEGATE: '任务转办',
+    TASK_RETURN: '任务退回',
+    TASK_TERMINATE: '流程终结',
     TASK_WITHDRAW: '流程撤回',
     PROCESS_START: '流程启动',
     PROCESS_TERMINATE: '流程终止',

@@ -96,7 +96,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-input',
     title: '单行输入',
     desc: '文本字段',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -105,7 +105,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-textarea',
     title: '多行文本',
     desc: '长文本字段',
-    zones: ['edit'],
+    zones: ['edit', 'detail'],
     defaultWidth: 580,
     defaultHeight: 98,
   },
@@ -114,7 +114,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-number',
     title: '数字输入',
     desc: '整数、小数、金额',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -123,7 +123,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-select',
     title: '下拉选择',
     desc: '系统字典或枚举',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -132,7 +132,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-dict-select',
     title: '字典选择器',
     desc: '系统字典组件',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -141,7 +141,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-tree-select',
     title: '树形选择',
     desc: '组织、分类、区域等树形字段',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -150,7 +150,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-org-tree-select',
     title: '组织树选择',
     desc: '当前系统组织树',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -159,7 +159,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-user-select',
     title: '用户选择',
     desc: '当前系统用户列表',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -168,7 +168,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-region-tree-select',
     title: '区划树选择',
     desc: '行政区划树组件',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -177,7 +177,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-cascader',
     title: '级联选择',
     desc: '多级分类或行政区划',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -186,7 +186,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-date',
     title: '日期',
     desc: '日期选择',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -195,7 +195,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-datetime',
     title: '日期时间',
     desc: '日期时间选择',
-    zones: ['search', 'edit'],
+    zones: ['search', 'edit', 'detail'],
     defaultWidth: 280,
     defaultHeight: 64,
   },
@@ -204,7 +204,7 @@ export const canvasComponentCatalog = [
     componentKey: 'field-switch',
     title: '开关',
     desc: '启用、禁用类字段',
-    zones: ['edit'],
+    zones: ['edit', 'detail'],
     defaultWidth: 220,
     defaultHeight: 64,
   },
@@ -212,19 +212,19 @@ export const canvasComponentCatalog = [
     group: 'field',
     componentKey: 'field-upload',
     title: '文件上传',
-    desc: '附件或图片',
-    zones: ['edit'],
+    desc: '附件上传',
+    zones: ['edit', 'detail'],
     defaultWidth: 300,
     defaultHeight: 72,
   },
   {
     group: 'field',
-    componentKey: 'detail-field',
-    title: '只读展示字段',
-    desc: '历史详情区兼容组件',
-    zones: ['detail'],
+    componentKey: 'field-image-upload',
+    title: '图片上传',
+    desc: '图片上传',
+    zones: ['edit', 'detail'],
     defaultWidth: 300,
-    defaultHeight: 58,
+    defaultHeight: 88,
   },
 ]
 
@@ -1107,8 +1107,6 @@ export function resolveCanvasComponent(componentKey) {
 }
 
 export function resolveDefaultFieldComponentKey(field, zoneKey = 'edit') {
-  if (zoneKey === 'detail')
-    return 'detail-field'
   if (field?.componentType === 'textarea')
     return 'field-textarea'
   if (field?.componentType === 'number' || ['int', 'bigint', 'decimal'].includes(field?.dataType))
@@ -1119,8 +1117,10 @@ export function resolveDefaultFieldComponentKey(field, zoneKey = 'edit') {
     return 'field-datetime'
   if (field?.componentType === 'switch')
     return 'field-switch'
-  if (field?.componentType === 'fileUpload' || field?.componentType === 'imageUpload')
+  if (field?.componentType === 'fileUpload')
     return 'field-upload'
+  if (field?.componentType === 'imageUpload')
+    return 'field-image-upload'
   if (field?.componentType === 'dictSelect')
     return 'field-dict-select'
   if (field?.componentType === 'orgTreeSelect')
@@ -1154,6 +1154,7 @@ export function resolveComponentTypeFromComponentKey(componentKey, fallback = 'i
     'field-datetime': 'datetime',
     'field-switch': 'switch',
     'field-upload': 'fileUpload',
+    'field-image-upload': 'imageUpload',
     'detail-field': fallback,
   }
   return typeMap[componentKey] || fallback
@@ -1174,6 +1175,8 @@ export function createCanvasItem(payload = {}, context = {}) {
     componentKey,
     label: payload.label || field?.label || component?.title || '组件',
     fieldRef: payload.fieldRef || field?.field || '',
+    modelCode: payload.modelCode || field?.modelCode || '',
+    modelName: payload.modelName || field?.modelName || '',
     fieldRefs,
     x: Number(payload.x ?? context.x ?? 32),
     y: Number(payload.y ?? context.y ?? 32),
@@ -1408,7 +1411,7 @@ function createDefaultFieldCanvasItem(field, zoneKey, index, allFields) {
   const width = ['edit', 'detail'].includes(zoneKey)
     ? 720
     : componentKey === 'field-textarea' ? 580 : 280
-  const height = componentKey === 'field-textarea' ? 98 : componentKey === 'detail-field' ? 58 : 64
+  const height = componentKey === 'field-textarea' ? 98 : componentKey === 'field-upload' || componentKey === 'field-image-upload' ? 88 : 64
   return createCanvasItem({
     id: `${zoneKey}_${safeKey(field.field)}`,
     componentKey,
@@ -1459,7 +1462,7 @@ function syncZoneBusinessProps(zone, canvas) {
       enableCustomQuery: componentKeys.has('custom-query'),
     }
   }
-  if (zone?.zoneKey === 'edit' || zone?.zoneKey === 'search') {
+  if (zone?.zoneKey === 'edit' || zone?.zoneKey === 'search' || zone?.zoneKey === 'detail') {
     const fieldSettings = {}
     const gridCols = resolveCanvasGridCols(canvas)
     ;(canvas?.items || []).forEach((item) => {
@@ -1483,6 +1486,7 @@ function syncZoneBusinessProps(zone, canvas) {
     return {
       fieldSettings,
       ...(zone?.zoneKey === 'edit' ? { editGridCols: gridCols } : {}),
+      ...(zone?.zoneKey === 'detail' ? { detailGridCols: gridCols } : {}),
     }
   }
   return {}

@@ -324,6 +324,64 @@
           </n-form>
         </n-tab-pane>
 
+        <!-- 办理控制Tab -->
+        <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="actionControl" tab="办理控制">
+          <n-form :model="properties" label-placement="top" size="small">
+            <div class="action-control-group">
+              <div class="action-control-title">
+                可执行动作
+              </div>
+              <div class="action-switch-list">
+                <div
+                  v-for="item in approvalActionOptions"
+                  :key="item.key"
+                  class="action-switch-row"
+                >
+                  <div class="action-switch-main">
+                    <i :class="item.icon" />
+                    <span>{{ item.label }}</span>
+                  </div>
+                  <n-switch
+                    v-model:value="properties[item.key]"
+                    size="small"
+                    @update:value="markDirty"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="action-control-group">
+              <div class="action-control-title">
+                办理要求
+              </div>
+              <div class="action-switch-list">
+                <div class="action-switch-row">
+                  <div class="action-switch-main">
+                    <i class="i-material-symbols:rate-review" />
+                    <span>审批意见必填</span>
+                  </div>
+                  <n-switch
+                    v-model:value="properties.requireComment"
+                    size="small"
+                    @update:value="markDirty"
+                  />
+                </div>
+                <div class="action-switch-row">
+                  <div class="action-switch-main">
+                    <i class="i-material-symbols:draw" />
+                    <span>签名必填</span>
+                  </div>
+                  <n-switch
+                    v-model:value="properties.requireSignature"
+                    size="small"
+                    @update:value="markDirty"
+                  />
+                </div>
+              </div>
+            </div>
+          </n-form>
+        </n-tab-pane>
+
         <!-- 会签配置Tab -->
         <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="multiInstance" tab="会签配置">
           <n-form :model="properties" label-placement="top" size="small">
@@ -678,6 +736,13 @@ const properties = reactive({
   formUrl: '',
   priority: 50,
   dueDate: 0,
+  allowApprove: true,
+  allowReject: true,
+  allowDelegate: true,
+  allowReturn: false,
+  allowTerminate: false,
+  requireSignature: false,
+  requireComment: true,
   // 多实例
   multiInstanceType: 'none',
   completionCondition: 'all',
@@ -723,6 +788,14 @@ const formTypeOptions = [
   { label: '动态表单', value: 'dynamic' },
   { label: '外部表单', value: 'external' },
   { label: '无表单', value: 'none' },
+]
+
+const approvalActionOptions = [
+  { key: 'allowApprove', label: '通过', icon: 'i-material-symbols:check-circle' },
+  { key: 'allowReject', label: '拒绝', icon: 'i-material-symbols:cancel' },
+  { key: 'allowReturn', label: '退回', icon: 'i-material-symbols:keyboard-return' },
+  { key: 'allowTerminate', label: '终结流程', icon: 'i-material-symbols:stop-circle' },
+  { key: 'allowDelegate', label: '转办', icon: 'i-material-symbols:person-add' },
 ]
 
 // 用户选择相关
@@ -791,6 +864,7 @@ async function handleSaveConfig() {
       updateFormType()
       updateExtensionProperty('priority')
       updateDueDate()
+      updateApprovalControl()
       updateMultiInstance()
       updateTaskListeners()
     }
@@ -1180,6 +1254,14 @@ function loadUserTaskProperties(bo) {
     properties.dueDate = 0
   }
 
+  properties.allowApprove = readBooleanAttr(bo, attrs, 'allowApprove', true)
+  properties.allowReject = readBooleanAttr(bo, attrs, 'allowReject', true)
+  properties.allowDelegate = readBooleanAttr(bo, attrs, 'allowDelegate', true)
+  properties.allowReturn = readBooleanAttr(bo, attrs, 'allowReturn', false)
+  properties.allowTerminate = readBooleanAttr(bo, attrs, 'allowTerminate', false)
+  properties.requireSignature = readBooleanAttr(bo, attrs, 'requireSignature', false)
+  properties.requireComment = readBooleanAttr(bo, attrs, 'requireComment', true)
+
   // 多实例配置
   const loopCharacteristics = bo.loopCharacteristics
   if (loopCharacteristics) {
@@ -1291,6 +1373,15 @@ function loadStartEventProperties(bo) {
   // moddleExtensions 注册后直接读 bo.initiator
   properties.initiator = bo.initiator ?? bo['flowable:initiator'] ?? attrs['flowable:initiator'] ?? 'initiator'
   properties.formKey = bo.formKey ?? bo['flowable:formKey'] ?? attrs['flowable:formKey'] ?? ''
+}
+
+function readBooleanAttr(bo, attrs, name, defaultValue) {
+  const value = bo[name] ?? bo[`flowable:${name}`] ?? attrs[`flowable:${name}`]
+  if (value === undefined || value === null || value === '')
+    return defaultValue
+  if (typeof value === 'boolean')
+    return value
+  return ['true', '1', 'y', 'yes'].includes(String(value).trim().toLowerCase())
 }
 
 // 更新扩展属性（flowable 命名空间属性，通过 moddleExtensions 注册后直接用属性名）
@@ -1438,6 +1529,23 @@ function updateDueDate() {
   modeling.updateProperties(rawElement.value, {
     'flowable:dueDate': properties.dueDate > 0 ? `P${properties.dueDate}D` : null,
   })
+}
+
+function updateApprovalControl() {
+  if (!rawElement.value || !props.modeler)
+    return
+
+  const modeling = props.modeler.get('modeling')
+  modeling.updateProperties(rawElement.value, {
+    'flowable:allowApprove': properties.allowApprove,
+    'flowable:allowReject': properties.allowReject,
+    'flowable:allowDelegate': properties.allowDelegate,
+    'flowable:allowReturn': properties.allowReturn,
+    'flowable:allowTerminate': properties.allowTerminate,
+    'flowable:requireSignature': properties.requireSignature,
+    'flowable:requireComment': properties.requireComment,
+  })
+  emit('update')
 }
 
 // 更新多实例配置
@@ -1753,6 +1861,48 @@ function updateProperty(prop) {
 
 .config-tabs {
   width: 100%;
+}
+
+.action-control-group {
+  margin-bottom: 12px;
+}
+
+.action-control-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.action-switch-list {
+  display: grid;
+  gap: 8px;
+}
+
+.action-switch-row {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.action-switch-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #334155;
+}
+
+.action-switch-main i {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
 /* Tab导航栏可滚动 + 显示滚动条 */

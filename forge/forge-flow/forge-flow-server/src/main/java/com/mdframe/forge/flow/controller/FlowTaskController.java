@@ -117,10 +117,11 @@ public class FlowTaskController {
         String taskId = String.valueOf(params.get("taskId"));
         String userId = String.valueOf(params.get("userId"));
         String comment = params.get("comment") != null ? String.valueOf(params.get("comment")) : null;
+        String signature = params.get("signature") != null ? String.valueOf(params.get("signature")) : null;
         @SuppressWarnings("unchecked")
         Map<String, Object> variables = (Map<String, Object>) params.get("variables");
         
-        flowTaskService.approve(taskId, userId, comment, variables);
+        flowTaskService.approve(taskId, userId, comment, signature, variables);
         return RespInfo.success("审批通过", null);
     }
 
@@ -132,8 +133,9 @@ public class FlowTaskController {
         String taskId = String.valueOf(params.get("taskId"));
         String userId = String.valueOf(params.get("userId"));
         String comment = params.get("comment") != null ? String.valueOf(params.get("comment")) : null;
+        String signature = params.get("signature") != null ? String.valueOf(params.get("signature")) : null;
         
-        flowTaskService.reject(taskId, userId, comment);
+        flowTaskService.reject(taskId, userId, comment, signature);
         return RespInfo.success("已驳回", null);
     }
 
@@ -146,6 +148,7 @@ public class FlowTaskController {
         String userId = String.valueOf(params.get("userId"));
         String targetUserId = String.valueOf(params.get("targetUserId"));
         String comment = params.get("comment") != null ? String.valueOf(params.get("comment")) : null;
+        String signature = params.get("signature") != null ? String.valueOf(params.get("signature")) : null;
 
         if (taskId == null || taskId.isBlank() || "null".equals(taskId)) {
             return RespInfo.error("任务ID不能为空");
@@ -157,8 +160,50 @@ public class FlowTaskController {
             return RespInfo.error("转办人ID不能为空");
         }
         
-        flowTaskService.delegate(taskId, userId, targetUserId, comment);
+        flowTaskService.delegate(taskId, userId, targetUserId, comment, signature);
         return RespInfo.success("转办成功", null);
+    }
+
+    /**
+     * 退回上一审批节点
+     */
+    @PostMapping("/return")
+    public RespInfo<Void> returnTask(@RequestBody Map<String, Object> params) {
+        String taskId = String.valueOf(params.get("taskId"));
+        String userId = String.valueOf(params.get("userId"));
+        String comment = params.get("comment") != null ? String.valueOf(params.get("comment")) : null;
+        String signature = params.get("signature") != null ? String.valueOf(params.get("signature")) : null;
+
+        if (taskId == null || taskId.isBlank() || "null".equals(taskId)) {
+            return RespInfo.error("任务ID不能为空");
+        }
+        if (userId == null || userId.isBlank() || "null".equals(userId)) {
+            return RespInfo.error("当前用户ID不能为空");
+        }
+
+        flowTaskService.returnTask(taskId, userId, comment, signature);
+        return RespInfo.success("已退回", null);
+    }
+
+    /**
+     * 终结流程
+     */
+    @PostMapping("/terminate")
+    public RespInfo<Void> terminateTask(@RequestBody Map<String, Object> params) {
+        String taskId = String.valueOf(params.get("taskId"));
+        String userId = String.valueOf(params.get("userId"));
+        String comment = params.get("comment") != null ? String.valueOf(params.get("comment")) : null;
+        String signature = params.get("signature") != null ? String.valueOf(params.get("signature")) : null;
+
+        if (taskId == null || taskId.isBlank() || "null".equals(taskId)) {
+            return RespInfo.error("任务ID不能为空");
+        }
+        if (userId == null || userId.isBlank() || "null".equals(userId)) {
+            return RespInfo.error("当前用户ID不能为空");
+        }
+
+        flowTaskService.terminateTask(taskId, userId, comment, signature);
+        return RespInfo.success("流程已终结", null);
     }
 
     /**

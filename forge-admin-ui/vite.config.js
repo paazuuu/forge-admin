@@ -94,6 +94,7 @@ export default defineConfig(({ mode, command }) => {
         'sm-crypto',
         'sockjs-client',
         'tiny-svg',
+        'vuedraggable',
         'vue3-intro-step',
         'vue3-slide-verify',
       ],

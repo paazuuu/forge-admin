@@ -290,10 +290,6 @@ function drawCanvasItem(api, group, item) {
     drawTablePreview(api, group, item, width, height)
     return
   }
-  if (item.componentKey === 'detail-field') {
-    drawDetailPreview(api, group, item, width, height)
-    return
-  }
   drawFormFieldPreview(api, group, item, width, height)
 }
 
@@ -639,8 +635,11 @@ function handleDrop(event) {
     return
   const payload = JSON.parse(raw)
   const rect = boardRef.value.getBoundingClientRect()
-  const x = snapValue(event.clientX - rect.left)
-  const y = snapValue(event.clientY - rect.top)
+  const scrollEl = scrollRef.value
+  const scrollLeft = scrollEl ? scrollEl.scrollLeft : 0
+  const scrollTop = scrollEl ? scrollEl.scrollTop : 0
+  const x = snapValue(event.clientX - rect.left + scrollLeft)
+  const y = snapValue(event.clientY - rect.top + scrollTop)
   const item = createCanvasItem(payload, {
     zoneKey: props.zone.zoneKey,
     fields: props.fields,
@@ -718,7 +717,7 @@ function applyColumnLayout(cols) {
   const fieldItems = sortCanvasItemsByPosition(canvasItems.value.filter(item => item.fieldRef))
   const fieldOrderMap = new Map(fieldItems.map((item, index) => [item.id, index]))
   const fieldHeights = fieldItems
-    .map(item => Number(item.h || (item.componentKey === 'field-textarea' ? 98 : item.componentKey === 'detail-field' ? 58 : 64)))
+    .map(item => Number(item.h || (item.componentKey === 'field-textarea' ? 98 : item.componentKey === 'field-upload' || item.componentKey === 'field-image-upload' ? 88 : 64)))
   const rowHeights = []
   fieldHeights.forEach((height, index) => {
     const row = Math.floor(index / columnCount)
@@ -735,7 +734,7 @@ function applyColumnLayout(cols) {
     const fieldIndex = fieldOrderMap.get(item.id) ?? index
     const row = Math.floor(fieldIndex / columnCount)
     const col = fieldIndex % columnCount
-    const height = Number(item.h || (item.componentKey === 'field-textarea' ? 98 : item.componentKey === 'detail-field' ? 58 : 64))
+    const height = Number(item.h || (item.componentKey === 'field-textarea' ? 98 : item.componentKey === 'field-upload' || item.componentKey === 'field-image-upload' ? 88 : 64))
     const y = rowOffsets[row] || startY
     maxBottom = Math.max(maxBottom, y + height)
     return {

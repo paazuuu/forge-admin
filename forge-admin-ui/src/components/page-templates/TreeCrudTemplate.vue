@@ -69,9 +69,13 @@ const normalizedTreeData = computed(() => normalizeTreeNodes(treeData.value))
 // 合并 crudProps，注入 parentId 过滤
 const mergedCrudProps = computed(() => {
   const filterField = treeConfig.value?.filterField || treeConfig.value?.parentField || 'parentId'
+  const includeChildren = treeConfig.value?.includeChildren !== false
   const publicParams = { ...(props.crudProps.publicParams || {}) }
   if (selectedId.value !== null && selectedId.value !== undefined && selectedId.value !== '') {
     publicParams[filterField] = selectedId.value
+    if (includeChildren) {
+      publicParams[filterField + '_includeChildren'] = true
+    }
   }
 
   return {

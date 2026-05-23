@@ -73,6 +73,7 @@ defineEmits(['filter'])
   border-radius: 8px;
   padding: 10px 12px;
   flex-shrink: 0;
+  min-width: 0;
   overflow-x: auto;
 }
 
@@ -159,6 +160,8 @@ defineEmits(['filter'])
   color: #64748b;
   font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-value {

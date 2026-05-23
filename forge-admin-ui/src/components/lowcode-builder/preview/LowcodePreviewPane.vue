@@ -559,24 +559,49 @@ function buildRuntimeCrudProps(cfg) {
 
 function transformColumns(columns, transConfig) {
   const transMap = {}
+  const transTypeMap = {}
   if (transConfig && typeof transConfig === 'object') {
-    for (const [field, conf] of Object.entries(transConfig))
+    for (const [field, conf] of Object.entries(transConfig)) {
       transMap[field] = conf.targetField || `${field}Name`
+      if (conf.type) transTypeMap[field] = conf.type
+    }
   }
   return (columns || []).map((col) => {
     const key = col.prop || col.key || col.dataIndex
     const nextCol = { ...col, prop: key }
+    if (col.render && typeof col.render === 'object') {
+      const renderType = col.render.type
+      if (renderType === 'dictTag') {
+        nextCol.render = row => h(DictTag, {
+          dictType: col.render.dictType,
+          value: row[key],
+          size: 'small',
+        })
+        return nextCol
+      }
+      if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+        const targetField = col.render.targetField || `${key}Name`
+        nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+        return nextCol
+      }
+      if (renderType === 'imageUpload') {
+        nextCol.render = row => {
+          const value = row[key]
+          if (!value) return '-'
+          return h('span', { style: 'color: #2563eb' }, value)
+        }
+        return nextCol
+      }
+      if (renderType === 'fileUpload') {
+        const targetField = col.render.targetField || `${key}Name`
+        nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+        return nextCol
+      }
+    }
     if (transMap[key]) {
       const targetField = transMap[key]
       nextCol.render = row => row[targetField] ?? row[key]
       return nextCol
-    }
-    if (col.render && typeof col.render === 'object' && col.render.type === 'dictTag') {
-      nextCol.render = row => h(DictTag, {
-        dictType: col.render.dictType,
-        value: row[key],
-        size: 'small',
-      })
     }
     return nextCol
   })

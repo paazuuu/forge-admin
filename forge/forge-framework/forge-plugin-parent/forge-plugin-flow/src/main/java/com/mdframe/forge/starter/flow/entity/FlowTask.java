@@ -101,7 +101,7 @@ public class FlowTask {
     private Integer priority;
 
     /**
-     * 状态（0-待办/1-已签收/2-已通过/3-已驳回/4-已转办/5-已委派/6-已撤回）
+     * 状态（0-待办/1-已签收/2-已通过/3-已驳回/4-已转办/5-已委派/6-已撤回/7-已退回/8-已终结）
      */
     private Integer status;
 
@@ -109,6 +109,11 @@ public class FlowTask {
      * 审批意见
      */
     private String comment;
+
+    /**
+     * 审批签名
+     */
+    private String signature;
 
     /**
      * 附件URL（逗号分隔）

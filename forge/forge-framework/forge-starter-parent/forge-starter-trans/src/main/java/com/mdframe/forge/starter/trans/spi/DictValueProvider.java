@@ -1,17 +1,49 @@
 package com.mdframe.forge.starter.trans.spi;
 
-/**
- * 字典值提供者SPI
- * 由业务模块实现，根据字典类型和key返回对应的显示值
- */
+import java.util.List;
+import java.util.Map;
+
 public interface DictValueProvider {
 
-    /**
-     * 根据字典类型和键获取显示值
-     *
-     * @param dictType 字典类型
-     * @param key      字典键
-     * @return 字典值（显示文本），找不到时返回null
-     */
     String getLabel(String dictType, String key);
+
+    default String getOrgName(String orgId) {
+        return null;
+    }
+
+    default Map<String, String> batchGetOrgNames(List<String> orgIds) {
+        return Map.of();
+    }
+
+    default String getUserName(String userId) {
+        return null;
+    }
+
+    default Map<String, String> batchGetUserNames(List<String> userIds) {
+        return Map.of();
+    }
+
+    default String getRegionName(String regionCode) {
+        return null;
+    }
+
+    default Map<String, String> batchGetRegionNames(List<String> regionCodes) {
+        return Map.of();
+    }
+
+    default String getFileUrl(String fileId) {
+        return null;
+    }
+
+    default Map<String, String> batchGetFileUrls(List<String> fileIds) {
+        return Map.of();
+    }
+
+    default String getFileName(String fileId) {
+        return null;
+    }
+
+    default Map<String, String> batchGetFileNames(List<String> fileIds) {
+        return Map.of();
+    }
 }

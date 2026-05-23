@@ -120,6 +120,11 @@ public class FlowNodeConfig implements Serializable {
     // ==================== 审批操作权限 ====================
 
     /**
+     * 允许通过
+     */
+    private Boolean allowApprove;
+
+    /**
      * 允许转办
      */
     private Boolean allowDelegate;
@@ -153,6 +158,26 @@ public class FlowNodeConfig implements Serializable {
      * 允许撤回
      */
     private Boolean allowWithdraw;
+
+    /**
+     * 允许退回
+     */
+    private Boolean allowReturn;
+
+    /**
+     * 允许终结流程
+     */
+    private Boolean allowTerminate;
+
+    /**
+     * 是否需要签名
+     */
+    private Boolean requireSignature;
+
+    /**
+     * 是否需要审批意见
+     */
+    private Boolean requireComment;
 
     // ==================== 其他配置 ====================
 

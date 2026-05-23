@@ -195,6 +195,7 @@
                 :task-def-key="taskFormInfo.taskDefKey"
                 :process-def-key="taskFormInfo.processDefKey"
                 :variables="taskFormInfo.variables || {}"
+                :approval-policy="approvalPolicy"
                 :read-only="false"
                 @submit="handleExternalFormSubmit"
                 @cancel="showDrawer = false"
@@ -221,20 +222,28 @@
 
             <template v-else>
               <n-form :model="approveForm" label-placement="top">
-                <n-form-item label="审批意见" required>
+                <n-form-item label="审批意见" :required="requireComment">
                   <n-input
                     v-model:value="approveForm.comment"
                     type="textarea"
                     :rows="3"
-                    placeholder="请输入审批意见"
+                    :placeholder="requireComment ? '请输入审批意见' : '请输入审批意见（可选）'"
                     :maxlength="500"
                     show-count
+                  />
+                </n-form-item>
+                <n-form-item v-if="requireSignature" label="审批签名" required>
+                  <SignaturePad
+                    :key="approveSignatureKey"
+                    ref="approveSignatureRef"
+                    v-model="approveForm.signature"
+                    :business-id="currentTask?.taskId || currentTask?.id || ''"
                   />
                 </n-form-item>
               </n-form>
 
               <div class="action-buttons">
-                <n-popconfirm @positive-click="() => submitApprove('approve')">
+                <n-popconfirm v-if="canApprove" @positive-click="() => submitApprove('approve')">
                   <template #trigger>
                     <NButton type="success" size="large" :loading="approveLoading && approveForm.action === 'approve'" :disabled="approveLoading">
                       <i class="i-material-symbols:check-circle mr-2" />
@@ -244,7 +253,7 @@
                   确认同意该审批？
                 </n-popconfirm>
 
-                <n-popconfirm @positive-click="() => submitApprove('reject')">
+                <n-popconfirm v-if="canReject" @positive-click="() => submitApprove('reject')">
                   <template #trigger>
                     <NButton type="error" size="large" :loading="approveLoading && approveForm.action === 'reject'" :disabled="approveLoading">
                       <i class="i-material-symbols:cancel mr-2" />
@@ -252,6 +261,26 @@
                     </NButton>
                   </template>
                   确认驳回该审批？
+                </n-popconfirm>
+
+                <n-popconfirm v-if="canReturn" @positive-click="() => submitApprove('return')">
+                  <template #trigger>
+                    <NButton type="warning" size="large" :loading="approveLoading && approveForm.action === 'return'" :disabled="approveLoading">
+                      <i class="i-material-symbols:keyboard-return mr-2" />
+                      退回
+                    </NButton>
+                  </template>
+                  确认退回上一审批节点？
+                </n-popconfirm>
+
+                <n-popconfirm v-if="canTerminate" @positive-click="() => submitApprove('terminate')">
+                  <template #trigger>
+                    <NButton type="error" ghost size="large" :loading="approveLoading && approveForm.action === 'terminate'" :disabled="approveLoading">
+                      <i class="i-material-symbols:stop-circle mr-2" />
+                      终结
+                    </NButton>
+                  </template>
+                  确认终结该流程？
                 </n-popconfirm>
 
                 <NButton v-if="canDelegate" size="large" :disabled="approveLoading" @click="handleDelegate">
@@ -304,7 +333,20 @@
           </div>
         </n-form-item>
         <n-form-item label="转办说明">
-          <n-input v-model:value="delegateForm.comment" type="textarea" :rows="2" placeholder="请输入转办说明（可选）" />
+          <n-input
+            v-model:value="delegateForm.comment"
+            type="textarea"
+            :rows="2"
+            :placeholder="requireComment ? '请输入转办说明' : '请输入转办说明（可选）'"
+          />
+        </n-form-item>
+        <n-form-item v-if="requireSignature" label="审批签名" required>
+          <SignaturePad
+            :key="delegateSignatureKey"
+            ref="delegateSignatureRef"
+            v-model="delegateForm.signature"
+            :business-id="currentTask?.taskId || currentTask?.id || ''"
+          />
         </n-form-item>
       </n-form>
       <template #footer>
@@ -340,6 +382,7 @@ import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowStats from '@/components/flow/FlowStats.vue'
 import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import SignaturePad from '@/components/flow/SignaturePad.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
@@ -395,18 +438,37 @@ const activeDrawerTab = ref('info')
 const taskFormInfo = ref(null)
 const formInfoLoading = ref(false)
 const useExternalForm = computed(() => taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
+const canApprove = computed(() => taskFormInfo.value?.allowApprove !== false)
+const canReject = computed(() => taskFormInfo.value?.allowReject !== false)
 const canDelegate = computed(() => taskFormInfo.value?.allowDelegate !== false)
+const canReturn = computed(() => taskFormInfo.value?.allowReturn === true)
+const canTerminate = computed(() => taskFormInfo.value?.allowTerminate === true)
+const requireComment = computed(() => taskFormInfo.value?.requireComment !== false)
+const requireSignature = computed(() => taskFormInfo.value?.requireSignature === true)
+const approvalPolicy = computed(() => ({
+  allowApprove: canApprove.value,
+  allowReject: canReject.value,
+  allowDelegate: canDelegate.value,
+  allowReturn: canReturn.value,
+  allowTerminate: canTerminate.value,
+  requireComment: requireComment.value,
+  requireSignature: requireSignature.value,
+}))
 
 // 审批表单
 const approveLoading = ref(false)
-const approveForm = reactive({ action: '', comment: '' })
+const approveForm = reactive({ action: '', comment: '', signature: '' })
+const approveSignatureRef = ref(null)
+const approveSignatureKey = ref(0)
 
 // 转办
 const showDelegateModal = ref(false)
 const showUserSelectModal = ref(false)
 const delegateLoading = ref(false)
 const delegateTargetUser = ref(null)
-const delegateForm = reactive({ comment: '' })
+const delegateForm = reactive({ comment: '', signature: '' })
+const delegateSignatureRef = ref(null)
+const delegateSignatureKey = ref(0)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_todo_status))
 
@@ -491,6 +553,8 @@ async function openDrawer(row) {
   currentTask.value = row
   approveForm.comment = ''
   approveForm.action = ''
+  approveForm.signature = ''
+  approveSignatureKey.value += 1
   approvalHistory.value = []
   taskFormInfo.value = null
   activeDrawerTab.value = 'info'
@@ -525,22 +589,25 @@ async function openDrawer(row) {
   await Promise.all(promises)
 }
 
-async function handleExternalFormSubmit({ action, comment, variables }) {
-  if (!comment?.trim()) {
-    window.$message.warning('请输入审批意见')
+async function handleExternalFormSubmit({ action, comment, signature, variables }) {
+  const approvalSignature = signature || variables?.signature
+  if (!canRunAction(action))
     return
-  }
+  if (!validateApprovalInput(comment, approvalSignature))
+    return
+
   approveLoading.value = true
   try {
-    const api = action === 'approve' ? flowApi.approveTask : flowApi.rejectTask
+    const api = resolveActionApi(action)
     const res = await api({
       taskId: currentTask.value.taskId || currentTask.value.id,
       userId: userStore.userId,
       comment,
+      signature: approvalSignature,
       variables,
     })
     if (res.code === 200) {
-      window.$message.success(action === 'approve' ? '审批通过' : '已驳回')
+      window.$message.success(getActionSuccessText(action))
       showDrawer.value = false
       loadData()
     }
@@ -548,30 +615,98 @@ async function handleExternalFormSubmit({ action, comment, variables }) {
       window.$message.error(res.message || '操作失败')
     }
   }
-  catch {
-    window.$message.error('操作失败')
+  catch (error) {
+    window.$message.error(error?.message || '操作失败')
   }
   finally {
     approveLoading.value = false
   }
 }
 
-async function submitApprove(action) {
-  if (!approveForm.comment?.trim()) {
-    window.$message.warning('请输入审批意见')
-    return
+function canRunAction(action) {
+  const allowed = {
+    approve: canApprove.value,
+    reject: canReject.value,
+    return: canReturn.value,
+    terminate: canTerminate.value,
+    delegate: canDelegate.value,
   }
+  if (allowed[action] === false) {
+    window.$message.warning('当前节点不允许执行该操作')
+    return false
+  }
+  return true
+}
+
+function hasSignatureValue(signature, signatureRef) {
+  return Boolean(signature?.trim()) || Boolean(signatureRef?.hasSignature?.())
+}
+
+async function resolveSignature(signatureRef, signature) {
+  if (!requireSignature.value)
+    return signature || ''
+  if (!signatureRef?.upload)
+    return signature || ''
+
+  try {
+    return await signatureRef.upload()
+  }
+  catch (error) {
+    throw new Error(error?.message || '签名图片保存失败')
+  }
+}
+
+function validateApprovalInput(comment, signature, signatureRef = null) {
+  if (requireComment.value && !comment?.trim()) {
+    window.$message.warning('请输入审批意见')
+    return false
+  }
+  if (requireSignature.value && !hasSignatureValue(signature, signatureRef)) {
+    window.$message.warning('请完成手写签名')
+    return false
+  }
+  return true
+}
+
+function resolveActionApi(action) {
+  const apiMap = {
+    approve: flowApi.approveTask,
+    reject: flowApi.rejectTask,
+    return: flowApi.returnTask,
+    terminate: flowApi.terminateTask,
+  }
+  return apiMap[action] || flowApi.approveTask
+}
+
+function getActionSuccessText(action) {
+  const textMap = {
+    approve: '审批通过',
+    reject: '已驳回',
+    return: '已退回',
+    terminate: '流程已终结',
+  }
+  return textMap[action] || '操作成功'
+}
+
+async function submitApprove(action) {
+  if (!canRunAction(action))
+    return
+  if (!validateApprovalInput(approveForm.comment, approveForm.signature, approveSignatureRef.value))
+    return
   approveForm.action = action
   approveLoading.value = true
   try {
-    const api = action === 'approve' ? flowApi.approveTask : flowApi.rejectTask
+    const signature = await resolveSignature(approveSignatureRef.value, approveForm.signature)
+    approveForm.signature = signature
+    const api = resolveActionApi(action)
     const res = await api({
       taskId: currentTask.value.taskId,
       userId: userStore.userId,
       comment: approveForm.comment,
+      signature,
     })
     if (res.code === 200) {
-      window.$message.success(action === 'approve' ? '审批通过' : '已驳回')
+      window.$message.success(getActionSuccessText(action))
       showDrawer.value = false
       loadData()
     }
@@ -579,8 +714,8 @@ async function submitApprove(action) {
       window.$message.error(res.message || '操作失败')
     }
   }
-  catch {
-    window.$message.error('操作失败')
+  catch (error) {
+    window.$message.error(error?.message || '操作失败')
   }
   finally {
     approveLoading.value = false
@@ -590,6 +725,8 @@ async function submitApprove(action) {
 function handleDelegate() {
   delegateTargetUser.value = null
   delegateForm.comment = ''
+  delegateForm.signature = ''
+  delegateSignatureKey.value += 1
   showDelegateModal.value = true
 }
 
@@ -598,17 +735,24 @@ function handleUserSelected(user) {
 }
 
 async function submitDelegate() {
+  if (!canRunAction('delegate'))
+    return
   if (!delegateTargetUser.value) {
     window.$message.warning('请选择转办人')
     return
   }
+  if (!validateApprovalInput(delegateForm.comment, delegateForm.signature, delegateSignatureRef.value))
+    return
   delegateLoading.value = true
   try {
+    const signature = await resolveSignature(delegateSignatureRef.value, delegateForm.signature)
+    delegateForm.signature = signature
     const res = await flowApi.delegateTask({
       taskId: currentTask.value.taskId,
       userId: String(userStore.userId),
       targetUserId: String(delegateTargetUser.value.id),
       comment: delegateForm.comment,
+      signature,
     })
     if (res.code === 200) {
       window.$message.success('转办成功')
@@ -620,8 +764,8 @@ async function submitDelegate() {
       window.$message.error(res.message || '转办失败')
     }
   }
-  catch {
-    window.$message.error('转办失败')
+  catch (error) {
+    window.$message.error(error?.message || '转办失败')
   }
   finally {
     delegateLoading.value = false

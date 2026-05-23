@@ -27,6 +27,7 @@
       :task-def-key="taskDefKey"
       :process-def-key="processDefKey"
       :variables="variables"
+      :approval-policy="approvalPolicy"
       :read-only="readOnly"
       @submit="handleFormSubmit"
       @cancel="$emit('cancel')"
@@ -76,6 +77,8 @@ const props = defineProps({
   formUrl: { type: String, default: null },
   /** 流程变量 */
   variables: { type: Object, default: () => ({}) },
+  /** 审批动作权限和办理要求 */
+  approvalPolicy: { type: Object, default: () => ({}) },
   /** 是否只读（已办/发起人查看） */
   readOnly: { type: Boolean, default: false },
 })

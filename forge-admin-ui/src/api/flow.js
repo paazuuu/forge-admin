@@ -52,6 +52,18 @@ export default {
     request.post('/api/flow/task/delegate', data),
 
   /**
+   * 退回上一审批节点
+   */
+  returnTask: data =>
+    request.post('/api/flow/task/return', data),
+
+  /**
+   * 终结流程
+   */
+  terminateTask: data =>
+    request.post('/api/flow/task/terminate', data),
+
+  /**
    * 撤回流程
    */
   withdrawProcess: data =>

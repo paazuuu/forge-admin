@@ -49,17 +49,48 @@ public interface FlowTaskService {
     /**
      * 审批通过
      */
-    void approve(String taskId, String userId, String comment, Map<String, Object> variables);
+    default void approve(String taskId, String userId, String comment, Map<String, Object> variables) {
+        approve(taskId, userId, comment, null, variables);
+    }
+
+    /**
+     * 审批通过
+     */
+    void approve(String taskId, String userId, String comment, String signature, Map<String, Object> variables);
 
     /**
      * 审批驳回
      */
-    void reject(String taskId, String userId, String comment);
+    default void reject(String taskId, String userId, String comment) {
+        reject(taskId, userId, comment, null);
+    }
+
+    /**
+     * 审批驳回
+     */
+    void reject(String taskId, String userId, String comment, String signature);
 
     /**
      * 转办
      */
-    void delegate(String taskId, String userId, String targetUserId, String comment);
+    default void delegate(String taskId, String userId, String targetUserId, String comment) {
+        delegate(taskId, userId, targetUserId, comment, null);
+    }
+
+    /**
+     * 转办
+     */
+    void delegate(String taskId, String userId, String targetUserId, String comment, String signature);
+
+    /**
+     * 退回上一审批节点
+     */
+    void returnTask(String taskId, String userId, String comment, String signature);
+
+    /**
+     * 终结流程
+     */
+    void terminateTask(String taskId, String userId, String comment, String signature);
 
     /**
      * 委派
