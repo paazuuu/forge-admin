@@ -211,6 +211,8 @@ public class LowcodeAppService {
                 "keyField", "id",
                 "parentField", parentField,
                 "labelField", labelField,
+                "filterField", parentField,
+                "targetField", "id",
                 "childrenField", "children",
                 "treeTitle", StringUtils.defaultIfBlank(modelSchema.getBusinessName(), "树形导航")
         );

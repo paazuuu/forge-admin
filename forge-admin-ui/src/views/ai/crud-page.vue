@@ -161,6 +161,7 @@ const crudProps = computed(() => {
     modalType: options.modalType || cfg.modalType || 'drawer',
     modalWidth: options.modalWidth || cfg.modalWidth || '800px',
     editGridCols: options.editGridCols || cfg.editGridCols || 1,
+    loadDetailOnEdit: options.loadDetailOnEdit ?? cfg.loadDetailOnEdit ?? true,
     searchGridCols: options.searchGridCols || cfg.searchGridCols || 4,
     hideBatchDelete: !!options.hideBatchDelete,
     showImport: !!options.showImport,

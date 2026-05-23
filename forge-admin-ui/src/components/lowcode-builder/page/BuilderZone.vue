@@ -133,7 +133,7 @@
 </template>
 
 <script setup>
-import { NButton, NCheckboxGroup, NDatePicker, NInput, NInputNumber, NRadio, NRadioGroup, NSelect, NSpace, NSwitch, NUpload } from 'naive-ui'
+import { NButton, NCascader, NCheckboxGroup, NDatePicker, NInput, NInputNumber, NRadio, NRadioGroup, NSelect, NSpace, NSwitch, NTreeSelect, NUpload } from 'naive-ui'
 import { computed, defineComponent, h, reactive, ref, watch } from 'vue'
 import { getDictData } from '@/composables/useDict'
 import { resolveZoneTitle } from './page-schema'
@@ -179,7 +179,7 @@ const ComponentPreviewControl = defineComponent({
       const placeholder = field.label ? `请输入${field.label}` : '请输入'
       const selectPlaceholder = field.label ? `请选择${field.label}` : '请选择'
       const componentType = field.componentType
-      const hasOptions = field.dictType || ['select', 'radio', 'checkbox'].includes(componentType)
+      const hasOptions = field.dictType || ['select', 'radio', 'checkbox', 'dictSelect', 'userSelect'].includes(componentType)
 
       if (componentType === 'textarea') {
         return h(NInput, {
@@ -252,6 +252,26 @@ const ComponentPreviewControl = defineComponent({
           accept: componentType === 'imageUpload' ? 'image/*' : undefined,
         }, {
           default: () => h(NButton, { size: 'small' }, { default: () => componentType === 'imageUpload' ? '选择图片' : '选择文件' }),
+        })
+      }
+      if (['treeSelect', 'orgTreeSelect', 'regionTreeSelect'].includes(componentType)) {
+        return h(NTreeSelect, {
+          value: controlProps.value,
+          options: controlProps.options,
+          clearable: true,
+          filterable: true,
+          placeholder: selectPlaceholder,
+          onUpdateValue: updateValue,
+        })
+      }
+      if (componentType === 'cascader') {
+        return h(NCascader, {
+          value: controlProps.value,
+          options: controlProps.options,
+          clearable: true,
+          filterable: true,
+          placeholder: selectPlaceholder,
+          onUpdateValue: updateValue,
         })
       }
       if (hasOptions) {

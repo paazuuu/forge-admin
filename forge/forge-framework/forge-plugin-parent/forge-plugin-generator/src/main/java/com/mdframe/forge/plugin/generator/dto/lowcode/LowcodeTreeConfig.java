@@ -8,11 +8,21 @@ import lombok.Data;
 @Data
 public class LowcodeTreeConfig {
 
+    private String sourceModelCode;
+
+    private String sourceModelName;
+
+    private String sourceTableName;
+
     private String keyField;
 
     private String parentField;
 
     private String labelField;
+
+    private String filterField;
+
+    private String targetField;
 
     private String childrenField;
 

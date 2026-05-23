@@ -13,8 +13,14 @@
           :label="field.label || field.field"
           :show-feedback="false"
         >
+          <n-tree-select
+            v-if="['treeSelect', 'orgTreeSelect', 'regionTreeSelect'].includes(componentType(field))"
+            :placeholder="`请选择${field.label || field.field}`"
+            disabled
+            size="small"
+          />
           <n-input
-            v-if="!field.dictType && !['date', 'datetime'].includes(componentType(field))"
+            v-else-if="!field.dictType && !['date', 'datetime', 'dictSelect', 'userSelect'].includes(componentType(field))"
             :placeholder="`请输入${field.label || field.field}`"
             disabled
             size="small"

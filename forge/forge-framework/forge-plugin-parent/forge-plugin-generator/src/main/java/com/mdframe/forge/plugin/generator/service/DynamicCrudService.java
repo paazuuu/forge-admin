@@ -195,7 +195,8 @@ public class DynamicCrudService {
      */
     public List<Map<String, Object>> selectTree(String configKey) {
         AiCrudConfig config = getConfig(configKey);
-        String tableName = config.getTableName();
+        LowcodeTreeConfig treeConfig = resolveTreeConfig(config);
+        String tableName = StringUtils.defaultIfBlank(treeConfig.getSourceTableName(), config.getTableName());
         List<Map<String, Object>> rows = repository.selectList(
                 tableName,
                 null,
@@ -208,7 +209,7 @@ public class DynamicCrudService {
 
         List<Map<String, Object>> camelCaseRows = DynamicQueryGenerator.convertListToCamelCase(rows);
         applyReadPipeline(camelCaseRows, config);
-        return buildTree(camelCaseRows, resolveTreeConfig(config));
+        return buildTree(camelCaseRows, treeConfig);
     }
 
     /**
@@ -1172,6 +1173,12 @@ public class DynamicCrudService {
         if (StringUtils.isBlank(treeConfig.getLabelField())) {
             treeConfig.setLabelField("name");
         }
+        if (StringUtils.isBlank(treeConfig.getFilterField())) {
+            treeConfig.setFilterField(treeConfig.getParentField());
+        }
+        if (StringUtils.isBlank(treeConfig.getTargetField())) {
+            treeConfig.setTargetField(treeConfig.getKeyField());
+        }
         if (StringUtils.isBlank(treeConfig.getChildrenField())) {
             treeConfig.setChildrenField("children");
         }
@@ -1209,11 +1216,26 @@ public class DynamicCrudService {
         if (StringUtils.isNotBlank(text(treeNode, "keyField"))) {
             target.setKeyField(text(treeNode, "keyField"));
         }
+        if (StringUtils.isNotBlank(text(treeNode, "sourceModelCode"))) {
+            target.setSourceModelCode(text(treeNode, "sourceModelCode"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "sourceModelName"))) {
+            target.setSourceModelName(text(treeNode, "sourceModelName"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "sourceTableName"))) {
+            target.setSourceTableName(text(treeNode, "sourceTableName"));
+        }
         if (StringUtils.isNotBlank(text(treeNode, "parentField"))) {
             target.setParentField(text(treeNode, "parentField"));
         }
         if (StringUtils.isNotBlank(text(treeNode, "labelField"))) {
             target.setLabelField(text(treeNode, "labelField"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "filterField"))) {
+            target.setFilterField(text(treeNode, "filterField"));
+        }
+        if (StringUtils.isNotBlank(text(treeNode, "targetField"))) {
+            target.setTargetField(text(treeNode, "targetField"));
         }
         if (StringUtils.isNotBlank(text(treeNode, "childrenField"))) {
             target.setChildrenField(text(treeNode, "childrenField"));
@@ -1233,6 +1255,8 @@ public class DynamicCrudService {
         Map<String, Map<String, Object>> nodeMap = new LinkedHashMap<>();
         String keyField = treeConfig.getKeyField();
         String parentField = treeConfig.getParentField();
+        String labelField = treeConfig.getLabelField();
+        String targetField = treeConfig.getTargetField();
         String childrenField = treeConfig.getChildrenField();
 
         for (Map<String, Object> row : rows) {
@@ -1241,6 +1265,9 @@ public class DynamicCrudService {
                 continue;
             }
             Map<String, Object> node = new LinkedHashMap<>(row);
+            node.putIfAbsent("key", row.get(keyField));
+            node.putIfAbsent("label", resolveTreeLabel(row, labelField, keyField));
+            node.putIfAbsent("targetValue", row.get(targetField));
             node.put(childrenField, new ArrayList<Map<String, Object>>());
             nodeMap.put(key, node);
         }
@@ -1260,6 +1287,20 @@ public class DynamicCrudService {
             }
         }
         return roots;
+    }
+
+    private Object resolveTreeLabel(Map<String, Object> row, String labelField, String keyField) {
+        List<String> candidates = Arrays.asList(labelField, "label", "name", "title", "treeName", "deptName", "orgName", keyField);
+        for (String candidate : candidates) {
+            if (StringUtils.isBlank(candidate)) {
+                continue;
+            }
+            Object value = row.get(candidate);
+            if (value != null && StringUtils.isNotBlank(String.valueOf(value))) {
+                return value;
+            }
+        }
+        return "未命名节点";
     }
 
     private boolean isRootParent(String parentKey) {

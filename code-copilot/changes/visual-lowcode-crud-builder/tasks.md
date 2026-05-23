@@ -31,6 +31,8 @@
 | Task 12 | 菜单资源、路由与入口收敛 | completed | P0 |
 | Task 13 | 验证、文档与测试 Spec | completed | P0 |
 | Task 14 | 树形单表拓展与 Excel 配置兼容 | completed | P1 |
+| Task 15 | 左树右表引用树与表单业务组件优化 | completed | P1 |
+| Task 16 | 数据源绑定、ER 图与运行态业务选择组件 | completed | P1 |
 
 ---
 
@@ -610,3 +612,63 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 mvn -pl forge-admin-server -am compile -DskipTests
 source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 ```
+
+---
+
+## Task 15: 左树右表引用树与表单业务组件优化
+
+**目标**: 让左树右表模板默认形成可用布局，支持左侧树从引用模型取数，并将表单/详情页配置收敛到系统已有业务组件。
+
+**状态**: completed
+
+**涉及文件**:
+- `page-schema.js`、`ListPageGridDesigner.vue`、`LowcodePageBuilder.vue`、`CanvasFormDesigner.vue`、`BuilderZone.vue`、`ModelFieldTable.vue`、`model-schema.js`、`LowcodePreviewPane.vue` — 左树右表默认布局、树数据模型选择、树形选择/级联选择/上传组件配置与预览。
+- `LowcodeTreeConfig.java`、`LowcodeRuntimeConfigBuilder.java`、`LowcodeSchemaValidator.java`、`DynamicCrudService.java`、`LowcodeAppService.java` — 树源模型、树源表、右表过滤字段、目标字段、引用模型字段校验和运行时转换。
+- `TreeCrudTemplate.vue` — 左树数据归一化为 `key/label/children`，使用 `filterField` 过滤右表，新增时自动回填右表外键字段。
+
+**验收标准**:
+- 切换到左树右表时自动插入左侧导航树，查询、工具栏和数据表默认布局到右侧。
+- 树配置面板可以选择主模型或引用模型作为树数据源，分别配置主键、父级、显示字段和右表过滤字段。
+- 引用模型树不再误报“树形表必须配置父级字段”，父级字段可按字段名、列名或页面引用字段识别。
+- 表单与详情页改用系统业务组件库配置树形选择、级联选择、文件上传、图片上传等组件。
+- 运行态左树从配置的引用表取数，并保证节点名称有 `label/name/title/...` 兜底显示。
+
+**验证**:
+```bash
+mvn -pl forge-admin-server -am compile -DskipTests
+source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm exec eslint src/components/lowcode-builder/model/ModelFieldTable.vue src/components/lowcode-builder/model/model-schema.js src/components/lowcode-builder/page/BuilderZone.vue src/components/lowcode-builder/page/CanvasFormDesigner.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/page/LowcodePageBuilder.vue src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/preview/LowcodePreviewPane.vue src/components/page-templates/TreeCrudTemplate.vue
+source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
+```
+
+---
+
+## Task 16: 数据源绑定、ER 图与运行态业务选择组件
+
+**目标**: 让数据模型显式绑定数据源，模型设计器提供 ER 图检查视图，并让运行态新增/查询表单可直接使用系统组织树、用户列表、区划树和左树右表自动树形下拉。
+
+**状态**: completed
+
+**涉及文件**:
+- `lowcode-models.vue`、`lowcode-crud.js`、`LowcodeSourceTableRef.java` — 模型基础信息新增数据源选择，绑定结果写入 `modelSchema.sourceTable.datasourceId/datasourceName/datasourceCode/dbType`，同步已有表时按数据源过滤并保留表引用。
+- `LowcodeModelDesigner.vue` — 新增 ER 图页签，参考 `er-diagram.html` 的表卡片、字段角色和关系连线呈现当前模型及关联模型。
+- `AiFormItem.vue`、`AiSearch.vue`、`model-schema.js`、`page-schema.js`、`CanvasFormDesigner.vue`、`BuilderZone.vue`、`StructuredListPageDesigner.vue`、`GridBlockRenderer.vue`、`LowcodePreviewPane.vue` — 封装 `dictSelect/orgTreeSelect/userSelect/regionTreeSelect` 等系统业务组件，并纳入模型字段与页面组件选择。
+- `LowcodeRuntimeConfigBuilder.java` — 左树右表运行时对右表 `filterField` 自动生成树形选择配置，新增/查询表单复用 `/ai/crud/{configKey}/tree` 作为下拉树数据源。
+
+**验收标准**:
+- 模型设计页可以选择数据源，保存后模型协议保留数据源信息；同步已有表模型时只展示当前数据源下的表。
+- 左侧业务域与模型列表在大量数据时内部滚动，不挤压右侧设计区域。
+- ER 图页签展示当前模型、关联模型、PK/FK/REF/SYS 字段角色和关系字段映射。
+- 字段组件类型可选择系统业务组件：字典选择器、组织树选择、用户选择、区划树选择、文件上传、图片上传等。
+- 左树右表应用中，新增/查询表单里的右表过滤字段自动成为带数据源的树形下拉；左侧树仍可自动过滤右表和新增默认回填。
+
+**验证**:
+```bash
+mvn -pl forge-admin-server -am compile -DskipTests
+source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm exec eslint src/api/lowcode-crud.js src/views/ai/lowcode-models.vue src/components/ai-form/AiFormItem.vue src/components/ai-form/AiSearch.vue src/components/lowcode-builder/model/LowcodeModelDesigner.vue src/components/lowcode-builder/model/model-schema.js src/components/lowcode-builder/page/CanvasFormDesigner.vue src/components/lowcode-builder/page/BuilderZone.vue src/components/lowcode-builder/page/StructuredListPageDesigner.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/preview/LowcodePreviewPane.vue src/components/page-templates/TreeCrudTemplate.vue
+source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
+```
+
+**结果**:
+- `mvn -pl forge-admin-server -am compile -DskipTests` 通过。
+- 定向 ESLint 通过，仅保留 `StructuredListPageDesigner.vue` 既有单文件多组件 warning。
+- `pnpm build` 通过；输出仍包含项目既有 UnoCSS icon、CSS 注释和 chunk size warning。

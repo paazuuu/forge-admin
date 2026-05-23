@@ -5,6 +5,7 @@
       <span>字段编码</span>
       <span>字段备注</span>
       <span>数据类型</span>
+      <span>表单组件</span>
       <span>长度</span>
       <span>小数位</span>
       <span>是否必填</span>
@@ -66,6 +67,14 @@
             @click.stop
             @update:value="handleDataTypeChange(index, $event)"
           />
+          <n-select
+            :value="element.componentType"
+            :disabled="isLockedSystemField(element)"
+            size="small"
+            :options="componentTypeOptions"
+            @click.stop
+            @update:value="updateField(index, { componentType: $event })"
+          />
           <n-input-number
             :value="element.length"
             :disabled="isLockedSystemField(element)"
@@ -124,7 +133,7 @@
 <script setup>
 import { ReorderFourOutline } from '@vicons/ionicons5'
 import draggable from 'vuedraggable'
-import { camelToSnake, dataTypeOptions, isLockedSystemField, isSystemField, normalizeFieldName } from './model-schema'
+import { camelToSnake, componentTypeOptions, dataTypeOptions, isLockedSystemField, isSystemField, normalizeFieldName } from './model-schema'
 
 const props = defineProps({
   fields: {
@@ -203,6 +212,7 @@ function relationText(field) {
     minmax(132px, 1fr)
     minmax(150px, 0.95fr)
     112px
+    124px
     84px
     84px
     78px
@@ -280,6 +290,6 @@ function relationText(field) {
 
 .table-head,
 .field-row {
-  min-width: 1120px;
+  min-width: 1240px;
 }
 </style>

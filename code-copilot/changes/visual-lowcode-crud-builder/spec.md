@@ -56,6 +56,7 @@
 - [x] 支持版本记录和回滚：每次发布保留快照，回滚后恢复配置并更新菜单。
 - [x] 动态 CRUD 支持导入模板、批量导入和数据导出；导入按 `editSchema` 白名单写入，字典字段支持“标签 -> 值”转换。
 - [x] 支持树形单表：模型协议包含 `appType=TREE/treeConfig`，页面模板支持左树右表，运行时新增 `/ai/crud/{configKey}/tree` 树接口。
+- [x] 左树右表支持引用模型作为左侧树数据源，树源表字段与右侧主表过滤字段解耦。
 - [x] 动态导出兼容后台 Excel 列配置表：当存在同 `configKey` 的列配置时，用其覆盖导出顺序、表头和字典类型；动态查询链路仍保持字段白名单、字典翻译和脱敏。
 - [x] AI 生成接口兼容返回 `modelSchema/pageSchema/options/layoutType`，AI 降级时规则引擎同步生成基础低代码协议。
 - [ ] AI SSE 前端交互升级为展示业务模型和页面布局协议，并允许对选中组件或字段做局部优化。
@@ -74,7 +75,7 @@
 - 删除已发布应用前，如果菜单已被角色授权，仍沿用现有规则禁止直接删除。
 - 在线 DDL 发布必须具备独立权限，例如 `ai:lowcode:deploy-ddl`，并记录操作日志。
 - 第一版支持在线创建新表，不支持业务人员在线删除表；在线改表仅允许受控追加字段，不允许删除/改名字段。
-- 第一版支持标准单表和树形单表，所有字段必须来自同一个业务表。
+- 第一版支持标准单表和树形单表；运行时写入边界仍是主业务表，左树右表允许引用模型作为只读树源并通过主表外键字段过滤右表。
 - 主子表协议字段已预留，但运行时暂不启用，选择 `MASTER_DETAIL` 时返回明确业务异常。
 - 发布菜单默认挂载到 `AI管理` 目录；后续可扩展为管理员选择父菜单。
 - 发布、回滚、删除属于权限影响操作，进入 `/apply` 前需要人工确认。
@@ -94,9 +95,13 @@
   "tableName": "biz_contract",
   "businessName": "合同管理",
   "treeConfig": {
+    "sourceModelCode": "",
+    "sourceTableName": "",
     "keyField": "id",
     "parentField": "parentId",
     "labelField": "name",
+    "filterField": "parentId",
+    "targetField": "id",
     "childrenField": "children",
     "treeTitle": "树形导航"
   },
@@ -209,6 +214,8 @@
 - 动态页面模板继续使用 `catalog + ai_page_template` 双注册机制。
 - 在线建表通过专门 DDL 服务生成和执行，只允许单表 `CREATE TABLE IF NOT EXISTS` 与受控追加字段。
 - 现有 `sys_excel_export_config/sys_excel_column_config` 面向固定 Service Bean + queryMethod 的导出配置；动态 CRUD 不直接复用固定 Bean 导出引擎，但按 `configKey` 读取列配置语义，覆盖动态导出列顺序、表头和字典类型。
+- 数据模型的数据源绑定优先写入 `modelSchema.sourceTable`，不新增模型主表列；运行时和导入同步通过协议中的 `datasourceId/datasourceCode/datasourceName/dbType` 保留来源。
+- 表单/详情页组件库只维护系统真实可运行的业务组件；左树右表的右表过滤字段在运行时自动补齐树形下拉数据源。
 
 ## 11. 执行日志
 | Task | 状态 | 实际改动文件 | 备注 |
@@ -227,6 +234,8 @@
 | Task 12 | done | `V1.0.4__add_visual_lowcode_crud_builder.sql`, `crud-config.vue`, `crud-generator.vue`, `ApiConfigEditor.vue`, `provider.vue`, `model.vue`, `AiCrudConfigGenerateService.java`, `SchemaGenerator.java` | 低代码菜单和权限初始化，旧入口主路径收敛到低代码工作台，JSON/AI/下载保留为技术入口，API 占位符统一为 `:id` |
 | Task 13 | done | `test-spec.md`, `implementation-summary.md`, `forge-docs/guide/lowcode-crud-builder.md` | 补充测试规格、实现总结和使用说明；AI 协议深度升级后续单独迭代 |
 | Task 14 | done | `LowcodeTreeConfig.java`, `LowcodeModelSchema.java`, `LowcodeRuntimeConfigBuilder.java`, `LowcodeSchemaValidator.java`, `DynamicCrudController.java`, `DynamicCrudService.java`, `TreeCrudTemplate.vue`, `LowcodeModelDesigner.vue`, `LowcodePageBuilder.vue`, `ComponentPropertyPanel.vue`, `page-schema.js`, `model-schema.js` | 补齐树形单表协议、左树右表运行时、父级字段隐藏查询/写入、搭建器树形配置入口；主子表协议保留但运行时阻断 |
+| Task 15 | done | `page-schema.js`, `ListPageGridDesigner.vue`, `LowcodePageBuilder.vue`, `CanvasFormDesigner.vue`, `BuilderZone.vue`, `ModelFieldTable.vue`, `model-schema.js`, `LowcodeRuntimeConfigBuilder.java`, `LowcodeSchemaValidator.java`, `DynamicCrudService.java`, `TreeCrudTemplate.vue` | 左树右表支持引用模型树源、右表过滤字段与树源字段解耦；表单/详情页改用系统业务组件库；运行态树节点名称归一化兜底 |
+| Task 16 | done | `lowcode-models.vue`, `LowcodeModelDesigner.vue`, `AiFormItem.vue`, `AiSearch.vue`, `LowcodeRuntimeConfigBuilder.java`, `LowcodeSourceTableRef.java`, `page-schema.js`, `model-schema.js` | 模型绑定数据源、ER 图页签、左侧资产导航滚动承载、系统业务选择组件与左树右表表单树形下拉自动配置 |
 
 ## 12. 审查结论
 待实现后审查。

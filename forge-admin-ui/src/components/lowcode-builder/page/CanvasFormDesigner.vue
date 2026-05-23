@@ -1,43 +1,69 @@
 <template>
   <div class="canvas-designer">
     <div class="canvas-toolbar">
-      <div>
-        <div class="canvas-title">
-          {{ zoneTitle }}
+      <div class="canvas-toolbar-head">
+        <div>
+          <div class="canvas-title">
+            {{ zoneTitle }}
+          </div>
+          <div class="canvas-subtitle">
+            Leafer Canvas · {{ canvasItems.length }} 个组件 · {{ canvas.width }} × {{ canvas.height }}
+          </div>
         </div>
-        <div class="canvas-subtitle">
-          Leafer Canvas · {{ canvasItems.length }} 个组件 · {{ canvas.width }} × {{ canvas.height }}
+        <div class="enable-switch">
+          <span>启用</span>
+          <NSwitch
+            :value="zone?.enabled !== false"
+            size="small"
+            @update:value="handleEnabledChange"
+          />
         </div>
       </div>
-      <n-space size="small" align="center">
-        <NSwitch
-          :value="zone?.enabled !== false"
-          size="small"
-          @update:value="handleEnabledChange"
-        />
-        <NInputNumber
-          :value="canvas.width"
-          :min="720"
-          :max="2000"
-          :step="40"
-          size="small"
-          class="size-input"
-          @update:value="updateCanvasSize('width', $event)"
-        />
-        <span class="size-divider">×</span>
-        <NInputNumber
-          :value="canvas.height"
-          :min="360"
-          :max="1800"
-          :step="40"
-          size="small"
-          class="size-input"
-          @update:value="updateCanvasSize('height', $event)"
-        />
-        <NButton size="small" @click="autoArrange">
+      <div class="canvas-toolbar-actions">
+        <div v-if="showLayoutModes" class="toolbar-group">
+          <span class="toolbar-label">布局</span>
+          <div class="layout-mode-group">
+            <NButton
+              v-for="cols in [1, 2, 3]"
+              :key="cols"
+              size="small"
+              :type="activeLayoutCols === cols ? 'primary' : 'default'"
+              :secondary="activeLayoutCols === cols"
+              @click="applyColumnLayout(cols)"
+            >
+              {{ cols }}列
+            </NButton>
+          </div>
+          <NButton size="small" @click="autoArrange">
+            自动排列
+          </NButton>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">画布</span>
+          <NInputNumber
+            :value="canvas.width"
+            :min="720"
+            :max="2000"
+            :step="40"
+            size="small"
+            class="size-input"
+            @update:value="updateCanvasSize('width', $event)"
+          />
+          <span class="size-divider">×</span>
+          <NInputNumber
+            :value="canvas.height"
+            :min="360"
+            :max="1800"
+            :step="40"
+            size="small"
+            class="size-input"
+            @update:value="updateCanvasSize('height', $event)"
+          />
+        </div>
+        <NButton v-if="!showLayoutModes" size="small" @click="autoArrange">
           自动排列
         </NButton>
-      </n-space>
+      </div>
     </div>
 
     <div
@@ -53,104 +79,20 @@
       >
         <div class="canvas-grid" />
         <div ref="leaferViewRef" class="leafer-layer" />
-        <div class="dom-layer">
-          <div
-            v-for="canvasItem in overlayItems"
-            :key="canvasItem.id"
-            class="canvas-dom-item"
-            :class="{ selected: canvasItem.id === selectedItemId }"
-            :style="resolveItemStyle(canvasItem)"
-          >
-            <div class="item-title">
-              <span>{{ canvasItem.label || resolveComponentTitle(canvasItem.componentKey) }}</span>
-              <span class="item-key">{{ canvasItem.componentKey }}</span>
-            </div>
-
-            <div v-if="isButtonComponent(canvasItem.componentKey)" class="button-preview">
-              <NButton
-                :type="canvasItem.componentKey === 'save-button' || canvasItem.componentKey === 'add-button' ? 'primary' : 'default'"
-                size="small"
-                @click="showActionMessage(canvasItem.label)"
-              >
-                {{ canvasItem.label }}
-              </NButton>
-            </div>
-
-            <div v-else-if="canvasItem.componentKey === 'query-set'" class="query-set-preview">
-              <div class="query-set-head">
-                <span>查询集字段</span>
-                <span>{{ resolveItemFields(canvasItem).length }} 项</span>
-              </div>
-              <div class="query-field-list">
-                <span
-                  v-for="queryField in resolveItemFields(canvasItem).slice(0, 8)"
-                  :key="queryField.field"
-                  class="query-chip"
-                >
-                  {{ queryField.label || queryField.field }}
-                </span>
-                <span v-if="resolveItemFields(canvasItem).length > 8" class="query-more">
-                  +{{ resolveItemFields(canvasItem).length - 8 }}
-                </span>
-              </div>
-            </div>
-
-            <div v-else-if="canvasItem.componentKey === 'data-table'" class="table-preview">
-              <div class="table-head">
-                <span
-                  v-for="tableField in resolveItemFields(canvasItem).slice(0, 5)"
-                  :key="tableField.field"
-                >
-                  {{ tableField.label || tableField.field }}
-                </span>
-              </div>
-              <div class="table-row">
-                <span
-                  v-for="rowField in resolveItemFields(canvasItem).slice(0, 5)"
-                  :key="rowField.field"
-                >
-                  {{ resolveSampleValue(rowField) }}
-                </span>
-              </div>
-              <div class="table-foot">
-                共 {{ resolveItemFields(canvasItem).length }} 列 · 支持列选择和顺序配置
-              </div>
-            </div>
-
-            <div v-else-if="canvasItem.componentKey === 'detail-field'" class="detail-preview">
-              <span class="detail-label">{{ canvasItem.label }}</span>
-              <span class="detail-value">{{ resolveSampleValue(resolveItemField(canvasItem)) }}</span>
-            </div>
-
-            <div v-else class="form-control-preview">
-              <label :style="{ width: `${Number(canvasItem.style?.labelWidth || 86)}px` }">
-                {{ canvasItem.label }}
-              </label>
-              <div class="control-editor" @mousedown.stop>
-                <CanvasPreviewControl
-                  v-model:value="demoModel[canvasItem.fieldRef || canvasItem.id]"
-                  :field="resolveItemField(canvasItem)"
-                  :item="canvasItem"
-                  :options="resolveOptions(resolveItemField(canvasItem))"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NUpload } from 'naive-ui'
-import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { NButton, NInputNumber, NSwitch } from 'naive-ui'
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { getDictData } from '@/composables/useDict'
 import {
   createCanvasItem,
   patchZoneCanvas,
   resolveCanvasComponent,
-  resolveDefaultFieldComponentKey,
+  resolveComponentTypeFromComponentKey,
   resolveZoneTitle,
 } from './page-schema'
 
@@ -171,120 +113,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:zone', 'selectItem'])
 
-const CanvasPreviewControl = defineComponent({
-  name: 'CanvasPreviewControl',
-  props: {
-    value: {
-      type: [String, Number, Boolean, Array, Object],
-      default: null,
-    },
-    field: {
-      type: Object,
-      default: null,
-    },
-    item: {
-      type: Object,
-      required: true,
-    },
-    options: {
-      type: Array,
-      default: () => [],
-    },
-  },
-  emits: ['update:value'],
-  setup(controlProps, { emit }) {
-    const updateValue = value => emit('update:value', value)
-    return () => {
-      const field = controlProps.field || {}
-      const item = controlProps.item || {}
-      const label = item.label || field.label || '字段'
-      const placeholder = item.props?.placeholder || `请输入${label}`
-      const selectPlaceholder = item.props?.placeholder || `请选择${label}`
-      const componentKey = item.componentKey || resolveDefaultFieldComponentKey(field)
-      const componentType = field.componentType
-
-      if (componentKey === 'field-textarea' || componentType === 'textarea') {
-        return h(NInput, {
-          value: controlProps.value,
-          type: 'textarea',
-          rows: 2,
-          placeholder,
-          onUpdateValue: updateValue,
-        })
-      }
-      if (componentKey === 'field-number' || componentType === 'number' || ['int', 'bigint', 'decimal'].includes(field.dataType)) {
-        return h(NInputNumber, {
-          value: controlProps.value,
-          placeholder,
-          showButton: false,
-          style: 'width: 100%',
-          onUpdateValue: updateValue,
-        })
-      }
-      if (componentKey === 'field-date' || componentType === 'date' || field.dataType === 'date') {
-        return h(NDatePicker, {
-          value: controlProps.value,
-          type: 'date',
-          placeholder: selectPlaceholder,
-          style: 'width: 100%',
-          onUpdateValue: updateValue,
-        })
-      }
-      if (componentKey === 'field-datetime' || componentType === 'datetime' || field.dataType === 'datetime') {
-        return h(NDatePicker, {
-          value: controlProps.value,
-          type: 'datetime',
-          placeholder: selectPlaceholder,
-          style: 'width: 100%',
-          onUpdateValue: updateValue,
-        })
-      }
-      if (componentKey === 'field-switch' || componentType === 'switch') {
-        return h(NSwitch, {
-          value: controlProps.value,
-          checkedValue: 1,
-          uncheckedValue: 0,
-          onUpdateValue: updateValue,
-        })
-      }
-      if (componentKey === 'field-upload' || componentType === 'fileUpload' || componentType === 'imageUpload') {
-        return h(NUpload, {
-          defaultUpload: false,
-          showFileList: false,
-          accept: componentType === 'imageUpload' ? 'image/*' : undefined,
-        }, {
-          default: () => h(NButton, { size: 'small' }, { default: () => componentType === 'imageUpload' ? '选择图片' : '选择文件' }),
-        })
-      }
-      if (componentKey === 'field-select' || field.dictType || ['select', 'radio', 'checkbox'].includes(componentType)) {
-        return h(NSelect, {
-          value: controlProps.value,
-          options: controlProps.options,
-          multiple: componentType === 'checkbox',
-          clearable: true,
-          filterable: true,
-          placeholder: selectPlaceholder,
-          onUpdateValue: updateValue,
-        })
-      }
-      return h(NInput, {
-        value: controlProps.value,
-        placeholder,
-        onUpdateValue: updateValue,
-      })
-    }
-  },
-})
-
 const scrollRef = ref(null)
 const boardRef = ref(null)
 const leaferViewRef = ref(null)
-const leaferApp = shallowRef(null)
-const leaferApi = shallowRef(null)
 const liveLayouts = ref({})
-const demoModel = reactive({})
 const dictOptionsMap = ref({})
 const shapeMap = new Map()
+let leaferApp = null
+let leaferApi = null
 let resizeObserver
 let transformTimer = null
 
@@ -292,6 +128,8 @@ const fieldMap = computed(() => new Map(props.fields.map(field => [field.field, 
 const zoneTitle = computed(() => resolveZoneTitle(props.zone?.zoneKey))
 const canvas = computed(() => props.zone?.props?.canvas || { width: 1040, height: 460, snap: 8, items: [] })
 const canvasItems = computed(() => canvas.value.items || [])
+const showLayoutModes = computed(() => ['edit', 'detail'].includes(props.zone?.zoneKey))
+const activeLayoutCols = computed(() => Math.max(1, Math.min(3, resolveCanvasColumnCount(canvasItems.value))))
 const overlayItems = computed(() => {
   return canvasItems.value
     .map(item => ({
@@ -326,7 +164,6 @@ watch(
   () => nextTick(syncEditorSelection),
 )
 
-watch(usedFields, initDemoModel, { immediate: true })
 watch(dictTypes, loadDictOptions, { immediate: true })
 
 onMounted(async () => {
@@ -334,23 +171,26 @@ onMounted(async () => {
   resizeObserver = new ResizeObserver(() => resizeLeafer())
   if (boardRef.value)
     resizeObserver.observe(boardRef.value)
+  window.addEventListener('keydown', handleGlobalKeydown)
 })
 
 onBeforeUnmount(() => {
   if (transformTimer)
     window.clearTimeout(transformTimer)
+  window.removeEventListener('keydown', handleGlobalKeydown)
   resizeObserver?.disconnect()
-  leaferApp.value?.destroy?.()
-  leaferApp.value = null
+  leaferApp?.destroy?.()
+  leaferApp = null
+  leaferApi = null
   shapeMap.clear()
 })
 
 async function initLeafer() {
-  if (!leaferViewRef.value || leaferApp.value)
+  if (!leaferViewRef.value || leaferApp)
     return
   const api = await import('leafer-editor')
-  leaferApi.value = api
-  const app = new api.App({
+  leaferApi = markRaw(api)
+  const app = markRaw(new api.App({
     view: leaferViewRef.value,
     width: canvas.value.width,
     height: canvas.value.height,
@@ -364,15 +204,11 @@ async function initLeafer() {
       stroke: '#2563eb',
       pointFill: '#ffffff',
       pointSize: 7,
-      hover: true,
-      hoverStyle: {
-        stroke: '#2563eb',
-        strokeWidth: 1.5,
-      },
+      hover: false,
     },
-  })
+  }))
 
-  leaferApp.value = app
+  leaferApp = app
   app.editor?.on?.(api.EditorEvent.SELECT, handleEditorSelect)
   app.editor?.on?.(api.EditorMoveEvent.MOVE, handleEditorTransform)
   app.editor?.on?.(api.EditorScaleEvent.SCALE, handleEditorTransform)
@@ -380,8 +216,8 @@ async function initLeafer() {
 }
 
 function renderLeaferItems() {
-  const app = leaferApp.value
-  const api = leaferApi.value
+  const app = leaferApp
+  const api = leaferApi
   if (!app || !api)
     return
 
@@ -390,40 +226,344 @@ function renderLeaferItems() {
   shapeMap.clear()
 
   overlayItems.value.forEach((item) => {
-    const rect = new api.Rect({
+    const group = new api.Group({
       id: item.id,
       x: Number(item.x || 0),
       y: Number(item.y || 0),
       width: Number(item.w || 120),
       height: Number(item.h || 48),
-      fill: item.id === props.selectedItemId ? '#eff6ff' : item.style?.fill || '#ffffff',
-      stroke: item.id === props.selectedItemId ? '#2563eb' : item.style?.stroke || '#cbd5e1',
-      strokeWidth: item.id === props.selectedItemId ? 2 : 1,
-      cornerRadius: Number(item.style?.radius || 6),
       draggable: !item.locked,
       editable: !item.locked,
       cursor: item.locked ? 'default' : 'move',
+      hitChildren: false,
       data: { itemId: item.id },
     })
-    rect.on(api.PointerEvent.TAP, () => {
+    drawCanvasItem(api, group, item)
+    group.on(api.PointerEvent.TAP, () => {
       emit('selectItem', item.id)
-      app.editor?.select?.(rect)
+      app.editor?.select?.(group)
     })
-    rect.on(api.DragEvent.DRAG, () => {
+    group.on(api.DragEvent.DRAG, () => {
       liveLayouts.value = {
         ...liveLayouts.value,
-        [item.id]: readShapeLayout(rect, item),
+        [item.id]: readShapeLayout(group, item),
       }
     })
-    rect.on(api.DragEvent.END, () => {
-      commitShapeLayout(rect, item)
+    group.on(api.DragEvent.END, () => {
+      commitShapeLayout(group, item)
     })
-    shapeMap.set(item.id, rect)
-    layer.add(rect)
+    shapeMap.set(item.id, group)
+    layer.add(group)
   })
 
   resizeLeafer()
   syncEditorSelection()
+}
+
+function drawCanvasItem(api, group, item) {
+  const width = Number(item.w || 120)
+  const height = Number(item.h || 48)
+  const selected = item.id === props.selectedItemId
+  const background = new api.Rect({
+    x: 0,
+    y: 0,
+    width,
+    height,
+    fill: selected ? '#eff6ff' : item.style?.fill || '#ffffff',
+    stroke: selected ? '#2563eb' : item.style?.stroke || '#cbd5e1',
+    strokeWidth: selected ? 2 : 1,
+    cornerRadius: Number(item.style?.radius || 6),
+    editable: false,
+    data: { itemId: item.id },
+  })
+  group.add(background)
+
+  if (isButtonComponent(item.componentKey)) {
+    drawButtonPreview(api, group, item, width, height)
+    return
+  }
+  if (item.componentKey === 'query-set') {
+    drawQuerySetPreview(api, group, item, width)
+    return
+  }
+  if (item.componentKey === 'data-table') {
+    drawTablePreview(api, group, item, width, height)
+    return
+  }
+  if (item.componentKey === 'detail-field') {
+    drawDetailPreview(api, group, item, width, height)
+    return
+  }
+  drawFormFieldPreview(api, group, item, width, height)
+}
+
+function drawButtonPreview(api, group, item, width, height) {
+  const isPrimary = item.componentKey === 'save-button' || item.componentKey === 'add-button'
+  const buttonWidth = Math.min(width - 20, 104)
+  const buttonHeight = Math.min(height - 16, 32)
+  group.add(new api.Rect({
+    x: 10,
+    y: Math.max(8, (height - buttonHeight) / 2),
+    width: buttonWidth,
+    height: buttonHeight,
+    fill: isPrimary ? '#2563eb' : '#ffffff',
+    stroke: isPrimary ? '#2563eb' : '#cbd5e1',
+    cornerRadius: 5,
+    editable: false,
+    data: { itemId: item.id },
+  }))
+  addText(api, group, item.label || resolveComponentTitle(item.componentKey), {
+    x: 10,
+    y: Math.max(8, (height - buttonHeight) / 2) + 8,
+    width: buttonWidth,
+    fill: isPrimary ? '#ffffff' : '#334155',
+    textAlign: 'center',
+    fontWeight: '600',
+  })
+}
+
+function drawQuerySetPreview(api, group, item, width) {
+  addItemHeader(api, group, item, width)
+  const fields = resolveItemFields(item)
+  addText(api, group, `${fields.length} 个查询字段`, {
+    x: width - 116,
+    y: 14,
+    width: 96,
+    fill: '#64748b',
+    textAlign: 'right',
+  })
+  const chipWidth = Math.max(80, Math.floor((width - 52) / 4))
+  fields.slice(0, 8).forEach((field, index) => {
+    const col = index % 4
+    const row = Math.floor(index / 4)
+    const x = 18 + col * (chipWidth + 8)
+    const y = 48 + row * 30
+    group.add(new api.Rect({
+      x,
+      y,
+      width: chipWidth,
+      height: 22,
+      fill: '#f8fafc',
+      stroke: '#dbe3ee',
+      cornerRadius: 11,
+      editable: false,
+      data: { itemId: item.id },
+    }))
+    addText(api, group, field.label || field.field, {
+      x: x + 8,
+      y: y + 5,
+      width: chipWidth - 16,
+      fill: '#475569',
+    })
+  })
+  if (fields.length > 8) {
+    addText(api, group, `+${fields.length - 8}`, {
+      x: width - 50,
+      y: 78,
+      width: 32,
+      fill: '#64748b',
+      textAlign: 'right',
+    })
+  }
+}
+
+function drawTablePreview(api, group, item, width, height) {
+  addItemHeader(api, group, item, width)
+  const fields = resolveItemFields(item).slice(0, 5)
+  const tableX = 16
+  const tableY = 50
+  const tableWidth = width - 32
+  const colWidth = tableWidth / Math.max(fields.length, 1)
+  const rowHeight = 32
+  fields.forEach((field, index) => {
+    const x = tableX + index * colWidth
+    group.add(new api.Rect({
+      x,
+      y: tableY,
+      width: colWidth,
+      height: rowHeight,
+      fill: '#f8fafc',
+      stroke: '#e5e7eb',
+      editable: false,
+      data: { itemId: item.id },
+    }))
+    group.add(new api.Rect({
+      x,
+      y: tableY + rowHeight,
+      width: colWidth,
+      height: rowHeight,
+      fill: '#ffffff',
+      stroke: '#e5e7eb',
+      editable: false,
+      data: { itemId: item.id },
+    }))
+    addText(api, group, field.label || field.field, {
+      x: x + 8,
+      y: tableY + 9,
+      width: colWidth - 16,
+      fill: '#334155',
+      fontWeight: '600',
+    })
+    addText(api, group, resolveSampleValue(field), {
+      x: x + 8,
+      y: tableY + rowHeight + 9,
+      width: colWidth - 16,
+      fill: '#64748b',
+    })
+  })
+  addText(api, group, `共 ${resolveItemFields(item).length} 列`, {
+    x: 16,
+    y: Math.min(height - 28, tableY + rowHeight * 2 + 16),
+    width: width - 32,
+    fill: '#64748b',
+  })
+}
+
+function drawDetailPreview(api, group, item, width, height) {
+  const labelWidth = Math.max(80, Math.min(150, Number(item.style?.labelWidth || 104)))
+  const contentHeight = Math.max(30, height - 20)
+  group.add(new api.Rect({
+    x: 10,
+    y: 10,
+    width: labelWidth,
+    height: contentHeight,
+    fill: '#f8fafc',
+    stroke: '#e5e7eb',
+    cornerRadius: [5, 0, 0, 5],
+    editable: false,
+    data: { itemId: item.id },
+  }))
+  group.add(new api.Rect({
+    x: 10 + labelWidth,
+    y: 10,
+    width: Math.max(40, width - labelWidth - 20),
+    height: contentHeight,
+    fill: '#ffffff',
+    stroke: '#e5e7eb',
+    cornerRadius: [0, 5, 5, 0],
+    editable: false,
+    data: { itemId: item.id },
+  }))
+  addText(api, group, item.label || '字段', {
+    x: 20,
+    y: 10 + contentHeight / 2 - 6,
+    width: labelWidth - 20,
+    fill: '#64748b',
+  })
+  addText(api, group, resolveSampleValue(resolveItemField(item)), {
+    x: 22 + labelWidth,
+    y: 10 + contentHeight / 2 - 6,
+    width: Math.max(24, width - labelWidth - 42),
+    fill: '#0f172a',
+  })
+}
+
+function drawFormFieldPreview(api, group, item, width, height) {
+  const labelWidth = Math.max(60, Math.min(width - 110, Number(item.style?.labelWidth || 86)))
+  addItemHeader(api, group, item, width)
+  addText(api, group, item.label || '字段', {
+    x: 14,
+    y: Math.max(40, height / 2 + 4),
+    width: labelWidth,
+    fill: '#475569',
+  })
+  drawControlSketch(api, group, item, 22 + labelWidth, 40, Math.max(72, width - labelWidth - 36), Math.max(28, height - 52))
+}
+
+function drawControlSketch(api, group, item, x, y, width, height) {
+  const field = resolveItemField(item)
+  const componentType = field.componentType
+  const componentKey = item.componentKey
+  const isSwitch = componentKey === 'field-switch' || componentType === 'switch'
+  const isUpload = componentKey === 'field-upload' || componentType === 'fileUpload' || componentType === 'imageUpload'
+  const isTextarea = componentKey === 'field-textarea' || componentType === 'textarea'
+  const controlHeight = isTextarea ? Math.max(44, height) : Math.min(34, height)
+
+  if (isSwitch) {
+    group.add(new api.Rect({
+      x,
+      y: y + 4,
+      width: 46,
+      height: 24,
+      fill: '#22c55e',
+      cornerRadius: 12,
+      editable: false,
+      data: { itemId: item.id },
+    }))
+    group.add(new api.Ellipse({
+      x: x + 24,
+      y: y + 7,
+      width: 18,
+      height: 18,
+      fill: '#ffffff',
+      editable: false,
+      data: { itemId: item.id },
+    }))
+    return
+  }
+
+  group.add(new api.Rect({
+    x,
+    y,
+    width,
+    height: controlHeight,
+    fill: '#ffffff',
+    stroke: '#dbe3ee',
+    cornerRadius: 5,
+    editable: false,
+    data: { itemId: item.id },
+  }))
+  addText(api, group, resolveControlText(item, field, isUpload), {
+    x: x + 10,
+    y: y + 9,
+    width: width - 20,
+    fill: isUpload ? '#1d4ed8' : '#94a3b8',
+  })
+  if (['field-select', 'field-dict-select', 'field-tree-select', 'field-org-tree-select', 'field-user-select', 'field-region-tree-select', 'field-cascader'].includes(componentKey)
+    || field.dictType || ['select', 'radio', 'checkbox', 'dictSelect', 'treeSelect', 'orgTreeSelect', 'userSelect', 'regionTreeSelect', 'cascader'].includes(componentType)) {
+    addText(api, group, 'v', {
+      x: x + width - 24,
+      y: y + 8,
+      width: 14,
+      fill: '#94a3b8',
+      textAlign: 'center',
+      fontWeight: '600',
+    })
+  }
+}
+
+function addItemHeader(api, group, item, width) {
+  addText(api, group, item.label || resolveComponentTitle(item.componentKey), {
+    x: 14,
+    y: 13,
+    width: Math.max(40, width - 116),
+    fill: '#0f172a',
+    fontWeight: '700',
+  })
+  addText(api, group, resolveComponentTitle(item.componentKey), {
+    x: Math.max(14, width - 98),
+    y: 14,
+    width: 84,
+    fill: '#94a3b8',
+    textAlign: 'right',
+    fontSize: 10,
+  })
+}
+
+function addText(api, group, text, attrs = {}) {
+  group.add(new api.Text({
+    text: truncateText(text, attrs.maxChars || 24),
+    x: attrs.x || 0,
+    y: attrs.y || 0,
+    width: attrs.width || 120,
+    height: attrs.height || 16,
+    fill: attrs.fill || '#334155',
+    fontSize: attrs.fontSize || 12,
+    fontWeight: attrs.fontWeight || '400',
+    textAlign: attrs.textAlign || 'left',
+    textOverflow: 'ellipsis',
+    editable: false,
+  }))
 }
 
 function handleEditorSelect(event) {
@@ -434,7 +574,7 @@ function handleEditorSelect(event) {
 }
 
 function handleEditorTransform(event) {
-  const target = event.target || leaferApp.value?.editor?.getItem?.()
+  const target = event.target || leaferApp?.editor?.getItem?.()
   const itemId = target?.data?.itemId || target?.id
   const item = canvasItems.value.find(canvasItem => canvasItem.id === itemId)
   if (!target || !item)
@@ -449,7 +589,7 @@ function handleEditorTransform(event) {
 }
 
 function syncEditorSelection() {
-  const app = leaferApp.value
+  const app = leaferApp
   if (!app?.editor)
     return
   const shape = props.selectedItemId ? shapeMap.get(props.selectedItemId) : null
@@ -460,7 +600,7 @@ function syncEditorSelection() {
 }
 
 function resizeLeafer() {
-  leaferApp.value?.resize?.({
+  leaferApp?.resize?.({
     width: canvas.value.width || 1040,
     height: canvas.value.height || 460,
   })
@@ -540,6 +680,10 @@ function handleEnabledChange(value) {
 }
 
 function autoArrange() {
+  if (showLayoutModes.value) {
+    applyColumnLayout(activeLayoutCols.value)
+    return
+  }
   const nextItems = canvasItems.value.map((item, index) => {
     if (isButtonComponent(item.componentKey)) {
       const buttonIndex = canvasItems.value.slice(0, index).filter(prev => isButtonComponent(prev.componentKey)).length
@@ -561,19 +705,70 @@ function autoArrange() {
   updateCanvasItems(nextItems)
 }
 
-function resolveNextZIndex() {
-  return Math.max(0, ...canvasItems.value.map(item => Number(item.zIndex || 0))) + 1
+function applyColumnLayout(cols) {
+  if (!props.zone)
+    return
+  const columnCount = Math.max(1, Math.min(3, Number(cols || 1)))
+  const paddingX = 32
+  const gapX = 24
+  const startY = 36
+  const rowGap = props.zone.zoneKey === 'detail' ? 16 : 22
+  const availableWidth = Number(canvas.value.width || 1040) - paddingX * 2 - gapX * (columnCount - 1)
+  const columnWidth = Math.max(220, Math.floor(availableWidth / columnCount))
+  const fieldItems = sortCanvasItemsByPosition(canvasItems.value.filter(item => item.fieldRef))
+  const fieldOrderMap = new Map(fieldItems.map((item, index) => [item.id, index]))
+  const fieldHeights = fieldItems
+    .map(item => Number(item.h || (item.componentKey === 'field-textarea' ? 98 : item.componentKey === 'detail-field' ? 58 : 64)))
+  const rowHeights = []
+  fieldHeights.forEach((height, index) => {
+    const row = Math.floor(index / columnCount)
+    rowHeights[row] = Math.max(rowHeights[row] || 0, height)
+  })
+  const rowOffsets = rowHeights.reduce((offsets, height, index) => {
+    offsets[index] = index === 0 ? startY : offsets[index - 1] + rowHeights[index - 1] + rowGap
+    return offsets
+  }, [])
+  let maxBottom = startY
+  const nextItems = canvasItems.value.map((item, index) => {
+    if (!item.fieldRef)
+      return { ...item, zIndex: index + 1 }
+    const fieldIndex = fieldOrderMap.get(item.id) ?? index
+    const row = Math.floor(fieldIndex / columnCount)
+    const col = fieldIndex % columnCount
+    const height = Number(item.h || (item.componentKey === 'field-textarea' ? 98 : item.componentKey === 'detail-field' ? 58 : 64))
+    const y = rowOffsets[row] || startY
+    maxBottom = Math.max(maxBottom, y + height)
+    return {
+      ...item,
+      x: paddingX + col * (columnWidth + gapX),
+      y,
+      w: columnWidth,
+      h: height,
+      zIndex: index + 1,
+    }
+  })
+  emit('update:zone', patchZoneCanvas(props.zone, {
+    ...canvas.value,
+    height: Math.max(420, maxBottom + 48),
+    items: nextItems,
+  }))
 }
 
-function resolveItemStyle(item) {
-  return {
-    left: `${Number(item.x || 0)}px`,
-    top: `${Number(item.y || 0)}px`,
-    width: `${Number(item.w || 120)}px`,
-    height: `${Number(item.h || 48)}px`,
-    zIndex: Number(item.zIndex || 1) + 5,
-    borderRadius: `${Number(item.style?.radius || 6)}px`,
-  }
+function handleGlobalKeydown(event) {
+  if (!['Delete', 'Backspace'].includes(event.key) || !props.selectedItemId)
+    return
+  if (isTypingTarget(event.target))
+    return
+  const selectedItem = canvasItems.value.find(item => item.id === props.selectedItemId)
+  if (!selectedItem)
+    return
+  event.preventDefault()
+  updateCanvasItems(canvasItems.value.filter(item => item.id !== props.selectedItemId))
+  emit('selectItem', '')
+}
+
+function resolveNextZIndex() {
+  return Math.max(0, ...canvasItems.value.map(item => Number(item.zIndex || 0))) + 1
 }
 
 function resolveComponentTitle(componentKey) {
@@ -584,7 +779,7 @@ function resolveItemField(item) {
   return fieldMap.value.get(item.fieldRef) || {
     field: item.fieldRef || item.id,
     label: item.label,
-    componentType: item.componentKey?.replace('field-', '') || 'input',
+    componentType: resolveComponentTypeFromComponentKey(item.componentKey, 'input'),
   }
 }
 
@@ -601,20 +796,37 @@ function isButtonComponent(componentKey) {
   return ['import-button', 'export-button', 'custom-query', 'add-button', 'save-button', 'reset-button'].includes(componentKey)
 }
 
-function initDemoModel() {
-  usedFields.value.forEach((field) => {
-    if (demoModel[field.field] !== undefined)
-      return
-    if (field.componentType === 'checkbox') {
-      demoModel[field.field] = []
-    }
-    else if (field.componentType === 'switch') {
-      demoModel[field.field] = 1
-    }
-    else {
-      demoModel[field.field] = null
-    }
+function resolveCanvasColumnCount(items = []) {
+  const columns = []
+  ;(items || [])
+    .filter(item => item.fieldRef)
+    .sort((a, b) => Number(a.x || 0) - Number(b.x || 0))
+    .forEach((item) => {
+      const x = Number(item.x || 0)
+      if (!columns.some(colX => Math.abs(colX - x) < 80))
+        columns.push(x)
+    })
+  return columns.length || 1
+}
+
+function sortCanvasItemsByPosition(items = []) {
+  return [...items].sort((a, b) => {
+    const rowA = Math.round(Number(a.y || 0) / 16)
+    const rowB = Math.round(Number(b.y || 0) / 16)
+    if (rowA !== rowB)
+      return rowA - rowB
+    const xDiff = Number(a.x || 0) - Number(b.x || 0)
+    if (xDiff !== 0)
+      return xDiff
+    return Number(a.zIndex || 0) - Number(b.zIndex || 0)
   })
+}
+
+function isTypingTarget(target) {
+  const tagName = target?.tagName?.toLowerCase()
+  return ['input', 'textarea', 'select'].includes(tagName)
+    || target?.isContentEditable
+    || Boolean(target?.closest?.('[contenteditable="true"], .n-input, .n-input-number'))
 }
 
 async function loadDictOptions(types) {
@@ -651,21 +863,39 @@ function resolveSampleValue(field) {
   return field.label ? `${field.label}示例` : '示例数据'
 }
 
-function showActionMessage(label) {
-  window.$message?.info(`${label}为画布交互预览，发布后接入运行时接口`)
-}
-
 function snapValue(value) {
   const snap = Number(canvas.value.snap || 8)
   return Math.round(Number(value || 0) / snap) * snap
+}
+
+function resolveControlText(item, field, isUpload) {
+  if (isUpload)
+    return field.componentType === 'imageUpload' ? '选择图片' : '选择文件'
+  if (item.componentKey === 'field-date' || field.componentType === 'date')
+    return '选择日期'
+  if (item.componentKey === 'field-datetime' || field.componentType === 'datetime')
+    return '选择日期时间'
+  if (item.componentKey === 'field-number' || field.componentType === 'number')
+    return '数字输入'
+  if (item.componentKey === 'field-select' || item.componentKey === 'field-dict-select' || field.dictType)
+    return item.props?.placeholder || `请选择${item.label || field.label || '选项'}`
+  return item.props?.placeholder || `请输入${item.label || field.label || '内容'}`
+}
+
+function truncateText(value, maxChars = 24) {
+  const text = String(value || '')
+  if (text.length <= maxChars)
+    return text
+  return `${text.slice(0, maxChars - 3)}...`
 }
 </script>
 
 <style scoped>
 .canvas-designer {
+  height: 640px;
   min-height: 640px;
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr);
+  grid-template-rows: 92px minmax(0, 1fr);
   border: 1px solid #dbe3ee;
   border-radius: 8px;
   background: #f8fafc;
@@ -673,13 +903,53 @@ function snapValue(value) {
 }
 
 .canvas-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 14px;
+  display: grid;
+  grid-template-rows: 40px 42px;
+  gap: 4px;
+  padding: 6px 14px 8px;
   background: #ffffff;
   border-bottom: 1px solid #dbe3ee;
+}
+
+.canvas-toolbar-head,
+.canvas-toolbar-actions,
+.toolbar-group,
+.enable-switch {
+  display: flex;
+  align-items: center;
+}
+
+.canvas-toolbar-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.canvas-toolbar-actions {
+  justify-content: space-between;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.canvas-toolbar-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.toolbar-group {
+  flex: 0 0 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toolbar-label,
+.enable-switch span {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.enable-switch {
+  gap: 8px;
 }
 
 .canvas-title {
@@ -695,15 +965,25 @@ function snapValue(value) {
 }
 
 .size-input {
-  width: 92px;
+  width: 84px;
 }
 
 .size-divider {
   color: #94a3b8;
 }
 
+.layout-mode-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
 .canvas-scroll {
-  min-height: 588px;
+  min-height: 0;
   overflow: auto;
   padding: 18px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.8), rgba(241, 245, 249, 0.95)), #f1f5f9;
@@ -718,8 +998,7 @@ function snapValue(value) {
 }
 
 .canvas-grid,
-.leafer-layer,
-.dom-layer {
+.leafer-layer {
   position: absolute;
   inset: 0;
 }
@@ -734,175 +1013,5 @@ function snapValue(value) {
 
 .leafer-layer {
   z-index: 1;
-}
-
-.dom-layer {
-  z-index: 2;
-  pointer-events: none;
-}
-
-.canvas-dom-item {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 9px 10px;
-  pointer-events: none;
-  color: #0f172a;
-  min-width: 0;
-}
-
-.canvas-dom-item.selected .item-title {
-  color: #1d4ed8;
-}
-
-.item-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 16px;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.item-title span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.item-key {
-  flex: none;
-  color: #94a3b8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-.button-preview {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  pointer-events: auto;
-}
-
-.query-set-preview,
-.table-preview {
-  display: grid;
-  gap: 8px;
-  min-height: 0;
-}
-
-.query-set-head,
-.table-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.query-field-list {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.query-chip,
-.query-more {
-  max-width: 112px;
-  padding: 3px 7px;
-  border: 1px solid #dbe3ee;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.table-head,
-.table-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  border-left: 1px solid #e5e7eb;
-  border-top: 1px solid #e5e7eb;
-}
-
-.table-head span,
-.table-row span {
-  min-height: 32px;
-  padding: 7px 8px;
-  border-right: 1px solid #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
-.table-head span {
-  background: #f8fafc;
-  color: #334155;
-  font-weight: 700;
-}
-
-.table-row span {
-  color: #64748b;
-}
-
-.detail-preview {
-  display: grid;
-  grid-template-columns: minmax(72px, 34%) minmax(0, 1fr);
-  align-items: center;
-  min-height: 32px;
-  border: 1px solid #e5e7eb;
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.detail-label,
-.detail-value {
-  padding: 7px 9px;
-  font-size: 12px;
-}
-
-.detail-label {
-  background: #f8fafc;
-  color: #64748b;
-}
-
-.detail-value {
-  color: #0f172a;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.form-control-preview {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.form-control-preview label {
-  flex: none;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.control-editor {
-  flex: 1;
-  min-width: 0;
-  pointer-events: auto;
 }
 </style>

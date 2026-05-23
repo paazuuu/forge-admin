@@ -14,6 +14,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -56,9 +57,9 @@ public class LowcodeRuntimeConfigBuilder {
         runtimeConfig.setLayoutType(StringUtils.defaultIfBlank(pageSchema.getLayoutType(), "simple-crud"));
 
         try {
-            runtimeConfig.setSearchSchema(objectMapper.writeValueAsString(buildSearchSchema(modelSchema, pageSchema)));
+            runtimeConfig.setSearchSchema(objectMapper.writeValueAsString(buildSearchSchema(configKey, modelSchema, pageSchema)));
             runtimeConfig.setColumnsSchema(objectMapper.writeValueAsString(buildColumnsSchema(modelSchema, pageSchema)));
-            runtimeConfig.setEditSchema(objectMapper.writeValueAsString(buildEditSchema(modelSchema, pageSchema)));
+            runtimeConfig.setEditSchema(objectMapper.writeValueAsString(buildEditSchema(configKey, modelSchema, pageSchema)));
             runtimeConfig.setApiConfig(objectMapper.writeValueAsString(buildApiConfig(configKey, modelSchema, pageSchema)));
             runtimeConfig.setOptions(objectMapper.writeValueAsString(buildOptions(modelSchema, pageSchema)));
             runtimeConfig.setDictConfig(objectMapper.writeValueAsString(buildDictConfig(modelSchema)));
@@ -71,12 +72,13 @@ public class LowcodeRuntimeConfigBuilder {
         }
     }
 
-    private List<Map<String, Object>> buildSearchSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+    private List<Map<String, Object>> buildSearchSchema(String configKey, LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
         List<Map<String, Object>> fields = resolveFields(modelSchema, pageSchema, "search", field -> Boolean.TRUE.equals(field.getSearchable()))
                 .stream()
                 .map(field -> buildSearchField(field, resolveFieldSetting(pageSchema, "search", field.getField())))
                 .collect(Collectors.toCollection(ArrayList::new));
         appendTreeRuntimeField(fields, modelSchema, pageSchema, "search");
+        decorateTreeRuntimeFields(fields, configKey, modelSchema, pageSchema);
         return fields;
     }
 
@@ -100,15 +102,21 @@ public class LowcodeRuntimeConfigBuilder {
         return columns;
     }
 
-    private List<Map<String, Object>> buildEditSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+    private List<Map<String, Object>> buildEditSchema(String configKey, LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
         Set<String> childFieldRefs = isMasterDetailRuntime(pageSchema) ? buildChildFieldRefs(pageSchema) : Set.of();
-        List<Map<String, Object>> fields = resolveFields(modelSchema, pageSchema, "edit",
-                field -> field.getFormVisible() == null || Boolean.TRUE.equals(field.getFormVisible()))
+        List<LowcodeFieldSchema> orderedFields = sortByCanvasOrder(
+                resolveFields(modelSchema, pageSchema, "edit",
+                        field -> field.getFormVisible() == null || Boolean.TRUE.equals(field.getFormVisible())),
+                pageSchema,
+                "edit"
+        );
+        List<Map<String, Object>> fields = orderedFields
                 .stream()
                 .filter(field -> !childFieldRefs.contains(field.getField()))
                 .map(field -> buildEditField(field, resolveEditFieldSetting(pageSchema, field.getField())))
                 .collect(Collectors.toCollection(ArrayList::new));
         appendTreeRuntimeField(fields, modelSchema, pageSchema, "edit");
+        decorateTreeRuntimeFields(fields, configKey, modelSchema, pageSchema);
         return fields;
     }
 
@@ -150,13 +158,21 @@ public class LowcodeRuntimeConfigBuilder {
             options.put("masterDetailConfig", buildMasterDetailConfig(modelSchema, pageSchema));
         }
         if (isTreeRuntime(modelSchema, pageSchema)) {
-            options.put("treeConfig", buildTreeConfig(modelSchema, extractTreeConfigOverrides(pageSchema)));
+            options.put("treeConfig", buildTreeConfig(modelSchema, pageSchema, extractTreeConfigOverrides(pageSchema)));
         }
         return options;
     }
 
     private int resolveEditGridCols(LowcodePageSchema pageSchema) {
         int cols = 1;
+        LowcodePageZone editZone = findZone(pageSchema, "edit");
+        if (editZone != null && editZone.getProps() != null) {
+            Integer configuredCols = integerValue(editZone.getProps().get("editGridCols"));
+            if (configuredCols != null && configuredCols > 0) {
+                return Math.max(1, Math.min(3, configuredCols));
+            }
+            cols = Math.max(cols, resolveCanvasGridCols(editZone));
+        }
         for (Map<String, Object> rule : extractFormRules(pageSchema)) {
             Object col = rule.get("col");
             if (!(col instanceof Map<?, ?> colMap)) {
@@ -166,9 +182,76 @@ public class LowcodeRuntimeConfigBuilder {
             if (span == null || span <= 0 || span >= 24) {
                 continue;
             }
-            cols = Math.max(cols, Math.min(4, Math.max(1, (int) Math.ceil(24.0 / span))));
+            cols = Math.max(cols, Math.min(3, Math.max(1, (int) Math.ceil(24.0 / span))));
         }
         return cols;
+    }
+
+    @SuppressWarnings("unchecked")
+    private int resolveCanvasGridCols(LowcodePageZone editZone) {
+        List<Map<String, Object>> items = extractCanvasItems(editZone);
+        if (items.isEmpty()) {
+            return 1;
+        }
+        List<Integer> columns = new ArrayList<>();
+        items.stream()
+                .filter(item -> StringUtils.isNotBlank(text(item.get("fieldRef"))))
+                .sorted(Comparator.comparingInt(item -> intValue(item.get("x"), 0)))
+                .forEach(item -> {
+                    int x = intValue(item.get("x"), 0);
+                    boolean exists = columns.stream().anyMatch(columnX -> Math.abs(columnX - x) < 80);
+                    if (!exists) {
+                        columns.add(x);
+                    }
+                });
+        return Math.max(1, Math.min(3, columns.isEmpty() ? 1 : columns.size()));
+    }
+
+    private List<LowcodeFieldSchema> sortByCanvasOrder(List<LowcodeFieldSchema> fields,
+                                                       LowcodePageSchema pageSchema,
+                                                       String zoneKey) {
+        if (fields == null || fields.size() <= 1) {
+            return fields == null ? List.of() : fields;
+        }
+        LowcodePageZone zone = findZone(pageSchema, zoneKey);
+        List<Map<String, Object>> items = extractCanvasItems(zone);
+        if (items.isEmpty()) {
+            return fields;
+        }
+        Map<String, LowcodeFieldSchema> fieldMap = fields.stream()
+                .collect(Collectors.toMap(
+                        LowcodeFieldSchema::getField,
+                        field -> field,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        List<LowcodeFieldSchema> ordered = new ArrayList<>();
+        items.stream()
+                .sorted(this::compareCanvasItemPosition)
+                .map(item -> text(item.get("fieldRef")))
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .forEach(fieldRef -> {
+                    LowcodeFieldSchema field = fieldMap.remove(fieldRef);
+                    if (field != null) {
+                        ordered.add(field);
+                    }
+                });
+        ordered.addAll(fieldMap.values());
+        return ordered;
+    }
+
+    private int compareCanvasItemPosition(Map<String, Object> left, Map<String, Object> right) {
+        int leftRow = Math.round(intValue(left.get("y"), 0) / 16.0f);
+        int rightRow = Math.round(intValue(right.get("y"), 0) / 16.0f);
+        if (leftRow != rightRow) {
+            return Integer.compare(leftRow, rightRow);
+        }
+        int xCompare = Integer.compare(intValue(left.get("x"), 0), intValue(right.get("x"), 0));
+        if (xCompare != 0) {
+            return xCompare;
+        }
+        return Integer.compare(intValue(left.get("zIndex"), 0), intValue(right.get("zIndex"), 0));
     }
 
     private List<Map<String, Object>> buildJoinConfig(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
@@ -442,27 +525,62 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> buildTreeConfig(LowcodeModelSchema modelSchema, Object overrides) {
+    private Map<String, Object> buildTreeConfig(LowcodeModelSchema modelSchema,
+                                                LowcodePageSchema pageSchema,
+                                                Object overrides) {
         Map<String, Object> treeConfig = new LinkedHashMap<>();
         if (modelSchema.getTreeConfig() != null) {
+            putIfNotBlank(treeConfig, "sourceModelCode", modelSchema.getTreeConfig().getSourceModelCode());
+            putIfNotBlank(treeConfig, "sourceModelName", modelSchema.getTreeConfig().getSourceModelName());
+            putIfNotBlank(treeConfig, "sourceTableName", modelSchema.getTreeConfig().getSourceTableName());
             putIfNotBlank(treeConfig, "keyField", modelSchema.getTreeConfig().getKeyField());
             putIfNotBlank(treeConfig, "parentField", modelSchema.getTreeConfig().getParentField());
             putIfNotBlank(treeConfig, "labelField", modelSchema.getTreeConfig().getLabelField());
+            putIfNotBlank(treeConfig, "filterField", modelSchema.getTreeConfig().getFilterField());
+            putIfNotBlank(treeConfig, "targetField", modelSchema.getTreeConfig().getTargetField());
             putIfNotBlank(treeConfig, "childrenField", modelSchema.getTreeConfig().getChildrenField());
             putIfNotBlank(treeConfig, "treeTitle", modelSchema.getTreeConfig().getTreeTitle());
         }
         if (overrides instanceof Map<?, ?> map) {
+            putIfNotBlank(treeConfig, "sourceModelCode", text(map.get("sourceModelCode")));
+            putIfNotBlank(treeConfig, "sourceModelName", text(map.get("sourceModelName")));
+            putIfNotBlank(treeConfig, "sourceTableName", text(map.get("sourceTableName")));
             putIfNotBlank(treeConfig, "keyField", text(map.get("keyField")));
             putIfNotBlank(treeConfig, "parentField", text(map.get("parentField")));
             putIfNotBlank(treeConfig, "labelField", text(map.get("labelField")));
+            putIfNotBlank(treeConfig, "filterField", text(map.get("filterField")));
+            putIfNotBlank(treeConfig, "targetField", text(map.get("targetField")));
             putIfNotBlank(treeConfig, "childrenField", text(map.get("childrenField")));
             putIfNotBlank(treeConfig, "treeTitle", text(map.get("treeTitle")));
         }
+        LowcodePageModelRef sourceRef = resolveTreeSourceRef(pageSchema, text(treeConfig.get("sourceModelCode")));
+        if (sourceRef != null) {
+            putIfNotBlank(treeConfig, "sourceModelCode", sourceRef.getModelCode());
+            putIfNotBlank(treeConfig, "sourceModelName", sourceRef.getModelName());
+            putIfNotBlank(treeConfig, "sourceTableName", sourceRef.getTableName());
+            normalizeTreeSourceField(treeConfig, "keyField", sourceRef);
+            normalizeTreeSourceField(treeConfig, "parentField", sourceRef);
+            normalizeTreeSourceField(treeConfig, "labelField", sourceRef);
+            normalizeTreeSourceField(treeConfig, "targetField", sourceRef);
+        }
         treeConfig.putIfAbsent("keyField", "id");
-        treeConfig.putIfAbsent("parentField", inferTreeParentField(modelSchema));
-        treeConfig.putIfAbsent("labelField", inferTreeLabelField(modelSchema));
+        treeConfig.putIfAbsent("parentField", inferTreeParentField(modelSchema, sourceRef));
+        treeConfig.putIfAbsent("labelField", inferTreeLabelField(modelSchema, sourceRef));
+        LowcodeRelationSchema relation = sourceRef == null || Boolean.TRUE.equals(sourceRef.getPrimary())
+                ? null
+                : resolveRuntimeRelation(resolveTreePrimaryModelCode(modelSchema, pageSchema),
+                sourceRef,
+                resolvePrimaryTreeRelations(modelSchema, pageSchema));
+        treeConfig.putIfAbsent("filterField", relation == null
+                ? text(treeConfig.get("parentField"))
+                : relation.getSourceField());
+        treeConfig.putIfAbsent("targetField", relation == null
+                ? text(treeConfig.get("keyField"))
+                : relation.getTargetField());
+        normalizePrimaryTreeField(treeConfig, "filterField", modelSchema);
         treeConfig.putIfAbsent("childrenField", "children");
-        treeConfig.putIfAbsent("treeTitle", StringUtils.defaultIfBlank(modelSchema.getBusinessName(), "树形导航"));
+        String defaultTreeTitle = StringUtils.defaultIfBlank(text(treeConfig.get("sourceModelName")), modelSchema.getBusinessName());
+        treeConfig.putIfAbsent("treeTitle", StringUtils.isBlank(defaultTreeTitle) ? "树形导航" : defaultTreeTitle + "树");
         return treeConfig;
     }
 
@@ -470,20 +588,112 @@ public class LowcodeRuntimeConfigBuilder {
         return value == null ? null : String.valueOf(value);
     }
 
-    private String inferTreeParentField(LowcodeModelSchema modelSchema) {
-        return modelSchema.getFields().stream()
-                .map(LowcodeFieldSchema::getField)
+    private String inferTreeParentField(LowcodeModelSchema modelSchema, LowcodePageModelRef sourceRef) {
+        return treeSourceFields(modelSchema, sourceRef).stream()
                 .filter(field -> "parentId".equals(field) || "pid".equals(field) || "parentCode".equals(field))
                 .findFirst()
                 .orElse("parentId");
     }
 
-    private String inferTreeLabelField(LowcodeModelSchema modelSchema) {
-        return modelSchema.getFields().stream()
-                .map(LowcodeFieldSchema::getField)
+    private String inferTreeLabelField(LowcodeModelSchema modelSchema, LowcodePageModelRef sourceRef) {
+        List<String> fields = treeSourceFields(modelSchema, sourceRef);
+        return fields.stream()
                 .filter(field -> "name".equals(field) || "title".equals(field) || "label".equals(field))
                 .findFirst()
-                .orElseGet(() -> modelSchema.getFields().isEmpty() ? "name" : modelSchema.getFields().get(0).getField());
+                .orElseGet(() -> fields.isEmpty() ? "name" : fields.get(0));
+    }
+
+    private LowcodePageModelRef resolveTreeSourceRef(LowcodePageSchema pageSchema, String sourceModelCode) {
+        if (pageSchema == null || pageSchema.getModelRefs() == null || pageSchema.getModelRefs().isEmpty()) {
+            return null;
+        }
+        if (StringUtils.isNotBlank(sourceModelCode)) {
+            for (LowcodePageModelRef ref : pageSchema.getModelRefs()) {
+                if (ref != null && sourceModelCode.equals(ref.getModelCode())) {
+                    return ref;
+                }
+            }
+        }
+        return pageSchema.getModelRefs().stream()
+                .filter(ref -> ref != null && !Boolean.TRUE.equals(ref.getPrimary()))
+                .findFirst()
+                .orElseGet(() -> pageSchema.getModelRefs().stream()
+                        .filter(ref -> ref != null && Boolean.TRUE.equals(ref.getPrimary()))
+                        .findFirst()
+                        .orElse(pageSchema.getModelRefs().get(0)));
+    }
+
+    private List<String> treeSourceFields(LowcodeModelSchema modelSchema, LowcodePageModelRef sourceRef) {
+        if (sourceRef != null && sourceRef.getFields() != null && !sourceRef.getFields().isEmpty()) {
+            return sourceRef.getFields().stream()
+                    .map(field -> StringUtils.defaultIfBlank(text(field.get("sourceField")), text(field.get("field"))))
+                    .filter(StringUtils::isNotBlank)
+                    .toList();
+        }
+        return modelSchema.getFields().stream()
+                .map(LowcodeFieldSchema::getField)
+                .filter(StringUtils::isNotBlank)
+                .toList();
+    }
+
+    private void normalizeTreeSourceField(Map<String, Object> treeConfig, String key, LowcodePageModelRef sourceRef) {
+        String value = text(treeConfig.get(key));
+        if (StringUtils.isBlank(value) || sourceRef == null || sourceRef.getFields() == null) {
+            return;
+        }
+        String normalized = resolveRefSourceField(sourceRef, value);
+        if (StringUtils.isNotBlank(normalized)) {
+            treeConfig.put(key, normalized);
+        }
+    }
+
+    private void normalizePrimaryTreeField(Map<String, Object> treeConfig, String key, LowcodeModelSchema modelSchema) {
+        String value = text(treeConfig.get(key));
+        if (StringUtils.isBlank(value)) {
+            return;
+        }
+        for (LowcodeFieldSchema field : modelSchema.getFields()) {
+            if (value.equals(field.getField()) || value.equals(field.getColumnName())) {
+                treeConfig.put(key, field.getField());
+                return;
+            }
+        }
+    }
+
+    private String resolveRefSourceField(LowcodePageModelRef ref, String value) {
+        for (Map<String, Object> field : ref.getFields()) {
+            String sourceField = StringUtils.defaultIfBlank(text(field.get("sourceField")), text(field.get("field")));
+            String fieldRef = StringUtils.defaultIfBlank(text(field.get("fieldRef")), sourceField);
+            String columnName = text(field.get("columnName"));
+            if (value.equals(sourceField)
+                    || value.equals(fieldRef)
+                    || value.equals(columnName)
+                    || value.equals(ref.getModelCode() + "__" + sourceField)
+                    || value.equals(ref.getModelCode() + "." + sourceField)) {
+                return sourceField;
+            }
+        }
+        return value;
+    }
+
+    private String resolveTreePrimaryModelCode(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+        String code = pageSchema == null ? null : pageSchema.getPrimaryModelCode();
+        if (StringUtils.isNotBlank(code)) {
+            return code;
+        }
+        LowcodePageModelRef primaryRef = resolvePrimaryRef(modelSchema, pageSchema);
+        if (primaryRef != null && StringUtils.isNotBlank(primaryRef.getModelCode())) {
+            return primaryRef.getModelCode();
+        }
+        return modelSchema.getObject() == null ? null : modelSchema.getObject().getCode();
+    }
+
+    private List<LowcodeRelationSchema> resolvePrimaryTreeRelations(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
+        LowcodePageModelRef primaryRef = resolvePrimaryRef(modelSchema, pageSchema);
+        if (primaryRef != null && primaryRef.getRelations() != null && !primaryRef.getRelations().isEmpty()) {
+            return primaryRef.getRelations();
+        }
+        return modelSchema.getRelations();
     }
 
     private void putIfNotBlank(Map<String, Object> target, String key, String value) {
@@ -499,15 +709,15 @@ public class LowcodeRuntimeConfigBuilder {
         if (!isTreeRuntime(modelSchema, pageSchema)) {
             return;
         }
-        String parentField = String.valueOf(buildTreeConfig(modelSchema, extractTreeConfigOverrides(pageSchema)).get("parentField"));
-        boolean exists = fields.stream().anyMatch(item -> parentField.equals(item.get("field"))
-                || parentField.equals(item.get("prop"))
-                || parentField.equals(item.get("dataIndex"))
-                || parentField.equals(item.get("key")));
+        String filterField = String.valueOf(buildTreeConfig(modelSchema, pageSchema, extractTreeConfigOverrides(pageSchema)).get("filterField"));
+        boolean exists = fields.stream().anyMatch(item -> filterField.equals(item.get("field"))
+                || filterField.equals(item.get("prop"))
+                || filterField.equals(item.get("dataIndex"))
+                || filterField.equals(item.get("key")));
         if (exists) {
             return;
         }
-        LowcodeFieldSchema fieldSchema = findField(modelSchema, parentField);
+        LowcodeFieldSchema fieldSchema = findField(modelSchema, filterField);
         if (fieldSchema == null) {
             return;
         }
@@ -516,6 +726,50 @@ public class LowcodeRuntimeConfigBuilder {
         hiddenField.put("queryType", "eq");
         hiddenField.put("required", false);
         fields.add(hiddenField);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void decorateTreeRuntimeFields(List<Map<String, Object>> fields,
+                                           String configKey,
+                                           LowcodeModelSchema modelSchema,
+                                           LowcodePageSchema pageSchema) {
+        if (!isTreeRuntime(modelSchema, pageSchema) || StringUtils.isBlank(configKey)) {
+            return;
+        }
+        Map<String, Object> treeConfig = buildTreeConfig(modelSchema, pageSchema, extractTreeConfigOverrides(pageSchema));
+        String filterField = text(treeConfig.get("filterField"));
+        if (StringUtils.isBlank(filterField)) {
+            return;
+        }
+        for (Map<String, Object> item : fields) {
+            if (!filterField.equals(text(item.get("field")))) {
+                continue;
+            }
+            String label = StringUtils.defaultIfBlank(text(item.get("label")), filterField);
+            item.put("type", "treeSelect");
+            item.put("queryType", "eq");
+            Map<String, Object> props = new LinkedHashMap<>();
+            Object sourceProps = item.get("props");
+            if (sourceProps instanceof Map<?, ?> sourcePropsMap) {
+                props.putAll((Map<String, Object>) sourcePropsMap);
+            }
+            props.putIfAbsent("placeholder", "请选择" + label);
+            props.putIfAbsent("clearable", true);
+            props.putIfAbsent("filterable", true);
+            props.put("optionSource", buildTreeOptionSource(configKey, treeConfig));
+            item.put("props", props);
+        }
+    }
+
+    private Map<String, Object> buildTreeOptionSource(String configKey, Map<String, Object> treeConfig) {
+        Map<String, Object> source = new LinkedHashMap<>();
+        source.put("type", "tree");
+        source.put("api", "get@/ai/crud/" + configKey + "/tree");
+        source.put("keyField", "key");
+        source.put("valueField", "targetValue");
+        source.put("labelField", "label");
+        source.put("childrenField", StringUtils.defaultIfBlank(text(treeConfig.get("childrenField")), "children"));
+        return source;
     }
 
     private Object extractTreeConfigOverrides(LowcodePageSchema pageSchema) {
@@ -624,13 +878,14 @@ public class LowcodeRuntimeConfigBuilder {
         return buildSearchField(field, Map.of());
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, Object> buildSearchField(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
         Map<String, Object> item = new LinkedHashMap<>();
         String queryType = StringUtils.defaultIfBlank(text(pageSetting.get("queryType")),
                 StringUtils.defaultIfBlank(field.getQueryType(), "eq")).toLowerCase(Locale.ROOT);
         item.put("field", field.getField());
         item.put("label", StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
-        String componentType = resolveSearchComponentType(field, queryType);
+        String componentType = resolveSearchComponentType(field, queryType, pageSetting);
         item.put("type", componentType);
         item.put("queryType", queryType);
         if ("daterange".equals(componentType) || "datetimerange".equals(componentType) || "timerange".equals(componentType)) {
@@ -639,6 +894,12 @@ public class LowcodeRuntimeConfigBuilder {
         }
         if (StringUtils.isNotBlank(field.getDictType())) {
             item.put("dictType", field.getDictType());
+        }
+        Object designerProps = pageSetting.get("props");
+        if (designerProps instanceof Map<?, ?> designerPropsMap) {
+            Map<String, Object> props = new LinkedHashMap<>();
+            props.putAll((Map<String, Object>) designerPropsMap);
+            item.put("props", props);
         }
         return item;
     }
@@ -689,7 +950,40 @@ public class LowcodeRuntimeConfigBuilder {
         Map<String, Object> setting = new LinkedHashMap<>(resolveFieldSetting(pageSchema, "edit", fieldName));
         Map<String, Object> designerSetting = resolveFormRuleSetting(pageSchema, fieldName);
         setting.putAll(designerSetting);
+        Map<String, Object> canvasSetting = resolveCanvasFieldSetting(pageSchema, fieldName);
+        setting.putAll(canvasSetting);
         return setting;
+    }
+
+    private Map<String, Object> resolveCanvasFieldSetting(LowcodePageSchema pageSchema, String fieldName) {
+        LowcodePageZone editZone = findZone(pageSchema, "edit");
+        if (editZone == null || StringUtils.isBlank(fieldName)) {
+            return Map.of();
+        }
+        int gridCols = Math.max(1, resolveEditGridCols(pageSchema));
+        int canvasWidth = 1040;
+        if (editZone.getProps() != null) {
+            Object canvas = editZone.getProps().get("canvas");
+            if (canvas instanceof Map<?, ?> canvasMap) {
+                canvasWidth = intValue(canvasMap.get("width"), canvasWidth);
+            }
+        }
+        int colWidth = Math.max(1, (canvasWidth - 64) / gridCols);
+        for (Map<String, Object> item : extractCanvasItems(editZone)) {
+            if (!fieldName.equals(text(item.get("fieldRef")))) {
+                continue;
+            }
+            Map<String, Object> setting = new LinkedHashMap<>();
+            int itemWidth = intValue(item.get("w"), 280);
+            int span = Math.max(1, Math.min(gridCols, Math.round((float) itemWidth / colWidth)));
+            setting.put("span", span);
+            Object style = item.get("style");
+            if (style instanceof Map<?, ?> styleMap && styleMap.get("labelWidth") != null) {
+                setting.put("labelWidth", styleMap.get("labelWidth"));
+            }
+            return setting;
+        }
+        return Map.of();
     }
 
     @SuppressWarnings("unchecked")
@@ -748,6 +1042,28 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractCanvasItems(LowcodePageZone zone) {
+        if (zone == null || zone.getProps() == null) {
+            return List.of();
+        }
+        Object canvas = zone.getProps().get("canvas");
+        if (!(canvas instanceof Map<?, ?> canvasMap)) {
+            return List.of();
+        }
+        Object items = canvasMap.get("items");
+        if (!(items instanceof List<?> itemList)) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : itemList) {
+            if (item instanceof Map<?, ?> itemMap) {
+                result.add((Map<String, Object>) itemMap);
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
     private void collectFormRules(List<?> rules, List<Map<String, Object>> result) {
         for (Object item : rules) {
             if (!(item instanceof Map<?, ?> rule)) {
@@ -770,9 +1086,10 @@ public class LowcodeRuntimeConfigBuilder {
     private Map<String, Object> buildEditField(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
         Map<String, Object> item = new LinkedHashMap<>();
         String label = StringUtils.defaultIfBlank(field.getLabel(), field.getField());
+        String componentType = resolveEditComponentType(field, pageSetting);
         item.put("field", field.getField());
         item.put("label", label);
-        item.put("type", resolveEditComponentType(field));
+        item.put("type", componentType);
         item.put("required", !isSystemField(field) && Boolean.TRUE.equals(field.getRequired()));
         if (isSystemField(field) || Boolean.TRUE.equals(field.getReadonly())) {
             item.put("disabled", true);
@@ -802,14 +1119,14 @@ public class LowcodeRuntimeConfigBuilder {
         }
 
         Map<String, Object> props = new LinkedHashMap<>();
-        props.put("placeholder", buildPlaceholder(field, label));
+        props.put("placeholder", buildPlaceholder(componentType, label));
         if (isSystemField(field) || Boolean.TRUE.equals(field.getReadonly())) {
             props.put("disabled", true);
         }
-        if (field.getLength() != null && field.getLength() > 0 && isTextComponent(field)) {
+        if (field.getLength() != null && field.getLength() > 0 && isTextComponent(componentType)) {
             props.put("maxlength", field.getLength());
         }
-        if (field.getPrecision() != null && field.getPrecision() >= 0 && "number".equals(resolveEditComponentType(field))) {
+        if (field.getPrecision() != null && field.getPrecision() >= 0 && "number".equals(componentType)) {
             props.put("precision", field.getPrecision());
         }
         Object designerProps = pageSetting.get("props");
@@ -824,7 +1141,7 @@ public class LowcodeRuntimeConfigBuilder {
         if (Boolean.TRUE.equals(field.getRequired())) {
             Map<String, Object> rule = new LinkedHashMap<>();
             rule.put("required", true);
-            rule.put("message", buildPlaceholder(field, label));
+            rule.put("message", buildPlaceholder(componentType, label));
             rule.put("trigger", List.of("blur", "change"));
             item.put("rules", List.of(rule));
         }
@@ -1049,6 +1366,11 @@ public class LowcodeRuntimeConfigBuilder {
         }
     }
 
+    private int intValue(Object value, int defaultValue) {
+        Integer parsed = integerValue(value);
+        return parsed == null ? defaultValue : parsed;
+    }
+
     private String safeKey(String value) {
         String key = StringUtils.defaultIfBlank(value, "model").replaceAll("[^A-Za-z0-9_]", "_");
         return StringUtils.defaultIfBlank(key, "model");
@@ -1095,11 +1417,22 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private String resolveSearchComponentType(LowcodeFieldSchema field, String queryType) {
-        if (StringUtils.isNotBlank(field.getDictType())) {
-            return "select";
+        return resolveSearchComponentType(field, queryType, Map.of());
+    }
+
+    private String resolveSearchComponentType(LowcodeFieldSchema field, String queryType, Map<String, Object> pageSetting) {
+        String configuredType = StringUtils.defaultIfBlank(text(pageSetting.get("componentType")), text(pageSetting.get("type")));
+        if (StringUtils.isNotBlank(configuredType)) {
+            return normalizeEditComponentType(configuredType);
         }
         String componentType = StringUtils.defaultIfBlank(field.getComponentType(), field.getDataType());
         componentType = StringUtils.defaultIfBlank(componentType, "input");
+        if (isBusinessSelectComponent(componentType)) {
+            return componentType;
+        }
+        if (StringUtils.isNotBlank(field.getDictType())) {
+            return "select";
+        }
         if ("between".equals(queryType)) {
             if ("datetime".equals(componentType)) {
                 return "datetimerange";
@@ -1123,33 +1456,54 @@ public class LowcodeRuntimeConfigBuilder {
         if ("time".equals(componentType)) {
             return "time";
         }
+        if ("treeSelect".equals(componentType)) {
+            return "treeSelect";
+        }
+        if ("cascader".equals(componentType)) {
+            return "cascader";
+        }
         return "input";
     }
 
     private String resolveEditComponentType(LowcodeFieldSchema field) {
-        String componentType = StringUtils.defaultIfBlank(field.getComponentType(), "input");
-        if ("fileUpload".equals(componentType)) {
-            return "upload";
-        }
-        if ("number".equals(componentType)) {
+        return normalizeEditComponentType(StringUtils.defaultIfBlank(field.getComponentType(), "input"));
+    }
+
+    private String resolveEditComponentType(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
+        String componentType = StringUtils.defaultIfBlank(text(pageSetting.get("componentType")), text(pageSetting.get("type")));
+        componentType = StringUtils.defaultIfBlank(componentType, field.getComponentType());
+        return normalizeEditComponentType(StringUtils.defaultIfBlank(componentType, "input"));
+    }
+
+    private String normalizeEditComponentType(String componentType) {
+        if ("inputNumber".equals(componentType)) {
             return "number";
         }
         return componentType;
     }
 
-    private String buildPlaceholder(LowcodeFieldSchema field, String label) {
-        String componentType = resolveEditComponentType(field);
+    private boolean isBusinessSelectComponent(String componentType) {
+        return "dictSelect".equals(componentType)
+                || "treeSelect".equals(componentType)
+                || "orgTreeSelect".equals(componentType)
+                || "userSelect".equals(componentType)
+                || "regionTreeSelect".equals(componentType)
+                || "cascader".equals(componentType);
+    }
+
+    private String buildPlaceholder(String componentType, String label) {
         if ("select".equals(componentType) || "radio".equals(componentType) || "checkbox".equals(componentType)
                 || "date".equals(componentType) || "datetime".equals(componentType) || "time".equals(componentType)
                 || "daterange".equals(componentType) || "datetimerange".equals(componentType) || "timerange".equals(componentType)
-                || "treeSelect".equals(componentType) || "cascader".equals(componentType)) {
+                || "dictSelect".equals(componentType) || "treeSelect".equals(componentType) || "orgTreeSelect".equals(componentType)
+                || "userSelect".equals(componentType) || "regionTreeSelect".equals(componentType) || "cascader".equals(componentType)
+                || "fileUpload".equals(componentType) || "imageUpload".equals(componentType) || "upload".equals(componentType)) {
             return "请选择" + label;
         }
         return "请输入" + label;
     }
 
-    private boolean isTextComponent(LowcodeFieldSchema field) {
-        String componentType = resolveEditComponentType(field);
+    private boolean isTextComponent(String componentType) {
         return "input".equals(componentType) || "textarea".equals(componentType);
     }
 }

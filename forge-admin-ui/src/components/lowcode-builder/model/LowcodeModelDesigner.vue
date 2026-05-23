@@ -196,6 +196,16 @@
           </section>
         </n-tab-pane>
 
+        <n-tab-pane name="er" tab="ER 图">
+          <LowcodeErDiagram
+            title="模型 ER 图"
+            :subtitle="erDiagramSubtitle"
+            :models="erDiagramModels"
+            :primary-model-code="erCurrentModelCode"
+            :download-file-name="`${erCurrentModelCode || 'model'}-er.svg`"
+          />
+        </n-tab-pane>
+
         <n-tab-pane name="rules" tab="校验规则">
           <section class="designer-section rules-grid">
             <div class="rule-card">
@@ -314,6 +324,7 @@
 import { AddOutline } from '@vicons/ionicons5'
 import { computed, ref, watch } from 'vue'
 import { lowcodeValidateModel } from '@/api/lowcode-crud'
+import LowcodeErDiagram from './LowcodeErDiagram.vue'
 import {
   appTypeOptions,
   cloneSchema,
@@ -379,6 +390,23 @@ const targetModelOptions = computed(() => props.dataModels.map(model => ({
   label: `${model.modelName || model.modelCode} (${model.modelCode})`,
   value: model.modelCode,
 })))
+const erCurrentModelCode = computed(() => localModel.value.object?.code || localModel.value.tableName || 'current_model')
+const erDiagramModels = computed(() => {
+  const current = {
+    id: localModel.value.id || '__current',
+    modelCode: erCurrentModelCode.value,
+    modelName: localModel.value.object?.name || localModel.value.businessName || '当前模型',
+    modelSchema: cloneSchema(localModel.value),
+  }
+  const related = props.dataModels
+    .filter(model => model.modelCode && model.modelCode !== erCurrentModelCode.value)
+  return [current, ...related]
+})
+const erDiagramSubtitle = computed(() => {
+  const relationCount = (localModel.value.relations || []).length
+  const datasourceName = localModel.value.sourceTable?.datasourceName || '未绑定数据源'
+  return `当前模型高亮展示，配置关系 ${relationCount} 条；数据源：${datasourceName}`
+})
 const relationIndexFields = computed(() => Array.from(new Set((localModel.value.relations || [])
   .map(relation => relation.sourceField)
   .filter(Boolean))))
@@ -953,6 +981,196 @@ async function validateModel() {
   min-height: 58px;
 }
 
+.er-section {
+  overflow: hidden;
+}
+
+.er-board {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.92fr) 180px minmax(300px, 1.08fr);
+  gap: 14px;
+  min-height: 420px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: linear-gradient(#f8fafc 31px, transparent 32px), linear-gradient(90deg, #f8fafc 31px, transparent 32px);
+  background-color: #ffffff;
+  background-size: 32px 32px;
+  padding: 18px;
+}
+
+.er-column,
+.er-related-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.primary-column {
+  align-content: center;
+}
+
+.er-table-card {
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+}
+
+.er-table-card.primary {
+  border-color: #2563eb;
+}
+
+.er-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.er-card-head div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.er-card-head strong,
+.er-card-head span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-card-head strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.er-card-head span {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.er-field-list {
+  display: grid;
+}
+
+.er-field-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border-bottom: 1px solid #eef2f7;
+  padding: 0 10px;
+}
+
+.er-field-row:last-child {
+  border-bottom: 0;
+}
+
+.er-field-row.muted {
+  background: #fbfdff;
+  color: #94a3b8;
+}
+
+.er-badge {
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.er-badge.pk {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.er-badge.fk,
+.er-badge.ref {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.er-badge.sys {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.er-field-name,
+.er-field-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-field-name {
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.er-field-type {
+  justify-self: end;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.er-link-column {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+}
+
+.er-link-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.er-link {
+  display: grid;
+  grid-template-columns: minmax(18px, 1fr) auto;
+  gap: 5px;
+  align-items: center;
+  color: #1d4ed8;
+  font-size: 11px;
+  text-align: center;
+}
+
+.er-link strong,
+.er-link small {
+  grid-column: 1 / -1;
+}
+
+.er-line {
+  display: block;
+  grid-column: 1 / -1;
+  height: 2px;
+  border-radius: 999px;
+  background: #60a5fa;
+}
+
+.er-no-link {
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #64748b;
+  font-size: 12px;
+  padding: 14px;
+  text-align: center;
+}
+
 .index-list {
   display: grid;
   gap: 8px;
@@ -1020,6 +1238,10 @@ async function validateModel() {
   }
 
   .index-row {
+    grid-template-columns: 1fr;
+  }
+
+  .er-board {
     grid-template-columns: 1fr;
   }
 

@@ -33,6 +33,16 @@
         </n-space>
       </div>
 
+      <n-spin v-if="selectedDomain" :show="domainModelsLoading">
+        <LowcodeErDiagram
+          title="业务域 ER 图"
+          :subtitle="`${selectedDomain.domainName} 下全部数据模型关系，可拖拽调整并下载 SVG`"
+          :models="domainModels"
+          :download-file-name="`${selectedDomain.domainCode || 'domain'}-er.svg`"
+          empty-text="该业务域暂无数据模型"
+        />
+      </n-spin>
+
       <section class="apps-board">
         <div class="apps-board-head">
           <div>
@@ -170,11 +180,13 @@ import {
   lowcodeAppPage,
   lowcodeDeleteApp,
   lowcodeDomainTree,
+  lowcodeModelList,
   lowcodeSaveDraft,
 } from '@/api/lowcode-crud'
 import DomainEditorDrawer from '@/components/lowcode-builder/domain/DomainEditorDrawer.vue'
 import DomainTreePanel from '@/components/lowcode-builder/domain/DomainTreePanel.vue'
 import MoveDomainModal from '@/components/lowcode-builder/domain/MoveDomainModal.vue'
+import LowcodeErDiagram from '@/components/lowcode-builder/model/LowcodeErDiagram.vue'
 import { cloneSchema, normalizeObjectCode } from '@/components/lowcode-builder/model/model-schema'
 import { useDict } from '@/composables/useDict'
 
@@ -185,10 +197,12 @@ const { dict } = useDict('lowcode_app_publish_status')
 const router = useRouter()
 const domainLoading = ref(false)
 const loading = ref(false)
+const domainModelsLoading = ref(false)
 const domains = ref([])
 const selectedDomainId = ref(null)
 const selectedDomain = ref(null)
 const apps = ref([])
+const domainModels = ref([])
 const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(9)
@@ -238,12 +252,13 @@ async function selectDomain(domain) {
   if (!domain) {
     selectedDomainId.value = null
     selectedDomain.value = null
+    domainModels.value = []
     await loadApps()
     return
   }
   selectedDomainId.value = domain.id
   selectedDomain.value = domain
-  await loadApps()
+  await Promise.all([loadApps(), loadDomainModels()])
 }
 
 async function loadApps() {
@@ -268,7 +283,25 @@ async function refreshAll() {
   await Promise.all([
     loadDomains(),
     loadApps(),
+    loadDomainModels(),
   ])
+}
+
+async function loadDomainModels() {
+  if (!selectedDomainId.value) {
+    domainModels.value = []
+    return
+  }
+  domainModelsLoading.value = true
+  try {
+    const res = await lowcodeModelList({
+      domainId: selectedDomainId.value,
+    })
+    domainModels.value = res.data || []
+  }
+  finally {
+    domainModelsLoading.value = false
+  }
 }
 
 function handleSearch() {

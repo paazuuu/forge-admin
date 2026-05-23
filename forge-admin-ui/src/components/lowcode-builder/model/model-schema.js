@@ -28,6 +28,12 @@ export const componentTypeOptions = [
   { label: '下拉选择', value: 'select' },
   { label: '单选', value: 'radio' },
   { label: '多选', value: 'checkbox' },
+  { label: '字典选择器', value: 'dictSelect' },
+  { label: '树形选择', value: 'treeSelect' },
+  { label: '组织树选择', value: 'orgTreeSelect' },
+  { label: '用户选择', value: 'userSelect' },
+  { label: '区划树选择', value: 'regionTreeSelect' },
+  { label: '级联选择', value: 'cascader' },
   { label: '开关', value: 'switch' },
   { label: '日期', value: 'date' },
   { label: '日期时间', value: 'datetime' },
@@ -485,8 +491,23 @@ function resolveColumnPrecision(columnType = '') {
 
 function resolveComponentType(htmlType = '', dataType = 'varchar') {
   const type = String(htmlType || '').toLowerCase()
-  if (['textarea', 'select', 'radio', 'checkbox', 'switch', 'imageupload', 'fileupload'].includes(type))
-    return type === 'imageupload' ? 'imageUpload' : type === 'fileupload' ? 'fileUpload' : type
+  const componentMap = {
+    textarea: 'textarea',
+    select: 'select',
+    radio: 'radio',
+    checkbox: 'checkbox',
+    dictselect: 'dictSelect',
+    switch: 'switch',
+    treeselect: 'treeSelect',
+    orgtreeselect: 'orgTreeSelect',
+    userselect: 'userSelect',
+    regiontreeselect: 'regionTreeSelect',
+    cascader: 'cascader',
+    imageupload: 'imageUpload',
+    fileupload: 'fileUpload',
+  }
+  if (componentMap[type])
+    return componentMap[type]
   if (type.includes('date') || ['date', 'datetime', 'time'].includes(dataType))
     return ['date', 'datetime', 'time'].includes(dataType) ? dataType : 'date'
   if (['int', 'bigint', 'decimal'].includes(dataType))

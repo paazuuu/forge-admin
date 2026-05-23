@@ -56,8 +56,20 @@
       </section>
 
       <section class="palette-section">
-        <div class="section-title">
-          数据字段
+        <div class="section-title field-section-title">
+          <span>数据字段</span>
+          <span>{{ availableFields.length }} / {{ pageFields.length }}</span>
+        </div>
+        <div class="field-tools">
+          <n-input
+            v-model:value="fieldKeyword"
+            clearable
+            size="small"
+            placeholder="搜索字段名称或编码"
+          />
+          <n-checkbox v-model:checked="hideUsedFields" size="small">
+            隐藏已放置
+          </n-checkbox>
         </div>
         <div class="field-list">
           <button
@@ -71,6 +83,7 @@
             <span class="field-name">{{ field.label || field.field }}</span>
             <span class="field-meta">{{ field.field }} · {{ resolveFieldType(field) }}</span>
           </button>
+          <n-empty v-if="!availableFields.length" size="small" description="没有可添加字段" />
         </div>
       </section>
     </div>
@@ -78,8 +91,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { canvasComponentCatalog, pageZoneCatalog, resolveDefaultFieldComponentKey } from './page-schema'
+import { computed, ref } from 'vue'
+import { canvasComponentCatalog, isPageFieldVisible, pageZoneCatalog, resolveDefaultFieldComponentKey } from './page-schema'
 
 const props = defineProps({
   selectedZoneKey: {
@@ -87,6 +100,10 @@ const props = defineProps({
     default: '',
   },
   fields: {
+    type: Array,
+    default: () => [],
+  },
+  usedFieldRefs: {
     type: Array,
     default: () => [],
   },
@@ -102,8 +119,28 @@ const baseControls = computed(() => canvasComponentCatalog.filter((item) => {
   return item.group === 'field' && item.zones?.includes(props.selectedZoneKey)
 }))
 
+const fieldKeyword = ref('')
+const hideUsedFields = ref(true)
+const usedFieldSet = computed(() => new Set(props.usedFieldRefs || []))
+const pageFields = computed(() => {
+  return props.fields.filter(field => isPageFieldVisible(field, props.selectedZoneKey))
+})
+
 const availableFields = computed(() => {
-  return props.fields
+  const keyword = fieldKeyword.value.trim().toLowerCase()
+  return pageFields.value.filter((field) => {
+    if (hideUsedFields.value && usedFieldSet.value.has(field.field))
+      return false
+    if (!keyword)
+      return true
+    return [
+      field.label,
+      field.field,
+      field.columnName,
+      field.sourceField,
+      field.comment,
+    ].some(value => String(value || '').toLowerCase().includes(keyword))
+  })
 })
 
 function handleComponentDragStart(event, item) {
@@ -195,6 +232,23 @@ function resolveFieldType(field) {
   color: #334155;
 }
 
+.field-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field-section-title span:last-child {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.field-tools {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .palette-list {
   display: grid;
   gap: 8px;
@@ -247,13 +301,14 @@ function resolveFieldType(field) {
 
 .field-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .field-item {
   display: grid;
   gap: 3px;
-  padding: 9px 10px;
+  min-height: 46px;
+  padding: 7px 9px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   background: #fff;
@@ -270,12 +325,18 @@ function resolveFieldType(field) {
   color: #0f172a;
   font-size: 12px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field-meta {
   color: #94a3b8;
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .palette-name {

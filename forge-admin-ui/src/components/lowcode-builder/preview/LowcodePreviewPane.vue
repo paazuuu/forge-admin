@@ -82,7 +82,12 @@
                   :label="field.label"
                   :show-feedback="false"
                 >
-                  <n-select v-if="field.dictType" disabled placeholder="请选择" />
+                  <n-select v-if="field.dictType || ['dictSelect', 'userSelect'].includes(field.componentType)" disabled placeholder="请选择" />
+                  <n-tree-select
+                    v-else-if="['treeSelect', 'orgTreeSelect', 'regionTreeSelect'].includes(field.componentType)"
+                    disabled
+                    placeholder="请选择"
+                  />
                   <n-date-picker
                     v-else-if="['daterange', 'datetimerange'].includes(resolveSearchPreviewType(field))"
                     disabled
@@ -105,9 +110,10 @@
                     disabled
                     style="width: 100%"
                   />
-                  <n-input-number
+                  <n-input
                     v-else-if="field.componentType === 'number' || ['int', 'bigint', 'decimal'].includes(field.dataType)"
                     disabled
+                    :placeholder="resolveSampleValue(field)"
                     style="width: 100%"
                   />
                   <n-input v-else disabled :placeholder="`请输入${field.label}`" />
@@ -164,17 +170,30 @@
         <div class="band-title">
           表单与详情
         </div>
-        <div class="form-grid">
+        <div class="form-grid" :style="formPreviewGridStyle">
           <n-form-item
             v-for="field in formFields"
             :key="field.field"
             :label="field.label"
             :required="field.required"
+            :style="resolveFormPreviewItemStyle(field)"
           >
             <n-input v-if="['input', 'textarea'].includes(field.componentType)" disabled :placeholder="`请输入${field.label}`" />
-            <n-input-number v-else-if="field.componentType === 'number'" disabled style="width: 100%" />
-            <n-select v-else-if="field.dictType || ['select', 'radio', 'checkbox'].includes(field.componentType)" disabled placeholder="请选择" />
+            <n-input
+              v-else-if="field.componentType === 'number'"
+              disabled
+              :placeholder="resolveSampleValue(field)"
+              style="width: 100%"
+            />
+            <n-select v-else-if="field.dictType || ['select', 'radio', 'checkbox', 'dictSelect', 'userSelect'].includes(field.componentType)" disabled placeholder="请选择" />
+            <n-tree-select v-else-if="['treeSelect', 'orgTreeSelect', 'regionTreeSelect'].includes(field.componentType)" disabled placeholder="请选择" />
+            <n-cascader v-else-if="field.componentType === 'cascader'" disabled placeholder="请选择" />
             <n-date-picker v-else-if="['date', 'datetime'].includes(field.componentType)" disabled style="width: 100%" />
+            <n-upload v-else-if="['fileUpload', 'imageUpload', 'upload'].includes(field.componentType)" disabled>
+              <n-button size="small" disabled>
+                {{ field.componentType === 'imageUpload' ? '选择图片' : '选择文件' }}
+              </n-button>
+            </n-upload>
             <n-input v-else disabled :placeholder="field.componentType" />
           </n-form-item>
         </div>
@@ -234,6 +253,7 @@ const modelSchema = computed(() => {
   return buildPageDesignModelSchema(props.draft.modelSchema || { fields: [] }, pageSchema.value.modelRefs || [])
 })
 const tableZone = computed(() => pageSchema.value.zones?.find(zone => zone.zoneKey === 'table'))
+const editZone = computed(() => pageSchema.value.zones?.find(zone => zone.zoneKey === 'edit'))
 const isPublished = computed(() => props.draft.publishStatus === 'PUBLISHED')
 const showRuntimePreview = computed(() => Boolean(previewMode.value === 'runtime' && runtimeConfig.value))
 
@@ -242,6 +262,10 @@ const fieldMap = computed(() => new Map((modelSchema.value.fields || []).map(fie
 const searchFields = computed(() => resolveFields('search', field => field.searchable))
 const visibleColumns = computed(() => resolveFields('table', field => field.listVisible !== false))
 const editFields = computed(() => resolveFields('edit', field => field.formVisible !== false))
+const formPreviewGridCols = computed(() => resolveFormPreviewGridCols())
+const formPreviewGridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${formPreviewGridCols.value}, minmax(0, 1fr))`,
+}))
 const primaryModelCode = computed(() => pageSchema.value.primaryModelCode
   || pageSchema.value.modelRefs?.find(ref => ref.primary)?.modelCode
   || props.draft.modelSchema?.object?.code
@@ -302,6 +326,10 @@ watch(
 
 function resolveFields(zoneKey, fallback) {
   const zone = pageSchema.value.zones?.find(item => item.zoneKey === zoneKey)
+  const canvasRefs = resolveCanvasRefs(zone, zoneKey)
+  if (['edit', 'detail'].includes(zoneKey) && canvasRefs.length) {
+    return canvasRefs.map(ref => fieldMap.value.get(ref)).filter(field => field && isPageFieldVisible(field, zoneKey))
+  }
   const formCreateRefs = zoneKey === 'edit'
     ? resolveFieldRefsFromFormCreateRules(zone?.props?.formCreateRule, new Set(fieldMap.value.keys()))
     : []
@@ -310,7 +338,6 @@ function resolveFields(zoneKey, fallback) {
   if (zone?.fieldRefs?.length) {
     return uniqueRefs(zone.fieldRefs).map(ref => fieldMap.value.get(ref)).filter(field => field && isPageFieldVisible(field, zoneKey))
   }
-  const canvasRefs = resolveCanvasRefs(zone, zoneKey)
   if (canvasRefs.length) {
     return canvasRefs.map(ref => fieldMap.value.get(ref)).filter(field => field && isPageFieldVisible(field, zoneKey))
   }
@@ -324,7 +351,7 @@ function isPrimaryFormField(field) {
 }
 
 function resolveCanvasRefs(zone, zoneKey) {
-  const items = [...(zone?.props?.canvas?.items || [])].sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0))
+  const items = sortCanvasItemsByPosition(zone?.props?.canvas?.items || [])
   const primary = zoneKey === 'table'
     ? items.find(item => item.componentKey === 'data-table')
     : zoneKey === 'search'
@@ -346,6 +373,45 @@ function resolveCanvasRefs(zone, zoneKey) {
 
 function uniqueRefs(refs) {
   return Array.from(new Set((refs || []).filter(Boolean)))
+}
+
+function sortCanvasItemsByPosition(items = []) {
+  return [...items].sort((a, b) => {
+    const rowA = Math.round(Number(a.y || 0) / 16)
+    const rowB = Math.round(Number(b.y || 0) / 16)
+    if (rowA !== rowB)
+      return rowA - rowB
+    const xDiff = Number(a.x || 0) - Number(b.x || 0)
+    if (xDiff !== 0)
+      return xDiff
+    return Number(a.zIndex || 0) - Number(b.zIndex || 0)
+  })
+}
+
+function resolveFormPreviewGridCols() {
+  const configured = Number(editZone.value?.props?.editGridCols || 0)
+  if (configured > 0)
+    return Math.max(1, Math.min(3, configured))
+  const items = [...(editZone.value?.props?.canvas?.items || [])]
+    .filter(item => item.fieldRef)
+    .sort((a, b) => Number(a.x || 0) - Number(b.x || 0))
+  const columns = []
+  items.forEach((item) => {
+    const x = Number(item.x || 0)
+    if (!columns.some(colX => Math.abs(colX - x) < 80))
+      columns.push(x)
+  })
+  return Math.max(1, Math.min(3, columns.length || 1))
+}
+
+function resolveFormPreviewItemStyle(field) {
+  const item = (editZone.value?.props?.canvas?.items || []).find(canvasItem => canvasItem.fieldRef === field.field)
+  if (!item)
+    return null
+  const canvasWidth = Number(editZone.value?.props?.canvas?.width || 1040)
+  const colWidth = Math.max(1, (canvasWidth - 64) / Math.max(1, formPreviewGridCols.value))
+  const span = Math.max(1, Math.min(formPreviewGridCols.value, Math.round(Number(item.w || 280) / colWidth) || 1))
+  return { gridColumn: `span ${span}` }
 }
 
 function resolveSampleValue(field, index = 0) {
@@ -477,6 +543,7 @@ function buildRuntimeCrudProps(cfg) {
     modalType: options.modalType || cfg.modalType || 'drawer',
     modalWidth: options.modalWidth || cfg.modalWidth || '800px',
     editGridCols: options.editGridCols || cfg.editGridCols || 1,
+    loadDetailOnEdit: options.loadDetailOnEdit ?? cfg.loadDetailOnEdit ?? true,
     searchGridCols: options.searchGridCols || cfg.searchGridCols || 4,
     hideBatchDelete: !!options.hideBatchDelete,
     showImport: !!options.showImport,

@@ -90,6 +90,20 @@
       v-on="getComponentEvents(field)"
     />
 
+    <!-- 字典选择器 -->
+    <DictSelect
+      v-else-if="field.type === 'dictSelect'"
+      :value="value"
+      :dict-type="field.dictType || field.props?.dictType"
+      :placeholder="getPlaceholder(field)"
+      :disabled="disabledHandler(field)"
+      :clearable="field.clearable !== false"
+      :filterable="field.filterable !== false"
+      :multiple="field.multiple"
+      v-bind="field.props"
+      @update:value="handleUpdate"
+    />
+
     <!-- 单选框 -->
     <n-radio-group
       v-else-if="field.type === 'radio'"
@@ -435,6 +449,54 @@
       v-on="getComponentEvents(field)"
     />
 
+    <!-- 系统组织树选择 -->
+    <n-tree-select
+      v-else-if="field.type === 'orgTreeSelect'"
+      :value="value"
+      :placeholder="getPlaceholder(field)"
+      :disabled="disabledHandler(field)"
+      :options="currentOptions"
+      :loading="remoteLoading"
+      :clearable="field.clearable !== false"
+      :filterable="field.filterable !== false"
+      :multiple="field.multiple"
+      :cascade="field.cascade !== false"
+      v-bind="field.props"
+      @update:value="handleUpdate"
+      v-on="getComponentEvents(field)"
+    />
+
+    <!-- 系统用户选择 -->
+    <n-select
+      v-else-if="field.type === 'userSelect'"
+      :value="value"
+      :placeholder="getPlaceholder(field)"
+      :disabled="disabledHandler(field)"
+      :options="currentOptions"
+      :loading="remoteLoading"
+      :clearable="field.clearable !== false"
+      :filterable="field.filterable !== false"
+      :multiple="field.multiple"
+      remote
+      v-bind="field.props"
+      @search="handleRemoteSearch"
+      @update:value="handleUpdate"
+      v-on="getComponentEvents(field)"
+    />
+
+    <!-- 行政区划树选择 -->
+    <RegionTreeSelect
+      v-else-if="field.type === 'regionTreeSelect'"
+      :model-value="value"
+      :placeholder="getPlaceholder(field)"
+      :disabled="disabledHandler(field)"
+      :clearable="field.clearable !== false"
+      :filterable="field.filterable !== false"
+      :virtual-disabled="field.props?.virtualDisabled ?? !context?.isSearch"
+      v-bind="field.props"
+      @update:model-value="handleUpdate"
+    />
+
     <!-- 树形选择 -->
     <n-tree-select
       v-else-if="field.type === 'treeSelect'"
@@ -442,6 +504,7 @@
       :placeholder="getPlaceholder(field)"
       :disabled="disabledHandler(field)"
       :options="currentOptions"
+      :loading="remoteLoading"
       :clearable="field.clearable !== false"
       :filterable="field.filterable"
       :multiple="field.multiple"
@@ -537,9 +600,12 @@
 <script setup>
 import { CopyOutline } from '@vicons/ionicons5'
 import { useClipboard } from '@vueuse/core'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import DictSelect from '@/components/DictSelect.vue'
 import FileUpload from '@/components/file-upload/index.vue'
 import ImageUpload from '@/components/image-upload/index.vue'
+import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
+import { request } from '@/utils'
 import AiCustomSelect from './AiCustomSelect.vue'
 
 const props = defineProps({
@@ -564,6 +630,9 @@ const props = defineProps({
 const emit = defineEmits(['update:value'])
 
 const { copy } = useClipboard()
+const remoteOptions = ref([])
+const remoteLoading = ref(false)
+let remoteRequestSeq = 0
 
 /**
  * 获取占位符文本
@@ -594,6 +663,20 @@ function disabledHandler(field) {
   }
   return false
 }
+
+const remoteOptionSource = computed(() => resolveOptionSource(props.field))
+
+watch(
+  remoteOptionSource,
+  (source) => {
+    if (!source) {
+      remoteOptions.value = []
+      return
+    }
+    loadRemoteOptions(source)
+  },
+  { immediate: true, deep: true },
+)
 
 /**
  * 获取选项数据 - 使用 computed 确保响应式
@@ -634,6 +717,10 @@ const currentOptions = computed(() => {
     return field.props.options
   }
 
+  if (remoteOptionSource.value) {
+    return remoteOptions.value
+  }
+
   // 最后处理 enumType (仅当 options 为空时)
   if (field.enumType) {
     // 这里应该根据 enumType 获取对应的枚举数据
@@ -651,6 +738,138 @@ function cacheAsyncOptions(field, promise) {
   promise.then((options) => {
     field._cachedOptions = options
   })
+}
+
+function resolveOptionSource(field = {}) {
+  if (field.optionSource || field.props?.optionSource)
+    return field.optionSource || field.props.optionSource
+  if (field.type === 'orgTreeSelect') {
+    return {
+      type: 'tree',
+      api: 'get@/system/org/tree',
+      valueField: 'id',
+      keyField: 'id',
+      labelField: 'orgName',
+      fallbackLabelFields: ['name'],
+      childrenField: 'children',
+    }
+  }
+  if (field.type === 'userSelect') {
+    return {
+      type: 'page',
+      api: 'get@/system/user/page',
+      valueField: 'id',
+      labelField: 'realName',
+      fallbackLabelFields: ['name', 'nickname', 'username'],
+      keywordParam: 'keyword',
+      recordsField: 'records',
+      params: { pageNum: 1, pageSize: 50 },
+    }
+  }
+  return null
+}
+
+async function loadRemoteOptions(source, keyword = '') {
+  if (!source?.api)
+    return
+  const requestSeq = ++remoteRequestSeq
+  remoteLoading.value = true
+  try {
+    const { method, url } = parseOptionApi(source.api)
+    const params = {
+      ...(source.params || {}),
+    }
+    if (keyword && source.keywordParam)
+      params[source.keywordParam] = keyword
+    const res = await request({
+      method,
+      url,
+      params: method === 'get' ? params : undefined,
+      data: method === 'get' ? undefined : params,
+    })
+    if (requestSeq !== remoteRequestSeq)
+      return
+    remoteOptions.value = normalizeRemoteOptions(res?.data, source)
+  }
+  catch (error) {
+    console.warn(`[AiFormItem] 加载 ${props.field?.field || ''} 选项失败:`, error)
+    remoteOptions.value = []
+  }
+  finally {
+    if (requestSeq === remoteRequestSeq)
+      remoteLoading.value = false
+  }
+}
+
+function parseOptionApi(api) {
+  const text = String(api || '')
+  const [method, ...urlParts] = text.includes('@') ? text.split('@') : ['get', text]
+  return {
+    method: String(method || 'get').toLowerCase(),
+    url: urlParts.join('@') || text,
+  }
+}
+
+function normalizeRemoteOptions(data, source = {}) {
+  const rows = extractOptionRows(data, source)
+  if (!Array.isArray(rows))
+    return []
+  const isTree = source.type === 'tree'
+  return rows.map(row => normalizeOptionNode(row, source, isTree)).filter(Boolean)
+}
+
+function extractOptionRows(data, source = {}) {
+  if (Array.isArray(data))
+    return data
+  if (!data || typeof data !== 'object')
+    return []
+  if (source.recordsField) {
+    const nested = getNestedValue(data, source.recordsField)
+    if (Array.isArray(nested))
+      return nested
+  }
+  return data.records || data.list || data.rows || []
+}
+
+function normalizeOptionNode(row, source = {}, includeChildren = false) {
+  if (!row || typeof row !== 'object')
+    return null
+  const valueField = source.valueField || source.keyField || 'value'
+  const keyField = source.keyField || valueField
+  const labelField = source.labelField || 'label'
+  const childrenField = source.childrenField || 'children'
+  const fallbackLabelFields = source.fallbackLabelFields || ['label', 'name', 'title']
+  const value = row[valueField] ?? row.value ?? row.key ?? row[keyField]
+  const label = row[labelField] ?? fallbackLabelFields.map(field => row[field]).find(item => item !== undefined && item !== null && item !== '')
+  const option = {
+    ...row,
+    value,
+    key: row.key ?? row[keyField] ?? value,
+    label: label === undefined || label === null || label === '' ? String(value ?? '') : String(label),
+  }
+  if (includeChildren) {
+    const children = Array.isArray(row[childrenField])
+      ? row[childrenField]
+      : Array.isArray(row.children)
+        ? row.children
+        : []
+    option.children = children.map(child => normalizeOptionNode(child, source, true)).filter(Boolean)
+  }
+  return option
+}
+
+function getNestedValue(source, path) {
+  return String(path || '')
+    .split('.')
+    .filter(Boolean)
+    .reduce((value, key) => value?.[key], source)
+}
+
+function handleRemoteSearch(keyword) {
+  const source = remoteOptionSource.value
+  if (!source)
+    return
+  loadRemoteOptions(source, keyword)
 }
 
 /**

@@ -219,6 +219,22 @@ public RespInfo<GoviewProject> getById(@PathVariable Long id) {
 - 所有使用文件访问地址渲染图片的前端组件
 - 头像、favicon、素材预览、图片上传回显等场景
 
+## 7. 树形低代码模板 beforeRenderForm 丢失行主键导致详情 URL 拼出 undefined
+
+**发现日期**: 2026-05-23
+
+**问题描述**:
+低代码动态渲染页点击编辑/查看详情时报错类似 `参数类型不匹配: id .../undefined`，但删除操作正常。原因是删除直接从表格行取 `rowKey`，而树形 CRUD 模板会给 `AiCrudPage` 注入 `beforeRenderForm`；如果该钩子编辑时返回 `{}` 或返回对象不含主键，详情加载会用加工后的行取 ID，导致 `:id` 被替换成 `undefined`。
+
+**解决方案**:
+- 树形模板的 `beforeRenderForm` 编辑场景必须从原始行数据开始合并钩子结果，不能直接返回空对象。
+- `AiCrudPage` 加载详情、删除、更新和自定义动作路径统一通过 `rowKey`/`id`/`Id` 兜底解析主键。
+- URL 占位符替换时跳过 `null`、`undefined`、空字符串以及字符串 `"undefined"`/`"null"`，避免拼出非法详情路径。
+
+**影响范围**:
+- `TreeCrudTemplate` 注入 `beforeRenderForm` 的低代码树形应用
+- 动态 CRUD 的编辑、查看详情、自定义行操作跳转
+
 ## 7. Naive UI 当前版本不导出 NSegmented
 
 **发现日期**: 2026-05-19

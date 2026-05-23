@@ -551,12 +551,15 @@ function resolveActionText(template, row) {
   let text = String(template || '')
   const data = row || {}
   Object.keys(data).forEach((key) => {
-    text = text.replaceAll(`:${key}`, data[key])
-    text = text.replaceAll(`\${${key}}`, data[key])
+    const value = data[key]
+    if (!isUsableKeyValue(value))
+      return
+    text = text.replaceAll(`:${key}`, value)
+    text = text.replaceAll(`\${${key}}`, value)
   })
-  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : 'id'
-  if (data[rowKey] !== undefined)
-    text = text.replaceAll(':id', data[rowKey])
+  const idValue = resolveRowKeyValue(data)
+  if (isUsableKeyValue(idValue))
+    text = text.replaceAll(':id', idValue)
   return text
 }
 
@@ -577,6 +580,48 @@ const rowKeyFn = computed(() => {
   }
   return row => row[props.rowKey]
 })
+
+function isUsableKeyValue(value) {
+  if (value === null || value === undefined)
+    return false
+  const textValue = String(value).trim()
+  return textValue !== '' && textValue !== 'undefined' && textValue !== 'null'
+}
+
+function resolveRowKeyValue(row) {
+  if (!row || typeof row !== 'object')
+    return undefined
+
+  const values = []
+  try {
+    values.push(rowKeyFn.value(row))
+  }
+  catch (error) {
+    console.warn('[AiCrudPage] rowKey解析失败:', error)
+  }
+
+  if (typeof props.rowKey === 'string')
+    values.push(row[props.rowKey])
+  values.push(row.id, row.Id)
+
+  return values.find(isUsableKeyValue)
+}
+
+function mergeHookRowWithOriginal(row, processedRow) {
+  if (!processedRow || typeof processedRow !== 'object')
+    return row
+  const merged = row && typeof row === 'object'
+    ? { ...row, ...processedRow }
+    : { ...processedRow }
+  const originalKey = resolveRowKeyValue(row)
+  if (isUsableKeyValue(originalKey) && !isUsableKeyValue(resolveRowKeyValue(merged))) {
+    const key = typeof props.rowKey === 'string' ? props.rowKey : 'id'
+    merged[key] = originalKey
+    if (!isUsableKeyValue(merged.id))
+      merged.id = originalKey
+  }
+  return merged
+}
 
 const resolvedCustomQueryConfigKey = computed(() => {
   if (props.customQueryConfigKey) {
@@ -773,7 +818,7 @@ const computedMaxHeight = computed(() => {
  * @param {string} hookName - 钩子函数名
  * @param {*} params - 参数
  * @param {Function} success - 成功回调
- * @returns {Promise}
+ * @returns {Promise} 处理后的钩子结果
  */
 async function callHook(hookName, params, success) {
   if (props[hookName] && typeof props[hookName] === 'function') {
@@ -809,29 +854,33 @@ async function callHook(hookName, params, success) {
  */
 function parseApiConfig(key, defaultApi, defaultMethod = 'get', urlParams = {}) {
   const apiConfigValue = props.apiConfig[key]
+  const normalizedUrlParams = normalizeUrlParams(urlParams)
 
   if (apiConfigValue) {
     const [method, url] = apiConfigValue.split('@')
-    // 支持 postEncrypt 方法
     const finalMethod = method === 'postEncrypt' ? method : method.toLowerCase()
-    // 替换 URL 中的占位符，如 :id, :dictId 等
     let finalUrl = url
     let hasPlaceholder = false
-    Object.keys(urlParams).forEach((paramKey) => {
+    Object.keys(normalizedUrlParams).forEach((paramKey) => {
+      const paramValue = normalizedUrlParams[paramKey]
+      if (!isUsableKeyValue(paramValue)) {
+        return
+      }
       if (finalUrl.includes(`:${paramKey}`)) {
         hasPlaceholder = true
-        finalUrl = finalUrl.replaceAll(`:${paramKey}`, urlParams[paramKey])
+        finalUrl = finalUrl.replaceAll(`:${paramKey}`, paramValue)
       }
-      // 兼容历史配置，避免 /{id} 或 /id 被后端识别成字符串 id。
       if (finalUrl.includes(`{${paramKey}}`)) {
         hasPlaceholder = true
-        finalUrl = finalUrl.replaceAll(`{${paramKey}}`, urlParams[paramKey])
+        finalUrl = finalUrl.replaceAll(`{${paramKey}}`, paramValue)
+      }
+      if (paramKey === 'id' && /\/id(?=\/|$|\?)/.test(finalUrl)) {
+        hasPlaceholder = true
+        finalUrl = finalUrl.replace(/\/id(?=\/|$|\?)/g, `/${paramValue}`)
       }
     })
-    // 如果没有占位符但有参数，且是 GET 请求，则自动拼接到 URL 末尾
-    // POST 请求不拼接，通过 query/body 参数传递
-    if (!hasPlaceholder && finalMethod === 'get' && Object.keys(urlParams).length > 0) {
-      const paramValues = Object.values(urlParams).join('/')
+    if (!hasPlaceholder && finalMethod === 'get' && Object.keys(normalizedUrlParams).length > 0) {
+      const paramValues = resolveUrlParamValues(normalizedUrlParams).join('/')
       if (paramValues) {
         finalUrl = `${finalUrl}/${paramValues}`
       }
@@ -840,6 +889,25 @@ function parseApiConfig(key, defaultApi, defaultMethod = 'get', urlParams = {}) 
   }
 
   return { method: defaultMethod, url: defaultApi }
+}
+
+function normalizeUrlParams(urlParams = {}) {
+  const normalized = { ...(urlParams || {}) }
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  if (rowKey && isUsableKeyValue(normalized[rowKey]) && !isUsableKeyValue(normalized.id))
+    normalized.id = normalized[rowKey]
+  if (rowKey && isUsableKeyValue(normalized.id) && !isUsableKeyValue(normalized[rowKey]))
+    normalized[rowKey] = normalized.id
+  return normalized
+}
+
+function resolveUrlParamValues(urlParams = {}) {
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  if (rowKey && isUsableKeyValue(urlParams[rowKey]))
+    return [urlParams[rowKey]]
+  if (isUsableKeyValue(urlParams.id))
+    return [urlParams.id]
+  return Object.values(urlParams).filter(isUsableKeyValue)
 }
 
 /**
@@ -1229,16 +1297,17 @@ async function handleEdit(row) {
 
   // 调用 beforeRenderForm 钩子（编辑时）
   const processedRow = await callHook('beforeRenderForm', row, data => data)
+  const renderRow = mergeHookRowWithOriginal(row, processedRow)
 
   // 如果需要加载详情
   if (props.loadDetailOnEdit) {
     window.$loading.show('加载中...')
-    await loadDetail(processedRow || row)
+    await loadDetail(renderRow)
     window.$loading.close()
   }
   else {
     // 调用 beforeRenderDetail 钩子
-    const data = await callHook('beforeRenderDetail', processedRow || row, data => data)
+    const data = await callHook('beforeRenderDetail', renderRow, data => data)
     applyDetailData(data)
   }
 
@@ -1258,12 +1327,18 @@ async function loadDetail(row) {
   confirmLoading.value = true
 
   try {
-    const idValue = row[props.rowKey]
+    const idValue = resolveRowKeyValue(row)
+    if (!isUsableKeyValue(idValue)) {
+      console.warn('[AiCrudPage] loadDetail id缺失', { rowKey: props.rowKey, rowKeys: Object.keys(row || {}).slice(0, 20), row })
+      window.$message.warning(`缺少${props.rowKey}参数，无法加载详情`)
+      confirmLoading.value = false
+      return
+    }
     const { method, url } = parseApiConfig(
       'detail',
       `${props.api}/${idValue}`,
       'get',
-      { [props.rowKey]: idValue },
+      { id: idValue },
     )
 
     // 确定使用哪种请求方法
@@ -1319,7 +1394,13 @@ async function loadDetail(row) {
  */
 async function handleDelete(row) {
   const rows = [row]
-  const keys = [rowKeyFn.value(row)]
+  const key = resolveRowKeyValue(row)
+  if (!isUsableKeyValue(key)) {
+    console.warn('[AiCrudPage] delete id缺失', { rowKey: props.rowKey, rowKeys: Object.keys(row || {}).slice(0, 20), row })
+    window.$message.warning(`缺少${props.rowKey}参数，无法删除`)
+    return
+  }
+  const keys = [key]
 
   await performDelete(rows, keys)
 }
@@ -1366,7 +1447,7 @@ async function performDelete(rows, keys) {
 
         // 单个删除且 URL 包含占位符时，使用替换后的 URL
         if (keys.length === 1 && (hasIdPlaceholder || hasRowKeyPlaceholder || hasBraceIdPlaceholder || hasBraceRowKeyPlaceholder)) {
-          const urlParams = { [props.rowKey]: keys[0] }
+          const urlParams = { id: keys[0] }
           const { method, url } = parseApiConfig('delete', props.api, 'delete', urlParams)
 
           let requestMethod = method
@@ -1476,11 +1557,16 @@ async function handleModalConfirm() {
       }
     }
 
+    const idValue = isEdit ? resolveRowKeyValue(currentRow.value) : null
+    if (isEdit && !isUsableKeyValue(idValue)) {
+      window.$message.warning(`缺少${props.rowKey}参数，无法提交编辑`)
+      return
+    }
     const { method, url } = parseApiConfig(
       isEdit ? 'update' : createKey,
-      isEdit ? `${props.api}/${currentRow.value[props.rowKey]}` : props.api,
+      isEdit ? `${props.api}/${idValue}` : props.api,
       isEdit ? 'put' : 'post',
-      isEdit ? { [props.rowKey]: currentRow.value[props.rowKey] } : {},
+      isEdit ? { id: idValue } : {},
     )
 
     // 确定使用哪种请求方法

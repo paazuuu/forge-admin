@@ -92,7 +92,8 @@ public class LowcodeSchemaValidator {
         }
         if ("TREE".equals(appType) && modelSchema.getTreeConfig() != null
                 && StringUtils.isNotBlank(modelSchema.getTreeConfig().getParentField())
-                && !fields.contains(modelSchema.getTreeConfig().getParentField())) {
+                && !fields.contains(modelSchema.getTreeConfig().getParentField())
+                && !columns.contains(modelSchema.getTreeConfig().getParentField())) {
             throw new BusinessException("树形父级字段不存在: " + modelSchema.getTreeConfig().getParentField());
         }
         validateIndexes(modelSchema, fields);
@@ -110,11 +111,15 @@ public class LowcodeSchemaValidator {
         Set<String> modelFields = modelSchema.getFields().stream()
                 .map(LowcodeFieldSchema::getField)
                 .collect(Collectors.toSet());
+        Set<String> modelColumns = modelSchema.getFields().stream()
+                .map(LowcodeFieldSchema::getColumnName)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toSet());
         Set<String> pageFields = buildAllowedPageRefs(modelFields, pageSchema);
         for (LowcodePageZone zone : pageSchema.getZones()) {
             validateZone(zone, pageFields);
         }
-        validateTreeRuntime(modelSchema, pageSchema, modelFields, pageFields);
+        validateTreeRuntime(modelSchema, pageSchema, modelFields, modelColumns, pageFields);
     }
 
     private void validateTableName(String tableName) {
@@ -253,8 +258,6 @@ public class LowcodeSchemaValidator {
                 continue;
             }
             String modelCode = StringUtils.trimToEmpty(modelRef.getModelCode());
-            boolean primary = Boolean.TRUE.equals(modelRef.getPrimary())
-                    || StringUtils.equals(modelCode, pageSchema.getPrimaryModelCode());
             for (Map<String, Object> field : modelRef.getFields()) {
                 String sourceField = readFieldText(field, "sourceField");
                 if (StringUtils.isBlank(sourceField)) {
@@ -264,8 +267,12 @@ public class LowcodeSchemaValidator {
                 if (StringUtils.isNotBlank(fieldRef)) {
                     pageFields.add(fieldRef);
                 }
-                if (primary && StringUtils.isNotBlank(sourceField)) {
+                if (StringUtils.isNotBlank(sourceField)) {
                     pageFields.add(sourceField);
+                }
+                String columnName = readFieldText(field, "columnName");
+                if (StringUtils.isNotBlank(columnName)) {
+                    pageFields.add(columnName);
                 }
                 if (StringUtils.isNotBlank(modelCode) && StringUtils.isNotBlank(sourceField)) {
                     pageFields.add(modelCode + "." + sourceField);
@@ -286,22 +293,23 @@ public class LowcodeSchemaValidator {
     private void validateTreeRuntime(LowcodeModelSchema modelSchema,
                                      LowcodePageSchema pageSchema,
                                      Set<String> modelFields,
+                                     Set<String> modelColumns,
                                      Set<String> pageFields) {
         if (!isTreeRuntime(modelSchema, pageSchema)) {
             return;
         }
         String parentField = resolveTreeParentField(modelSchema, pageSchema);
-        if (StringUtils.isBlank(parentField) || !isValidTreeField(parentField, modelFields, pageFields)) {
+        if (StringUtils.isBlank(parentField) || !isValidTreeField(parentField, modelFields, modelColumns, pageFields)) {
             throw new BusinessException("树形表必须配置父级字段，请先添加 parentId/pid 等字段或在树形配置中指定父级字段");
         }
         String labelField = resolveTreeLabelField(modelSchema, pageSchema);
-        if (StringUtils.isNotBlank(labelField) && !isValidTreeField(labelField, modelFields, pageFields)) {
+        if (StringUtils.isNotBlank(labelField) && !isValidTreeField(labelField, modelFields, modelColumns, pageFields)) {
             throw new BusinessException("树形显示字段不存在: " + labelField);
         }
     }
 
-    private boolean isValidTreeField(String field, Set<String> modelFields, Set<String> pageFields) {
-        return modelFields.contains(field) || pageFields.contains(field);
+    private boolean isValidTreeField(String field, Set<String> modelFields, Set<String> modelColumns, Set<String> pageFields) {
+        return modelFields.contains(field) || modelColumns.contains(field) || pageFields.contains(field);
     }
 
     private boolean isTreeRuntime(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {

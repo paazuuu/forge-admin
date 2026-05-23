@@ -74,19 +74,10 @@ export const canvasComponentCatalog = [
   },
   {
     group: 'business',
-    componentKey: 'save-button',
-    title: '保存',
-    desc: '提交表单数据',
-    zones: ['edit'],
-    defaultWidth: 104,
-    defaultHeight: 40,
-  },
-  {
-    group: 'business',
     componentKey: 'reset-button',
     title: '重置',
     desc: '清空当前表单',
-    zones: ['search', 'edit'],
+    zones: ['search'],
     defaultWidth: 104,
     defaultHeight: 40,
   },
@@ -132,6 +123,60 @@ export const canvasComponentCatalog = [
     componentKey: 'field-select',
     title: '下拉选择',
     desc: '系统字典或枚举',
+    zones: ['search', 'edit'],
+    defaultWidth: 280,
+    defaultHeight: 64,
+  },
+  {
+    group: 'field',
+    componentKey: 'field-dict-select',
+    title: '字典选择器',
+    desc: '系统字典组件',
+    zones: ['search', 'edit'],
+    defaultWidth: 280,
+    defaultHeight: 64,
+  },
+  {
+    group: 'field',
+    componentKey: 'field-tree-select',
+    title: '树形选择',
+    desc: '组织、分类、区域等树形字段',
+    zones: ['search', 'edit'],
+    defaultWidth: 280,
+    defaultHeight: 64,
+  },
+  {
+    group: 'field',
+    componentKey: 'field-org-tree-select',
+    title: '组织树选择',
+    desc: '当前系统组织树',
+    zones: ['search', 'edit'],
+    defaultWidth: 280,
+    defaultHeight: 64,
+  },
+  {
+    group: 'field',
+    componentKey: 'field-user-select',
+    title: '用户选择',
+    desc: '当前系统用户列表',
+    zones: ['search', 'edit'],
+    defaultWidth: 280,
+    defaultHeight: 64,
+  },
+  {
+    group: 'field',
+    componentKey: 'field-region-tree-select',
+    title: '区划树选择',
+    desc: '行政区划树组件',
+    zones: ['search', 'edit'],
+    defaultWidth: 280,
+    defaultHeight: 64,
+  },
+  {
+    group: 'field',
+    componentKey: 'field-cascader',
+    title: '级联选择',
+    desc: '多级分类或行政区划',
     zones: ['search', 'edit'],
     defaultWidth: 280,
     defaultHeight: 64,
@@ -254,6 +299,7 @@ export function createDefaultPageSchema(modelSchema) {
   const isTree = modelSchema?.appType === 'TREE'
   const isMasterDetail = modelSchema?.appType === 'MASTER_DETAIL'
   const layoutType = isTree ? 'tree-crud' : isMasterDetail ? 'master-detail-crud' : 'simple-crud'
+  const treeConfig = isTree ? resolveDefaultTreeConfig(modelSchema) : null
   const schema = {
     layoutType,
     listLayoutMode: 'grid',
@@ -279,13 +325,7 @@ export function createDefaultPageSchema(modelSchema) {
           customActions: [],
           ...(isTree
             ? {
-                treeConfig: {
-                  keyField: modelSchema?.treeConfig?.keyField || 'id',
-                  parentField: modelSchema?.treeConfig?.parentField || 'parentId',
-                  labelField: modelSchema?.treeConfig?.labelField || fields.find(field => field.field === 'name')?.field || fields[0]?.field || '',
-                  childrenField: modelSchema?.treeConfig?.childrenField || 'children',
-                  treeTitle: modelSchema?.treeConfig?.treeTitle || `${modelSchema?.businessName || '业务'}树`,
-                },
+                treeConfig,
               }
             : {}),
         },
@@ -295,7 +335,9 @@ export function createDefaultPageSchema(modelSchema) {
         componentKey: 'edit-form',
         enabled: true,
         fieldRefs: filterPageFields(fields, 'edit').map(field => field.field),
-        props: {},
+        props: {
+          editGridCols: 1,
+        },
       },
       {
         zoneKey: 'detail',
@@ -329,17 +371,20 @@ export function syncPageSchemaWithModel(pageSchema, modelSchema) {
       props,
     }
     const canvas = normalizeZoneCanvas(normalizedZone, modelSchema)
-    const formCreateRefs = normalizedZone.zoneKey === 'edit'
+    const canvasRefs = resolveFieldRefsFromCanvas(canvas).filter(field => zoneFieldSet.has(field))
+    const formCreateRefs = normalizedZone.zoneKey === 'edit' && !canvasRefs.length
       ? resolveFieldRefsFromFormCreateRules(props.formCreateRule, zoneFieldSet)
       : []
     const explicitRefs = (normalizedZone.fieldRefs || []).filter(field => zoneFieldSet.has(field))
     const explicitChildRefs = explicitRefs.filter(ref => childEditSet.has(ref))
-    const canvasRefs = resolveFieldRefsFromCanvas(canvas).filter(field => zoneFieldSet.has(field))
-    const fieldRefs = formCreateRefs.length
-      ? mergePageFieldRefs(formCreateRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
-      : explicitRefs.length
-        ? mergePageFieldRefs(explicitRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
-        : mergePageFieldRefs(canvasRefs, childEditRefs)
+    const preferCanvasRefs = ['edit', 'detail'].includes(normalizedZone.zoneKey) && canvasRefs.length
+    const fieldRefs = preferCanvasRefs
+      ? mergePageFieldRefs(canvasRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
+      : formCreateRefs.length
+        ? mergePageFieldRefs(formCreateRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
+        : explicitRefs.length
+          ? mergePageFieldRefs(explicitRefs, explicitChildRefs.length ? explicitChildRefs : childEditRefs)
+          : mergePageFieldRefs(canvasRefs, childEditRefs)
     return {
       ...normalizedZone,
       fieldRefs,
@@ -548,6 +593,110 @@ export function resolveListPageBlockMeta(blockType) {
   return listPageBlockCatalog.find(item => item.blockType === blockType) || null
 }
 
+export function resolveTreeSourceRefs(modelSchema = {}) {
+  const refs = Array.isArray(modelSchema.pageModelRefs) && modelSchema.pageModelRefs.length
+    ? modelSchema.pageModelRefs
+    : [createPageModelRef({ modelSchema }, { primary: true })]
+  return refs.filter(ref => ref?.modelCode || ref?.primary)
+}
+
+export function resolveDefaultTreeConfig(modelSchema = {}, overrides = {}) {
+  const sourceRef = resolveTreeSourceRef(modelSchema, overrides.sourceModelCode)
+  const primaryRef = resolvePrimaryModelRef(modelSchema)
+  const sourceFields = sourceRef?.fields || modelSchema.fields || []
+  const modelTreeConfig = sourceRef?.primary ? (modelSchema.treeConfig || {}) : {}
+  const keyField = overrides.keyField
+    || modelTreeConfig.keyField
+    || pickSourceField(sourceFields, ['id'])
+    || 'id'
+  const parentField = overrides.parentField
+    || modelTreeConfig.parentField
+    || pickSourceField(sourceFields, ['parentId', 'pid', 'parentCode'])
+    || 'parentId'
+  const labelField = overrides.labelField
+    || modelTreeConfig.labelField
+    || pickSourceField(sourceFields, ['name', 'title', 'label'])
+    || firstBusinessSourceField(sourceFields, [keyField, parentField])
+    || 'name'
+  const relation = sourceRef?.primary ? null : findRelationToSource(primaryRef, sourceRef)
+  const filterField = overrides.filterField
+    || (sourceRef?.primary ? parentField : relation?.sourceField)
+    || parentField
+  const targetField = overrides.targetField
+    || (sourceRef?.primary ? keyField : relation?.targetField)
+    || keyField
+
+  return {
+    sourceModelCode: sourceRef?.modelCode || '',
+    sourceModelName: sourceRef?.modelName || modelSchema.businessName || '',
+    sourceTableName: sourceRef?.tableName || modelSchema.tableName || '',
+    keyField,
+    parentField,
+    labelField,
+    filterField,
+    targetField,
+    childrenField: overrides.childrenField || modelTreeConfig.childrenField || 'children',
+    treeTitle: overrides.treeTitle || modelTreeConfig.treeTitle || `${sourceRef?.modelName || modelSchema.businessName || '业务'}树`,
+  }
+}
+
+export function resolveTreeSourceRef(modelSchema = {}, sourceModelCode = '') {
+  const refs = resolveTreeSourceRefs(modelSchema)
+  if (!refs.length)
+    return null
+  if (sourceModelCode) {
+    const matched = refs.find(ref => ref.modelCode === sourceModelCode)
+    if (matched)
+      return matched
+  }
+  return refs.find(ref => !ref.primary) || refs.find(ref => ref.primary) || refs[0]
+}
+
+export function resolveTreeFieldOptions(modelSchema = {}, sourceModelCode = '') {
+  const sourceRef = resolveTreeSourceRef(modelSchema, sourceModelCode)
+  const fields = sourceRef?.fields || modelSchema.fields || []
+  return fields
+    .filter(field => !isHiddenPageField(field))
+    .map(field => ({
+      label: (field.rawLabel || field.label)
+        ? `${field.rawLabel || field.label}（${sourceFieldName(field)}）`
+        : sourceFieldName(field),
+      value: sourceFieldName(field),
+    }))
+}
+
+function resolvePrimaryModelRef(modelSchema = {}) {
+  const refs = resolveTreeSourceRefs(modelSchema)
+  return refs.find(ref => ref.primary) || refs[0] || null
+}
+
+function sourceFieldName(field = {}) {
+  return field?.sourceField || field?.field || ''
+}
+
+function pickSourceField(fields = [], names = []) {
+  const field = fields.find((item) => {
+    const sourceField = sourceFieldName(item)
+    return names.includes(sourceField) || names.includes(item.field)
+  })
+  return sourceFieldName(field)
+}
+
+function firstBusinessSourceField(fields = [], excluded = []) {
+  const excludedSet = new Set(excluded.filter(Boolean))
+  const field = fields.find((item) => {
+    const sourceField = sourceFieldName(item)
+    return sourceField && !excludedSet.has(sourceField) && !isReadonlySystemField(item)
+  }) || fields.find(item => sourceFieldName(item) && !excludedSet.has(sourceFieldName(item)))
+  return sourceFieldName(field)
+}
+
+function findRelationToSource(primaryRef, sourceRef) {
+  if (!primaryRef || !sourceRef?.modelCode)
+    return null
+  return (primaryRef.relations || []).find(relation => relation?.targetObjectCode === sourceRef.modelCode) || null
+}
+
 export function createDefaultListGridLayout(modelSchema, options = {}) {
   const fields = modelSchema?.fields || []
   const layoutType = options.layoutType || (modelSchema?.appType === 'TREE' ? 'tree-crud' : 'simple-crud')
@@ -555,6 +704,7 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
   const items = []
   const mainX = isTree ? 3 : 0
   const mainW = isTree ? 9 : 12
+  const treeConfig = isTree ? resolveDefaultTreeConfig(modelSchema) : null
 
   if (isTree) {
     items.push({
@@ -566,11 +716,7 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
       gridH: 18,
       label: '导航树',
       props: {
-        treeTitle: `${modelSchema?.businessName || '业务'}树`,
-        keyField: modelSchema?.treeConfig?.keyField || 'id',
-        parentField: modelSchema?.treeConfig?.parentField || 'parentId',
-        labelField: modelSchema?.treeConfig?.labelField || (fields.find(f => f.field === 'name')?.field) || fields[0]?.field || '',
-        childrenField: modelSchema?.treeConfig?.childrenField || 'children',
+        ...treeConfig,
       },
       fieldRefs: [],
     })
@@ -640,7 +786,8 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
     : modelSchema?.appType === 'MASTER_DETAIL' ? 'master-detail-crud' : 'simple-crud')
   const fallback = createDefaultListGridLayout(modelSchema, { layoutType })
   const source = (layout?.items || []).length ? layout : fallback
-  const items = (source.items || []).filter((item) => {
+  const modeChanged = Boolean(source.layoutType && source.layoutType !== layoutType)
+  const sourceItems = (source.items || []).filter((item) => {
     const meta = resolveListPageBlockMeta(item.blockType) || {}
     return !meta.onlyFor || meta.onlyFor.includes(layoutType)
   }).map((item) => {
@@ -655,10 +802,13 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
       gridY: Math.max(0, Number(item.gridY) || 0),
       gridW: clampNumber(item.gridW, 1, LIST_PAGE_GRID_COLS),
       gridH: Math.max(resolveBlockMinGridH(item.blockType, meta), Number(item.gridH) || meta.defaultH || 2),
-      props: { ...(item.props || {}) },
+      props: item.blockType === 'tree-panel'
+        ? resolveDefaultTreeConfig(modelSchema, item.props || {})
+        : { ...(item.props || {}) },
       fieldRefs: refs,
     }
   })
+  const items = normalizeGridItemsForLayout(sourceItems, modelSchema, layoutType, modeChanged)
   return {
     cols: Number(source.cols) || LIST_PAGE_GRID_COLS,
     rowHeight: Number(source.rowHeight) || LIST_PAGE_GRID_ROW_HEIGHT,
@@ -666,6 +816,45 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
     layoutType,
     items,
   }
+}
+
+function normalizeGridItemsForLayout(items, modelSchema, layoutType, modeChanged) {
+  const next = [...items]
+  const isTree = layoutType === 'tree-crud'
+  const treeIndex = next.findIndex(item => item.blockType === 'tree-panel')
+  const needsTreeInsert = isTree && treeIndex < 0
+  const defaultLayout = (modeChanged || needsTreeInsert)
+    ? createDefaultListGridLayout(modelSchema, { layoutType })
+    : null
+
+  if (needsTreeInsert) {
+    const treeBlock = defaultLayout?.items?.find(item => item.blockType === 'tree-panel')
+      || createGridBlock('tree-panel', modelSchema, { gridX: 0, gridY: 0 })
+    if (treeBlock)
+      next.unshift(treeBlock)
+  }
+
+  if (!modeChanged && !needsTreeInsert)
+    return next
+
+  const defaultByType = new Map((defaultLayout?.items || []).map(item => [item.blockType, item]))
+  return next.map((item) => {
+    if (!['search-form', 'toolbar', 'data-table', 'tree-panel'].includes(item.blockType))
+      return item
+    const defaultItem = defaultByType.get(item.blockType)
+    if (!defaultItem)
+      return item
+    return {
+      ...item,
+      gridX: defaultItem.gridX,
+      gridY: defaultItem.gridY,
+      gridW: defaultItem.gridW,
+      gridH: Math.max(item.gridH || 1, defaultItem.gridH || 1),
+      props: item.blockType === 'tree-panel'
+        ? { ...defaultItem.props, ...(item.props || {}) }
+        : item.props,
+    }
+  })
 }
 
 export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
@@ -679,6 +868,7 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
 
   if (isTree) {
     const treeConfig = table?.props?.treeConfig || {}
+    const defaultTreeConfig = resolveDefaultTreeConfig(modelSchema, treeConfig)
     items.push({
       id: 'block_tree',
       blockType: 'tree-panel',
@@ -688,11 +878,7 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
       gridH: 18,
       label: '导航树',
       props: {
-        treeTitle: treeConfig.treeTitle || `${modelSchema?.businessName || '业务'}树`,
-        keyField: treeConfig.keyField || 'id',
-        parentField: treeConfig.parentField || 'parentId',
-        labelField: treeConfig.labelField || '',
-        childrenField: treeConfig.childrenField || 'children',
+        ...defaultTreeConfig,
       },
       fieldRefs: [],
     })
@@ -801,10 +987,15 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
       if (tree) {
         nextProps.treeConfig = {
           ...(zone.props?.treeConfig || {}),
+          sourceModelCode: tree.props?.sourceModelCode || zone.props?.treeConfig?.sourceModelCode || '',
+          sourceModelName: tree.props?.sourceModelName || zone.props?.treeConfig?.sourceModelName || '',
+          sourceTableName: tree.props?.sourceTableName || zone.props?.treeConfig?.sourceTableName || '',
           treeTitle: tree.props?.treeTitle || zone.props?.treeConfig?.treeTitle,
           keyField: tree.props?.keyField || zone.props?.treeConfig?.keyField || 'id',
           parentField: tree.props?.parentField || zone.props?.treeConfig?.parentField || 'parentId',
           labelField: tree.props?.labelField || zone.props?.treeConfig?.labelField || '',
+          filterField: tree.props?.filterField || zone.props?.treeConfig?.filterField || '',
+          targetField: tree.props?.targetField || zone.props?.treeConfig?.targetField || '',
           childrenField: tree.props?.childrenField || zone.props?.treeConfig?.childrenField || 'children',
         }
       }
@@ -854,13 +1045,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
     base.props = { actions: ['add', 'import', 'export', 'custom-query'], customActions: [] }
   }
   if (blockType === 'tree-panel') {
-    base.props = {
-      treeTitle: `${modelSchema?.businessName || '业务'}树`,
-      keyField: 'id',
-      parentField: 'parentId',
-      labelField: fields.find(f => f.field === 'name')?.field || fields[0]?.field || '',
-      childrenField: 'children',
-    }
+    base.props = resolveDefaultTreeConfig(modelSchema)
   }
   if (blockType === 'stats-strip') {
     base.props = {
@@ -936,9 +1121,42 @@ export function resolveDefaultFieldComponentKey(field, zoneKey = 'edit') {
     return 'field-switch'
   if (field?.componentType === 'fileUpload' || field?.componentType === 'imageUpload')
     return 'field-upload'
+  if (field?.componentType === 'dictSelect')
+    return 'field-dict-select'
+  if (field?.componentType === 'orgTreeSelect')
+    return 'field-org-tree-select'
+  if (field?.componentType === 'userSelect')
+    return 'field-user-select'
+  if (field?.componentType === 'regionTreeSelect')
+    return 'field-region-tree-select'
+  if (field?.componentType === 'treeSelect')
+    return 'field-tree-select'
+  if (field?.componentType === 'cascader')
+    return 'field-cascader'
   if (field?.dictType || ['select', 'radio', 'checkbox'].includes(field?.componentType))
     return 'field-select'
   return 'field-input'
+}
+
+export function resolveComponentTypeFromComponentKey(componentKey, fallback = 'input') {
+  const typeMap = {
+    'field-input': 'input',
+    'field-textarea': 'textarea',
+    'field-number': 'number',
+    'field-select': 'select',
+    'field-dict-select': 'dictSelect',
+    'field-tree-select': 'treeSelect',
+    'field-org-tree-select': 'orgTreeSelect',
+    'field-user-select': 'userSelect',
+    'field-region-tree-select': 'regionTreeSelect',
+    'field-cascader': 'cascader',
+    'field-date': 'date',
+    'field-datetime': 'datetime',
+    'field-switch': 'switch',
+    'field-upload': 'fileUpload',
+    'detail-field': fallback,
+  }
+  return typeMap[componentKey] || fallback
 }
 
 export function createCanvasItem(payload = {}, context = {}) {
@@ -986,8 +1204,9 @@ export function normalizeZoneCanvas(zone, modelSchema) {
     ? oldCanvas.items
     : defaultCanvas.items
   const fieldSet = new Set(filterPageFields(fields, zone?.zoneKey).map(field => field.field))
-  const items = sourceItems
+  let items = sourceItems
     .map(item => normalizeCanvasItem(item, zone?.zoneKey, fields))
+    .filter(item => zone?.zoneKey !== 'edit' || !['save-button', 'reset-button'].includes(item.componentKey))
     .filter(item => !item.fieldRef || fieldSet.has(item.fieldRef))
     .map((item) => {
       const refs = normalizeFieldRefs(item.fieldRefs || item.props?.fieldRefs || []).filter(ref => fieldSet.has(ref))
@@ -1001,6 +1220,21 @@ export function normalizeZoneCanvas(zone, modelSchema) {
       }
     })
 
+  if (['edit', 'detail'].includes(zone?.zoneKey)) {
+    const explicitRefs = normalizeFieldRefs(zone?.fieldRefs || []).filter(ref => fieldSet.has(ref))
+    const usedRefs = new Set(resolveFieldRefsFromCanvas({ items }))
+    const missingRefs = explicitRefs.filter(ref => !usedRefs.has(ref))
+    if (missingRefs.length) {
+      const fieldMap = new Map(fields.map(field => [field.field, field]))
+      const startIndex = items.filter(item => item.fieldRef).length
+      const missingItems = missingRefs
+        .map(ref => fieldMap.get(ref))
+        .filter(Boolean)
+        .map((field, index) => createDefaultFieldCanvasItem(field, zone?.zoneKey, startIndex + index, fields))
+      items = [...items, ...missingItems]
+    }
+  }
+
   return {
     width: Number(oldCanvas.width || defaultCanvas.width),
     height: Number(oldCanvas.height || defaultCanvas.height),
@@ -1011,7 +1245,7 @@ export function normalizeZoneCanvas(zone, modelSchema) {
 
 export function resolveFieldRefsFromCanvas(canvas) {
   const refs = []
-  ;(canvas?.items || []).forEach((item) => {
+  sortCanvasItemsByPosition(canvas?.items || []).forEach((item) => {
     if (item.fieldRef)
       refs.push(item.fieldRef)
     refs.push(...normalizeFieldRefs(item.fieldRefs || item.props?.fieldRefs || []))
@@ -1025,14 +1259,19 @@ export function patchZoneCanvas(zone, canvasPatch = {}) {
     ...canvasPatch,
   }
   const syncedProps = syncZoneBusinessProps(zone, canvas)
+  const props = {
+    ...(zone?.props || {}),
+    ...syncedProps,
+    canvas,
+  }
+  if (zone?.zoneKey === 'edit') {
+    delete props.formCreateRule
+    delete props.formCreateOptions
+  }
   return {
     ...zone,
     fieldRefs: resolveFieldRefsFromCanvas(canvas),
-    props: {
-      ...(zone?.props || {}),
-      ...syncedProps,
-      canvas,
-    },
+    props,
   }
 }
 
@@ -1150,46 +1389,8 @@ function createDefaultCanvasForZone(zoneKey, allFields, fieldRefs = [], modelSch
   }
 
   const items = fields.map((field, index) => {
-    const componentKey = resolveDefaultFieldComponentKey(field, zoneKey)
-    const colCount = zoneKey === 'detail' ? 2 : 3
-    const col = index % colCount
-    const row = Math.floor(index / colCount)
-    const width = componentKey === 'field-textarea' ? 580 : 280
-    const height = componentKey === 'field-textarea' ? 98 : componentKey === 'detail-field' ? 58 : 64
-    return createCanvasItem({
-      id: `${zoneKey}_${safeKey(field.field)}`,
-      componentKey,
-      label: field.label || field.field,
-      fieldRef: field.field,
-      x: 32 + col * 308,
-      y: 36 + row * (zoneKey === 'detail' ? 74 : 86),
-      w: width,
-      h: height,
-      zIndex: index + 1,
-    }, { zoneKey, fields: allFields })
+    return createDefaultFieldCanvasItem(field, zoneKey, index, allFields)
   })
-
-  if (zoneKey === 'edit') {
-    const y = 36 + Math.ceil(items.length / 3) * 86
-    items.push(
-      createCanvasItem({
-        id: 'edit_action_save',
-        componentKey: 'save-button',
-        label: '保存',
-        x: 32,
-        y,
-        zIndex: items.length + 1,
-      }, { zoneKey, fields: allFields }),
-      createCanvasItem({
-        id: 'edit_action_reset',
-        componentKey: 'reset-button',
-        label: '重置',
-        x: 148,
-        y,
-        zIndex: items.length + 2,
-      }, { zoneKey, fields: allFields }),
-    )
-  }
 
   return {
     width: 1040,
@@ -1197,6 +1398,28 @@ function createDefaultCanvasForZone(zoneKey, allFields, fieldRefs = [], modelSch
     snap: 8,
     items,
   }
+}
+
+function createDefaultFieldCanvasItem(field, zoneKey, index, allFields) {
+  const componentKey = resolveDefaultFieldComponentKey(field, zoneKey)
+  const colCount = ['edit', 'detail'].includes(zoneKey) ? 1 : 3
+  const col = index % colCount
+  const row = Math.floor(index / colCount)
+  const width = ['edit', 'detail'].includes(zoneKey)
+    ? 720
+    : componentKey === 'field-textarea' ? 580 : 280
+  const height = componentKey === 'field-textarea' ? 98 : componentKey === 'detail-field' ? 58 : 64
+  return createCanvasItem({
+    id: `${zoneKey}_${safeKey(field.field)}`,
+    componentKey,
+    label: field.label || field.field,
+    fieldRef: field.field,
+    x: 32 + col * 308,
+    y: 36 + row * (zoneKey === 'detail' ? 74 : 86),
+    w: width,
+    h: height,
+    zIndex: index + 1,
+  }, { zoneKey, fields: allFields })
 }
 
 function resolveDefaultFields(zoneKey, fields, fieldRefs) {
@@ -1229,12 +1452,76 @@ function normalizeFieldRefs(refs) {
 
 function syncZoneBusinessProps(zone, canvas) {
   const componentKeys = new Set((canvas?.items || []).map(item => item.componentKey))
-  if (zone?.zoneKey !== 'table')
-    return {}
+  if (zone?.zoneKey === 'table') {
+    return {
+      showImport: componentKeys.has('import-button'),
+      showExport: componentKeys.has('export-button'),
+      enableCustomQuery: componentKeys.has('custom-query'),
+    }
+  }
+  if (zone?.zoneKey === 'edit' || zone?.zoneKey === 'search') {
+    const fieldSettings = {}
+    const gridCols = resolveCanvasGridCols(canvas)
+    ;(canvas?.items || []).forEach((item) => {
+      if (!item.fieldRef)
+        return
+      const componentType = resolveComponentTypeFromComponentKey(item.componentKey, '')
+      if (!componentType)
+        return
+      fieldSettings[item.fieldRef] = {
+        ...(zone.props?.fieldSettings?.[item.fieldRef] || {}),
+        componentType,
+        ...resolveCanvasItemLayoutSetting(item, canvas, gridCols),
+      }
+      if (item.props?.placeholder) {
+        fieldSettings[item.fieldRef].props = {
+          ...(fieldSettings[item.fieldRef].props || {}),
+          placeholder: item.props.placeholder,
+        }
+      }
+    })
+    return {
+      fieldSettings,
+      ...(zone?.zoneKey === 'edit' ? { editGridCols: gridCols } : {}),
+    }
+  }
+  return {}
+}
+
+function resolveCanvasGridCols(canvas) {
+  const fieldItems = (canvas?.items || [])
+    .filter(item => item.fieldRef)
+    .sort((a, b) => Number(a.x || 0) - Number(b.x || 0))
+  const columns = []
+  fieldItems.forEach((item) => {
+    const x = Number(item.x || 0)
+    if (!columns.some(colX => Math.abs(colX - x) < 80))
+      columns.push(x)
+  })
+  return Math.max(1, Math.min(3, columns.length || 1))
+}
+
+function sortCanvasItemsByPosition(items = []) {
+  return [...items].sort((a, b) => {
+    const rowA = Math.round(Number(a.y || 0) / 16)
+    const rowB = Math.round(Number(b.y || 0) / 16)
+    if (rowA !== rowB)
+      return rowA - rowB
+    const xDiff = Number(a.x || 0) - Number(b.x || 0)
+    if (xDiff !== 0)
+      return xDiff
+    return Number(a.zIndex || 0) - Number(b.zIndex || 0)
+  })
+}
+
+function resolveCanvasItemLayoutSetting(item, canvas, gridCols) {
+  const canvasWidth = Number(canvas?.width || 1040)
+  const colWidth = Math.max(1, (canvasWidth - 64) / Math.max(1, gridCols))
+  const itemWidth = Number(item.w || 280)
+  const span = Math.max(1, Math.min(gridCols, Math.round(itemWidth / colWidth) || 1))
   return {
-    showImport: componentKeys.has('import-button'),
-    showExport: componentKeys.has('export-button'),
-    enableCustomQuery: componentKeys.has('custom-query'),
+    span,
+    labelWidth: item.style?.labelWidth || 86,
   }
 }
 

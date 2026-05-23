@@ -17,7 +17,7 @@
       :max-visible-fields="maxVisibleFields"
       :show-submit="false"
       :show-reset="false"
-      :context="context"
+      :context="formContext"
       :show-feedback="false"
       :y-gap="yGap"
     >
@@ -148,6 +148,10 @@ const resetLoading = ref(false)
 
 // 兼容 options 和 schema 两种命名
 const schema = computed(() => props.schema.length > 0 ? props.schema : props.options)
+const formContext = computed(() => ({
+  ...props.context,
+  isSearch: true,
+}))
 
 /**
  * 搜索
@@ -165,7 +169,7 @@ async function handleSearch() {
     emit('update:modelValue', { ...formData.value })
   }
   catch (error) {
-    console.log('表单验证失败:', error)
+    console.warn('表单验证失败:', error)
   }
   finally {
     // 延迟 300ms 再关闭 loading,防止连续点击

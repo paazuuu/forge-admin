@@ -198,7 +198,7 @@
 </template>
 
 <script setup>
-import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NTimePicker, NUpload } from 'naive-ui'
+import { NButton, NDatePicker, NInput, NInputNumber, NSelect, NSwitch, NTimePicker, NTreeSelect, NUpload } from 'naive-ui'
 import { computed, defineComponent, h, ref } from 'vue'
 import draggable from 'vuedraggable'
 import { isPageFieldVisible } from './page-schema'
@@ -301,7 +301,16 @@ const ComponentPreviewControl = defineComponent({
           style: 'width: 100%',
         })
       }
-      if (field.dictType || ['select', 'radio', 'checkbox'].includes(componentType)) {
+      if (['treeSelect', 'orgTreeSelect', 'regionTreeSelect'].includes(componentType)) {
+        return h(NTreeSelect, {
+          disabled: controlProps.disabled,
+          options: controlProps.options,
+          placeholder: `请选择${label}`,
+          clearable: true,
+          filterable: true,
+        })
+      }
+      if (field.dictType || ['select', 'radio', 'checkbox', 'dictSelect', 'userSelect'].includes(componentType)) {
         return h(NSelect, {
           disabled: controlProps.disabled,
           options: controlProps.options,

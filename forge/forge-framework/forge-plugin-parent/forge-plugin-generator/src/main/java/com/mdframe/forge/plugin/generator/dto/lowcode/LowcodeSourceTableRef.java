@@ -10,6 +10,14 @@ public class LowcodeSourceTableRef {
 
     private Long tableId;
 
+    private Long datasourceId;
+
+    private String datasourceCode;
+
+    private String datasourceName;
+
+    private String dbType;
+
     private String tableName;
 
     private String tableComment;

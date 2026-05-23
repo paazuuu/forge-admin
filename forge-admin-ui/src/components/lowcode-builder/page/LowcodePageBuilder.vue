@@ -50,12 +50,28 @@
         :layout-type="localSchema.layoutType"
       />
     </div>
-    <div v-else class="form-create-builder">
-      <FormCreateDesignerAdapter
+    <div v-else class="form-component-builder">
+      <ComponentPalette
+        selected-zone-key="edit"
+        :fields="fields"
+        :used-field-refs="editUsedFieldRefs"
+        @select="noop"
+      />
+      <CanvasFormDesigner
         :zone="editZone"
+        :fields="fields"
+        :selected-item-id="selectedEditItemId"
+        @select-item="selectedEditItemId = $event"
+        @update:zone="handleZoneUpdate"
+      />
+      <ComponentPropertyPanel
+        :zone="editZone"
+        :selected-item="selectedEditItem"
         :fields="fields"
         :layout-type="localSchema.layoutType"
         @update:zone="handleZoneUpdate"
+        @update-item="handleEditItemUpdate"
+        @remove-item="handleEditItemRemove"
       />
     </div>
   </div>
@@ -64,11 +80,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { cloneSchema, isSameSchema } from '../model/model-schema'
-import FormCreateDesignerAdapter from './FormCreateDesignerAdapter.vue'
+import CanvasFormDesigner from './CanvasFormDesigner.vue'
+import ComponentPalette from './ComponentPalette.vue'
+import ComponentPropertyPanel from './ComponentPropertyPanel.vue'
 import ListPageGridDesigner from './ListPageGridDesigner.vue'
 import {
   applyGridLayoutToZones,
   createDefaultListGridLayout,
+  patchZoneCanvas,
   syncGridLayoutWithModel,
   syncPageSchemaWithModel,
 } from './page-schema'
@@ -89,6 +108,7 @@ const emit = defineEmits(['update:modelValue'])
 
 const localSchema = ref(syncPageSchemaWithModel(cloneSchema(props.modelValue), props.modelSchema))
 const builderTab = ref('list')
+const selectedEditItemId = ref('')
 const layoutOptions = [
   { label: '标准单表', value: 'simple-crud' },
   { label: '左树右表', value: 'tree-crud' },
@@ -97,6 +117,11 @@ const layoutOptions = [
 
 const fields = computed(() => props.modelSchema?.fields || [])
 const editZone = computed(() => localSchema.value.zones?.find(zone => zone.zoneKey === 'edit') || null)
+const selectedEditItem = computed(() => {
+  const items = editZone.value?.props?.canvas?.items || []
+  return items.find(item => item.id === selectedEditItemId.value) || null
+})
+const editUsedFieldRefs = computed(() => resolveCanvasFieldRefs(editZone.value?.props?.canvas?.items || []))
 const listLayoutMode = computed(() => localSchema.value.listLayoutMode || 'grid')
 
 watch(
@@ -150,6 +175,42 @@ function handleZoneUpdate(zone) {
     ...localSchema.value,
     zones: (localSchema.value.zones || []).map(item => item.zoneKey === zone.zoneKey ? zone : item),
   }
+}
+
+function noop() {}
+
+function resolveCanvasFieldRefs(items = []) {
+  const refs = []
+  items.forEach((item) => {
+    if (item.fieldRef)
+      refs.push(item.fieldRef)
+    refs.push(...(item.fieldRefs || item.props?.fieldRefs || []))
+  })
+  return Array.from(new Set(refs))
+}
+
+function handleEditItemUpdate(item) {
+  if (!editZone.value || !item)
+    return
+  const canvas = editZone.value.props?.canvas || {}
+  const items = (canvas.items || []).map(canvasItem => canvasItem.id === item.id ? item : canvasItem)
+  handleZoneUpdate(patchZoneCanvas(editZone.value, {
+    ...canvas,
+    items,
+  }))
+}
+
+function handleEditItemRemove(itemId) {
+  if (!editZone.value || !itemId)
+    return
+  const canvas = editZone.value.props?.canvas || {}
+  const items = (canvas.items || []).filter(item => item.id !== itemId)
+  if (selectedEditItemId.value === itemId)
+    selectedEditItemId.value = ''
+  handleZoneUpdate(patchZoneCanvas(editZone.value, {
+    ...canvas,
+    items,
+  }))
 }
 
 function handleGridLayoutUpdate(layout) {
@@ -207,7 +268,10 @@ function updateListLayoutMode(mode) {
   min-height: 704px;
 }
 
-.form-create-builder {
+.form-component-builder {
   min-height: 704px;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 300px;
+  gap: 12px;
 }
 </style>

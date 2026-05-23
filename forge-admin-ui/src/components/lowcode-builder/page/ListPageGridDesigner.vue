@@ -220,16 +220,32 @@
 
           <!-- Tree panel -->
           <template v-if="selectedBlock.blockType === 'tree-panel'">
+            <n-form-item label="树数据模型">
+              <n-select
+                :value="selectedBlock.props?.sourceModelCode"
+                :options="treeSourceOptions"
+                clearable
+                @update:value="handleTreeSourceChange"
+              />
+            </n-form-item>
             <n-form-item label="树标题">
               <n-input
                 :value="selectedBlock.props?.treeTitle"
                 @update:value="patchBlockProps(selectedBlock.id, { treeTitle: $event })"
               />
             </n-form-item>
+            <n-form-item label="节点主键字段">
+              <n-select
+                :value="selectedBlock.props?.keyField"
+                :options="treeFieldOptions"
+                clearable
+                @update:value="patchBlockProps(selectedBlock.id, { keyField: $event })"
+              />
+            </n-form-item>
             <n-form-item label="父级字段">
               <n-select
                 :value="selectedBlock.props?.parentField"
-                :options="fieldOptions"
+                :options="treeFieldOptions"
                 clearable
                 @update:value="patchBlockProps(selectedBlock.id, { parentField: $event })"
               />
@@ -237,9 +253,17 @@
             <n-form-item label="显示字段">
               <n-select
                 :value="selectedBlock.props?.labelField"
-                :options="fieldOptions"
+                :options="treeFieldOptions"
                 clearable
                 @update:value="patchBlockProps(selectedBlock.id, { labelField: $event })"
+              />
+            </n-form-item>
+            <n-form-item label="右表过滤字段">
+              <n-select
+                :value="selectedBlock.props?.filterField"
+                :options="primaryFieldOptions"
+                clearable
+                @update:value="patchBlockProps(selectedBlock.id, { filterField: $event })"
               />
             </n-form-item>
           </template>
@@ -570,7 +594,10 @@ import {
   isPageFieldVisible,
   LIST_PAGE_GRID_COLS,
   listPageBlockCatalog,
+  resolveDefaultTreeConfig,
   resolveListPageBlockMeta,
+  resolveTreeFieldOptions,
+  resolveTreeSourceRefs,
   syncGridLayoutWithModel,
 } from './page-schema'
 
@@ -662,12 +689,22 @@ const layoutTitle = computed(() => {
 })
 const selectedBlockMeta = computed(() => selectedBlock.value ? resolveListPageBlockMeta(selectedBlock.value.blockType) : null)
 
-const fieldOptions = computed(() => props.fields
+const primaryModelCode = computed(() => props.modelSchema?.pageModelRefs?.find(ref => ref.primary)?.modelCode || '')
+const primaryFieldOptions = computed(() => props.fields
+  .filter(field => !field.modelCode || !primaryModelCode.value || field.modelCode === primaryModelCode.value)
   .filter(field => isPageFieldVisible(field, 'table'))
   .map(f => ({
-    label: f.sourceLabel || f.modelName ? `${f.label || f.field} · ${f.sourceLabel || f.modelName}` : (f.label ? `${f.label}（${f.field}）` : f.field),
-    value: f.field,
+    label: f.label ? `${f.label}（${f.sourceField || f.field}）` : (f.sourceField || f.field),
+    value: f.sourceField || f.field,
   })))
+const treeSourceOptions = computed(() => resolveTreeSourceRefs(props.modelSchema).map(ref => ({
+  label: `${ref.modelName || ref.modelCode || '数据模型'}${ref.primary ? '（主模型）' : '（引用模型）'}`,
+  value: ref.modelCode || '',
+})))
+const treeFieldOptions = computed(() => resolveTreeFieldOptions(
+  props.modelSchema,
+  selectedBlock.value?.props?.sourceModelCode || '',
+))
 
 const groupedBlocks = computed(() => {
   const groups = [
@@ -755,6 +792,13 @@ function handlePaletteClick(item) {
   if (isBlockDisabled(item))
     return
   appendBlock(item.blockType)
+}
+
+function handleTreeSourceChange(sourceModelCode) {
+  if (!selectedBlock.value)
+    return
+  const defaultConfig = resolveDefaultTreeConfig(props.modelSchema, { sourceModelCode })
+  patchBlockProps(selectedBlock.value.id, defaultConfig)
 }
 
 function handleCanvasDrop(event) {

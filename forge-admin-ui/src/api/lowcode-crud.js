@@ -115,3 +115,7 @@ export function genTablePage(params) {
 export function genTableColumnList(tableId) {
   return request.get(`/generator/column/list/${tableId}`)
 }
+
+export function genDatasourceEnabled() {
+  return request.get('/generator/datasource/enabled')
+}

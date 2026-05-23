@@ -16,10 +16,10 @@
       </div>
       <n-spin :show="treeLoading">
         <n-tree
-          :data="treeData"
-          :key-field="treeConfig.keyField || 'id'"
-          :label-field="treeConfig.labelField || 'name'"
-          :children-field="treeConfig.childrenField || 'children'"
+          :data="normalizedTreeData"
+          key-field="key"
+          label-field="label"
+          children-field="children"
           block-line
           default-expand-all
           :selected-keys="selectedKeys"
@@ -64,29 +64,33 @@ const treeLoading = ref(false)
 const treeData = ref([])
 const selectedKeys = ref([])
 const selectedId = ref(null)
+const normalizedTreeData = computed(() => normalizeTreeNodes(treeData.value))
 
 // 合并 crudProps，注入 parentId 过滤
 const mergedCrudProps = computed(() => {
-  const parentField = treeConfig.value?.parentField || 'parentId'
+  const filterField = treeConfig.value?.filterField || treeConfig.value?.parentField || 'parentId'
   const publicParams = { ...(props.crudProps.publicParams || {}) }
-  if (selectedId.value) {
-    publicParams[parentField] = selectedId.value
+  if (selectedId.value !== null && selectedId.value !== undefined && selectedId.value !== '') {
+    publicParams[filterField] = selectedId.value
   }
 
   return {
     ...props.crudProps,
     publicParams,
-    beforeRenderForm: buildBeforeRenderForm(parentField),
+    beforeRenderForm: buildBeforeRenderForm(filterField),
   }
 })
 
-function buildBeforeRenderForm(parentField) {
+function buildBeforeRenderForm(filterField) {
   return async (row) => {
     const originalHook = props.crudProps.beforeRenderForm
     const originalData = typeof originalHook === 'function' ? await originalHook(row) : null
-    const nextData = originalData && typeof originalData === 'object' ? { ...originalData } : {}
-    if (selectedId.value && !row) {
-      nextData[parentField] = selectedId.value
+    const nextData = row && typeof row === 'object' ? { ...row } : {}
+    if (originalData && typeof originalData === 'object') {
+      Object.assign(nextData, originalData)
+    }
+    if (selectedId.value !== null && selectedId.value !== undefined && selectedId.value !== '' && !row) {
+      nextData[filterField] = selectedId.value
     }
     return nextData
   }
@@ -118,9 +122,9 @@ async function loadTreeData() {
   }
 }
 
-function handleTreeSelect(keys) {
+function handleTreeSelect(keys, options = []) {
   selectedKeys.value = keys
-  selectedId.value = keys[0] ?? null
+  selectedId.value = resolveTreeTargetValue(options[0], keys[0])
 }
 
 function clearTreeSelect() {
@@ -139,6 +143,54 @@ watch(() => props.crudProps?.apiConfig, () => {
     loadTreeData()
   }
 }, { deep: true })
+
+function normalizeTreeNodes(nodes = []) {
+  if (!Array.isArray(nodes))
+    return []
+  const config = treeConfig.value || {}
+  const keyField = config.keyField || 'id'
+  const childrenField = config.childrenField || 'children'
+  return nodes.map((node) => {
+    const children = Array.isArray(node?.[childrenField])
+      ? node[childrenField]
+      : Array.isArray(node?.children)
+        ? node.children
+        : []
+    return {
+      ...(node || {}),
+      key: node?.key ?? node?.[keyField],
+      label: resolveTreeLabel(node, config),
+      children: normalizeTreeNodes(children),
+    }
+  })
+}
+
+function resolveTreeLabel(node, config) {
+  const keyField = config.keyField || 'id'
+  const fields = [
+    config.labelField,
+    'label',
+    'name',
+    'title',
+    'treeName',
+    'deptName',
+    'orgName',
+    keyField,
+  ].filter(Boolean)
+  for (const field of fields) {
+    const value = node?.[field]
+    if (value !== undefined && value !== null && String(value) !== '')
+      return String(value)
+  }
+  return '未命名节点'
+}
+
+function resolveTreeTargetValue(node, fallbackKey) {
+  if (!node)
+    return fallbackKey ?? null
+  const targetField = treeConfig.value?.targetField || treeConfig.value?.keyField || 'id'
+  return node[targetField] ?? node.targetValue ?? node.key ?? fallbackKey ?? null
+}
 </script>
 
 <style scoped>
