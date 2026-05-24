@@ -10,7 +10,17 @@ public class LowcodePolicySchema {
 
     private String dataScope = "TENANT";
 
+    private String userField;
+
+    private String userColumn;
+
+    private String orgField;
+
+    private String orgColumn;
+
     private String regionField;
+
+    private String regionColumn;
 
     private Boolean auditEnabled = true;
 
@@ -21,5 +31,9 @@ public class LowcodePolicySchema {
 
     private String tenantField = "tenantId";
 
+    private String tenantColumn = "tenant_id";
+
     private String logicDeleteField = "delFlag";
+
+    private String logicDeleteColumn = "del_flag";
 }

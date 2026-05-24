@@ -563,7 +563,8 @@ function transformColumns(columns, transConfig) {
   if (transConfig && typeof transConfig === 'object') {
     for (const [field, conf] of Object.entries(transConfig)) {
       transMap[field] = conf.targetField || `${field}Name`
-      if (conf.type) transTypeMap[field] = conf.type
+      if (conf.type)
+        transTypeMap[field] = conf.type
     }
   }
   return (columns || []).map((col) => {
@@ -585,9 +586,10 @@ function transformColumns(columns, transConfig) {
         return nextCol
       }
       if (renderType === 'imageUpload') {
-        nextCol.render = row => {
+        nextCol.render = (row) => {
           const value = row[key]
-          if (!value) return '-'
+          if (!value)
+            return '-'
           return h('span', { style: 'color: #2563eb' }, value)
         }
         return nextCol

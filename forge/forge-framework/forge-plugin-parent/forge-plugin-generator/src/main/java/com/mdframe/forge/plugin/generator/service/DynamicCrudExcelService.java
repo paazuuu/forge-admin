@@ -311,7 +311,7 @@ public class DynamicCrudExcelService {
             meta.setLabel(StringUtils.defaultIfBlank(getFirstText(node, "title", "label", "columnName"), field));
             meta.setDataType(modelDataTypes.get(field));
             meta.setDictType(resolveDictType(field, node, transConfig));
-            meta.setTargetField(resolveTargetField(field, transConfig));
+            meta.setTargetField(resolveTargetField(field, node, transConfig));
             columns.add(meta);
         }
         return applyExportColumnConfig(config, columns);
@@ -460,8 +460,11 @@ public class DynamicCrudExcelService {
         List<Object> values = new ArrayList<>();
         for (ExcelColumnMeta column : columns) {
             Object value = row.get(column.getField());
-            if (StringUtils.isNotBlank(column.getDictType()) && StringUtils.isNotBlank(column.getTargetField())) {
-                value = row.getOrDefault(column.getTargetField(), value);
+            if (StringUtils.isNotBlank(column.getTargetField())) {
+                Object displayValue = row.get(column.getTargetField());
+                if (!isEmptyValue(displayValue)) {
+                    value = displayValue;
+                }
             }
             values.add(value);
         }
@@ -559,9 +562,27 @@ public class DynamicCrudExcelService {
         return dictType;
     }
 
-    private String resolveTargetField(String field, Map<String, TransMeta> transConfig) {
+    private String resolveTargetField(String field, JsonNode node, Map<String, TransMeta> transConfig) {
         TransMeta meta = transConfig.get(field);
-        return meta != null ? meta.getTargetField() : null;
+        if (meta != null && StringUtils.isNotBlank(meta.getTargetField())) {
+            return meta.getTargetField();
+        }
+        if (node != null && node.has("render") && node.get("render").isObject()) {
+            JsonNode render = node.get("render");
+            String targetField = getFirstText(render, "targetField");
+            if (StringUtils.isNotBlank(targetField)) {
+                return targetField;
+            }
+            String renderType = StringUtils.defaultIfBlank(getFirstText(render, "type"), "").toLowerCase(Locale.ROOT);
+            if (Set.of("orgname", "username", "regionname", "fileupload", "imageupload").contains(renderType)) {
+                return field + "Name";
+            }
+        }
+        String componentType = StringUtils.defaultIfBlank(getFirstText(node, "type", "componentType"), "").toLowerCase(Locale.ROOT);
+        if (Set.of("orgtreeselect", "userselect", "regiontreeselect", "treeselect").contains(componentType)) {
+            return field + "Name";
+        }
+        return null;
     }
 
     private boolean resolveRequired(JsonNode node) {

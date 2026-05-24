@@ -119,6 +119,27 @@
         </n-space>
       </div>
 
+      <div class="table-toolbar sort-setting-bar">
+        <n-space size="small" align="center">
+          <span class="toggle-label">默认排序</span>
+          <NSelect
+            :value="tableZone?.props?.defaultSortField || 'id'"
+            :options="sortFieldOptions"
+            size="small"
+            filterable
+            style="width: 180px"
+            @update:value="updateTableProp('defaultSortField', $event)"
+          />
+          <NSelect
+            :value="tableZone?.props?.defaultSortOrder || 'desc'"
+            :options="sortOrderOptions"
+            size="small"
+            style="width: 120px"
+            @update:value="updateTableProp('defaultSortOrder', $event)"
+          />
+        </n-space>
+      </div>
+
       <n-data-table
         :columns="tableColumns"
         :data="sampleRows"
@@ -159,6 +180,13 @@
               :options="fieldOptions"
               placeholder="请选择树节点显示字段"
               @update:value="updateTreeConfig('labelField', $event)"
+            />
+          </n-form-item>
+          <n-form-item label="加载方式">
+            <NSelect
+              :value="treeConfig.loadMode || 'full'"
+              :options="treeLoadModeOptions"
+              @update:value="updateTreeConfig('loadMode', $event)"
             />
           </n-form-item>
         </div>
@@ -226,6 +254,37 @@ const queryTypeOptions = [
   { label: '小于等于', value: 'le' },
   { label: '区间', value: 'between' },
   { label: '多值', value: 'in' },
+]
+const searchComponentOptions = [
+  { label: '自动', value: '' },
+  { label: '输入框', value: 'input' },
+  { label: '数字输入', value: 'number' },
+  { label: '下拉选择', value: 'select' },
+  { label: '字典选择', value: 'dictSelect' },
+  { label: '组织树', value: 'orgTreeSelect' },
+  { label: '用户选择', value: 'userSelect' },
+  { label: '区划树', value: 'regionTreeSelect' },
+  { label: '树形选择', value: 'treeSelect' },
+  { label: '日期', value: 'date' },
+  { label: '日期时间', value: 'datetime' },
+  { label: '时间', value: 'time' },
+]
+const tableRenderOptions = [
+  { label: '默认', value: '' },
+  { label: '字典标签', value: 'dictTag' },
+  { label: '组织名称', value: 'orgName' },
+  { label: '用户名称', value: 'userName' },
+  { label: '区划名称', value: 'regionName' },
+  { label: '文件名称', value: 'fileUpload' },
+  { label: '图片预览', value: 'imageUpload' },
+]
+const treeLoadModeOptions = [
+  { label: '全量加载', value: 'full' },
+  { label: '懒加载', value: 'lazy' },
+]
+const sortOrderOptions = [
+  { label: '降序', value: 'desc' },
+  { label: '升序', value: 'asc' },
 ]
 
 const ComponentPreviewControl = defineComponent({
@@ -427,6 +486,23 @@ const FieldOrderEditor = defineComponent({
     const availableRows = computed(() => editorProps.fields.filter((field) => {
       return editorProps.filter(field) && !editorProps.selectedRefs.includes(field.field)
     }))
+    const queryFieldOptions = computed(() => editorProps.fields
+      .filter(field => !field.systemField)
+      .map(field => ({
+        label: field.label ? `${field.label}（${field.sourceField || field.field}）` : (field.sourceField || field.field),
+        value: field.field,
+      })))
+    const renderTargetFieldOptions = (field = {}) => {
+      const options = queryFieldOptions.value.map(item => ({ ...item }))
+      const defaultTarget = `${field.field}Name`
+      if (!options.some(item => item.value === defaultTarget)) {
+        options.unshift({
+          label: `${defaultTarget}（默认翻译字段）`,
+          value: defaultTarget,
+        })
+      }
+      return options
+    }
     const updateRows = rows => emit('update', rows.map(row => row.field))
     const remove = field => emit('update', editorProps.selectedRefs.filter(ref => ref !== field))
     const add = field => emit('update', [...editorProps.selectedRefs, field])
@@ -450,35 +526,77 @@ const FieldOrderEditor = defineComponent({
             'class': 'selected-field-list',
             'onUpdate:modelValue': updateRows,
           }, {
-            item: ({ element }) => h('div', { class: ['selected-field-row', editorProps.mode ? `mode-${editorProps.mode}` : ''] }, [
-              h('span', { class: 'field-handle' }, '☰'),
-              h('span', { class: 'field-name' }, [
-                h('span', null, element.label || element.field),
-                element.sourceLabel || element.modelName
-                  ? h('small', null, element.sourceLabel || element.modelName)
+            item: ({ element }) => {
+              const setting = editorProps.settings?.[element.field] || {}
+              const tableRenderType = setting.renderType || resolveDefaultTableRenderType(element)
+              return h('div', { class: ['selected-field-row', editorProps.mode ? `mode-${editorProps.mode}` : ''] }, [
+                h('span', { class: 'field-handle' }, '☰'),
+                h('span', { class: 'field-name' }, [
+                  h('span', null, element.label || element.field),
+                  element.sourceLabel || element.modelName
+                    ? h('small', null, element.sourceLabel || element.modelName)
+                    : null,
+                ]),
+                h('span', { class: 'field-code' }, element.field),
+                h('button', { type: 'button', onClick: () => remove(element.field) }, '移除'),
+                editorProps.mode === 'search'
+                  ? h('div', { class: 'field-setting-row search-setting-row' }, [
+                      h(NSelect, {
+                        value: setting.queryType || element.queryType || 'like',
+                        options: queryTypeOptions,
+                        size: 'tiny',
+                        placeholder: '查询方式',
+                        onUpdateValue: value => updateSetting(element.field, { queryType: value }),
+                      }),
+                      h(NSelect, {
+                        value: setting.componentType || resolveDefaultSearchComponentType(element),
+                        options: searchComponentOptions,
+                        size: 'tiny',
+                        placeholder: '查询组件',
+                        onUpdateValue: value => updateSetting(element.field, { componentType: value }),
+                      }),
+                      h(NSelect, {
+                        value: setting.queryField || element.field,
+                        options: queryFieldOptions.value,
+                        size: 'tiny',
+                        filterable: true,
+                        placeholder: '映射字段',
+                        onUpdateValue: value => updateSetting(element.field, { queryField: value }),
+                      }),
+                    ])
                   : null,
-              ]),
-              h('span', { class: 'field-code' }, element.field),
-              editorProps.mode === 'search'
-                ? h(NSelect, {
-                    value: editorProps.settings?.[element.field]?.queryType || element.queryType || 'like',
-                    options: queryTypeOptions,
-                    size: 'tiny',
-                    onUpdateValue: value => updateSetting(element.field, { queryType: value }),
-                  })
-                : null,
-              editorProps.mode === 'table'
-                ? h('span', { class: 'field-inline-switch' }, [
-                    h('span', null, '排序'),
-                    h(NSwitch, {
-                      value: Boolean(editorProps.settings?.[element.field]?.sortable ?? element.sortable),
-                      size: 'small',
-                      onUpdateValue: value => updateSetting(element.field, { sortable: value }),
-                    }),
-                  ])
-                : null,
-              h('button', { type: 'button', onClick: () => remove(element.field) }, '移除'),
-            ]),
+                editorProps.mode === 'table'
+                  ? h('div', { class: 'field-setting-row table-setting-row' }, [
+                      h('span', { class: 'field-inline-switch' }, [
+                        h('span', null, '排序'),
+                        h(NSwitch, {
+                          value: Boolean(setting.sortable ?? element.sortable),
+                          size: 'small',
+                          onUpdateValue: value => updateSetting(element.field, { sortable: value }),
+                        }),
+                      ]),
+                      h(NSelect, {
+                        value: tableRenderType,
+                        options: tableRenderOptions,
+                        size: 'tiny',
+                        placeholder: '渲染方式',
+                        onUpdateValue: value => updateSetting(element.field, { renderType: value }),
+                      }),
+                      isNameRenderType(tableRenderType)
+                        ? h(NSelect, {
+                            value: setting.targetField || `${element.field}Name`,
+                            options: renderTargetFieldOptions(element),
+                            size: 'tiny',
+                            filterable: true,
+                            tag: true,
+                            placeholder: '名称字段',
+                            onUpdateValue: value => updateSetting(element.field, { targetField: value }),
+                          })
+                        : null,
+                    ])
+                  : null,
+              ])
+            },
           })
         : h('div', { class: 'field-empty' }, editorProps.emptyText),
       availableRows.value.length
@@ -504,6 +622,13 @@ const fieldOptions = computed(() => props.fields.map(field => ({
   label: field.label ? `${field.label}（${field.field}）` : field.field,
   value: field.field,
 })))
+const sortFieldOptions = computed(() => {
+  const options = fieldOptions.value.map(item => ({ ...item }))
+  if (!options.some(item => item.value === 'id')) {
+    options.unshift({ label: 'ID（id）', value: 'id' })
+  }
+  return options
+})
 const searchFields = computed(() => resolveFields(searchZone.value, field => field.searchable))
 const tableFields = computed(() => resolveFields(tableZone.value, field => field.listVisible !== false))
 const treeConfig = computed(() => tableZone.value?.props?.treeConfig || {})
@@ -584,6 +709,34 @@ function resolveSearchControlType(field, queryType = '') {
   return componentType
 }
 
+function resolveDefaultSearchComponentType(field = {}) {
+  const componentType = field.componentType || field.dataType || 'input'
+  if (field.dictType)
+    return 'dictSelect'
+  if (['int', 'bigint', 'decimal', 'double', 'float'].includes(field.dataType))
+    return 'number'
+  return componentType === 'inputNumber' ? 'number' : componentType
+}
+
+function resolveDefaultTableRenderType(field = {}) {
+  const componentType = field.componentType || ''
+  if (field.dictType)
+    return 'dictTag'
+  if (componentType === 'orgTreeSelect')
+    return 'orgName'
+  if (componentType === 'userSelect')
+    return 'userName'
+  if (componentType === 'regionTreeSelect')
+    return 'regionName'
+  if (componentType === 'fileUpload' || componentType === 'imageUpload')
+    return componentType
+  return ''
+}
+
+function isNameRenderType(renderType) {
+  return ['orgName', 'userName', 'regionName', 'fileUpload', 'imageUpload'].includes(renderType)
+}
+
 function updateZoneRefs(zoneKey, refs) {
   patchZone(zoneKey, { fieldRefs: refs })
 }
@@ -603,6 +756,7 @@ function updateTreeConfig(key, value) {
       ...(tableZone.value?.props || {}),
       treeConfig: {
         ...(treeConfig.value || {}),
+        enabled: true,
         [key]: value,
       },
     },
@@ -861,11 +1015,25 @@ function resolveSampleValue(field, index = 0) {
 }
 
 :deep(.selected-field-row.mode-search) {
-  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) 108px auto;
+  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) auto;
 }
 
 :deep(.selected-field-row.mode-table) {
-  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) 76px auto;
+  grid-template-columns: 16px minmax(80px, auto) minmax(90px, auto) auto;
+}
+
+:deep(.field-setting-row) {
+  display: grid;
+  grid-column: 2 / -1;
+  gap: 6px;
+}
+
+:deep(.search-setting-row) {
+  grid-template-columns: 96px minmax(110px, 1fr) minmax(120px, 1fr);
+}
+
+:deep(.table-setting-row) {
+  grid-template-columns: auto minmax(110px, 0.8fr) minmax(140px, 1.2fr);
 }
 
 :deep(.field-inline-switch) {
@@ -952,11 +1120,11 @@ function resolveSampleValue(field, index = 0) {
 }
 
 .field-config-modal :deep(.selected-field-row.mode-search) {
-  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) 132px auto;
+  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) auto;
 }
 
 .field-config-modal :deep(.selected-field-row.mode-table) {
-  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) 96px auto;
+  grid-template-columns: 20px minmax(120px, 1fr) minmax(140px, 1fr) auto;
 }
 
 @media (max-width: 1280px) {

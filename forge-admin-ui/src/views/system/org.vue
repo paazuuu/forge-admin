@@ -3,27 +3,27 @@
     <!-- 组织列表 -->
     <div class="org-content">
       <AiCrudPage
-          ref="crudRef"
-          api="/system/org"
-          :api-config="{
+        ref="crudRef"
+        api="/system/org"
+        :api-config="{
           list: 'get@/system/org/lazyTree',
           detail: 'post@/system/org/getById',
           add: 'post@/system/org/add',
           update: 'post@/system/org/edit',
           delete: 'post@/system/org/remove',
         }"
-          :search-schema="searchSchema"
-          :columns="tableColumns"
-          :edit-schema="editSchema"
-          :before-render-list="beforeRenderList"
-          :before-submit="beforeSubmit"
-          row-key="id"
-          :edit-grid-cols="2"
-          modal-width="900px"
-          :show-pagination="false"
-          :lazy="false"
-          add-button-text="新增组织"
-          :table-props="{
+        :search-schema="searchSchema"
+        :columns="tableColumns"
+        :edit-schema="editSchema"
+        :before-render-list="beforeRenderList"
+        :before-submit="beforeSubmit"
+        row-key="id"
+        :edit-grid-cols="2"
+        modal-width="900px"
+        :show-pagination="false"
+        :lazy="false"
+        add-button-text="新增组织"
+        :table-props="{
           expandedRowKeys: expandedKeys,
           onUpdateExpandedRowKeys: handleExpandedKeysUpdate,
           onLoad: handleLoad,
@@ -314,8 +314,8 @@ async function loadParentOrgOptions() {
           value: item.id,
           key: item.id,
           children: item.children && item.children.length > 0
-              ? convertToTreeSelect(item.children)
-              : undefined,
+            ? convertToTreeSelect(item.children)
+            : undefined,
         }))
       }
       parentOrgOptions.value = [
@@ -385,18 +385,18 @@ function beforeRenderList(list) {
 function handleLoad(node) {
   return new Promise((resolve) => {
     request.get(`/system/org/children/${node.id}`)
-    .then((res) => {
-      if (res.code === 200) {
-        node.children = (res.data || []).map(item => ({
-          ...item,
-          isLeaf: !item.hasChildren,
-        }))
-      }
-      resolve()
-    })
-    .catch(() => {
-      resolve()
-    })
+      .then((res) => {
+        if (res.code === 200) {
+          node.children = (res.data || []).map(item => ({
+            ...item,
+            isLeaf: !item.hasChildren,
+          }))
+        }
+        resolve()
+      })
+      .catch(() => {
+        resolve()
+      })
   })
 }
 

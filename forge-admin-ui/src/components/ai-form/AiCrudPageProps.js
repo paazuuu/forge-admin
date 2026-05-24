@@ -180,6 +180,15 @@ export const aiCrudPageProps = {
     default: () => ({}),
   },
 
+  /**
+   * 树形表配置。存在时内置“添加下级”等树形操作。
+   * @type {object}
+   */
+  treeConfig: {
+    type: Object,
+    default: () => ({}),
+  },
+
   // ========== 编辑表单相关 ==========
   /**
    * 编辑表单配置

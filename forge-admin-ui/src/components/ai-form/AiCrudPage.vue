@@ -30,8 +30,8 @@
         </template>
 
         <!-- 搜索表单额外操作按钮 -->
-        <template #extra-actions="{ formData }">
-          <slot name="search-extra-actions" :form-data="formData" />
+        <template #extra-actions="{ formData: searchFormData }">
+          <slot name="search-extra-actions" :form-data="searchFormData" />
         </template>
       </AiSearch>
     </div>
@@ -74,12 +74,26 @@
                     v-if="!hideAdd"
                     type="primary"
                     size="small"
-                    @click="handleAdd"
+                    @click="handleAdd()"
                   >
                     <template #icon>
                       <n-icon><Add /></n-icon>
                     </template>
                     {{ addButtonText }}
+                  </n-button>
+                  <!-- 批量删除按钮 -->
+                  <n-button
+                    v-if="!hideBatchDelete"
+                    size="small"
+                    type="error"
+                    secondary
+                    :disabled="selectedKeys.length === 0"
+                    @click="handleBatchDelete"
+                  >
+                    <template #icon>
+                      <n-icon><TrashOutline /></n-icon>
+                    </template>
+                    批量删除
                   </n-button>
                   <!-- 批量导入按钮 -->
                   <n-button
@@ -305,11 +319,14 @@ import {
   Add,
   CloudUploadOutline,
   DownloadOutline,
+  TrashOutline,
 } from '@vicons/ionicons5'
 import { NDropdown } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
+import AuthImage from '@/components/common/AuthImage.vue'
+import DictTag from '@/components/DictTag.vue'
 import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
@@ -318,9 +335,6 @@ import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
 import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
-import DictTag from '@/components/DictTag.vue'
-import AuthImage from '@/components/common/AuthImage.vue'
-import { getFileUrl } from '@/utils/file'
 
 /**
  * ==================== Props 定义 ====================
@@ -488,7 +502,14 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
  */
 function handleActionClick(actionOrKey, row) {
   const action = typeof actionOrKey === 'string' ? { key: actionOrKey, label: actionOrKey } : actionOrKey || {}
+  if (row?._dataScopeWritable === false && ['edit', 'delete', 'addChild'].includes(action.key)) {
+    window.$message.warning('该节点仅用于导航展示，不能执行数据操作')
+    return
+  }
   switch (action.key) {
+    case 'addChild':
+      handleAddChild(row)
+      break
     case 'edit':
       handleEdit(row)
       break
@@ -670,10 +691,11 @@ const tableColumns = computed(() => {
   activeSourceColumns.value.forEach((col) => {
     if (isActionCol(col) && col.actions) {
       const actionCol = { ...col }
+      const actions = normalizeRowActions(col.actions)
       delete actionCol.actions
       delete actionCol._slot
       delete actionCol.slot
-      actionCol.render = row => renderActionColumn(row, col.actions, col.maxActionButtons)
+      actionCol.render = row => renderActionColumn(row, actions, col.maxActionButtons)
       cols.push(actionCol)
       return
     }
@@ -698,10 +720,10 @@ const tableColumns = computed(() => {
       width: 200,
       fixed: 'right',
       render: (row) => {
-        const actions = [
+        const actions = normalizeRowActions([
           { label: '编辑', key: 'edit', type: 'primary' },
           { label: '删除', key: 'delete', type: 'error' },
-        ]
+        ])
         return renderActionColumn(row, actions)
       },
     })
@@ -709,6 +731,26 @@ const tableColumns = computed(() => {
 
   return cols
 })
+
+function normalizeRowActions(actions = []) {
+  const next = Array.isArray(actions) ? [...actions] : []
+  if (!hasTreeConfig())
+    return next
+  if (next.some(action => action?.key === 'addChild'))
+    return next
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const addChildAction = { label: '添加下级', key: 'addChild', type: 'success' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, addChildAction)
+    return next
+  }
+  next.unshift(addChildAction)
+  return next
+}
+
+function hasTreeConfig() {
+  return !!(props.treeConfig && Object.keys(props.treeConfig).length)
+}
 
 function resolveColumnRender(col) {
   const nextCol = { ...col }
@@ -726,26 +768,32 @@ function resolveColumnRender(col) {
       value: row[key],
       size: 'small',
     })
-  } else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+  }
+  else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
     const targetField = col.render.targetField || `${key}Name`
     nextCol.render = row => row[targetField] ?? row[key] ?? '-'
-  } else if (renderType === 'imageUpload') {
-    nextCol.render = row => {
+  }
+  else if (renderType === 'imageUpload') {
+    nextCol.render = (row) => {
       const value = row[key]
-      if (!value) return '-'
+      if (!value)
+        return '-'
       const fileIds = String(value).split(',').filter(Boolean)
-      if (fileIds.length === 0) return '-'
-      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' },
-        fileIds.map(fileId => h(AuthImage, { fileId, style: 'width: 32px; height: 32px; border-radius: 4px; object-fit: cover;' })))
+      if (fileIds.length === 0)
+        return '-'
+      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' }, fileIds.map(fileId => h(AuthImage, { fileId, style: 'width: 32px; height: 32px; border-radius: 4px; object-fit: cover;' })))
     }
-  } else if (renderType === 'fileUpload') {
-    nextCol.render = row => {
+  }
+  else if (renderType === 'fileUpload') {
+    nextCol.render = (row) => {
       const value = row[key]
-      if (!value) return '-'
+      if (!value)
+        return '-'
       const nameField = col.render.targetField || `${key}Name`
       const name = row[nameField]
-      if (name) return name
-      return String(value).split(',').filter(Boolean).length + ' 个文件'
+      if (name)
+        return name
+      return `${String(value).split(',').filter(Boolean).length} 个文件`
     }
   }
   return nextCol
@@ -966,8 +1014,8 @@ async function loadList() {
   try {
     // 构建请求参数
     let params = {
-      ...props.publicParams,
       ...searchParams.value,
+      ...props.publicParams,
     }
 
     // 分页参数
@@ -993,6 +1041,7 @@ async function loadList() {
     let response
     if (customQueryPayload.value && resolvedCustomQueryConfigKey.value) {
       response = await customQueryExecute(resolvedCustomQueryConfigKey.value, {
+        ...resolveDefaultRequestSortParams(),
         ...customQueryPayload.value,
         pageNum: pagination.value.page,
         pageSize: pagination.value.pageSize,
@@ -1067,6 +1116,17 @@ async function loadList() {
   }
   finally {
     tableLoading.value = false
+  }
+}
+
+function resolveDefaultRequestSortParams() {
+  const orderByColumn = props.publicParams?.orderByColumn
+  const isAsc = props.publicParams?.isAsc
+  if (!orderByColumn && !isAsc)
+    return {}
+  return {
+    ...(orderByColumn ? { orderByColumn } : {}),
+    ...(isAsc ? { isAsc } : {}),
   }
 }
 
@@ -1285,8 +1345,11 @@ function buildMasterDetailSubmitData(data) {
 /**
  * 新增
  */
-async function handleAdd() {
-  modalTitle.value = props.addButtonText
+async function handleAdd(defaultValues = null, options = {}) {
+  const presetValues = isPlainRecord(defaultValues)
+    ? defaultValues
+    : null
+  modalTitle.value = options.title || props.addButtonText
   modalStatus.value = 'add'
   currentRow.value = null
 
@@ -1312,21 +1375,52 @@ async function handleAdd() {
   // 合并默认值和钩子返回的数据
   if (formDataFromHook && typeof formDataFromHook === 'object') {
     if (hasChildrenConfig.value && isMasterDetailPayload(formDataFromHook)) {
-      formData.value = { ...initialData, ...(formDataFromHook.main || {}) }
+      formData.value = { ...initialData, ...(formDataFromHook.main || {}), ...(presetValues || {}) }
       childFormData.value = normalizeChildrenData(formDataFromHook.children)
     }
     else {
-      formData.value = { ...initialData, ...formDataFromHook }
+      formData.value = { ...initialData, ...formDataFromHook, ...(presetValues || {}) }
       childFormData.value = buildInitialChildrenData()
     }
   }
   else {
-    formData.value = initialData
+    formData.value = { ...initialData, ...(presetValues || {}) }
     childFormData.value = buildInitialChildrenData()
   }
 
-  emit('add')
-  emit('modal-open', { status: 'add', row: null })
+  emit('add', { defaults: presetValues, context: options })
+  emit('modal-open', { status: 'add', row: null, defaults: presetValues, context: options })
+}
+
+async function handleAddChild(row) {
+  if (!row) {
+    window.$message.warning('缺少父级数据，无法添加下级')
+    return
+  }
+  const parentField = resolveTreeParentField()
+  const parentValue = resolveTreeParentValue(row)
+  if (!isUsableKeyValue(parentValue)) {
+    window.$message.warning(`缺少${parentField}对应的父级值，无法添加下级`)
+    return
+  }
+  await handleAdd({ [parentField]: parentValue }, { title: '新增下级', parentRow: row })
+}
+
+function resolveTreeParentField() {
+  return props.treeConfig?.parentField || props.treeConfig?.filterField || 'parentId'
+}
+
+function resolveTreeParentValue(row = {}) {
+  const keyField = props.treeConfig?.keyField || (typeof props.rowKey === 'string' ? props.rowKey : 'id')
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  return row?.[keyField] ?? (rowKey ? row?.[rowKey] : undefined) ?? row?.id ?? row?.key ?? row?.targetValue
+}
+
+function isPlainRecord(value) {
+  if (!value || typeof value !== 'object')
+    return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }
 
 /**
@@ -1487,28 +1581,30 @@ async function performDelete(rows, keys) {
         const hasBraceIdPlaceholder = deleteApiConfig && deleteApiConfig.includes('{id}')
         const hasBraceRowKeyPlaceholder = deleteApiConfig && deleteApiConfig.includes(`{${props.rowKey}}`)
 
-        // 单个删除且 URL 包含占位符时，使用替换后的 URL
-        if (keys.length === 1 && (hasIdPlaceholder || hasRowKeyPlaceholder || hasBraceIdPlaceholder || hasBraceRowKeyPlaceholder)) {
-          const urlParams = { id: keys[0] }
-          const { method, url } = parseApiConfig('delete', props.api, 'delete', urlParams)
+        // 配置了占位符时，批量删除逐条替换 ID 调用，避免把数组提交到单条删除接口。
+        if (hasIdPlaceholder || hasRowKeyPlaceholder || hasBraceIdPlaceholder || hasBraceRowKeyPlaceholder) {
+          for (const key of keys) {
+            const urlParams = { id: key }
+            const { method, url } = parseApiConfig('delete', props.api, 'delete', urlParams)
 
-          let requestMethod = method
-          const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
-          if (useEncrypt) {
-            requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
-          }
-          else {
-            requestMethod = method.toLowerCase()
-          }
+            let requestMethod = method
+            const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+            if (useEncrypt) {
+              requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+            }
+            else {
+              requestMethod = method.toLowerCase()
+            }
 
-          if (useEncrypt && requestMethod === 'postEncrypt') {
-            await postEncrypt(url, keys[0])
-          }
-          else {
-            await request({
-              method: requestMethod,
-              url,
-            })
+            if (useEncrypt && requestMethod === 'postEncrypt') {
+              await postEncrypt(url, key)
+            }
+            else {
+              await request({
+                method: requestMethod,
+                url,
+              })
+            }
           }
         }
         else {

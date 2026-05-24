@@ -49,6 +49,7 @@ public class LowcodePublishService {
     private final LowcodeRuntimeConfigBuilder runtimeConfigBuilder;
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlService ddlService;
+    private final LowcodePolicyService policyService;
     private final MenuRegisterAdapter menuRegisterAdapter;
     private final AiCrudConfigVersionMapper versionMapper;
 
@@ -61,6 +62,7 @@ public class LowcodePublishService {
         LowcodePageSchema pageSchema = resolvePublishPage(config, dto, modelSchema);
         schemaValidator.validatePage(pageSchema, modelSchema);
         ensureTableReady(modelSchema, dto);
+        policyService.validatePublishedPolicies(modelSchema, ddlService.listColumns(modelSchema.getTableName()));
 
         LowcodeRuntimeConfig runtimeConfig = runtimeConfigBuilder.buildRuntimeConfig(config.getConfigKey(), modelSchema, pageSchema);
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig);
@@ -462,6 +464,7 @@ public class LowcodePublishService {
         }
         modelSchema.setObject(object);
         ensureTableName(modelSchema, context.domain(), context.objectCode(), configKey);
+        policyService.normalizeModelSchema(modelSchema);
     }
 
     private void ensureTableName(LowcodeModelSchema modelSchema, AiLowcodeDomain domain, String objectCode, String configKey) {

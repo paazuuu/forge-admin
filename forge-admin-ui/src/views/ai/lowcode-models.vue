@@ -5,20 +5,20 @@
         <div class="nav-head">
           <div>
             <h2>业务域与数据模型</h2>
-            <span>{{ flatDomains.length }} 个业务域</span>
+            <span>{{ flatDomains.length }} 个业务域 · {{ currentTreeModelCount }} 个模型</span>
           </div>
           <n-button size="small" type="primary" @click="openDomainEditor">
             <template #icon>
               <n-icon><AddOutline /></n-icon>
             </template>
-            新建业务域
+            新建
           </n-button>
         </div>
         <n-input
           v-model:value="domainKeyword"
           clearable
           size="small"
-          placeholder="搜索领域"
+          placeholder="搜索业务域"
           @keyup.enter="loadDomains"
           @clear="loadDomains"
         >
@@ -28,34 +28,36 @@
         </n-input>
         <n-spin :show="domainLoading">
           <div class="asset-tree">
-            <template v-for="domain in visibleDomains" :key="domain.id">
+            <template v-for="node in visibleAssetNodes" :key="node.key">
               <button
+                v-if="node.type === 'domain'"
                 type="button"
                 class="tree-domain"
-                :class="{ active: selectedDomainId === domain.id, disabled: domain.status === 'DISABLED' }"
-                :style="{ '--indent': domain.level }"
-                @click="selectDomain(domain)"
+                :class="{ active: selectedDomainId === node.domain.id && !isEditingModel, disabled: node.domain.status === 'DISABLED' }"
+                :style="{ '--indent': node.level }"
+                @click="selectDomain(node.domain)"
               >
                 <span class="node-indent" />
                 <span
                   class="node-toggle"
-                  :class="{ empty: !hasChildren(domain) }"
-                  @click.stop="toggleExpanded(domain)"
+                  :class="{ empty: !isAssetExpandable(node.domain) }"
+                  @click.stop="toggleExpanded(node.domain)"
                 >
-                  <n-icon v-if="hasChildren(domain)">
-                    <ChevronDownOutline v-if="isExpanded(domain.id)" />
+                  <n-icon v-if="isAssetExpandable(node.domain)">
+                    <ChevronDownOutline v-if="isExpanded(node.domain.id)" />
                     <ChevronForwardOutline v-else />
                   </n-icon>
                 </span>
+                <span class="node-kind domain">域</span>
                 <span class="tree-glyph">
                   <n-icon><FolderOpenOutline /></n-icon>
                 </span>
                 <span class="node-main">
-                  <strong>{{ domain.domainName }}</strong>
-                  <code>{{ domain.domainCode }}</code>
+                  <strong>{{ node.domain.domainName }}</strong>
+                  <code>{{ node.domain.domainCode }}</code>
                 </span>
                 <n-tag
-                  v-if="domain.status === 'DISABLED'"
+                  v-if="node.domain.status === 'DISABLED'"
                   size="small"
                   type="warning"
                   :bordered="false"
@@ -63,55 +65,49 @@
                   停用
                 </n-tag>
               </button>
+
+              <button
+                v-else-if="node.type === 'model'"
+                type="button"
+                class="tree-model"
+                :class="{ active: currentModel.id === node.model.id }"
+                :style="{ '--indent': node.level }"
+                @click="openTreeModel(node.model, node.domain)"
+              >
+                <span class="node-indent" />
+                <span class="node-spacer" />
+                <span class="node-kind model">模型</span>
+                <span class="tree-glyph">
+                  <n-icon><DocumentTextOutline /></n-icon>
+                </span>
+                <span class="node-main">
+                  <strong>{{ node.model.modelName }}</strong>
+                  <code>{{ node.model.modelCode }}</code>
+                </span>
+                <n-tag size="small" :type="node.model.status === 'ENABLED' ? 'success' : 'warning'" :bordered="false">
+                  {{ dict.lowcode_model_status?.find(d => d.value === node.model.status)?.label || '启用' }}
+                </n-tag>
+              </button>
+
+              <div
+                v-else-if="node.type === 'loading'"
+                class="tree-state"
+                :style="{ '--indent': node.level }"
+              >
+                <span class="node-indent" />
+                <span>加载模型中...</span>
+              </div>
+
+              <div
+                v-else-if="node.type === 'empty'"
+                class="tree-state muted"
+                :style="{ '--indent': node.level }"
+              >
+                <span class="node-indent" />
+                <span>暂无数据模型</span>
+              </div>
             </template>
           </div>
-        </n-spin>
-      </section>
-
-      <section class="nav-block model-list-block">
-        <div class="nav-head compact">
-          <div>
-            <h2>当前领域数据模型</h2>
-            <span>{{ selectedDomain?.domainName || '未选择业务域' }}</span>
-          </div>
-        </div>
-        <n-input
-          v-model:value="modelKeyword"
-          clearable
-          size="small"
-          placeholder="搜索当前领域模型"
-          :disabled="!selectedDomain"
-          @keyup.enter="loadModels"
-          @clear="loadModels"
-        />
-        <n-spin :show="modelLoading">
-          <div v-if="models.length" class="model-list">
-            <button
-              v-for="model in models"
-              :key="model.id"
-              type="button"
-              class="tree-model"
-              :class="{ active: currentModel.id === model.id }"
-              @click="openModel(model)"
-            >
-              <span class="tree-glyph">
-                <n-icon><DocumentTextOutline /></n-icon>
-              </span>
-              <span class="node-main">
-                <strong>{{ model.modelName }}</strong>
-                <code>{{ model.modelCode }}</code>
-              </span>
-              <n-tag size="small" :type="model.status === 'ENABLED' ? 'success' : 'warning'" :bordered="false">
-                {{ dict.lowcode_model_status?.find(d => d.value === model.status)?.label || '启用' }}
-              </n-tag>
-            </button>
-          </div>
-          <n-empty
-            v-else
-            size="small"
-            :description="selectedDomain ? '该领域暂无模型' : '请先选择业务域'"
-            class="model-empty"
-          />
         </n-spin>
       </section>
     </aside>
@@ -160,190 +156,182 @@
 
       <section v-else-if="selectedDomain && !isEditingModel" class="domain-overview">
         <div class="overview-hero">
-            <div>
-              <div class="hero-code">
-                {{ selectedDomain.domainCode }}
-              </div>
-              <h1>{{ selectedDomain.domainName }}</h1>
-              <p>{{ selectedDomain.domainDesc || `${selectedDomain.domainName} 业务领域，管理该领域下的所有数据模型。` }}</p>
+          <div>
+            <div class="hero-code">
+              {{ selectedDomain.domainCode }}
             </div>
-            <div class="hero-actions">
-              <div class="hero-metrics">
-                <div class="hero-metric">
-                  <strong>{{ models.length }}</strong>
-                  <span>数据模型</span>
-                </div>
-                <div class="hero-metric">
-                  <strong>{{ enabledModels.length }}</strong>
-                  <span>启用模型</span>
-                </div>
-              </div>
-              <n-button type="primary" ghost @click="editSelectedDomain">
-                编辑领域
-              </n-button>
-            </div>
+            <h1>{{ selectedDomain.domainName }}</h1>
+            <p>{{ selectedDomain.domainDesc || `${selectedDomain.domainName} 业务领域，管理该领域下的所有数据模型。` }}</p>
           </div>
-
-          <LowcodeErDiagram
-            title="领域 ER 图"
-            :subtitle="`${selectedDomain.domainName} 下全部数据模型关系，可拖拽调整并下载 SVG`"
-            :models="models"
-            :download-file-name="`${selectedDomain.domainCode || 'domain'}-er.svg`"
-            empty-text="该业务域暂无数据模型"
-          />
-
-          <div class="domain-model-list">
-            <div class="model-list-head">
-              <div>
-                <div class="section-title">
-                  领域数据模型
-                </div>
-                <p>当前领域下已维护的数据模型清单</p>
+          <div class="hero-actions">
+            <div class="hero-metrics">
+              <div class="hero-metric">
+                <strong>{{ models.length }}</strong>
+                <span>数据模型</span>
               </div>
-              <n-button :disabled="!canCreateModel" type="primary" secondary @click="createModel">
+              <div class="hero-metric">
+                <strong>{{ enabledModels.length }}</strong>
+                <span>启用模型</span>
+              </div>
+            </div>
+            <n-button type="primary" ghost @click="editSelectedDomain">
+              编辑领域
+            </n-button>
+          </div>
+        </div>
+
+        <div class="domain-model-list">
+          <div class="model-list-head">
+            <div>
+              <div class="section-title">
+                领域数据模型
+              </div>
+              <p>当前领域下已维护的数据模型清单</p>
+            </div>
+            <n-button :disabled="!canCreateModel" type="primary" secondary @click="createModel">
+              新建模型
+            </n-button>
+          </div>
+          <div v-if="models.length" class="model-card-grid">
+            <button
+              v-for="model in models"
+              :key="model.id"
+              type="button"
+              class="model-card"
+              @click="openModel(model)"
+            >
+              <div class="model-card-head">
+                <strong>{{ model.modelName }}</strong>
+                <n-tag size="small" :type="model.status === 'ENABLED' ? 'success' : 'warning'" :bordered="false">
+                  {{ dict.lowcode_model_status?.find(d => d.value === model.status)?.label || model.status }}
+                </n-tag>
+              </div>
+              <div class="model-card-body">
+                <code>{{ model.modelCode }}</code>
+                <span>{{ (model.modelSchema?.fields || []).length }} 个字段</span>
+                <span v-if="model.masterData">· 主数据</span>
+                <span v-if="model.tenantEnabled">· 多租户</span>
+              </div>
+              <div v-if="model.modelDesc" class="model-card-desc">
+                {{ model.modelDesc }}
+              </div>
+            </button>
+          </div>
+          <n-empty v-else size="small" description="该领域暂无数据模型" class="model-empty">
+            <template #extra>
+              <n-button type="primary" :disabled="!canCreateModel" @click="createModel">
                 新建模型
               </n-button>
-            </div>
-            <div v-if="models.length" class="model-card-grid">
-              <button
-                v-for="model in models"
-                :key="model.id"
-                type="button"
-                class="model-card"
-                @click="openModel(model)"
-              >
-                <div class="model-card-head">
-                  <strong>{{ model.modelName }}</strong>
-                  <n-tag size="small" :type="model.status === 'ENABLED' ? 'success' : 'warning'" :bordered="false">
-                    {{ dict.lowcode_model_status?.find(d => d.value === model.status)?.label || model.status }}
-                  </n-tag>
-                </div>
-                <div class="model-card-body">
-                  <code>{{ model.modelCode }}</code>
-                  <span>{{ (model.modelSchema?.fields || []).length }} 个字段</span>
-                  <span v-if="model.masterData">· 主数据</span>
-                  <span v-if="model.tenantEnabled">· 多租户</span>
-                </div>
-                <div v-if="model.modelDesc" class="model-card-desc">
-                  {{ model.modelDesc }}
-                </div>
-              </button>
-            </div>
-            <n-empty v-else size="small" description="该领域暂无数据模型" class="model-empty">
-              <template #extra>
-                <n-button type="primary" :disabled="!canCreateModel" @click="createModel">
-                  新建模型
-                </n-button>
-              </template>
-            </n-empty>
-          </div>
-        </section>
+            </template>
+          </n-empty>
+        </div>
+      </section>
 
-        <section v-else class="model-editor">
-          <section class="basic-panel">
-            <div class="section-title">
-              模型基本信息
-            </div>
-            <n-form label-placement="top" size="small" class="basic-form" :show-feedback="false">
-              <n-form-item label="模型名称">
-                <n-input
-                  v-model:value="currentModel.modelName"
-                  placeholder="例如：客户档案"
-                  @update:value="syncModelIdentity"
-                />
-              </n-form-item>
-              <n-form-item label="模型编码 / 数据表名">
-                <n-input
-                  :value="currentModel.modelCode"
-                  placeholder="tf_f_order"
-                  @update:value="updateModelCode"
-                />
-              </n-form-item>
-              <n-form-item label="所属业务域">
+      <section v-else class="model-editor">
+        <section class="basic-panel">
+          <div class="section-title">
+            模型基本信息
+          </div>
+          <n-form label-placement="top" size="small" class="basic-form" :show-feedback="false">
+            <n-form-item label="模型名称">
+              <n-input
+                v-model:value="currentModel.modelName"
+                placeholder="例如：客户档案"
+                @update:value="syncModelIdentity"
+              />
+            </n-form-item>
+            <n-form-item label="模型编码 / 数据表名">
+              <n-input
+                :value="currentModel.modelCode"
+                placeholder="tf_f_order"
+                @update:value="updateModelCode"
+              />
+            </n-form-item>
+            <n-form-item label="所属业务域">
+              <n-select
+                :value="currentModel.domainId"
+                :options="domainOptions"
+                disabled
+              />
+            </n-form-item>
+            <n-form-item label="启用状态">
+              <n-select v-model:value="currentModel.status" :options="statusOptions" />
+            </n-form-item>
+            <n-form-item label="多租户">
+              <n-switch v-model:value="currentModel.tenantEnabled" />
+            </n-form-item>
+            <n-form-item label="主数据标识">
+              <n-switch v-model:value="currentModel.masterData" />
+            </n-form-item>
+            <n-form-item class="span-2" label="绑定数据源">
+              <n-select
+                v-model:value="selectedDatasourceId"
+                clearable
+                filterable
+                :loading="datasourceLoading"
+                :options="datasourceOptions"
+                placeholder="选择模型所属数据源"
+                @update:value="handleDatasourceChange"
+              />
+            </n-form-item>
+            <n-form-item class="span-2" label="描述">
+              <n-input
+                v-model:value="currentModel.modelDesc"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                placeholder="描述模型承载的数据范围、口径和业务边界"
+              />
+            </n-form-item>
+            <n-form-item class="span-2" label="同步已有表模型">
+              <div class="table-sync-control">
                 <n-select
-                  :value="currentModel.domainId"
-                  :options="domainOptions"
-                  disabled
-                />
-              </n-form-item>
-              <n-form-item label="启用状态">
-                <n-select v-model:value="currentModel.status" :options="statusOptions" />
-              </n-form-item>
-              <n-form-item label="多租户">
-                <n-switch v-model:value="currentModel.tenantEnabled" />
-              </n-form-item>
-              <n-form-item label="主数据标识">
-                <n-switch v-model:value="currentModel.masterData" />
-              </n-form-item>
-              <n-form-item class="span-2" label="绑定数据源">
-                <n-select
-                  v-model:value="selectedDatasourceId"
+                  v-model:value="selectedTableModelId"
                   clearable
                   filterable
-                  :loading="datasourceLoading"
-                  :options="datasourceOptions"
-                  placeholder="选择模型所属数据源"
-                  @update:value="handleDatasourceChange"
+                  :loading="tableModelLoading"
+                  :options="tableModelOptions"
+                  :disabled="!selectedDatasourceId"
+                  placeholder="先选数据源，再选择已导入的表模型"
+                  @update:value="handleTableModelSelect"
                 />
-              </n-form-item>
-              <n-form-item class="span-2" label="描述">
-                <n-input
-                  v-model:value="currentModel.modelDesc"
-                  type="textarea"
-                  :autosize="{ minRows: 2, maxRows: 4 }"
-                  placeholder="描述模型承载的数据范围、口径和业务边界"
-                />
-              </n-form-item>
-              <n-form-item class="span-2" label="同步已有表模型">
-                <div class="table-sync-control">
-                  <n-select
-                    v-model:value="selectedTableModelId"
-                    clearable
-                    filterable
-                    :loading="tableModelLoading"
-                    :options="tableModelOptions"
-                    :disabled="!selectedDatasourceId"
-                    placeholder="先选数据源，再选择已导入的表模型"
-                    @update:value="handleTableModelSelect"
-                  />
-                  <n-button
-                    :loading="syncingTable"
-                    :disabled="!selectedTableModelId"
-                    @click="syncFromSelectedTableModel"
-                  >
-                    同步字段
-                  </n-button>
-                </div>
-              </n-form-item>
-            </n-form>
-          </section>
-
-          <section v-if="ddlPreview" class="ddl-panel">
-            <div class="section-title">
-              DDL 预览
-            </div>
-            <n-alert
-              v-for="warning in ddlPreview.warnings"
-              :key="warning"
-              type="warning"
-              :bordered="false"
-              class="ddl-warning"
-            >
-              {{ warning }}
-            </n-alert>
-            <pre v-for="ddl in ddlPreview.ddlStatements" :key="ddl" class="ddl-code">{{ ddl }}</pre>
-            <n-empty v-if="!ddlPreview.ddlStatements?.length" description="当前没有需要执行的 DDL" />
-          </section>
-
-          <LowcodeModelDesigner
-            v-if="currentModel.modelSchema"
-            v-model="currentModel.modelSchema"
-            :domain="selectedDomain"
-            :data-models="models"
-            :show-basic-tab="false"
-            class="designer-panel"
-          />
+                <n-button
+                  :loading="syncingTable"
+                  :disabled="!selectedTableModelId"
+                  @click="syncFromSelectedTableModel"
+                >
+                  同步字段
+                </n-button>
+              </div>
+            </n-form-item>
+          </n-form>
         </section>
+
+        <section v-if="ddlPreview" class="ddl-panel">
+          <div class="section-title">
+            DDL 预览
+          </div>
+          <n-alert
+            v-for="warning in ddlPreview.warnings"
+            :key="warning"
+            type="warning"
+            :bordered="false"
+            class="ddl-warning"
+          >
+            {{ warning }}
+          </n-alert>
+          <pre v-for="ddl in ddlPreview.ddlStatements" :key="ddl" class="ddl-code">{{ ddl }}</pre>
+          <n-empty v-if="!ddlPreview.ddlStatements?.length" description="当前没有需要执行的 DDL" />
+        </section>
+
+        <LowcodeModelDesigner
+          v-if="currentModel.modelSchema"
+          v-model="currentModel.modelSchema"
+          :domain="selectedDomain"
+          :data-models="models"
+          :show-basic-tab="false"
+          class="designer-panel"
+        />
+      </section>
     </main>
     <DomainEditorDrawer
       v-model:show="domainEditorVisible"
@@ -384,7 +372,6 @@ import {
   lowcodeUpdateModel,
 } from '@/api/lowcode-crud'
 import DomainEditorDrawer from '@/components/lowcode-builder/domain/DomainEditorDrawer.vue'
-import LowcodeErDiagram from '@/components/lowcode-builder/model/LowcodeErDiagram.vue'
 import LowcodeModelDesigner from '@/components/lowcode-builder/model/LowcodeModelDesigner.vue'
 import {
   cloneSchema,
@@ -393,6 +380,7 @@ import {
   ensureSystemFields,
   isAuditField,
   normalizeFieldName,
+  normalizeLowcodePolicies,
   normalizeObjectCode,
   normalizeTableName,
 } from '@/components/lowcode-builder/model/model-schema'
@@ -409,10 +397,11 @@ const syncSaving = ref(false)
 const ddlLoading = ref(false)
 const domains = ref([])
 const models = ref([])
+const domainModelsMap = ref({})
+const domainModelLoadingIds = ref(new Set())
 const selectedDomainId = ref(null)
 const selectedDomain = ref(null)
 const domainKeyword = ref('')
-const modelKeyword = ref('')
 const domainEditorVisible = ref(false)
 const editingDomain = ref(null)
 const expandedDomainIds = ref(new Set())
@@ -449,7 +438,7 @@ const tableModelOptions = computed(() => filteredTableModels.value.map(item => (
 })))
 
 const flatDomains = computed(() => flattenDomains(domains.value))
-const visibleDomains = computed(() => flattenVisibleDomains(domains.value))
+const visibleAssetNodes = computed(() => flattenVisibleAssetNodes(domains.value))
 const domainOptions = computed(() => flatDomains.value.map(domain => ({
   label: domain.domainName,
   value: domain.id,
@@ -457,6 +446,9 @@ const domainOptions = computed(() => flatDomains.value.map(domain => ({
 const canCreateModel = computed(() => selectedDomain.value?.status === 'ENABLED')
 const statusOptions = computed(() => dict.value.lowcode_model_status || [])
 const enabledModels = computed(() => models.value.filter(model => model.status === 'ENABLED'))
+const currentTreeModelCount = computed(() => {
+  return Object.values(domainModelsMap.value).reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0)
+})
 
 onMounted(async () => {
   await Promise.all([loadDomains(), loadDatasources()])
@@ -490,6 +482,7 @@ async function loadDomains() {
 
 async function selectDomain(domain) {
   selectedDomainId.value = domain.id
+  expandDomain(domain.id)
   const res = await lowcodeDomainDefaults(domain.id)
   selectedDomain.value = res.data || domain
   clearModelState()
@@ -555,9 +548,9 @@ async function loadModels() {
       pageNum: 1,
       pageSize: 100,
       domainId: selectedDomainId.value,
-      keyword: modelKeyword.value || undefined,
     })
     models.value = res.data?.records || []
+    setDomainModels(selectedDomainId.value, models.value)
   }
   finally {
     modelLoading.value = false
@@ -577,6 +570,17 @@ async function openModel(model) {
   isEditingModel.value = true
   const res = await lowcodeModelDetail(model.id)
   applyModel(res.data)
+}
+
+async function openTreeModel(model, domain) {
+  if (model?.domainId && selectedDomainId.value !== model.domainId) {
+    selectedDomainId.value = model.domainId
+    expandDomain(model.domainId)
+    const res = await lowcodeDomainDefaults(model.domainId)
+    selectedDomain.value = res.data || domain || findDomainById(model.domainId)
+    await Promise.all([loadModels(), loadTableModels()])
+  }
+  await openModel(model)
 }
 
 async function saveModel(syncDdl = false) {
@@ -1040,21 +1044,7 @@ function syncModelIdentity() {
     name: currentModel.modelName,
   }
   currentModel.modelSchema.businessName = currentModel.modelName
-  currentModel.modelSchema.policies = {
-    dataScope: 'TENANT',
-    regionField: '',
-    auditEnabled: true,
-    primaryKeyStrategy: 'AUTO_INCREMENT',
-    primaryKeyField: 'id',
-    tenantField: 'tenantId',
-    logicDeleteField: 'delFlag',
-    ...(currentModel.modelSchema.policies || {}),
-  }
-  currentModel.modelSchema.policies.auditEnabled = true
-  currentModel.modelSchema.policies.primaryKeyStrategy = 'AUTO_INCREMENT'
-  currentModel.modelSchema.policies.primaryKeyField = 'id'
-  currentModel.modelSchema.policies.tenantField = 'tenantId'
-  currentModel.modelSchema.policies.logicDeleteField = 'delFlag'
+  normalizeLowcodePolicies(currentModel.modelSchema)
   if (!currentModel.modelSchema.tableName && currentModel.modelCode)
     currentModel.modelSchema.tableName = normalizeTableName(currentModel.modelCode)
   if (selectedDatasourceId.value) {
@@ -1114,12 +1104,48 @@ function flattenDomains(nodes, level = 0) {
   return result
 }
 
-function flattenVisibleDomains(nodes, level = 0) {
+function flattenVisibleAssetNodes(nodes, level = 0) {
   const result = []
-  for (const node of nodes || []) {
-    result.push({ ...node, level })
-    if (node.children?.length && isExpanded(node.id))
-      result.push(...flattenVisibleDomains(node.children, level + 1))
+  for (const domain of nodes || []) {
+    result.push({
+      key: `domain-${domain.id}`,
+      type: 'domain',
+      domain,
+      level,
+    })
+    if (!isExpanded(domain.id))
+      continue
+    if (domain.children?.length)
+      result.push(...flattenVisibleAssetNodes(domain.children, level + 1))
+    if (isDomainModelsLoading(domain.id)) {
+      result.push({
+        key: `domain-${domain.id}-loading`,
+        type: 'loading',
+        domain,
+        level: level + 1,
+      })
+      continue
+    }
+    const domainModels = getDomainModels(domain.id)
+    if (domainModels.length) {
+      domainModels.forEach((model) => {
+        result.push({
+          key: `model-${model.id}`,
+          type: 'model',
+          domain,
+          model,
+          level: level + 1,
+        })
+      })
+    }
+    else if (isDomainModelsLoaded(domain.id) && !domain.children?.length) {
+      result.push({
+        key: `domain-${domain.id}-empty`,
+        type: 'empty',
+        domain,
+        level: level + 1,
+      })
+    }
   }
   return result
 }
@@ -1128,19 +1154,81 @@ function hasChildren(domain) {
   return Boolean(domain?.children?.length)
 }
 
+function isAssetExpandable(domain) {
+  return Boolean(domain?.id) && (hasChildren(domain) || !isDomainModelsLoaded(domain.id) || getDomainModels(domain.id).length > 0)
+}
+
 function isExpanded(id) {
   return expandedDomainIds.value.has(id)
 }
 
 function toggleExpanded(domain) {
-  if (!hasChildren(domain))
+  if (!isAssetExpandable(domain))
     return
   const next = new Set(expandedDomainIds.value)
-  if (next.has(domain.id))
+  if (next.has(domain.id)) {
     next.delete(domain.id)
-  else
+  }
+  else {
     next.add(domain.id)
+    ensureDomainModels(domain.id)
+  }
   expandedDomainIds.value = next
+}
+
+function expandDomain(domainId) {
+  if (!domainId)
+    return
+  const next = new Set(expandedDomainIds.value)
+  next.add(domainId)
+  expandedDomainIds.value = next
+  ensureDomainModels(domainId)
+}
+
+async function ensureDomainModels(domainId) {
+  if (!domainId || isDomainModelsLoaded(domainId) || isDomainModelsLoading(domainId))
+    return
+  const nextLoadingIds = new Set(domainModelLoadingIds.value)
+  nextLoadingIds.add(domainId)
+  domainModelLoadingIds.value = nextLoadingIds
+  try {
+    const res = await lowcodeModelPage({
+      pageNum: 1,
+      pageSize: 100,
+      domainId,
+    })
+    setDomainModels(domainId, res.data?.records || [])
+  }
+  finally {
+    const next = new Set(domainModelLoadingIds.value)
+    next.delete(domainId)
+    domainModelLoadingIds.value = next
+  }
+}
+
+function getDomainModels(domainId) {
+  return domainModelsMap.value[domainId] || []
+}
+
+function setDomainModels(domainId, items) {
+  if (!domainId)
+    return
+  domainModelsMap.value = {
+    ...domainModelsMap.value,
+    [domainId]: Array.isArray(items) ? items : [],
+  }
+}
+
+function isDomainModelsLoaded(domainId) {
+  return Object.prototype.hasOwnProperty.call(domainModelsMap.value, domainId)
+}
+
+function isDomainModelsLoading(domainId) {
+  return domainModelLoadingIds.value.has(domainId)
+}
+
+function findDomainById(domainId) {
+  return flatDomains.value.find(domain => domain.id === domainId) || null
 }
 
 function openDomainEditor() {
@@ -1182,7 +1270,7 @@ function downloadJson(payload, filename) {
 .model-workbench-page {
   display: grid;
   min-height: 100%;
-  grid-template-columns: 304px minmax(0, 1fr);
+  grid-template-columns: 268px minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
   background: #f3f6fa;
@@ -1194,9 +1282,8 @@ function downloadJson(payload, filename) {
   top: 14px;
   max-height: calc(100vh - 28px);
   min-height: 0;
-  grid-template-rows: minmax(280px, 1fr) minmax(240px, 0.78fr);
+  grid-template-rows: minmax(420px, 1fr);
   align-self: start;
-  gap: 12px;
 }
 
 .nav-block,
@@ -1261,11 +1348,11 @@ function downloadJson(payload, filename) {
 }
 
 .tree-domain {
-  grid-template-columns: calc(var(--indent, 0) * 16px) 20px 22px minmax(0, 1fr) auto;
+  grid-template-columns: calc(var(--indent, 0) * 14px) 18px 34px 20px minmax(0, 1fr) auto;
 }
 
 .tree-model {
-  grid-template-columns: 26px 22px minmax(0, 1fr) auto;
+  grid-template-columns: calc(var(--indent, 0) * 14px) 18px 34px 20px minmax(0, 1fr) auto;
 }
 
 .tree-domain:hover,
@@ -1313,8 +1400,13 @@ function downloadJson(payload, filename) {
 }
 
 .node-indent,
+.node-spacer,
 .model-indent {
   display: block;
+}
+
+.node-spacer {
+  width: 18px;
 }
 
 .node-toggle {
@@ -1345,12 +1437,34 @@ function downloadJson(payload, filename) {
 
 .tree-glyph {
   display: inline-flex;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   align-items: center;
   justify-content: center;
   color: #2563eb;
   font-size: 16px;
+}
+
+.node-kind {
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.node-kind.domain {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.node-kind.model {
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .node-main {
@@ -1375,6 +1489,20 @@ function downloadJson(payload, filename) {
   color: #64748b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
+}
+
+.tree-state {
+  display: grid;
+  min-height: 30px;
+  grid-template-columns: calc(var(--indent, 0) * 14px) minmax(0, 1fr);
+  align-items: center;
+  color: #64748b;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.tree-state.muted {
+  color: #94a3b8;
 }
 
 .model-main {
@@ -1619,7 +1747,10 @@ function downloadJson(payload, filename) {
   cursor: pointer;
   padding: 12px;
   text-align: left;
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
 .model-card:hover {
@@ -1681,8 +1812,7 @@ function downloadJson(payload, filename) {
     grid-template-rows: auto;
   }
 
-  .asset-tree,
-  .model-list {
+  .asset-tree {
     max-height: 320px;
   }
 

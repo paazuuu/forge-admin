@@ -181,6 +181,24 @@
                 @update:value="patchBlockProps(selectedBlock.id, { collapsible: $event })"
               />
             </n-form-item>
+            <template v-if="selectedBlock.blockType === 'data-table'">
+              <n-form-item label="默认排序字段">
+                <n-select
+                  :value="selectedBlock.props?.defaultSortField || 'id'"
+                  :options="sortFieldOptions"
+                  filterable
+                  clearable
+                  @update:value="patchBlockProps(selectedBlock.id, { defaultSortField: $event || 'id' })"
+                />
+              </n-form-item>
+              <n-form-item label="默认排序方式">
+                <n-select
+                  :value="selectedBlock.props?.defaultSortOrder || 'desc'"
+                  :options="sortOrderOptions"
+                  @update:value="patchBlockProps(selectedBlock.id, { defaultSortOrder: $event || 'desc' })"
+                />
+              </n-form-item>
+            </template>
           </template>
 
           <!-- Toolbar 动作 -->
@@ -256,6 +274,13 @@
                 :options="treeFieldOptions"
                 clearable
                 @update:value="patchBlockProps(selectedBlock.id, { labelField: $event })"
+              />
+            </n-form-item>
+            <n-form-item label="加载方式">
+              <n-select
+                :value="selectedBlock.props?.loadMode || 'full'"
+                :options="treeLoadModeOptions"
+                @update:value="patchBlockProps(selectedBlock.id, { loadMode: $event })"
               />
             </n-form-item>
             <n-form-item label="右表过滤字段">
@@ -385,23 +410,65 @@
               @update:model-value="handleSelectedReorder"
             >
               <template #item="{ element }">
-                <div class="selected-row" :class="{ search: selectedBlock.blockType === 'search-form' }">
+                <div
+                  class="selected-row"
+                  :class="{
+                    search: selectedBlock.blockType === 'search-form',
+                    table: selectedBlock.blockType === 'data-table',
+                  }"
+                >
                   <span class="f-handle">☰</span>
                   <span class="f-name">
                     {{ element.label || element.field }}
                     <small v-if="element.sourceLabel || element.modelName">{{ element.sourceLabel || element.modelName }}</small>
                   </span>
                   <span class="f-code">{{ element.field }}</span>
-                  <n-select
-                    v-if="selectedBlock.blockType === 'search-form'"
-                    :value="resolveFieldSetting(element.field).queryType || element.queryType || 'like'"
-                    size="tiny"
-                    :options="queryTypeOptions"
-                    @update:value="updateFieldSetting(element.field, { queryType: $event })"
-                  />
                   <button type="button" class="f-remove" @click="toggleField(element.field, false)">
                     移除
                   </button>
+                  <div v-if="selectedBlock.blockType === 'search-form'" class="field-setting-row search-setting-row">
+                    <n-select
+                      :value="resolveFieldSetting(element.field).queryType || element.queryType || 'like'"
+                      size="tiny"
+                      :options="queryTypeOptions"
+                      placeholder="查询方式"
+                      @update:value="updateFieldSetting(element.field, { queryType: $event })"
+                    />
+                    <n-select
+                      :value="resolveFieldSetting(element.field).componentType || resolveDefaultSearchComponentType(element)"
+                      size="tiny"
+                      :options="searchComponentOptions"
+                      placeholder="查询组件"
+                      @update:value="updateFieldSetting(element.field, { componentType: $event })"
+                    />
+                    <n-select
+                      :value="resolveFieldSetting(element.field).queryField || element.field"
+                      size="tiny"
+                      :options="queryFieldOptions"
+                      filterable
+                      placeholder="映射字段"
+                      @update:value="updateFieldSetting(element.field, { queryField: $event })"
+                    />
+                  </div>
+                  <div v-if="selectedBlock.blockType === 'data-table'" class="field-setting-row table-setting-row">
+                    <n-select
+                      :value="resolveFieldSetting(element.field).renderType || resolveDefaultTableRenderType(element)"
+                      size="tiny"
+                      :options="tableRenderOptions"
+                      placeholder="渲染方式"
+                      @update:value="updateFieldSetting(element.field, { renderType: $event })"
+                    />
+                    <n-select
+                      v-if="isNameRenderType(resolveFieldSetting(element.field).renderType || resolveDefaultTableRenderType(element))"
+                      :value="resolveFieldSetting(element.field).targetField || `${element.field}Name`"
+                      size="tiny"
+                      :options="renderTargetFieldOptions(element)"
+                      filterable
+                      tag
+                      placeholder="名称字段"
+                      @update:value="updateFieldSetting(element.field, { targetField: $event })"
+                    />
+                  </div>
                 </div>
               </template>
             </draggable>
@@ -654,6 +721,37 @@ const queryTypeOptions = [
   { label: '区间', value: 'between' },
   { label: '多值', value: 'in' },
 ]
+const searchComponentOptions = [
+  { label: '自动', value: '' },
+  { label: '输入框', value: 'input' },
+  { label: '数字输入', value: 'number' },
+  { label: '下拉选择', value: 'select' },
+  { label: '字典选择', value: 'dictSelect' },
+  { label: '组织树', value: 'orgTreeSelect' },
+  { label: '用户选择', value: 'userSelect' },
+  { label: '区划树', value: 'regionTreeSelect' },
+  { label: '树形选择', value: 'treeSelect' },
+  { label: '日期', value: 'date' },
+  { label: '日期时间', value: 'datetime' },
+  { label: '时间', value: 'time' },
+]
+const tableRenderOptions = [
+  { label: '默认', value: '' },
+  { label: '字典标签', value: 'dictTag' },
+  { label: '组织名称', value: 'orgName' },
+  { label: '用户名称', value: 'userName' },
+  { label: '区划名称', value: 'regionName' },
+  { label: '文件名称', value: 'fileUpload' },
+  { label: '图片预览', value: 'imageUpload' },
+]
+const treeLoadModeOptions = [
+  { label: '全量加载', value: 'full' },
+  { label: '懒加载', value: 'lazy' },
+]
+const sortOrderOptions = [
+  { label: '降序', value: 'desc' },
+  { label: '升序', value: 'asc' },
+]
 
 const canvasRef = ref(null)
 const selectedBlockId = ref(null)
@@ -697,6 +795,13 @@ const primaryFieldOptions = computed(() => props.fields
     label: f.label ? `${f.label}（${f.sourceField || f.field}）` : (f.sourceField || f.field),
     value: f.sourceField || f.field,
   })))
+const sortFieldOptions = computed(() => {
+  const options = primaryFieldOptions.value.map(item => ({ ...item }))
+  if (!options.some(item => item.value === 'id')) {
+    options.unshift({ label: 'ID（id）', value: 'id' })
+  }
+  return options
+})
 const treeSourceOptions = computed(() => resolveTreeSourceRefs(props.modelSchema).map(ref => ({
   label: `${ref.modelName || ref.modelCode || '数据模型'}${ref.primary ? '（主模型）' : '（引用模型）'}`,
   value: ref.modelCode || '',
@@ -720,6 +825,12 @@ const groupedBlocks = computed(() => {
 })
 
 const fieldMap = computed(() => new Map(props.fields.map(f => [f.field, f])))
+const queryFieldOptions = computed(() => props.fields
+  .filter(field => !field.systemField)
+  .map(field => ({
+    label: field.label ? `${field.label}（${field.sourceField || field.field}）` : (field.sourceField || field.field),
+    value: field.field,
+  })))
 const selectedBlockZoneKey = computed(() => selectedBlock.value?.blockType === 'search-form' ? 'search' : 'table')
 const selectedFieldsList = computed(() => (selectedBlock.value?.fieldRefs || [])
   .map(ref => fieldMap.value.get(ref))
@@ -978,6 +1089,46 @@ function handleSelectedReorder(rows) {
 
 function resolveFieldSetting(fieldName) {
   return selectedBlock.value?.props?.fieldSettings?.[fieldName] || {}
+}
+
+function resolveDefaultSearchComponentType(field = {}) {
+  const componentType = field.componentType || field.dataType || 'input'
+  if (field.dictType)
+    return 'dictSelect'
+  if (['int', 'bigint', 'decimal', 'double', 'float'].includes(field.dataType))
+    return 'number'
+  return componentType === 'inputNumber' ? 'number' : componentType
+}
+
+function resolveDefaultTableRenderType(field = {}) {
+  const componentType = field.componentType || ''
+  if (field.dictType)
+    return 'dictTag'
+  if (componentType === 'orgTreeSelect')
+    return 'orgName'
+  if (componentType === 'userSelect')
+    return 'userName'
+  if (componentType === 'regionTreeSelect')
+    return 'regionName'
+  if (componentType === 'fileUpload' || componentType === 'imageUpload')
+    return componentType
+  return ''
+}
+
+function isNameRenderType(renderType) {
+  return ['orgName', 'userName', 'regionName', 'fileUpload', 'imageUpload'].includes(renderType)
+}
+
+function renderTargetFieldOptions(field = {}) {
+  const options = queryFieldOptions.value.map(item => ({ ...item }))
+  const defaultTarget = `${field.field}Name`
+  if (!options.some(item => item.value === defaultTarget)) {
+    options.unshift({
+      label: `${defaultTarget}（默认翻译字段）`,
+      value: defaultTarget,
+    })
+  }
+  return options
 }
 
 function updateFieldSetting(fieldName, settingPatch) {
@@ -1533,8 +1684,23 @@ function removeTab(idx) {
   font-size: 12px;
 }
 
-.selected-row.search {
-  grid-template-columns: 16px minmax(110px, 1fr) minmax(80px, 1fr) 108px auto;
+.selected-row.search,
+.selected-row.table {
+  grid-template-columns: 16px minmax(120px, 1fr) minmax(80px, 0.8fr) auto;
+}
+
+.field-setting-row {
+  display: grid;
+  grid-column: 2 / -1;
+  gap: 6px;
+}
+
+.search-setting-row {
+  grid-template-columns: 96px minmax(110px, 1fr) minmax(120px, 1fr);
+}
+
+.table-setting-row {
+  grid-template-columns: minmax(110px, 0.8fr) minmax(140px, 1.2fr);
 }
 
 .f-handle {

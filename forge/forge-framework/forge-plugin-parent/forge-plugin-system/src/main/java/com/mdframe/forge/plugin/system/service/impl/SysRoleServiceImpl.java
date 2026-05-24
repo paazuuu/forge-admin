@@ -118,14 +118,16 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         }
 
         List<SysResource> assignableResources = resourceService.list();
+        Map<Long, SysResource> resourceMap = assignableResources.stream()
+                .collect(Collectors.toMap(SysResource::getId, resource -> resource, (left, right) -> left));
         Set<Long> clientResourceIdSet = Collections.emptySet();
+        Set<Long> clientAssignableResourceIdSet = Collections.emptySet();
         if (StringUtils.isNotBlank(clientCode)) {
-            assignableResources = assignableResources.stream()
-                    .filter(resource -> clientCode.equals(resource.getClientCode()))
-                    .collect(Collectors.toList());
             clientResourceIdSet = assignableResources.stream()
+                    .filter(resource -> clientCode.equals(resource.getClientCode()))
                     .map(SysResource::getId)
                     .collect(Collectors.toSet());
+            clientAssignableResourceIdSet = new HashSet<>(clientResourceIdSet);
             if (resourceIds != null) {
                 for (Long resourceId : resourceIds) {
                     if (!clientResourceIdSet.contains(resourceId)) {
@@ -155,19 +157,28 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (resourceIds != null && resourceIds.length > 0) {
             finalResourceIdSet.addAll(Arrays.asList(resourceIds));
             
-            // 获取所有资源并构建父子关系映射
-            Map<Long, Long> parentMap = assignableResources.stream()
-                .collect(Collectors.toMap(SysResource::getId, r -> r.getParentId() == null ? 0L : r.getParentId()));
-            
+            // 自动补齐父级时使用全量资源构建父链。历史数据中可能存在父级 client_code 为空，
+            // 这类父级只作为当前客户端树的结构节点补齐；真正属于其他客户端的父级仍然拦截。
             Set<Long> parentIdsToAdd = new HashSet<>();
             for (Long id : finalResourceIdSet) {
-                Long pid = parentMap.get(id);
+                SysResource resource = resourceMap.get(id);
+                Long pid = resource == null ? null : normalizeParentId(resource.getParentId());
                 while (pid != null && pid != 0L) {
                     if (finalResourceIdSet.contains(pid) || parentIdsToAdd.contains(pid)) {
                         break;
                     }
+                    SysResource parentResource = resourceMap.get(pid);
+                    if (parentResource == null) {
+                        break;
+                    }
+                    if (StringUtils.isNotBlank(clientCode) && !isClientCompatibleParent(parentResource, clientCode)) {
+                        throw new RuntimeException("权限溢出：不能分配其他客户端的父级资源权限");
+                    }
                     parentIdsToAdd.add(pid);
-                    pid = parentMap.get(pid);
+                    if (StringUtils.isNotBlank(clientCode)) {
+                        clientAssignableResourceIdSet.add(pid);
+                    }
+                    pid = normalizeParentId(parentResource.getParentId());
                 }
             }
             finalResourceIdSet.addAll(parentIdsToAdd);
@@ -176,7 +187,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (loginUser != null && !loginUser.isAdmin() && !currentUserResourceIdSet.containsAll(finalResourceIdSet)) {
             throw new RuntimeException("权限溢出：不能分配自己没有的父级资源权限");
         }
-        if (StringUtils.isNotBlank(clientCode) && !clientResourceIdSet.containsAll(finalResourceIdSet)) {
+        if (StringUtils.isNotBlank(clientCode) && !clientAssignableResourceIdSet.containsAll(finalResourceIdSet)) {
             throw new RuntimeException("权限溢出：不能分配其他客户端的父级资源权限");
         }
         
@@ -184,10 +195,10 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         LambdaQueryWrapper<SysRoleResource> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(SysRoleResource::getRoleId, roleId);
         if (StringUtils.isNotBlank(clientCode)) {
-            if (clientResourceIdSet.isEmpty()) {
+            if (clientAssignableResourceIdSet.isEmpty()) {
                 return true;
             }
-            deleteWrapper.in(SysRoleResource::getResourceId, clientResourceIdSet);
+            deleteWrapper.in(SysRoleResource::getResourceId, clientAssignableResourceIdSet);
         }
         roleResourceMapper.delete(deleteWrapper);
         
@@ -210,6 +221,15 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             roleResourceMapper.insertBatch(roleResources);
         }
         return true;
+    }
+
+    private Long normalizeParentId(Long parentId) {
+        return parentId == null ? 0L : parentId;
+    }
+
+    private boolean isClientCompatibleParent(SysResource resource, String clientCode) {
+        return resource != null
+                && (StringUtils.isBlank(resource.getClientCode()) || clientCode.equals(resource.getClientCode()));
     }
 
     @Override

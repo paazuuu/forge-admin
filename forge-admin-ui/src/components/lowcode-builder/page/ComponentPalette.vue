@@ -81,6 +81,9 @@
             @dragstart="handleFieldDragStart($event, field)"
           >
             <span class="field-name">{{ field.label || field.field }}</span>
+            <span class="field-model-tag" :class="{ primary: isPrimaryModelField(field) }">
+              {{ resolveModelTag(field) }}
+            </span>
             <span class="field-meta">{{ field.field }} · {{ resolveFieldType(field) }}</span>
           </button>
           <n-empty v-if="!availableFields.length" size="small" description="没有可添加字段" />
@@ -168,6 +171,16 @@ function resolveFieldType(field) {
   if (field.componentType)
     return field.componentType
   return field.dataType || '字段'
+}
+
+function isPrimaryModelField(field = {}) {
+  return !field.modelCode || field.field === (field.sourceField || field.field)
+}
+
+function resolveModelTag(field = {}) {
+  if (isPrimaryModelField(field))
+    return '主模型'
+  return field.modelName || field.modelCode || '关联模型'
 }
 </script>
 
@@ -330,6 +343,22 @@ function resolveFieldType(field) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.field-model-tag {
+  justify-self: start;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.field-model-tag.primary {
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .field-meta {

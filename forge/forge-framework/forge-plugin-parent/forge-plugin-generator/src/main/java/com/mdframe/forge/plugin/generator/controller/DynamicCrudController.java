@@ -44,8 +44,13 @@ public class DynamicCrudController {
 
     @ApiEncrypt
     @GetMapping("/tree")
-    public RespInfo<List<Map<String, Object>>> tree(@PathVariable String configKey) {
-        return RespInfo.success(dynamicCrudService.selectTree(configKey));
+    public RespInfo<List<Map<String, Object>>> tree(@PathVariable String configKey,
+                                                    @RequestParam(required = false) String parentValue,
+                                                    @RequestParam(required = false) String parentId,
+                                                    @RequestParam(required = false) String loadMode,
+                                                    @RequestParam(required = false) String orderByColumn,
+                                                    @RequestParam(required = false) String isAsc) {
+        return RespInfo.success(dynamicCrudService.selectTree(configKey, parentValue, parentId, loadMode, orderByColumn, isAsc));
     }
 
     @ApiEncrypt

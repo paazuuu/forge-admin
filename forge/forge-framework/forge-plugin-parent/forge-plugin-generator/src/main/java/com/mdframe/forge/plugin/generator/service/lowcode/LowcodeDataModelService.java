@@ -53,6 +53,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlService ddlService;
     private final GenTableColumnMapper genTableColumnMapper;
+    private final LowcodePolicyService policyService;
 
     public Page<LowcodeDataModelVO> page(PageQuery pageQuery, Long domainId, String keyword,
                                          String status, Boolean masterData) {
@@ -249,13 +250,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
     }
 
     private void normalizePolicies(LowcodeModelSchema schema) {
-        LowcodePolicySchema policies = schema.getPolicies() == null ? new LowcodePolicySchema() : schema.getPolicies();
-        policies.setAuditEnabled(true);
-        policies.setPrimaryKeyStrategy("AUTO_INCREMENT");
-        policies.setPrimaryKeyField("id");
-        policies.setTenantField("tenantId");
-        policies.setLogicDeleteField("delFlag");
-        schema.setPolicies(policies);
+        policyService.normalizeModelSchema(schema);
     }
 
     private boolean isAuditField(LowcodeFieldSchema field) {

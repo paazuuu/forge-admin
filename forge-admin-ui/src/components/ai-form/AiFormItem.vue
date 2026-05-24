@@ -75,7 +75,7 @@
     <!-- 下拉选择 -->
     <n-select
       v-else-if="field.type === 'select'"
-      :value="value"
+      :value="resolveOptionValue(value)"
       :placeholder="getPlaceholder(field)"
       :disabled="disabledHandler(field)"
       :options="currentOptions"
@@ -194,6 +194,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field)"
       :format="field.props?.format || field.format || 'yyyy-MM-dd'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
       @update:value="handleUpdate"
@@ -210,6 +211,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field)"
       :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
       @update:value="handleUpdate"
@@ -219,7 +221,7 @@
     <!-- 日期范围选择 -->
     <n-date-picker
       v-else-if="field.type === 'daterange'"
-      :value="value"
+      :value="normalizeRangePickerValue(value)"
       type="daterange"
       :placeholder="field.placeholder"
       :start-placeholder="field.startPlaceholder || '开始日期'"
@@ -228,6 +230,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field, true)"
       :format="field.props?.format || field.format || 'yyyy-MM-dd'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
       @update:value="handleUpdate"
@@ -237,7 +240,7 @@
     <!-- 日期时间范围选择 -->
     <n-date-picker
       v-else-if="field.type === 'datetimerange'"
-      :value="value"
+      :value="normalizeRangePickerValue(value)"
       type="datetimerange"
       :placeholder="field.placeholder"
       :start-placeholder="field.startPlaceholder || '开始时间'"
@@ -246,6 +249,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field, true)"
       :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
       @update:value="handleUpdate"
@@ -262,6 +266,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field)"
       :format="field.props?.format || field.format || 'yyyy-MM'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM'"
       @update:value="handleUpdate"
@@ -278,6 +283,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field)"
       :format="field.props?.format || field.format || 'yyyy'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy'"
       @update:value="handleUpdate"
@@ -293,6 +299,7 @@
       :clearable="field.clearable !== false"
       style="width: 100%"
       v-bind="field.props"
+      :default-value="resolvePickerDefaultValue(field)"
       :format="field.props?.format || field.format || 'HH:mm:ss'"
       :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
       @update:value="handleUpdate"
@@ -308,6 +315,7 @@
         :clearable="field.clearable !== false"
         style="width: 100%"
         v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
         :format="field.props?.format || field.format || 'HH:mm:ss'"
         :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
         @update:value="handleRangeUpdate(0, $event)"
@@ -321,6 +329,7 @@
         :clearable="field.clearable !== false"
         style="width: 100%"
         v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
         :format="field.props?.format || field.format || 'HH:mm:ss'"
         :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
         @update:value="handleRangeUpdate(1, $event)"
@@ -435,7 +444,7 @@
     <!-- 级联选择 -->
     <n-cascader
       v-else-if="field.type === 'cascader'"
-      :value="value"
+      :value="resolveOptionValue(value)"
       :placeholder="getPlaceholder(field)"
       :disabled="disabledHandler(field)"
       :options="currentOptions"
@@ -452,7 +461,7 @@
     <!-- 系统组织树选择 -->
     <n-tree-select
       v-else-if="field.type === 'orgTreeSelect'"
-      :value="value"
+      :value="resolveOptionValue(value)"
       :placeholder="getPlaceholder(field)"
       :disabled="disabledHandler(field)"
       :options="currentOptions"
@@ -462,14 +471,14 @@
       :multiple="field.multiple"
       :cascade="field.cascade !== false"
       v-bind="field.props"
-      @update:value="handleUpdate"
+      @update:value="handleTreeSelectUpdate(field, $event)"
       v-on="getComponentEvents(field)"
     />
 
     <!-- 系统用户选择 -->
     <n-select
       v-else-if="field.type === 'userSelect'"
-      :value="value"
+      :value="resolveOptionValue(value)"
       :placeholder="getPlaceholder(field)"
       :disabled="disabledHandler(field)"
       :options="currentOptions"
@@ -494,13 +503,13 @@
       :filterable="field.filterable !== false"
       :virtual-disabled="field.props?.virtualDisabled ?? !context?.isSearch"
       v-bind="field.props"
-      @update:model-value="handleUpdate"
+      @update:model-value="handleRegionTreeSelectUpdate(field, $event)"
     />
 
     <!-- 树形选择 -->
     <n-tree-select
       v-else-if="field.type === 'treeSelect'"
-      :value="value"
+      :value="resolveOptionValue(value)"
       :placeholder="getPlaceholder(field)"
       :disabled="disabledHandler(field)"
       :options="currentOptions"
@@ -511,7 +520,7 @@
       :cascade="field.cascade !== false"
       :show-path="field.showPath !== false"
       v-bind="field.props"
-      @update:value="handleUpdate"
+      @update:value="handleTreeSelectUpdate(field, $event)"
       v-on="getComponentEvents(field)"
     />
 
@@ -632,6 +641,7 @@ const emit = defineEmits(['update:value'])
 const { copy } = useClipboard()
 const remoteOptions = ref([])
 const remoteLoading = ref(false)
+const pickerDefaultTimestamp = Date.now()
 let remoteRequestSeq = 0
 
 /**
@@ -708,12 +718,12 @@ const currentOptions = computed(() => {
   }
 
   // 其次使用 options 数组
-  if (field.options && Array.isArray(field.options)) {
+  if (field.options && Array.isArray(field.options) && field.options.length > 0) {
     return field.options
   }
 
   // 检查 props.options（兼容旧的配置方式）
-  if (field.props?.options && Array.isArray(field.props.options)) {
+  if (field.props?.options && Array.isArray(field.props.options) && field.props.options.length > 0) {
     return field.props.options
   }
 
@@ -872,6 +882,102 @@ function handleRemoteSearch(keyword) {
   loadRemoteOptions(source, keyword)
 }
 
+function resolveOptionValue(rawValue) {
+  return normalizeOptionValue(rawValue, currentOptions.value, props.field?.multiple)
+}
+
+function normalizeOptionValue(rawValue, options = [], multiple = false) {
+  if (rawValue === null || rawValue === undefined || rawValue === '' || !Array.isArray(options) || !options.length)
+    return rawValue
+
+  if (Array.isArray(rawValue)) {
+    return rawValue.map(item => findOptionValue(options, item)).filter(item => item !== undefined)
+  }
+
+  if (multiple && typeof rawValue === 'string') {
+    return rawValue.split(',').map(item => item.trim()).filter(Boolean).map(item => findOptionValue(options, item)).filter(item => item !== undefined)
+  }
+
+  return findOptionValue(options, rawValue)
+}
+
+function findOptionValue(options = [], rawValue) {
+  const match = flattenOptionNodes(options).find(option => isSameOptionValue(option?.value ?? option?.key, rawValue))
+  if (match)
+    return match.value ?? match.key
+  return rawValue
+}
+
+function flattenOptionNodes(options = []) {
+  const result = []
+  const walk = (nodes) => {
+    ;(Array.isArray(nodes) ? nodes : []).forEach((node) => {
+      if (!node || typeof node !== 'object')
+        return
+      result.push(node)
+      if (Array.isArray(node.children))
+        walk(node.children)
+    })
+  }
+  walk(options)
+  return result
+}
+
+function isSameOptionValue(left, right) {
+  if (left === right)
+    return true
+  if (left === null || left === undefined || right === null || right === undefined)
+    return false
+  return String(left) === String(right)
+}
+
+function handleTreeSelectUpdate(field, newValue) {
+  const normalizedValue = normalizeOptionValue(newValue, currentOptions.value, field?.multiple)
+  syncIncludeChildrenFlag(field, normalizedValue)
+  emit('update:value', normalizedValue)
+}
+
+function handleRegionTreeSelectUpdate(field, newValue) {
+  if (!props.context?.isSearch || !field?.field) {
+    emit('update:value', newValue)
+    return
+  }
+  const includeChildrenKey = `${field.field}_includeChildren`
+  if (newValue === null || newValue === undefined || newValue === '') {
+    props.context?.patchFormData?.({ [includeChildrenKey]: undefined })
+    emit('update:value', newValue)
+    return
+  }
+  const textValue = String(newValue)
+  if (textValue.endsWith('ALL')) {
+    props.context?.patchFormData?.({ [includeChildrenKey]: true })
+    emit('update:value', textValue.replace(/ALL$/, ''))
+    return
+  }
+  props.context?.patchFormData?.({ [includeChildrenKey]: undefined })
+  emit('update:value', newValue)
+}
+
+function syncIncludeChildrenFlag(field, value) {
+  if (!props.context?.isSearch || !field?.field || !['treeSelect', 'orgTreeSelect'].includes(field.type))
+    return
+  const includeChildrenKey = `${field.field}_includeChildren`
+  if (Array.isArray(value) || value === null || value === undefined || value === '') {
+    props.context?.patchFormData?.({ [includeChildrenKey]: undefined })
+    return
+  }
+  if (field.type === 'orgTreeSelect') {
+    props.context?.patchFormData?.({ [includeChildrenKey]: true })
+    return
+  }
+  const selectedNode = flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, value))
+  if (selectedNode?.children?.length) {
+    props.context?.patchFormData?.({ [includeChildrenKey]: true })
+    return
+  }
+  props.context?.patchFormData?.({ [includeChildrenKey]: undefined })
+}
+
 /**
  * 获取组件事件
  */
@@ -904,6 +1010,19 @@ function handleUpdate(newValue) {
 
 function resolveRangeValue(value, index) {
   return Array.isArray(value) ? value[index] ?? null : null
+}
+
+function normalizeRangePickerValue(value) {
+  if (!Array.isArray(value))
+    return null
+  const hasValue = value.some(item => item !== null && item !== undefined && item !== '')
+  return hasValue ? value : null
+}
+
+function resolvePickerDefaultValue(field, range = false) {
+  const configured = field?.pickerDefaultValue ?? field?.props?.pickerDefaultValue ?? field?.props?.defaultPickerValue
+  const value = configured ?? pickerDefaultTimestamp
+  return range ? [value, value] : value
 }
 
 function handleRangeUpdate(index, nextValue) {

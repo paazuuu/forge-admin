@@ -45,6 +45,7 @@
             :min="720"
             :max="2000"
             :step="40"
+            :show-button="false"
             size="small"
             class="size-input"
             @update:value="updateCanvasSize('width', $event)"
@@ -55,6 +56,7 @@
             :min="360"
             :max="1800"
             :step="40"
+            :show-button="false"
             size="small"
             class="size-input"
             @update:value="updateCanvasSize('height', $event)"
@@ -290,6 +292,10 @@ function drawCanvasItem(api, group, item) {
     drawTablePreview(api, group, item, width, height)
     return
   }
+  if (props.zone?.zoneKey === 'detail' || item.componentKey === 'detail-field') {
+    drawDetailPreview(api, group, item, width, height)
+    return
+  }
   drawFormFieldPreview(api, group, item, width, height)
 }
 
@@ -416,8 +422,10 @@ function drawTablePreview(api, group, item, width, height) {
 }
 
 function drawDetailPreview(api, group, item, width, height) {
+  const field = resolveItemField(item)
   const labelWidth = Math.max(80, Math.min(150, Number(item.style?.labelWidth || 104)))
   const contentHeight = Math.max(30, height - 20)
+  addItemModelBadge(api, group, item, field, width, 12)
   group.add(new api.Rect({
     x: 10,
     y: 10,
@@ -529,10 +537,12 @@ function drawControlSketch(api, group, item, x, y, width, height) {
 }
 
 function addItemHeader(api, group, item, width) {
+  const field = resolveItemField(item)
+  const badgeWidth = addItemModelBadge(api, group, item, field, width, 12)
   addText(api, group, item.label || resolveComponentTitle(item.componentKey), {
     x: 14,
     y: 13,
-    width: Math.max(40, width - 116),
+    width: Math.max(40, width - 110 - badgeWidth),
     fill: '#0f172a',
     fontWeight: '700',
   })
@@ -544,6 +554,63 @@ function addItemHeader(api, group, item, width) {
     textAlign: 'right',
     fontSize: 10,
   })
+}
+
+function addItemModelBadge(api, group, item, field, width, y) {
+  if (!item?.fieldRef)
+    return 0
+  const label = resolveItemModelLabel(item, field)
+  if (!label)
+    return 0
+  const palette = resolveModelBadgePalette(field)
+  const badgeWidth = Math.min(88, Math.max(48, label.length * 12 + 14))
+  const x = Math.max(112, width - 106 - badgeWidth)
+  group.add(new api.Rect({
+    x,
+    y,
+    width: badgeWidth,
+    height: 18,
+    fill: palette.fill,
+    cornerRadius: 9,
+    editable: false,
+    data: { itemId: item.id },
+  }))
+  addText(api, group, label, {
+    x: x + 6,
+    y: y + 3,
+    width: badgeWidth - 12,
+    fill: palette.text,
+    fontSize: 10,
+    textAlign: 'center',
+    fontWeight: '600',
+    maxChars: 10,
+  })
+  return badgeWidth + 10
+}
+
+function resolveItemModelLabel(item, field = {}) {
+  const modelName = item?.modelName || field?.modelName || field?.sourceLabel || ''
+  if (!item?.fieldRef || !modelName)
+    return ''
+  return isPrimaryItemField(field) ? '主模型' : modelName
+}
+
+function resolveModelBadgePalette(field = {}) {
+  if (isPrimaryItemField(field)) {
+    return {
+      fill: '#dbeafe',
+      text: '#1d4ed8',
+    }
+  }
+  return {
+    fill: '#dcfce7',
+    text: '#047857',
+  }
+}
+
+function isPrimaryItemField(field = {}) {
+  const sourceField = field?.sourceField || field?.field
+  return !field?.modelCode || field?.field === sourceField
 }
 
 function addText(api, group, text, attrs = {}) {
@@ -964,7 +1031,12 @@ function truncateText(value, maxChars = 24) {
 }
 
 .size-input {
-  width: 84px;
+  width: 96px;
+  min-width: 96px;
+}
+
+.size-input :deep(.n-input__input-el) {
+  text-align: center;
 }
 
 .size-divider {

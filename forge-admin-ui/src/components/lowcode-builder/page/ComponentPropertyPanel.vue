@@ -240,6 +240,13 @@
               @update:value="updateTreeConfig('labelField', $event)"
             />
           </n-form-item>
+          <n-form-item label="加载方式">
+            <n-select
+              :value="treeConfig.loadMode || 'full'"
+              :options="treeLoadModeOptions"
+              @update:value="updateTreeConfig('loadMode', $event)"
+            />
+          </n-form-item>
         </template>
       </template>
     </n-form>
@@ -271,6 +278,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:zone', 'updateItem', 'removeItem'])
+
+const treeLoadModeOptions = [
+  { label: '全量加载', value: 'full' },
+  { label: '懒加载', value: 'lazy' },
+]
 
 const fieldOptions = computed(() => props.fields.map(field => ({
   label: field.label ? `${field.label}（${field.field}）` : field.field,
@@ -332,11 +344,13 @@ function ensureTreeConfig() {
     patchZone({
       props: {
         treeConfig: {
+          enabled: true,
           keyField: 'id',
           parentField,
           labelField,
           childrenField: 'children',
           treeTitle: '树形导航',
+          loadMode: 'full',
         },
       },
     })
@@ -385,6 +399,7 @@ function updateTreeConfig(key, value) {
     props: {
       treeConfig: {
         ...(treeConfig.value || {}),
+        enabled: true,
         [key]: value,
       },
     },

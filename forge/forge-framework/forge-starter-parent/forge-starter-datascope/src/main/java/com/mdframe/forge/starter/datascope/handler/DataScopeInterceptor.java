@@ -90,7 +90,9 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
         
         // 5. 判断数据权限类型
-        DataScopeType scopeType = DataScopeType.getByCode(context.getMinDataScope());
+        DataScopeType scopeType = DataScopeType.getByRoleDataScope(
+                context.getMinDataScope(),
+                context.getCustomOrgIds() != null && !context.getCustomOrgIds().isEmpty());
         if (scopeType == null) {
             log.warn("数据权限拦截器：未知的数据权限类型 {}", context.getMinDataScope());
             return;

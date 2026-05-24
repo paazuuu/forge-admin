@@ -66,4 +66,25 @@ public enum DataScopeType {
         }
         return null;
     }
+
+    /**
+     * 兼容角色数据范围的两套历史编码：
+     * 当前字典：1全部、2本租户、3本组织、4本组织及子组织、5个人、7行政区划；
+     * 旧后端枚举：1全部、2个人、3本组织、4本组织及子组织、5自定义、6本租户、7行政区划。
+     */
+    public static DataScopeType getByRoleDataScope(Integer code, boolean hasCustomOrgIds) {
+        if (code == null) {
+            return null;
+        }
+        return switch (code) {
+            case 1 -> ALL;
+            case 2 -> TENANT_ALL;
+            case 3 -> ORG;
+            case 4 -> ORG_AND_CHILD;
+            case 5 -> hasCustomOrgIds ? CUSTOM : SELF;
+            case 6 -> TENANT_ALL;
+            case 7 -> REGION;
+            default -> getByCode(code);
+        };
+    }
 }

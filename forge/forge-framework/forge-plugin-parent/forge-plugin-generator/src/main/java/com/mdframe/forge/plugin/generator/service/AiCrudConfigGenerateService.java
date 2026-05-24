@@ -288,11 +288,13 @@ public class AiCrudConfigGenerateService {
         modelSchema.put("tableName", tableName);
         modelSchema.put("businessName", tableName);
         modelSchema.put("treeConfig", Map.of(
+                "enabled", false,
                 "keyField", "id",
                 "parentField", "parentId",
                 "labelField", inferLabelField(fields),
                 "childrenField", "children",
-                "treeTitle", tableName
+                "treeTitle", tableName,
+                "loadMode", "full"
         ));
         modelSchema.put("fields", fields);
         modelSchema.put("children", List.of());

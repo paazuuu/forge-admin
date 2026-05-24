@@ -85,6 +85,11 @@ public class LowcodeDdlService {
         return ddlRepository.hasAutoIncrementPrimaryId(tableName);
     }
 
+    public Set<String> listColumns(String tableName) {
+        validateIdentifier(tableName, "表名");
+        return ddlRepository.listColumns(tableName);
+    }
+
     private String buildCreateTableSql(LowcodeModelSchema modelSchema, List<String> warnings) {
         List<String> definitions = new ArrayList<>();
         definitions.add("`id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID'");

@@ -296,6 +296,7 @@ import {
   cloneSchema,
   createDefaultModelSchema,
   ensureSystemFields,
+  normalizeLowcodePolicies,
   normalizeObjectCode,
   normalizeTableName,
 } from '@/components/lowcode-builder/model/model-schema'
@@ -754,8 +755,7 @@ function normalizeRuntimeModel(modelSchema, model) {
     modelSchema.tableName = buildRuntimeTableName(modelSchema, model)
   if (!modelSchema.relations)
     modelSchema.relations = []
-  if (!modelSchema.policies)
-    modelSchema.policies = { dataScope: 'TENANT', regionField: '', auditEnabled: true }
+  normalizeLowcodePolicies(modelSchema)
   if (!modelSchema.children)
     modelSchema.children = []
 }
@@ -821,7 +821,7 @@ function createSyntheticModelFromRef(ref = {}) {
       label: field.rawLabel || field.label || field.sourceField || field.field,
     })),
     relations: [],
-    policies: { dataScope: 'TENANT', regionField: '', auditEnabled: true },
+    policies: {},
     children: [],
   }, {
     modelCode: ref.modelCode,
@@ -832,6 +832,8 @@ function createSyntheticModelFromRef(ref = {}) {
 function createSyntheticModelFromSchema(schema = {}, options = {}) {
   const modelCode = options.modelCode || schema.object?.code || 'runtime_model'
   const modelName = options.modelName || schema.object?.name || schema.businessName || modelCode
+  const modelSchema = cloneSchema(schema)
+  normalizeLowcodePolicies(modelSchema)
   return {
     id: `schema:${modelCode}`,
     domainId: draft.domainId,
@@ -842,7 +844,7 @@ function createSyntheticModelFromSchema(schema = {}, options = {}) {
     status: 'ENABLED',
     tenantEnabled: true,
     masterData: false,
-    modelSchema: cloneSchema(schema),
+    modelSchema,
   }
 }
 

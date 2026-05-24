@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysDictData;
 import com.mdframe.forge.plugin.system.entity.SysFileMetadata;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
+import com.mdframe.forge.plugin.system.entity.SysRegion;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.mapper.SysFileMetadataMapper;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
+import com.mdframe.forge.plugin.system.mapper.SysRegionMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.service.ISysDictDataService;
 import com.mdframe.forge.starter.trans.spi.DictValueProvider;
@@ -28,6 +30,7 @@ public class SytemDictValueProvider implements DictValueProvider {
     private final ISysDictDataService sysDictDataService;
     private final SysOrgMapper sysOrgMapper;
     private final SysUserMapper sysUserMapper;
+    private final SysRegionMapper sysRegionMapper;
     private final SysFileMetadataMapper sysFileMetadataMapper;
 
     private static final long CACHE_TTL_MS = 30 * 60 * 1000L;
@@ -129,6 +132,35 @@ public class SytemDictValueProvider implements DictValueProvider {
         Map<String, String> result = new LinkedHashMap<>();
         for (SysUser user : users) {
             result.put(String.valueOf(user.getId()), user.getRealName());
+        }
+        return result;
+    }
+
+    @Override
+    public String getRegionName(String regionCode) {
+        if (regionCode == null || regionCode.isBlank()) {
+            return null;
+        }
+        SysRegion region = sysRegionMapper.selectById(regionCode);
+        return region != null ? region.getName() : null;
+    }
+
+    @Override
+    public Map<String, String> batchGetRegionNames(List<String> regionCodes) {
+        if (regionCodes == null || regionCodes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<String> codes = regionCodes.stream()
+                .filter(code -> code != null && !code.isBlank())
+                .distinct()
+                .toList();
+        if (codes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<SysRegion> regions = sysRegionMapper.selectBatchIds(codes);
+        Map<String, String> result = new LinkedHashMap<>();
+        for (SysRegion region : regions) {
+            result.put(region.getCode(), region.getName());
         }
         return result;
     }

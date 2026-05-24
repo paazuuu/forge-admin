@@ -27,4 +27,8 @@ public class LowcodeTreeConfig {
     private String childrenField;
 
     private String treeTitle;
+
+    private String loadMode;
+
+    private Boolean enabled;
 }
