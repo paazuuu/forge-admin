@@ -1,92 +1,109 @@
 <template>
   <div class="${configKey}-page">
-    <!--
-      ${tableComment} 页面
-      生成日期: ${date}
-      如需自定义功能，可在 AiCrudPage 上添加插槽，如 #toolbar-end、#form-xxx 等
-    -->
-    <AiCrudPage
-      ref="crudRef"
-      :api-config="apiConfig"
-      :search-schema="computedSearchSchema"
-      :columns="computedColumns"
-      :edit-schema="computedEditSchema"
-      row-key="${pkColumn.javaField}"
-      :load-detail-on-edit="true"
-    />
+#if(${isLeftTreeLayout})
+    <TreeCrudTemplate :crud-props="crudProps" />
+#elseif(${isMasterDetailLayout})
+    <MasterDetailCrudTemplate :crud-props="crudProps" />
+#else
+    <AiCrudPage v-bind="crudProps" />
+#end
   </div>
 </template>
 
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
+#if(${isLeftTreeLayout})
+import TreeCrudTemplate from '@/components/page-templates/TreeCrudTemplate.vue'
+#elseif(${isMasterDetailLayout})
+import MasterDetailCrudTemplate from '@/components/page-templates/MasterDetailCrudTemplate.vue'
+#else
 import { AiCrudPage } from '@/components/ai-form'
+#end
 import DictTag from '@/components/DictTag.vue'
 import { getDictData } from '@/composables/useDict'
+#if(${isTreeTableLayout})
+import { request } from '@/utils'
+#end
 
 defineOptions({ name: '${componentName}' })
 
-const crudRef = ref(null)
+const dictCache = ref({})
 
 // ── 接口配置（基于生成的 Controller 接口）──────────────────────────────────
-const apiConfig = {
-  list:   'get@${apiBase}/page',
+const baseApiConfig = {
+  list: 'get@${apiBase}/page',
+#if(${hasTreeConfig})
+  tree: 'get@${apiBase}/tree',
+#end
   detail: 'post@${apiBase}/getById',
-  add:    'post@${apiBase}/add',
+  add: 'post@${apiBase}/add',
   update: 'post@${apiBase}/edit',
   delete: 'post@${apiBase}/remove/:${pkColumn.javaField}',
 }
 
-// ── 字典缓存 ──────────────────────────────────────────────────────────────
-const dictCache = ref({})
+const layoutType = '${layoutType}'
+const crudOptions = ${optionsJson}
+const searchSchema = ${searchSchemaJson}
+const columnsSchema = ${columnsSchemaJson}
+const editSchema = ${editSchemaJson}
 
-// ── 搜索条件配置（原始） ──────────────────────────────────────────────────
-const searchSchema = [
-#foreach($field in $searchSchema)
-  {
-    field: '${field.field}',
-    label: '${field.label}',
-    type: '${field.type}'#if($field.dictType),
-    dictType: '${field.dictType}'#end
-,
-  },
-#end
-]
+const isTreeTable = computed(() => Boolean(crudOptions.treeConfig) && layoutType !== 'tree-crud')
+const defaultSortParams = computed(() => resolveDefaultSortParams(crudOptions.defaultSort))
+const computedApiConfig = computed(() => {
+  if (!isTreeTable.value) {
+    return baseApiConfig
+  }
+  return {
+    ...baseApiConfig,
+    list: baseApiConfig.tree || baseApiConfig.list,
+  }
+})
 
-// ── 表格列配置（原始） ────────────────────────────────────────────────────
-const columnsSchema = [
-#foreach($col in $columnsSchema)
-  {
-    prop: '${col.dataIndex}',
-    label: '${col.title}'#if($col.width),
-    width: ${col.width}#end
-#if($col._transName),
-    _transName: '${col._transName}'#end
-#if($col._dictType),
-    _dictType: '${col._dictType}'#end
-,
-  },
-#end
-]
-
-// ── 新增/编辑表单配置（原始） ─────────────────────────────────────────────
-const editSchema = [
-#foreach($field in $editSchema)
-  {
-    field: '${field.field}',
-    label: '${field.label}',
-    type: '${field.type}',
-    required: ${field.required}#if($field.dictType),
-    dictType: '${field.dictType}'#end
-,
-  },
-#end
-]
+const crudProps = computed(() => {
+  const treeConfig = crudOptions.treeConfig || {}
+  return {
+    searchSchema: computedSearchSchema.value,
+    columns: computedColumns.value,
+    editSchema: computedEditSchema.value,
+    childrenConfig: transformChildrenConfig(crudOptions.masterDetailConfig?.children || []),
+    apiConfig: computedApiConfig.value,
+    options: crudOptions,
+    rowKey: '${pkColumn.javaField}',
+    modalType: crudOptions.modalType || 'drawer',
+    modalWidth: crudOptions.modalWidth || ('${isMasterDetailLayout}' === 'true' ? '1080px' : '800px'),
+    editGridCols: crudOptions.editGridCols || 1,
+    loadDetailOnEdit: crudOptions.loadDetailOnEdit ?? true,
+    searchGridCols: crudOptions.searchGridCols || 4,
+    hideAdd: !!crudOptions.hideAdd,
+    hideBatchDelete: !!crudOptions.hideBatchDelete,
+    showImport: !!crudOptions.showImport,
+    showExport: !!crudOptions.showExport,
+    showPagination: isTreeTable.value ? false : crudOptions.showPagination !== false,
+    enableCustomQuery: crudOptions.enableCustomQuery !== false,
+    customQueryConfigKey: '${configKey}',
+    toolbarActions: crudOptions.toolbarActions || [],
+    publicParams: isTreeTable.value
+      ? { ...defaultSortParams.value, loadMode: resolveTreeLoadMode(treeConfig) }
+      : defaultSortParams.value,
+    beforeRenderList: isTreeTable.value ? list => normalizeTreeTableNodes(list, treeConfig) : null,
+    treeConfig: isTreeTable.value ? treeConfig : {},
+    tableProps: isTreeTable.value ? buildTreeTableProps(treeConfig) : {},
+  }
+})
 
 // ── 字典预加载 ────────────────────────────────────────────────────────────
 async function preloadDicts() {
   const types = new Set()
-  columnsSchema.forEach(col => col._dictType && types.add(col._dictType))
+  columnsSchema.forEach((col) => {
+    if (col.render?.dictType)
+      types.add(col.render.dictType)
+    if (col._dictType)
+      types.add(col._dictType)
+  })
   ;[...searchSchema, ...editSchema].forEach(f => f.dictType && types.add(f.dictType))
+  ;(crudOptions.masterDetailConfig?.children || []).forEach((child) => {
+    ;(child.fields || []).forEach(field => field.dictType && types.add(field.dictType))
+  })
   for (const type of types) {
     try {
       dictCache.value[type] = await getDictData(type)
@@ -97,40 +114,174 @@ async function preloadDicts() {
 }
 onMounted(preloadDicts)
 
-// ── 表格列转换（注入 dictTag render 函数） ────────────────────────────────
-const computedColumns = computed(() =>
-  columnsSchema.map((col) => {
-    // 字典翻译字段：直接显示后端返回的 xxxName 字段
+const computedColumns = computed(() => {
+  let treeColumnApplied = columnsSchema.some(item => item.tree)
+  return columnsSchema.map((col) => {
+    const key = col.prop || col.key || col.dataIndex
+    const nextCol = { ...col, prop: key }
+    if (['actions', 'action'].includes(key) && Array.isArray(col.actions)) {
+      nextCol.actions = ensureDetailRowAction(col.actions)
+      nextCol.width = Math.max(Number(col.width) || 0, nextCol.actions.length * 58, 180)
+      return nextCol
+    }
+    if (isTreeTable.value && key && !['actions', 'action'].includes(key) && !treeColumnApplied) {
+      nextCol.tree = true
+      treeColumnApplied = true
+    }
     if (col._transName) {
-      return {
-        ...col,
-        render: row => row[col._transName] ?? row[col.prop],
-      }
+      nextCol.render = row => row[col._transName] ?? row[key]
+      return nextCol
     }
-    // 字典标签：用 DictTag 组件渲染
     if (col._dictType) {
-      return {
-        ...col,
-        render: row => h(DictTag, { dictType: col._dictType, value: row[col.prop], size: 'small' }),
+      nextCol.render = row => h(DictTag, { dictType: col._dictType, value: row[key], size: 'small' })
+      return nextCol
+    }
+    if (col.render && typeof col.render === 'object') {
+      const renderType = col.render.type
+      if (renderType === 'dictTag') {
+        nextCol.render = row => h(DictTag, {
+          dictType: col.render.dictType,
+          value: row[key],
+          size: 'small',
+        })
+        return nextCol
+      }
+      if (['orgName', 'userName', 'regionName', 'fileUpload', 'imageUpload'].includes(renderType)) {
+        const targetField = col.render.targetField || `${key}Name`
+        nextCol.render = row => row[targetField] ?? row[key] ?? '-'
+        return nextCol
       }
     }
-    return col
-  }),
-)
-
-// ── 表单字段转换（注入字典选项） ──────────────────────────────────────────
-function transformFields(fields) {
-  return fields.map((field) => {
-    if (field.dictType && ['select', 'radio', 'checkbox'].includes(field.type)) {
-      return {
-        ...field,
-        props: { ...(field.props || {}), options: dictCache.value[field.dictType] || [] },
-      }
-    }
-    return field
+    return nextCol
   })
+})
+
+function ensureDetailRowAction(actions = []) {
+  if (actions.some(action => action?.key === 'detail'))
+    return actions
+  const next = [...actions]
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const detailAction = { key: 'detail', label: '查看详情', type: 'info', position: 'row' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, detailAction)
+    return next
+  }
+  next.unshift(detailAction)
+  return next
+}
+
+function transformFields(fields) {
+  return (fields || []).map((field) => {
+    const nextField = { ...field }
+    if (field.dictType && ['select', 'radio', 'checkbox'].includes(field.type)) {
+      nextField.props = {
+        ...(nextField.props || {}),
+        options: dictCache.value[field.dictType] || [],
+      }
+    }
+    const timeProps = resolveDateTimeProps(field.type)
+    if (timeProps) {
+      nextField.props = {
+        ...(nextField.props || {}),
+        ...timeProps,
+      }
+    }
+    return nextField
+  })
+}
+
+function transformChildrenConfig(children = []) {
+  return (children || []).map(child => ({
+    ...child,
+    fields: transformFields(child.fields || []),
+  }))
 }
 
 const computedSearchSchema = computed(() => transformFields(searchSchema))
 const computedEditSchema = computed(() => transformFields(editSchema))
+
+function resolveDateTimeProps(type) {
+  switch (String(type || '').toLowerCase()) {
+    case 'date':
+    case 'daterange':
+      return { format: 'yyyy-MM-dd', valueFormat: 'yyyy-MM-dd' }
+    case 'datetime':
+    case 'datetimerange':
+      return { format: 'yyyy-MM-dd HH:mm:ss', valueFormat: 'yyyy-MM-dd HH:mm:ss' }
+    case 'time':
+    case 'timerange':
+      return { format: 'HH:mm:ss', valueFormat: 'HH:mm:ss' }
+    default:
+      return null
+  }
+}
+
+function resolveDefaultSortParams(defaultSort = {}) {
+  return {
+    orderByColumn: defaultSort.orderByColumn || defaultSort.field || '${pkColumn.javaField}',
+    isAsc: defaultSort.isAsc || defaultSort.order || 'desc',
+  }
+}
+
+function resolveTreeLoadMode(treeConfig = {}) {
+  return treeConfig.loadMode === 'lazy' ? 'lazy' : 'full'
+}
+
+function buildTreeTableProps(treeConfig = {}) {
+  const loadMode = resolveTreeLoadMode(treeConfig)
+  return {
+    childrenKey: treeConfig.childrenField || 'children',
+    defaultExpandAll: loadMode !== 'lazy',
+#if(${isTreeTableLayout})
+    onLoad: loadMode === 'lazy' ? node => loadTreeTableChildren(node, treeConfig) : undefined,
+#else
+    onLoad: undefined,
+#end
+  }
+}
+
+#if(${isTreeTableLayout})
+async function loadTreeTableChildren(node, treeConfig = {}) {
+  const treeApi = baseApiConfig.tree
+  if (!treeApi || !node)
+    return
+  const [method, url] = treeApi.split('@')
+  const keyField = treeConfig.keyField || '${tree.keyField}'
+  const parentValue = node[keyField] ?? node.key ?? node.targetValue
+  const res = await request({
+    method: method.toLowerCase(),
+    url,
+    params: {
+      ...defaultSortParams.value,
+      loadMode: 'lazy',
+      parentValue,
+    },
+  })
+  node[treeConfig.childrenField || 'children'] = normalizeTreeTableNodes(res?.data || [], treeConfig)
+  if (!node[treeConfig.childrenField || 'children'].length)
+    node.isLeaf = true
+}
+
+#end
+function normalizeTreeTableNodes(nodes = [], treeConfig = {}) {
+  if (!Array.isArray(nodes))
+    return []
+  const keyField = treeConfig.keyField || 'id'
+  const childrenField = treeConfig.childrenField || 'children'
+  return nodes.map((node) => {
+    const children = Array.isArray(node?.[childrenField])
+      ? normalizeTreeTableNodes(node[childrenField], treeConfig)
+      : []
+    const normalized = { ...(node || {}) }
+    normalized.key = node?.key ?? node?.[keyField]
+    if (children.length) {
+      normalized[childrenField] = children
+      normalized.isLeaf = false
+    }
+    else if (node?.isLeaf !== undefined) {
+      normalized.isLeaf = !!node.isLeaf
+    }
+    return normalized
+  })
+}
 </script>
