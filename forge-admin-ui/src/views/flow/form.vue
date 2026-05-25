@@ -119,11 +119,10 @@
         :mask-closable="false"
       >
         <div class="h-full -m-4">
-          <FormDesigner
+          <FlowFormCreateDesigner
             ref="designerRef"
-            :initial-schema="currentFormSchema"
+            v-model="currentFormSchema"
             @save="handleSaveSchema"
-            @cancel="showDesigner = false"
           />
         </div>
       </n-modal>
@@ -137,9 +136,10 @@
         title="表单预览"
         style="width: 800px"
       >
-        <FormPreview
+        <FlowFormCreateRenderer
           v-if="currentFormSchema"
           :schema="currentFormSchema"
+          read-only
         />
       </n-modal>
     </Teleport>
@@ -151,8 +151,8 @@ import { NButton, NPopconfirm, NSpace, NSwitch } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import api from '@/api/flow'
 import DictTag from '@/components/DictTag.vue'
-import FormDesigner from '@/components/form-designer/FormDesigner.vue'
-import FormPreview from '@/components/form-designer/FormPreview.vue'
+import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
+import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 
 // 使用全局 message 实例
@@ -220,7 +220,7 @@ const rules = {
 const showDesigner = ref(false)
 const designerRef = ref(null)
 const currentFormId = ref(null)
-const currentFormSchema = ref(null)
+const currentFormSchema = ref([])
 
 // 表单预览相关
 const showPreview = ref(false)
@@ -437,7 +437,7 @@ async function handleDesign(row) {
   try {
     const res = await api.getFormById(row.id)
     if (res.data) {
-      currentFormSchema.value = res.data.formSchema ? JSON.parse(res.data.formSchema) : null
+      currentFormSchema.value = res.data.formSchema ? JSON.parse(res.data.formSchema) : []
       showDesigner.value = true
     }
   }

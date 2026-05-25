@@ -199,6 +199,64 @@ public RespInfo<GoviewProject> getById(@PathVariable Long id) {
 **解决方案**:
 排查“前端已传参但后台保存/回显不生效”时，除字段映射、租户条件外，必须检查接口是否补齐 `@ApiEncrypt` / `@ApiDecrypt`。
 
+---
+
+## 6. Vite Outdated Optimize Dep 导致动态路由模块加载失败
+
+**发现日期**: 2026-05-26
+
+**问题描述**:
+前端新增较重依赖（例如 `element-plus`、`@form-create/designer`、`@form-create/element-ui`）后，浏览器控制台出现：
+
+```text
+Failed to load resource: the server responded with a status of 504 (Outdated Optimize Dep)
+TypeError: Failed to fetch dynamically imported module: http://localhost:3000/src/views/flow/model.vue
+```
+
+**根本原因**:
+Vite dev server 的 `node_modules/.vite` 预构建缓存与浏览器中已加载的依赖图不一致。动态路由模块本身可能没有语法错误，但它依赖的新包触发了重新预构建，旧页面继续请求已失效的优化依赖 URL。
+
+**解决方案**:
+1. 停止旧的 Vite dev server。
+2. 删除 `forge-admin-ui/node_modules/.vite`。
+3. 将新引入的大型运行时依赖加入 `vite.config.js` 的 `optimizeDeps.include`。
+4. 使用 Node 20.19.0 重新启动前端 dev server，必要时加 `--force`。
+
+**验证方式**:
+直接请求动态模块和优化依赖，确认返回 200：
+
+```bash
+curl -I http://localhost:3000/src/views/flow/model.vue
+curl -I http://localhost:3000/node_modules/.vite/deps/@form-create_designer.js
+```
+
+---
+
+## 7. form-create 设计器默认锁定字段 ID
+
+**发现日期**: 2026-05-26
+
+**问题描述**:
+`@form-create/designer` 默认会把右侧基础配置里的“字段”（即 rule.field）设为只读，业务用户无法把动态表单字段 ID 改成业务模型字段名，导致审批表单变量无法稳定映射到业务表。
+
+**根本原因**:
+`FieldInput.vue` 会读取 `designer.setupState.fieldReadonly`；`FcDesigner.vue` 中默认逻辑是 `config.fieldReadonly !== false`，也就是未显式配置时字段只读。
+
+**解决方案**:
+所有面向业务配置的 form-create 设计器封装必须显式传入：
+
+```js
+const designerConfig = {
+  fieldReadonly: false,
+}
+```
+
+**影响范围**:
+- 流程模型动态表单设计器
+- 流程表单管理设计器
+- 节点专属动态表单在线设计
+- 低代码页面 form-create 适配器
+
 **影响范围**:
 - `forge-report-ui` 项目保存、发布、详情回显
 - 所有启用前端加密拦截的后端接口

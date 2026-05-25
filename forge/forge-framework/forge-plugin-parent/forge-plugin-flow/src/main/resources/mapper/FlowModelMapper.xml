@@ -20,6 +20,9 @@
             <if test="status != null">
                 AND m.status = #{status}
             </if>
+            <if test="createBy != null and createBy != ''">
+                AND m.create_by = #{createBy}
+            </if>
         </where>
         ORDER BY m.create_time DESC
     </select>

@@ -84,8 +84,8 @@ export default {
   /**
    * 获取流程图详情信息（包含节点状态）
    */
-  getProcessDiagramInfo: processInstanceId =>
-    request.get(`/api/flow/task/diagram-info/${processInstanceId}`),
+  getProcessDiagramInfo: (processInstanceId, params = {}) =>
+    request.get(`/api/flow/task/diagram-info/${processInstanceId}`, { params }),
 
   /**
    * 获取流程审批时间轴
@@ -226,12 +226,6 @@ export default {
    */
   createFromTemplate: (templateKey, data) =>
     request.post(`/api/flow/template/create/${templateKey}`, data),
-
-  /**
-   * 获取模板详情
-   */
-  getTemplateDetail: templateKey =>
-    request.get(`/api/flow/template/${templateKey}`),
 
   // ========== 流程分类 ==========
 

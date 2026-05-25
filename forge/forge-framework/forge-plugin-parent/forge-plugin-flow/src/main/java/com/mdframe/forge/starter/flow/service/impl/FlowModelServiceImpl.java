@@ -48,7 +48,11 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
 
     @Override
     public IPage<FlowModel> pageFlowModel(Page<FlowModel> page, String modelName, String category, Integer status) {
-        return this.getBaseMapper().selectModelPage(page, modelName, category, status);
+        String currentUsername = SessionHelper.getUsername();
+        if (currentUsername == null || currentUsername.isEmpty()) {
+            return new Page<>(page.getCurrent(), page.getSize());
+        }
+        return this.getBaseMapper().selectModelPage(page, modelName, category, status, currentUsername);
     }
 
     @Override

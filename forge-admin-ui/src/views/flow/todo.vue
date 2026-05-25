@@ -221,6 +221,25 @@
             </template>
 
             <template v-else>
+              <div v-if="useDynamicForm" class="dynamic-form-section">
+                <div class="dynamic-form-header">
+                  <div>
+                    <div class="dynamic-form-title">
+                      节点动态表单
+                    </div>
+                    <div class="dynamic-form-desc">
+                      审批通过时会校验表单，并将填写内容作为流程变量提交
+                    </div>
+                  </div>
+                  <span class="dynamic-form-key">{{ taskFormInfo.formKey || 'inline' }}</span>
+                </div>
+                <FlowFormCreateRenderer
+                  ref="dynamicFormRef"
+                  v-model="dynamicFormData"
+                  :schema="taskFormInfo.formJson"
+                />
+              </div>
+
               <n-form :model="approveForm" label-placement="top">
                 <n-form-item label="审批意见" :required="requireComment">
                   <n-input
@@ -383,6 +402,7 @@ import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowStats from '@/components/flow/FlowStats.vue'
 import FlowTimeline from '@/components/flow/FlowTimeline.vue'
 import SignaturePad from '@/components/flow/SignaturePad.vue'
+import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
@@ -438,6 +458,9 @@ const activeDrawerTab = ref('info')
 const taskFormInfo = ref(null)
 const formInfoLoading = ref(false)
 const useExternalForm = computed(() => taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
+const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
+const dynamicFormRef = ref(null)
+const dynamicFormData = ref({})
 const canApprove = computed(() => taskFormInfo.value?.allowApprove !== false)
 const canReject = computed(() => taskFormInfo.value?.allowReject !== false)
 const canDelegate = computed(() => taskFormInfo.value?.allowDelegate !== false)
@@ -557,6 +580,7 @@ async function openDrawer(row) {
   approveSignatureKey.value += 1
   approvalHistory.value = []
   taskFormInfo.value = null
+  dynamicFormData.value = {}
   activeDrawerTab.value = 'info'
   showDrawer.value = true
 
@@ -578,8 +602,10 @@ async function openDrawer(row) {
     promises.push(
       flowApi.getTaskFormInfo(taskId)
         .then((res) => {
-          if (res.code === 200)
+          if (res.code === 200) {
             taskFormInfo.value = res.data
+            dynamicFormData.value = { ...(res.data?.variables || {}) }
+          }
         })
         .catch(e => console.error('加载表单信息失败', e))
         .finally(() => { formInfoLoading.value = false }),
@@ -699,11 +725,13 @@ async function submitApprove(action) {
     const signature = await resolveSignature(approveSignatureRef.value, approveForm.signature)
     approveForm.signature = signature
     const api = resolveActionApi(action)
+    const variables = await collectDynamicFormVariables(action)
     const res = await api({
       taskId: currentTask.value.taskId,
       userId: userStore.userId,
       comment: approveForm.comment,
       signature,
+      variables,
     })
     if (res.code === 200) {
       window.$message.success(getActionSuccessText(action))
@@ -720,6 +748,15 @@ async function submitApprove(action) {
   finally {
     approveLoading.value = false
   }
+}
+
+async function collectDynamicFormVariables(action) {
+  if (!useDynamicForm.value || !dynamicFormRef.value)
+    return undefined
+  if (action === 'approve') {
+    await dynamicFormRef.value.validate()
+  }
+  return dynamicFormRef.value.getData()
 }
 
 function handleDelegate() {
@@ -1208,6 +1245,48 @@ onMounted(() => {
   gap: 8px;
   padding: 20px 0;
   color: #64748b;
+}
+
+.dynamic-form-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dynamic-form-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dynamic-form-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.dynamic-form-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.dynamic-form-key {
+  max-width: 180px;
+  padding: 3px 8px;
+  border: 1px solid #d7dde7;
+  border-radius: 999px;
+  background: #fff;
+  color: #475467;
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .action-buttons {

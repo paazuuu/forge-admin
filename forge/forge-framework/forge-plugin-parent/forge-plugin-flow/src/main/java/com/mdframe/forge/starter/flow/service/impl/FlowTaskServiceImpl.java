@@ -12,12 +12,14 @@ import com.mdframe.forge.starter.flow.dto.ProcessNodeInfo;
 import com.mdframe.forge.starter.flow.dto.TaskFormInfo;
 import com.mdframe.forge.starter.flow.entity.FlowBusiness;
 import com.mdframe.forge.starter.flow.entity.FlowErrorLog;
+import com.mdframe.forge.starter.flow.entity.FlowForm;
 import com.mdframe.forge.starter.flow.entity.FlowModel;
 import com.mdframe.forge.starter.flow.entity.FlowNodeConfig;
 import com.mdframe.forge.starter.flow.entity.FlowTask;
 import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
+import com.mdframe.forge.starter.flow.service.FlowFormService;
 import com.mdframe.forge.starter.flow.service.FlowModelService;
 import com.mdframe.forge.starter.flow.service.FlowNodeConfigService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
@@ -118,6 +120,9 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Autowired
     private FlowErrorLogService flowErrorLogService;
+
+    @Autowired(required = false)
+    private FlowFormService flowFormService;
 
 @Override
     public IPage<FlowTask> todoTasks(Page<FlowTask> page, String userId, String title, String category, Integer status) {
@@ -732,6 +737,11 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Override
     public ProcessDiagramInfo getProcessDiagramInfo(String processInstanceId) {
+        return getProcessDiagramInfo(processInstanceId, false);
+    }
+
+    @Override
+    public ProcessDiagramInfo getProcessDiagramInfo(String processInstanceId, boolean includeImage) {
         try {
             log.info("开始获取流程图详情，processInstanceId: {}", processInstanceId);
             
@@ -796,15 +806,16 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                 log.info("BPMN XML 长度: {}", bpmnXml != null ? bpmnXml.length() : 0);
             }
             
-            // 5. 生成流程图图片（备用）
-            byte[] diagramBytes = getProcessDiagram(processInstanceId);
-            if (diagramBytes != null && diagramBytes.length > 0) {
-                // 转换为Base64
-                String base64 = Base64.getEncoder().encodeToString(diagramBytes);
-                diagramInfo.setDiagramBase64("data:image/png;base64," + base64);
-                log.info("流程图图片大小: {} bytes, base64长度: {}", diagramBytes.length, base64.length());
-            } else {
-                log.warn("未能生成流程图图片");
+            // 5. 生成流程图图片（备用，默认关闭。BPMN XML 已足够前端渲染，避免每次生成 Base64 PNG 拖慢加载）
+            if (includeImage) {
+                byte[] diagramBytes = getProcessDiagram(processInstanceId);
+                if (diagramBytes != null && diagramBytes.length > 0) {
+                    String base64 = Base64.getEncoder().encodeToString(diagramBytes);
+                    diagramInfo.setDiagramBase64("data:image/png;base64," + base64);
+                    log.info("流程图图片大小: {} bytes, base64长度: {}", diagramBytes.length, base64.length());
+                } else {
+                    log.warn("未能生成流程图图片");
+                }
             }
             
             // 6. 获取节点信息列表
@@ -1309,7 +1320,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             // 节点配置了动态表单
             formInfo.setFormType("dynamic");
             formInfo.setFormKey(nodeFormKey);
-            formInfo.setFormJson(nodeFormJson);
+            formInfo.setFormJson(resolveFormJson(nodeFormKey, nodeFormJson));
         } else if (flowModel != null) {
             // 使用全局表单配置
             String formType = flowModel.getFormType();
@@ -1317,7 +1328,8 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
             if ("dynamic".equals(formType)) {
                 // 动态表单
-                formInfo.setFormJson(flowModel.getFormJson());
+                formInfo.setFormKey(flowModel.getFormId());
+                formInfo.setFormJson(resolveModelFormJson(flowModel.getFormId(), flowModel.getFormJson()));
             } else if ("external".equals(formType)) {
                 // 外部表单
                 formInfo.setFormUrl(flowModel.getFormId());
@@ -1342,6 +1354,39 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                 taskId, formInfo.getFormType(), formInfo.getFormKey());
 
         return formInfo;
+    }
+
+    private String resolveFormJson(String formKey, String inlineFormJson) {
+        if (inlineFormJson != null && !inlineFormJson.isEmpty()) {
+            return inlineFormJson;
+        }
+        if (formKey == null || formKey.isEmpty() || flowFormService == null) {
+            return inlineFormJson;
+        }
+        try {
+            return flowFormService.getFormSchema(formKey);
+        } catch (Exception e) {
+            log.warn("根据 formKey 获取动态表单失败：formKey={}", formKey, e);
+            return inlineFormJson;
+        }
+    }
+
+    private String resolveModelFormJson(String formId, String inlineFormJson) {
+        if (inlineFormJson != null && !inlineFormJson.isEmpty()) {
+            return inlineFormJson;
+        }
+        if (formId == null || formId.isEmpty() || flowFormService == null) {
+            return inlineFormJson;
+        }
+        try {
+            FlowForm form = flowFormService.getById(Long.valueOf(formId));
+            return form != null ? form.getFormSchema() : inlineFormJson;
+        } catch (NumberFormatException e) {
+            return resolveFormJson(formId, inlineFormJson);
+        } catch (Exception e) {
+            log.warn("根据 formId 获取模型动态表单失败：formId={}", formId, e);
+            return inlineFormJson;
+        }
     }
 
     /**

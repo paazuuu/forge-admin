@@ -155,7 +155,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['node-click', 'loaded'])
+const emit = defineEmits(['nodeClick', 'loaded'])
 
 // 状态
 const loading = ref(false)
@@ -246,17 +246,10 @@ async function fetchDiagramInfo() {
   imageLoaded.value = false
 
   try {
-    console.log('[InteractiveProcessDiagram] 获取流程图详情, processInstanceId:', props.processInstanceId)
-    const res = await flowApi.getProcessDiagramInfo(props.processInstanceId)
-    console.log('[InteractiveProcessDiagram] API 返回结果:', res)
+    const res = await flowApi.getProcessDiagramInfo(props.processInstanceId, { includeImage: true })
 
     if (res.code === 200) {
       diagramInfo.value = res.data
-      console.log('[InteractiveProcessDiagram] diagramInfo:', diagramInfo.value)
-      console.log('[InteractiveProcessDiagram] nodes 数量:', res.data?.nodes?.length)
-      if (res.data?.nodes?.length > 0) {
-        console.log('[InteractiveProcessDiagram] 第一个节点:', res.data.nodes[0])
-      }
       emit('loaded', res.data)
     }
     else {
@@ -295,15 +288,6 @@ function getNodeClass(node) {
   }
 }
 
-function getNodeStyle(node) {
-  return {
-    left: `${node.scaledX}px`,
-    top: `${node.scaledY}px`,
-    width: `${node.scaledWidth}px`,
-    height: `${node.scaledHeight}px`,
-  }
-}
-
 function getIndicatorStyle(node) {
   // 状态指示器放在节点右上角
   return {
@@ -330,7 +314,7 @@ function hideNodeTooltip() {
 }
 
 function handleNodeClick(node) {
-  emit('node-click', node)
+  emit('nodeClick', node)
 }
 
 function getNodeStatusType(status) {

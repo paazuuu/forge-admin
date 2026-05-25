@@ -46,7 +46,7 @@ const props = defineProps({
   visible: { type: Boolean, default: true },
 })
 
-const expanded = ref(true)
+const expanded = ref(false)
 const minimapCanvas = ref(null)
 const svgContent = ref('')
 const viewportStyle = ref(null)
@@ -66,7 +66,7 @@ function toggleMinimap() {
 }
 
 async function updateMinimap() {
-  if (!props.modeler || !canvas)
+  if (!expanded.value || !props.modeler || !canvas)
     return
 
   try {
@@ -184,6 +184,8 @@ function startPan(e) {
 }
 
 function scheduleUpdate() {
+  if (!expanded.value)
+    return
   if (updateTimer)
     clearTimeout(updateTimer)
 
@@ -205,10 +207,12 @@ function setupEvents() {
     eventBus.on('commandStack.changed', scheduleUpdate)
     eventBus.on('elements.changed', scheduleUpdate)
 
-    setTimeout(() => {
-      updateMinimap()
-      updateViewport()
-    }, 500)
+    if (expanded.value) {
+      setTimeout(() => {
+        updateMinimap()
+        updateViewport()
+      }, 500)
+    }
   }
   catch (error) {
     console.warn('设置事件监听失败:', error)
@@ -250,16 +254,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 设计系统变量 */
-:root {
-  --primary: #6366f1;
-  --surface: #ffffff;
-  --border: #e2e8f0;
-  --text-secondary: #64748b;
-  --background: #f5f3ff;
-}
-
 .minimap-wrapper {
+  --primary: #2563eb;
+  --surface: #ffffff;
+  --border: #d7dde7;
+  --text-secondary: #667085;
+  --background: #f8fafc;
+
   position: absolute;
   bottom: 20px;
   right: 20px;
@@ -274,19 +275,15 @@ onUnmounted(() => {
 .minimap-container {
   width: 220px;
   background: var(--surface);
-  border: 2px solid var(--primary);
-  border-radius: 14px;
-  box-shadow:
-    0 10px 15px -3px rgba(99, 102, 241, 0.1),
-    0 4px 6px -2px rgba(99, 102, 241, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
   overflow: hidden;
   transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .minimap-container:hover {
-  box-shadow:
-    0 20px 25px -5px rgba(99, 102, 241, 0.15),
-    0 10px 10px -5px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
 }
 
 .minimap-header {
@@ -294,15 +291,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: linear-gradient(135deg, var(--primary) 0%, #818cf8 100%);
-  border-bottom: 2px solid var(--primary);
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
 }
 
 .minimap-title {
   font-size: 12px;
   font-weight: 600;
-  color: white;
-  letter-spacing: 0.3px;
+  color: #344054;
 }
 
 .minimap-canvas {
@@ -329,7 +325,7 @@ onUnmounted(() => {
 .minimap-viewport {
   position: absolute;
   border: 2px solid var(--primary);
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(37, 99, 235, 0.1);
   pointer-events: none;
   transition: all 100ms ease-out;
   border-radius: 4px;
@@ -337,19 +333,15 @@ onUnmounted(() => {
 
 .minimap-toggle {
   background: var(--surface);
-  border: 2px solid var(--primary);
-  box-shadow:
-    0 10px 15px -3px rgba(99, 102, 241, 0.1),
-    0 4px 6px -2px rgba(99, 102, 241, 0.05);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 }
 
 .minimap-toggle:hover {
-  box-shadow:
-    0 20px 25px -5px rgba(99, 102, 241, 0.15),
-    0 10px 10px -5px rgba(99, 102, 241, 0.1);
-  transform: translateY(-2px);
+  border-color: #98a2b3;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
   cursor: pointer;
 }
 

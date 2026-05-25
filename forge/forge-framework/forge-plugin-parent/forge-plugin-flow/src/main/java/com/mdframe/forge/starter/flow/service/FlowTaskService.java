@@ -124,6 +124,15 @@ public interface FlowTaskService {
     ProcessDiagramInfo getProcessDiagramInfo(String processInstanceId);
 
     /**
+     * 获取流程图详情
+     *
+     * @param processInstanceId 流程实例ID
+     * @param includeImage 是否返回 Base64 图片。默认查看器使用 BPMN XML 渲染，图片按需生成。
+     * @return 流程图详情
+     */
+    ProcessDiagramInfo getProcessDiagramInfo(String processInstanceId, boolean includeImage);
+
+    /**
      * 催办
      */
     void remind(String taskId);
