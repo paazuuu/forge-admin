@@ -66,6 +66,10 @@ function transformColumns(columns, transConfig, options = {}) {
     const key = col.prop || col.key || col.dataIndex
     // 统一补prop字段，AiTable需要这个字段来匹配数据
     const newCol = { ...col, prop: key }
+    if (['actions', 'action'].includes(key) && Array.isArray(col.actions) && options.includeDetailAction) {
+      newCol.actions = ensureDetailRowAction(col.actions)
+      newCol.width = Math.max(Number(col.width) || 0, newCol.actions.length * 58, 180)
+    }
     if (options.treeTable && !treeColumnApplied && key && !['actions', 'action'].includes(key)) {
       newCol.tree = true
       treeColumnApplied = true
@@ -95,6 +99,20 @@ function transformColumns(columns, transConfig, options = {}) {
   })
 
   return result
+}
+
+function ensureDetailRowAction(actions = []) {
+  if (actions.some(action => action?.key === 'detail'))
+    return actions
+  const next = [...actions]
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const detailAction = { key: 'detail', label: '查看详情', type: 'info', position: 'row' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, detailAction)
+    return next
+  }
+  next.unshift(detailAction)
+  return next
 }
 
 /**
@@ -170,7 +188,7 @@ const crudProps = computed(() => {
   const masterDetailConfig = options.masterDetailConfig || {}
   return {
     searchSchema: transformFields(cfg.searchSchema),
-    columns: transformColumns(cfg.columnsSchema, cfg.transConfig, { treeTable }),
+    columns: transformColumns(cfg.columnsSchema, cfg.transConfig, { treeTable, includeDetailAction: true }),
     editSchema: transformFields(cfg.editSchema),
     childrenConfig: transformChildrenConfig(masterDetailConfig.children || []),
     apiConfig,

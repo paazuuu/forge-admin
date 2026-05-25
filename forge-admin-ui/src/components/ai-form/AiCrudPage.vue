@@ -180,7 +180,7 @@
         ref="formRef"
         v-model:value="formData"
         :class="editFormClass"
-        :schema="editSchema"
+        :schema="modalFormSchema"
         :grid-cols="editGridCols"
         :label-width="editLabelWidth"
         :label-placement="editLabelPlacement"
@@ -197,10 +197,11 @@
         ref="childFormRef"
         v-model:value="childFormData"
         :children-config="childrenConfig"
+        :readonly="isDetailMode"
       />
 
       <!-- 弹窗底部按钮 -->
-      <template v-if="!hideModalFooter" #footer>
+      <template v-if="!hideModalFooter && !isDetailMode" #footer>
         <n-space justify="end">
           <n-button @click="handleModalCancel">
             取消
@@ -230,7 +231,7 @@
           ref="formRef"
           v-model:value="formData"
           :class="editFormClass"
-          :schema="editSchema"
+          :schema="modalFormSchema"
           :grid-cols="editGridCols"
           :label-width="editLabelWidth"
           :label-placement="editLabelPlacement"
@@ -247,10 +248,11 @@
           ref="childFormRef"
           v-model:value="childFormData"
           :children-config="childrenConfig"
+          :readonly="isDetailMode"
         />
 
         <!-- 抽屉底部按钮 -->
-        <template v-if="!hideModalFooter" #footer>
+        <template v-if="!hideModalFooter && !isDetailMode" #footer>
           <n-space justify="end">
             <n-button @click="handleModalCancel">
               取消
@@ -349,6 +351,7 @@ const emit = defineEmits([
   'load-list-error', // 列表加载失败
   'add', // 点击新增
   'edit', // 点击编辑
+  'detail', // 点击查看详情
   'delete', // 删除成功
   'submit-success', // 提交成功
   'submit-error', // 提交失败
@@ -392,7 +395,7 @@ const pagination = ref({
 // 弹窗
 const modalVisible = ref(false)
 const modalTitle = ref('')
-const modalStatus = ref('') // 'add' | 'edit'
+const modalStatus = ref('') // 'add' | 'edit' | 'detail'
 const formData = ref({})
 const childFormData = ref({})
 const confirmLoading = ref(false)
@@ -512,6 +515,9 @@ function handleActionClick(actionOrKey, row) {
       break
     case 'edit':
       handleEdit(row)
+      break
+    case 'detail':
+      handleDetail(row)
       break
     case 'delete':
       handleDelete(row)
@@ -850,14 +856,38 @@ const hasChildrenConfig = computed(() => {
   return Array.isArray(props.childrenConfig) && props.childrenConfig.some(child => child?.fields?.length)
 })
 
+const isDetailMode = computed(() => modalStatus.value === 'detail')
+
+const modalFormSchema = computed(() => {
+  if (!isDetailMode.value)
+    return props.editSchema
+  return props.editSchema.map(toReadonlyField)
+})
+
+function toReadonlyField(field) {
+  if (!field || field.type === 'divider')
+    return field
+  return {
+    ...field,
+    disabled: true,
+    readonly: true,
+    props: {
+      ...(field.props || {}),
+      disabled: true,
+      readonly: true,
+    },
+  }
+}
+
 /**
  * 表单上下文（传递 modalStatus 等信息）
  */
 const formContext = computed(() => {
   return {
-    modalStatus: modalStatus.value, // 'add' | 'edit'
+    modalStatus: modalStatus.value, // 'add' | 'edit' | 'detail'
     isEdit: modalStatus.value === 'edit',
     isAdd: modalStatus.value === 'add',
+    isDetail: modalStatus.value === 'detail',
     currentRow: currentRow.value,
   }
 })
@@ -1457,6 +1487,35 @@ async function handleEdit(row) {
 }
 
 /**
+ * 查看详情
+ */
+async function handleDetail(row) {
+  modalTitle.value = row?.__modalTitle || '查看详情'
+  modalStatus.value = 'detail'
+  currentRow.value = row
+
+  const processedRow = await callHook('beforeRenderForm', row, data => data)
+  const renderRow = mergeHookRowWithOriginal(row, processedRow)
+
+  if (props.loadDetailOnEdit) {
+    window.$loading.show('加载中...')
+    await loadDetail(renderRow)
+    window.$loading.close()
+  }
+  else {
+    const data = await callHook('beforeRenderDetail', renderRow, data => data)
+    applyDetailData(data)
+  }
+
+  modalVisible.value = true
+  await nextTick()
+  formRef.value?.restoreValidation()
+
+  emit('detail', row)
+  emit('modal-open', { status: 'detail', row })
+}
+
+/**
  * 加载详情
  */
 async function loadDetail(row) {
@@ -1648,6 +1707,11 @@ async function performDelete(rows, keys) {
  * 提交表单
  */
 async function handleModalConfirm() {
+  if (isDetailMode.value) {
+    modalVisible.value = false
+    return
+  }
+
   try {
     await nextTick()
     await formRef.value?.validate()
@@ -2018,9 +2082,19 @@ defineExpose({
   showEdit: handleEdit,
 
   /**
+   * 打开详情弹窗
+   */
+  showDetail: handleDetail,
+
+  /**
    * 编辑（同 showEdit）
    */
   handleEdit,
+
+  /**
+   * 查看详情（同 showDetail）
+   */
+  handleDetail,
 
   /**
    * 删除

@@ -1438,6 +1438,7 @@ public class LowcodeRuntimeConfigBuilder {
     private List<Map<String, Object>> buildRowActions(LowcodePageSchema pageSchema, boolean treeRuntime) {
         List<Map<String, Object>> actions = new ArrayList<>();
         actions.add(defaultAction("edit", "编辑", "primary"));
+        actions.add(defaultAction("detail", "查看详情", "info"));
         if (treeRuntime) {
             actions.add(defaultAction("addChild", "添加下级", "success"));
         }

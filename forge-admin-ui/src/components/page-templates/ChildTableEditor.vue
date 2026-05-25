@@ -12,7 +12,7 @@
             <div class="child-table-title">
               {{ child.modelName || child.modelCode || '子表明细' }}
             </div>
-            <n-button size="small" type="primary" secondary @click="addRow(child)">
+            <n-button v-if="!props.readonly" size="small" type="primary" secondary @click="addRow(child)">
               新增行
             </n-button>
           </div>
@@ -29,7 +29,7 @@
                     <span>{{ field.label || field.field }}</span>
                     <em v-if="field.required">*</em>
                   </th>
-                  <th class="action-col">
+                  <th v-if="!props.readonly" class="action-col">
                     操作
                   </th>
                 </tr>
@@ -45,7 +45,7 @@
                       type="textarea"
                       :value="row[field.field]"
                       :placeholder="field.props?.placeholder || `请输入${field.label || field.field}`"
-                      :disabled="field.disabled || field.readonly"
+                      :disabled="props.readonly || field.disabled || field.readonly"
                       :autosize="{ minRows: 1, maxRows: 3 }"
                       v-bind="field.props"
                       @update:value="updateCell(child, rowIndex, field, $event)"
@@ -54,7 +54,7 @@
                       v-else-if="field.type === 'number' || field.type === 'inputNumber'"
                       :value="row[field.field]"
                       :placeholder="field.props?.placeholder || `请输入${field.label || field.field}`"
-                      :disabled="field.disabled || field.readonly"
+                      :disabled="props.readonly || field.disabled || field.readonly"
                       :precision="field.props?.precision ?? field.precision"
                       style="width: 100%"
                       v-bind="field.props"
@@ -64,7 +64,7 @@
                       v-else-if="field.type === 'select'"
                       :value="row[field.field]"
                       :placeholder="field.props?.placeholder || `请选择${field.label || field.field}`"
-                      :disabled="field.disabled || field.readonly"
+                      :disabled="props.readonly || field.disabled || field.readonly"
                       :options="field.props?.options || field.options || []"
                       clearable
                       filterable
@@ -76,7 +76,7 @@
                       :value="row[field.field]"
                       :type="field.type === 'datetime' ? 'datetime' : 'date'"
                       :placeholder="field.props?.placeholder || `请选择${field.label || field.field}`"
-                      :disabled="field.disabled || field.readonly"
+                      :disabled="props.readonly || field.disabled || field.readonly"
                       style="width: 100%"
                       v-bind="field.props"
                       :format="field.props?.format || (field.type === 'datetime' ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd')"
@@ -86,7 +86,7 @@
                     <n-switch
                       v-else-if="field.type === 'switch'"
                       :value="row[field.field]"
-                      :disabled="field.disabled || field.readonly"
+                      :disabled="props.readonly || field.disabled || field.readonly"
                       v-bind="field.props"
                       :checked-value="field.props?.checkedValue ?? field.checkedValue ?? true"
                       :unchecked-value="field.props?.uncheckedValue ?? field.uncheckedValue ?? false"
@@ -96,20 +96,20 @@
                       v-else
                       :value="row[field.field]"
                       :placeholder="field.props?.placeholder || `请输入${field.label || field.field}`"
-                      :disabled="field.disabled || field.readonly"
+                      :disabled="props.readonly || field.disabled || field.readonly"
                       clearable
                       v-bind="field.props"
                       @update:value="updateCell(child, rowIndex, field, $event)"
                     />
                   </td>
-                  <td class="action-col">
+                  <td v-if="!props.readonly" class="action-col">
                     <n-button text type="error" size="small" @click="removeRow(child, rowIndex)">
                       删除
                     </n-button>
                   </td>
                 </tr>
                 <tr v-if="!rowsFor(child).length">
-                  <td :colspan="child.fields.length + 1" class="empty-cell">
+                  <td :colspan="props.readonly ? child.fields.length : child.fields.length + 1" class="empty-cell">
                     <n-empty size="small" description="暂无明细" />
                   </td>
                 </tr>
@@ -133,6 +133,10 @@ const props = defineProps({
   childrenConfig: {
     type: Array,
     default: () => [],
+  },
+  readonly: {
+    type: Boolean,
+    default: false,
   },
 })
 

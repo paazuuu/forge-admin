@@ -467,6 +467,7 @@ function downloadJson(payload, filename) {
   min-height: 100%;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
+  overflow-x: hidden;
   padding: 16px;
   background: #f3f6fa;
 }
@@ -479,6 +480,7 @@ function downloadJson(payload, filename) {
 
 .main-toolbar {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -486,6 +488,15 @@ function downloadJson(payload, filename) {
   border-radius: 8px;
   background: #fff;
   padding: 16px;
+}
+
+.main-toolbar > div {
+  min-width: 0;
+}
+
+.main-toolbar :deep(.n-space) {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .main-toolbar h1 {
@@ -502,6 +513,8 @@ function downloadJson(payload, filename) {
 }
 
 .apps-board {
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #fff;
@@ -510,10 +523,15 @@ function downloadJson(payload, filename) {
 
 .apps-board-head {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.apps-board-head > div {
+  min-width: 0;
 }
 
 .apps-board-head h2 {
@@ -530,8 +548,9 @@ function downloadJson(payload, filename) {
 
 .filter-strip {
   display: grid;
+  min-width: 0;
   width: min(520px, 50%);
-  grid-template-columns: minmax(220px, 1fr) 150px;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 150px);
   gap: 10px;
 }
 
@@ -582,6 +601,10 @@ function downloadJson(payload, filename) {
   align-items: center;
 }
 
+.app-title-row > div {
+  min-width: 0;
+}
+
 .app-mark {
   display: flex;
   width: 38px;
@@ -622,6 +645,7 @@ function downloadJson(payload, filename) {
 .app-code-grid div {
   display: grid;
   min-width: 0;
+  overflow: hidden;
   gap: 3px;
   border: 1px solid #eef2f7;
   border-radius: 8px;
@@ -649,7 +673,14 @@ function downloadJson(payload, filename) {
 }
 
 .app-actions {
+  flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
+}
+
+.app-actions :deep(.n-button) {
+  flex: 0 1 auto;
+  min-width: 64px;
 }
 
 .apps-pagination {
@@ -688,9 +719,34 @@ function downloadJson(payload, filename) {
     flex-direction: column;
   }
 
+  .main-toolbar :deep(.n-space),
+  .app-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .filter-strip,
   .apps-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .apps-board,
+  .main-toolbar {
+    padding: 12px;
+  }
+
+  .app-code-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-actions :deep(.n-button) {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .apps-pagination :deep(.n-pagination) {
+    justify-content: flex-start;
   }
 }
 </style>
