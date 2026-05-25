@@ -273,7 +273,7 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
     private void syncGenTableColumnRequired(LowcodeModelSchema modelSchema) {
         Long sourceTableId = resolveSourceTableId(modelSchema);
         if (modelSchema == null
-                || (sourceTableId == null && StringUtils.isBlank(modelSchema.getTableName()))
+                || sourceTableId == null
                 || modelSchema.getFields() == null) {
             return;
         }

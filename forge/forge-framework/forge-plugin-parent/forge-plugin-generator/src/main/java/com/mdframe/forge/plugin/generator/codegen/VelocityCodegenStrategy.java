@@ -6,6 +6,8 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiPageTemplate;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.mapper.GenTableColumnMapper;
 import com.mdframe.forge.plugin.generator.util.GenUtils;
 import com.mdframe.forge.plugin.generator.util.VelocityUtils;
@@ -51,14 +53,15 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
 
         // ── 1. 解析 apiConfig，提取业务路由前缀 ──────────────────────────────
         String apiBase = resolveApiBase(config);          // e.g. /order/manage
-        String moduleName = resolveModuleName(apiBase);   // e.g. order
+        String moduleName = StringUtils.defaultIfBlank(readOption(config, "moduleName", null),
+                resolveModuleName(apiBase));   // e.g. order
         String businessPath = resolveBusinessPath(apiBase); // e.g. manage
 
         // ── 2. 构造 GenTable（复用已有的 VelocityUtils 体系）────────────────
         GenTable genTable = buildGenTable(config, moduleName, businessPath);
 
         // ── 3. 从数据库加载字段元数据 ─────────────────────────────────────────
-        List<GenTableColumn> columns = loadColumns(config.getTableName());
+        List<GenTableColumn> columns = loadColumns(config);
         genTable.setColumns(columns);
         genTable.setPkColumn(GenUtils.getPkColumn(columns));
 
@@ -107,15 +110,20 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         renderTo(files, "templates/vm/query.java.vm",       ctx, javaRoot + "dto/" + className + "Query.java");
 
         // ── 7. 渲染 SQL ───────────────────────────────────────────────────────
-        renderTo(files, "templates/vm/sql/menu.sql.vm", ctx, "sql/" + config.getTableName() + "_menu.sql");
-        // 只在有字典字段时生成 dict.sql
-        if ((boolean) annotationFlags.getOrDefault("hasDictConfig", false)) {
+        boolean includeSql = readBooleanOption(config, "includeSql", true);
+        boolean includeMenuSql = readBooleanOption(config, "includeMenuSql", true);
+        boolean includeDictSql = readBooleanOption(config, "includeDictSql", true);
+        if (includeSql && includeMenuSql) {
+            renderTo(files, "templates/vm/sql/menu.sql.vm", ctx, "sql/" + config.getTableName() + "_menu.sql");
+        }
+        if (includeSql && includeDictSql && (boolean) annotationFlags.getOrDefault("hasDictConfig", false)) {
             renderTo(files, "templates/vm/sql/dict.sql.vm", ctx, "sql/" + config.getTableName() + "_dict.sql");
         }
 
         // ── 8. 渲染前端代码 ───────────────────────────────────────────────────
         String viewPath = configKey.replace("_", "/");
-        renderTo(files, "templates/vm/ai-crud/index.vue.vm", ctx, "frontend/src/views/" + viewPath + "/index.vue");
+        String frontendBasePath = normalizeOutputBasePath(readOption(config, "frontendBasePath", "frontend/src/views"));
+        renderTo(files, "templates/vm/ai-crud/index.vue.vm", ctx, frontendBasePath + "/" + viewPath + "/index.vue");
         renderTo(files, "templates/vm/ai-crud/api.js.vm",    ctx, "frontend/src/api/" + configKey + ".js");
 
         // ── 9. 附带原始配置 JSON ──────────────────────────────────────────────
@@ -200,7 +208,7 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         table.setBusinessName(StringUtils.uncapitalize(className));
 
         // 包路径：从 options 中读取，或使用默认值
-        String packageName = readOption(config, "packageName", DEFAULT_PACKAGE);
+        String packageName = normalizeBasePackageName(readOption(config, "packageName", DEFAULT_PACKAGE), moduleName);
         table.setPackageName(packageName);
         table.setModuleName(moduleName);
         table.setBusinessName(resolveBusinessName(businessPath));
@@ -215,21 +223,128 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         return parts[parts.length - 1];
     }
 
+    private String normalizeBasePackageName(String packageName, String moduleName) {
+        String normalized = StringUtils.defaultIfBlank(packageName, DEFAULT_PACKAGE)
+                .replaceAll("\\.+$", "");
+        String module = StringUtils.defaultString(moduleName).trim();
+        if (StringUtils.isBlank(module)) {
+            return normalized;
+        }
+        String suffix = "." + module;
+        if (normalized.endsWith(suffix)) {
+            return normalized.substring(0, normalized.length() - suffix.length());
+        }
+        return normalized;
+    }
+
     // ───────────────────────────────────────────────────────────────────────────
     // 字段加载与初始化
     // ───────────────────────────────────────────────────────────────────────────
 
-    private List<GenTableColumn> loadColumns(String tableName) {
+    private List<GenTableColumn> loadColumns(AiCrudConfig config) {
+        String tableName = config.getTableName();
         if (StringUtils.isBlank(tableName)) return new ArrayList<>();
         try {
             List<GenTableColumn> columns = genTableColumnMapper.selectDbTableColumnsByName(tableName);
-            if (columns == null || columns.isEmpty()) return new ArrayList<>();
+            if (columns == null || columns.isEmpty()) return loadColumnsFromModelSchema(config);
             columns.forEach(GenUtils::initColumnField);
             return columns;
         } catch (Exception e) {
             log.warn("[VelocityCodegenStrategy] 加载字段失败, tableName={}", tableName, e);
+            return loadColumnsFromModelSchema(config);
+        }
+    }
+
+    private List<GenTableColumn> loadColumnsFromModelSchema(AiCrudConfig config) {
+        if (StringUtils.isBlank(config.getModelSchema())) {
             return new ArrayList<>();
         }
+        try {
+            LowcodeModelSchema modelSchema = objectMapper.readValue(config.getModelSchema(), LowcodeModelSchema.class);
+            List<GenTableColumn> columns = new ArrayList<>();
+            int sort = 0;
+            for (LowcodeFieldSchema field : modelSchema.getFields()) {
+                if (field == null || StringUtils.isBlank(field.getColumnName())) {
+                    continue;
+                }
+                GenTableColumn column = new GenTableColumn();
+                column.setColumnName(field.getColumnName());
+                column.setColumnComment(StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
+                column.setColumnType(toColumnType(field));
+                column.setJavaType(toJavaType(field.getDataType()));
+                column.setJavaField(StringUtils.defaultIfBlank(field.getField(), field.getColumnName()));
+                column.setIsPk(Boolean.TRUE.equals(field.getPrimaryKey()) ? 1 : 0);
+                column.setIsIncrement(Boolean.TRUE.equals(field.getAutoIncrement()) ? 1 : 0);
+                column.setIsRequired(Boolean.TRUE.equals(field.getRequired()) ? 1 : 0);
+                column.setIsInsert(Boolean.TRUE.equals(field.getFormVisible()) && !Boolean.TRUE.equals(field.getReadonly()) ? 1 : 0);
+                column.setIsEdit(Boolean.TRUE.equals(field.getFormVisible()) && !Boolean.TRUE.equals(field.getReadonly()) ? 1 : 0);
+                column.setIsList(field.getListVisible() == null || Boolean.TRUE.equals(field.getListVisible()) ? 1 : 0);
+                column.setIsQuery(Boolean.TRUE.equals(field.getSearchable()) ? 1 : 0);
+                column.setQueryType(StringUtils.defaultIfBlank(field.getQueryType(), "EQ").toUpperCase(Locale.ROOT));
+                column.setHtmlType(toHtmlType(field.getComponentType(), field.getDataType()));
+                column.setDictType(StringUtils.trimToNull(field.getDictType()));
+                column.setDesensitizeType(StringUtils.trimToNull(field.getSensitiveType()));
+                column.setSort(sort++);
+                columns.add(column);
+            }
+            return columns;
+        } catch (Exception e) {
+            log.warn("[VelocityCodegenStrategy] 从低代码模型协议构建字段失败, configKey={}", config.getConfigKey(), e);
+            return new ArrayList<>();
+        }
+    }
+
+    private String toColumnType(LowcodeFieldSchema field) {
+        String dataType = StringUtils.defaultIfBlank(field.getDataType(), "varchar").toLowerCase(Locale.ROOT);
+        Integer length = field.getLength();
+        Integer precision = field.getPrecision();
+        return switch (dataType) {
+            case "bigint" -> "bigint";
+            case "int", "integer" -> "int";
+            case "tinyint" -> "tinyint";
+            case "decimal" -> "decimal(" + (length == null ? 18 : length) + "," + (precision == null ? 2 : precision) + ")";
+            case "datetime" -> "datetime";
+            case "date" -> "date";
+            case "text" -> "text";
+            case "char" -> "char(" + (length == null ? 1 : length) + ")";
+            default -> "varchar(" + (length == null || length <= 0 ? 128 : length) + ")";
+        };
+    }
+
+    private String toJavaType(String dataType) {
+        String type = StringUtils.defaultIfBlank(dataType, "varchar").toLowerCase(Locale.ROOT);
+        return switch (type) {
+            case "bigint" -> "Long";
+            case "int", "integer", "tinyint" -> "Integer";
+            case "decimal" -> "BigDecimal";
+            case "datetime" -> "LocalDateTime";
+            case "date" -> "LocalDateTime";
+            default -> "String";
+        };
+    }
+
+    private String toHtmlType(String componentType, String dataType) {
+        String component = StringUtils.defaultString(componentType);
+        if ("textarea".equals(component)) {
+            return "textarea";
+        }
+        if ("select".equals(component)) {
+            return "select";
+        }
+        if ("switch".equals(component)) {
+            return "radio";
+        }
+        if ("date".equals(component) || "datetime".equals(component)
+                || "date".equals(dataType) || "datetime".equals(dataType)) {
+            return "datetime";
+        }
+        if ("fileUpload".equals(component)) {
+            return "fileUpload";
+        }
+        if ("imageUpload".equals(component)) {
+            return "imageUpload";
+        }
+        return "input";
     }
 
     // ───────────────────────────────────────────────────────────────────────────
@@ -398,10 +513,34 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         try {
             Map<String, Object> opts = objectMapper.readValue(config.getOptions(), new TypeReference<>() {});
             Object val = opts.get(key);
+            if (val == null && opts.get("codegen") instanceof Map<?, ?> codegen) {
+                val = codegen.get(key);
+                if (val == null && "packageName".equals(key)) {
+                    val = codegen.get("domainPackage");
+                }
+            }
             return val != null ? String.valueOf(val) : defaultValue;
         } catch (Exception e) {
             return defaultValue;
         }
+    }
+
+    private boolean readBooleanOption(AiCrudConfig config, String key, boolean defaultValue) {
+        String value = readOption(config, key, null);
+        if (StringUtils.isBlank(value)) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(value);
+    }
+
+    private String normalizeOutputBasePath(String value) {
+        String normalized = StringUtils.defaultIfBlank(value, "frontend/src/views")
+                .replace("\\", "/")
+                .replaceAll("/+$", "");
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return StringUtils.defaultIfBlank(normalized, "frontend/src/views");
     }
 
     @SuppressWarnings("unchecked")
@@ -478,6 +617,7 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         map.put("columnsSchema", parseJsonArray(config.getColumnsSchema()));
         map.put("editSchema", parseJsonArray(config.getEditSchema()));
         map.put("apiConfig", parseJsonObject(config.getApiConfig()));
+        map.put("options", parseJsonObject(config.getOptions()));
         return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
     }
 }

@@ -121,29 +121,43 @@
           <h1>{{ currentModel.modelName || '新建数据模型' }}</h1>
           <p>{{ selectedDomain ? `${selectedDomain.domainName} / ${currentModel.modelCode || '未设置编码'}` : '先选择业务领域，再维护领域下的数据模型。' }}</p>
         </div>
-        <n-space>
-          <n-button :disabled="!canCreateModel" type="primary" secondary @click="createModel">
-            新建模型
-          </n-button>
-          <n-button :disabled="!selectedDomain || !isEditingModel" @click="triggerModelImport">
-            导入配置
-          </n-button>
-          <n-button :disabled="!selectedDomain || !isEditingModel || !currentModel.modelName" @click="exportCurrentModel">
-            导出配置
-          </n-button>
-          <n-button @click="loadModels">
-            刷新
-          </n-button>
-          <n-button :loading="ddlLoading" :disabled="!selectedDomain || !isEditingModel" @click="previewDdl">
-            DDL 预览
-          </n-button>
-          <n-button :loading="saving" :disabled="!selectedDomain || !isEditingModel" @click="saveModel(false)">
-            保存配置
-          </n-button>
-          <n-button :loading="syncSaving" type="primary" :disabled="!selectedDomain || !isEditingModel" @click="saveModel(true)">
-            保存并同步表结构
-          </n-button>
-        </n-space>
+        <div class="model-header-actions">
+          <template v-if="selectedDomain && !isEditingModel">
+            <n-button :disabled="!canCreateModel" type="primary" @click="createModel">
+              新建模型
+            </n-button>
+            <n-button :disabled="!canCreateModel" @click="openDbTableImport">
+              导入数据表
+            </n-button>
+            <n-button :disabled="!canCreateModel" @click="openAiModelGenerate">
+              AI 生成模型
+            </n-button>
+            <n-button @click="loadModels">
+              刷新
+            </n-button>
+          </template>
+          <template v-else-if="selectedDomain && isEditingModel">
+            <div class="header-action-group">
+              <n-button @click="triggerModelImport">
+                导入 JSON
+              </n-button>
+              <n-button :disabled="!currentModel.modelName" @click="exportCurrentModel">
+                导出配置
+              </n-button>
+              <n-button :loading="ddlLoading" @click="previewDdl">
+                DDL 预览
+              </n-button>
+            </div>
+            <div class="header-action-group primary">
+              <n-button :loading="saving" @click="saveModel(false)">
+                保存配置
+              </n-button>
+              <n-button :loading="syncSaving" type="primary" @click="saveModel(true)">
+                保存并同步表结构
+              </n-button>
+            </div>
+          </template>
+        </div>
       </header>
 
       <section v-if="!selectedDomain" class="empty-panel">
@@ -174,9 +188,14 @@
                 <span>启用模型</span>
               </div>
             </div>
-            <n-button type="primary" ghost @click="editSelectedDomain">
-              编辑领域
-            </n-button>
+            <div class="hero-action-buttons">
+              <n-button type="primary" ghost @click="editSelectedDomain">
+                编辑领域
+              </n-button>
+              <n-button type="primary" :disabled="!canCreateModel" @click="openDbTableImport">
+                导入数据表
+              </n-button>
+            </div>
           </div>
         </div>
 
@@ -282,24 +301,13 @@
                 placeholder="描述模型承载的数据范围、口径和业务边界"
               />
             </n-form-item>
-            <n-form-item class="span-2" label="同步已有表模型">
+            <n-form-item class="span-2" label="数据源表导入">
               <div class="table-sync-control">
-                <n-select
-                  v-model:value="selectedTableModelId"
-                  clearable
-                  filterable
-                  :loading="tableModelLoading"
-                  :options="tableModelOptions"
-                  :disabled="!selectedDatasourceId"
-                  placeholder="先选数据源，再选择已导入的表模型"
-                  @update:value="handleTableModelSelect"
-                />
-                <n-button
-                  :loading="syncingTable"
-                  :disabled="!selectedTableModelId"
-                  @click="syncFromSelectedTableModel"
-                >
-                  同步字段
+                <div class="source-table-summary">
+                  {{ currentModel.modelSchema?.sourceTable?.tableName || '直接读取数据源表结构生成模型，不再依赖旧表模型' }}
+                </div>
+                <n-button :disabled="!canCreateModel" @click="openDbTableImport">
+                  选择数据表
                 </n-button>
               </div>
             </n-form-item>
@@ -339,6 +347,56 @@
       :domains="domains"
       @saved="handleDomainSaved"
     />
+    <LowcodeModelImportModal
+      v-model:show="modelImportVisible"
+      :domain-id="selectedDomainId"
+      @apply="handleDbTableModelApply"
+    />
+    <n-modal
+      v-model:show="aiModelVisible"
+      title="AI 生成模型草稿"
+      preset="card"
+      style="width: min(780px, calc(100vw - 28px))"
+      :mask-closable="false"
+    >
+      <div class="ai-model-modal">
+        <n-input
+          v-model:value="aiModelDescription"
+          type="textarea"
+          :autosize="{ minRows: 5, maxRows: 8 }"
+          placeholder="描述业务对象、字段、状态、查询条件和表单要求"
+        />
+        <n-button type="primary" :loading="aiModelLoading" @click="generateAiModelDraft">
+          生成草稿
+        </n-button>
+        <section v-if="aiModelResult" class="ai-result-panel">
+          <div class="preview-head">
+            <div>
+              <strong>{{ aiModelResult.modelDraft?.modelName || aiModelResult.modelSchema?.businessName }}</strong>
+              <span>{{ aiModelResult.modelDraft?.modelCode || aiModelResult.modelSchema?.object?.code }}</span>
+            </div>
+            <n-tag :bordered="false">
+              {{ aiModelResult.modelSchema?.fields?.length || 0 }} 个字段
+            </n-tag>
+          </div>
+          <ul class="note-list">
+            <li v-for="note in aiModelResult.generationNotes" :key="note">
+              {{ note }}
+            </li>
+          </ul>
+        </section>
+      </div>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="aiModelVisible = false">
+            取消
+          </n-button>
+          <n-button type="primary" :disabled="!aiModelResult" @click="applyAiModelResult">
+            应用到模型设计
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
     <input
       ref="modelImportInputRef"
       class="hidden-file-input"
@@ -361,8 +419,7 @@ import {
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   genDatasourceEnabled,
-  genTableColumnList,
-  genTablePage,
+  lowcodeAiGenerateApp,
   lowcodeCreateModel,
   lowcodeDdlPreview,
   lowcodeDomainDefaults,
@@ -373,13 +430,11 @@ import {
 } from '@/api/lowcode-crud'
 import DomainEditorDrawer from '@/components/lowcode-builder/domain/DomainEditorDrawer.vue'
 import LowcodeModelDesigner from '@/components/lowcode-builder/model/LowcodeModelDesigner.vue'
+import LowcodeModelImportModal from '@/components/lowcode-builder/model/LowcodeModelImportModal.vue'
 import {
   cloneSchema,
-  createDefaultField,
   createDefaultModelSchema,
   ensureSystemFields,
-  isAuditField,
-  normalizeFieldName,
   normalizeLowcodePolicies,
   normalizeObjectCode,
   normalizeTableName,
@@ -406,16 +461,17 @@ const domainEditorVisible = ref(false)
 const editingDomain = ref(null)
 const expandedDomainIds = ref(new Set())
 const modelImportInputRef = ref(null)
+const modelImportVisible = ref(false)
+const aiModelVisible = ref(false)
+const aiModelLoading = ref(false)
+const aiModelDescription = ref('')
+const aiModelResult = ref(null)
 
 const currentModel = reactive(createEmptyModel())
 
 const datasourceLoading = ref(false)
 const datasources = ref([])
 const selectedDatasourceId = ref(null)
-const tableModels = ref([])
-const tableModelLoading = ref(false)
-const selectedTableModelId = ref(null)
-const syncingTable = ref(false)
 const ddlPreview = ref(null)
 const isEditingModel = ref(false)
 const datasourceOptions = computed(() => datasources.value.map(item => ({
@@ -423,19 +479,6 @@ const datasourceOptions = computed(() => datasources.value.map(item => ({
   value: item.datasourceId,
 })))
 const datasourceMap = computed(() => new Map(datasources.value.map(item => [item.datasourceId, item])))
-const filteredTableModels = computed(() => {
-  if (!selectedDatasourceId.value)
-    return []
-  return tableModels.value.filter((item) => {
-    if (item.datasourceId === null || item.datasourceId === undefined)
-      return true
-    return Number(item.datasourceId) === Number(selectedDatasourceId.value)
-  })
-})
-const tableModelOptions = computed(() => filteredTableModels.value.map(item => ({
-  label: `${item.tableComment || item.tableName}（${item.tableName}）`,
-  value: item.tableId,
-})))
 
 const flatDomains = computed(() => flattenDomains(domains.value))
 const visibleAssetNodes = computed(() => flattenVisibleAssetNodes(domains.value))
@@ -487,7 +530,7 @@ async function selectDomain(domain) {
   selectedDomain.value = res.data || domain
   clearModelState()
   isEditingModel.value = false
-  await Promise.all([loadModels(), loadTableModels()])
+  await loadModels()
 }
 
 async function loadDatasources() {
@@ -513,27 +556,8 @@ function ensureDefaultDatasourceSelected() {
   selectedDatasourceId.value = defaultDatasource?.datasourceId || null
 }
 
-async function loadTableModels() {
-  tableModelLoading.value = true
-  try {
-    const res = await genTablePage({ pageNum: 1, pageSize: 500 })
-    tableModels.value = res.data?.records || res.data?.list || res.data || []
-    if (selectedTableModelId.value && !filteredTableModels.value.some(item => item.tableId === selectedTableModelId.value))
-      selectedTableModelId.value = null
-  }
-  catch (e) {
-    tableModels.value = []
-    console.warn('加载已有表模型失败:', e)
-  }
-  finally {
-    tableModelLoading.value = false
-  }
-}
-
 function handleDatasourceChange(datasourceId) {
   selectedDatasourceId.value = datasourceId || null
-  if (selectedTableModelId.value && !filteredTableModels.value.some(item => item.tableId === selectedTableModelId.value))
-    selectedTableModelId.value = null
   syncSourceTableDatasource()
 }
 
@@ -578,7 +602,7 @@ async function openTreeModel(model, domain) {
     expandDomain(model.domainId)
     const res = await lowcodeDomainDefaults(model.domainId)
     selectedDomain.value = res.data || domain || findDomainById(model.domainId)
-    await Promise.all([loadModels(), loadTableModels()])
+    await loadModels()
   }
   await openModel(model)
 }
@@ -664,6 +688,87 @@ function triggerModelImport() {
     return
   }
   modelImportInputRef.value?.click()
+}
+
+function openDbTableImport() {
+  if (!canCreateModel.value) {
+    window.$message?.warning('请先选择启用状态的业务领域')
+    return
+  }
+  modelImportVisible.value = true
+}
+
+function handleDbTableModelApply(payload) {
+  const schema = cloneSchema(payload?.modelSchema || {})
+  if (!schema.fields?.length) {
+    window.$message?.warning('数据表没有可导入字段')
+    return
+  }
+  isEditingModel.value = true
+  currentModel.id = null
+  currentModel.domainId = selectedDomain.value?.id || null
+  currentModel.domainCode = selectedDomain.value?.domainCode || ''
+  currentModel.domainName = selectedDomain.value?.domainName || ''
+  currentModel.modelCode = normalizeObjectCode(payload.modelCode || schema.object?.code || schema.tableName || '')
+  currentModel.modelName = payload.modelName || schema.object?.name || schema.businessName || payload.request?.tableName || ''
+  currentModel.modelDesc = schema.object?.description || schema.sourceTable?.tableComment || ''
+  currentModel.status = 'ENABLED'
+  currentModel.tenantEnabled = true
+  currentModel.masterData = false
+  currentModel.modelSchema = schema
+  currentModel.modelSchema.fields = ensureSystemFields(currentModel.modelSchema.fields || [], true)
+  applySourceTableSelection(currentModel.modelSchema.sourceTable)
+  syncModelIdentity()
+  ddlPreview.value = null
+  window.$message?.success('数据表结构已应用到模型设计，请确认后保存')
+}
+
+function openAiModelGenerate() {
+  if (!canCreateModel.value) {
+    window.$message?.warning('请先选择启用状态的业务领域')
+    return
+  }
+  aiModelDescription.value = ''
+  aiModelResult.value = null
+  aiModelVisible.value = true
+}
+
+async function generateAiModelDraft() {
+  if (!aiModelDescription.value.trim()) {
+    window.$message?.warning('请输入需求描述')
+    return
+  }
+  aiModelLoading.value = true
+  try {
+    const res = await lowcodeAiGenerateApp({
+      domainId: selectedDomainId.value,
+      description: aiModelDescription.value.trim(),
+      layoutType: 'simple-crud',
+      autoCreateModel: true,
+      includeDdl: false,
+    })
+    aiModelResult.value = res.data
+  }
+  catch (e) {
+    aiModelResult.value = null
+    window.$message?.error(e?.message || 'AI 生成模型失败')
+  }
+  finally {
+    aiModelLoading.value = false
+  }
+}
+
+function applyAiModelResult() {
+  const modelDraft = aiModelResult.value?.modelDraft
+  const modelSchema = aiModelResult.value?.modelSchema
+  if (!modelDraft && !modelSchema)
+    return
+  applyImportedModel({
+    ...(modelDraft || {}),
+    modelSchema: modelDraft?.modelSchema || modelSchema,
+  })
+  aiModelVisible.value = false
+  window.$message?.success('AI 模型草稿已应用，请确认后保存')
 }
 
 function exportCurrentModel() {
@@ -764,7 +869,6 @@ function clearModelState() {
   currentModel.masterData = false
   currentModel.modelSchema = null
   selectedDatasourceId.value = null
-  selectedTableModelId.value = null
   ddlPreview.value = null
 }
 
@@ -800,16 +904,8 @@ function syncTableNameFromModelCode() {
   currentModel.modelSchema.tableName = normalizeTableName(currentModel.modelCode)
 }
 
-function handleTableModelSelect(tableId) {
-  selectedTableModelId.value = tableId
-  const table = tableModels.value.find(item => item.tableId === tableId)
-  if (table?.datasourceId && Number(table.datasourceId) !== Number(selectedDatasourceId.value))
-    selectedDatasourceId.value = table.datasourceId
-}
-
 function applySourceTableSelection(sourceTable = {}) {
   selectedDatasourceId.value = sourceTable?.datasourceId || null
-  selectedTableModelId.value = sourceTable?.tableId || null
   ensureDefaultDatasourceSelected()
 }
 
@@ -825,15 +921,6 @@ function syncSourceTableDatasource() {
   }
 }
 
-function buildSourceTableRef(table = {}) {
-  return {
-    tableId: table.tableId,
-    tableName: table.tableName,
-    tableComment: table.tableComment || '',
-    ...buildDatasourceRef(table.datasourceId || selectedDatasourceId.value),
-  }
-}
-
 function buildDatasourceRef(datasourceId) {
   const datasource = datasourceMap.value.get(datasourceId) || {}
   return {
@@ -842,184 +929,6 @@ function buildDatasourceRef(datasourceId) {
     datasourceName: datasource.datasourceName || '',
     dbType: datasource.dbType || '',
   }
-}
-
-async function syncFromSelectedTableModel() {
-  if (!selectedTableModelId.value)
-    return
-  const table = tableModels.value.find(item => item.tableId === selectedTableModelId.value)
-  if (!table) {
-    window.$message?.warning('未找到所选表模型')
-    return
-  }
-  if (!selectedDatasourceId.value) {
-    window.$message?.warning('请先选择数据源')
-    return
-  }
-  syncingTable.value = true
-  try {
-    const res = await genTableColumnList(selectedTableModelId.value)
-    const columns = Array.isArray(res.data) ? res.data : res.data?.records || []
-    if (!columns.length) {
-      window.$message?.warning('该表暂无字段')
-      return
-    }
-    if (!currentModel.modelSchema)
-      currentModel.modelSchema = createModelSchema(selectedDomain.value)
-    if (table.tableName) {
-      currentModel.modelCode = normalizeObjectCode(table.tableName)
-      currentModel.modelSchema.tableName = normalizeTableName(table.tableName)
-    }
-    if (table.tableComment) {
-      currentModel.modelName = table.tableComment
-      currentModel.modelDesc = table.tableComment
-    }
-    currentModel.modelSchema.tableMode = 'EXISTING'
-    currentModel.modelSchema.sourceTable = buildSourceTableRef(table)
-    currentModel.modelSchema.fields = ensureSystemFields(
-      columns.map(col => mapTableColumnToField(col)),
-      true,
-    )
-    syncModelIdentity()
-    window.$message?.success(`已同步 ${currentModel.modelSchema.fields.length} 个字段`)
-  }
-  catch (e) {
-    window.$message?.error(e?.message || '同步表字段失败')
-  }
-  finally {
-    syncingTable.value = false
-  }
-}
-
-function mapTableColumnToField(column) {
-  const fieldName = normalizeFieldName(column.javaField || column.columnName || 'field')
-  const dataType = mapColumnDataType(column.columnType, column.javaType)
-  const length = parseColumnLength(column.columnType, dataType)
-  const componentType = inferBusinessComponent(column, fieldName, dataType) || mapHtmlTypeToComponent(column.htmlType, dataType)
-  return {
-    ...createDefaultField(fieldName, column.columnComment || fieldName),
-    columnName: column.columnName || camelToSnakeFallback(fieldName),
-    dataType,
-    length,
-    componentType,
-    required: column.isRequired === 1 || column.isRequired === '1',
-    searchable: column.isQuery === 1 || column.isQuery === '1',
-    listVisible: column.isList === 1 || column.isList === '1',
-    formVisible: (column.isInsert === 1 || column.isInsert === '1') || (column.isEdit === 1 || column.isEdit === '1'),
-    queryType: column.queryType || 'like',
-    dictType: column.dictType || '',
-    sensitiveType: column.desensitizeType || 'NONE',
-    primaryKey: column.isPk === 1 || column.isPk === '1',
-    systemField: isAuditField({ field: fieldName, columnName: column.columnName }),
-    readonly: isAuditField({ field: fieldName, columnName: column.columnName }),
-    autoIncrement: (column.isPk === 1 || column.isPk === '1')
-      && String(column.extra || column.columnExtra || '').toLowerCase().includes('auto_increment'),
-    sortable: false,
-    remark: column.columnComment || '',
-  }
-}
-
-function inferBusinessComponent(column, fieldName, dataType) {
-  const columnName = String(column.columnName || '').toLowerCase()
-  const javaField = String(fieldName || column.javaField || '').toLowerCase()
-  const comment = String(column.columnComment || '').toLowerCase()
-  const text = `${columnName} ${javaField} ${comment}`
-  const idLike = columnName.endsWith('_id') || javaField.endsWith('id') || ['int', 'bigint'].includes(dataType)
-  if (column.dictType)
-    return ''
-  if (columnName === 'region_code' || javaField === 'regioncode')
-    return 'regionTreeSelect'
-  if (idLike && (['org_id', 'dept_id', 'department_id'].includes(columnName)
-    || ['orgid', 'deptid', 'departmentid'].includes(javaField)
-    || text.includes('组织id') || text.includes('部门id'))) {
-    return 'orgTreeSelect'
-  }
-  if (idLike && (['user_id', 'owner_id', 'manager_id', 'assignee_id'].includes(columnName)
-    || ['userid', 'ownerid', 'managerid', 'assigneeid'].includes(javaField)
-    || text.includes('用户id') || text.includes('负责人id'))) {
-    return 'userSelect'
-  }
-  if (text.includes('附件') || text.includes('文件'))
-    return 'fileUpload'
-  if (text.includes('图片') || text.includes('照片') || text.includes('头像'))
-    return 'imageUpload'
-  return ''
-}
-
-function mapColumnDataType(columnType, javaType) {
-  const type = String(columnType || '').toLowerCase()
-  if (type.startsWith('varchar') || type.startsWith('char'))
-    return 'varchar'
-  if (type.includes('text'))
-    return 'text'
-  if (type.startsWith('tinyint'))
-    return 'tinyint'
-  if (type.startsWith('bigint'))
-    return 'bigint'
-  if (type.startsWith('int') || type.startsWith('smallint') || type.startsWith('mediumint'))
-    return 'int'
-  if (type.startsWith('decimal') || type.startsWith('numeric') || type.startsWith('double') || type.startsWith('float'))
-    return 'decimal'
-  if (type.startsWith('datetime') || type.startsWith('timestamp'))
-    return 'datetime'
-  if (type.startsWith('date'))
-    return 'date'
-  if (javaType === 'Long' || javaType === 'Integer')
-    return javaType === 'Long' ? 'bigint' : 'int'
-  if (javaType === 'BigDecimal' || javaType === 'Double' || javaType === 'Float')
-    return 'decimal'
-  if (javaType === 'Date' || javaType === 'LocalDateTime')
-    return 'datetime'
-  if (javaType === 'LocalDate')
-    return 'date'
-  return 'varchar'
-}
-
-function parseColumnLength(columnType, dataType) {
-  const match = String(columnType || '').match(/\((\d+)/)
-  if (match)
-    return Number(match[1])
-  if (dataType === 'varchar')
-    return 128
-  if (dataType === 'text')
-    return 0
-  if (dataType === 'decimal')
-    return 18
-  return 0
-}
-
-function mapHtmlTypeToComponent(htmlType, dataType) {
-  if (!htmlType) {
-    if (['int', 'bigint', 'decimal'].includes(dataType))
-      return 'number'
-    if (dataType === 'date')
-      return 'date'
-    if (dataType === 'datetime')
-      return 'datetime'
-    if (dataType === 'tinyint')
-      return 'switch'
-    return 'input'
-  }
-  const map = {
-    input: 'input',
-    textarea: 'textarea',
-    select: 'select',
-    radio: 'radio',
-    checkbox: 'checkbox',
-    datetime: 'datetime',
-    fileUpload: 'fileUpload',
-    imageUpload: 'imageUpload',
-    editor: 'textarea',
-  }
-  return map[htmlType] || 'input'
-}
-
-function camelToSnakeFallback(value) {
-  return String(value || '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/\W/g, '_')
-    .replace(/_+/g, '_')
-    .toLowerCase()
 }
 
 function syncModelIdentity() {
@@ -1512,7 +1421,38 @@ function downloadJson(payload, filename) {
 }
 
 .page-header {
+  align-items: flex-start;
   padding: 14px;
+}
+
+.page-header > div {
+  min-width: 0;
+}
+
+.model-header-actions {
+  display: flex;
+  max-width: min(820px, 62%);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.model-header-actions :deep(.n-button) {
+  min-width: 88px;
+}
+
+.header-action-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.header-action-group.primary {
+  padding-left: 8px;
+  border-left: 1px solid #d8dee8;
 }
 
 .header-kicker {
@@ -1571,8 +1511,73 @@ function downloadJson(payload, filename) {
   align-items: center;
 }
 
+.source-table-summary {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 30px;
+  padding: 0 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hidden-file-input {
   display: none;
+}
+
+.ai-model-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-result-panel {
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preview-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.preview-head strong,
+.preview-head span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-head strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.preview-head span {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.note-list {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.7;
+  padding-left: 18px;
 }
 
 .ddl-warning {
@@ -1671,17 +1676,28 @@ function downloadJson(payload, filename) {
 }
 
 .hero-metrics {
-  display: flex;
-  gap: 16px;
-  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .hero-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  display: grid;
+  width: 380px;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.hero-action-buttons {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hero-action-buttons :deep(.n-button) {
+  width: 100%;
+  min-width: 0;
 }
 
 .hero-metric {
@@ -1819,6 +1835,28 @@ function downloadJson(payload, filename) {
   .basic-form {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .page-header {
+    flex-direction: column;
+  }
+
+  .model-header-actions {
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .header-action-group.primary {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .overview-hero {
+    flex-direction: column;
+  }
+
+  .hero-actions {
+    width: 100%;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1830,6 +1868,23 @@ function downloadJson(payload, filename) {
 
   .span-2 {
     grid-column: span 1;
+  }
+
+  .model-header-actions :deep(.n-button),
+  .header-action-group :deep(.n-button) {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+
+  .header-action-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .hero-action-buttons,
+  .hero-metrics,
+  .model-card-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

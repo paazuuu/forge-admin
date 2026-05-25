@@ -30,6 +30,18 @@
           </template>
           预览
         </n-button>
+        <n-button :disabled="!currentAppId" @click="openCodePreview">
+          <template #icon>
+            <n-icon><CodeOutline /></n-icon>
+          </template>
+          代码预览
+        </n-button>
+        <n-button :disabled="!currentAppId" :loading="codeDownloading" @click="downloadBuilderCode">
+          <template #icon>
+            <n-icon><DownloadOutline /></n-icon>
+          </template>
+          下载代码
+        </n-button>
         <n-button :loading="saving" @click="saveDraft">
           <template #icon>
             <n-icon><SaveOutline /></n-icon>
@@ -267,17 +279,65 @@
                 @published="reloadDetail"
                 @rolled-back="reloadDetail"
               />
+              <section v-show="currentStep === 'code'" class="code-output-stage">
+                <div class="code-output-head">
+                  <div>
+                    <div class="section-title">
+                      应用代码输出
+                    </div>
+                    <p>基于已保存草稿或发布版本生成前后端代码包，下载后用于二次开发。</p>
+                  </div>
+                  <n-tag :bordered="false">
+                    {{ currentAppId ? '可生成' : '请先保存草稿' }}
+                  </n-tag>
+                </div>
+                <n-form label-placement="top" size="small" class="code-output-form" :show-feedback="false">
+                  <div class="code-settings-grid">
+                    <n-form-item label="生成来源">
+                      <n-select v-model:value="codeSourceType" :options="codeSourceOptions" />
+                    </n-form-item>
+                    <n-form-item label="Group ID">
+                      <n-input
+                        v-model:value="codegenForm.groupId"
+                        clearable
+                        :disabled="codegenOptionsLoading"
+                        placeholder="com.mdframe.forge.business"
+                      />
+                    </n-form-item>
+                    <div class="code-output-actions">
+                      <n-button :loading="codegenSaving" :disabled="!currentAppId" @click="saveCodegenOptions">
+                        保存设置
+                      </n-button>
+                      <n-button :disabled="!currentAppId" @click="openCodePreview">
+                        预览代码
+                      </n-button>
+                      <n-button type="primary" :loading="codeDownloading" :disabled="!currentAppId" @click="downloadBuilderCode">
+                        下载代码
+                      </n-button>
+                    </div>
+                  </div>
+                </n-form>
+              </section>
             </section>
           </template>
         </main>
       </div>
     </n-spin>
+    <LowcodeCodePreviewModal
+      v-model:show="codePreviewVisible"
+      :app-id="currentAppId"
+      :app-name="draft.appName || draft.configKey"
+      :default-source-type="codeSourceType"
+      :codegen-options="builderCodegenOptions"
+    />
   </div>
 </template>
 
 <script setup>
 import {
   ArrowBackOutline,
+  CodeOutline,
+  DownloadOutline,
   EyeOutline,
   FolderOpenOutline,
   GitBranchOutline,
@@ -288,10 +348,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   lowcodeAppDetail,
+  lowcodeAppCodeOptions,
   lowcodeDomainDefaults,
+  lowcodeDownloadAppCode,
   lowcodeModelList,
+  lowcodeSaveAppCodeOptions,
   lowcodeSaveDraft,
 } from '@/api/lowcode-crud'
+import LowcodeCodePreviewModal from '@/components/lowcode-builder/code/LowcodeCodePreviewModal.vue'
 import {
   cloneSchema,
   createDefaultModelSchema,
@@ -328,8 +392,15 @@ const selectedDomain = ref(null)
 const selectedModelKeys = ref([])
 const primaryModelKey = ref(null)
 const appCodeTouched = ref(false)
+const codePreviewVisible = ref(false)
+const codeDownloading = ref(false)
+const codegenSaving = ref(false)
+const codegenOptionsLoading = ref(false)
+const codeSourceType = ref('DRAFT')
+const codegenForm = reactive(createBlankCodegenForm())
 
 const appId = computed(() => route.params.id || null)
+const currentAppId = computed(() => draft.id || appId.value || null)
 const pageLoading = computed(() => pageBootLoading.value || domainLoading.value)
 const emptyRuntimeModel = createEmptyRuntimeModel()
 const draft = reactive({
@@ -354,11 +425,16 @@ const stepItems = [
   { value: 'page', title: '页面设计', desc: '字段绑定 / 布局配置' },
   { value: 'preview', title: '实时预览', desc: '查看运行态效果' },
   { value: 'publish', title: '发布上线', desc: '菜单 / DDL / 版本' },
+  { value: 'code', title: '代码输出', desc: '预览 / 下载代码包' },
 ]
 const layoutOptions = [
   { label: '标准列表', value: 'simple-crud' },
   { label: '左树右表', value: 'tree-crud' },
   { label: '主子表', value: 'master-detail-crud' },
+]
+const codeSourceOptions = [
+  { label: '已保存草稿', value: 'DRAFT' },
+  { label: '已发布版本', value: 'PUBLISHED' },
 ]
 const selectedDataModels = computed(() => selectedModelKeys.value
   .map(key => dataModels.value.find(model => resolveModelKey(model) === key))
@@ -393,6 +469,11 @@ const fieldPools = computed(() => selectedDataModels.value.map(model => ({
   code: model.modelCode,
   fields: (model.modelSchema?.fields || []).filter(field => !isHiddenPageField(field)),
 })))
+const builderCodegenOptions = computed(() => compactCodegenOptions(codegenForm))
+const builderCodegenRequest = computed(() => ({
+  sourceType: codeSourceType.value,
+  ...builderCodegenOptions.value,
+}))
 
 onMounted(async () => {
   try {
@@ -502,6 +583,7 @@ async function reloadDetail() {
     await selectDomainById(draft.domainId, { resetDraft: false })
     restoreSelectedModels(detail)
     syncSelectedModelsToDraft()
+    await loadCodegenOptions()
   }
 }
 
@@ -537,6 +619,7 @@ function applyDomainToDraft(domain) {
     draft.menuParentId = defaults.menuParentId || null
   if (!draft.pageSchema.layoutType)
     draft.pageSchema.layoutType = defaults.layoutType
+  applyCodegenDefaults(domain)
 }
 
 function restoreSelectedModels(detail) {
@@ -737,6 +820,61 @@ async function openPublishStep() {
   currentStep.value = 'publish'
 }
 
+function openCodePreview() {
+  if (!currentAppId.value) {
+    window.$message?.warning('请先保存应用草稿')
+    return
+  }
+  codePreviewVisible.value = true
+}
+
+async function downloadBuilderCode() {
+  if (!currentAppId.value) {
+    window.$message?.warning('请先保存应用草稿')
+    return
+  }
+  codeDownloading.value = true
+  try {
+    const blob = await lowcodeDownloadAppCode(currentAppId.value, builderCodegenRequest.value)
+    downloadBlob(blob, `${draft.configKey || 'lowcode-app'}-code.zip`)
+    window.$message?.success('代码包下载成功')
+  }
+  catch (e) {
+    window.$message?.error(e?.message || '下载代码失败')
+  }
+  finally {
+    codeDownloading.value = false
+  }
+}
+
+async function saveCodegenOptions() {
+  if (!currentAppId.value) {
+    window.$message?.warning('请先保存应用草稿')
+    return
+  }
+  codegenSaving.value = true
+  try {
+    await lowcodeSaveAppCodeOptions(currentAppId.value, builderCodegenOptions.value)
+    window.$message?.success('代码生成设置已保存')
+    await loadCodegenOptions()
+  }
+  catch (e) {
+    window.$message?.error(e?.message || '保存代码生成设置失败')
+  }
+  finally {
+    codegenSaving.value = false
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function normalizeRuntimeModel(modelSchema, model) {
   modelSchema.schemaVersion = 2
   modelSchema.domain = {
@@ -860,6 +998,56 @@ function resolveDomainDefaults(domain) {
     layoutType: 'simple-crud',
     menuParentId: domain?.menuParentId || schema.defaults?.menuParentId || null,
   }
+}
+
+function createBlankCodegenForm() {
+  return {
+    groupId: '',
+  }
+}
+
+async function loadCodegenOptions() {
+  applyCodegenDefaults(selectedDomain.value)
+  if (!currentAppId.value)
+    return
+  codegenOptionsLoading.value = true
+  try {
+    const res = await lowcodeAppCodeOptions(currentAppId.value)
+    applyCodegenOptions(res.data || {})
+  }
+  catch (e) {
+    console.warn('加载代码生成配置失败:', e)
+  }
+  finally {
+    codegenOptionsLoading.value = false
+  }
+}
+
+function applyCodegenDefaults(domain) {
+  Object.assign(codegenForm, createBlankCodegenForm(), resolveDomainCodegenDefaults(domain))
+}
+
+function applyCodegenOptions(options = {}) {
+  Object.assign(codegenForm, {
+    ...resolveDomainCodegenDefaults(selectedDomain.value),
+    groupId: options.groupId || resolveDomainCodegenDefaults(selectedDomain.value).groupId,
+  })
+}
+
+function resolveDomainCodegenDefaults(domain) {
+  const codegen = domain?.domainSchema?.codegen || {}
+  return {
+    groupId: codegen.groupId || codegen.domainPackage || '',
+  }
+}
+
+function compactCodegenOptions(options = {}) {
+  const result = {}
+  Object.entries(options).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '')
+      result[key] = String(value).trim()
+  })
+  return result
 }
 </script>
 
@@ -1074,7 +1262,7 @@ function resolveDomainDefaults(domain) {
 
 .step-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1247,6 +1435,45 @@ function resolveDomainDefaults(domain) {
   color: #94a3b8;
 }
 
+.code-output-stage {
+  display: grid;
+  gap: 12px;
+}
+
+.code-output-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.code-output-head p {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.code-output-form {
+  max-width: 860px;
+}
+
+.code-settings-grid {
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(180px, 220px) minmax(260px, 1fr) auto;
+  gap: 8px;
+}
+
+.code-settings-grid :deep(.n-form-item) {
+  margin-bottom: 0;
+}
+
+.code-output-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
 @media (max-width: 1320px) {
   .domain-context {
     grid-template-columns: 1fr;
@@ -1280,8 +1507,13 @@ function resolveDomainDefaults(domain) {
   .step-strip,
   .metric-strip,
   .selected-model-grid,
-  .field-pool-grid {
+  .field-pool-grid,
+  .code-settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .code-output-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

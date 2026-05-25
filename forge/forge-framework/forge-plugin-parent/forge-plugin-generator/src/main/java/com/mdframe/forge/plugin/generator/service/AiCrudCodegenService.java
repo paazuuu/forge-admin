@@ -40,6 +40,23 @@ public class AiCrudCodegenService {
         if (config == null) {
             throw new BusinessException("配置不存在: " + configKey);
         }
+        return generateZip(config);
+    }
+
+    /**
+     * 根据配置对象生成代码 zip 包。
+     */
+    public byte[] generateZip(AiCrudConfig config) {
+        return toZip(generateFiles(config));
+    }
+
+    /**
+     * 根据配置对象生成代码文件 Map。
+     */
+    public Map<String, String> generateFiles(AiCrudConfig config) {
+        if (config == null) {
+            throw new BusinessException("配置不存在");
+        }
         try {
             // 加载页面模板，获取 codegen_type
             AiPageTemplate template = null;
@@ -59,30 +76,33 @@ public class AiCrudCodegenService {
                     .orElseThrow(() -> new BusinessException("no codegen strategy for type: " + finalCodegenType));
 
             log.info("[AiCrudCodegenService] configKey={}, codegenType={}, strategy={}",
-                    configKey, codegenType, strategy.getClass().getSimpleName());
+                    config.getConfigKey(), codegenType, strategy.getClass().getSimpleName());
 
-            Map<String, String> files = strategy.generate(config, template);
-            return toZip(files);
+            return strategy.generate(config, template);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("[AiCrudCodegenService] 生成代码失败, configKey={}", configKey, e);
+            log.error("[AiCrudCodegenService] 生成代码失败, configKey={}", config.getConfigKey(), e);
             throw new BusinessException("代码生成失败: " + e.getMessage());
         }
     }
 
-    private byte[] toZip(Map<String, String> files) throws Exception {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (ZipOutputStream zos = new ZipOutputStream(baos)) {
-            for (Map.Entry<String, String> entry : files.entrySet()) {
-                ZipEntry zipEntry = new ZipEntry(entry.getKey());
-                byte[] bytes = entry.getValue().getBytes(StandardCharsets.UTF_8);
-                zipEntry.setSize(bytes.length);
-                zos.putNextEntry(zipEntry);
-                zos.write(bytes);
-                zos.closeEntry();
+    public byte[] toZip(Map<String, String> files) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+                for (Map.Entry<String, String> entry : files.entrySet()) {
+                    ZipEntry zipEntry = new ZipEntry(entry.getKey());
+                    byte[] bytes = entry.getValue().getBytes(StandardCharsets.UTF_8);
+                    zipEntry.setSize(bytes.length);
+                    zos.putNextEntry(zipEntry);
+                    zos.write(bytes);
+                    zos.closeEntry();
+                }
             }
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new BusinessException("代码压缩失败: " + e.getMessage());
         }
-        return baos.toByteArray();
     }
 }
