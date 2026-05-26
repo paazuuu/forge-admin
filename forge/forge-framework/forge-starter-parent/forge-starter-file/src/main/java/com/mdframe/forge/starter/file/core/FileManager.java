@@ -95,6 +95,65 @@ public class FileManager {
         return doUpload(file, businessType, businessId, storageType, null);
     }
 
+    /**
+     * 上传文件流（使用默认存储策略）。
+     */
+    public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
+                               String businessType, String businessId) {
+        return upload(inputStream, fileName, contentType, businessType, businessId, null, null);
+    }
+
+    /**
+     * 上传文件流（指定存储策略 + 可见范围）。
+     */
+    public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
+                               String businessType, String businessId,
+                               String storageType, Boolean isPrivate) {
+        return upload(inputStream, fileName, contentType, businessType, businessId, storageType, isPrivate, null);
+    }
+
+    /**
+     * 上传文件流（指定存储策略 + 可见范围 + 已知文件大小）。
+     */
+    public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
+                               String businessType, String businessId,
+                               String storageType, Boolean isPrivate, Long fileSize) {
+        if (inputStream == null) {
+            throw new RuntimeException("文件流不能为空");
+        }
+        if (fileName == null || fileName.isBlank()) {
+            throw new RuntimeException("文件名不能为空");
+        }
+        if (storageType == null) {
+            if (configProvider == null) {
+                throw new RuntimeException("未配置StorageConfigProvider");
+            }
+            StorageConfig config = configProvider.getDefaultConfig();
+            if (config == null) {
+                throw new RuntimeException("未找到默认存储配置");
+            }
+            storageType = config.getStorageType();
+        }
+        validateFileName(fileName, storageType, fileSize);
+
+        FileStorage storage = getStorage(storageType);
+        if (storage == null) {
+            throw new RuntimeException("不支持的存储类型: " + storageType);
+        }
+
+        FileMetadata metadata = storage.upload(inputStream, fileName, contentType, businessType, businessId, fileSize);
+        if (metadata.getFileSize() == null && fileSize != null) {
+            metadata.setFileSize(fileSize);
+        }
+        if (isPrivate != null) {
+            metadata.setIsPrivate(isPrivate);
+        }
+        if (metadataPersistence != null) {
+            metadataPersistence.save(metadata);
+        }
+        return metadata;
+    }
+
     private FileMetadata doUpload(MultipartFile file, String businessType, String businessId,
                                   String storageType, Boolean isPrivate) {
         // 验证文件
@@ -383,6 +442,36 @@ public class FileManager {
         List<String> allowedTypes = config.getAllowedTypeList();
         if (!allowedTypes.isEmpty()) {
             String extension = FileUtil.getExtension(file.getOriginalFilename());
+            if (!allowedTypes.contains(extension.toLowerCase())) {
+                throw new RuntimeException("不支持的文件类型: " + extension);
+            }
+        }
+    }
+
+    private void validateFileName(String fileName, String storageType) {
+        validateFileName(fileName, storageType, null);
+    }
+
+    private void validateFileName(String fileName, String storageType, Long fileSize) {
+        if (configProvider == null) {
+            return;
+        }
+
+        StorageConfig config = configProvider.getConfigByType(storageType);
+        if (config == null) {
+            return;
+        }
+
+        if (fileSize != null && fileSize >= 0 && config.getMaxFileSize() != null) {
+            long maxSize = config.getMaxFileSize() * 1024L * 1024L;
+            if (fileSize > maxSize) {
+                throw new RuntimeException("文件大小超过限制: " + config.getMaxFileSize() + "MB");
+            }
+        }
+
+        List<String> allowedTypes = config.getAllowedTypeList();
+        if (!allowedTypes.isEmpty()) {
+            String extension = FileUtil.getExtension(fileName);
             if (!allowedTypes.contains(extension.toLowerCase())) {
                 throw new RuntimeException("不支持的文件类型: " + extension);
             }

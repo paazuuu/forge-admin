@@ -20,6 +20,7 @@ import com.mdframe.forge.starter.crypto.crypto.EncryptorFactory;
 import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeStrategy;
 import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeStrategyFactory;
 import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeType;
+import com.mdframe.forge.starter.datascope.context.DataScopeContext;
 import com.mdframe.forge.starter.trans.spi.DictValueProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +74,15 @@ public class DynamicCrudService {
                                       List<DynamicCrudRepository.JoinSpec> joins,
                                       Map<String, String> fieldColumnMapping,
                                       Map<String, String> relationDisplayAliases) {
+    }
+
+    private record ExportQueryContext(AiCrudConfig config,
+                                      String tableName,
+                                      Map<String, String> columnMapping,
+                                      Set<String> allowedSearchFields,
+                                      Map<String, String> searchTypeMap,
+                                      Map<String, Object> searchParams,
+                                      RuntimeJoinContext joinContext) {
     }
 
     private final DynamicCrudRepository repository;
@@ -157,48 +167,89 @@ public class DynamicCrudService {
     public List<Map<String, Object>> selectExportRows(String configKey,
                                                       DynamicCrudQuery query,
                                                       Integer maxRows) {
-        AiCrudConfig config = getConfig(configKey);
-        String tableName = config.getTableName();
-        Map<String, String> columnMapping = repository.getColumnMapping(tableName);
-        Set<String> allowedSearchFields = buildAllowedSearchFields(config);
-        Map<String, String> searchTypeMap = DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper);
-        Map<String, Object> searchParams = query != null ? query.getSearchParams() : null;
-        searchParams = expandIncludeChildrenParams(searchParams, config, tableName, allowedSearchFields, searchTypeMap);
         int limit = normalizeExportLimit(maxRows);
+        return selectExportPageRows(configKey, query, 1, limit, null);
+    }
 
-        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
-        if (joinContext != null && requiresJoinedExportQuery(config, searchParams, joinContext)) {
-            DynamicCrudRepository.SqlCondition dataScopeCondition = buildDataScopeCondition(config, tableName, "t0");
-            Page<Map<String, Object>> page = repository.selectJoinedPage(
-                    tableName,
-                    buildRuntimeSelectFields(joinContext, DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper), true),
+    /**
+     * 统计动态导出数据量，供同步/异步导出决策使用。
+     */
+    public long countExportRows(String configKey,
+                                DynamicCrudQuery query,
+                                DataScopeContext dataScopeContext) {
+        ExportQueryContext context = buildExportQueryContext(configKey, query);
+        RuntimeJoinContext joinContext = context.joinContext();
+        if (joinContext != null && requiresJoinedExportQuery(context.config(), context.searchParams(), joinContext)) {
+            DynamicCrudRepository.SqlCondition dataScopeCondition = buildDataScopeCondition(
+                    context.config(), context.tableName(), "t0", dataScopeContext);
+            return repository.countJoined(
+                    context.tableName(),
+                    buildRuntimeSelectFields(joinContext,
+                            DynamicQueryGenerator.extractFieldNames(context.config().getColumnsSchema(), objectMapper), true),
                     joinContext.joins(),
-                    1,
-                    limit,
-                    searchParams,
-                    allowedSearchFields,
-                    searchTypeMap,
+                    context.searchParams(),
+                    context.allowedSearchFields(),
+                    context.searchTypeMap(),
                     joinContext.fieldColumnMapping(),
-                    "t0.id DESC",
                     dataScopeCondition
             );
-            applyReadPipeline(page.getRecords(), config);
-            return page.getRecords();
         }
 
-        List<Map<String, Object>> rows = repository.selectList(
-                tableName,
-                searchParams,
-                allowedSearchFields,
-                searchTypeMap,
-                columnMapping,
+        return repository.countList(
+                context.tableName(),
+                context.searchParams(),
+                context.allowedSearchFields(),
+                context.searchTypeMap(),
+                context.columnMapping(),
+                buildDataScopeCondition(context.config(), context.tableName(), null, dataScopeContext)
+        );
+    }
+
+    /**
+     * 分页查询动态导出数据，不重复统计 count，供异步导出分批写入使用。
+     */
+    public List<Map<String, Object>> selectExportPageRows(String configKey,
+                                                          DynamicCrudQuery query,
+                                                          Integer pageNum,
+                                                          Integer pageSize,
+                                                          DataScopeContext dataScopeContext) {
+        ExportQueryContext context = buildExportQueryContext(configKey, query);
+        int current = normalizePageNum(pageNum);
+        int size = normalizeExportPageSize(pageSize);
+        RuntimeJoinContext joinContext = context.joinContext();
+        if (joinContext != null && requiresJoinedExportQuery(context.config(), context.searchParams(), joinContext)) {
+            List<Map<String, Object>> rows = repository.selectJoinedPageRecords(
+                    context.tableName(),
+                    buildRuntimeSelectFields(joinContext,
+                            DynamicQueryGenerator.extractFieldNames(context.config().getColumnsSchema(), objectMapper), true),
+                    joinContext.joins(),
+                    current,
+                    size,
+                    context.searchParams(),
+                    context.allowedSearchFields(),
+                    context.searchTypeMap(),
+                    joinContext.fieldColumnMapping(),
+                    "t0.id DESC",
+                    buildDataScopeCondition(context.config(), context.tableName(), "t0", dataScopeContext)
+            );
+            applyReadPipeline(rows, context.config());
+            return rows;
+        }
+
+        List<Map<String, Object>> rows = repository.selectPageRecords(
+                context.tableName(),
+                current,
+                size,
+                context.searchParams(),
+                context.allowedSearchFields(),
+                context.searchTypeMap(),
+                context.columnMapping(),
                 "id DESC",
-                limit,
-                buildDataScopeCondition(config, tableName, null)
+                buildDataScopeCondition(context.config(), context.tableName(), null, dataScopeContext)
         );
 
         List<Map<String, Object>> camelCaseRows = DynamicQueryGenerator.convertListToCamelCase(rows);
-        applyReadPipeline(camelCaseRows, config);
+        applyReadPipeline(camelCaseRows, context.config());
         return camelCaseRows;
     }
 
@@ -2429,8 +2480,28 @@ public class DynamicCrudService {
         return fields;
     }
 
+    private ExportQueryContext buildExportQueryContext(String configKey, DynamicCrudQuery query) {
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        Map<String, String> columnMapping = repository.getColumnMapping(tableName);
+        Set<String> allowedSearchFields = buildAllowedSearchFields(config);
+        Map<String, String> searchTypeMap = DynamicQueryGenerator.extractSearchTypeMap(config.getSearchSchema(), objectMapper);
+        Map<String, Object> searchParams = query != null ? query.getSearchParams() : null;
+        searchParams = expandIncludeChildrenParams(searchParams, config, tableName, allowedSearchFields, searchTypeMap);
+        RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
+        return new ExportQueryContext(config, tableName, columnMapping, allowedSearchFields, searchTypeMap,
+                searchParams, joinContext);
+    }
+
     private DynamicCrudRepository.SqlCondition buildDataScopeCondition(AiCrudConfig config, String tableName, String tableAlias) {
         return dynamicDataScopeService.buildCondition(config, tableName, tableAlias);
+    }
+
+    private DynamicCrudRepository.SqlCondition buildDataScopeCondition(AiCrudConfig config,
+                                                                       String tableName,
+                                                                       String tableAlias,
+                                                                       DataScopeContext dataScopeContext) {
+        return dynamicDataScopeService.buildCondition(config, tableName, tableAlias, dataScopeContext);
     }
 
     private int normalizePageNum(Integer pageNum) {
@@ -2449,5 +2520,12 @@ public class DynamicCrudService {
             return MAX_EXPORT_ROWS;
         }
         return Math.min(maxRows, MAX_EXPORT_ROWS);
+    }
+
+    private int normalizeExportPageSize(Integer pageSize) {
+        if (pageSize == null || pageSize < 1) {
+            return 1000;
+        }
+        return Math.min(pageSize, 5000);
     }
 }

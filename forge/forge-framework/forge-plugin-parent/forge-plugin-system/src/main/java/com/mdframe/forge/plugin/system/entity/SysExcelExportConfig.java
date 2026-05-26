@@ -79,6 +79,16 @@ public class SysExcelExportConfig extends BaseEntity {
     private Integer status;
 
     /**
+     * 是否包含示例数据
+     */
+    private Boolean includeSample;
+
+    /**
+     * 是否允许导入
+     */
+    private Boolean allowImport;
+
+    /**
      * 备注
      */
     private String remark;

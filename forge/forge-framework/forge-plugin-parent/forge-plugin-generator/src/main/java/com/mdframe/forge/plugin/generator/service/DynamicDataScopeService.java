@@ -39,6 +39,13 @@ public class DynamicDataScopeService {
     private final LowcodePolicyService policyService;
 
     public DynamicCrudRepository.SqlCondition buildCondition(AiCrudConfig config, String tableName, String tableAlias) {
+        return buildCondition(config, tableName, tableAlias, null);
+    }
+
+    public DynamicCrudRepository.SqlCondition buildCondition(AiCrudConfig config,
+                                                             String tableName,
+                                                             String tableAlias,
+                                                             DataScopeContext explicitContext) {
         LowcodeModelSchema modelSchema = readModelSchema(config);
         if (modelSchema == null) {
             logSkip(config, tableName, "非低代码配置或缺少模型协议");
@@ -50,7 +57,7 @@ public class DynamicDataScopeService {
             return null;
         }
 
-        DataScopeContext context = resolveContext(config);
+        DataScopeContext context = explicitContext != null ? explicitContext : resolveContext(config);
         DataScopeType scopeType = DataScopeType.getByRoleDataScope(
                 context.getMinDataScope(),
                 context.getCustomOrgIds() != null && !context.getCustomOrgIds().isEmpty());

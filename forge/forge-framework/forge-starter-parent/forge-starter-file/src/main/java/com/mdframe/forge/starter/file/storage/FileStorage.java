@@ -44,6 +44,22 @@ public interface FileStorage {
      */
     FileMetadata upload(InputStream inputStream, String fileName, String contentType, 
                        String businessType, String businessId);
+
+    /**
+     * 上传文件流，调用方已知文件大小时应使用该方法，避免对象存储实现为了计算长度而一次性读入内存。
+     *
+     * @param inputStream  输入流
+     * @param fileName     文件名
+     * @param contentType  内容类型
+     * @param businessType 业务类型
+     * @param businessId   业务ID
+     * @param fileSize     文件大小（字节）
+     * @return 文件元数据
+     */
+    default FileMetadata upload(InputStream inputStream, String fileName, String contentType,
+                                String businessType, String businessId, Long fileSize) {
+        return upload(inputStream, fileName, contentType, businessType, businessId);
+    }
     
     /**
      * 分片上传初始化

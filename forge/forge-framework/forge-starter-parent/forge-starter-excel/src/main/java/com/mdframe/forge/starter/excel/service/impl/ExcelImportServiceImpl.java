@@ -3,8 +3,6 @@ package com.mdframe.forge.starter.excel.service.impl;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
-import com.alibaba.excel.write.builder.ExcelWriterBuilder;
-import com.alibaba.excel.write.metadata.WriteSheet;
 import com.mdframe.forge.starter.excel.model.ExcelColumnConfig;
 import com.mdframe.forge.starter.excel.model.ExcelExportMetadata;
 import com.mdframe.forge.starter.excel.model.GenericRowData;
@@ -13,6 +11,7 @@ import com.mdframe.forge.starter.excel.model.ImportResult;
 import com.mdframe.forge.starter.excel.service.ExcelImportService;
 import com.mdframe.forge.starter.excel.spi.ExcelConfigProvider;
 import com.mdframe.forge.starter.excel.spi.ExcelMetadataProvider;
+import com.mdframe.forge.starter.trans.spi.DictValueProvider;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,11 +20,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 /**
@@ -41,6 +46,9 @@ public class ExcelImportServiceImpl implements ExcelImportService {
 
     @Autowired(required = false)
     private ExcelConfigProvider configProvider;
+
+    @Autowired(required = false)
+    private DictValueProvider dictValueProvider;
     
     /**
      * 临时文件目录
@@ -58,41 +66,26 @@ public class ExcelImportServiceImpl implements ExcelImportService {
     @Override
     public byte[] downloadTemplate(String configKey) {
         try {
-            // 1. 加载元数据
-            ExcelExportMetadata metadata = null;
-            if (metadataProvider != null) {
-                metadata = metadataProvider.getMetadata(configKey);
+            ExcelExportMetadata metadata = loadMetadata(configKey);
+            if (!isImportAllowed(metadata)) {
+                throw new RuntimeException("当前配置未开启导入: " + configKey);
             }
-            
-            // 2. 加载列配置
-            List<ExcelColumnConfig> columnConfigs = null;
-            if (configProvider != null) {
-                columnConfigs = configProvider.getColumnConfigs(configKey);
-            }
-            
-            if (columnConfigs == null || columnConfigs.isEmpty()) {
+
+            List<ExcelColumnConfig> columnConfigs = loadImportableColumnConfigs(configKey);
+            if (columnConfigs.isEmpty()) {
                 throw new RuntimeException("未找到导出配置：" + configKey);
             }
             
-            // 3. 构建表头
             List<List<String>> headers = new ArrayList<>();
-            List<Integer> widths = new ArrayList<>();
-            
             for (ExcelColumnConfig config : columnConfigs) {
-                if (Boolean.TRUE.equals(config.getImportable())) {
-                    headers.add(Collections.singletonList(config.getColumnName()));
-                    widths.add(config.getWidth() != null ? config.getWidth() : 20);
-                }
+                headers.add(Collections.singletonList(config.getColumnName()));
             }
             
-            // 4. 生成示例数据（可选）
             List<Map<String, Object>> sampleData = new ArrayList<>();
             if (metadata != null && Boolean.TRUE.equals(metadata.getIncludeSample())) {
                 Map<String, Object> sampleRow = new LinkedHashMap<>();
                 for (ExcelColumnConfig config : columnConfigs) {
-                    if (Boolean.TRUE.equals(config.getImportable())) {
-                        sampleRow.put(config.getColumnName(), config.getExampleValue() != null ? config.getExampleValue() : "");
-                    }
+                    sampleRow.put(config.getColumnName(), config.getExampleValue() != null ? config.getExampleValue() : "");
                 }
                 sampleData.add(sampleRow);
             }
@@ -127,32 +120,35 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         ImportResult<T> result = new ImportResult<>();
         
         try {
-            // 加载列配置用于校验
-            Map<String, ExcelColumnConfig> columnConfigMap = new HashMap<>();
-            if (configProvider != null) {
-                List<ExcelColumnConfig> configs = configProvider.getColumnConfigs(configKey);
-                if (configs != null) {
-                    for (ExcelColumnConfig config : configs) {
-                        columnConfigMap.put(config.getColumnName(), config);
-                    }
-                }
+            ExcelExportMetadata metadata = loadMetadata(configKey);
+            if (!isImportAllowed(metadata)) {
+                throw new RuntimeException("当前配置未开启导入: " + configKey);
             }
-            
-            // 解析 Excel
-            // 特殊处理 GenericRowData 类型，使用 Map 模式读取
+
+            List<ExcelColumnConfig> columnConfigs = loadImportableColumnConfigs(configKey);
+            if (columnConfigs.isEmpty()) {
+                throw new RuntimeException("未配置可导入列: " + configKey);
+            }
+
+            ImportResult<GenericRowData> genericResult = new ImportResult<>();
+            GenericRowDataListener listener = new GenericRowDataListener(columnConfigs, genericResult, dictValueProvider);
+            EasyExcel.read(inputStream, listener).sheet().doRead();
+            genericResult.setTotalRows(listener.getRowCount());
+            genericResult.setSuccessRows(genericResult.getSuccessData().size());
+            genericResult.setFailedRows(genericResult.getErrors().size());
+            genericResult.buildSummary();
+            genericResult.setSuccess(genericResult.getErrors().isEmpty());
+
             if (clazz == GenericRowData.class) {
-                // 使用 EasyExcel 的 Map 读取模式
                 @SuppressWarnings("unchecked")
-                ImportResult<GenericRowData> genericResult = (ImportResult<GenericRowData>) result;
-                GenericRowDataListener listener = new GenericRowDataListener(columnConfigMap, genericResult);
-                EasyExcel.read(inputStream, null, listener).sheet().doRead();
-                result.setTotalRows(listener.getRowCount());
-            } else {
-                // 使用普通对象模式
-                ImportListener<T> listener = new ImportListener<>(clazz, columnConfigMap, result);
-                EasyExcel.read(inputStream, clazz, listener).sheet().doRead();
-                result.setTotalRows(listener.getRowCount());
+                ImportResult<T> castResult = (ImportResult<T>) genericResult;
+                return castResult;
             }
+
+            result.setTotalRows(listener.getRowCount());
+            mergeErrors(result, genericResult.getErrors());
+            Map<String, ExcelColumnConfig> fieldConfigMap = buildFieldConfigMap(columnConfigs);
+            mapGenericRowsToPojo(clazz, genericResult.getSuccessData(), fieldConfigMap, result);
             
             // 设置汇总信息
             result.setSuccessRows(result.getSuccessData().size());
@@ -169,6 +165,243 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         }
         
         return result;
+    }
+
+    private ExcelExportMetadata loadMetadata(String configKey) {
+        return metadataProvider != null ? metadataProvider.getMetadata(configKey) : null;
+    }
+
+    private List<ExcelColumnConfig> loadImportableColumnConfigs(String configKey) {
+        if (configProvider == null) {
+            return List.of();
+        }
+        List<ExcelColumnConfig> configs = configProvider.getColumnConfigs(configKey);
+        if (configs == null || configs.isEmpty()) {
+            return List.of();
+        }
+        return configs.stream()
+                .filter(Objects::nonNull)
+                .filter(config -> !Boolean.FALSE.equals(config.getImportable()))
+                .sorted(Comparator.comparingInt(config -> config.getOrderNum() != null ? config.getOrderNum() : Integer.MAX_VALUE))
+                .toList();
+    }
+
+    private boolean isImportAllowed(ExcelExportMetadata metadata) {
+        return metadata == null || metadata.getAllowImport() == null || Boolean.TRUE.equals(metadata.getAllowImport());
+    }
+
+    private <T> void mapGenericRowsToPojo(Class<T> clazz,
+                                          List<GenericRowData> rows,
+                                          Map<String, ExcelColumnConfig> fieldConfigMap,
+                                          ImportResult<T> result) {
+        for (GenericRowData row : rows) {
+            boolean hasError = false;
+            try {
+                T instance = newInstance(clazz);
+                for (Map.Entry<String, Object> entry : row.getFields().entrySet()) {
+                    ExcelColumnConfig config = fieldConfigMap.get(entry.getKey());
+                    try {
+                        setProperty(instance, entry.getKey(), entry.getValue());
+                    } catch (Exception ex) {
+                        hasError = true;
+                        result.addError(buildPojoFieldError(row.getRowNum(), config, entry.getValue(), ex.getMessage()));
+                    }
+                }
+                if (!hasError) {
+                    result.getSuccessData().add(instance);
+                }
+            } catch (Exception e) {
+                result.addError(buildPojoError(row.getRowNum(), e.getMessage()));
+            }
+        }
+    }
+
+    private void mergeErrors(ImportResult<?> target, List<ImportErrorRecord> errors) {
+        if (errors == null || errors.isEmpty()) {
+            return;
+        }
+        for (ImportErrorRecord error : errors) {
+            target.addError(error);
+        }
+    }
+
+    private ImportErrorRecord buildPojoError(Integer rowNum, String errorMessage) {
+        ImportErrorRecord error = new ImportErrorRecord();
+        error.setRowNum(rowNum);
+        error.setErrorType("对象映射错误");
+        error.setErrorMessage(errorMessage);
+        error.setSuggestion("请检查导入字段与目标对象字段类型是否一致");
+        return error;
+    }
+
+    private ImportErrorRecord buildPojoFieldError(Integer rowNum,
+                                                  ExcelColumnConfig config,
+                                                  Object rawValue,
+                                                  String errorMessage) {
+        ImportErrorRecord error = new ImportErrorRecord();
+        error.setRowNum(rowNum);
+        error.setColumnName(config != null ? config.getColumnName() : null);
+        error.setRawValue(rawValue != null ? String.valueOf(rawValue) : null);
+        error.setErrorType("对象映射错误");
+        error.setErrorMessage(errorMessage);
+        error.setSuggestion("请检查导入字段与目标对象字段类型是否一致");
+        return error;
+    }
+
+    private Map<String, ExcelColumnConfig> buildFieldConfigMap(List<ExcelColumnConfig> columnConfigs) {
+        Map<String, ExcelColumnConfig> map = new HashMap<>();
+        for (ExcelColumnConfig config : columnConfigs) {
+            if (config != null && config.getFieldName() != null) {
+                map.put(config.getFieldName(), config);
+            }
+        }
+        return map;
+    }
+
+    private <T> T newInstance(Class<T> clazz) throws Exception {
+        var constructor = clazz.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
+    }
+
+    private void setProperty(Object target, String fieldName, Object value) throws Exception {
+        if (target == null || fieldName == null || fieldName.isBlank()) {
+            return;
+        }
+        Method setter = findSetter(target.getClass(), fieldName);
+        if (setter != null) {
+            Object convertedValue = convertValue(value, setter.getParameterTypes()[0]);
+            setter.invoke(target, convertedValue);
+            return;
+        }
+        Field field = findField(target.getClass(), fieldName);
+        if (field == null) {
+            throw new RuntimeException("目标对象不存在字段: " + fieldName);
+        }
+        field.setAccessible(true);
+        field.set(target, convertValue(value, field.getType()));
+    }
+
+    private Method findSetter(Class<?> clazz, String fieldName) {
+        String setterName = "set" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+        for (Method method : clazz.getMethods()) {
+            if (method.getName().equals(setterName) && method.getParameterCount() == 1) {
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private Field findField(Class<?> clazz, String fieldName) {
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    private Object convertValue(Object value, Class<?> targetType) {
+        if (value == null) {
+            return null;
+        }
+        if (targetType.isInstance(value)) {
+            return value;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+
+        if (targetType == String.class) {
+            return text;
+        }
+        if (targetType == BigDecimal.class) {
+            return new BigDecimal(text);
+        }
+        if (targetType == Integer.class || targetType == int.class) {
+            return Integer.valueOf(normalizeNumberText(text));
+        }
+        if (targetType == Long.class || targetType == long.class) {
+            return Long.valueOf(normalizeNumberText(text));
+        }
+        if (targetType == Double.class || targetType == double.class) {
+            return Double.valueOf(normalizeNumberText(text));
+        }
+        if (targetType == Float.class || targetType == float.class) {
+            return Float.valueOf(normalizeNumberText(text));
+        }
+        if (targetType == Short.class || targetType == short.class) {
+            return Short.valueOf(normalizeNumberText(text));
+        }
+        if (targetType == Byte.class || targetType == byte.class) {
+            return Byte.valueOf(normalizeNumberText(text));
+        }
+        if (targetType == Boolean.class || targetType == boolean.class) {
+            return parseBoolean(text);
+        }
+        if (targetType == LocalDateTime.class) {
+            return parseLocalDateTime(text);
+        }
+        if (targetType == LocalDate.class) {
+            return parseLocalDate(text);
+        }
+        if (targetType == LocalTime.class) {
+            return parseLocalTime(text);
+        }
+        return value;
+    }
+
+    private Boolean parseBoolean(String text) {
+        String normalized = text.trim().toLowerCase(Locale.ROOT);
+        return Set.of("1", "true", "y", "yes", "是").contains(normalized);
+    }
+
+    private String normalizeNumberText(String text) {
+        return text.endsWith(".0") ? text.substring(0, text.length() - 2) : text;
+    }
+
+    private LocalDateTime parseLocalDateTime(String text) {
+        String normalized = text.replace("/", "-").replace("T", " ");
+        if (normalized.length() == 10) {
+            normalized = normalized + " 00:00:00";
+        }
+        try {
+            return LocalDateTime.parse(normalized, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        } catch (DateTimeParseException e) {
+            try {
+                return LocalDateTime.parse(text);
+            } catch (DateTimeParseException ex) {
+                throw new RuntimeException("无法转换为LocalDateTime: " + text);
+            }
+        }
+    }
+
+    private LocalDate parseLocalDate(String text) {
+        String normalized = text.replace("/", "-");
+        if (normalized.length() > 10) {
+            normalized = normalized.substring(0, 10);
+        }
+        try {
+            return LocalDate.parse(normalized, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        } catch (DateTimeParseException e) {
+            throw new RuntimeException("无法转换为LocalDate: " + text);
+        }
+    }
+
+    private LocalTime parseLocalTime(String text) {
+        try {
+            return LocalTime.parse(text, DateTimeFormatter.ofPattern("HH:mm:ss"));
+        } catch (DateTimeParseException e) {
+            try {
+                return LocalTime.parse(text);
+            } catch (DateTimeParseException ex) {
+                throw new RuntimeException("无法转换为LocalTime: " + text);
+            }
+        }
     }
 
     @Override
@@ -227,52 +460,6 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         } catch (Exception e) {
             log.error("生成错误报告失败", e);
             return null;
-        }
-    }
-    
-    /**
-     * Excel 导入监听器
-     */
-    private static class ImportListener<T> extends AnalysisEventListener<T> {
-        
-        private final Class<T> clazz;
-        private final Map<String, ExcelColumnConfig> columnConfigMap;
-        private final ImportResult<T> result;
-        private int rowCount = 0;
-        
-        public ImportListener(Class<T> clazz, Map<String, ExcelColumnConfig> columnConfigMap, ImportResult<T> result) {
-            this.clazz = clazz;
-            this.columnConfigMap = columnConfigMap;
-            this.result = result;
-        }
-        
-        @Override
-        public void invoke(T data, AnalysisContext context) {
-            rowCount++;
-            // 默认全部成功，具体业务校验可在子类扩展
-            result.getSuccessData().add(data);
-        }
-        
-        @Override
-        public void doAfterAllAnalysed(AnalysisContext context) {
-            log.info("所有数据解析完成，共{}行", rowCount);
-        }
-        
-        @Override
-        public void onException(Exception exception, AnalysisContext context) throws Exception {
-            // 记录错误
-            ImportErrorRecord error = new ImportErrorRecord();
-            error.setRowNum(context.readRowHolder().getRowIndex() + 1); // 行号从 1 开始
-            error.setErrorType("解析错误");
-            error.setErrorMessage(exception.getMessage());
-            result.addError(error);
-            
-            // 不抛出异常，继续处理下一行
-            log.warn("第{}行解析失败：{}", error.getRowNum(), exception.getMessage());
-        }
-        
-        public int getRowCount() {
-            return rowCount;
         }
     }
     

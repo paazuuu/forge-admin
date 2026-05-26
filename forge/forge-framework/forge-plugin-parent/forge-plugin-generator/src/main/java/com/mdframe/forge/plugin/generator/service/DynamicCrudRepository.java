@@ -213,6 +213,106 @@ public class DynamicCrudRepository {
     }
 
     /**
+     * 统计动态列表数据量，用于智能导出阈值判断。
+     */
+    public long countList(String tableName,
+                          Map<String, Object> searchParams,
+                          Set<String> allowedSearchFields,
+                          Map<String, String> searchTypeMap,
+                          Map<String, String> columnMapping,
+                          SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+
+        StringBuilder whereClause = buildBaseWhereClause(tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
+
+        String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        return total != null ? total : 0L;
+    }
+
+    /**
+     * 分页查询动态列表记录，不执行 count，用于异步导出分批读取。
+     */
+    public List<Map<String, Object>> selectPageRecords(String tableName,
+                                                       int pageNum,
+                                                       int pageSize,
+                                                       Map<String, Object> searchParams,
+                                                       Set<String> allowedSearchFields,
+                                                       Map<String, String> searchTypeMap,
+                                                       Map<String, String> columnMapping,
+                                                       String orderBy,
+                                                       SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+
+        StringBuilder whereClause = buildBaseWhereClause(tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
+
+        String dataSql = buildPageDataSql(tableName, whereClause, orderBy);
+        appendPageParams(params, pageNum, pageSize);
+        return namedJdbcTemplate.queryForList(dataSql, params);
+    }
+
+    /**
+     * 统计左连接动态列表数据量，用于智能导出阈值判断。
+     */
+    public long countJoined(String mainTableName,
+                            List<JoinField> selectFields,
+                            List<JoinSpec> joins,
+                            Map<String, Object> searchParams,
+                            Set<String> allowedSearchFields,
+                            Map<String, String> searchTypeMap,
+                            Map<String, String> fieldColumnMapping,
+                            SqlCondition dataScopeCondition) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
+
+        String fromClause = buildJoinedFromClause(mainTableName, joins);
+        boolean distinctMainRows = selectsOnlyMainTable(selectFields);
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+                + fromClause + buildWhereSql(whereClause);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        return total != null ? total : 0L;
+    }
+
+    /**
+     * 分页查询左连接动态列表记录，不执行 count，用于异步导出分批读取。
+     */
+    public List<Map<String, Object>> selectJoinedPageRecords(String mainTableName,
+                                                             List<JoinField> selectFields,
+                                                             List<JoinSpec> joins,
+                                                             int pageNum,
+                                                             int pageSize,
+                                                             Map<String, Object> searchParams,
+                                                             Set<String> allowedSearchFields,
+                                                             Map<String, String> searchTypeMap,
+                                                             Map<String, String> fieldColumnMapping,
+                                                             String orderBy,
+                                                             SqlCondition dataScopeCondition) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
+
+        String fromClause = buildJoinedFromClause(mainTableName, joins);
+        boolean distinctMainRows = selectsOnlyMainTable(selectFields);
+        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
+                + buildWhereSql(whereClause) + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
+        appendPageParams(params, pageNum, pageSize);
+        return namedJdbcTemplate.queryForList(dataSql, params);
+    }
+
+    /**
      * 自定义分页查询。
      */
     public Page<Map<String, Object>> selectCustomPage(String tableName, int pageNum, int pageSize,

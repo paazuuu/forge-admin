@@ -1,4 +1,5 @@
 <!--
+  eslint-disable vue/component-name-in-template-casing
   CRUD 页面组件
   基于 Naive UI 的完整 CRUD 解决方案
   参考 LxBasePage 设计，集成搜索、表格、新增、编辑、删除、导入导出等功能
@@ -113,12 +114,25 @@
                     size="small"
                     strong
                     secondary
+                    :loading="exportLoading"
                     @click="handleExport"
                   >
                     <template #icon>
                       <n-icon><DownloadOutline /></n-icon>
                     </template>
                     {{ exportButtonText }}
+                  </n-button>
+
+                  <n-button
+                    v-if="showExportTaskEntry"
+                    size="small"
+                    tertiary
+                    @click="handleOpenExportTasks"
+                  >
+                    <template #icon>
+                      <n-icon><TimeOutline /></n-icon>
+                    </template>
+                    导出任务
                   </n-button>
 
                   <AiCustomQuery
@@ -312,6 +326,57 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 导出任务抽屉 -->
+    <n-drawer
+      v-model:show="exportTaskDrawerVisible"
+      :width="exportTaskDrawerWidth"
+      placement="right"
+    >
+      <n-drawer-content title="导出任务" :closable="true">
+        <template #header-extra>
+          <n-button
+            size="small"
+            quaternary
+            aria-label="刷新导出任务"
+            title="刷新"
+            :loading="exportTaskLoading"
+            @click="loadExportTasks"
+          >
+            <template #icon>
+              <n-icon><RefreshOutline /></n-icon>
+            </template>
+          </n-button>
+        </template>
+
+        <div v-if="activeExportTask" class="export-task-current">
+          <div class="export-task-current__main">
+            <span class="export-task-current__title">{{ activeExportTask.fileName || '导出任务' }}</span>
+            <n-tag size="small" :type="resolveExportTaskTagType(activeExportTask.status)">
+              {{ resolveExportTaskStatusText(activeExportTask.status) }}
+            </n-tag>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="activeExportTask.progress || 0"
+            :processing="isExportTaskRunning(activeExportTask)"
+            indicator-placement="inside"
+          />
+        </div>
+
+        <n-data-table
+          remote
+          size="small"
+          :bordered="false"
+          :columns="exportTaskColumns"
+          :data="exportTasks"
+          :loading="exportTaskLoading"
+          :pagination="exportTaskPaginationConfig"
+          :row-key="row => row.id"
+          :scroll-x="720"
+        />
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 
@@ -321,16 +386,18 @@ import {
   Add,
   CloudUploadOutline,
   DownloadOutline,
+  RefreshOutline,
+  TimeOutline,
   TrashOutline,
 } from '@vicons/ionicons5'
-import { NDropdown } from 'naive-ui'
-import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
+import { NButton, NDropdown, NProgress, NTag } from 'naive-ui'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
 import AuthImage from '@/components/common/AuthImage.vue'
 import DictTag from '@/components/DictTag.vue'
 import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
-import { request } from '@/utils'
+import { downloadFile, request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
 import { aiCrudPageProps } from './AiCrudPageProps'
 import AiCustomQuery from './AiCustomQuery.vue'
@@ -403,6 +470,22 @@ const currentRow = ref(null)
 
 // 导入
 const importModalVisible = ref(false)
+
+// 导出
+const exportLoading = ref(false)
+
+// 导出任务
+const exportTaskDrawerVisible = ref(false)
+const exportTaskLoading = ref(false)
+const exportTasks = ref([])
+const activeExportTaskId = ref(null)
+const exportTaskPollTimer = ref(null)
+const exportTaskDrawerWidth = 'min(680px, 92vw)'
+const exportTaskPagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+})
 
 /**
  * 操作列最大显示按钮数
@@ -661,6 +744,95 @@ const resolvedCustomQueryConfigKey = computed(() => {
   const match = listApi.match(/\/ai\/crud\/([^/]+)\/page/)
   return match?.[1] || ''
 })
+
+const resolvedExportTaskConfigKey = computed(() => {
+  if (props.exportTaskConfigKey) {
+    return props.exportTaskConfigKey
+  }
+  const exportApi = props.apiConfig?.export || props.exportApi || ''
+  const exportUrl = extractApiUrl(exportApi)
+  const match = exportUrl.match(/\/ai\/crud\/([^/]+)\/export(?:$|\?)/)
+  return match?.[1] || ''
+})
+
+const showExportTaskEntry = computed(() => {
+  return props.showExport && props.showExportTasks && !!resolvedExportTaskConfigKey.value
+})
+
+const activeExportTask = computed(() => {
+  if (!activeExportTaskId.value) {
+    return null
+  }
+  return exportTasks.value.find(task => String(task.id) === String(activeExportTaskId.value)) || null
+})
+
+const exportTaskPaginationConfig = computed(() => ({
+  page: exportTaskPagination.value.page,
+  pageSize: exportTaskPagination.value.pageSize,
+  itemCount: exportTaskPagination.value.itemCount,
+  pageSizes: [10, 20, 50],
+  showSizePicker: true,
+  prefix: ({ itemCount }) => `共${itemCount}个任务`,
+  onUpdatePage: handleExportTaskPageChange,
+  onUpdatePageSize: handleExportTaskPageSizeChange,
+}))
+
+const exportTaskColumns = computed(() => [
+  {
+    title: '文件',
+    key: 'fileName',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: row => row.fileName || '-',
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 96,
+    render: row => h(NTag, {
+      size: 'small',
+      type: resolveExportTaskTagType(row.status),
+    }, { default: () => resolveExportTaskStatusText(row.status) }),
+  },
+  {
+    title: '进度',
+    key: 'progress',
+    width: 150,
+    render: row => h(NProgress, {
+      type: 'line',
+      percentage: row.progress || 0,
+      processing: isExportTaskRunning(row),
+      indicatorPlacement: 'inside',
+      height: 10,
+      status: row.status === 'FAILED' ? 'error' : undefined,
+    }),
+  },
+  {
+    title: '数据量',
+    key: 'totalCount',
+    width: 120,
+    render: row => `${row.exportedCount || 0}/${row.totalCount || 0}`,
+  },
+  {
+    title: '创建时间',
+    key: 'createTime',
+    width: 160,
+    render: row => row.createTime || '-',
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 88,
+    fixed: 'right',
+    render: row => h(NButton, {
+      text: true,
+      type: 'primary',
+      size: 'small',
+      disabled: row.status !== 'SUCCESS' || !row.fileId,
+      onClick: () => handleDownloadExportTask(row),
+    }, { default: () => '下载' }),
+  },
+])
 
 function getColumnKey(col) {
   return col?.prop || col?.key || col?.dataIndex || ''
@@ -1009,6 +1181,15 @@ function parseApiConfig(key, defaultApi, defaultMethod = 'get', urlParams = {}) 
   }
 
   return { method: defaultMethod, url: defaultApi }
+}
+
+function extractApiUrl(apiConfigValue) {
+  if (!apiConfigValue) {
+    return ''
+  }
+  const text = String(apiConfigValue)
+  const parts = text.split('@')
+  return parts.length > 1 ? parts.slice(1).join('@') : text
 }
 
 function normalizeUrlParams(urlParams = {}) {
@@ -1899,12 +2080,16 @@ async function handleImportRequest({ file, data, onFinish, onError, onProgress }
 }
 
 function buildImportFailureMessage(result) {
+  if (result?.summary && result?.errors?.length) {
+    return result.summary
+  }
   const firstError = result?.errors?.[0]
   if (!firstError) {
     return result?.summary || '导入校验失败'
   }
-  const label = firstError.label || firstError.field || '字段'
-  return `导入校验失败：第${firstError.rowNum || '-'}行 ${label}，${firstError.message || '数据不正确'}`
+  const label = firstError.columnName || firstError.label || firstError.field || '字段'
+  const message = firstError.errorMessage || firstError.message || '数据不正确'
+  return `导入校验失败：第${firstError.rowNum || '-'}行【${label}】${message}`
 }
 
 /**
@@ -1937,6 +2122,7 @@ async function handleDownloadTemplate() {
  * 导出
  */
 async function handleExport() {
+  exportLoading.value = true
   try {
     const { method, url } = parseApiConfig('export', props.exportApi || props.api, 'post')
 
@@ -1973,12 +2159,203 @@ async function handleExport() {
       })
     }
 
+    const asyncExportResult = await resolveAsyncExportResult(response)
+    if (asyncExportResult?.async) {
+      window.$message.success(asyncExportResult.message || '导出任务已提交')
+      activeExportTaskId.value = asyncExportResult.taskId
+      exportTaskDrawerVisible.value = true
+      exportTaskPagination.value.page = 1
+      await loadExportTasks()
+      pollExportTask(asyncExportResult.taskId)
+      return
+    }
+
     downloadBlobResponse(response, props.exportFileName || '导出数据.xlsx')
     window.$message.success('导出成功')
   }
   catch (error) {
     console.error('导出失败:', error)
     window.$message.error('导出失败')
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+async function resolveAsyncExportResult(response) {
+  if (response?.data?.async !== undefined) {
+    return response.data
+  }
+  if (response?.async !== undefined) {
+    return response
+  }
+  const blob = response?.data instanceof Blob ? response.data : response instanceof Blob ? response : null
+  if (blob?.type?.includes('json')) {
+    try {
+      const text = await blob.text()
+      if (!text) {
+        return null
+      }
+      const parsed = JSON.parse(text)
+      if (parsed?.data?.async !== undefined) {
+        return parsed.data
+      }
+      if (parsed?.async !== undefined) {
+        return parsed
+      }
+    }
+    catch (error) {
+      console.warn('解析异步导出响应失败:', error)
+    }
+  }
+  return null
+}
+
+async function handleOpenExportTasks() {
+  if (!resolvedExportTaskConfigKey.value) {
+    window.$message.warning('当前导出接口不支持任务查询')
+    return
+  }
+  exportTaskDrawerVisible.value = true
+  exportTaskPagination.value.page = 1
+  await loadExportTasks()
+}
+
+async function loadExportTasks() {
+  if (!resolvedExportTaskConfigKey.value) {
+    return
+  }
+  exportTaskLoading.value = true
+  try {
+    const response = await request({
+      method: 'get',
+      url: `/ai/crud/${resolvedExportTaskConfigKey.value}/export/tasks`,
+      params: {
+        pageNum: exportTaskPagination.value.page,
+        pageSize: exportTaskPagination.value.pageSize,
+      },
+    })
+    const page = response?.data || {}
+    exportTasks.value = page.records || []
+    exportTaskPagination.value.itemCount = page.total || 0
+  }
+  catch (error) {
+    console.error('加载导出任务失败:', error)
+    window.$message.error(error?.message || '加载导出任务失败')
+  }
+  finally {
+    exportTaskLoading.value = false
+  }
+}
+
+async function pollExportTask(taskId) {
+  clearExportTaskPollTimer()
+  if (!taskId || !resolvedExportTaskConfigKey.value) {
+    return
+  }
+
+  const fetchTask = async () => {
+    try {
+      const response = await request({
+        method: 'get',
+        url: `/ai/crud/${resolvedExportTaskConfigKey.value}/export/tasks/${taskId}`,
+        needTip: false,
+      })
+      const task = response?.data
+      if (!task) {
+        return
+      }
+      upsertExportTask(task)
+      if (isExportTaskRunning(task)) {
+        exportTaskPollTimer.value = window.setTimeout(fetchTask, 2000)
+      }
+      else if (task.status === 'SUCCESS') {
+        window.$message.success('导出任务已完成')
+      }
+      else if (task.status === 'FAILED') {
+        window.$message.error(task.errorMessage || '导出任务失败')
+      }
+    }
+    catch (error) {
+      console.warn('轮询导出任务失败:', error)
+    }
+  }
+
+  await fetchTask()
+}
+
+function upsertExportTask(task) {
+  const index = exportTasks.value.findIndex(item => String(item.id) === String(task.id))
+  if (index >= 0) {
+    exportTasks.value.splice(index, 1, task)
+  }
+  else {
+    exportTasks.value.unshift(task)
+  }
+}
+
+async function handleDownloadExportTask(row) {
+  if (!row?.fileId) {
+    window.$message.warning('导出文件还未生成')
+    return
+  }
+  try {
+    await downloadFile(row.fileId, row.fileName || '导出数据.xlsx')
+  }
+  catch (error) {
+    console.error('下载导出文件失败:', error)
+    window.$message.error(error?.message || '下载导出文件失败')
+  }
+}
+
+function handleExportTaskPageChange(page) {
+  exportTaskPagination.value.page = page
+  loadExportTasks()
+}
+
+function handleExportTaskPageSizeChange(pageSize) {
+  exportTaskPagination.value.pageSize = pageSize
+  exportTaskPagination.value.page = 1
+  loadExportTasks()
+}
+
+function clearExportTaskPollTimer() {
+  if (exportTaskPollTimer.value) {
+    window.clearTimeout(exportTaskPollTimer.value)
+    exportTaskPollTimer.value = null
+  }
+}
+
+function isExportTaskRunning(task) {
+  return ['PENDING', 'RUNNING'].includes(task?.status)
+}
+
+function resolveExportTaskStatusText(status) {
+  switch (status) {
+    case 'PENDING':
+      return '排队中'
+    case 'RUNNING':
+      return '导出中'
+    case 'SUCCESS':
+      return '已完成'
+    case 'FAILED':
+      return '失败'
+    default:
+      return '未知'
+  }
+}
+
+function resolveExportTaskTagType(status) {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILED':
+      return 'error'
+    case 'RUNNING':
+      return 'info'
+    case 'PENDING':
+      return 'warning'
+    default:
+      return 'default'
   }
 }
 
@@ -2147,6 +2524,10 @@ onMounted(() => {
   }
 })
 
+onBeforeUnmount(() => {
+  clearExportTaskPollTimer()
+})
+
 // 监听公共参数变化
 watch(() => props.publicParams, () => {
   pagination.value.page = 1
@@ -2310,6 +2691,33 @@ watch(() => props.publicQuery, () => {
 /* 操作列折叠下拉样式 */
 :deep(.table-action-column .n-dropdown) {
   min-width: 80px;
+}
+
+.export-task-current {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.export-task-current__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.export-task-current__title {
+  min-width: 0;
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 响应式设计 */

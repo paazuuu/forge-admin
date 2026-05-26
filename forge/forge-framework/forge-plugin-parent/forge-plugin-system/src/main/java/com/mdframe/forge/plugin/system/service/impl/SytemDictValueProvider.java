@@ -50,6 +50,7 @@ public class SytemDictValueProvider implements DictValueProvider {
     }
 
     private final ConcurrentHashMap<String, DictCacheEntry> dictCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, DictCacheEntry> reverseDictCache = new ConcurrentHashMap<>();
 
     @Override
     public String getLabel(String dictType, String key) {
@@ -58,6 +59,15 @@ public class SytemDictValueProvider implements DictValueProvider {
         }
         Map<String, String> valueLabelMap = getOrLoadDictMap(dictType);
         return valueLabelMap.get(key);
+    }
+
+    @Override
+    public String getValue(String dictType, String labelOrValue) {
+        if (dictType == null || labelOrValue == null) {
+            return null;
+        }
+        Map<String, String> labelValueMap = getOrLoadLabelValueMap(dictType);
+        return labelValueMap.get(labelOrValue);
     }
 
     @Override
@@ -250,13 +260,32 @@ public class SytemDictValueProvider implements DictValueProvider {
         return map;
     }
 
+    private Map<String, String> getOrLoadLabelValueMap(String dictType) {
+        DictCacheEntry entry = reverseDictCache.get(dictType);
+        if (entry != null && !entry.isExpired()) {
+            return entry.valueLabelMap;
+        }
+        List<SysDictData> dictDataList = sysDictDataService.selectDictDataByType(dictType);
+        Map<String, String> map = new LinkedHashMap<>(dictDataList.size() * 2);
+        for (SysDictData dictData : dictDataList) {
+            if (dictData.getDictLabel() != null && dictData.getDictValue() != null) {
+                map.putIfAbsent(dictData.getDictLabel(), dictData.getDictValue());
+                map.putIfAbsent(dictData.getDictValue(), dictData.getDictValue());
+            }
+        }
+        reverseDictCache.put(dictType, new DictCacheEntry(map));
+        return map;
+    }
+
     public void clearCache() {
         dictCache.clear();
+        reverseDictCache.clear();
         log.info("字典翻译缓存已全部清除");
     }
 
     public void clearCache(String dictType) {
         dictCache.remove(dictType);
+        reverseDictCache.remove(dictType);
         log.info("字典翻译缓存已清除: {}", dictType);
     }
 }

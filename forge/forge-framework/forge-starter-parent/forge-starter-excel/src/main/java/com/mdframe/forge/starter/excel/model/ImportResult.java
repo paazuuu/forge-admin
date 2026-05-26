@@ -3,6 +3,7 @@ package com.mdframe.forge.starter.excel.model;
 import lombok.Data;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 导入结果
@@ -62,7 +63,26 @@ public class ImportResult<T> {
      * 构建汇总信息
      */
     public void buildSummary() {
-        this.summary = String.format("共%d行，成功%d行，失败%d行", 
-                totalRows, successRows, failedRows);
+        if (errors.isEmpty()) {
+            this.summary = String.format("导入成功，共%d行，成功%d行", totalRows, successRows);
+        } else {
+            String errorDetail = errors.stream()
+                    .limit(5)
+                    .map(e -> {
+                        StringBuilder sb = new StringBuilder();
+                        sb.append("第").append(e.getRowNum()).append("行");
+                        if (e.getColumnName() != null) {
+                            sb.append("【").append(e.getColumnName()).append("】");
+                        }
+                        sb.append(e.getErrorMessage());
+                        return sb.toString();
+                    })
+                    .collect(Collectors.joining("；"));
+            if (errors.size() > 5) {
+                errorDetail += "；...共" + errors.size() + "条错误";
+            }
+            this.summary = String.format("共%d行，成功%d行，失败%d行。失败原因：%s",
+                    totalRows, successRows, failedRows, errorDetail);
+        }
     }
 }

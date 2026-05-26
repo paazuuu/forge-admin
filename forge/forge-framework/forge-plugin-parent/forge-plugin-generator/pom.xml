@@ -66,6 +66,12 @@
             <artifactId>forge-starter-excel</artifactId>
         </dependency>
 
+        <!-- Starter File -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-file</artifactId>
+        </dependency>
+
         <!-- Velocity模板引擎 -->
         <dependency>
             <groupId>org.apache.velocity</groupId>

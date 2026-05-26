@@ -489,6 +489,24 @@ export const aiCrudPageProps = {
     default: '',
   },
 
+  /**
+   * 是否显示异步导出任务入口
+   * @type {boolean}
+   */
+  showExportTasks: {
+    type: Boolean,
+    default: true,
+  },
+
+  /**
+   * 导出任务对应的动态 CRUD 配置键。不传时会从 exportApi/apiConfig.export 解析。
+   * @type {string}
+   */
+  exportTaskConfigKey: {
+    type: String,
+    default: '',
+  },
+
   // ========== 分页相关 ==========
   /**
    * 是否显示分页
