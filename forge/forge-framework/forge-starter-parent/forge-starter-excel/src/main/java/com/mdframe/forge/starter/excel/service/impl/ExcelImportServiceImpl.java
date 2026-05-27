@@ -73,7 +73,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
 
             List<ExcelColumnConfig> columnConfigs = loadImportableColumnConfigs(configKey);
             if (columnConfigs.isEmpty()) {
-                throw new RuntimeException("未找到导出配置：" + configKey);
+                throw new RuntimeException("未找到导入列配置：" + configKey);
             }
             
             List<List<String>> headers = new ArrayList<>();
@@ -187,7 +187,16 @@ public class ExcelImportServiceImpl implements ExcelImportService {
     }
 
     private boolean isImportAllowed(ExcelExportMetadata metadata) {
-        return metadata == null || metadata.getAllowImport() == null || Boolean.TRUE.equals(metadata.getAllowImport());
+        if (metadata == null) {
+            return true;
+        }
+        if (Integer.valueOf(0).equals(metadata.getStatus())) {
+            return false;
+        }
+        if ("EXPORT".equalsIgnoreCase(metadata.getConfigType())) {
+            return false;
+        }
+        return metadata.getAllowImport() == null || Boolean.TRUE.equals(metadata.getAllowImport());
     }
 
     private <T> void mapGenericRowsToPojo(Class<T> clazz,

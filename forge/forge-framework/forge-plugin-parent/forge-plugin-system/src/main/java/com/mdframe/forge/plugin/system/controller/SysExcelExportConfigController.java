@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Excel导出配置管理
+ * Excel导入导出配置管理
  */
 @RestController
 @RequestMapping("/system/excel/export-config")
@@ -53,7 +53,7 @@ public class SysExcelExportConfigController {
      */
     @PostMapping
     public RespInfo<Void> add(@RequestBody SysExcelExportConfig config) {
-        exportConfigService.save(config);
+        exportConfigService.saveConfig(config);
         return RespInfo.success();
     }
     
@@ -62,7 +62,7 @@ public class SysExcelExportConfigController {
      */
     @PutMapping
     public RespInfo<Void> edit(@RequestBody SysExcelExportConfig config) {
-        exportConfigService.updateById(config);
+        exportConfigService.updateConfig(config);
         return RespInfo.success();
     }
     

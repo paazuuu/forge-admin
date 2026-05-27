@@ -61,8 +61,11 @@ public class DynamicExportEngine {
         try {
             // 1. 加载导出元数据
             ExcelExportMetadata metadata = loadMetadata(configKey);
-            if (metadata == null || metadata.getStatus() == 0) {
+            if (metadata == null || Integer.valueOf(0).equals(metadata.getStatus())) {
                 throw new RuntimeException("导出配置不存在或已禁用: " + configKey);
+            }
+            if (!isExportAllowed(metadata)) {
+                throw new RuntimeException("当前配置未开启导出: " + configKey);
             }
 
             // 2. 加载列配置
@@ -107,6 +110,13 @@ public class DynamicExportEngine {
             throw new RuntimeException("未配置ExcelMetadataProvider");
         }
         return metadataProvider.getMetadata(configKey);
+    }
+
+    private boolean isExportAllowed(ExcelExportMetadata metadata) {
+        if (metadata == null || metadata.getConfigType() == null || metadata.getConfigType().isBlank()) {
+            return true;
+        }
+        return !"IMPORT".equalsIgnoreCase(metadata.getConfigType());
     }
 
     /**
@@ -617,8 +627,11 @@ public class DynamicExportEngine {
     public void exportToStream(java.io.OutputStream outputStream, String configKey, Map<String, Object> queryParams) {
         try {
             ExcelExportMetadata metadata = loadMetadata(configKey);
-            if (metadata == null || metadata.getStatus() == 0) {
+            if (metadata == null || Integer.valueOf(0).equals(metadata.getStatus())) {
                 throw new RuntimeException("导出配置不存在或已禁用：" + configKey);
+            }
+            if (!isExportAllowed(metadata)) {
+                throw new RuntimeException("当前配置未开启导出：" + configKey);
             }
 
             List<ExcelColumnConfig> columnConfigs = loadColumnConfigs(configKey);

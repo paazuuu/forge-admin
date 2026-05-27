@@ -1,7 +1,6 @@
 package com.mdframe.forge.plugin.system.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.system.entity.SysExcelColumnConfig;
@@ -26,43 +25,57 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SysExcelExportConfigServiceImpl extends ServiceImpl<SysExcelExportConfigMapper, SysExcelExportConfig>
         implements ISysExcelExportConfigService {
+
+    private static final String CONFIG_TYPE_EXPORT = "EXPORT";
+    private static final String CONFIG_TYPE_IMPORT = "IMPORT";
+    private static final String CONFIG_TYPE_BOTH = "BOTH";
     
     private final SysExcelColumnConfigMapper columnConfigMapper;
     
     @Override
     public Page<SysExcelExportConfig> page(PageQuery query, SysExcelExportConfig condition) {
-        LambdaQueryWrapper<SysExcelExportConfig> wrapper = new LambdaQueryWrapper<>();
-        
-        if (StrUtil.isNotBlank(condition.getConfigKey())) {
-            wrapper.like(SysExcelExportConfig::getConfigKey, condition.getConfigKey());
-        }
-        
-        if (StrUtil.isNotBlank(condition.getExportName())) {
-            wrapper.like(SysExcelExportConfig::getExportName, condition.getExportName());
-        }
-        
-        if (condition.getStatus() != null) {
-            wrapper.eq(SysExcelExportConfig::getStatus, condition.getStatus());
-        }
-        
-        wrapper.orderByDesc(SysExcelExportConfig::getUpdateTime);
-        
         Page<SysExcelExportConfig> page = new Page<>(query.getPageNum(), query.getPageSize());
-        return this.baseMapper.selectPage(page, wrapper);
+        return this.baseMapper.selectConfigPage(page, condition);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveConfig(SysExcelExportConfig config) {
+        normalizeAndValidate(config);
+        if (this.baseMapper.countByConfigKey(config.getConfigKey()) > 0) {
+            throw new RuntimeException("配置键已存在: " + config.getConfigKey());
+        }
+        this.save(config);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateConfig(SysExcelExportConfig config) {
+        if (config == null || config.getId() == null) {
+            throw new RuntimeException("配置ID不能为空");
+        }
+        normalizeAndValidate(config);
+        if (this.baseMapper.countByConfigKeyExcludeId(config.getConfigKey(), config.getId()) > 0) {
+            throw new RuntimeException("配置键已存在: " + config.getConfigKey());
+        }
+        this.updateById(config);
     }
     
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateStatus(Long id, Integer status) {
-        this.lambdaUpdate()
-                .eq(SysExcelExportConfig::getId, id)
-                .set(SysExcelExportConfig::getStatus, status)
-                .update();
+        SysExcelExportConfig config = new SysExcelExportConfig();
+        config.setId(id);
+        config.setStatus(status);
+        this.updateById(config);
     }
     
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SysExcelExportConfig copyConfig(Long id, String newConfigKey) {
+        if (StrUtil.isBlank(newConfigKey)) {
+            throw new RuntimeException("新配置键不能为空");
+        }
         // 查询原配置
         SysExcelExportConfig source = this.getById(id);
         if (source == null) {
@@ -70,9 +83,7 @@ public class SysExcelExportConfigServiceImpl extends ServiceImpl<SysExcelExportC
         }
         
         // 检查新配置键是否已存在
-        long count = this.lambdaQuery()
-                .eq(SysExcelExportConfig::getConfigKey, newConfigKey)
-                .count();
+        long count = this.baseMapper.countByConfigKey(newConfigKey);
         if (count > 0) {
             throw new RuntimeException("配置键已存在: " + newConfigKey);
         }
@@ -87,17 +98,86 @@ public class SysExcelExportConfigServiceImpl extends ServiceImpl<SysExcelExportC
         this.save(newConfig);
         
         // 复制列配置
-        LambdaQueryWrapper<SysExcelColumnConfig> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysExcelColumnConfig::getConfigKey, source.getConfigKey());
-        List<SysExcelColumnConfig> columnConfigs = columnConfigMapper.selectList(wrapper);
+        List<SysExcelColumnConfig> columnConfigs = columnConfigMapper.selectByConfigKey(source.getConfigKey());
         
         for (SysExcelColumnConfig columnConfig : columnConfigs) {
             SysExcelColumnConfig newColumn = new SysExcelColumnConfig();
             BeanUtils.copyProperties(columnConfig, newColumn);
+            newColumn.setId(null);
             newColumn.setConfigKey(newConfigKey);
             columnConfigMapper.insert(newColumn);
         }
         
         return newConfig;
+    }
+
+    private void normalizeAndValidate(SysExcelExportConfig config) {
+        if (config == null) {
+            throw new RuntimeException("配置不能为空");
+        }
+        if (StrUtil.isBlank(config.getConfigKey())) {
+            throw new RuntimeException("配置键不能为空");
+        }
+        if (StrUtil.isBlank(config.getExportName())) {
+            throw new RuntimeException("配置名称不能为空");
+        }
+        config.setConfigKey(StrUtil.trim(config.getConfigKey()));
+        config.setExportName(StrUtil.trim(config.getExportName()));
+        config.setSheetName(trimToNull(config.getSheetName()));
+        config.setFileNameTemplate(trimToNull(config.getFileNameTemplate()));
+        config.setDataSourceBean(trimToNull(config.getDataSourceBean()));
+        config.setQueryMethod(trimToNull(config.getQueryMethod()));
+        config.setSortField(trimToNull(config.getSortField()));
+        config.setSortOrder(trimToNull(config.getSortOrder()));
+        config.setRemark(trimToNull(config.getRemark()));
+
+        String configType = StrUtil.blankToDefault(config.getConfigType(), CONFIG_TYPE_BOTH).toUpperCase();
+        if (!CONFIG_TYPE_EXPORT.equals(configType)
+                && !CONFIG_TYPE_IMPORT.equals(configType)
+                && !CONFIG_TYPE_BOTH.equals(configType)) {
+            throw new RuntimeException("配置类型不正确: " + configType);
+        }
+        config.setConfigType(configType);
+
+        boolean exportEnabled = CONFIG_TYPE_EXPORT.equals(configType) || CONFIG_TYPE_BOTH.equals(configType);
+        boolean importEnabled = CONFIG_TYPE_IMPORT.equals(configType) || CONFIG_TYPE_BOTH.equals(configType);
+
+        config.setAllowImport(importEnabled);
+        if (config.getStatus() == null) {
+            config.setStatus(1);
+        }
+        if (config.getAutoTrans() == null) {
+            config.setAutoTrans(true);
+        }
+        if (config.getPageable() == null) {
+            config.setPageable(false);
+        }
+        if (config.getIncludeSample() == null) {
+            config.setIncludeSample(false);
+        }
+
+        if (exportEnabled) {
+            if (StrUtil.isBlank(config.getDataSourceBean())) {
+                throw new RuntimeException("导出配置必须填写数据源Bean");
+            }
+            if (StrUtil.isBlank(config.getQueryMethod())) {
+                throw new RuntimeException("导出配置必须填写查询方法");
+            }
+            if (config.getMaxRows() == null || config.getMaxRows() <= 0) {
+                config.setMaxRows(10000);
+            }
+        } else {
+            config.setDataSourceBean(null);
+            config.setQueryMethod(null);
+            config.setPageable(false);
+            config.setMaxRows(null);
+            config.setSortField(null);
+            config.setSortOrder(null);
+        }
+    }
+
+    private String trimToNull(String value) {
+        String normalized = StrUtil.trim(value);
+        return StrUtil.isBlank(normalized) ? null : normalized;
     }
 }

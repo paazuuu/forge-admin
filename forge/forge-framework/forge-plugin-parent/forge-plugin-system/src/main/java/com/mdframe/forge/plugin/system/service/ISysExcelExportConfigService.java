@@ -14,6 +14,16 @@ public interface ISysExcelExportConfigService extends IService<SysExcelExportCon
      * 分页查询
      */
     Page<SysExcelExportConfig> page(PageQuery query, SysExcelExportConfig condition);
+
+    /**
+     * 保存配置
+     */
+    void saveConfig(SysExcelExportConfig config);
+
+    /**
+     * 更新配置
+     */
+    void updateConfig(SysExcelExportConfig config);
     
     /**
      * 更新状态

@@ -1,6 +1,5 @@
 package com.mdframe.forge.plugin.system.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysExcelColumnConfig;
 import com.mdframe.forge.plugin.system.mapper.SysExcelColumnConfigMapper;
 import com.mdframe.forge.starter.excel.model.ExcelColumnConfig;
@@ -26,11 +25,7 @@ public class SystemExcelConfigProvider implements ExcelConfigProvider {
 
     @Override
     public List<ExcelColumnConfig> getColumnConfigs(String configKey) {
-        LambdaQueryWrapper<SysExcelColumnConfig> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysExcelColumnConfig::getConfigKey, configKey)
-               .orderByAsc(SysExcelColumnConfig::getOrderNum);
-
-        List<SysExcelColumnConfig> configList = columnConfigMapper.selectList(wrapper);
+        List<SysExcelColumnConfig> configList = columnConfigMapper.selectByConfigKey(configKey);
 
         if (configList == null || configList.isEmpty()) {
             log.warn("未找到列配置: {}", configKey);
