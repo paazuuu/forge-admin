@@ -95,7 +95,7 @@
           <div class="card-footer">
             <div class="card-meta">
               <div class="meta-item">
-                <i class="i-material-symbols:history-outline" />
+                <i class="i-material-symbols:history" />
                 {{ formatDate(item.updateTime) }}
               </div>
               <div class="meta-item">

@@ -248,6 +248,9 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         if (result.getDefaults() == null) {
             result.setDefaults(new LowcodeDomainSchema.Defaults());
         }
+        if (result.getCodegen() == null) {
+            result.setCodegen(new LowcodeDomainSchema.Codegen());
+        }
         if (result.getFieldTemplates() == null) {
             result.setFieldTemplates(new ArrayList<>());
         }

@@ -2,21 +2,30 @@ package ${packageName}.${moduleName}.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import ${packageName}.${moduleName}.dto.${className}DTO;
+#if(${isMasterDetailLayout})
+import ${packageName}.${moduleName}.dto.${className}MasterDetailDTO;
+#end
 import ${packageName}.${moduleName}.dto.${className}Query;
 import ${packageName}.${moduleName}.entity.${className};
+#if(${hasTreeConfig})
+#if(${tree.separateSource})
+import ${packageName}.${moduleName}.entity.${tree.className};
+#end
+#end
 import ${packageName}.${moduleName}.service.I${className}Service;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
-import com.mdframe.forge.starter.core.domain.OperationType;
-#if(${hasEncrypt})
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
-#end
+import com.mdframe.forge.starter.core.domain.OperationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+#if(${isMasterDetailLayout})
+import java.util.Map;
+#end
 
 /**
  * ${functionName}Controller
@@ -53,12 +62,30 @@ public class ${className}Controller {
         return RespInfo.success(list);
     }
 
+#if(${hasTreeConfig})
+    /**
+     * 查询${functionName}树形数据
+     */
+    @GetMapping("/tree")
+    @OperationLog(module = "${functionName}管理", type = OperationType.QUERY, desc = "查询${functionName}树形数据")
+    public RespInfo<List<${tree.className}>> tree(@RequestParam(required = false) String loadMode,
+                                                  @RequestParam(required = false) String parentValue) {
+        List<${tree.className}> tree = ${classname}Service.select${tree.className}Tree(loadMode, parentValue);
+        return RespInfo.success(tree);
+    }
+
+#end
     /**
      * 根据ID查询${functionName}详情
      */
     @PostMapping("/getById")
+#if(${isMasterDetailLayout})
+    public RespInfo<Map<String, Object>> getById(@RequestParam Long ${pkColumn.javaField}) {
+        Map<String, Object> ${classname} = ${classname}Service.select${className}ById(${pkColumn.javaField});
+#else
     public RespInfo<${className}> getById(@RequestParam Long ${pkColumn.javaField}) {
         ${className} ${classname} = ${classname}Service.select${className}ById(${pkColumn.javaField});
+#end
         return RespInfo.success(${classname});
     }
 
@@ -67,7 +94,11 @@ public class ${className}Controller {
      */
     @PostMapping("/add")
     @OperationLog(module = "${functionName}管理", type = OperationType.ADD, desc = "新增${functionName}")
+#if(${isMasterDetailLayout})
+    public RespInfo<Void> add(@RequestBody ${className}MasterDetailDTO dto) {
+#else
     public RespInfo<Void> add(@RequestBody ${className}DTO dto) {
+#end
         boolean result = ${classname}Service.insert${className}(dto);
         return result ? RespInfo.success() : RespInfo.error("新增失败");
     }
@@ -77,7 +108,11 @@ public class ${className}Controller {
      */
     @PostMapping("/edit")
     @OperationLog(module = "${functionName}管理", type = OperationType.UPDATE, desc = "修改${functionName}")
+#if(${isMasterDetailLayout})
+    public RespInfo<Void> edit(@RequestBody ${className}MasterDetailDTO dto) {
+#else
     public RespInfo<Void> edit(@RequestBody ${className}DTO dto) {
+#end
         boolean result = ${classname}Service.update${className}(dto);
         return result ? RespInfo.success() : RespInfo.error("修改失败");
     }

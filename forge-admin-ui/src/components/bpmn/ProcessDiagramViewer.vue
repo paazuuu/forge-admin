@@ -1,5 +1,5 @@
 <template>
-  <div class="process-diagram-viewer">
+  <div class="process-diagram-viewer" :class="{ compact: props.compact }">
     <!-- 加载状态 -->
     <n-spin :show="loading" class="w-full">
       <div v-if="diagramInfo" class="diagram-wrapper">
@@ -22,7 +22,14 @@
 
         <!-- BPMN 流程图容器 -->
         <div ref="containerRef" class="diagram-container">
-          <div ref="canvasRef" class="bpmn-canvas" />
+          <div v-if="diagramInfo.bpmnXml && !renderFailed" ref="canvasRef" class="bpmn-canvas" />
+          <img
+            v-else-if="diagramInfo.diagramBase64"
+            :src="diagramInfo.diagramBase64"
+            alt="流程图"
+            class="diagram-image"
+          >
+          <n-empty v-else description="暂无可渲染的流程图" size="small" class="diagram-empty" />
         </div>
 
         <!-- 图例 -->
@@ -137,15 +144,24 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  compact: {
+    type: Boolean,
+    default: false,
+  },
+  includeImage: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['node-click', 'loaded'])
+const emit = defineEmits(['nodeClick', 'loaded'])
 
 // 状态
 const loading = ref(false)
 const diagramInfo = ref(null)
 const containerRef = ref(null)
 const canvasRef = ref(null)
+const renderFailed = ref(false)
 let bpmnViewer = null
 
 // 悬浮提示
@@ -199,9 +215,10 @@ async function fetchDiagramInfo() {
   loading.value = true
 
   try {
-    const res = await flowApi.getProcessDiagramInfo(props.processInstanceId)
+    const res = await flowApi.getProcessDiagramInfo(props.processInstanceId, { includeImage: props.includeImage })
     if (res.code === 200) {
       diagramInfo.value = res.data
+      renderFailed.value = false
       emit('loaded', res.data)
 
       // 等待 DOM 更新后渲染 BPMN
@@ -296,12 +313,13 @@ async function renderBpmn(bpmnXml, nodes) {
       const element = event.element
       const nodeInfo = nodeStatusMap.get(element.id)
       if (nodeInfo) {
-        emit('node-click', nodeInfo)
+        emit('nodeClick', nodeInfo)
       }
     })
   }
   catch (error) {
     console.error('渲染 BPMN 失败:', error)
+    renderFailed.value = true
   }
 }
 
@@ -411,7 +429,7 @@ function handleMouseMove(event) {
 }
 
 // 监听 processInstanceId 变化
-watch(() => props.processInstanceId, () => {
+watch(() => [props.processInstanceId, props.includeImage], () => {
   fetchDiagramInfo()
 }, { immediate: true })
 
@@ -436,6 +454,11 @@ onUnmounted(() => {
 .process-diagram-viewer {
   width: 100%;
   min-height: 400px;
+  color: #172033;
+}
+
+.process-diagram-viewer.compact {
+  min-height: 300px;
 }
 
 .diagram-wrapper {
@@ -447,11 +470,12 @@ onUnmounted(() => {
 .process-status-bar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-  border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
 }
 
 .status-info {
@@ -467,19 +491,19 @@ onUnmounted(() => {
 }
 
 .meta-label {
-  color: #909399;
+  color: #667085;
   font-weight: 500;
 }
 
 .meta-value {
-  color: #303133;
+  color: #172033;
 }
 
 .diagram-container {
   position: relative;
-  background: #fafafa;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  background: #f9fafb;
+  border: 1px solid #d7dde7;
+  border-radius: 6px;
   overflow: hidden;
 }
 
@@ -488,19 +512,37 @@ onUnmounted(() => {
   height: 500px;
 }
 
+.compact .bpmn-canvas {
+  height: 320px;
+}
+
+.diagram-image {
+  display: block;
+  width: 100%;
+  max-height: 500px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.diagram-empty {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* 节点状态样式 */
 :deep(.status-completed) {
-  fill: #f0f9ff !important;
+  fill: #f0fdf4 !important;
   stroke: #18a058 !important;
 }
 
 :deep(.status-completed .djs-visual > rect),
 :deep(.status-completed .djs-visual > circle),
 :deep(.status-completed .djs-visual > polygon) {
-  fill: #f0f9ff !important;
+  fill: #f0fdf4 !important;
   stroke: #18a058 !important;
-  stroke-width: 2.5px;
-  filter: drop-shadow(0 2px 4px rgba(24, 160, 88, 0.2));
+  stroke-width: 2px;
 }
 
 :deep(.status-running) {
@@ -513,9 +555,7 @@ onUnmounted(() => {
 :deep(.status-running .djs-visual > polygon) {
   fill: #fffbeb !important;
   stroke: #f0a020 !important;
-  stroke-width: 2.5px;
-  animation: pulse-border 2s ease-in-out infinite;
-  filter: drop-shadow(0 2px 6px rgba(240, 160, 32, 0.3));
+  stroke-width: 2px;
 }
 
 :deep(.status-pending) {
@@ -531,95 +571,56 @@ onUnmounted(() => {
   stroke-width: 2px;
 }
 
-@keyframes pulse-border {
-  0%,
-  100% {
-    stroke-opacity: 1;
-    filter: drop-shadow(0 2px 6px rgba(240, 160, 32, 0.3));
-  }
-  50% {
-    stroke-opacity: 0.7;
-    filter: drop-shadow(0 3px 10px rgba(240, 160, 32, 0.5));
-  }
-}
-
 /* 处理人标记样式 */
 :deep(.assignee-overlay) {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  padding: 5px 10px;
-  border-radius: 12px;
+  background: #fff;
+  color: #344054;
+  padding: 4px 8px;
+  border: 1px solid #d7dde7;
+  border-radius: 999px;
   font-size: 11px;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-  backdrop-filter: blur(4px);
   font-weight: 500;
 }
 
 .legend {
   display: flex;
   justify-content: center;
-  gap: 24px;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  gap: 18px;
+  padding: 9px 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #606266;
+  gap: 7px;
+  font-size: 12px;
+  color: #667085;
 }
 
-.legend-color {
-  width: 10px;
-  height: 10px;
+.legend-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  position: relative;
+  border: 1px solid currentColor;
 }
 
-.legend-color::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+.legend-dot.completed {
+  color: #18a058;
+  background: #18a058;
 }
 
-.legend-color.completed {
-  background: rgba(103, 194, 58, 0.2);
-  color: #67c23a;
+.legend-dot.running {
+  color: #f0a020;
+  background: #f0a020;
 }
 
-.legend-color.running {
-  background: rgba(230, 162, 60, 0.2);
-  color: #e6a23c;
-  animation: legendPulse 2s ease-in-out infinite;
-}
-
-.legend-color.pending {
-  background: rgba(144, 147, 153, 0.2);
-  color: #909399;
-}
-
-@keyframes legendPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 currentColor;
-    opacity: 1;
-  }
-  50% {
-    box-shadow: 0 0 0 4px transparent;
-    opacity: 0.8;
-  }
+.legend-dot.pending {
+  color: #98a2b3;
+  background: #fff;
 }
 
 /* 悬浮提示样式 */
@@ -630,23 +631,10 @@ onUnmounted(() => {
   max-width: 340px;
   padding: 0;
   background: #fff;
-  border-radius: 12px;
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.12),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
-  animation: fadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
   overflow: hidden;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 .tooltip-header {
@@ -655,22 +643,17 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 12px 14px;
-  background: linear-gradient(135deg, #667eea08 0%, #764ba208 100%);
-  border-bottom: 1px solid #f0f0f0;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .node-name {
   font-weight: 600;
   font-size: 14px;
-  color: #303133;
+  color: #172033;
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.node-name::before {
-  content: '📍';
-  font-size: 16px;
 }
 
 .tooltip-content {
@@ -689,7 +672,7 @@ onUnmounted(() => {
 
 .info-row .label {
   flex-shrink: 0;
-  color: #909399;
+  color: #667085;
   width: 75px;
   font-weight: 500;
   display: flex;
@@ -699,12 +682,12 @@ onUnmounted(() => {
 
 .info-row .label::before {
   content: '•';
-  color: #667eea;
+  color: #98a2b3;
   font-weight: bold;
 }
 
 .info-row .value {
-  color: #606266;
+  color: #344054;
   word-break: break-all;
   flex: 1;
 }
@@ -727,22 +710,16 @@ onUnmounted(() => {
 
 .assignee-item:hover {
   background: #f0f2f5;
-  transform: translateX(2px);
-}
-
-.assignee-item::before {
-  content: '👤';
-  font-size: 14px;
 }
 
 .assignee-item .name {
-  color: #303133;
+  color: #172033;
   font-weight: 500;
   font-size: 12px;
 }
 
 .assignee-item .org {
-  color: #909399;
+  color: #667085;
   font-size: 11px;
   padding: 2px 6px;
   background: #fff;
@@ -751,7 +728,7 @@ onUnmounted(() => {
 }
 
 .org-suffix {
-  color: #909399;
+  color: #667085;
   font-size: 11px;
 }
 
@@ -761,18 +738,17 @@ onUnmounted(() => {
   padding: 10px;
   background: #fafbfc;
   border-radius: 8px;
-  border-left: 3px solid #667eea;
+  border-left: 3px solid #2563eb;
 }
 
 .comment-row .label {
   width: auto;
-  color: #667eea;
+  color: #2563eb;
   font-weight: 600;
 }
 
 .comment-text {
-  color: #303133;
+  color: #172033;
   line-height: 1.6;
-  font-style: italic;
 }
 </style>

@@ -42,8 +42,9 @@ public class LowcodeSchemaValidator {
             "varchar", "char", "text", "longtext", "int", "bigint", "decimal", "date", "datetime", "time", "tinyint"
     );
     private static final Set<String> COMPONENT_TYPES = Set.of(
-            "input", "textarea", "select", "radio", "checkbox", "switch", "date", "datetime", "time",
-            "number", "upload", "imageUpload", "fileUpload", "cascader", "treeSelect"
+        "input", "textarea", "select", "radio", "checkbox", "switch", "date", "datetime", "time",
+            "number", "upload", "imageUpload", "fileUpload", "cascader", "treeSelect",
+            "dictSelect", "orgTreeSelect", "userSelect", "regionTreeSelect"
     );
     private static final Set<String> QUERY_TYPES = Set.of(
             "eq", "ne", "like", "left_like", "right_like", "gt", "ge", "gte", "lt", "le", "lte", "in", "between"
@@ -314,7 +315,34 @@ public class LowcodeSchemaValidator {
 
     private boolean isTreeRuntime(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
         String appType = StringUtils.defaultIfBlank(modelSchema.getAppType(), "SINGLE").toUpperCase(Locale.ROOT);
-        return "TREE".equals(appType) || (pageSchema != null && "tree-crud".equals(pageSchema.getLayoutType()));
+        return "TREE".equals(appType)
+                || (modelSchema.getTreeConfig() != null && Boolean.TRUE.equals(modelSchema.getTreeConfig().getEnabled()))
+                || (pageSchema != null && "tree-crud".equals(pageSchema.getLayoutType()))
+                || hasPageTreeConfig(pageSchema);
+    }
+
+    private boolean hasPageTreeConfig(LowcodePageSchema pageSchema) {
+        if (pageSchema == null) {
+            return false;
+        }
+        boolean zoneTree = pageSchema.getZones() != null && pageSchema.getZones().stream()
+                .filter(zone -> "table".equals(zone.getZoneKey()))
+                .map(LowcodePageZone::getProps)
+                .anyMatch(props -> props != null && props.get("treeConfig") instanceof Map<?, ?>);
+        if (zoneTree) {
+            return true;
+        }
+        if (pageSchema.getListGridLayout() == null) {
+            return false;
+        }
+        Object items = pageSchema.getListGridLayout().get("items");
+        if (!(items instanceof List<?> itemList)) {
+            return false;
+        }
+        return itemList.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .anyMatch(block -> "tree-panel".equals(String.valueOf(block.get("blockType"))));
     }
 
     private String resolveTreeParentField(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {

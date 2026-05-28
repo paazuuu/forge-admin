@@ -3,11 +3,22 @@ package ${packageName}.${moduleName}.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import ${packageName}.${moduleName}.dto.${className}DTO;
+#if(${isMasterDetailLayout})
+import ${packageName}.${moduleName}.dto.${className}MasterDetailDTO;
+#end
 import ${packageName}.${moduleName}.dto.${className}Query;
 import ${packageName}.${moduleName}.entity.${className};
+#if(${hasTreeConfig})
+#if(${tree.separateSource})
+import ${packageName}.${moduleName}.entity.${tree.className};
+#end
+#end
 import com.mdframe.forge.starter.core.domain.PageQuery;
 
 import java.util.List;
+#if(${isMasterDetailLayout})
+import java.util.Map;
+#end
 
 /**
  * ${functionName}Service接口
@@ -27,20 +38,39 @@ public interface I${className}Service extends IService<${className}> {
      */
     List<${className}> select${className}List(${className}Query query);
 
+#if(${hasTreeConfig})
+    /**
+     * 查询${functionName}树形数据
+     */
+    List<${tree.className}> select${tree.className}Tree(String loadMode, String parentValue);
+
+#end
     /**
      * 根据ID查询${functionName}详情
      */
+#if(${isMasterDetailLayout})
+    Map<String, Object> select${className}ById(Long ${pkColumn.javaField});
+#else
     ${className} select${className}ById(Long ${pkColumn.javaField});
+#end
 
     /**
      * 新增${functionName}
      */
+#if(${isMasterDetailLayout})
+    boolean insert${className}(${className}MasterDetailDTO dto);
+#else
     boolean insert${className}(${className}DTO dto);
+#end
 
     /**
      * 修改${functionName}
      */
+#if(${isMasterDetailLayout})
+    boolean update${className}(${className}MasterDetailDTO dto);
+#else
     boolean update${className}(${className}DTO dto);
+#end
 
     /**
      * 删除${functionName}

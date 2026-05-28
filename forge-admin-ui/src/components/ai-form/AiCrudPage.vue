@@ -1,4 +1,5 @@
 <!--
+  eslint-disable vue/component-name-in-template-casing
   CRUD 页面组件
   基于 Naive UI 的完整 CRUD 解决方案
   参考 LxBasePage 设计，集成搜索、表格、新增、编辑、删除、导入导出等功能
@@ -30,8 +31,8 @@
         </template>
 
         <!-- 搜索表单额外操作按钮 -->
-        <template #extra-actions="{ formData }">
-          <slot name="search-extra-actions" :form-data="formData" />
+        <template #extra-actions="{ formData: searchFormData }">
+          <slot name="search-extra-actions" :form-data="searchFormData" />
         </template>
       </AiSearch>
     </div>
@@ -74,12 +75,26 @@
                     v-if="!hideAdd"
                     type="primary"
                     size="small"
-                    @click="handleAdd"
+                    @click="handleAdd()"
                   >
                     <template #icon>
                       <n-icon><Add /></n-icon>
                     </template>
                     {{ addButtonText }}
+                  </n-button>
+                  <!-- 批量删除按钮 -->
+                  <n-button
+                    v-if="!hideBatchDelete"
+                    size="small"
+                    type="error"
+                    secondary
+                    :disabled="selectedKeys.length === 0"
+                    @click="handleBatchDelete"
+                  >
+                    <template #icon>
+                      <n-icon><TrashOutline /></n-icon>
+                    </template>
+                    批量删除
                   </n-button>
                   <!-- 批量导入按钮 -->
                   <n-button
@@ -99,12 +114,25 @@
                     size="small"
                     strong
                     secondary
+                    :loading="exportLoading"
                     @click="handleExport"
                   >
                     <template #icon>
                       <n-icon><DownloadOutline /></n-icon>
                     </template>
                     {{ exportButtonText }}
+                  </n-button>
+
+                  <n-button
+                    v-if="showExportTaskEntry"
+                    size="small"
+                    tertiary
+                    @click="handleOpenExportTasks"
+                  >
+                    <template #icon>
+                      <n-icon><TimeOutline /></n-icon>
+                    </template>
+                    导出任务
                   </n-button>
 
                   <AiCustomQuery
@@ -166,7 +194,7 @@
         ref="formRef"
         v-model:value="formData"
         :class="editFormClass"
-        :schema="editSchema"
+        :schema="modalFormSchema"
         :grid-cols="editGridCols"
         :label-width="editLabelWidth"
         :label-placement="editLabelPlacement"
@@ -183,10 +211,11 @@
         ref="childFormRef"
         v-model:value="childFormData"
         :children-config="childrenConfig"
+        :readonly="isDetailMode"
       />
 
       <!-- 弹窗底部按钮 -->
-      <template v-if="!hideModalFooter" #footer>
+      <template v-if="!hideModalFooter && !isDetailMode" #footer>
         <n-space justify="end">
           <n-button @click="handleModalCancel">
             取消
@@ -216,7 +245,7 @@
           ref="formRef"
           v-model:value="formData"
           :class="editFormClass"
-          :schema="editSchema"
+          :schema="modalFormSchema"
           :grid-cols="editGridCols"
           :label-width="editLabelWidth"
           :label-placement="editLabelPlacement"
@@ -233,10 +262,11 @@
           ref="childFormRef"
           v-model:value="childFormData"
           :children-config="childrenConfig"
+          :readonly="isDetailMode"
         />
 
         <!-- 抽屉底部按钮 -->
-        <template v-if="!hideModalFooter" #footer>
+        <template v-if="!hideModalFooter && !isDetailMode" #footer>
           <n-space justify="end">
             <n-button @click="handleModalCancel">
               取消
@@ -296,6 +326,57 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 导出任务抽屉 -->
+    <n-drawer
+      v-model:show="exportTaskDrawerVisible"
+      :width="exportTaskDrawerWidth"
+      placement="right"
+    >
+      <n-drawer-content title="导出任务" :closable="true">
+        <template #header-extra>
+          <n-button
+            size="small"
+            quaternary
+            aria-label="刷新导出任务"
+            title="刷新"
+            :loading="exportTaskLoading"
+            @click="loadExportTasks"
+          >
+            <template #icon>
+              <n-icon><RefreshOutline /></n-icon>
+            </template>
+          </n-button>
+        </template>
+
+        <div v-if="activeExportTask" class="export-task-current">
+          <div class="export-task-current__main">
+            <span class="export-task-current__title">{{ activeExportTask.fileName || '导出任务' }}</span>
+            <n-tag size="small" :type="resolveExportTaskTagType(activeExportTask.status)">
+              {{ resolveExportTaskStatusText(activeExportTask.status) }}
+            </n-tag>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="activeExportTask.progress || 0"
+            :processing="isExportTaskRunning(activeExportTask)"
+            indicator-placement="inside"
+          />
+        </div>
+
+        <n-data-table
+          remote
+          size="small"
+          :bordered="false"
+          :columns="exportTaskColumns"
+          :data="exportTasks"
+          :loading="exportTaskLoading"
+          :pagination="exportTaskPaginationConfig"
+          :row-key="row => row.id"
+          :scroll-x="720"
+        />
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 
@@ -305,22 +386,24 @@ import {
   Add,
   CloudUploadOutline,
   DownloadOutline,
+  RefreshOutline,
+  TimeOutline,
+  TrashOutline,
 } from '@vicons/ionicons5'
-import { NDropdown } from 'naive-ui'
-import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
+import { NButton, NDropdown, NProgress, NTag } from 'naive-ui'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
+import AuthImage from '@/components/common/AuthImage.vue'
+import DictTag from '@/components/DictTag.vue'
 import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
-import { request } from '@/utils'
+import { downloadFile, request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
 import { aiCrudPageProps } from './AiCrudPageProps'
 import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
 import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
-import DictTag from '@/components/DictTag.vue'
-import AuthImage from '@/components/common/AuthImage.vue'
-import { getFileUrl } from '@/utils/file'
 
 /**
  * ==================== Props 定义 ====================
@@ -335,6 +418,7 @@ const emit = defineEmits([
   'load-list-error', // 列表加载失败
   'add', // 点击新增
   'edit', // 点击编辑
+  'detail', // 点击查看详情
   'delete', // 删除成功
   'submit-success', // 提交成功
   'submit-error', // 提交失败
@@ -378,7 +462,7 @@ const pagination = ref({
 // 弹窗
 const modalVisible = ref(false)
 const modalTitle = ref('')
-const modalStatus = ref('') // 'add' | 'edit'
+const modalStatus = ref('') // 'add' | 'edit' | 'detail'
 const formData = ref({})
 const childFormData = ref({})
 const confirmLoading = ref(false)
@@ -386,6 +470,22 @@ const currentRow = ref(null)
 
 // 导入
 const importModalVisible = ref(false)
+
+// 导出
+const exportLoading = ref(false)
+
+// 导出任务
+const exportTaskDrawerVisible = ref(false)
+const exportTaskLoading = ref(false)
+const exportTasks = ref([])
+const activeExportTaskId = ref(null)
+const exportTaskPollTimer = ref(null)
+const exportTaskDrawerWidth = 'min(680px, 92vw)'
+const exportTaskPagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+})
 
 /**
  * 操作列最大显示按钮数
@@ -488,9 +588,19 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
  */
 function handleActionClick(actionOrKey, row) {
   const action = typeof actionOrKey === 'string' ? { key: actionOrKey, label: actionOrKey } : actionOrKey || {}
+  if (row?._dataScopeWritable === false && ['edit', 'delete', 'addChild'].includes(action.key)) {
+    window.$message.warning('该节点仅用于导航展示，不能执行数据操作')
+    return
+  }
   switch (action.key) {
+    case 'addChild':
+      handleAddChild(row)
+      break
     case 'edit':
       handleEdit(row)
+      break
+    case 'detail':
+      handleDetail(row)
       break
     case 'delete':
       handleDelete(row)
@@ -635,6 +745,95 @@ const resolvedCustomQueryConfigKey = computed(() => {
   return match?.[1] || ''
 })
 
+const resolvedExportTaskConfigKey = computed(() => {
+  if (props.exportTaskConfigKey) {
+    return props.exportTaskConfigKey
+  }
+  const exportApi = props.apiConfig?.export || props.exportApi || ''
+  const exportUrl = extractApiUrl(exportApi)
+  const match = exportUrl.match(/\/ai\/crud\/([^/]+)\/export(?:$|\?)/)
+  return match?.[1] || ''
+})
+
+const showExportTaskEntry = computed(() => {
+  return props.showExport && props.showExportTasks && !!resolvedExportTaskConfigKey.value
+})
+
+const activeExportTask = computed(() => {
+  if (!activeExportTaskId.value) {
+    return null
+  }
+  return exportTasks.value.find(task => String(task.id) === String(activeExportTaskId.value)) || null
+})
+
+const exportTaskPaginationConfig = computed(() => ({
+  page: exportTaskPagination.value.page,
+  pageSize: exportTaskPagination.value.pageSize,
+  itemCount: exportTaskPagination.value.itemCount,
+  pageSizes: [10, 20, 50],
+  showSizePicker: true,
+  prefix: ({ itemCount }) => `共${itemCount}个任务`,
+  onUpdatePage: handleExportTaskPageChange,
+  onUpdatePageSize: handleExportTaskPageSizeChange,
+}))
+
+const exportTaskColumns = computed(() => [
+  {
+    title: '文件',
+    key: 'fileName',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: row => row.fileName || '-',
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 96,
+    render: row => h(NTag, {
+      size: 'small',
+      type: resolveExportTaskTagType(row.status),
+    }, { default: () => resolveExportTaskStatusText(row.status) }),
+  },
+  {
+    title: '进度',
+    key: 'progress',
+    width: 150,
+    render: row => h(NProgress, {
+      type: 'line',
+      percentage: row.progress || 0,
+      processing: isExportTaskRunning(row),
+      indicatorPlacement: 'inside',
+      height: 10,
+      status: row.status === 'FAILED' ? 'error' : undefined,
+    }),
+  },
+  {
+    title: '数据量',
+    key: 'totalCount',
+    width: 120,
+    render: row => `${row.exportedCount || 0}/${row.totalCount || 0}`,
+  },
+  {
+    title: '创建时间',
+    key: 'createTime',
+    width: 160,
+    render: row => row.createTime || '-',
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 88,
+    fixed: 'right',
+    render: row => h(NButton, {
+      text: true,
+      type: 'primary',
+      size: 'small',
+      disabled: row.status !== 'SUCCESS' || !row.fileId,
+      onClick: () => handleDownloadExportTask(row),
+    }, { default: () => '下载' }),
+  },
+])
+
 function getColumnKey(col) {
   return col?.prop || col?.key || col?.dataIndex || ''
 }
@@ -670,10 +869,11 @@ const tableColumns = computed(() => {
   activeSourceColumns.value.forEach((col) => {
     if (isActionCol(col) && col.actions) {
       const actionCol = { ...col }
+      const actions = normalizeRowActions(col.actions)
       delete actionCol.actions
       delete actionCol._slot
       delete actionCol.slot
-      actionCol.render = row => renderActionColumn(row, col.actions, col.maxActionButtons)
+      actionCol.render = row => renderActionColumn(row, actions, col.maxActionButtons)
       cols.push(actionCol)
       return
     }
@@ -698,10 +898,10 @@ const tableColumns = computed(() => {
       width: 200,
       fixed: 'right',
       render: (row) => {
-        const actions = [
+        const actions = normalizeRowActions([
           { label: '编辑', key: 'edit', type: 'primary' },
           { label: '删除', key: 'delete', type: 'error' },
-        ]
+        ])
         return renderActionColumn(row, actions)
       },
     })
@@ -709,6 +909,26 @@ const tableColumns = computed(() => {
 
   return cols
 })
+
+function normalizeRowActions(actions = []) {
+  const next = Array.isArray(actions) ? [...actions] : []
+  if (!hasTreeConfig())
+    return next
+  if (next.some(action => action?.key === 'addChild'))
+    return next
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const addChildAction = { label: '添加下级', key: 'addChild', type: 'success' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, addChildAction)
+    return next
+  }
+  next.unshift(addChildAction)
+  return next
+}
+
+function hasTreeConfig() {
+  return !!(props.treeConfig && Object.keys(props.treeConfig).length)
+}
 
 function resolveColumnRender(col) {
   const nextCol = { ...col }
@@ -726,26 +946,32 @@ function resolveColumnRender(col) {
       value: row[key],
       size: 'small',
     })
-  } else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+  }
+  else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
     const targetField = col.render.targetField || `${key}Name`
     nextCol.render = row => row[targetField] ?? row[key] ?? '-'
-  } else if (renderType === 'imageUpload') {
-    nextCol.render = row => {
+  }
+  else if (renderType === 'imageUpload') {
+    nextCol.render = (row) => {
       const value = row[key]
-      if (!value) return '-'
+      if (!value)
+        return '-'
       const fileIds = String(value).split(',').filter(Boolean)
-      if (fileIds.length === 0) return '-'
-      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' },
-        fileIds.map(fileId => h(AuthImage, { fileId, style: 'width: 32px; height: 32px; border-radius: 4px; object-fit: cover;' })))
+      if (fileIds.length === 0)
+        return '-'
+      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' }, fileIds.map(fileId => h(AuthImage, { fileId, style: 'width: 32px; height: 32px; border-radius: 4px; object-fit: cover;' })))
     }
-  } else if (renderType === 'fileUpload') {
-    nextCol.render = row => {
+  }
+  else if (renderType === 'fileUpload') {
+    nextCol.render = (row) => {
       const value = row[key]
-      if (!value) return '-'
+      if (!value)
+        return '-'
       const nameField = col.render.targetField || `${key}Name`
       const name = row[nameField]
-      if (name) return name
-      return String(value).split(',').filter(Boolean).length + ' 个文件'
+      if (name)
+        return name
+      return `${String(value).split(',').filter(Boolean).length} 个文件`
     }
   }
   return nextCol
@@ -802,14 +1028,38 @@ const hasChildrenConfig = computed(() => {
   return Array.isArray(props.childrenConfig) && props.childrenConfig.some(child => child?.fields?.length)
 })
 
+const isDetailMode = computed(() => modalStatus.value === 'detail')
+
+const modalFormSchema = computed(() => {
+  if (!isDetailMode.value)
+    return props.editSchema
+  return props.editSchema.map(toReadonlyField)
+})
+
+function toReadonlyField(field) {
+  if (!field || field.type === 'divider')
+    return field
+  return {
+    ...field,
+    disabled: true,
+    readonly: true,
+    props: {
+      ...(field.props || {}),
+      disabled: true,
+      readonly: true,
+    },
+  }
+}
+
 /**
  * 表单上下文（传递 modalStatus 等信息）
  */
 const formContext = computed(() => {
   return {
-    modalStatus: modalStatus.value, // 'add' | 'edit'
+    modalStatus: modalStatus.value, // 'add' | 'edit' | 'detail'
     isEdit: modalStatus.value === 'edit',
     isAdd: modalStatus.value === 'add',
+    isDetail: modalStatus.value === 'detail',
     currentRow: currentRow.value,
   }
 })
@@ -933,6 +1183,15 @@ function parseApiConfig(key, defaultApi, defaultMethod = 'get', urlParams = {}) 
   return { method: defaultMethod, url: defaultApi }
 }
 
+function extractApiUrl(apiConfigValue) {
+  if (!apiConfigValue) {
+    return ''
+  }
+  const text = String(apiConfigValue)
+  const parts = text.split('@')
+  return parts.length > 1 ? parts.slice(1).join('@') : text
+}
+
 function normalizeUrlParams(urlParams = {}) {
   const normalized = { ...(urlParams || {}) }
   const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
@@ -966,8 +1225,8 @@ async function loadList() {
   try {
     // 构建请求参数
     let params = {
-      ...props.publicParams,
       ...searchParams.value,
+      ...props.publicParams,
     }
 
     // 分页参数
@@ -993,6 +1252,7 @@ async function loadList() {
     let response
     if (customQueryPayload.value && resolvedCustomQueryConfigKey.value) {
       response = await customQueryExecute(resolvedCustomQueryConfigKey.value, {
+        ...resolveDefaultRequestSortParams(),
         ...customQueryPayload.value,
         pageNum: pagination.value.page,
         pageSize: pagination.value.pageSize,
@@ -1067,6 +1327,17 @@ async function loadList() {
   }
   finally {
     tableLoading.value = false
+  }
+}
+
+function resolveDefaultRequestSortParams() {
+  const orderByColumn = props.publicParams?.orderByColumn
+  const isAsc = props.publicParams?.isAsc
+  if (!orderByColumn && !isAsc)
+    return {}
+  return {
+    ...(orderByColumn ? { orderByColumn } : {}),
+    ...(isAsc ? { isAsc } : {}),
   }
 }
 
@@ -1285,8 +1556,11 @@ function buildMasterDetailSubmitData(data) {
 /**
  * 新增
  */
-async function handleAdd() {
-  modalTitle.value = props.addButtonText
+async function handleAdd(defaultValues = null, options = {}) {
+  const presetValues = isPlainRecord(defaultValues)
+    ? defaultValues
+    : null
+  modalTitle.value = options.title || props.addButtonText
   modalStatus.value = 'add'
   currentRow.value = null
 
@@ -1312,21 +1586,52 @@ async function handleAdd() {
   // 合并默认值和钩子返回的数据
   if (formDataFromHook && typeof formDataFromHook === 'object') {
     if (hasChildrenConfig.value && isMasterDetailPayload(formDataFromHook)) {
-      formData.value = { ...initialData, ...(formDataFromHook.main || {}) }
+      formData.value = { ...initialData, ...(formDataFromHook.main || {}), ...(presetValues || {}) }
       childFormData.value = normalizeChildrenData(formDataFromHook.children)
     }
     else {
-      formData.value = { ...initialData, ...formDataFromHook }
+      formData.value = { ...initialData, ...formDataFromHook, ...(presetValues || {}) }
       childFormData.value = buildInitialChildrenData()
     }
   }
   else {
-    formData.value = initialData
+    formData.value = { ...initialData, ...(presetValues || {}) }
     childFormData.value = buildInitialChildrenData()
   }
 
-  emit('add')
-  emit('modal-open', { status: 'add', row: null })
+  emit('add', { defaults: presetValues, context: options })
+  emit('modal-open', { status: 'add', row: null, defaults: presetValues, context: options })
+}
+
+async function handleAddChild(row) {
+  if (!row) {
+    window.$message.warning('缺少父级数据，无法添加下级')
+    return
+  }
+  const parentField = resolveTreeParentField()
+  const parentValue = resolveTreeParentValue(row)
+  if (!isUsableKeyValue(parentValue)) {
+    window.$message.warning(`缺少${parentField}对应的父级值，无法添加下级`)
+    return
+  }
+  await handleAdd({ [parentField]: parentValue }, { title: '新增下级', parentRow: row })
+}
+
+function resolveTreeParentField() {
+  return props.treeConfig?.parentField || props.treeConfig?.filterField || 'parentId'
+}
+
+function resolveTreeParentValue(row = {}) {
+  const keyField = props.treeConfig?.keyField || (typeof props.rowKey === 'string' ? props.rowKey : 'id')
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  return row?.[keyField] ?? (rowKey ? row?.[rowKey] : undefined) ?? row?.id ?? row?.key ?? row?.targetValue
+}
+
+function isPlainRecord(value) {
+  if (!value || typeof value !== 'object')
+    return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }
 
 /**
@@ -1360,6 +1665,35 @@ async function handleEdit(row) {
 
   emit('edit', row)
   emit('modal-open', { status: 'edit', row })
+}
+
+/**
+ * 查看详情
+ */
+async function handleDetail(row) {
+  modalTitle.value = row?.__modalTitle || '查看详情'
+  modalStatus.value = 'detail'
+  currentRow.value = row
+
+  const processedRow = await callHook('beforeRenderForm', row, data => data)
+  const renderRow = mergeHookRowWithOriginal(row, processedRow)
+
+  if (props.loadDetailOnEdit) {
+    window.$loading.show('加载中...')
+    await loadDetail(renderRow)
+    window.$loading.close()
+  }
+  else {
+    const data = await callHook('beforeRenderDetail', renderRow, data => data)
+    applyDetailData(data)
+  }
+
+  modalVisible.value = true
+  await nextTick()
+  formRef.value?.restoreValidation()
+
+  emit('detail', row)
+  emit('modal-open', { status: 'detail', row })
 }
 
 /**
@@ -1487,28 +1821,30 @@ async function performDelete(rows, keys) {
         const hasBraceIdPlaceholder = deleteApiConfig && deleteApiConfig.includes('{id}')
         const hasBraceRowKeyPlaceholder = deleteApiConfig && deleteApiConfig.includes(`{${props.rowKey}}`)
 
-        // 单个删除且 URL 包含占位符时，使用替换后的 URL
-        if (keys.length === 1 && (hasIdPlaceholder || hasRowKeyPlaceholder || hasBraceIdPlaceholder || hasBraceRowKeyPlaceholder)) {
-          const urlParams = { id: keys[0] }
-          const { method, url } = parseApiConfig('delete', props.api, 'delete', urlParams)
+        // 配置了占位符时，批量删除逐条替换 ID 调用，避免把数组提交到单条删除接口。
+        if (hasIdPlaceholder || hasRowKeyPlaceholder || hasBraceIdPlaceholder || hasBraceRowKeyPlaceholder) {
+          for (const key of keys) {
+            const urlParams = { id: key }
+            const { method, url } = parseApiConfig('delete', props.api, 'delete', urlParams)
 
-          let requestMethod = method
-          const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
-          if (useEncrypt) {
-            requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
-          }
-          else {
-            requestMethod = method.toLowerCase()
-          }
+            let requestMethod = method
+            const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+            if (useEncrypt) {
+              requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+            }
+            else {
+              requestMethod = method.toLowerCase()
+            }
 
-          if (useEncrypt && requestMethod === 'postEncrypt') {
-            await postEncrypt(url, keys[0])
-          }
-          else {
-            await request({
-              method: requestMethod,
-              url,
-            })
+            if (useEncrypt && requestMethod === 'postEncrypt') {
+              await postEncrypt(url, key)
+            }
+            else {
+              await request({
+                method: requestMethod,
+                url,
+              })
+            }
           }
         }
         else {
@@ -1552,6 +1888,11 @@ async function performDelete(rows, keys) {
  * 提交表单
  */
 async function handleModalConfirm() {
+  if (isDetailMode.value) {
+    modalVisible.value = false
+    return
+  }
+
   try {
     await nextTick()
     await formRef.value?.validate()
@@ -1739,12 +2080,16 @@ async function handleImportRequest({ file, data, onFinish, onError, onProgress }
 }
 
 function buildImportFailureMessage(result) {
+  if (result?.summary && result?.errors?.length) {
+    return result.summary
+  }
   const firstError = result?.errors?.[0]
   if (!firstError) {
     return result?.summary || '导入校验失败'
   }
-  const label = firstError.label || firstError.field || '字段'
-  return `导入校验失败：第${firstError.rowNum || '-'}行 ${label}，${firstError.message || '数据不正确'}`
+  const label = firstError.columnName || firstError.label || firstError.field || '字段'
+  const message = firstError.errorMessage || firstError.message || '数据不正确'
+  return `导入校验失败：第${firstError.rowNum || '-'}行【${label}】${message}`
 }
 
 /**
@@ -1777,6 +2122,7 @@ async function handleDownloadTemplate() {
  * 导出
  */
 async function handleExport() {
+  exportLoading.value = true
   try {
     const { method, url } = parseApiConfig('export', props.exportApi || props.api, 'post')
 
@@ -1813,12 +2159,203 @@ async function handleExport() {
       })
     }
 
+    const asyncExportResult = await resolveAsyncExportResult(response)
+    if (asyncExportResult?.async) {
+      window.$message.success(asyncExportResult.message || '导出任务已提交')
+      activeExportTaskId.value = asyncExportResult.taskId
+      exportTaskDrawerVisible.value = true
+      exportTaskPagination.value.page = 1
+      await loadExportTasks()
+      pollExportTask(asyncExportResult.taskId)
+      return
+    }
+
     downloadBlobResponse(response, props.exportFileName || '导出数据.xlsx')
     window.$message.success('导出成功')
   }
   catch (error) {
     console.error('导出失败:', error)
     window.$message.error('导出失败')
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+async function resolveAsyncExportResult(response) {
+  if (response?.data?.async !== undefined) {
+    return response.data
+  }
+  if (response?.async !== undefined) {
+    return response
+  }
+  const blob = response?.data instanceof Blob ? response.data : response instanceof Blob ? response : null
+  if (blob?.type?.includes('json')) {
+    try {
+      const text = await blob.text()
+      if (!text) {
+        return null
+      }
+      const parsed = JSON.parse(text)
+      if (parsed?.data?.async !== undefined) {
+        return parsed.data
+      }
+      if (parsed?.async !== undefined) {
+        return parsed
+      }
+    }
+    catch (error) {
+      console.warn('解析异步导出响应失败:', error)
+    }
+  }
+  return null
+}
+
+async function handleOpenExportTasks() {
+  if (!resolvedExportTaskConfigKey.value) {
+    window.$message.warning('当前导出接口不支持任务查询')
+    return
+  }
+  exportTaskDrawerVisible.value = true
+  exportTaskPagination.value.page = 1
+  await loadExportTasks()
+}
+
+async function loadExportTasks() {
+  if (!resolvedExportTaskConfigKey.value) {
+    return
+  }
+  exportTaskLoading.value = true
+  try {
+    const response = await request({
+      method: 'get',
+      url: `/ai/crud/${resolvedExportTaskConfigKey.value}/export/tasks`,
+      params: {
+        pageNum: exportTaskPagination.value.page,
+        pageSize: exportTaskPagination.value.pageSize,
+      },
+    })
+    const page = response?.data || {}
+    exportTasks.value = page.records || []
+    exportTaskPagination.value.itemCount = page.total || 0
+  }
+  catch (error) {
+    console.error('加载导出任务失败:', error)
+    window.$message.error(error?.message || '加载导出任务失败')
+  }
+  finally {
+    exportTaskLoading.value = false
+  }
+}
+
+async function pollExportTask(taskId) {
+  clearExportTaskPollTimer()
+  if (!taskId || !resolvedExportTaskConfigKey.value) {
+    return
+  }
+
+  const fetchTask = async () => {
+    try {
+      const response = await request({
+        method: 'get',
+        url: `/ai/crud/${resolvedExportTaskConfigKey.value}/export/tasks/${taskId}`,
+        needTip: false,
+      })
+      const task = response?.data
+      if (!task) {
+        return
+      }
+      upsertExportTask(task)
+      if (isExportTaskRunning(task)) {
+        exportTaskPollTimer.value = window.setTimeout(fetchTask, 2000)
+      }
+      else if (task.status === 'SUCCESS') {
+        window.$message.success('导出任务已完成')
+      }
+      else if (task.status === 'FAILED') {
+        window.$message.error(task.errorMessage || '导出任务失败')
+      }
+    }
+    catch (error) {
+      console.warn('轮询导出任务失败:', error)
+    }
+  }
+
+  await fetchTask()
+}
+
+function upsertExportTask(task) {
+  const index = exportTasks.value.findIndex(item => String(item.id) === String(task.id))
+  if (index >= 0) {
+    exportTasks.value.splice(index, 1, task)
+  }
+  else {
+    exportTasks.value.unshift(task)
+  }
+}
+
+async function handleDownloadExportTask(row) {
+  if (!row?.fileId) {
+    window.$message.warning('导出文件还未生成')
+    return
+  }
+  try {
+    await downloadFile(row.fileId, row.fileName || '导出数据.xlsx')
+  }
+  catch (error) {
+    console.error('下载导出文件失败:', error)
+    window.$message.error(error?.message || '下载导出文件失败')
+  }
+}
+
+function handleExportTaskPageChange(page) {
+  exportTaskPagination.value.page = page
+  loadExportTasks()
+}
+
+function handleExportTaskPageSizeChange(pageSize) {
+  exportTaskPagination.value.pageSize = pageSize
+  exportTaskPagination.value.page = 1
+  loadExportTasks()
+}
+
+function clearExportTaskPollTimer() {
+  if (exportTaskPollTimer.value) {
+    window.clearTimeout(exportTaskPollTimer.value)
+    exportTaskPollTimer.value = null
+  }
+}
+
+function isExportTaskRunning(task) {
+  return ['PENDING', 'RUNNING'].includes(task?.status)
+}
+
+function resolveExportTaskStatusText(status) {
+  switch (status) {
+    case 'PENDING':
+      return '排队中'
+    case 'RUNNING':
+      return '导出中'
+    case 'SUCCESS':
+      return '已完成'
+    case 'FAILED':
+      return '失败'
+    default:
+      return '未知'
+  }
+}
+
+function resolveExportTaskTagType(status) {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILED':
+      return 'error'
+    case 'RUNNING':
+      return 'info'
+    case 'PENDING':
+      return 'warning'
+    default:
+      return 'default'
   }
 }
 
@@ -1922,9 +2459,19 @@ defineExpose({
   showEdit: handleEdit,
 
   /**
+   * 打开详情弹窗
+   */
+  showDetail: handleDetail,
+
+  /**
    * 编辑（同 showEdit）
    */
   handleEdit,
+
+  /**
+   * 查看详情（同 showDetail）
+   */
+  handleDetail,
 
   /**
    * 删除
@@ -1975,6 +2522,10 @@ onMounted(() => {
   if (!props.lazy) {
     loadList()
   }
+})
+
+onBeforeUnmount(() => {
+  clearExportTaskPollTimer()
 })
 
 // 监听公共参数变化
@@ -2140,6 +2691,33 @@ watch(() => props.publicQuery, () => {
 /* 操作列折叠下拉样式 */
 :deep(.table-action-column .n-dropdown) {
   min-width: 80px;
+}
+
+.export-task-current {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.export-task-current__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.export-task-current__title {
+  min-width: 0;
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 响应式设计 */

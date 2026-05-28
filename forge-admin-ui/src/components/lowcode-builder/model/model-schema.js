@@ -201,6 +201,17 @@ export function createDefaultModelSchema(options = {}) {
   const objectCode = options.objectCode || 'lowcode_demo'
   const objectName = options.objectName || '低代码应用'
   const tableName = options.tableName || 'biz_lowcode_demo'
+  const fields = ensureSystemFields([
+    createDefaultField('name', '名称'),
+    {
+      ...createDefaultField('status', '状态'),
+      dataType: 'varchar',
+      length: 32,
+      componentType: 'select',
+      dictType: 'common_status',
+      queryType: 'eq',
+    },
+  ], options.tenantEnabled !== false)
 
   return {
     schemaVersion: 2,
@@ -220,36 +231,89 @@ export function createDefaultModelSchema(options = {}) {
     tableName,
     businessName: objectName,
     treeConfig: {
+      enabled: false,
       keyField: 'id',
       parentField: 'parentId',
       labelField: 'name',
       childrenField: 'children',
       treeTitle: '树形导航',
+      loadMode: 'full',
     },
-    fields: ensureSystemFields([
-      createDefaultField('name', '名称'),
-      {
-        ...createDefaultField('status', '状态'),
-        dataType: 'varchar',
-        length: 32,
-        componentType: 'select',
-        dictType: 'common_status',
-        queryType: 'eq',
-      },
-    ], options.tenantEnabled !== false),
+    fields,
     relations: [],
     indexes: [],
-    policies: {
-      dataScope: 'TENANT',
-      regionField: '',
-      auditEnabled: true,
-      primaryKeyStrategy: 'AUTO_INCREMENT',
-      primaryKeyField: 'id',
-      tenantField: 'tenantId',
-      logicDeleteField: 'delFlag',
-    },
+    policies: createDefaultPolicies(fields),
     children: [],
   }
+}
+
+export function createDefaultPolicies(fields = []) {
+  return normalizeLowcodePolicies({ fields, policies: {} }).policies
+}
+
+export function normalizeLowcodePolicies(model = {}) {
+  const fields = Array.isArray(model.fields) ? model.fields : []
+  const source = model.policies || {}
+  const userRef = resolvePolicyField(fields, source.userField, source.userColumn, ['createBy', 'create_by', 'userId', 'user_id'], 'createBy', 'create_by')
+  const orgRef = resolvePolicyField(fields, source.orgField, source.orgColumn, ['orgId', 'org_id', 'deptId', 'dept_id', 'createDept', 'create_dept'], 'createDept', 'create_dept')
+  const regionRef = resolvePolicyField(fields, source.regionField, source.regionColumn, ['regionCode', 'region_code', 'areaCode', 'area_code'], '', '')
+  const tenantRef = resolvePolicyField(fields, source.tenantField, source.tenantColumn, ['tenantId', 'tenant_id'], 'tenantId', 'tenant_id')
+  const logicDeleteRef = resolvePolicyField(fields, source.logicDeleteField, source.logicDeleteColumn, ['delFlag', 'del_flag'], 'delFlag', 'del_flag')
+  model.policies = {
+    dataScope: normalizeDataScope(source.dataScope),
+    userField: userRef.field,
+    userColumn: userRef.column,
+    orgField: orgRef.field,
+    orgColumn: orgRef.column,
+    regionField: regionRef.field,
+    regionColumn: regionRef.column,
+    auditEnabled: true,
+    primaryKeyStrategy: 'AUTO_INCREMENT',
+    primaryKeyField: 'id',
+    tenantField: tenantRef.field || 'tenantId',
+    tenantColumn: tenantRef.column || 'tenant_id',
+    logicDeleteField: logicDeleteRef.field || 'delFlag',
+    logicDeleteColumn: logicDeleteRef.column || 'del_flag',
+  }
+  return model
+}
+
+function normalizeDataScope(dataScope) {
+  const normalized = String(dataScope || 'TENANT').trim().toUpperCase()
+  return normalized === 'SYSTEM_DATA_SCOPE' ? 'FOLLOW_SYSTEM' : normalized
+}
+
+function resolvePolicyField(fields, configuredField, configuredColumn, candidates, fallbackField, fallbackColumn) {
+  const refs = new Map()
+  fields.forEach((field) => {
+    if (!field)
+      return
+    const fieldName = field.field || ''
+    const columnName = field.columnName || camelToSnake(fieldName)
+    const ref = { field: fieldName, column: columnName }
+    if (fieldName)
+      refs.set(String(fieldName).toLowerCase(), ref)
+    if (columnName)
+      refs.set(String(columnName).toLowerCase(), ref)
+  })
+  const configured = findPolicyRef(refs, configuredField) || findPolicyRef(refs, configuredColumn)
+  if (configured)
+    return configured
+  for (const candidate of candidates) {
+    const matched = findPolicyRef(refs, candidate)
+    if (matched)
+      return matched
+  }
+  return {
+    field: configuredField || fallbackField || '',
+    column: configuredColumn || fallbackColumn || '',
+  }
+}
+
+function findPolicyRef(refs, key) {
+  if (!key)
+    return null
+  return refs.get(String(key).toLowerCase()) || null
 }
 
 export function createDefaultField(field = 'fieldName', label = '字段名称') {

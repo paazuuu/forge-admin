@@ -1,16 +1,28 @@
 package com.mdframe.forge.plugin.generator.service;
 
+import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
+import com.alibaba.excel.write.metadata.WriteSheet;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
+import com.mdframe.forge.plugin.generator.domain.entity.AiCrudExportTask;
+import com.mdframe.forge.plugin.generator.dto.DynamicCrudExportResult;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudImportResult;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
+import com.mdframe.forge.plugin.generator.mapper.AiCrudExportTaskMapper;
+import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.datascope.context.DataScopeContext;
+import com.mdframe.forge.starter.datascope.service.IDataScopeService;
 import com.mdframe.forge.starter.excel.model.ExcelColumnConfig;
 import com.mdframe.forge.starter.excel.spi.ExcelConfigProvider;
+import com.mdframe.forge.starter.file.core.FileManager;
+import com.mdframe.forge.starter.file.model.FileMetadata;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.Data;
@@ -26,10 +38,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -56,8 +71,19 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DynamicCrudExcelService {
 
-    private static final int MAX_EXPORT_ROWS = 10000;
     private static final int MAX_IMPORT_ROWS = 5000;
+    private static final int DEFAULT_ASYNC_THRESHOLD = 5000;
+    private static final int DEFAULT_EXPORT_BATCH_SIZE = 1000;
+    private static final int DEFAULT_FILE_KEEP_HOURS = 24;
+    private static final String EXPORT_STATUS_PENDING = "PENDING";
+    private static final String EXPORT_STATUS_RUNNING = "RUNNING";
+    private static final String EXPORT_STATUS_SUCCESS = "SUCCESS";
+    private static final String EXPORT_STATUS_FAILED = "FAILED";
+    private static final String EXPORT_BUSINESS_TYPE = "ai_crud_export";
+    private static final String XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private static final String CONFIG_ASYNC_THRESHOLD = "sys.export.async.threshold";
+    private static final String CONFIG_BATCH_SIZE = "sys.export.batch.size";
+    private static final String CONFIG_FILE_KEEP_HOURS = "sys.export.file.keepHours";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -66,21 +92,41 @@ public class DynamicCrudExcelService {
     private final ObjectMapper objectMapper;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final ObjectProvider<ExcelConfigProvider> excelConfigProvider;
+    private final ObjectProvider<DynamicCrudAsyncExportWorker> asyncExportWorker;
+    private final AiCrudExportTaskMapper exportTaskMapper;
+    private final FileManager fileManager;
+    private final IDataScopeService dataScopeService;
 
-    public void exportExcel(String configKey, DynamicCrudQuery query, HttpServletResponse response) {
+    public DynamicCrudExportResult exportExcel(String configKey, DynamicCrudQuery query, HttpServletResponse response) {
         AiCrudConfig config = dynamicCrudService.getRuntimeConfig(configKey);
         List<ExcelColumnMeta> columns = resolveExportColumns(config);
         if (columns.isEmpty()) {
             throw new BusinessException("没有可导出的字段");
         }
 
-        List<Map<String, Object>> rows = dynamicCrudService.selectExportRows(configKey, query, MAX_EXPORT_ROWS);
+        int threshold = readPositiveIntConfig(CONFIG_ASYNC_THRESHOLD, DEFAULT_ASYNC_THRESHOLD, 1, 1_000_000);
+        DataScopeContext dataScopeContext = captureDataScopeContext();
+        long totalCount = dynamicCrudService.countExportRows(configKey, query, dataScopeContext);
+        if (totalCount > threshold) {
+            int batchSize = readPositiveIntConfig(CONFIG_BATCH_SIZE, DEFAULT_EXPORT_BATCH_SIZE, 100, 5000);
+            int keepHours = readPositiveIntConfig(CONFIG_FILE_KEEP_HOURS, DEFAULT_FILE_KEEP_HOURS, 1, 720);
+            AiCrudExportTask task = createExportTask(config, query, totalCount, keepHours);
+            ExportExecutionContext context = new ExportExecutionContext(
+                    task.getId(), resolveTenantId(), SessionHelper.getUserId(), SessionHelper.getMainOrgId(),
+                    dataScopeContext, totalCount, batchSize, keepHours);
+            asyncExportWorker.getObject().executeAsync(task.getId(), configKey, query, context);
+            return DynamicCrudExportResult.async(task.getId(), totalCount, threshold);
+        }
+
+        int pageSize = (int) Math.max(1L, totalCount);
+        List<Map<String, Object>> rows = dynamicCrudService.selectExportPageRows(configKey, query, 1, pageSize, dataScopeContext);
         List<List<String>> headers = buildHeaders(columns);
         List<List<Object>> data = rows.stream()
                 .map(row -> buildExportRow(row, columns))
                 .toList();
 
         writeWorkbook(response, buildFileName(config, "导出数据"), "数据", headers, data);
+        return DynamicCrudExportResult.sync(totalCount, threshold);
     }
 
     public void downloadImportTemplate(String configKey, HttpServletResponse response) {
@@ -90,6 +136,90 @@ public class DynamicCrudExcelService {
             throw new BusinessException("没有可导入的字段");
         }
         writeWorkbook(response, buildFileName(config, "导入模板"), "导入模板", buildHeaders(columns), List.of());
+    }
+
+    public Page<AiCrudExportTask> selectExportTaskPage(String configKey, PageQuery pageQuery) {
+        return exportTaskMapper.selectTaskPage(
+                pageQuery.toPage(),
+                resolveTenantId(),
+                SessionHelper.getUserId(),
+                configKey
+        );
+    }
+
+    public AiCrudExportTask selectExportTask(String configKey, Long taskId) {
+        AiCrudExportTask task = exportTaskMapper.selectTaskById(resolveTenantId(), SessionHelper.getUserId(), taskId);
+        if (task == null || !StringUtils.equals(task.getConfigKey(), configKey)) {
+            throw new BusinessException("导出任务不存在");
+        }
+        return task;
+    }
+
+    void executeAsyncExportTask(Long taskId,
+                                String configKey,
+                                DynamicCrudQuery query,
+                                ExportExecutionContext context) {
+        TenantContextHolder.executeWithTenant(context.tenantId(), () ->
+                doExecuteAsyncExportTask(taskId, configKey, query, context));
+    }
+
+    private void doExecuteAsyncExportTask(Long taskId,
+                                          String configKey,
+                                          DynamicCrudQuery query,
+                                          ExportExecutionContext context) {
+        AiCrudExportTask task = exportTaskMapper.selectById(taskId);
+        if (task == null) {
+            log.warn("[DynamicCrudExcelService] 异步导出任务不存在, taskId={}", taskId);
+            return;
+        }
+
+        Path tempFile = null;
+        try {
+            markTaskRunning(taskId);
+            AiCrudConfig config = dynamicCrudService.getRuntimeConfig(configKey);
+            List<ExcelColumnMeta> columns = resolveExportColumns(config);
+            if (columns.isEmpty()) {
+                throw new BusinessException("没有可导出的字段");
+            }
+
+            tempFile = Files.createTempFile("ai-crud-export-" + taskId + "-", ".xlsx");
+            writeAsyncWorkbook(tempFile, configKey, query, columns, context);
+
+            FileMetadata metadata;
+            long fileSize = Files.size(tempFile);
+            try (InputStream inputStream = Files.newInputStream(tempFile)) {
+                metadata = fileManager.upload(inputStream, task.getFileName(), XLSX_MIME,
+                        EXPORT_BUSINESS_TYPE, String.valueOf(taskId), null, true, fileSize);
+            }
+
+            AiCrudExportTask success = new AiCrudExportTask();
+            success.setId(taskId);
+            success.setStatus(EXPORT_STATUS_SUCCESS);
+            success.setProgress(100);
+            success.setExportedCount(context.totalCount());
+            success.setFileId(metadata.getFileId());
+            success.setFileSize(metadata.getFileSize());
+            success.setFinishTime(LocalDateTime.now());
+            exportTaskMapper.updateById(success);
+            log.info("[DynamicCrudExcelService] 异步导出完成, taskId={}, fileId={}, total={}",
+                    taskId, metadata.getFileId(), context.totalCount());
+        } catch (Exception e) {
+            log.error("[DynamicCrudExcelService] 异步导出失败, taskId={}", taskId, e);
+            AiCrudExportTask failed = new AiCrudExportTask();
+            failed.setId(taskId);
+            failed.setStatus(EXPORT_STATUS_FAILED);
+            failed.setErrorMessage(StringUtils.left(e.getMessage(), 1000));
+            failed.setFinishTime(LocalDateTime.now());
+            exportTaskMapper.updateById(failed);
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException e) {
+                    log.warn("[DynamicCrudExcelService] 删除导出临时文件失败, path={}", tempFile, e);
+                }
+            }
+        }
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -311,7 +441,7 @@ public class DynamicCrudExcelService {
             meta.setLabel(StringUtils.defaultIfBlank(getFirstText(node, "title", "label", "columnName"), field));
             meta.setDataType(modelDataTypes.get(field));
             meta.setDictType(resolveDictType(field, node, transConfig));
-            meta.setTargetField(resolveTargetField(field, transConfig));
+            meta.setTargetField(resolveTargetField(field, node, transConfig));
             columns.add(meta);
         }
         return applyExportColumnConfig(config, columns);
@@ -460,8 +590,11 @@ public class DynamicCrudExcelService {
         List<Object> values = new ArrayList<>();
         for (ExcelColumnMeta column : columns) {
             Object value = row.get(column.getField());
-            if (StringUtils.isNotBlank(column.getDictType()) && StringUtils.isNotBlank(column.getTargetField())) {
-                value = row.getOrDefault(column.getTargetField(), value);
+            if (StringUtils.isNotBlank(column.getTargetField())) {
+                Object displayValue = row.get(column.getTargetField());
+                if (!isEmptyValue(displayValue)) {
+                    value = displayValue;
+                }
             }
             values.add(value);
         }
@@ -486,6 +619,127 @@ public class DynamicCrudExcelService {
         } catch (IOException e) {
             throw new BusinessException("写入Excel失败: " + e.getMessage());
         }
+    }
+
+    private void writeAsyncWorkbook(Path targetFile,
+                                    String configKey,
+                                    DynamicCrudQuery query,
+                                    List<ExcelColumnMeta> columns,
+                                    ExportExecutionContext context) throws IOException {
+        List<List<String>> headers = buildHeaders(columns);
+        ExcelWriter excelWriter = null;
+        try (OutputStream outputStream = Files.newOutputStream(targetFile)) {
+            excelWriter = EasyExcel.write(outputStream)
+                    .head(headers)
+                    .build();
+            try {
+                WriteSheet writeSheet = EasyExcel.writerSheet("数据").build();
+                long exported = 0L;
+                int pageNum = 1;
+                while (exported < context.totalCount()) {
+                    List<Map<String, Object>> rows = dynamicCrudService.selectExportPageRows(
+                            configKey, query, pageNum, context.batchSize(), context.dataScopeContext());
+                    if (rows.isEmpty()) {
+                        break;
+                    }
+                    List<List<Object>> data = rows.stream()
+                            .map(row -> buildExportRow(row, columns))
+                            .toList();
+                    excelWriter.write(data, writeSheet);
+                    exported += rows.size();
+                    updateTaskProgress(context.taskId(), exported, context.totalCount());
+                    pageNum++;
+                }
+                if (context.totalCount() == 0) {
+                    updateTaskProgress(context.taskId(), 0L, 0L);
+                }
+            } finally {
+                if (excelWriter != null) {
+                    excelWriter.finish();
+                }
+            }
+        }
+    }
+
+    private AiCrudExportTask createExportTask(AiCrudConfig config,
+                                              DynamicCrudQuery query,
+                                              long totalCount,
+                                              int keepHours) {
+        AiCrudExportTask task = new AiCrudExportTask();
+        task.setTenantId(resolveTenantId());
+        task.setConfigKey(config.getConfigKey());
+        task.setExportName(StringUtils.defaultIfBlank(config.getAppName(),
+                StringUtils.defaultIfBlank(config.getTableComment(), config.getConfigKey())));
+        task.setFileName(buildFileName(config, "导出数据"));
+        task.setStatus(EXPORT_STATUS_PENDING);
+        task.setTotalCount(totalCount);
+        task.setExportedCount(0L);
+        task.setProgress(0);
+        task.setQueryParams(writeQueryParams(query));
+        task.setExpireTime(LocalDateTime.now().plusHours(keepHours));
+        task.setCreateBy(SessionHelper.getUserId());
+        task.setCreateDept(SessionHelper.getMainOrgId());
+        task.setUpdateBy(SessionHelper.getUserId());
+        exportTaskMapper.insert(task);
+        return task;
+    }
+
+    private void markTaskRunning(Long taskId) {
+        AiCrudExportTask update = new AiCrudExportTask();
+        update.setId(taskId);
+        update.setStatus(EXPORT_STATUS_RUNNING);
+        update.setProgress(0);
+        update.setExportedCount(0L);
+        exportTaskMapper.updateById(update);
+    }
+
+    private void updateTaskProgress(Long taskId, long exportedCount, long totalCount) {
+        AiCrudExportTask update = new AiCrudExportTask();
+        update.setId(taskId);
+        update.setExportedCount(exportedCount);
+        update.setProgress(totalCount <= 0 ? 100 : Math.min(99, (int) ((exportedCount * 100) / totalCount)));
+        exportTaskMapper.updateById(update);
+    }
+
+    private String writeQueryParams(DynamicCrudQuery query) {
+        try {
+            return objectMapper.writeValueAsString(query == null ? new DynamicCrudQuery() : query);
+        } catch (Exception e) {
+            log.warn("[DynamicCrudExcelService] 序列化导出参数失败", e);
+            return "{}";
+        }
+    }
+
+    private DataScopeContext captureDataScopeContext() {
+        try {
+            return dataScopeService.getCurrentUserDataScope();
+        } catch (Exception e) {
+            log.warn("[DynamicCrudExcelService] 捕获数据权限上下文失败，将由查询链路按当前上下文处理", e);
+            return null;
+        }
+    }
+
+    private int readPositiveIntConfig(String configKey, int defaultValue, int minValue, int maxValue) {
+        try {
+            String value = exportTaskMapper.selectConfigValue(resolveTenantId(), configKey);
+            if (StringUtils.isBlank(value)) {
+                return defaultValue;
+            }
+            int parsed = Integer.parseInt(value.trim());
+            return Math.max(minValue, Math.min(maxValue, parsed));
+        } catch (Exception e) {
+            log.warn("[DynamicCrudExcelService] 读取系统参数失败, configKey={}", configKey, e);
+            return defaultValue;
+        }
+    }
+
+    private Long resolveTenantId() {
+        Long tenantId = TenantContextHolder.getTenantId();
+        if (tenantId != null) {
+            return tenantId;
+        }
+        tenantId = SessionHelper.getTenantId();
+        return tenantId != null ? tenantId : 1L;
     }
 
     private JsonNode readArray(String json, String fieldName) {
@@ -559,9 +813,27 @@ public class DynamicCrudExcelService {
         return dictType;
     }
 
-    private String resolveTargetField(String field, Map<String, TransMeta> transConfig) {
+    private String resolveTargetField(String field, JsonNode node, Map<String, TransMeta> transConfig) {
         TransMeta meta = transConfig.get(field);
-        return meta != null ? meta.getTargetField() : null;
+        if (meta != null && StringUtils.isNotBlank(meta.getTargetField())) {
+            return meta.getTargetField();
+        }
+        if (node != null && node.has("render") && node.get("render").isObject()) {
+            JsonNode render = node.get("render");
+            String targetField = getFirstText(render, "targetField");
+            if (StringUtils.isNotBlank(targetField)) {
+                return targetField;
+            }
+            String renderType = StringUtils.defaultIfBlank(getFirstText(render, "type"), "").toLowerCase(Locale.ROOT);
+            if (Set.of("orgname", "username", "regionname", "fileupload", "imageupload").contains(renderType)) {
+                return field + "Name";
+            }
+        }
+        String componentType = StringUtils.defaultIfBlank(getFirstText(node, "type", "componentType"), "").toLowerCase(Locale.ROOT);
+        if (Set.of("orgtreeselect", "userselect", "regiontreeselect", "treeselect").contains(componentType)) {
+            return field + "Name";
+        }
+        return null;
     }
 
     private boolean resolveRequired(JsonNode node) {
@@ -708,6 +980,16 @@ public class DynamicCrudExcelService {
                 StringUtils.defaultIfBlank(config.getTableComment(), config.getConfigKey()));
         String fileName = baseName + "_" + suffix + ".xlsx";
         return fileName.replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_");
+    }
+
+    public record ExportExecutionContext(Long taskId,
+                                         Long tenantId,
+                                         Long userId,
+                                         Long createDept,
+                                         DataScopeContext dataScopeContext,
+                                         long totalCount,
+                                         int batchSize,
+                                         int keepHours) {
     }
 
     @Data

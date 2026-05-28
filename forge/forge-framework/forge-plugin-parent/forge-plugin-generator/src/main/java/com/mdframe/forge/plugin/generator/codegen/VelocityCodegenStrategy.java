@@ -6,9 +6,14 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiPageTemplate;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.mapper.GenTableColumnMapper;
 import com.mdframe.forge.plugin.generator.util.GenUtils;
 import com.mdframe.forge.plugin.generator.util.VelocityUtils;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -51,19 +56,33 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
 
         // ── 1. 解析 apiConfig，提取业务路由前缀 ──────────────────────────────
         String apiBase = resolveApiBase(config);          // e.g. /order/manage
-        String moduleName = resolveModuleName(apiBase);   // e.g. order
+        String moduleName = StringUtils.defaultIfBlank(readOption(config, "moduleName", null),
+                resolveModuleName(apiBase));   // e.g. order
         String businessPath = resolveBusinessPath(apiBase); // e.g. manage
 
         // ── 2. 构造 GenTable（复用已有的 VelocityUtils 体系）────────────────
         GenTable genTable = buildGenTable(config, moduleName, businessPath);
 
         // ── 3. 从数据库加载字段元数据 ─────────────────────────────────────────
-        List<GenTableColumn> columns = loadColumns(config.getTableName());
+        List<GenTableColumn> columns = loadColumns(config);
         genTable.setColumns(columns);
         genTable.setPkColumn(GenUtils.getPkColumn(columns));
 
         // ── 4. 解析四类安全配置，注入注解控制变量 ────────────────────────────
         Map<String, Object> annotationFlags = resolveAnnotationFlags(config, columns);
+        String layoutType = StringUtils.isNotBlank(config.getLayoutType()) ? config.getLayoutType() : "simple-crud";
+        Map<String, Object> runtimeOptions = parseJsonObject(config.getOptions());
+        Map<String, Object> treeConfig = readNestedMap(runtimeOptions, "treeConfig");
+        Map<String, Object> masterDetailConfig = readNestedMap(runtimeOptions, "masterDetailConfig");
+        LowcodePageSchema pageSchema = parsePageSchema(config);
+        List<RelatedTableMeta> relatedTables = buildRelatedTables(config, pageSchema, genTable, moduleName, businessPath);
+        TreeCodegenMeta treeMeta = buildTreeMeta(genTable, relatedTables, treeConfig);
+        List<RelatedTableMeta> masterDetailChildren = buildMasterDetailChildren(masterDetailConfig, relatedTables, genTable);
+        boolean hasTreeConfig = treeMeta != null;
+        boolean isLeftTreeLayout = hasTreeConfig && "tree-crud".equals(layoutType);
+        boolean isTreeTableLayout = hasTreeConfig && !"tree-crud".equals(layoutType);
+        boolean isMasterDetailLayout = "master-detail-crud".equals(layoutType) && !masterDetailChildren.isEmpty();
+        List<RelatedTableMeta> injectedRelatedTables = resolveInjectedRelatedTables(treeMeta, relatedTables, masterDetailChildren);
 
         // ── 5. 初始化 Velocity ────────────────────────────────────────────────
         VelocityUtils.initVelocity();
@@ -89,7 +108,24 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         ctx.put("columnsSchema", preprocessColumnsSchema(parseJsonArray(config.getColumnsSchema()), transConfig));
         ctx.put("editSchema", parseJsonArray(config.getEditSchema()));
         ctx.put("apiConfig", parseJsonObject(config.getApiConfig()));
-        ctx.put("layoutType", StringUtils.isNotBlank(config.getLayoutType()) ? config.getLayoutType() : "simple-crud");
+        ctx.put("layoutType", layoutType);
+        ctx.put("options", runtimeOptions);
+        ctx.put("optionsJson", toJsonLiteral(runtimeOptions));
+        ctx.put("searchSchemaJson", toJsonLiteral(ctx.get("searchSchema")));
+        ctx.put("columnsSchemaJson", toJsonLiteral(ctx.get("columnsSchema")));
+        ctx.put("editSchemaJson", toJsonLiteral(ctx.get("editSchema")));
+        ctx.put("treeConfigJson", toJsonLiteral(treeConfig));
+        ctx.put("masterDetailConfigJson", toJsonLiteral(masterDetailConfig));
+        ctx.put("hasTreeConfig", hasTreeConfig);
+        ctx.put("tree", treeMeta);
+        ctx.put("isLeftTreeLayout", isLeftTreeLayout);
+        ctx.put("isTreeTableLayout", isTreeTableLayout);
+        ctx.put("isMasterDetailLayout", isMasterDetailLayout);
+        ctx.put("masterDetailChildren", masterDetailChildren);
+        ctx.put("injectedRelatedTables", injectedRelatedTables);
+        ctx.put("hasEntityTreeFields", hasTreeConfig && !treeMeta.isSeparateSource());
+        ctx.put("entityTreeChildrenField", hasTreeConfig && !treeMeta.isSeparateSource()
+                ? treeMeta.getChildrenField() : "children");
 
         // ── 6. 渲染后端代码 ───────────────────────────────────────────────────
         String className = genTable.getClassName();
@@ -105,17 +141,26 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         renderTo(files, "templates/vm/controller.java.vm",  ctx, javaRoot + "controller/" + className + "Controller.java");
         renderTo(files, "templates/vm/dto.java.vm",         ctx, javaRoot + "dto/" + className + "DTO.java");
         renderTo(files, "templates/vm/query.java.vm",       ctx, javaRoot + "dto/" + className + "Query.java");
+        if (isMasterDetailLayout) {
+            renderTo(files, "templates/vm/masterDetailDTO.java.vm", ctx, javaRoot + "dto/" + className + "MasterDetailDTO.java");
+        }
+        renderRelatedTableFiles(files, relatedTables, javaRoot, resRoot, treeMeta);
 
         // ── 7. 渲染 SQL ───────────────────────────────────────────────────────
-        renderTo(files, "templates/vm/sql/menu.sql.vm", ctx, "sql/" + config.getTableName() + "_menu.sql");
-        // 只在有字典字段时生成 dict.sql
-        if ((boolean) annotationFlags.getOrDefault("hasDictConfig", false)) {
+        boolean includeSql = readBooleanOption(config, "includeSql", true);
+        boolean includeMenuSql = readBooleanOption(config, "includeMenuSql", true);
+        boolean includeDictSql = readBooleanOption(config, "includeDictSql", true);
+        if (includeSql && includeMenuSql) {
+            renderTo(files, "templates/vm/sql/menu.sql.vm", ctx, "sql/" + config.getTableName() + "_menu.sql");
+        }
+        if (includeSql && includeDictSql && (boolean) annotationFlags.getOrDefault("hasDictConfig", false)) {
             renderTo(files, "templates/vm/sql/dict.sql.vm", ctx, "sql/" + config.getTableName() + "_dict.sql");
         }
 
         // ── 8. 渲染前端代码 ───────────────────────────────────────────────────
         String viewPath = configKey.replace("_", "/");
-        renderTo(files, "templates/vm/ai-crud/index.vue.vm", ctx, "frontend/src/views/" + viewPath + "/index.vue");
+        String frontendBasePath = normalizeOutputBasePath(readOption(config, "frontendBasePath", "frontend/src/views"));
+        renderTo(files, "templates/vm/ai-crud/index.vue.vm", ctx, frontendBasePath + "/" + viewPath + "/index.vue");
         renderTo(files, "templates/vm/ai-crud/api.js.vm",    ctx, "frontend/src/api/" + configKey + ".js");
 
         // ── 9. 附带原始配置 JSON ──────────────────────────────────────────────
@@ -200,7 +245,7 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         table.setBusinessName(StringUtils.uncapitalize(className));
 
         // 包路径：从 options 中读取，或使用默认值
-        String packageName = readOption(config, "packageName", DEFAULT_PACKAGE);
+        String packageName = normalizeBasePackageName(readOption(config, "packageName", DEFAULT_PACKAGE), moduleName);
         table.setPackageName(packageName);
         table.setModuleName(moduleName);
         table.setBusinessName(resolveBusinessName(businessPath));
@@ -215,21 +260,128 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         return parts[parts.length - 1];
     }
 
+    private String normalizeBasePackageName(String packageName, String moduleName) {
+        String normalized = StringUtils.defaultIfBlank(packageName, DEFAULT_PACKAGE)
+                .replaceAll("\\.+$", "");
+        String module = StringUtils.defaultString(moduleName).trim();
+        if (StringUtils.isBlank(module)) {
+            return normalized;
+        }
+        String suffix = "." + module;
+        if (normalized.endsWith(suffix)) {
+            return normalized.substring(0, normalized.length() - suffix.length());
+        }
+        return normalized;
+    }
+
     // ───────────────────────────────────────────────────────────────────────────
     // 字段加载与初始化
     // ───────────────────────────────────────────────────────────────────────────
 
-    private List<GenTableColumn> loadColumns(String tableName) {
+    private List<GenTableColumn> loadColumns(AiCrudConfig config) {
+        String tableName = config.getTableName();
         if (StringUtils.isBlank(tableName)) return new ArrayList<>();
         try {
             List<GenTableColumn> columns = genTableColumnMapper.selectDbTableColumnsByName(tableName);
-            if (columns == null || columns.isEmpty()) return new ArrayList<>();
+            if (columns == null || columns.isEmpty()) return loadColumnsFromModelSchema(config);
             columns.forEach(GenUtils::initColumnField);
             return columns;
         } catch (Exception e) {
             log.warn("[VelocityCodegenStrategy] 加载字段失败, tableName={}", tableName, e);
+            return loadColumnsFromModelSchema(config);
+        }
+    }
+
+    private List<GenTableColumn> loadColumnsFromModelSchema(AiCrudConfig config) {
+        if (StringUtils.isBlank(config.getModelSchema())) {
             return new ArrayList<>();
         }
+        try {
+            LowcodeModelSchema modelSchema = objectMapper.readValue(config.getModelSchema(), LowcodeModelSchema.class);
+            List<GenTableColumn> columns = new ArrayList<>();
+            int sort = 0;
+            for (LowcodeFieldSchema field : modelSchema.getFields()) {
+                if (field == null || StringUtils.isBlank(field.getColumnName())) {
+                    continue;
+                }
+                GenTableColumn column = new GenTableColumn();
+                column.setColumnName(field.getColumnName());
+                column.setColumnComment(StringUtils.defaultIfBlank(field.getLabel(), field.getField()));
+                column.setColumnType(toColumnType(field));
+                column.setJavaType(toJavaType(field.getDataType()));
+                column.setJavaField(StringUtils.defaultIfBlank(field.getField(), field.getColumnName()));
+                column.setIsPk(Boolean.TRUE.equals(field.getPrimaryKey()) ? 1 : 0);
+                column.setIsIncrement(Boolean.TRUE.equals(field.getAutoIncrement()) ? 1 : 0);
+                column.setIsRequired(Boolean.TRUE.equals(field.getRequired()) ? 1 : 0);
+                column.setIsInsert(Boolean.TRUE.equals(field.getFormVisible()) && !Boolean.TRUE.equals(field.getReadonly()) ? 1 : 0);
+                column.setIsEdit(Boolean.TRUE.equals(field.getFormVisible()) && !Boolean.TRUE.equals(field.getReadonly()) ? 1 : 0);
+                column.setIsList(field.getListVisible() == null || Boolean.TRUE.equals(field.getListVisible()) ? 1 : 0);
+                column.setIsQuery(Boolean.TRUE.equals(field.getSearchable()) ? 1 : 0);
+                column.setQueryType(StringUtils.defaultIfBlank(field.getQueryType(), "EQ").toUpperCase(Locale.ROOT));
+                column.setHtmlType(toHtmlType(field.getComponentType(), field.getDataType()));
+                column.setDictType(StringUtils.trimToNull(field.getDictType()));
+                column.setDesensitizeType(StringUtils.trimToNull(field.getSensitiveType()));
+                column.setSort(sort++);
+                columns.add(column);
+            }
+            return columns;
+        } catch (Exception e) {
+            log.warn("[VelocityCodegenStrategy] 从低代码模型协议构建字段失败, configKey={}", config.getConfigKey(), e);
+            return new ArrayList<>();
+        }
+    }
+
+    private String toColumnType(LowcodeFieldSchema field) {
+        String dataType = StringUtils.defaultIfBlank(field.getDataType(), "varchar").toLowerCase(Locale.ROOT);
+        Integer length = field.getLength();
+        Integer precision = field.getPrecision();
+        return switch (dataType) {
+            case "bigint" -> "bigint";
+            case "int", "integer" -> "int";
+            case "tinyint" -> "tinyint";
+            case "decimal" -> "decimal(" + (length == null ? 18 : length) + "," + (precision == null ? 2 : precision) + ")";
+            case "datetime" -> "datetime";
+            case "date" -> "date";
+            case "text" -> "text";
+            case "char" -> "char(" + (length == null ? 1 : length) + ")";
+            default -> "varchar(" + (length == null || length <= 0 ? 128 : length) + ")";
+        };
+    }
+
+    private String toJavaType(String dataType) {
+        String type = StringUtils.defaultIfBlank(dataType, "varchar").toLowerCase(Locale.ROOT);
+        return switch (type) {
+            case "bigint" -> "Long";
+            case "int", "integer", "tinyint" -> "Integer";
+            case "decimal" -> "BigDecimal";
+            case "datetime" -> "LocalDateTime";
+            case "date" -> "LocalDateTime";
+            default -> "String";
+        };
+    }
+
+    private String toHtmlType(String componentType, String dataType) {
+        String component = StringUtils.defaultString(componentType);
+        if ("textarea".equals(component)) {
+            return "textarea";
+        }
+        if ("select".equals(component)) {
+            return "select";
+        }
+        if ("switch".equals(component)) {
+            return "radio";
+        }
+        if ("date".equals(component) || "datetime".equals(component)
+                || "date".equals(dataType) || "datetime".equals(dataType)) {
+            return "datetime";
+        }
+        if ("fileUpload".equals(component)) {
+            return "fileUpload";
+        }
+        if ("imageUpload".equals(component)) {
+            return "imageUpload";
+        }
+        return "input";
     }
 
     // ───────────────────────────────────────────────────────────────────────────
@@ -398,9 +550,266 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         try {
             Map<String, Object> opts = objectMapper.readValue(config.getOptions(), new TypeReference<>() {});
             Object val = opts.get(key);
+            if (val == null && opts.get("codegen") instanceof Map<?, ?> codegen) {
+                val = codegen.get(key);
+                if (val == null && "packageName".equals(key)) {
+                    val = codegen.get("domainPackage");
+                }
+            }
             return val != null ? String.valueOf(val) : defaultValue;
         } catch (Exception e) {
             return defaultValue;
+        }
+    }
+
+    private boolean readBooleanOption(AiCrudConfig config, String key, boolean defaultValue) {
+        String value = readOption(config, key, null);
+        if (StringUtils.isBlank(value)) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(value);
+    }
+
+    private String normalizeOutputBasePath(String value) {
+        String normalized = StringUtils.defaultIfBlank(value, "frontend/src/views")
+                .replace("\\", "/")
+                .replaceAll("/+$", "");
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return StringUtils.defaultIfBlank(normalized, "frontend/src/views");
+    }
+
+    private LowcodePageSchema parsePageSchema(AiCrudConfig config) {
+        if (StringUtils.isBlank(config.getPageSchema())) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(config.getPageSchema(), LowcodePageSchema.class);
+        } catch (Exception e) {
+            log.warn("[VelocityCodegenStrategy] 解析低代码页面协议失败, configKey={}", config.getConfigKey(), e);
+            return null;
+        }
+    }
+
+    private List<RelatedTableMeta> buildRelatedTables(AiCrudConfig config,
+                                                      LowcodePageSchema pageSchema,
+                                                      GenTable mainTable,
+                                                      String moduleName,
+                                                      String businessPath) {
+        if (pageSchema == null || pageSchema.getModelRefs() == null || pageSchema.getModelRefs().isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<RelatedTableMeta> result = new ArrayList<>();
+        Set<String> seenTables = new LinkedHashSet<>();
+        for (LowcodePageModelRef ref : pageSchema.getModelRefs()) {
+            if (ref == null || Boolean.TRUE.equals(ref.getPrimary()) || StringUtils.isBlank(ref.getTableName())) {
+                continue;
+            }
+            if (StringUtils.equals(ref.getTableName(), config.getTableName()) || !seenTables.add(ref.getTableName())) {
+                continue;
+            }
+            GenTable table = new GenTable();
+            table.setTableName(ref.getTableName());
+            table.setTableComment(StringUtils.defaultIfBlank(ref.getModelName(), ref.getTableName()));
+            table.setFunctionName(table.getTableComment());
+            String className = toPascalCase(stripTablePrefix(ref.getTableName()));
+            table.setClassName(className);
+            table.setBusinessName(resolveBusinessName(businessPath));
+            table.setPackageName(mainTable.getPackageName());
+            table.setModuleName(moduleName);
+            table.setAuthor(mainTable.getAuthor());
+            List<GenTableColumn> refColumns = buildColumnsFromModelRef(ref);
+            table.setColumns(refColumns);
+            table.setPkColumn(GenUtils.getPkColumn(refColumns));
+
+            RelatedTableMeta meta = new RelatedTableMeta();
+            meta.setModelCode(ref.getModelCode());
+            meta.setKey(StringUtils.defaultIfBlank(ref.getModelCode(), className));
+            meta.setModelName(ref.getModelName());
+            meta.setTableName(ref.getTableName());
+            meta.setClassName(className);
+            meta.setVariableName(StringUtils.uncapitalize(className));
+            meta.setMapperVarName(StringUtils.uncapitalize(className) + "Mapper");
+            meta.setTable(table);
+            meta.setColumns(refColumns);
+            meta.setPkColumn(table.getPkColumn());
+            result.add(meta);
+        }
+        return result;
+    }
+
+    private List<GenTableColumn> buildColumnsFromModelRef(LowcodePageModelRef ref) {
+        if (ref.getFields() == null || ref.getFields().isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<GenTableColumn> columns = new ArrayList<>();
+        int sort = 0;
+        for (Map<String, Object> fieldMap : ref.getFields()) {
+            String sourceField = StringUtils.firstNonBlank(text(fieldMap.get("sourceField")),
+                    text(fieldMap.get("field")), text(fieldMap.get("fieldRef")));
+            if (StringUtils.isBlank(sourceField)) {
+                continue;
+            }
+            String columnName = StringUtils.defaultIfBlank(text(fieldMap.get("columnName")), camelToSnake(sourceField));
+            GenTableColumn column = new GenTableColumn();
+            column.setColumnName(columnName);
+            column.setColumnComment(StringUtils.firstNonBlank(text(fieldMap.get("rawLabel")),
+                    text(fieldMap.get("label")), sourceField));
+            LowcodeFieldSchema lowcodeField = new LowcodeFieldSchema();
+            lowcodeField.setDataType(text(fieldMap.get("dataType")));
+            lowcodeField.setLength(integerValue(fieldMap.get("length")));
+            lowcodeField.setPrecision(integerValue(fieldMap.get("precision")));
+            column.setColumnType(toColumnType(lowcodeField));
+            column.setJavaType(toJavaType(text(fieldMap.get("dataType"))));
+            column.setJavaField(sourceField);
+            boolean primaryKey = booleanValue(fieldMap.get("primaryKey")) || "id".equals(sourceField) || "id".equals(columnName);
+            boolean readonly = booleanValue(fieldMap.get("readonly"));
+            column.setIsPk(primaryKey ? 1 : 0);
+            column.setIsIncrement(booleanValue(fieldMap.get("autoIncrement")) || primaryKey ? 1 : 0);
+            column.setIsRequired(booleanValue(fieldMap.get("required")) ? 1 : 0);
+            column.setIsInsert(!primaryKey && !readonly ? 1 : 0);
+            column.setIsEdit(!primaryKey && !readonly ? 1 : 0);
+            column.setIsList(booleanValueDefault(fieldMap.get("listVisible"), true) ? 1 : 0);
+            column.setIsQuery(booleanValue(fieldMap.get("searchable")) ? 1 : 0);
+            column.setQueryType(StringUtils.defaultIfBlank(text(fieldMap.get("queryType")), "EQ").toUpperCase(Locale.ROOT));
+            column.setHtmlType(toHtmlType(text(fieldMap.get("componentType")), text(fieldMap.get("dataType"))));
+            column.setDictType(StringUtils.trimToNull(text(fieldMap.get("dictType"))));
+            column.setDesensitizeType(StringUtils.trimToNull(text(fieldMap.get("sensitiveType"))));
+            column.setSort(sort++);
+            columns.add(column);
+        }
+        return columns;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<RelatedTableMeta> buildMasterDetailChildren(Map<String, Object> masterDetailConfig,
+                                                             List<RelatedTableMeta> relatedTables,
+                                                             GenTable mainTable) {
+        Object childrenObj = masterDetailConfig.get("children");
+        if (!(childrenObj instanceof List<?> childrenList)) {
+            return new ArrayList<>();
+        }
+        List<RelatedTableMeta> result = new ArrayList<>();
+        for (Object childObj : childrenList) {
+            if (!(childObj instanceof Map<?, ?> rawChild)) {
+                continue;
+            }
+            Map<String, Object> child = (Map<String, Object>) rawChild;
+            RelatedTableMeta meta = findRelatedTable(relatedTables, text(child.get("modelCode")), text(child.get("tableName")));
+            if (meta == null) {
+                continue;
+            }
+            meta.setMasterDetailChild(true);
+            meta.setChildKey(StringUtils.firstNonBlank(text(child.get("key")), text(child.get("modelCode")), meta.getKey()));
+            meta.setChildFkField(StringUtils.defaultIfBlank(text(child.get("sourceField")), "parentId"));
+            meta.setChildFkFieldCap(capJavaField(meta.getChildFkField()));
+            meta.setChildFkColumn(resolveColumnName(meta.getColumns(), meta.getChildFkField()));
+            meta.setMainField(StringUtils.defaultIfBlank(text(child.get("targetField")),
+                    mainTable.getPkColumn() == null ? "id" : mainTable.getPkColumn().getJavaField()));
+            meta.setMainFieldCap(capJavaField(meta.getMainField()));
+            meta.setMainColumn(resolveColumnName(mainTable.getColumns(), meta.getMainField()));
+            result.add(meta);
+        }
+        return result;
+    }
+
+    private TreeCodegenMeta buildTreeMeta(GenTable mainTable,
+                                          List<RelatedTableMeta> relatedTables,
+                                          Map<String, Object> treeConfig) {
+        if (treeConfig == null || treeConfig.isEmpty()) {
+            return null;
+        }
+        String sourceTableName = text(treeConfig.get("sourceTableName"));
+        String sourceModelCode = text(treeConfig.get("sourceModelCode"));
+        RelatedTableMeta sourceMeta = findRelatedTable(relatedTables, sourceModelCode, sourceTableName);
+        boolean separateSource = sourceMeta != null
+                && !StringUtils.equals(sourceMeta.getTableName(), mainTable.getTableName());
+        List<GenTableColumn> sourceColumns = separateSource ? sourceMeta.getColumns() : mainTable.getColumns();
+
+        TreeCodegenMeta meta = new TreeCodegenMeta();
+        meta.setSeparateSource(separateSource);
+        meta.setSourceModelCode(sourceModelCode);
+        meta.setSourceTableName(StringUtils.defaultIfBlank(sourceTableName, mainTable.getTableName()));
+        meta.setClassName(separateSource ? sourceMeta.getClassName() : mainTable.getClassName());
+        meta.setMapperVarName(separateSource ? sourceMeta.getMapperVarName() : StringUtils.uncapitalize(mainTable.getClassName()) + "Mapper");
+        meta.setKeyField(normalizeJavaField(StringUtils.defaultIfBlank(text(treeConfig.get("keyField")), "id")));
+        meta.setParentField(normalizeJavaField(StringUtils.defaultIfBlank(text(treeConfig.get("parentField")), "parentId")));
+        meta.setLabelField(normalizeJavaField(StringUtils.defaultIfBlank(text(treeConfig.get("labelField")), "name")));
+        meta.setFilterField(normalizeJavaField(StringUtils.defaultIfBlank(text(treeConfig.get("filterField")), meta.getParentField())));
+        meta.setTargetField(normalizeJavaField(StringUtils.defaultIfBlank(text(treeConfig.get("targetField")), meta.getKeyField())));
+        meta.setChildrenField(normalizeJavaField(StringUtils.defaultIfBlank(text(treeConfig.get("childrenField")), "children")));
+        meta.setLoadMode(StringUtils.defaultIfBlank(text(treeConfig.get("loadMode")), "full"));
+        meta.setKeyFieldCap(capJavaField(meta.getKeyField()));
+        meta.setParentFieldCap(capJavaField(meta.getParentField()));
+        meta.setLabelFieldCap(capJavaField(meta.getLabelField()));
+        meta.setFilterFieldCap(capJavaField(meta.getFilterField()));
+        meta.setTargetFieldCap(capJavaField(meta.getTargetField()));
+        meta.setChildrenFieldCap(capJavaField(meta.getChildrenField()));
+        meta.setKeyColumn(resolveColumnName(sourceColumns, meta.getKeyField()));
+        meta.setParentColumn(resolveColumnName(sourceColumns, meta.getParentField()));
+        meta.setTargetColumn(resolveColumnName(sourceColumns, meta.getTargetField()));
+        if (sourceMeta != null) {
+            sourceMeta.setTreeSource(true);
+            sourceMeta.setTreeChildrenField(meta.getChildrenField());
+        }
+        return meta;
+    }
+
+    private List<RelatedTableMeta> resolveInjectedRelatedTables(TreeCodegenMeta treeMeta,
+                                                                List<RelatedTableMeta> relatedTables,
+                                                                List<RelatedTableMeta> masterDetailChildren) {
+        Map<String, RelatedTableMeta> result = new LinkedHashMap<>();
+        if (treeMeta != null && treeMeta.isSeparateSource()) {
+            for (RelatedTableMeta relatedTable : relatedTables) {
+                if (StringUtils.equals(relatedTable.getClassName(), treeMeta.getClassName())) {
+                    result.put(relatedTable.getClassName(), relatedTable);
+                }
+            }
+        }
+        for (RelatedTableMeta child : masterDetailChildren) {
+            result.put(child.getClassName(), child);
+        }
+        return new ArrayList<>(result.values());
+    }
+
+    private RelatedTableMeta findRelatedTable(List<RelatedTableMeta> relatedTables, String modelCode, String tableName) {
+        if (relatedTables == null || relatedTables.isEmpty()) {
+            return null;
+        }
+        for (RelatedTableMeta relatedTable : relatedTables) {
+            if (StringUtils.isNotBlank(modelCode) && StringUtils.equals(modelCode, relatedTable.getModelCode())) {
+                return relatedTable;
+            }
+            if (StringUtils.isNotBlank(tableName) && StringUtils.equals(tableName, relatedTable.getTableName())) {
+                return relatedTable;
+            }
+        }
+        return null;
+    }
+
+    private void renderRelatedTableFiles(Map<String, String> files,
+                                         List<RelatedTableMeta> relatedTables,
+                                         String javaRoot,
+                                         String resRoot,
+                                         TreeCodegenMeta treeMeta) {
+        if (relatedTables == null || relatedTables.isEmpty()) {
+            return;
+        }
+        for (RelatedTableMeta meta : relatedTables) {
+            VelocityContext childCtx = VelocityUtils.prepareContext(meta.getTable());
+            childCtx.put("hasDictConfig", GenUtils.hasDictTrans(meta.getColumns()));
+            childCtx.put("hasDictTrans", GenUtils.hasDictTrans(meta.getColumns()));
+            childCtx.put("hasDesensitize", meta.getColumns().stream().anyMatch(c -> StringUtils.isNotBlank(c.getDesensitizeType())));
+            childCtx.put("hasEncrypt", false);
+            childCtx.put("enableDecrypt", false);
+            childCtx.put("enableEncrypt", false);
+            childCtx.put("hasEntityTreeFields", meta.isTreeSource());
+            childCtx.put("entityTreeChildrenField", StringUtils.defaultIfBlank(meta.getTreeChildrenField(), "children"));
+            childCtx.put("tree", meta.isTreeSource() ? treeMeta : null);
+            renderTo(files, "templates/vm/entity.java.vm", childCtx, javaRoot + "entity/" + meta.getClassName() + ".java");
+            renderTo(files, "templates/vm/mapper.java.vm", childCtx, javaRoot + "mapper/" + meta.getClassName() + "Mapper.java");
+            renderTo(files, "templates/vm/mapper.xml.vm", childCtx, resRoot + "mapper/" + meta.getClassName() + "Mapper.xml");
         }
     }
 
@@ -424,9 +833,7 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
     private List<Map<String, Object>> preprocessColumnsSchema(List<Map<String, Object>> columns, Map<String, Object> transConfig) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> col : columns) {
-            // 过滤操作列
             Object key = col.get("key");
-            if ("actions".equals(key)) continue;
             Map<String, Object> newCol = new java.util.LinkedHashMap<>(col);
             // 提取 render.dictType
             Object renderObj = col.get("render");
@@ -468,6 +875,100 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readNestedMap(Map<String, Object> source, String key) {
+        if (source == null || !(source.get(key) instanceof Map<?, ?> map)) {
+            return new LinkedHashMap<>();
+        }
+        return new LinkedHashMap<>((Map<String, Object>) map);
+    }
+
+    private String toJsonLiteral(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? new LinkedHashMap<>() : value);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
+    private String text(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Integer integerValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && StringUtils.isNotBlank(text)) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private boolean booleanValue(Object value) {
+        return Boolean.TRUE.equals(value) || "true".equalsIgnoreCase(String.valueOf(value));
+    }
+
+    private boolean booleanValueDefault(Object value, boolean defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        return booleanValue(value);
+    }
+
+    private String resolveColumnName(List<GenTableColumn> columns, String javaField) {
+        if (StringUtils.isBlank(javaField) || columns == null) {
+            return camelToSnake(javaField);
+        }
+        return columns.stream()
+                .filter(column -> StringUtils.equals(javaField, column.getJavaField())
+                        || StringUtils.equals(javaField, column.getColumnName()))
+                .map(GenTableColumn::getColumnName)
+                .findFirst()
+                .orElse(camelToSnake(javaField));
+    }
+
+    private String capJavaField(String javaField) {
+        String field = normalizeJavaField(javaField);
+        if (StringUtils.isBlank(field)) {
+            return field;
+        }
+        return Character.toUpperCase(field.charAt(0)) + field.substring(1);
+    }
+
+    private String normalizeJavaField(String field) {
+        if (StringUtils.isBlank(field)) {
+            return field;
+        }
+        String trimmed = field.trim();
+        if (trimmed.contains("_") || trimmed.contains("-")) {
+            return lowerCamel(trimmed);
+        }
+        return trimmed;
+    }
+
+    private String lowerCamel(String value) {
+        String pascal = toPascalCase(value);
+        if (StringUtils.isBlank(pascal)) {
+            return pascal;
+        }
+        return Character.toLowerCase(pascal.charAt(0)) + pascal.substring(1);
+    }
+
+    private String camelToSnake(String value) {
+        if (StringUtils.isBlank(value)) {
+            return value;
+        }
+        String normalized = value.replace("-", "_");
+        return normalized
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .toLowerCase(Locale.ROOT);
+    }
+
     private String buildConfigJson(AiCrudConfig config) throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("configKey", config.getConfigKey());
@@ -478,6 +979,56 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
         map.put("columnsSchema", parseJsonArray(config.getColumnsSchema()));
         map.put("editSchema", parseJsonArray(config.getEditSchema()));
         map.put("apiConfig", parseJsonObject(config.getApiConfig()));
+        map.put("options", parseJsonObject(config.getOptions()));
         return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(map);
+    }
+
+    @Data
+    private static class RelatedTableMeta {
+        private String modelCode;
+        private String key;
+        private String modelName;
+        private String tableName;
+        private String className;
+        private String variableName;
+        private String mapperVarName;
+        private GenTable table;
+        private List<GenTableColumn> columns = new ArrayList<>();
+        private GenTableColumn pkColumn;
+        private boolean treeSource;
+        private String treeChildrenField;
+        private boolean masterDetailChild;
+        private String childKey;
+        private String childFkField;
+        private String childFkFieldCap;
+        private String childFkColumn;
+        private String mainField;
+        private String mainFieldCap;
+        private String mainColumn;
+    }
+
+    @Data
+    private static class TreeCodegenMeta {
+        private boolean separateSource;
+        private String sourceModelCode;
+        private String sourceTableName;
+        private String className;
+        private String mapperVarName;
+        private String keyField;
+        private String keyFieldCap;
+        private String keyColumn;
+        private String parentField;
+        private String parentFieldCap;
+        private String parentColumn;
+        private String labelField;
+        private String labelFieldCap;
+        private String filterField;
+        private String filterFieldCap;
+        private String targetField;
+        private String targetFieldCap;
+        private String targetColumn;
+        private String childrenField;
+        private String childrenFieldCap;
+        private String loadMode;
     }
 }

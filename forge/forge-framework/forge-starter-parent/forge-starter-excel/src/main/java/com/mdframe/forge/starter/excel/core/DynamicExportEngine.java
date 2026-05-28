@@ -6,7 +6,10 @@ import com.mdframe.forge.starter.excel.model.ExcelColumnConfig;
 import com.mdframe.forge.starter.excel.model.ExcelExportMetadata;
 import com.mdframe.forge.starter.excel.spi.ExcelConfigProvider;
 import com.mdframe.forge.starter.excel.spi.ExcelMetadataProvider;
+import com.mdframe.forge.starter.trans.annotation.DictTrans;
+import com.mdframe.forge.starter.trans.annotation.TransField;
 import com.mdframe.forge.starter.trans.manager.TransManager;
+import com.mdframe.forge.starter.trans.spi.DictValueProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +46,9 @@ public class DynamicExportEngine {
 
     @Autowired(required = false)
     private TransManager transManager;
+    
+    @Autowired(required = false)
+    private DictValueProvider dictValueProvider;
 
     /**
      * 动态导出核心方法
@@ -55,8 +61,11 @@ public class DynamicExportEngine {
         try {
             // 1. 加载导出元数据
             ExcelExportMetadata metadata = loadMetadata(configKey);
-            if (metadata == null || metadata.getStatus() == 0) {
+            if (metadata == null || Integer.valueOf(0).equals(metadata.getStatus())) {
                 throw new RuntimeException("导出配置不存在或已禁用: " + configKey);
+            }
+            if (!isExportAllowed(metadata)) {
+                throw new RuntimeException("当前配置未开启导出: " + configKey);
             }
 
             // 2. 加载列配置
@@ -72,8 +81,9 @@ public class DynamicExportEngine {
                 dataList = Collections.emptyList();
             }
 
-            // 4. 字典翻译
-            if (Boolean.TRUE.equals(metadata.getAutoTrans()) && transManager != null) {
+            // 4. 注解翻译仅在导出列依赖 xxxName/target 字段时触发。
+            // 基于 dictType 的列由 translateFieldValue 直接处理，避免导出与导入配置重复维护。
+            if (shouldTranslateData(metadata, columnConfigs, dataList)) {
                 translateData(dataList);
             }
 
@@ -100,6 +110,13 @@ public class DynamicExportEngine {
             throw new RuntimeException("未配置ExcelMetadataProvider");
         }
         return metadataProvider.getMetadata(configKey);
+    }
+
+    private boolean isExportAllowed(ExcelExportMetadata metadata) {
+        if (metadata == null || metadata.getConfigType() == null || metadata.getConfigType().isBlank()) {
+            return true;
+        }
+        return !"IMPORT".equalsIgnoreCase(metadata.getConfigType());
     }
 
     /**
@@ -190,16 +207,16 @@ public class DynamicExportEngine {
             
             // 2. 基本类型及其包装类
             if (isPrimitiveOrWrapper(paramType)) {
-                Object value = queryParams != null && queryParams.size() == 1 
-                    ? queryParams.values().iterator().next() 
+                Object value = queryParams != null && queryParams.size() == 1
+                    ? queryParams.values().iterator().next()
                     : null;
                 return new Object[]{convertToType(value, paramType)};
             }
             
             // 3. String类型
             if (String.class.isAssignableFrom(paramType)) {
-                Object value = queryParams != null && queryParams.size() == 1 
-                    ? queryParams.values().iterator().next() 
+                Object value = queryParams != null && queryParams.size() == 1
+                    ? queryParams.values().iterator().next()
                     : null;
                 return new Object[]{value != null ? String.valueOf(value) : null};
             }
@@ -254,10 +271,10 @@ public class DynamicExportEngine {
      * 判断是否为基本类型或其包装类
      */
     private boolean isPrimitiveOrWrapper(Class<?> clazz) {
-        return clazz.isPrimitive() 
-            || clazz == Integer.class || clazz == Long.class 
-            || clazz == Double.class || clazz == Float.class 
-            || clazz == Boolean.class || clazz == Byte.class 
+        return clazz.isPrimitive()
+            || clazz == Integer.class || clazz == Long.class
+            || clazz == Double.class || clazz == Float.class
+            || clazz == Boolean.class || clazz == Byte.class
             || clazz == Short.class || clazz == Character.class;
     }
     
@@ -409,6 +426,60 @@ public class DynamicExportEngine {
         }
     }
 
+    private boolean shouldTranslateData(ExcelExportMetadata metadata,
+                                        List<ExcelColumnConfig> columnConfigs,
+                                        List<?> dataList) {
+        if (!Boolean.TRUE.equals(metadata.getAutoTrans()) || transManager == null || dataList.isEmpty()) {
+            return false;
+        }
+        Class<?> rowClass = dataList.get(0).getClass();
+        if (!isDictTransEnabled(rowClass)) {
+            return false;
+        }
+        for (ExcelColumnConfig columnConfig : columnConfigs) {
+            if (columnConfig == null || columnConfig.getFieldName() == null) {
+                continue;
+            }
+            if (isTransTargetField(rowClass, columnConfig.getFieldName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isDictTransEnabled(Class<?> rowClass) {
+        Class<?> current = rowClass;
+        while (current != null && current != Object.class) {
+            DictTrans dictTrans = current.getAnnotation(DictTrans.class);
+            if (dictTrans != null) {
+                return dictTrans.enabled();
+            }
+            current = current.getSuperclass();
+        }
+        return false;
+    }
+
+    private boolean isTransTargetField(Class<?> rowClass, String exportFieldName) {
+        Class<?> current = rowClass;
+        while (current != null && current != Object.class) {
+            for (java.lang.reflect.Field field : current.getDeclaredFields()) {
+                TransField transField = field.getAnnotation(TransField.class);
+                if (transField == null) {
+                    continue;
+                }
+                String targetField = transField.target();
+                if (targetField == null || targetField.isEmpty()) {
+                    targetField = field.getName() + "Name";
+                }
+                if (exportFieldName.equals(targetField)) {
+                    return true;
+                }
+            }
+            current = current.getSuperclass();
+        }
+        return false;
+    }
+
     /**
      * 导出到响应流
      */
@@ -458,12 +529,52 @@ public class DynamicExportEngine {
             List<Object> row = new ArrayList<>();
             for (ExcelColumnConfig config : columnConfigs) {
                 Object value = getFieldValue(obj, config.getFieldName());
+                value = translateFieldValue(value, config);
+                value = formatFieldValue(value, config);
                 row.add(value);
             }
             result.add(row);
         }
         log.debug("映射数据: {} 条记录，{} 列", result.size(), columnConfigs.size());
         return result;
+    }
+    
+    private Object translateFieldValue(Object value, ExcelColumnConfig config) {
+        if (value == null || config.getDictType() == null || config.getDictType().isEmpty()) {
+            return value;
+        }
+        if (dictValueProvider == null) {
+            return value;
+        }
+        try {
+            String key = String.valueOf(value);
+            String label = dictValueProvider.getLabel(config.getDictType(), key);
+            return label != null ? label : value;
+        } catch (Exception e) {
+            log.debug("字典翻译失败: dictType={}, value={}", config.getDictType(), value);
+            return value;
+        }
+    }
+    
+    private Object formatFieldValue(Object value, ExcelColumnConfig config) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDateTime && config.getDateFormat() != null && !config.getDateFormat().isEmpty()) {
+            try {
+                return ((LocalDateTime) value).format(DateTimeFormatter.ofPattern(config.getDateFormat()));
+            } catch (Exception e) {
+                return value.toString();
+            }
+        }
+        if (value instanceof LocalDate && config.getDateFormat() != null && !config.getDateFormat().isEmpty()) {
+            try {
+                return ((LocalDate) value).format(DateTimeFormatter.ofPattern(config.getDateFormat()));
+            } catch (Exception e) {
+                return value.toString();
+            }
+        }
+        return value;
     }
 
     /**
@@ -516,8 +627,11 @@ public class DynamicExportEngine {
     public void exportToStream(java.io.OutputStream outputStream, String configKey, Map<String, Object> queryParams) {
         try {
             ExcelExportMetadata metadata = loadMetadata(configKey);
-            if (metadata == null || metadata.getStatus() == 0) {
+            if (metadata == null || Integer.valueOf(0).equals(metadata.getStatus())) {
                 throw new RuntimeException("导出配置不存在或已禁用：" + configKey);
+            }
+            if (!isExportAllowed(metadata)) {
+                throw new RuntimeException("当前配置未开启导出：" + configKey);
             }
 
             List<ExcelColumnConfig> columnConfigs = loadColumnConfigs(configKey);
@@ -531,7 +645,7 @@ public class DynamicExportEngine {
                 dataList = Collections.emptyList();
             }
 
-            if (Boolean.TRUE.equals(metadata.getAutoTrans()) && transManager != null) {
+            if (shouldTranslateData(metadata, columnConfigs, dataList)) {
                 translateData(dataList);
             }
 

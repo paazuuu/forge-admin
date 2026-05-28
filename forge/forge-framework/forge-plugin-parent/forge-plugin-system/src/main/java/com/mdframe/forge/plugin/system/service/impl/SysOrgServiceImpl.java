@@ -44,7 +44,11 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
     @Override
     @DictTranslate
     public List<SysOrgTreeVO> selectOrgLazyTree(SysOrgQuery query) {
-        return orgMapper.selectOrgLazyTree(query);
+        List<SysOrgTreeVO> allOrgs = orgMapper.selectOrgLazyTree(query);
+        if (query != null && query.getParentId() != null) {
+            return allOrgs;
+        }
+        return buildLazyRootNodes(allOrgs);
     }
     
     @Override
@@ -87,6 +91,37 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
                     org.setChildren(children.isEmpty() ? null : children);
                 })
                 .toList();
+    }
+
+    /**
+     * 懒加载根节点按当前可见结果集识别。
+     * 数据权限过滤掉顶级组织时，父节点不可见的下级组织需要作为当前视图根节点返回。
+     */
+    private List<SysOrgTreeVO> buildLazyRootNodes(List<SysOrgTreeVO> allOrgs) {
+        if (allOrgs == null || allOrgs.isEmpty()) {
+            return allOrgs;
+        }
+        Set<Long> visibleIds = allOrgs.stream()
+                .map(SysOrgTreeVO::getId)
+                .collect(Collectors.toSet());
+        Set<Long> visibleParentIds = allOrgs.stream()
+                .map(SysOrgTreeVO::getParentId)
+                .filter(parentId -> parentId != null && visibleIds.contains(parentId))
+                .collect(Collectors.toSet());
+        return allOrgs.stream()
+                .filter(org -> isLazyRootNode(org, visibleIds))
+                .peek(org -> {
+                    org.setChildren(null);
+                    if (visibleParentIds.contains(org.getId())) {
+                        org.setHasChildren(true);
+                    }
+                })
+                .toList();
+    }
+
+    private boolean isLazyRootNode(SysOrgTreeVO org, Set<Long> visibleIds) {
+        Long parentId = org.getParentId();
+        return parentId == null || parentId == 0L || !visibleIds.contains(parentId);
     }
 
     @Override

@@ -11,6 +11,13 @@ export function get${apiVarName}Page(params) {
   return request.get(BASE + '/page', { params })
 }
 
+#if(${hasTreeConfig})
+/** 查询树形数据 */
+export function get${apiVarName}Tree(params) {
+  return request.get(BASE + '/tree', { params })
+}
+
+#end
 /** 查询详情 */
 export function get${apiVarName}Detail(${pkColumn.javaField}) {
   return request.post(BASE + '/getById', null, { params: { ${pkColumn.javaField} } })

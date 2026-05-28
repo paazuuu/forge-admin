@@ -15,6 +15,11 @@ public class ExcelExportMetadata {
     private String configKey;
 
     /**
+     * 配置类型（EXPORT-导出，IMPORT-导入，BOTH-导入导出）
+     */
+    private String configType;
+
+    /**
      * 导出名称
      */
     private String exportName;

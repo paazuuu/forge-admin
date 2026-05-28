@@ -298,7 +298,7 @@ const tableColumns = computed(() => visibleColumns.value.map(field => ({
 })).concat({
   key: 'actions',
   title: '操作',
-  width: Math.max(140, (2 + customRowActions.value.length) * 54),
+  width: Math.max(196, (3 + customRowActions.value.length) * 62),
   fixed: 'right',
   render: row => renderDraftActions(row),
 }))
@@ -460,6 +460,7 @@ function resolveSearchPreviewType(field) {
 function renderDraftActions(_row) {
   const actions = [
     { key: 'edit', label: '编辑', type: 'primary' },
+    { key: 'detail', label: '查看详情', type: 'info' },
     { key: 'delete', label: '删除', type: 'error' },
     ...customRowActions.value,
   ]
@@ -563,12 +564,17 @@ function transformColumns(columns, transConfig) {
   if (transConfig && typeof transConfig === 'object') {
     for (const [field, conf] of Object.entries(transConfig)) {
       transMap[field] = conf.targetField || `${field}Name`
-      if (conf.type) transTypeMap[field] = conf.type
+      if (conf.type)
+        transTypeMap[field] = conf.type
     }
   }
   return (columns || []).map((col) => {
     const key = col.prop || col.key || col.dataIndex
     const nextCol = { ...col, prop: key }
+    if (['actions', 'action'].includes(key) && Array.isArray(col.actions)) {
+      nextCol.actions = ensureDetailRowAction(col.actions)
+      nextCol.width = Math.max(Number(col.width) || 0, nextCol.actions.length * 58, 180)
+    }
     if (col.render && typeof col.render === 'object') {
       const renderType = col.render.type
       if (renderType === 'dictTag') {
@@ -585,9 +591,10 @@ function transformColumns(columns, transConfig) {
         return nextCol
       }
       if (renderType === 'imageUpload') {
-        nextCol.render = row => {
+        nextCol.render = (row) => {
           const value = row[key]
-          if (!value) return '-'
+          if (!value)
+            return '-'
           return h('span', { style: 'color: #2563eb' }, value)
         }
         return nextCol
@@ -605,6 +612,20 @@ function transformColumns(columns, transConfig) {
     }
     return nextCol
   })
+}
+
+function ensureDetailRowAction(actions = []) {
+  if (actions.some(action => action?.key === 'detail'))
+    return actions
+  const next = [...actions]
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const detailAction = { key: 'detail', label: '查看详情', type: 'info', position: 'row' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, detailAction)
+    return next
+  }
+  next.unshift(detailAction)
+  return next
 }
 
 function transformFields(fields) {
@@ -871,6 +892,10 @@ function extractApiUrl(apiConfigValue) {
 
 .draft-action-link.type-warning {
   color: #d97706;
+}
+
+.draft-action-link.type-info {
+  color: #475569;
 }
 
 .draft-action-link.type-success {

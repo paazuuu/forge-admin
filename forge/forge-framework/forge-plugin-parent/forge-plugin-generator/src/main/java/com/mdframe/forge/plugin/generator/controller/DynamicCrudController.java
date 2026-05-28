@@ -2,6 +2,8 @@ package com.mdframe.forge.plugin.generator.controller;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mdframe.forge.plugin.generator.domain.entity.AiCrudExportTask;
+import com.mdframe.forge.plugin.generator.dto.DynamicCrudExportResult;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudImportResult;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudExcelService;
@@ -44,8 +46,13 @@ public class DynamicCrudController {
 
     @ApiEncrypt
     @GetMapping("/tree")
-    public RespInfo<List<Map<String, Object>>> tree(@PathVariable String configKey) {
-        return RespInfo.success(dynamicCrudService.selectTree(configKey));
+    public RespInfo<List<Map<String, Object>>> tree(@PathVariable String configKey,
+                                                    @RequestParam(required = false) String parentValue,
+                                                    @RequestParam(required = false) String parentId,
+                                                    @RequestParam(required = false) String loadMode,
+                                                    @RequestParam(required = false) String orderByColumn,
+                                                    @RequestParam(required = false) String isAsc) {
+        return RespInfo.success(dynamicCrudService.selectTree(configKey, parentValue, parentId, loadMode, orderByColumn, isAsc));
     }
 
     @ApiEncrypt
@@ -88,10 +95,24 @@ public class DynamicCrudController {
     }
 
     @PostMapping("/export")
-    public void exportExcel(@PathVariable String configKey,
-                            @RequestBody(required = false) Map<String, Object> requestBody,
-                            HttpServletResponse response) {
-        dynamicCrudExcelService.exportExcel(configKey, buildQueryFromBody(requestBody), response);
+    public RespInfo<DynamicCrudExportResult> exportExcel(@PathVariable String configKey,
+                                                         @RequestBody(required = false) Map<String, Object> requestBody,
+                                                         HttpServletResponse response) {
+        DynamicCrudExportResult result = dynamicCrudExcelService.exportExcel(
+                configKey, buildQueryFromBody(requestBody), response);
+        return Boolean.TRUE.equals(result.getAsync()) ? RespInfo.success(result) : null;
+    }
+
+    @GetMapping("/export/tasks")
+    public RespInfo<Page<AiCrudExportTask>> exportTasks(@PathVariable String configKey,
+                                                        PageQuery pageQuery) {
+        return RespInfo.success(dynamicCrudExcelService.selectExportTaskPage(configKey, pageQuery));
+    }
+
+    @GetMapping("/export/tasks/{taskId}")
+    public RespInfo<AiCrudExportTask> exportTask(@PathVariable String configKey,
+                                                 @PathVariable Long taskId) {
+        return RespInfo.success(dynamicCrudExcelService.selectExportTask(configKey, taskId));
     }
 
     @GetMapping("/import-template")

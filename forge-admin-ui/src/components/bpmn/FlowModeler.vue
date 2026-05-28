@@ -220,8 +220,6 @@
 import BpmnModeler from 'bpmn-js/lib/Modeler'
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import autoLayout from './AutoLayout.js'
-import CanvasBackground from './CanvasBackground.js'
-import CustomRenderer from './CustomRenderer.js'
 import flowableModdle from './flowable-moddle.json'
 import Minimap from './Minimap.vue'
 import ShortcutsBar from './ShortcutsBar.vue'
@@ -317,10 +315,6 @@ async function initModeler() {
     moddleExtensions: {
       flowable: flowableModdle,
     },
-    additionalModules: [
-      CustomRenderer,
-      CanvasBackground,
-    ],
   })
   modelerRef.value = modeler
   isModelerReady.value = true
@@ -889,40 +883,27 @@ defineExpose({
 </script>
 
 <style scoped>
-/* ========== 设计系统变量 ========== */
-:root {
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --secondary: #818cf8;
-  --success: #10b981;
-  --background: #f5f3ff;
-  --surface: #ffffff;
-  --text-primary: #1e1b4b;
-  --border: #e2e8f0;
-  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 .flow-modeler-container {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --secondary: #475467;
+  --success: #18a058;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --text-primary: #172033;
+  --border: #d7dde7;
+  --transition: 160ms ease;
+
   height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border: 2px solid var(--primary);
-  border-radius: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   overflow: hidden;
   transition:
     background var(--transition),
-    border-color var(--transition),
-    box-shadow var(--transition);
-  box-shadow:
-    0 4px 6px -1px rgba(99, 102, 241, 0.1),
-    0 2px 4px -1px rgba(99, 102, 241, 0.06);
-}
-
-.flow-modeler-container:hover {
-  box-shadow:
-    0 10px 15px -3px rgba(99, 102, 241, 0.15),
-    0 4px 6px -2px rgba(99, 102, 241, 0.1);
+    border-color var(--transition);
 }
 
 .flow-modeler-container.dark {
@@ -931,13 +912,12 @@ defineExpose({
 }
 
 .toolbar {
-  padding: 12px 16px;
-  border-bottom: 2px solid var(--primary);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(129, 140, 248, 0.05) 100%);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: #f8fafc;
   transition:
     background var(--transition),
     border-color var(--transition);
-  backdrop-filter: blur(8px);
 }
 
 .dark .toolbar {
@@ -949,12 +929,19 @@ defineExpose({
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: var(--background);
+  background-color: var(--background);
+  background-image: linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 .canvas-container {
   width: 100%;
   height: 100%;
+}
+
+:deep(.djs-container),
+:deep(.djs-container svg) {
+  background: transparent;
 }
 
 .import-panel {
@@ -989,7 +976,7 @@ defineExpose({
   background: transparent;
 }
 
-/* ========== bpmn-js 工具面板 —— 横向顶部 + Indigo 主题 ========== */
+/* ========== bpmn-js 工具面板 —— 横向顶部 + 企业后台主题 ========== */
 
 :deep(.djs-palette) {
   --palette-entry-color: #64748b;
@@ -999,8 +986,8 @@ defineExpose({
 
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 0 0 10px 10px;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   padding: 4px 8px !important;
   left: 50% !important;
   top: 0 !important;
@@ -1014,11 +1001,7 @@ defineExpose({
   align-items: center !important;
   flex-wrap: nowrap !important;
   gap: 2px;
-  transition: box-shadow var(--transition);
-}
-
-:deep(.djs-palette:hover) {
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+  transition: border-color var(--transition);
 }
 
 :deep(.djs-palette::before) {
@@ -1032,8 +1015,9 @@ defineExpose({
 :deep(.djs-palette .entry) {
   border-radius: 8px;
   cursor: pointer;
-  transition: all var(--transition);
-  will-change: transform, background-color;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
   float: none !important;
   display: inline-flex !important;
   align-items: center;
@@ -1044,17 +1028,12 @@ defineExpose({
   cursor: pointer;
 }
 
-:deep(.djs-palette .entry:active) {
-  transform: scale(0.95);
-}
-
 :deep(.djs-palette .entry::before) {
   vertical-align: middle !important;
 }
 
 :deep(.djs-palette .entry:hover) {
-  background: rgba(99, 102, 241, 0.1);
-  transform: translateY(-1px);
+  background: #eff6ff;
 }
 
 :deep(.djs-palette .entry.bpmn-icon-start-event-none:hover),
@@ -1071,7 +1050,7 @@ defineExpose({
 :deep(.djs-palette .entry.bpmn-icon-manual-task:hover),
 :deep(.djs-palette .entry.bpmn-icon-send-task:hover),
 :deep(.djs-palette .entry.bpmn-icon-receive-task:hover) {
-  background: rgba(99, 102, 241, 0.15);
+  background: #eff6ff;
   color: var(--primary) !important;
 }
 
@@ -1088,7 +1067,7 @@ defineExpose({
 :deep(.djs-palette .entry.bpmn-icon-subprocess-collapsed:hover),
 :deep(.djs-palette .entry.bpmn-icon-call-activity:hover),
 :deep(.djs-palette .entry.bpmn-icon-participant:hover) {
-  background: rgba(129, 140, 248, 0.15);
+  background: #f2f4f7;
   color: var(--secondary) !important;
 }
 
@@ -1104,7 +1083,6 @@ defineExpose({
 :deep(.djs-palette .highlighted-entry) {
   background: var(--primary) !important;
   color: white !important;
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3) !important;
 }
 
 :deep(.djs-palette .separator) {
@@ -1137,9 +1115,9 @@ defineExpose({
 /* ========== 上下文菜单（context pad） ========== */
 :deep(.djs-context-pad) {
   background: var(--surface);
-  border: 2px solid var(--primary);
-  border-radius: 14px;
-  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
   padding: 6px;
   gap: 4px;
 }
@@ -1147,14 +1125,15 @@ defineExpose({
 :deep(.djs-context-pad .entry) {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  transition: all var(--transition);
+  border-radius: 6px;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
   cursor: pointer;
 }
 
 :deep(.djs-context-pad .entry:hover) {
-  background: rgba(99, 102, 241, 0.1);
-  transform: scale(1.1);
+  background: #eff6ff;
   cursor: pointer;
 }
 
@@ -1171,14 +1150,14 @@ defineExpose({
 /* ========== 弹出菜单（类型切换等） ========== */
 :deep(.djs-popup) {
   background: var(--surface);
-  border: 2px solid var(--primary);
-  border-radius: 14px;
-  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
   padding: 8px;
 }
 
 :deep(.djs-popup .entry) {
-  border-radius: 10px;
+  border-radius: 6px;
   padding: 8px 14px;
   font-size: 13px;
   font-weight: 500;
@@ -1188,7 +1167,7 @@ defineExpose({
 }
 
 :deep(.djs-popup .entry:hover) {
-  background: rgba(99, 102, 241, 0.1);
+  background: #eff6ff;
   color: var(--primary);
   cursor: pointer;
 }
@@ -1235,7 +1214,7 @@ defineExpose({
 }
 
 .dark :deep(.djs-palette .entry:hover) {
-  background: rgba(129, 140, 248, 0.2);
+  background: rgba(37, 99, 235, 0.18);
 }
 
 .dark :deep(.djs-palette .entry.bpmn-icon-start-event-none:hover),
@@ -1248,8 +1227,8 @@ defineExpose({
 .dark :deep(.djs-palette .entry.bpmn-icon-user-task:hover),
 .dark :deep(.djs-palette .entry.bpmn-icon-service-task:hover),
 .dark :deep(.djs-palette .entry.bpmn-icon-script-task:hover) {
-  background: rgba(129, 140, 248, 0.25);
-  color: #a5b4fc !important;
+  background: rgba(37, 99, 235, 0.22);
+  color: #93c5fd !important;
 }
 
 .dark :deep(.djs-palette .entry.bpmn-icon-gateway-xor:hover),
@@ -1261,15 +1240,14 @@ defineExpose({
 .dark :deep(.djs-palette .entry.bpmn-icon-subprocess-expanded:hover),
 .dark :deep(.djs-palette .entry.bpmn-icon-subprocess-collapsed:hover),
 .dark :deep(.djs-palette .entry.bpmn-icon-call-activity:hover) {
-  background: rgba(129, 140, 248, 0.25);
-  color: #c4b5fd !important;
+  background: rgba(100, 116, 139, 0.35);
+  color: #cbd5e1 !important;
 }
 
 .dark :deep(.djs-palette .entry.selected),
 .dark :deep(.djs-palette .highlighted-entry) {
   background: var(--secondary) !important;
   color: white !important;
-  box-shadow: 0 4px 6px -1px rgba(129, 140, 248, 0.4) !important;
 }
 
 .dark :deep(.djs-palette .separator) {
@@ -1286,7 +1264,7 @@ defineExpose({
 }
 
 .dark :deep(.djs-context-pad .entry:hover) {
-  background: rgba(129, 140, 248, 0.2);
+  background: rgba(37, 99, 235, 0.18);
 }
 
 .dark :deep(.djs-context-pad .entry:hover::before) {
@@ -1299,7 +1277,7 @@ defineExpose({
 }
 
 .dark :deep(.djs-popup .entry:hover) {
-  background: rgba(129, 140, 248, 0.2);
+  background: rgba(37, 99, 235, 0.18);
   color: var(--secondary);
 }
 

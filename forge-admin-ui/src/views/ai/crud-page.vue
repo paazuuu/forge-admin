@@ -33,6 +33,7 @@ import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import DictTag from '@/components/DictTag.vue'
 import { getDictData } from '@/composables/useDict'
 import { useTabStore } from '@/store'
+import { request } from '@/utils'
 
 const route = useRoute()
 const tabStore = useTabStore()
@@ -50,7 +51,7 @@ const currentTemplate = ref(null)
  * 转换表格列配置：将 JSON 格式的 render 对象转为 Vue render 函数
  * 如果配置了 transConfig，则使用翻译后的 xxxName 字段直接显示文本
  */
-function transformColumns(columns, transConfig) {
+function transformColumns(columns, transConfig, options = {}) {
   // 构建翻译映射: { field -> targetField }
   const transMap = {}
   if (transConfig && typeof transConfig === 'object') {
@@ -59,18 +60,21 @@ function transformColumns(columns, transConfig) {
     }
   }
 
+  let treeColumnApplied = false
   const result = (columns || []).map((col) => {
     // 统一提取字段名，优先级：prop > key > dataIndex
     const key = col.prop || col.key || col.dataIndex
     // 统一补prop字段，AiTable需要这个字段来匹配数据
     const newCol = { ...col, prop: key }
-
-    // 如果该字段有翻译配置，优先显示翻译后的值，没有则显示原字段值
-    if (transMap[key]) {
-      const targetField = transMap[key]
-      newCol.render = row => row[targetField] ?? row[key]
-      return newCol
+    if (['actions', 'action'].includes(key) && Array.isArray(col.actions) && options.includeDetailAction) {
+      newCol.actions = ensureDetailRowAction(col.actions)
+      newCol.width = Math.max(Number(col.width) || 0, newCol.actions.length * 58, 180)
     }
+    if (options.treeTable && !treeColumnApplied && key && !['actions', 'action'].includes(key)) {
+      newCol.tree = true
+      treeColumnApplied = true
+    }
+
     // dictTag 渲染
     if (col.render && typeof col.render === 'object' && col.render.type === 'dictTag') {
       newCol.render = row => h(DictTag, {
@@ -80,10 +84,35 @@ function transformColumns(columns, transConfig) {
       })
       return newCol
     }
+    if (col.render && typeof col.render === 'object' && ['orgName', 'userName', 'regionName', 'fileUpload'].includes(col.render.type)) {
+      const targetField = col.render.targetField || `${key}Name`
+      newCol.render = row => row[targetField] ?? row[key] ?? '-'
+      return newCol
+    }
+    // 如果该字段有翻译配置，优先显示翻译后的值，没有则显示原字段值
+    if (transMap[key]) {
+      const targetField = transMap[key]
+      newCol.render = row => row[targetField] ?? row[key]
+      return newCol
+    }
     return newCol
   })
 
   return result
+}
+
+function ensureDetailRowAction(actions = []) {
+  if (actions.some(action => action?.key === 'detail'))
+    return actions
+  const next = [...actions]
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const detailAction = { key: 'detail', label: '查看详情', type: 'info', position: 'row' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, detailAction)
+    return next
+  }
+  next.unshift(detailAction)
+  return next
 }
 
 /**
@@ -149,13 +178,20 @@ const crudProps = computed(() => {
     return {}
   const cfg = renderConfig.value
   const options = cfg.options || {}
+  const treeTable = isTreeTableRuntime(cfg)
+  const treeConfig = options.treeConfig || {}
+  const treeLoadMode = resolveTreeLoadMode(treeConfig)
+  const defaultSortParams = resolveDefaultSortParams(options.defaultSort)
+  const apiConfig = treeTable
+    ? { ...(cfg.apiConfig || {}), list: cfg.apiConfig?.tree || cfg.apiConfig?.list }
+    : cfg.apiConfig || {}
   const masterDetailConfig = options.masterDetailConfig || {}
   return {
     searchSchema: transformFields(cfg.searchSchema),
-    columns: transformColumns(cfg.columnsSchema, cfg.transConfig),
+    columns: transformColumns(cfg.columnsSchema, cfg.transConfig, { treeTable, includeDetailAction: true }),
     editSchema: transformFields(cfg.editSchema),
     childrenConfig: transformChildrenConfig(masterDetailConfig.children || []),
-    apiConfig: cfg.apiConfig || {},
+    apiConfig,
     options,
     rowKey: cfg.rowKey || 'id',
     modalType: options.modalType || cfg.modalType || 'drawer',
@@ -163,17 +199,112 @@ const crudProps = computed(() => {
     editGridCols: options.editGridCols || cfg.editGridCols || 1,
     loadDetailOnEdit: options.loadDetailOnEdit ?? cfg.loadDetailOnEdit ?? true,
     searchGridCols: options.searchGridCols || cfg.searchGridCols || 4,
+    hideAdd: !!options.hideAdd,
     hideBatchDelete: !!options.hideBatchDelete,
     showImport: !!options.showImport,
     showExport: !!options.showExport,
+    showPagination: treeTable ? false : options.showPagination !== false,
     importApi: extractApiUrl(cfg.apiConfig?.import),
     exportApi: cfg.apiConfig?.export || '',
     importTemplateUrl: extractApiUrl(cfg.apiConfig?.importTemplate),
     enableCustomQuery: options.enableCustomQuery !== false,
     customQueryConfigKey: cfg.configKey,
     toolbarActions: options.toolbarActions || [],
+    publicParams: treeTable ? { ...defaultSortParams, loadMode: treeLoadMode } : defaultSortParams,
+    beforeRenderList: treeTable ? list => normalizeTreeTableNodes(list, treeConfig) : null,
+    treeConfig: treeTable ? treeConfig : {},
+    tableProps: treeTable ? buildTreeTableProps(cfg) : {},
   }
 })
+
+function resolveDefaultSortParams(defaultSort = {}) {
+  const orderByColumn = defaultSort.orderByColumn || defaultSort.field || 'id'
+  const isAsc = defaultSort.isAsc || defaultSort.order || 'desc'
+  return {
+    orderByColumn,
+    isAsc,
+  }
+}
+
+function isTreeTableRuntime(cfg = {}) {
+  return !!cfg.options?.treeConfig && (cfg.layoutType || 'simple-crud') !== 'tree-crud'
+}
+
+function resolveTreeLoadMode(treeConfig = {}) {
+  return treeConfig.loadMode === 'lazy' ? 'lazy' : 'full'
+}
+
+function buildTreeTableProps(cfg = {}) {
+  const treeConfig = cfg.options?.treeConfig || {}
+  const loadMode = resolveTreeLoadMode(treeConfig)
+  return {
+    childrenKey: treeConfig.childrenField || 'children',
+    defaultExpandAll: loadMode !== 'lazy',
+    onLoad: loadMode === 'lazy' ? node => loadTreeTableChildren(node, cfg) : undefined,
+  }
+}
+
+async function loadTreeTableChildren(node, cfg = {}) {
+  const treeConfig = cfg.options?.treeConfig || {}
+  const treeApi = cfg.apiConfig?.tree
+  if (!treeApi || !node)
+    return
+  const { method, url } = parseApiConfigValue(treeApi)
+  const keyField = treeConfig.keyField || 'id'
+  const parentValue = node[keyField] ?? node.key ?? node.targetValue
+  const defaultSortParams = resolveDefaultSortParams(cfg.options?.defaultSort)
+  try {
+    const res = await request({
+      method,
+      url,
+      params: {
+        ...defaultSortParams,
+        loadMode: 'lazy',
+        parentValue,
+      },
+    })
+    node[treeConfig.childrenField || 'children'] = normalizeTreeTableNodes(res?.data || [], treeConfig)
+    if (!node[treeConfig.childrenField || 'children'].length)
+      node.isLeaf = true
+  }
+  catch (error) {
+    console.warn('[crud-page] 加载树形子节点失败', error)
+    node.isLeaf = true
+  }
+}
+
+function normalizeTreeTableNodes(nodes = [], treeConfig = {}) {
+  if (!Array.isArray(nodes))
+    return []
+  const keyField = treeConfig.keyField || 'id'
+  const childrenField = treeConfig.childrenField || 'children'
+  return nodes.map((node) => {
+    const children = Array.isArray(node?.[childrenField])
+      ? normalizeTreeTableNodes(node[childrenField], treeConfig)
+      : []
+    const normalized = {
+      ...(node || {}),
+      key: node?.key ?? node?.[keyField],
+    }
+    if (children.length) {
+      normalized[childrenField] = children
+      normalized.isLeaf = false
+    }
+    else if (node?.isLeaf !== undefined) {
+      normalized.isLeaf = !!node.isLeaf
+    }
+    return normalized
+  })
+}
+
+function parseApiConfigValue(apiConfigValue) {
+  const text = String(apiConfigValue || '')
+  const [method, ...urlParts] = text.includes('@') ? text.split('@') : ['get', text]
+  return {
+    method: String(method || 'get').toLowerCase(),
+    url: urlParts.join('@') || text,
+  }
+}
 
 function extractApiUrl(apiConfigValue) {
   if (!apiConfigValue)

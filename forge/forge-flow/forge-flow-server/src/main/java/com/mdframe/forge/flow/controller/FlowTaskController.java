@@ -256,8 +256,10 @@ public class FlowTaskController {
      * 获取流程图详情（包含节点信息，用于交互式展示）
      */
     @GetMapping("/diagram-info/{processInstanceId}")
-    public RespInfo<ProcessDiagramInfo> getProcessDiagramInfo(@PathVariable String processInstanceId) {
-        ProcessDiagramInfo diagramInfo = flowTaskService.getProcessDiagramInfo(processInstanceId);
+    public RespInfo<ProcessDiagramInfo> getProcessDiagramInfo(
+            @PathVariable String processInstanceId,
+            @RequestParam(defaultValue = "false") boolean includeImage) {
+        ProcessDiagramInfo diagramInfo = flowTaskService.getProcessDiagramInfo(processInstanceId, includeImage);
         if (diagramInfo == null) {
             return RespInfo.error("流程图信息不存在");
         }

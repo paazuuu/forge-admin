@@ -47,6 +47,7 @@ public class LowcodeAppService {
     private final AiCrudConfigMapper configMapper;
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDomainService domainService;
+    private final LowcodePolicyService policyService;
 
     public Page<LowcodeAppDetailVO> page(PageQuery pageQuery, String keyword, String publishStatus,
                                          Long domainId, String domainCode, Boolean generalDomain) {
@@ -208,13 +209,15 @@ public class LowcodeAppService {
                 .findFirst()
                 .orElseGet(() -> modelSchema.getFields().isEmpty() ? "name" : modelSchema.getFields().get(0).getField()));
         return Map.of(
+                "enabled", true,
                 "keyField", "id",
                 "parentField", parentField,
                 "labelField", labelField,
                 "filterField", parentField,
                 "targetField", "id",
                 "childrenField", "children",
-                "treeTitle", StringUtils.defaultIfBlank(modelSchema.getBusinessName(), "树形导航")
+                "treeTitle", StringUtils.defaultIfBlank(modelSchema.getBusinessName(), "树形导航"),
+                "loadMode", "full"
         );
     }
 
@@ -464,6 +467,7 @@ public class LowcodeAppService {
         }
         modelSchema.setObject(object);
         ensureTableName(existing, modelSchema, domain, objectCode);
+        policyService.normalizeModelSchema(modelSchema);
     }
 
     private void ensureTableName(AiCrudConfig existing, LowcodeModelSchema modelSchema,

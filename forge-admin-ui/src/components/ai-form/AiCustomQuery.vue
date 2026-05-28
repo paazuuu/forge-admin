@@ -76,43 +76,63 @@
                   filterable
                   placeholder="字段"
                   class="field-select"
-                  @update:value="resetConditionValue(condition)"
+                  @update:value="handleConditionFieldChange(condition)"
                 />
 
                 <n-select
                   v-model:value="condition.operator"
                   :options="operatorOptions"
                   class="operator-select"
-                  @update:value="resetConditionValue(condition)"
+                  @update:value="handleConditionOperatorChange(condition)"
                 />
 
                 <template v-if="requiresValue(condition.operator)">
-                  <n-input
-                    v-if="condition.operator !== 'between'"
-                    v-model:value="condition.value"
-                    clearable
-                    placeholder="值"
-                    class="value-input"
-                  />
-                  <n-input-group v-else class="range-input">
-                    <n-input
-                      v-model:value="condition.value"
-                      clearable
-                      placeholder="起始值"
-                    />
-                    <n-input
-                      v-model:value="condition.valueEnd"
-                      clearable
-                      placeholder="结束值"
-                    />
+                  <n-input-group v-if="isGenericBetween(condition)" class="condition-range-value">
+                    <template v-if="isNumberCondition(condition)">
+                      <n-input-number
+                        :value="condition.value"
+                        clearable
+                        placeholder="起始值"
+                        @update:value="condition.value = $event"
+                      />
+                      <n-input-number
+                        :value="condition.valueEnd"
+                        clearable
+                        placeholder="结束值"
+                        @update:value="condition.valueEnd = $event"
+                      />
+                    </template>
+                    <template v-else>
+                      <n-input
+                        v-model:value="condition.value"
+                        clearable
+                        placeholder="起始值"
+                      />
+                      <n-input
+                        v-model:value="condition.valueEnd"
+                        clearable
+                        placeholder="结束值"
+                      />
+                    </template>
                   </n-input-group>
+                  <div v-else class="condition-value">
+                    <AiFormItem
+                      :field="buildConditionField(condition)"
+                      :value="resolveConditionValue(condition)"
+                      :form-data="buildConditionFormData(condition)"
+                      :context="buildConditionContext(condition)"
+                      @update:value="handleConditionValueUpdate(condition, $event)"
+                    />
+                  </div>
                 </template>
                 <div v-else class="empty-value" />
 
                 <n-button
+                  class="condition-remove"
                   quaternary
                   circle
-                  :disabled="conditions.length === 1"
+                  type="error"
+                  @mousedown.stop
                   @click="removeCondition(index)"
                 >
                   <template #icon>
@@ -304,6 +324,7 @@ import {
   customQuerySchemeList,
   customQuerySchemeUpdate,
 } from '@/api/ai'
+import AiFormItem from './AiFormItem.vue'
 
 const props = defineProps({
   configKey: {
@@ -390,13 +411,22 @@ const fieldOptions = computed(() => {
 
 const queryFieldOptions = computed(() => {
   const map = new Map()
-  ;[...(props.columns || []), ...(props.searchSchema || []), ...(props.editSchema || [])].forEach((item) => {
+  ;[...(props.columns || []), ...(props.editSchema || []), ...(props.searchSchema || [])].forEach((item) => {
     const field = normalizeField(item)
-    if (field && !map.has(field.value)) {
-      map.set(field.value, field)
+    if (!field) {
+      return
     }
+    if (!map.has(field.value)) {
+      map.set(field.value, field)
+      return
+    }
+    map.set(field.value, mergeFieldMeta(map.get(field.value), field))
   })
   return Array.from(map.values())
+})
+
+const queryFieldMap = computed(() => {
+  return new Map(queryFieldOptions.value.map(field => [field.value, field]))
 })
 
 const schemeOptions = computed(() => {
@@ -430,10 +460,45 @@ function normalizeField(item) {
   if (!value || value === 'action' || value === 'actions') {
     return null
   }
+  const props = item.props || item.render?.props || {}
   return {
     label: item.label || item.title || item.fieldLabel || value,
     value,
+    field: value,
+    type: item.type || item.componentType || item.render?.type || '',
+    componentType: item.componentType || item.render?.componentType || item.type || '',
+    dataType: item.dataType || item.fieldDataType || item.render?.dataType || '',
+    dictType: item.dictType || item.render?.dictType || props.dictType || '',
+    queryType: item.queryType || props.queryType || '',
+    options: item.options || props.options || item.render?.options || [],
+    props,
+    multiple: item.multiple ?? props.multiple,
+    clearable: item.clearable ?? props.clearable,
+    optionSource: item.optionSource || props.optionSource,
   }
+}
+
+function mergeFieldMeta(base = {}, next = {}) {
+  return {
+    ...base,
+    ...Object.fromEntries(Object.entries(next).filter(([, value]) => hasMetaValue(value))),
+    label: next.label || base.label,
+    value: base.value || next.value,
+    field: base.field || next.field,
+    props: {
+      ...(base.props || {}),
+      ...(next.props || {}),
+    },
+    options: hasMetaValue(next.options) ? next.options : base.options,
+  }
+}
+
+function hasMetaValue(value) {
+  if (value === null || value === undefined || value === '')
+    return false
+  if (Array.isArray(value))
+    return value.length > 0
+  return true
 }
 
 function createCondition() {
@@ -444,6 +509,7 @@ function createCondition() {
     operator: 'like',
     value: null,
     valueEnd: null,
+    includeChildren: false,
   }
 }
 
@@ -508,6 +574,7 @@ function normalizeConditions(items) {
     operator: item.operator || 'like',
     value: item.value ?? null,
     valueEnd: item.valueEnd ?? null,
+    includeChildren: item.includeChildren === true,
   }))
 }
 
@@ -523,18 +590,205 @@ function addCondition() {
 
 function removeCondition(index) {
   if (conditions.value.length <= 1) {
+    conditions.value = [createCondition()]
     return
   }
   conditions.value.splice(index, 1)
 }
 
+function handleConditionFieldChange(condition) {
+  const field = getConditionField(condition)
+  const nextOperator = resolveDefaultOperator(field)
+  if (!condition.operator || condition.operator === 'like' || isRangeField(field))
+    condition.operator = nextOperator
+  resetConditionValue(condition)
+}
+
+function handleConditionOperatorChange(condition) {
+  condition.value = null
+  condition.valueEnd = null
+  condition.includeChildren = false
+}
+
 function resetConditionValue(condition) {
   condition.value = null
   condition.valueEnd = null
+  condition.includeChildren = false
 }
 
 function requiresValue(operator) {
   return !['is_null', 'is_not_null'].includes(operator)
+}
+
+function getConditionField(condition) {
+  return queryFieldMap.value.get(condition?.field) || null
+}
+
+function buildConditionField(condition) {
+  const field = getConditionField(condition)
+  const componentType = resolveConditionComponentType(field, condition)
+  const props = {
+    ...(field?.props || {}),
+  }
+  if (field?.options?.length && !props.options)
+    props.options = field.options
+  if (field?.optionSource && !props.optionSource)
+    props.optionSource = field.optionSource
+  if (condition.operator === 'in')
+    props.multiple = true
+  return {
+    ...(field || {}),
+    field: field?.value || condition.field || '',
+    label: field?.label || '值',
+    type: componentType,
+    options: field?.options?.length ? field.options : (props.options?.length ? props.options : undefined),
+    dictType: field?.dictType || props.dictType || '',
+    multiple: condition.operator === 'in' || field?.multiple === true,
+    clearable: field?.clearable !== false,
+    showLabel: false,
+    showFeedback: false,
+    formItemStyle: { marginBottom: 0, width: '100%' },
+    placeholder: resolveConditionPlaceholder(field, componentType),
+    startPlaceholder: '开始值',
+    endPlaceholder: '结束值',
+    props,
+  }
+}
+
+function resolveConditionComponentType(field, condition) {
+  if (!field)
+    return 'input'
+  const baseType = normalizeComponentType(field)
+  if (condition.operator === 'between') {
+    if (baseType === 'datetime')
+      return 'datetimerange'
+    if (baseType === 'date')
+      return 'daterange'
+    if (baseType === 'time')
+      return 'timerange'
+    if (baseType === 'number')
+      return 'number'
+  }
+  if (['fileUpload', 'imageUpload', 'upload', 'textarea'].includes(baseType))
+    return 'input'
+  return baseType
+}
+
+function isGenericBetween(condition) {
+  if (condition.operator !== 'between')
+    return false
+  return !['date', 'datetime', 'time'].includes(normalizeComponentType(getConditionField(condition)))
+}
+
+function isNumberCondition(condition) {
+  return normalizeComponentType(getConditionField(condition)) === 'number'
+}
+
+function normalizeComponentType(field = {}) {
+  const componentType = field.type || field.componentType || field.dataType || ''
+  if (field.dictType)
+    return 'dictSelect'
+  if (componentType === 'daterange')
+    return 'date'
+  if (componentType === 'datetimerange')
+    return 'datetime'
+  if (componentType === 'timerange')
+    return 'time'
+  if (componentType === 'orgName')
+    return 'orgTreeSelect'
+  if (componentType === 'userName')
+    return 'userSelect'
+  if (componentType === 'regionName')
+    return 'regionTreeSelect'
+  if (['inputNumber', 'number'].includes(componentType))
+    return 'number'
+  if (['int', 'bigint', 'decimal', 'double', 'float'].includes(field.dataType) || ['int', 'bigint', 'decimal', 'double', 'float'].includes(componentType))
+    return 'number'
+  if (['date', 'datetime', 'time', 'select', 'dictSelect', 'treeSelect', 'orgTreeSelect', 'userSelect', 'regionTreeSelect', 'cascader', 'checkbox', 'radio', 'switch'].includes(componentType))
+    return componentType
+  return 'input'
+}
+
+function resolveDefaultOperator(field) {
+  const queryType = normalizeQueryType(field?.queryType)
+  if (queryType)
+    return queryType
+  if (isRangeField(field))
+    return 'between'
+  const componentType = normalizeComponentType(field)
+  if (field?.multiple || componentType === 'checkbox')
+    return 'in'
+  if (['number', 'date', 'datetime', 'time', 'select', 'dictSelect', 'treeSelect', 'orgTreeSelect', 'userSelect', 'regionTreeSelect', 'cascader', 'checkbox', 'radio', 'switch'].includes(componentType))
+    return 'eq'
+  return 'like'
+}
+
+function normalizeQueryType(queryType = '') {
+  const type = String(queryType || '').toLowerCase()
+  const map = {
+    '=': 'eq',
+    'eq': 'eq',
+    'ne': 'ne',
+    '!=': 'ne',
+    'like': 'like',
+    'gt': 'gt',
+    'ge': 'ge',
+    'gte': 'ge',
+    'lt': 'lt',
+    'le': 'le',
+    'lte': 'le',
+    'in': 'in',
+    'between': 'between',
+  }
+  return map[type] || ''
+}
+
+function isRangeField(field) {
+  const componentType = field?.type || field?.componentType || ''
+  return ['daterange', 'datetimerange', 'timerange'].includes(componentType)
+}
+
+function resolveConditionPlaceholder(field, componentType) {
+  const prefix = ['input', 'number'].includes(componentType) ? '请输入' : '请选择'
+  return `${prefix}${field?.label || '值'}`
+}
+
+function resolveConditionValue(condition) {
+  if (condition.operator === 'between' && (hasValue(condition.value) || hasValue(condition.valueEnd)))
+    return [condition.value ?? null, condition.valueEnd ?? null]
+  if (condition.operator === 'between')
+    return null
+  return condition.value
+}
+
+function handleConditionValueUpdate(condition, value) {
+  if (condition.operator === 'between') {
+    const range = Array.isArray(value) ? value : []
+    condition.value = range[0] ?? null
+    condition.valueEnd = range[1] ?? null
+    return
+  }
+  condition.value = value
+  condition.valueEnd = null
+}
+
+function buildConditionFormData(condition) {
+  return {
+    [condition.field]: condition.value,
+  }
+}
+
+function buildConditionContext(condition) {
+  return {
+    isSearch: true,
+    patchFormData: patch => patchConditionSearchMeta(condition, patch),
+  }
+}
+
+function patchConditionSearchMeta(condition, patch = {}) {
+  const includeChildrenKey = `${condition.field}_includeChildren`
+  if (Object.prototype.hasOwnProperty.call(patch, includeChildrenKey))
+    condition.includeChildren = patch[includeChildrenKey] === true
 }
 
 function buildConditions() {
@@ -557,6 +811,7 @@ function buildConditions() {
       operator: condition.operator,
       value: condition.value,
       valueEnd: condition.operator === 'between' ? condition.valueEnd : null,
+      includeChildren: condition.includeChildren === true ? true : undefined,
     }))
 }
 
@@ -701,7 +956,7 @@ function deleteScheme(scheme) {
 
 .condition-row {
   display: grid;
-  grid-template-columns: 72px minmax(150px, 1fr) 116px minmax(180px, 1.4fr) 34px;
+  grid-template-columns: 72px minmax(150px, 1fr) 116px minmax(220px, 1.4fr) 34px;
   gap: 8px;
   align-items: center;
 }
@@ -722,9 +977,31 @@ function deleteScheme(scheme) {
 }
 
 .field-select,
-.value-input,
-.range-input {
+.condition-value {
+  min-width: 0;
   width: 100%;
+}
+
+.condition-range-value {
+  min-width: 0;
+  width: 100%;
+}
+
+.condition-remove {
+  position: relative;
+  z-index: 1;
+}
+
+.condition-range-value :deep(.n-input-number) {
+  width: 50%;
+}
+
+.condition-value :deep(.n-form-item) {
+  margin-bottom: 0;
+}
+
+.condition-value :deep(.n-form-item-blank) {
+  min-height: 32px;
 }
 
 .empty-value {

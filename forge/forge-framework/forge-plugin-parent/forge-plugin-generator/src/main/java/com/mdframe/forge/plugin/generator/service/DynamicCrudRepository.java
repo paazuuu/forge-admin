@@ -41,6 +41,9 @@ public class DynamicCrudRepository {
 
     public record JoinSpec(String tableName, String tableAlias, String joinColumn, String mainColumn) {
     }
+
+    public record SqlCondition(String sql, Map<String, Object> params) {
+    }
     
     // 缓存：表名 -> 是否有del_flag列
     private final ConcurrentHashMap<String, Boolean> delFlagCache = new ConcurrentHashMap<>();
@@ -62,10 +65,22 @@ public class DynamicCrudRepository {
                                                   Map<String, String> searchTypeMap,
                                                   Map<String, String> columnMapping,
                                                   String orderBy) {
+        return selectPage(tableName, pageNum, pageSize, searchParams, allowedSearchFields,
+                searchTypeMap, columnMapping, orderBy, null);
+    }
+
+    public Page<Map<String, Object>> selectPage(String tableName, int pageNum, int pageSize,
+                                                  Map<String, Object> searchParams,
+                                                  Set<String> allowedSearchFields,
+                                                  Map<String, String> searchTypeMap,
+                                                  Map<String, String> columnMapping,
+                                                  String orderBy,
+                                                  SqlCondition dataScopeCondition) {
         validateTableName(tableName);
 
         StringBuilder whereClause = buildBaseWhereClause(tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
 
         String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
@@ -94,10 +109,26 @@ public class DynamicCrudRepository {
                                                       Map<String, String> searchTypeMap,
                                                       Map<String, String> fieldColumnMapping,
                                                       String orderBy) {
+        return selectJoinedPage(mainTableName, selectFields, joins, pageNum, pageSize, searchParams,
+                allowedSearchFields, searchTypeMap, fieldColumnMapping, orderBy, null);
+    }
+
+    public Page<Map<String, Object>> selectJoinedPage(String mainTableName,
+                                                      List<JoinField> selectFields,
+                                                      List<JoinSpec> joins,
+                                                      int pageNum,
+                                                      int pageSize,
+                                                      Map<String, Object> searchParams,
+                                                      Set<String> allowedSearchFields,
+                                                      Map<String, String> searchTypeMap,
+                                                      Map<String, String> fieldColumnMapping,
+                                                      String orderBy,
+                                                      SqlCondition dataScopeCondition) {
         validateJoinQuery(mainTableName, selectFields, joins);
 
         StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
         MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSqlCondition(whereClause, params, dataScopeCondition);
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
@@ -123,12 +154,21 @@ public class DynamicCrudRepository {
                                                 Long id,
                                                 List<JoinField> selectFields,
                                                 List<JoinSpec> joins) {
+        return selectJoinedById(mainTableName, id, selectFields, joins, null);
+    }
+
+    public Map<String, Object> selectJoinedById(String mainTableName,
+                                                Long id,
+                                                List<JoinField> selectFields,
+                                                List<JoinSpec> joins,
+                                                SqlCondition dataScopeCondition) {
         validateJoinQuery(mainTableName, selectFields, joins);
 
         StringBuilder whereClause = new StringBuilder("t0.id = :id");
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), mainTableName, "t0");
         MapSqlParameterSource params = buildBaseQueryParams("t0");
         appendIdParam(params, id);
+        appendSqlCondition(whereClause, params, dataScopeCondition);
 
         String sql = buildJoinSelectClause(selectFields) + " " + buildJoinedFromClause(mainTableName, joins)
                 + buildWhereSql(whereClause) + " LIMIT 1";
@@ -146,10 +186,22 @@ public class DynamicCrudRepository {
                                                 Map<String, String> columnMapping,
                                                 String orderBy,
                                                 int limit) {
+        return selectList(tableName, searchParams, allowedSearchFields, searchTypeMap, columnMapping, orderBy, limit, null);
+    }
+
+    public List<Map<String, Object>> selectList(String tableName,
+                                                Map<String, Object> searchParams,
+                                                Set<String> allowedSearchFields,
+                                                Map<String, String> searchTypeMap,
+                                                Map<String, String> columnMapping,
+                                                String orderBy,
+                                                int limit,
+                                                SqlCondition dataScopeCondition) {
         validateTableName(tableName);
 
         StringBuilder whereClause = buildBaseWhereClause(tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
 
         String dataSql = buildSelectSql("SELECT *", tableName, whereClause);
@@ -157,6 +209,106 @@ public class DynamicCrudRepository {
         dataSql += " LIMIT :limit";
         params.addValue("limit", Math.max(1, limit));
 
+        return namedJdbcTemplate.queryForList(dataSql, params);
+    }
+
+    /**
+     * 统计动态列表数据量，用于智能导出阈值判断。
+     */
+    public long countList(String tableName,
+                          Map<String, Object> searchParams,
+                          Set<String> allowedSearchFields,
+                          Map<String, String> searchTypeMap,
+                          Map<String, String> columnMapping,
+                          SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+
+        StringBuilder whereClause = buildBaseWhereClause(tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
+
+        String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        return total != null ? total : 0L;
+    }
+
+    /**
+     * 分页查询动态列表记录，不执行 count，用于异步导出分批读取。
+     */
+    public List<Map<String, Object>> selectPageRecords(String tableName,
+                                                       int pageNum,
+                                                       int pageSize,
+                                                       Map<String, Object> searchParams,
+                                                       Set<String> allowedSearchFields,
+                                                       Map<String, String> searchTypeMap,
+                                                       Map<String, String> columnMapping,
+                                                       String orderBy,
+                                                       SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+
+        StringBuilder whereClause = buildBaseWhereClause(tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
+
+        String dataSql = buildPageDataSql(tableName, whereClause, orderBy);
+        appendPageParams(params, pageNum, pageSize);
+        return namedJdbcTemplate.queryForList(dataSql, params);
+    }
+
+    /**
+     * 统计左连接动态列表数据量，用于智能导出阈值判断。
+     */
+    public long countJoined(String mainTableName,
+                            List<JoinField> selectFields,
+                            List<JoinSpec> joins,
+                            Map<String, Object> searchParams,
+                            Set<String> allowedSearchFields,
+                            Map<String, String> searchTypeMap,
+                            Map<String, String> fieldColumnMapping,
+                            SqlCondition dataScopeCondition) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
+
+        String fromClause = buildJoinedFromClause(mainTableName, joins);
+        boolean distinctMainRows = selectsOnlyMainTable(selectFields);
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+                + fromClause + buildWhereSql(whereClause);
+        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        return total != null ? total : 0L;
+    }
+
+    /**
+     * 分页查询左连接动态列表记录，不执行 count，用于异步导出分批读取。
+     */
+    public List<Map<String, Object>> selectJoinedPageRecords(String mainTableName,
+                                                             List<JoinField> selectFields,
+                                                             List<JoinSpec> joins,
+                                                             int pageNum,
+                                                             int pageSize,
+                                                             Map<String, Object> searchParams,
+                                                             Set<String> allowedSearchFields,
+                                                             Map<String, String> searchTypeMap,
+                                                             Map<String, String> fieldColumnMapping,
+                                                             String orderBy,
+                                                             SqlCondition dataScopeCondition) {
+        validateJoinQuery(mainTableName, selectFields, joins);
+
+        StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
+        MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, fieldColumnMapping);
+
+        String fromClause = buildJoinedFromClause(mainTableName, joins);
+        boolean distinctMainRows = selectsOnlyMainTable(selectFields);
+        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
+                + buildWhereSql(whereClause) + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
+        appendPageParams(params, pageNum, pageSize);
         return namedJdbcTemplate.queryForList(dataSql, params);
     }
 
@@ -169,10 +321,22 @@ public class DynamicCrudRepository {
                                                       Set<String> allowedFields,
                                                       Map<String, String> columnMapping,
                                                       String orderBy) {
+        return selectCustomPage(tableName, pageNum, pageSize, selectedFields, conditions,
+                allowedFields, columnMapping, orderBy, null);
+    }
+
+    public Page<Map<String, Object>> selectCustomPage(String tableName, int pageNum, int pageSize,
+                                                      List<String> selectedFields,
+                                                      List<CustomQueryConditionDTO> conditions,
+                                                      Set<String> allowedFields,
+                                                      Map<String, String> columnMapping,
+                                                      String orderBy,
+                                                      SqlCondition dataScopeCondition) {
         validateTableName(tableName);
 
         StringBuilder whereClause = buildBaseWhereClause(tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
+        appendSqlCondition(whereClause, params, dataScopeCondition);
         appendCustomConditions(whereClause, params, conditions, allowedFields, columnMapping);
 
         String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
@@ -208,10 +372,25 @@ public class DynamicCrudRepository {
                                                             Set<String> allowedFields,
                                                             Map<String, String> fieldColumnMapping,
                                                             String orderBy) {
+        return selectJoinedCustomPage(mainTableName, selectFields, joins, pageNum, pageSize, conditions,
+                allowedFields, fieldColumnMapping, orderBy, null);
+    }
+
+    public Page<Map<String, Object>> selectJoinedCustomPage(String mainTableName,
+                                                            List<JoinField> selectFields,
+                                                            List<JoinSpec> joins,
+                                                            int pageNum,
+                                                            int pageSize,
+                                                            List<CustomQueryConditionDTO> conditions,
+                                                            Set<String> allowedFields,
+                                                            Map<String, String> fieldColumnMapping,
+                                                            String orderBy,
+                                                            SqlCondition dataScopeCondition) {
         validateJoinQuery(mainTableName, selectFields, joins);
 
         StringBuilder whereClause = buildBaseWhereClause(mainTableName, "t0");
         MapSqlParameterSource params = buildBaseQueryParams("t0");
+        appendSqlCondition(whereClause, params, dataScopeCondition);
         appendCustomConditions(whereClause, params, conditions, allowedFields, fieldColumnMapping);
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
@@ -605,7 +784,9 @@ public class DynamicCrudRepository {
 
     private void appendBaseQueryConditions(StringBuilder whereClause, MapSqlParameterSource params,
                                            String tableName, String tableAlias) {
-        appendTenantWhereClause(whereClause, params, tableAlias);
+        if (tableName == null || getTableColumns(tableName).contains("tenant_id")) {
+            appendTenantWhereClause(whereClause, params, tableAlias);
+        }
         if (tableName != null && hasDelFlag(tableName)) {
             appendWhereCondition(whereClause, qualifyColumn(tableAlias, "del_flag") + " = '0'");
         }
@@ -615,10 +796,15 @@ public class DynamicCrudRepository {
      * 根据ID查询
      */
     public Map<String, Object> selectById(String tableName, Long id) {
+        return selectById(tableName, id, null);
+    }
+
+    public Map<String, Object> selectById(String tableName, Long id, SqlCondition dataScopeCondition) {
         validateTableName(tableName);
 
         StringBuilder whereClause = buildIdWhereClause(tableName);
         MapSqlParameterSource params = buildIdQueryParams(id);
+        appendSqlCondition(whereClause, params, dataScopeCondition);
 
         String sql = buildSelectSql("SELECT *", tableName, whereClause);
         List<Map<String, Object>> results = namedJdbcTemplate.queryForList(sql, params);
@@ -636,8 +822,68 @@ public class DynamicCrudRepository {
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("value", value);
-        String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY id ASC";
+        String orderColumn = getTableColumns(tableName).contains("id") ? "id" : columnName;
+        String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
         return namedJdbcTemplate.queryForList(sql, params);
+    }
+
+    public List<Map<String, Object>> selectTreeChildren(String tableName,
+                                                        String parentColumn,
+                                                        Object parentValue,
+                                                        String orderBy,
+                                                        int limit) {
+        return selectTreeChildren(tableName, parentColumn, parentValue, orderBy, limit, null);
+    }
+
+    public List<Map<String, Object>> selectTreeChildren(String tableName,
+                                                        String parentColumn,
+                                                        Object parentValue,
+                                                        String orderBy,
+                                                        int limit,
+                                                        SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+        validateIdentifier(parentColumn);
+
+        boolean rootQuery = parentValue == null || StringUtils.isBlank(String.valueOf(parentValue));
+        StringBuilder whereClause = rootQuery
+                ? new StringBuilder("(" + parentColumn + " IS NULL OR " + parentColumn + " = :zeroValue OR " + parentColumn + " = :emptyValue)")
+                : new StringBuilder(parentColumn + " = :parentValue");
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
+
+        MapSqlParameterSource params = buildBaseQueryParams();
+        if (rootQuery) {
+            params.addValue("zeroValue", "0");
+            params.addValue("emptyValue", "");
+        } else {
+            params.addValue("parentValue", parentValue);
+        }
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        params.addValue("limit", Math.max(1, limit));
+
+        String sql = buildSelectSql("SELECT *", tableName, whereClause)
+                + buildOrderByClause(orderBy) + " LIMIT :limit";
+        return namedJdbcTemplate.queryForList(sql, params);
+    }
+
+    public boolean existsByColumn(String tableName, String columnName, Object value) {
+        return existsByColumn(tableName, columnName, value, null);
+    }
+
+    public boolean existsByColumn(String tableName, String columnName, Object value, SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+        validateIdentifier(columnName);
+        if (value == null) {
+            return false;
+        }
+
+        StringBuilder whereClause = new StringBuilder(columnName + " = :value");
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        params.addValue("value", value);
+        appendSqlCondition(whereClause, params, dataScopeCondition);
+        String sql = buildSelectSql("SELECT COUNT(1)", tableName, whereClause) + " LIMIT 1";
+        Long count = namedJdbcTemplate.queryForObject(sql, params, Long.class);
+        return count != null && count > 0;
     }
 
     // ==================== 新增操作 ====================
@@ -671,11 +917,16 @@ public class DynamicCrudRepository {
      * 根据ID更新
      */
     public int updateById(String tableName, Long id, Map<String, Object> data) {
+        return updateById(tableName, id, data, null);
+    }
+
+    public int updateById(String tableName, Long id, Map<String, Object> data, SqlCondition dataScopeCondition) {
         validateTableName(tableName);
 
         Map<String, Object> updateData = prepareUpdateData(tableName, data);
         MapSqlParameterSource params = toSqlParams(updateData, id);
         String sql = appendTenantCondition(buildUpdateSql(tableName, updateData), params);
+        sql = appendSqlCondition(sql, params, dataScopeCondition);
         return namedJdbcTemplate.update(sql, params);
     }
 
@@ -700,10 +951,15 @@ public class DynamicCrudRepository {
      * 根据ID删除
      */
     public int deleteById(String tableName, Long id, boolean logicDelete) {
+        return deleteById(tableName, id, logicDelete, null);
+    }
+
+    public int deleteById(String tableName, Long id, boolean logicDelete, SqlCondition dataScopeCondition) {
         validateTableName(tableName);
 
         MapSqlParameterSource params = toIdParam(id);
         String sql = appendTenantCondition(buildDeleteSql(tableName, logicDelete), params);
+        sql = appendSqlCondition(sql, params, dataScopeCondition);
         return namedJdbcTemplate.update(sql, params);
     }
 
@@ -920,6 +1176,16 @@ public class DynamicCrudRepository {
         whereClause.append(condition);
     }
 
+    private void appendSqlCondition(StringBuilder whereClause, MapSqlParameterSource params, SqlCondition condition) {
+        if (condition == null || StringUtils.isBlank(condition.sql())) {
+            return;
+        }
+        appendWhereCondition(whereClause, "(" + condition.sql() + ")");
+        if (condition.params() != null) {
+            condition.params().forEach(params::addValue);
+        }
+    }
+
     private void appendWhereJoiner(StringBuilder whereClause) {
         if (whereClause.length() > 0) {
             whereClause.append(" AND ");
@@ -933,6 +1199,16 @@ public class DynamicCrudRepository {
         }
         params.addValue("tenantId", tenantId);
         return sql + " AND tenant_id = :tenantId";
+    }
+
+    private String appendSqlCondition(String sql, MapSqlParameterSource params, SqlCondition condition) {
+        if (condition == null || StringUtils.isBlank(condition.sql())) {
+            return sql;
+        }
+        if (condition.params() != null) {
+            condition.params().forEach(params::addValue);
+        }
+        return sql + " AND (" + condition.sql() + ")";
     }
 
     private String buildInsertSql(String tableName, Map<String, Object> data) {

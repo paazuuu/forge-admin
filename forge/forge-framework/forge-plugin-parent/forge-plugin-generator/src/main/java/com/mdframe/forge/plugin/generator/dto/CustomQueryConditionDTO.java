@@ -32,4 +32,9 @@ public class CustomQueryConditionDTO {
      * 区间结束值。
      */
     private Object valueEnd;
+
+    /**
+     * 树形字段是否包含子级节点。
+     */
+    private Boolean includeChildren;
 }

@@ -95,7 +95,8 @@ public class TencentCosFileStorage implements FileStorage {
     @Override
     public FileMetadata upload(MultipartFile file, String businessType, String businessId) {
         try {
-            return upload(file.getInputStream(), file.getOriginalFilename(), file.getContentType(), businessType, businessId);
+            return upload(file.getInputStream(), file.getOriginalFilename(), file.getContentType(),
+                    businessType, businessId, file.getSize());
         } catch (IOException e) {
             throw new RuntimeException("腾讯云 COS 文件上传失败", e);
         }
@@ -104,15 +105,27 @@ public class TencentCosFileStorage implements FileStorage {
     @Override
     public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
                                String businessType, String businessId) {
+        return upload(inputStream, fileName, contentType, businessType, businessId, null);
+    }
+
+    @Override
+    public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
+                               String businessType, String businessId, Long fileSize) {
         try (InputStream stream = inputStream) {
-            byte[] bytes = stream.readAllBytes();
+            Long knownSize = fileSize == null || fileSize < 0 ? null : fileSize;
+            byte[] fallbackBytes = null;
+            if (knownSize == null) {
+                fallbackBytes = stream.readAllBytes();
+                knownSize = (long) fallbackBytes.length;
+            }
             String key = generateObjectKey(fileName, businessType);
             ObjectMetadata metadata = new ObjectMetadata();
-            metadata.setContentLength(bytes.length);
+            metadata.setContentLength(knownSize);
             metadata.setContentType(StrUtil.blankToDefault(contentType, "application/octet-stream"));
             applyCacheControl(metadata, fileName, contentType);
 
-            PutObjectRequest request = new PutObjectRequest(defaultBucket, key, new ByteArrayInputStream(bytes), metadata);
+            InputStream uploadStream = fallbackBytes == null ? stream : new ByteArrayInputStream(fallbackBytes);
+            PutObjectRequest request = new PutObjectRequest(defaultBucket, key, uploadStream, metadata);
             PutObjectResult result = cosClient.putObject(request);
 
             log.info("腾讯云 COS 文件上传成功: bucket={}, key={}, etag={}", defaultBucket, key, result.getETag());
@@ -121,7 +134,7 @@ public class TencentCosFileStorage implements FileStorage {
                     .originalName(fileName)
                     .storageName(key)
                     .filePath(key)
-                    .fileSize((long) bytes.length)
+                    .fileSize(knownSize)
                     .mimeType(metadata.getContentType())
                     .extension(getExtension(fileName))
                     .storageType(STORAGE_TYPE)

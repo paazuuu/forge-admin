@@ -323,6 +323,8 @@ export function createDefaultPageSchema(modelSchema) {
           hideBatchDelete: false,
           enableCustomQuery: true,
           customActions: [],
+          defaultSortField: 'id',
+          defaultSortOrder: 'desc',
           ...(isTree
             ? {
                 treeConfig,
@@ -627,6 +629,7 @@ export function resolveDefaultTreeConfig(modelSchema = {}, overrides = {}) {
     || keyField
 
   return {
+    enabled: overrides.enabled ?? true,
     sourceModelCode: sourceRef?.modelCode || '',
     sourceModelName: sourceRef?.modelName || modelSchema.businessName || '',
     sourceTableName: sourceRef?.tableName || modelSchema.tableName || '',
@@ -637,6 +640,7 @@ export function resolveDefaultTreeConfig(modelSchema = {}, overrides = {}) {
     targetField,
     childrenField: overrides.childrenField || modelTreeConfig.childrenField || 'children',
     treeTitle: overrides.treeTitle || modelTreeConfig.treeTitle || `${sourceRef?.modelName || modelSchema.businessName || '业务'}树`,
+    loadMode: overrides.loadMode || modelTreeConfig.loadMode || 'full',
   }
 }
 
@@ -765,6 +769,8 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
     label: '数据列表',
     props: {
       fieldSettings: {},
+      defaultSortField: 'id',
+      defaultSortOrder: 'desc',
     },
     fieldRefs: filterPageFields(fields, 'table').map(f => f.field),
   })
@@ -937,7 +943,11 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
       gridW: mainW,
       gridH: 10,
       label: '数据列表',
-      props: { fieldSettings: table?.props?.fieldSettings || {} },
+      props: {
+        fieldSettings: table?.props?.fieldSettings || {},
+        defaultSortField: table?.props?.defaultSortField || 'id',
+        defaultSortOrder: table?.props?.defaultSortOrder || 'desc',
+      },
       fieldRefs: table?.fieldRefs || [],
     })
   }
@@ -981,12 +991,16 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
         fieldSettings: table?.props?.fieldSettings || zone.props?.fieldSettings || {},
         showImport: actions.includes('import'),
         showExport: actions.includes('export'),
+        hideBatchDelete: !actions.includes('batch-delete'),
         enableCustomQuery: actions.includes('custom-query'),
         customActions: toolbar?.props?.customActions || zone.props?.customActions || [],
+        defaultSortField: table?.props?.defaultSortField || zone.props?.defaultSortField || 'id',
+        defaultSortOrder: table?.props?.defaultSortOrder || zone.props?.defaultSortOrder || 'desc',
       }
       if (tree) {
         nextProps.treeConfig = {
           ...(zone.props?.treeConfig || {}),
+          enabled: tree.props?.enabled ?? zone.props?.treeConfig?.enabled ?? true,
           sourceModelCode: tree.props?.sourceModelCode || zone.props?.treeConfig?.sourceModelCode || '',
           sourceModelName: tree.props?.sourceModelName || zone.props?.treeConfig?.sourceModelName || '',
           sourceTableName: tree.props?.sourceTableName || zone.props?.treeConfig?.sourceTableName || '',
@@ -997,6 +1011,7 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
           filterField: tree.props?.filterField || zone.props?.treeConfig?.filterField || '',
           targetField: tree.props?.targetField || zone.props?.treeConfig?.targetField || '',
           childrenField: tree.props?.childrenField || zone.props?.treeConfig?.childrenField || 'children',
+          loadMode: tree.props?.loadMode || zone.props?.treeConfig?.loadMode || 'full',
         }
       }
       return {
@@ -1039,7 +1054,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   }
   if (blockType === 'data-table') {
     base.fieldRefs = filterPageFields(fields, 'table').map(f => f.field)
-    base.props = { fieldSettings: {} }
+    base.props = { fieldSettings: {}, defaultSortField: 'id', defaultSortOrder: 'desc' }
   }
   if (blockType === 'toolbar') {
     base.props = { actions: ['add', 'import', 'export', 'custom-query'], customActions: [] }
@@ -1106,7 +1121,7 @@ export function resolveCanvasComponent(componentKey) {
   return canvasComponentCatalog.find(item => item.componentKey === componentKey) || null
 }
 
-export function resolveDefaultFieldComponentKey(field, zoneKey = 'edit') {
+export function resolveDefaultFieldComponentKey(field) {
   if (field?.componentType === 'textarea')
     return 'field-textarea'
   if (field?.componentType === 'number' || ['int', 'bigint', 'decimal'].includes(field?.dataType))

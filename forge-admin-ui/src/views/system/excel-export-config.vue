@@ -7,13 +7,14 @@
         detail: 'post@/system/excel/export-config/detail',
         add: 'post@/system/excel/export-config',
         update: 'put@/system/excel/export-config',
-        delete: 'delete@/system/excel/export-config/{ids}',
+        delete: 'delete@/system/excel/export-config/:id',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
       :edit-schema="editSchema"
+      :before-submit="normalizeConfigBeforeSubmit"
       row-key="id"
-      add-button-text="新增导出配置"
+      add-button-text="新增配置"
       :load-detail-on-edit="true"
       :edit-grid-cols="2"
       modal-width="1000px"
@@ -41,6 +42,7 @@
         v-if="showColumnModal"
         :config-key="currentConfigKey"
         :config-name="currentConfigName"
+        :config-type="currentConfigType"
       />
     </NModal>
 
@@ -70,14 +72,19 @@
 </template>
 
 <script setup>
-import { NButton, NForm, NFormItem, NInput, NModal, NTag } from 'naive-ui'
+import { NButton, NForm, NFormItem, NInput, NModal } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/store'
 import { request } from '@/utils'
 import ExcelColumnConfig from './excel-column-config.vue'
 
 defineOptions({ name: 'ExcelExportConfig' })
+
+const CONFIG_TYPE_DICT = 'sys_excel_config_type'
+const STATUS_DICT = 'sys_enable_disable'
 
 const authStore = useAuthStore()
 const crudRef = ref(null)
@@ -86,13 +93,17 @@ const showCopyModal = ref(false)
 const copyFormRef = ref(null)
 const currentConfigKey = ref('')
 const currentConfigName = ref('')
+const currentConfigType = ref('BOTH')
 const copyForm = ref({
   sourceId: null,
   newConfigKey: '',
 })
+const { dict } = useDict(CONFIG_TYPE_DICT, STATUS_DICT)
+const configTypeOptions = computed(() => dict.value[CONFIG_TYPE_DICT] || [])
+const statusOptions = computed(() => toNumberOptions(dict.value[STATUS_DICT]))
 
 // 搜索表单配置
-const searchSchema = [
+const searchSchema = computed(() => [
   {
     field: 'configKey',
     label: '配置键',
@@ -103,10 +114,20 @@ const searchSchema = [
   },
   {
     field: 'exportName',
-    label: '导出名称',
+    label: '配置名称',
     type: 'input',
     props: {
-      placeholder: '请输入导出名称',
+      placeholder: '请输入配置名称',
+    },
+  },
+  {
+    field: 'configType',
+    label: '配置类型',
+    type: 'select',
+    props: {
+      placeholder: '请选择配置类型',
+      clearable: true,
+      options: configTypeOptions.value,
     },
   },
   {
@@ -115,13 +136,11 @@ const searchSchema = [
     type: 'select',
     props: {
       placeholder: '请选择状态',
-      options: [
-        { label: '启用', value: 1 },
-        { label: '禁用', value: 0 },
-      ],
+      clearable: true,
+      options: statusOptions.value,
     },
   },
-]
+])
 
 // 表格列配置
 const tableColumns = computed(() => [
@@ -132,8 +151,14 @@ const tableColumns = computed(() => [
     showOverflowTooltip: true,
   },
   {
+    prop: 'configType',
+    label: '配置类型',
+    width: 110,
+    render: row => h(DictTag, { dictType: CONFIG_TYPE_DICT, value: row.configType || 'BOTH', size: 'small' }),
+  },
+  {
     prop: 'exportName',
-    label: '导出名称',
+    label: '配置名称',
     minWidth: 150,
   },
   {
@@ -161,14 +186,7 @@ const tableColumns = computed(() => [
     prop: 'status',
     label: '状态',
     width: 80,
-    render: (row) => {
-      return h(NTag, {
-        type: row.status === 1 ? 'success' : 'default',
-        size: 'small',
-      }, {
-        default: () => row.status === 1 ? '启用' : '禁用',
-      })
-    },
+    render: row => h(DictTag, { dictType: STATUS_DICT, value: String(row.status ?? ''), size: 'small' }),
   },
   {
     prop: 'createTime',
@@ -183,7 +201,7 @@ const tableColumns = computed(() => [
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
       { label: '列配置', key: 'columns', type: 'info', onClick: handleManageColumns },
-      { label: '导出测试', key: 'test', onClick: handleTestExport },
+      { label: '导出测试', key: 'test', onClick: handleTestExport, visible: row => isExportConfig(row) },
       { label: '复制配置', key: 'copy', onClick: handleCopy },
       { label: '禁用', key: 'disable', type: 'warning', onClick: handleToggleStatus, visible: row => row.status === 1 },
       { label: '启用', key: 'enable', type: 'success', onClick: handleToggleStatus, visible: row => row.status !== 1 },
@@ -193,7 +211,7 @@ const tableColumns = computed(() => [
 ])
 
 // 编辑表单配置
-const editSchema = [
+const editSchema = computed(() => [
   // ==================== 基础信息 ====================
   {
     type: 'divider',
@@ -214,63 +232,79 @@ const editSchema = [
   },
   {
     field: 'exportName',
-    label: '导出名称',
+    label: '配置名称',
     type: 'input',
-    rules: [{ required: true, message: '请输入导出名称', trigger: 'blur' }],
+    rules: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
     props: {
-      placeholder: '请输入导出名称，如：用户列表导出',
+      placeholder: '请输入配置名称，如：用户列表导入导出',
     },
   },
   {
-    field: 'sheetName',
-    label: 'Sheet名称',
-    type: 'input',
+    field: 'configType',
+    label: '配置类型',
+    type: 'select',
+    defaultValue: 'BOTH',
+    rules: [{ required: true, message: '请选择配置类型', trigger: 'change' }],
     props: {
-      placeholder: '请输入Sheet名称，默认：Sheet1',
+      options: configTypeOptions.value,
+      placeholder: '请选择配置类型',
+    },
+    help: '选择后页面会自动区分导入设置和导出设置',
+  },
+
+  // ==================== 导出数据源配置 ====================
+  {
+    type: 'divider',
+    label: '导出设置',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+    vIf: formData => isExportType(formData.configType),
+  },
+  {
+    field: 'sheetName',
+    label: '导出Sheet',
+    type: 'input',
+    vIf: formData => isExportType(formData.configType),
+    props: {
+      placeholder: '请输入导出Sheet名称，默认：Sheet1',
     },
   },
   {
     field: 'fileNameTemplate',
-    label: '文件名模板',
+    label: '导出文件名模板',
     type: 'input',
     span: 2,
+    vIf: formData => isExportType(formData.configType),
     props: {
       placeholder: '支持占位符：{date}、{time}，如：用户列表_{date}.xlsx',
     },
     help: '支持占位符：{date}（日期如20240101）、{time}（时间如120530）',
   },
-
-  // ==================== 数据源配置 ====================
-  {
-    type: 'divider',
-    label: '数据源配置',
-    props: {
-      titlePlacement: 'left',
-    },
-    span: 2,
-  },
   {
     field: 'dataSourceBean',
-    label: '数据源Bean',
+    label: '导出数据源Bean',
     type: 'input',
-    rules: [{ required: true, message: '请输入数据源Bean名称', trigger: 'blur' }],
+    vIf: formData => isExportType(formData.configType),
     props: {
-      placeholder: '请输入Service Bean名称，如：sysUserService',
+      placeholder: '仅导出/导入导出必填，如：sysUserService',
     },
   },
   {
     field: 'queryMethod',
-    label: '查询方法',
+    label: '导出查询方法',
     type: 'input',
-    rules: [{ required: true, message: '请输入查询方法名', trigger: 'blur' }],
+    vIf: formData => isExportType(formData.configType),
     props: {
-      placeholder: '请输入查询方法名，如：list、page',
+      placeholder: '仅导出/导入导出必填，如：list、page',
     },
   },
   {
     field: 'pageable',
-    label: '分页查询',
+    label: '导出分页查询',
     type: 'switch',
+    vIf: formData => isExportType(formData.configType),
     props: {
       checkedValue: true,
       uncheckedValue: false,
@@ -278,8 +312,9 @@ const editSchema = [
   },
   {
     field: 'maxRows',
-    label: '最大行数',
+    label: '最大导出行数',
     type: 'input-number',
+    vIf: formData => isExportType(formData.configType),
     props: {
       placeholder: '最大导出条数',
       min: 1,
@@ -298,8 +333,9 @@ const editSchema = [
   },
   {
     field: 'autoTrans',
-    label: '字典翻译',
+    label: '导出字典翻译',
     type: 'switch',
+    vIf: formData => isExportType(formData.configType),
     props: {
       checkedValue: true,
       uncheckedValue: false,
@@ -307,33 +343,55 @@ const editSchema = [
     help: '是否自动翻译字典类型字段',
   },
   {
-    field: 'status',
-    label: '状态',
-    type: 'select',
-    props: {
-      options: [
-        { label: '启用', value: 1 },
-        { label: '禁用', value: 0 },
-      ],
-    },
-  },
-  {
     field: 'sortField',
-    label: '排序字段',
+    label: '导出排序字段',
     type: 'input',
+    vIf: formData => isExportType(formData.configType),
     props: {
       placeholder: '请输入排序字段名',
     },
   },
   {
     field: 'sortOrder',
-    label: '排序方向',
+    label: '导出排序方向',
     type: 'select',
+    vIf: formData => isExportType(formData.configType),
     props: {
       options: [
         { label: '升序', value: 'ASC' },
         { label: '降序', value: 'DESC' },
       ],
+    },
+  },
+
+  // ==================== 导入配置 ====================
+  {
+    type: 'divider',
+    label: '导入设置',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+    vIf: formData => isImportType(formData.configType),
+  },
+  {
+    field: 'includeSample',
+    label: '导入模板示例',
+    type: 'switch',
+    vIf: formData => isImportType(formData.configType),
+    props: {
+      checkedValue: true,
+      uncheckedValue: false,
+    },
+    help: '下载导入模板时是否生成示例数据',
+  },
+  {
+    field: 'status',
+    label: '状态',
+    type: 'select',
+    defaultValue: 1,
+    props: {
+      options: statusOptions.value,
     },
   },
   {
@@ -346,7 +404,44 @@ const editSchema = [
       rows: 3,
     },
   },
-]
+])
+
+function isExportConfig(row) {
+  return isExportType(row?.configType)
+}
+
+function isExportType(configType) {
+  return (configType || 'BOTH') !== 'IMPORT'
+}
+
+function isImportType(configType) {
+  return (configType || 'BOTH') !== 'EXPORT'
+}
+
+function normalizeConfigBeforeSubmit(formData) {
+  const configType = formData.configType || 'BOTH'
+  const exportEnabled = isExportType(configType)
+  if (exportEnabled && (!formData.dataSourceBean || !formData.queryMethod)) {
+    window.$message.error('仅导出或导入导出配置必须填写数据源Bean和查询方法')
+    return false
+  }
+  return {
+    ...formData,
+    configType,
+    allowImport: configType !== 'EXPORT',
+    dataSourceBean: exportEnabled ? formData.dataSourceBean : null,
+    queryMethod: exportEnabled ? formData.queryMethod : null,
+    maxRows: exportEnabled ? formData.maxRows : null,
+    pageable: exportEnabled ? formData.pageable : false,
+  }
+}
+
+function toNumberOptions(options = []) {
+  return (options || []).map(item => ({
+    ...item,
+    value: Number(item.value),
+  }))
+}
 
 // 刷新
 function handleRefresh() {
@@ -358,61 +453,11 @@ function handleEdit(row) {
   crudRef.value?.showEdit(row)
 }
 
-// 获取更多操作菜单
-function getMoreOptions(row) {
-  return [
-    {
-      label: '导出测试',
-      key: 'test',
-      icon: () => h('i', { class: 'i-material-symbols:download' }),
-    },
-    {
-      label: '复制配置',
-      key: 'copy',
-      icon: () => h('i', { class: 'i-material-symbols:content-copy' }),
-    },
-    {
-      label: row.status === 1 ? '禁用' : '启用',
-      key: 'toggle',
-      icon: () => h('i', { class: row.status === 1 ? 'i-material-symbols:block' : 'i-material-symbols:check-circle' }),
-    },
-    {
-      type: 'divider',
-    },
-    {
-      label: '删除',
-      key: 'delete',
-      icon: () => h('i', { class: 'i-material-symbols:delete' }),
-      props: {
-        style: 'color: #d03050',
-      },
-    },
-  ]
-}
-
-// 处理更多操作
-function handleMoreAction(key, row) {
-  switch (key) {
-    case 'test':
-      handleTestExport(row)
-      break
-    case 'copy':
-      handleCopy(row)
-      break
-    case 'toggle':
-      handleToggleStatus(row)
-      break
-    case 'delete':
-      handleDelete(row)
-      break
-  }
-}
-
 // 删除
 function handleDelete(row) {
   window.$dialog.warning({
     title: '确认删除',
-    content: `确定要删除导出配置“${row.exportName}”吗？删除后将同时删除所有关联的列配置！`,
+    content: `确定要删除配置“${row.exportName}”吗？删除后将同时删除所有关联的列配置！`,
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -437,19 +482,21 @@ function handleDelete(row) {
 function handleManageColumns(row) {
   currentConfigKey.value = row.configKey
   currentConfigName.value = row.exportName
+  currentConfigType.value = row.configType || 'BOTH'
   showColumnModal.value = true
 }
 
 // 导出测试
 async function handleTestExport(row) {
+  if (!isExportConfig(row)) {
+    window.$message.warning('仅导入配置不支持导出测试')
+    return
+  }
   try {
     // 使用系统统一的请求前缀
     const token = authStore.accessToken
     const baseUrl = import.meta.env.VITE_REQUEST_PREFIX || '/dev-api'
     const url = `${baseUrl}/system/excel/export-config/test/${row.id}`
-
-    console.log('导出测试URL:', url)
-    console.log('Token:', token ? 'exists' : 'missing')
 
     // 使用 fetch 下载文件
     const response = await fetch(url, {

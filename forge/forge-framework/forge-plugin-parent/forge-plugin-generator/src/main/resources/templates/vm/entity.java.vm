@@ -21,6 +21,10 @@ import java.time.LocalDateTime;
 #if(${hasBigDecimal})
 import java.math.BigDecimal;
 #end
+#if(${hasEntityTreeFields})
+import java.util.ArrayList;
+import java.util.List;
+#end
 
 /**
  * ${functionName}实体类
@@ -60,5 +64,19 @@ public class ${className}#if(${hasBaseEntity}) extends BaseEntity#end {
     private String ${column.javaField}Name;
 
 #end
+#end
+#if(${hasEntityTreeFields})
+    /**
+     * 树形子节点
+     */
+    @TableField(exist = false)
+    private List<${className}> ${entityTreeChildrenField} = new ArrayList<>();
+
+    /**
+     * 懒加载树节点是否叶子节点
+     */
+    @TableField(exist = false)
+    private Boolean isLeaf;
+
 #end
 }

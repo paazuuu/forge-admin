@@ -48,6 +48,26 @@
 
         <div class="form-section">
           <div class="section-title">
+            代码生成默认值
+          </div>
+          <div class="two-col">
+            <n-form-item label="Group ID">
+              <n-input v-model:value="schema.codegen.groupId" placeholder="com.mdframe.forge.business" />
+            </n-form-item>
+            <n-form-item label="Java 基础包名">
+              <n-input v-model:value="schema.codegen.domainPackage" placeholder="com.mdframe.forge.business" />
+            </n-form-item>
+            <n-form-item label="代码模块名">
+              <n-input v-model:value="schema.codegen.moduleName" placeholder="crm" />
+            </n-form-item>
+            <n-form-item label="前端路径">
+              <n-input v-model:value="schema.codegen.frontendBasePath" placeholder="frontend/src/views" />
+            </n-form-item>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">
             AI 上下文
           </div>
           <n-form-item label="业务描述">
@@ -161,6 +181,12 @@ function createBlankSchema() {
     defaults: {
       menuParentId: null,
     },
+    codegen: {
+      groupId: '',
+      domainPackage: '',
+      moduleName: '',
+      frontendBasePath: '',
+    },
     fieldTemplates: [],
     dictRecommendations: [],
     securityPolicies: [],
@@ -180,6 +206,10 @@ function resetForm(domain) {
   if (nextSchema.naming)
     delete nextSchema.naming.tableMode
   Object.assign(schema, createBlankSchema(), nextSchema)
+  schema.codegen = {
+    ...createBlankSchema().codegen,
+    ...(nextSchema.codegen || {}),
+  }
   termsText.value = (schema.aiContext.terms || []).join('\n')
   constraintsText.value = (schema.aiContext.constraints || []).join('\n')
 }
@@ -196,6 +226,12 @@ async function save() {
     schema.naming.tablePrefix = form.tablePrefix
     schema.naming.configKeyPrefix = form.configKeyPrefix
     schema.defaults.menuParentId = form.menuParentId
+    schema.codegen = {
+      groupId: trimText(schema.codegen?.groupId),
+      domainPackage: trimText(schema.codegen?.domainPackage),
+      moduleName: trimText(schema.codegen?.moduleName),
+      frontendBasePath: trimText(schema.codegen?.frontendBasePath),
+    }
 
     const payload = {
       id: form.id,
@@ -232,6 +268,10 @@ function splitLines(value) {
     .split(/\n|,/)
     .map(item => item.trim())
     .filter(Boolean)
+}
+
+function trimText(value) {
+  return String(value || '').trim()
 }
 
 function flattenDomains(nodes, level = 0) {

@@ -30,7 +30,7 @@
           :field="field"
           :value="formValue[field.field]"
           :form-data="formValue"
-          :context="context"
+          :context="itemContext"
           @update:value="handleFieldChange(field.field, $event)"
         >
           <!-- 支持自定义插槽 -->
@@ -220,25 +220,16 @@ const formRules = computed(() => {
       const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
       const isNumericType = field.type === 'number' || field.type === 'inputNumber'
       const isDateType = isDateLikeType(field.type)
+      const isSelectionType = isSelectionLikeType(field.type)
       const rule = {
         required: true,
         message: field.requiredMessage || `请${inputTypes.includes(field.type) ? '输入' : '选择'}${field.label}`,
-        trigger: field.trigger || (isNumericType || isDateType ? 'change' : ['blur', 'change']),
+        trigger: field.trigger || (isNumericType || isDateType || isSelectionType ? 'change' : ['blur', 'change']),
       }
-      // number 类型需要自定义 validator，避免 0 被判断为空
-      if (isNumericType) {
+      // number/date/treeSelect 等类型需要自定义 validator，避免 0、数字 ID、数组等有效值被误判为空
+      if (isNumericType || isDateType || isSelectionType) {
         rule.validator = (_rule, value) => {
-          if (value === null || value === undefined || value === '') {
-            return new Error(rule.message)
-          }
-          return true
-        }
-        delete rule.required
-      }
-      // 日期类型需要自定义 validator，避免已选日期但内容为数字时被判断为空
-      if (isDateType) {
-        rule.validator = (_rule, value) => {
-          if (value === null || value === undefined || value === '') {
+          if (!hasFormValue(value)) {
             return new Error(rule.message)
           }
           return true
@@ -251,8 +242,31 @@ const formRules = computed(() => {
   return rules
 })
 
+const itemContext = computed(() => ({
+  ...props.context,
+  patchFormData,
+}))
+
 function isDateLikeType(type) {
   return ['date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange'].includes(type)
+}
+
+function isSelectionLikeType(type) {
+  return [
+    'select',
+    'dictSelect',
+    'radio',
+    'checkbox',
+    'cascader',
+    'treeSelect',
+    'orgTreeSelect',
+    'regionTreeSelect',
+    'userSelect',
+    'transfer',
+    'upload',
+    'imageUpload',
+    'fileUpload',
+  ].includes(type)
 }
 
 function hasFormValue(value) {
@@ -263,7 +277,7 @@ function hasFormValue(value) {
 
 function normalizeFieldRules(field, fieldRules) {
   const rules = Array.isArray(fieldRules) ? fieldRules : [fieldRules]
-  if (!isDateLikeType(field.type) && field.type !== 'number' && field.type !== 'inputNumber')
+  if (!isDateLikeType(field.type) && !isSelectionLikeType(field.type) && field.type !== 'number' && field.type !== 'inputNumber')
     return fieldRules
 
   return rules.map((sourceRule) => {
@@ -364,6 +378,20 @@ async function handleFieldChange(field, value) {
     formValue.value = { ...formValue.value }
     emit('update:value', { ...formValue.value })
   }
+}
+
+function patchFormData(patch = {}) {
+  const next = {
+    ...formValue.value,
+  }
+  Object.entries(patch).forEach(([key, value]) => {
+    if (value === undefined)
+      delete next[key]
+    else
+      next[key] = value
+  })
+  formValue.value = next
+  emit('update:value', { ...formValue.value })
 }
 
 // 提交表单

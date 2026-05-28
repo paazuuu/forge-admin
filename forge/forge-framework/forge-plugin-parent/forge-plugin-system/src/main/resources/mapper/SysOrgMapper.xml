@@ -113,7 +113,14 @@
         SELECT <include refid="OrgTreeVO_Column_List" />
         FROM sys_org o
         <where>
-            (o.parent_id = 0 OR o.parent_id IS NULL)
+            <choose>
+                <when test="query.parentId != null and query.parentId == 0">
+                    AND (o.parent_id = 0 OR o.parent_id IS NULL)
+                </when>
+                <when test="query.parentId != null">
+                    AND o.parent_id = #{query.parentId}
+                </when>
+            </choose>
             <if test="query.orgName != null and query.orgName != ''">
                 AND o.org_name LIKE CONCAT('%', #{query.orgName}, '%')
             </if>

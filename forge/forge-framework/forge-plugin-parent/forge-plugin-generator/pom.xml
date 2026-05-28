@@ -42,6 +42,12 @@
             <artifactId>forge-starter-tenant</artifactId>
         </dependency>
 
+        <!-- Starter DataScope -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-datascope</artifactId>
+        </dependency>
+
         <!-- Starter Crypto (脱敏) -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
@@ -58,6 +64,12 @@
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-excel</artifactId>
+        </dependency>
+
+        <!-- Starter File -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-file</artifactId>
         </dependency>
 
         <!-- Velocity模板引擎 -->

@@ -1,6 +1,5 @@
 package com.mdframe.forge.plugin.system.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysExcelExportConfig;
 import com.mdframe.forge.plugin.system.mapper.SysExcelExportConfigMapper;
 import com.mdframe.forge.starter.excel.model.ExcelExportMetadata;
@@ -23,9 +22,7 @@ public class SystemExcelMetadataProvider implements ExcelMetadataProvider {
 
     @Override
     public ExcelExportMetadata getMetadata(String configKey) {
-        LambdaQueryWrapper<SysExcelExportConfig> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysExcelExportConfig::getConfigKey, configKey);
-        SysExcelExportConfig config = exportConfigMapper.selectOne(wrapper);
+        SysExcelExportConfig config = exportConfigMapper.selectByConfigKey(configKey);
 
         if (config == null) {
             log.warn("未找到导出配置: {}", configKey);

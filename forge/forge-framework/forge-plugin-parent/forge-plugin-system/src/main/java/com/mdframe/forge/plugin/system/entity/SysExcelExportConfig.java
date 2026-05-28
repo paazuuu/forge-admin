@@ -24,6 +24,11 @@ public class SysExcelExportConfig extends BaseEntity {
     private String configKey;
 
     /**
+     * 配置类型（EXPORT-导出，IMPORT-导入，BOTH-导入导出）
+     */
+    private String configType;
+
+    /**
      * 导出名称
      */
     private String exportName;
@@ -77,6 +82,16 @@ public class SysExcelExportConfig extends BaseEntity {
      * 状态（1-启用，0-禁用）
      */
     private Integer status;
+
+    /**
+     * 是否包含示例数据
+     */
+    private Boolean includeSample;
+
+    /**
+     * 是否允许导入
+     */
+    private Boolean allowImport;
 
     /**
      * 备注

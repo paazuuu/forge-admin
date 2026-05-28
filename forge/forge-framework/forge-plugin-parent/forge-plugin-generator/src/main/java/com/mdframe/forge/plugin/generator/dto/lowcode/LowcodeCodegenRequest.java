@@ -1,0 +1,35 @@
+package com.mdframe.forge.plugin.generator.dto.lowcode;
+
+import lombok.Data;
+
+/**
+ * 低代码应用代码预览/下载请求。
+ */
+@Data
+public class LowcodeCodegenRequest {
+
+    /** DRAFT/PUBLISHED/VERSION，默认 DRAFT。 */
+    private String sourceType;
+
+    private Long versionId;
+
+    private Long domainId;
+
+    /** Maven groupId，默认从业务领域 domainSchema.codegen.groupId 读取。 */
+    private String groupId;
+
+    /** Java 基础包名，默认从业务领域 domainSchema.codegen.domainPackage 读取；最终代码包会追加 moduleName。 */
+    private String domainPackage;
+
+    private String moduleName;
+
+    private String author;
+
+    private Boolean includeSql;
+
+    private Boolean includeMenuSql;
+
+    private Boolean includeDictSql;
+
+    private String frontendBasePath;
+}

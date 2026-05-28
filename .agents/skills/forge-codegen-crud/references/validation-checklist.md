@@ -1,0 +1,47 @@
+# Validation Checklist
+
+## Generated SQL
+
+- [ ] Flyway filename uses the next unused version and lower snake case description.
+- [ ] Business table has `id`, `tenant_id`, `create_by`, `create_time`, `create_dept`, `update_by`, `update_time`.
+- [ ] Built-in data uses `tenant_id = 1`, never `0`.
+- [ ] Every insert has explicit column names.
+- [ ] Every dictionary/resource/Excel seed has `NOT EXISTS` protection.
+- [ ] Dictionary fields either reuse an existing `dict_type` or add `sys_dict_type` and `sys_dict_data`.
+- [ ] Import/export pages include `sys_excel_export_config` and `sys_excel_column_config` rows.
+- [ ] `sys_resource` inserts create the menu and required button permissions.
+
+## Backend
+
+- [ ] Controller uses `RespInfo.success(data)` / `RespInfo.success()` and standard routes.
+- [ ] Pagination uses `PageQuery` or `pageNum` + `pageSize`, not `page`.
+- [ ] Query SQL lives in Mapper XML.
+- [ ] Mapper XML lists explicit columns and includes standard audit fields.
+- [ ] Sensitive or encrypted endpoints use `@ApiDecrypt` and `@ApiEncrypt`.
+- [ ] Service methods validate required IDs and uniqueness before writes.
+- [ ] No Service-to-Service circular dependency is introduced.
+- [ ] Batch delete accepts IDs and rejects empty input.
+
+## Frontend
+
+- [ ] Page uses `AiCrudPage`.
+- [ ] `api-config` uses `:id` placeholders, not `{id}`.
+- [ ] Dictionary fields use `useDict()`, `DictSelect`, and `DictTag`.
+- [ ] Schemas are `computed` when they depend on dictionaries.
+- [ ] Import/export props and API config match generated backend or common Excel endpoints.
+- [ ] Image/file fields use file IDs and `AuthImage` or `getFileUrl(fileId)`, not raw avatar URLs.
+- [ ] Operation links use semantic UnoCSS classes such as `text-primary`, `text-error`, `text-warning`, and `text-success`.
+
+## Verification Commands
+
+Run the narrowest useful checks for the generated scope:
+
+```bash
+cd forge && mvn -pl forge-admin-server -am compile -DskipTests
+```
+
+```bash
+cd forge-admin-ui && source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
+```
+
+If the full commands are too expensive, run module-specific compilation/lint and state what was not run.

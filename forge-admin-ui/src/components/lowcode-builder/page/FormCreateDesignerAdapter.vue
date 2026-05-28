@@ -105,6 +105,7 @@ const designerConfig = {
   showLanguage: false,
   showDevice: false,
   showComponentName: false,
+  fieldReadonly: false,
   showSaveBtn: false,
   showPreviewBtn: true,
   showJsonPreview: true,

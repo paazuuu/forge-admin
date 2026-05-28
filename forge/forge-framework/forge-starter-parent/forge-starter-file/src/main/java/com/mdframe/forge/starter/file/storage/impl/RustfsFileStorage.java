@@ -91,7 +91,8 @@ public class RustfsFileStorage implements FileStorage {
                 file.getOriginalFilename(),
                 file.getContentType(),
                 businessType,
-                businessId
+                businessId,
+                file.getSize()
             );
         } catch (IOException e) {
             throw new RuntimeException("文件上传失败", e);
@@ -101,31 +102,43 @@ public class RustfsFileStorage implements FileStorage {
     @Override
     public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
                                String businessType, String businessId) {
+        return upload(inputStream, fileName, contentType, businessType, businessId, null);
+    }
+
+    @Override
+    public FileMetadata upload(InputStream inputStream, String fileName, String contentType,
+                               String businessType, String businessId, Long fileSize) {
         try {
             String bucket = defaultBucket;
             String key = generateObjectKey(fileName, businessType, businessId);
-            
+
             try (InputStream stream = inputStream) {
-                byte[] bytes = stream.readAllBytes();
-                long fileSize = bytes.length;
-                
+                Long knownSize = fileSize == null || fileSize < 0 ? null : fileSize;
+                byte[] fallbackBytes = null;
+                if (knownSize == null) {
+                    fallbackBytes = stream.readAllBytes();
+                    knownSize = (long) fallbackBytes.length;
+                }
                 PutObjectRequest putRequest = PutObjectRequest.builder()
                         .bucket(bucket)
                         .key(key)
                         .contentType(contentType)
-                        .contentLength(fileSize)
+                        .contentLength(knownSize)
                         .build();
-                
-                s3Client.putObject(putRequest, RequestBody.fromBytes(bytes));
-                
-                log.info("文件上传成功: bucket={}, key={}, size={}", bucket, key, fileSize);
-                
+
+                RequestBody requestBody = fallbackBytes == null
+                        ? RequestBody.fromInputStream(stream, knownSize)
+                        : RequestBody.fromBytes(fallbackBytes);
+                s3Client.putObject(putRequest, requestBody);
+
+                log.info("文件上传成功: bucket={}, key={}, size={}", bucket, key, knownSize);
+
                 return FileMetadata.builder()
                         .fileId(IdUtil.fastSimpleUUID())
                         .originalName(fileName)
                         .storageName(key)
                         .filePath(key)
-                        .fileSize(fileSize)
+                        .fileSize(knownSize)
                         .mimeType(contentType)
                         .extension(getExtension(fileName))
                         .storageType(STORAGE_TYPE)

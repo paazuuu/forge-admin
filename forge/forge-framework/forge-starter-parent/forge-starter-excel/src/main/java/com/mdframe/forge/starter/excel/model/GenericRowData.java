@@ -13,6 +13,11 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 public class GenericRowData {
+
+    /**
+     * Excel 行号
+     */
+    private Integer rowNum;
     
     /**
      * 动态字段数据，保持插入顺序

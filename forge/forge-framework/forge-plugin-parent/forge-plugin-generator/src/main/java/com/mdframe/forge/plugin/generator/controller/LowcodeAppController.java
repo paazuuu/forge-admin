@@ -3,11 +3,14 @@ package com.mdframe.forge.plugin.generator.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.dto.AiCrudConfigRenderVO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeAppDraftDTO;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeCodegenRequest;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeMoveDomainDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePublishDTO;
+import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeCodegenService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeAppService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodePublishService;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeAppDetailVO;
+import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeCodePreviewVO;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeVersionVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
@@ -15,11 +18,13 @@ import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 低代码 CRUD 应用接口。
@@ -34,6 +39,7 @@ public class LowcodeAppController {
 
     private final LowcodeAppService appService;
     private final LowcodePublishService publishService;
+    private final LowcodeCodegenService codegenService;
 
     @GetMapping("/page")
     @OperationLog(module = "低代码应用", type = OperationType.QUERY, desc = "分页查询低代码应用")
@@ -95,6 +101,39 @@ public class LowcodeAppController {
     @OperationLog(module = "低代码应用", type = OperationType.UPDATE, desc = "回滚低代码应用版本")
     public RespInfo<Void> rollback(@PathVariable Long id, @PathVariable Long versionId) {
         publishService.rollback(id, versionId);
+        return RespInfo.success();
+    }
+
+    @GetMapping("/{id}/code/preview")
+    @OperationLog(module = "低代码应用", type = OperationType.QUERY, desc = "预览低代码应用代码")
+    public RespInfo<LowcodeCodePreviewVO> previewCode(@PathVariable Long id, LowcodeCodegenRequest request) {
+        return RespInfo.success(codegenService.previewCode(id, request));
+    }
+
+    @GetMapping("/{id}/code/download")
+    @OperationLog(module = "低代码应用", type = OperationType.QUERY, desc = "下载低代码应用代码")
+    public void downloadCode(@PathVariable Long id,
+                             LowcodeCodegenRequest request,
+                             HttpServletResponse response) throws Exception {
+        byte[] zipBytes = codegenService.downloadCode(id, request);
+        String filename = appService.getDetail(id).getConfigKey() + "-code.zip";
+        response.setContentType("application/zip");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        response.setContentLength(zipBytes.length);
+        response.getOutputStream().write(zipBytes);
+        response.getOutputStream().flush();
+    }
+
+    @GetMapping("/{id}/code/options")
+    @OperationLog(module = "低代码应用", type = OperationType.QUERY, desc = "查询低代码应用代码生成配置")
+    public RespInfo<Map<String, Object>> codeOptions(@PathVariable Long id) {
+        return RespInfo.success(codegenService.getOptions(id));
+    }
+
+    @PutMapping("/{id}/code/options")
+    @OperationLog(module = "低代码应用", type = OperationType.UPDATE, desc = "保存低代码应用代码生成配置")
+    public RespInfo<Void> saveCodeOptions(@PathVariable Long id, @RequestBody LowcodeCodegenRequest request) {
+        codegenService.saveOptions(id, request);
         return RespInfo.success();
     }
 }

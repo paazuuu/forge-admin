@@ -461,7 +461,7 @@
         :mask-closable="false"
       >
         <div class="h-full -m-4">
-          <FormDesigner
+          <FlowFormCreateDesigner
             ref="formDesignerRef"
             v-model="formSchema"
             @save="handleSaveFormSchema"
@@ -478,9 +478,10 @@
         title="表单预览"
         style="width: 800px"
       >
-        <FormPreview
+        <FlowFormCreateRenderer
           v-if="formSchema.length > 0"
-          :form-items="formSchema"
+          :schema="formSchema"
+          read-only
         />
       </n-modal>
     </Teleport>
@@ -523,8 +524,8 @@ import flowApi from '@/api/flow'
 import { streamFlowGenerate } from '@/api/flow-generator'
 import FlowModeler from '@/components/bpmn/FlowModeler.vue'
 import NodePropertiesPanel from '@/components/bpmn/NodePropertiesPanel.vue'
-import FormDesigner from '@/components/form-designer/FormDesigner.vue'
-import FormPreview from '@/components/form-designer/FormPreview.vue'
+import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
+import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import VersionHistory from './version.vue'
 
 const route = useRoute()

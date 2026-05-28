@@ -96,6 +96,15 @@
           >
             停用
           </n-tag>
+          <n-dropdown
+            trigger="click"
+            :options="domainActionOptions"
+            @select="key => handleDomainAction(key, item)"
+          >
+            <span class="node-action" @click.stop>
+              <n-icon><EllipsisVertical /></n-icon>
+            </span>
+          </n-dropdown>
         </button>
       </div>
 
@@ -109,6 +118,7 @@ import {
   AddOutline,
   ChevronDownOutline,
   ChevronForwardOutline,
+  EllipsisVertical,
   FolderOpenOutline,
   GridOutline,
   RefreshOutline,
@@ -136,7 +146,11 @@ const props = defineProps({
   },
 })
 
-defineEmits(['select', 'create', 'refresh', 'search', 'update:keyword'])
+const emit = defineEmits(['select', 'create', 'refresh', 'search', 'update:keyword', 'delete'])
+
+const domainActionOptions = [
+  { label: '删除领域', key: 'delete' },
+]
 
 const flatDomains = computed(() => flattenDomains(props.domains))
 const visibleDomains = computed(() => flattenVisibleDomains(props.domains))
@@ -194,6 +208,11 @@ function toggleExpanded(item) {
     next.add(item.id)
   expandedIds.value = next
 }
+
+function handleDomainAction(key, item) {
+  if (key === 'delete')
+    emit('delete', item)
+}
 </script>
 
 <style scoped>
@@ -246,7 +265,7 @@ function toggleExpanded(item) {
   display: grid;
   width: 100%;
   min-height: 48px;
-  grid-template-columns: calc(var(--indent, 0) * 16px) 20px 28px minmax(0, 1fr) auto;
+  grid-template-columns: calc(var(--indent, 0) * 16px) 20px 28px minmax(0, 1fr) auto 24px;
   align-items: center;
   gap: 8px;
   border: 1px solid transparent;
@@ -278,6 +297,28 @@ function toggleExpanded(item) {
 
 .tree-node.all-node {
   grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.node-action {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748b;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.tree-node:hover .node-action,
+.tree-node.active .node-action {
+  opacity: 1;
+}
+
+.node-action:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .node-indent {

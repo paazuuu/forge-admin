@@ -16,6 +16,7 @@ import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.expression.operators.relational.InExpression;
+import net.sf.jsqlparser.expression.operators.relational.ParenthesedExpressionList;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
@@ -90,7 +91,9 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
         
         // 5. 判断数据权限类型
-        DataScopeType scopeType = DataScopeType.getByCode(context.getMinDataScope());
+        DataScopeType scopeType = DataScopeType.getByRoleDataScope(
+                context.getMinDataScope(),
+                context.getCustomOrgIds() != null && !context.getCustomOrgIds().isEmpty());
         if (scopeType == null) {
             log.warn("数据权限拦截器：未知的数据权限类型 {}", context.getMinDataScope());
             return;
@@ -358,7 +361,6 @@ public class DataScopeInterceptor implements InnerInterceptor {
         inExpression.setLeftExpression(
                 new Column(StrUtil.isNotBlank(tableAlias) ? tableAlias + "." + columnName : columnName));
         
-        // 构建值列表
         java.util.List<Expression> expressions = new java.util.ArrayList<>();
         for (Object value : values) {
             expressions.add(new LongValue(value.toString()));
@@ -367,8 +369,9 @@ public class DataScopeInterceptor implements InnerInterceptor {
         ExpressionList expressionList = new ExpressionList();
         expressionList.setExpressions(expressions);
         
-        // 使用ItemsList的实现类
-        inExpression.setRightExpression(expressionList);
+        ParenthesedExpressionList parenthesedList = new ParenthesedExpressionList(expressionList);
+        
+        inExpression.setRightExpression(parenthesedList);
         
         return inExpression;
     }

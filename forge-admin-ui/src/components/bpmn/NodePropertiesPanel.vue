@@ -36,243 +36,106 @@
         </n-space>
       </template>
     </n-modal>
-    <!-- Tab分隔配置 - 横向滚动 -->
-    <div class="tabs-wrapper">
-      <n-tabs
-        v-model:value="activeTab"
-        type="line"
-        size="small"
-        class="config-tabs"
+
+    <Teleport to="body">
+      <n-modal
+        v-model:show="showNodeFormDesigner"
+        preset="card"
+        :title="nodeFormDesignerTitle"
+        style="width: min(1180px, 96vw); height: 90vh"
+        content-style="height: calc(90vh - 66px); padding: 16px;"
+        :mask-closable="false"
       >
-        <!-- 基础属性Tab -->
-        <n-tab-pane name="basic" tab="基础属性">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="节点ID">
-              <n-input v-model:value="properties.id" placeholder="请输入节点ID" @input="markDirty" />
-            </n-form-item>
-            <n-form-item label="节点名称">
-              <n-input v-model:value="properties.name" placeholder="请输入节点名称" @input="markDirty" />
-            </n-form-item>
-            <n-form-item label="节点描述">
-              <n-input
-                v-model:value="properties.documentation"
-                type="textarea"
-                :rows="2"
-                placeholder="请输入节点描述"
-                @input="markDirty"
-              />
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
+        <FlowFormCreateDesigner
+          ref="nodeFormDesignerRef"
+          v-model="nodeFormDesignerSchema"
+          height="calc(90vh - 156px)"
+          @save="handleSaveNodeFormSchema"
+        />
+      </n-modal>
+    </Teleport>
 
-        <!-- 开始节点配置Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:StartEvent'" name="startConfig" tab="开始配置">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="发起人变量">
-              <n-input
-                v-model:value="properties.initiator"
-                placeholder="默认: initiator"
-                @input="markDirty"
-              />
-            </n-form-item>
-            <n-form-item label="表单Key">
-              <n-input
-                v-model:value="properties.formKey"
-                placeholder="表单标识"
-                @input="markDirty"
-              />
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
+    <Teleport to="body">
+      <n-modal
+        v-model:show="showNodeFormPreview"
+        preset="card"
+        :title="nodeFormPreviewTitle"
+        style="width: min(780px, 92vw)"
+      >
+        <FlowFormCreateRenderer
+          :schema="nodeFormPreviewSchema"
+          read-only
+        />
+      </n-modal>
+    </Teleport>
 
-        <!-- 审批设置Tab（仅用户任务） -->
-        <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="approval" tab="审批设置">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="任务类型">
-              <n-select
-                v-model:value="properties.taskType"
-                :options="taskTypeOptions"
-                @update:value="updateTaskType"
-              />
-            </n-form-item>
-
-            <!-- 指定审批人 -->
-            <template v-if="properties.taskType === 'assignee'">
-              <n-form-item label="审批人">
-                <n-space vertical size="small" style="width: 100%">
-                  <n-select
-                    v-model:value="properties.assignee"
-                    :options="assigneeOptions"
-                    placeholder="选择审批人类型"
-                    filterable
-                    tag
-                    @update:value="updateUserTaskAssignee"
-                  />
-                  <n-button
-                    v-if="properties.assignee === 'custom'"
-                    type="primary"
-                    dashed
-                    block
-                    @click="openUserSelect('assignee')"
-                  >
-                    <template #icon>
-                      <i class="i-material-symbols:person-add" />
-                    </template>
-                    从用户列表选择
-                  </n-button>
-                </n-space>
+    <!-- Tab分隔配置 - 横向滚动 -->
+    <div ref="tabsWrapperRef" class="tabs-wrapper">
+      <div class="tabs-toolbar">
+        <n-button
+          quaternary
+          circle
+          size="small"
+          :disabled="!canGoPrevTab"
+          aria-label="上一个配置页签"
+          @click="switchRelativeTab(-1)"
+        >
+          <template #icon>
+            <i class="i-material-symbols:chevron-left" />
+          </template>
+        </n-button>
+        <span class="tabs-position">{{ activeTabPositionText }}</span>
+        <n-button
+          quaternary
+          circle
+          size="small"
+          :disabled="!canGoNextTab"
+          aria-label="下一个配置页签"
+          @click="switchRelativeTab(1)"
+        >
+          <template #icon>
+            <i class="i-material-symbols:chevron-right" />
+          </template>
+        </n-button>
+      </div>
+      <div class="tabs-shell" :class="{ 'has-next': canGoNextTab }">
+        <n-tabs
+          v-model:value="activeTab"
+          type="line"
+          size="small"
+          class="config-tabs"
+        >
+          <!-- 基础属性Tab -->
+          <n-tab-pane name="basic" tab="基础属性">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="节点ID">
+                <n-input v-model:value="properties.id" placeholder="请输入节点ID" @input="markDirty" />
               </n-form-item>
-
-              <!-- SPEL 表达式配置 -->
-              <template v-if="properties.assignee === 'spel'">
-                <n-form-item label="表达式模板">
-                  <n-select
-                    v-model:value="selectedSpelTemplate"
-                    :options="spelTemplatesFromApi"
-                    placeholder="选择常用表达式模板（可选）"
-                    clearable
-                    @update:value="applySpelTemplate"
-                  >
-                    <template #option="{ option }">
-                      <div>
-                        <div style="font-weight: 500">
-                          {{ option.label }}
-                        </div>
-                        <div v-if="option.description" style="font-size: 12px; color: #999; margin-top: 4px">
-                          {{ option.description }}
-                        </div>
-                      </div>
-                    </template>
-                  </n-select>
-                </n-form-item>
-
-                <n-form-item label="SPEL 表达式">
-                  <n-space vertical size="small" style="width: 100%">
-                    <n-input
-                      v-model:value="properties.assigneeExpr"
-                      type="textarea"
-                      placeholder="输入 SPEL 表达式，例如：${userService.findContactByRegion(execution.getVariable('regionCode'))}"
-                      :autosize="{ minRows: 3, maxRows: 6 }"
-                      @blur="validateSpelExpression"
-                    />
-                    <n-alert
-                      v-if="spelValidationError"
-                      type="error"
-                      :title="spelValidationError"
-                      closable
-                      @close="spelValidationError = ''"
-                    />
-                    <n-collapse>
-                      <n-collapse-item title="表达式语法提示" name="help">
-                        <n-space vertical size="small">
-                          <div style="font-size: 13px; line-height: 1.6">
-                            <p><strong>可用对象：</strong></p>
-                            <ul style="margin: 8px 0; padding-left: 20px">
-                              <li><code>execution</code> - 流程执行上下文</li>
-                              <li><code>userService</code> - 用户查询服务</li>
-                              <li><code>deptService</code> - 部门查询服务</li>
-                              <li><code>roleService</code> - 角色查询服务</li>
-                            </ul>
-                            <p><strong>常用方法：</strong></p>
-                            <ul style="margin: 8px 0; padding-left: 20px">
-                              <li><code>execution.getVariable("key")</code> - 获取流程变量</li>
-                              <li><code>userService.findById(userId)</code> - 根据ID查找用户</li>
-                              <li><code>userService.findByRole(roleKey)</code> - 根据角色查找用户</li>
-                              <li><code>deptService.findManager(deptId)</code> - 查找部门负责人</li>
-                            </ul>
-                            <p><strong>示例：</strong></p>
-                            <ul style="margin: 8px 0; padding-left: 20px">
-                              <li>条件判断：<code>${amount > 10000 ? 'manager' : 'staff'}</code></li>
-                              <li>方法调用：<code>${userService.findContactByRegion(regionCode)}</code></li>
-                              <li>链式调用：<code>${deptService.findById(deptId).getManager()}</code></li>
-                            </ul>
-                          </div>
-                        </n-space>
-                      </n-collapse-item>
-                    </n-collapse>
-                  </n-space>
-                </n-form-item>
-              </template>
-
-              <n-form-item v-if="properties.assigneeUserName" label="已选用户">
-                <n-tag type="info" closable @close="clearAssigneeUser">
-                  {{ properties.assigneeUserName }}
-                </n-tag>
+              <n-form-item label="节点名称">
+                <n-input v-model:value="properties.name" placeholder="请输入节点名称" @input="markDirty" />
               </n-form-item>
-            </template>
-
-            <!-- 候选用户 -->
-            <template v-if="properties.taskType === 'candidateUsers'">
-              <n-form-item label="候选用户">
-                <n-space vertical size="small" style="width: 100%">
-                  <n-button
-                    type="primary"
-                    dashed
-                    block
-                    @click="openUserSelect('candidateUsers')"
-                  >
-                    <template #icon>
-                      <i class="i-material-symbols:group-add" />
-                    </template>
-                    从用户列表选择
-                  </n-button>
-                  <div v-if="properties.candidateUserNames.length > 0" style="margin-top: 8px">
-                    <n-tag
-                      v-for="(name, index) in properties.candidateUserNames"
-                      :key="index"
-                      type="info"
-                      closable
-                      style="margin: 2px"
-                      @close="removeCandidateUser(index)"
-                    >
-                      {{ name }}
-                    </n-tag>
-                  </div>
-                </n-space>
+              <n-form-item label="节点描述">
+                <n-input
+                  v-model:value="properties.documentation"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="请输入节点描述"
+                  @input="markDirty"
+                />
               </n-form-item>
-            </template>
+            </n-form>
+          </n-tab-pane>
 
-            <!-- 候选组 -->
-            <template v-if="properties.taskType === 'candidateGroups'">
-              <n-form-item label="候选组(角色)">
-                <n-space vertical size="small" style="width: 100%">
-                  <n-button
-                    type="primary"
-                    dashed
-                    block
-                    @click="openRoleSelect"
-                  >
-                    <template #icon>
-                      <i class="i-material-symbols:shield" />
-                    </template>
-                    从角色列表选择
-                  </n-button>
-                  <div v-if="properties.candidateGroupNames.length > 0" style="margin-top: 8px">
-                    <n-tag
-                      v-for="(name, index) in properties.candidateGroupNames"
-                      :key="index"
-                      type="success"
-                      closable
-                      style="margin: 2px"
-                      @close="removeCandidateGroup(index)"
-                    >
-                      {{ name }}
-                    </n-tag>
-                  </div>
-                </n-space>
+          <!-- 开始节点配置Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:StartEvent'" name="startConfig" tab="开始配置">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="发起人变量">
+                <n-input
+                  v-model:value="properties.initiator"
+                  placeholder="默认: initiator"
+                  @input="markDirty"
+                />
               </n-form-item>
-            </template>
-
-            <!-- 表单配置 -->
-            <n-form-item label="表单类型">
-              <n-select
-                v-model:value="properties.formType"
-                :options="formTypeOptions"
-                @update:value="updateFormType"
-              />
-            </n-form-item>
-
-            <template v-if="properties.formType === 'dynamic'">
               <n-form-item label="表单Key">
                 <n-input
                   v-model:value="properties.formKey"
@@ -280,372 +143,627 @@
                   @input="markDirty"
                 />
               </n-form-item>
-              <n-form-item label="表单JSON">
-                <n-input
-                  v-model:value="properties.formJson"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="表单JSON配置"
-                  @input="markDirty"
-                />
-              </n-form-item>
-            </template>
+            </n-form>
+          </n-tab-pane>
 
-            <template v-if="properties.formType === 'external'">
-              <n-form-item label="表单URL">
-                <n-input
-                  v-model:value="properties.formUrl"
-                  placeholder="外部表单URL"
-                  @input="markDirty"
-                />
-              </n-form-item>
-            </template>
-
-            <!-- 优先级 -->
-            <n-form-item label="优先级">
-              <n-slider
-                v-model:value="properties.priority"
-                :min="0"
-                :max="100"
-                :step="10"
-                @update:value="updateExtensionProperty('priority')"
-              />
-            </n-form-item>
-
-            <!-- 截止日期 -->
-            <n-form-item label="截止日期(天)">
-              <n-input-number
-                v-model:value="properties.dueDate"
-                :min="0"
-                placeholder="0表示不限制"
-                @update:value="markDirty"
-              />
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-
-        <!-- 办理控制Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="actionControl" tab="办理控制">
-          <n-form :model="properties" label-placement="top" size="small">
-            <div class="action-control-group">
-              <div class="action-control-title">
-                可执行动作
-              </div>
-              <div class="action-switch-list">
-                <div
-                  v-for="item in approvalActionOptions"
-                  :key="item.key"
-                  class="action-switch-row"
-                >
-                  <div class="action-switch-main">
-                    <i :class="item.icon" />
-                    <span>{{ item.label }}</span>
-                  </div>
-                  <n-switch
-                    v-model:value="properties[item.key]"
-                    size="small"
-                    @update:value="markDirty"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div class="action-control-group">
-              <div class="action-control-title">
-                办理要求
-              </div>
-              <div class="action-switch-list">
-                <div class="action-switch-row">
-                  <div class="action-switch-main">
-                    <i class="i-material-symbols:rate-review" />
-                    <span>审批意见必填</span>
-                  </div>
-                  <n-switch
-                    v-model:value="properties.requireComment"
-                    size="small"
-                    @update:value="markDirty"
-                  />
-                </div>
-                <div class="action-switch-row">
-                  <div class="action-switch-main">
-                    <i class="i-material-symbols:draw" />
-                    <span>签名必填</span>
-                  </div>
-                  <n-switch
-                    v-model:value="properties.requireSignature"
-                    size="small"
-                    @update:value="markDirty"
-                  />
-                </div>
-              </div>
-            </div>
-          </n-form>
-        </n-tab-pane>
-
-        <!-- 会签配置Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="multiInstance" tab="会签配置">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="多人审批方式">
-              <n-radio-group v-model:value="properties.multiInstanceType" @update:value="updateMultiInstance">
-                <n-radio-button value="none">
-                  单人审批
-                </n-radio-button>
-                <n-radio-button value="parallel">
-                  并行会签
-                </n-radio-button>
-                <n-radio-button value="sequential">
-                  依次审批
-                </n-radio-button>
-              </n-radio-group>
-            </n-form-item>
-
-            <template v-if="properties.multiInstanceType !== 'none'">
-              <n-form-item label="完成条件">
+          <!-- 审批设置Tab（仅用户任务） -->
+          <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="approval" tab="审批设置">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="任务类型">
                 <n-select
-                  v-model:value="properties.completionCondition"
-                  :options="completionConditionOptions"
-                  @update:value="updateMultiInstance"
+                  v-model:value="properties.taskType"
+                  :options="taskTypeOptions"
+                  @update:value="updateTaskType"
                 />
               </n-form-item>
 
-              <n-form-item v-if="properties.completionCondition === 'rate'" label="通过比例">
-                <div class="pass-rate-config">
-                  <!-- 预设快选 -->
-                  <div class="pass-rate-presets">
-                    <n-button-group size="tiny">
-                      <n-button
-                        v-for="preset in passRatePresets"
-                        :key="preset.value"
-                        :type="properties.passRate === preset.value ? 'primary' : 'default'"
-                        @click="setPassRate(preset.value)"
-                      >
-                        {{ preset.label }}
-                      </n-button>
-                    </n-button-group>
-                  </div>
-                  <!-- 滑块 + 精确输入 -->
-                  <div class="pass-rate-slider-row">
-                    <n-slider
-                      v-model:value="properties.passRate"
-                      :min="10"
-                      :max="100"
-                      :step="1"
-                      :marks="passRateMarks"
-                      :format-tooltip="v => `${v}%`"
-                      style="flex: 1"
-                      @update:value="updateMultiInstance"
+              <!-- 指定审批人 -->
+              <template v-if="properties.taskType === 'assignee'">
+                <n-form-item label="审批人">
+                  <n-space vertical size="small" style="width: 100%">
+                    <n-select
+                      v-model:value="properties.assignee"
+                      :options="assigneeOptions"
+                      placeholder="选择审批人类型"
+                      filterable
+                      tag
+                      @update:value="updateUserTaskAssignee"
                     />
-                    <n-input-number
-                      v-model:value="properties.passRate"
-                      :min="10"
-                      :max="100"
-                      size="small"
-                      style="width: 82px; flex-shrink: 0"
-                      @update:value="updateMultiInstance"
+                    <n-button
+                      v-if="properties.assignee === 'custom'"
+                      type="primary"
+                      dashed
+                      block
+                      @click="openUserSelect('assignee')"
                     >
-                      <template #suffix>
-                        %
+                      <template #icon>
+                        <i class="i-material-symbols:person-add" />
                       </template>
-                    </n-input-number>
+                      从用户列表选择
+                    </n-button>
+                  </n-space>
+                </n-form-item>
+
+                <!-- SPEL 表达式配置 -->
+                <template v-if="properties.assignee === 'spel'">
+                  <n-form-item label="表达式模板">
+                    <n-select
+                      v-model:value="selectedSpelTemplate"
+                      :options="spelTemplatesFromApi"
+                      placeholder="选择常用表达式模板（可选）"
+                      clearable
+                      @update:value="applySpelTemplate"
+                    >
+                      <template #option="{ option }">
+                        <div>
+                          <div style="font-weight: 500">
+                            {{ option.label }}
+                          </div>
+                          <div v-if="option.description" style="font-size: 12px; color: #999; margin-top: 4px">
+                            {{ option.description }}
+                          </div>
+                        </div>
+                      </template>
+                    </n-select>
+                  </n-form-item>
+
+                  <n-form-item label="SPEL 表达式">
+                    <n-space vertical size="small" style="width: 100%">
+                      <n-input
+                        v-model:value="properties.assigneeExpr"
+                        type="textarea"
+                        placeholder="输入 SPEL 表达式，例如：${userService.findContactByRegion(execution.getVariable('regionCode'))}"
+                        :autosize="{ minRows: 3, maxRows: 6 }"
+                        @blur="validateSpelExpression"
+                      />
+                      <n-alert
+                        v-if="spelValidationError"
+                        type="error"
+                        :title="spelValidationError"
+                        closable
+                        @close="spelValidationError = ''"
+                      />
+                      <n-collapse>
+                        <n-collapse-item title="表达式语法提示" name="help">
+                          <n-space vertical size="small">
+                            <div style="font-size: 13px; line-height: 1.6">
+                              <p><strong>可用对象：</strong></p>
+                              <ul style="margin: 8px 0; padding-left: 20px">
+                                <li><code>execution</code> - 流程执行上下文</li>
+                                <li><code>userService</code> - 用户查询服务</li>
+                                <li><code>deptService</code> - 部门查询服务</li>
+                                <li><code>roleService</code> - 角色查询服务</li>
+                              </ul>
+                              <p><strong>常用方法：</strong></p>
+                              <ul style="margin: 8px 0; padding-left: 20px">
+                                <li><code>execution.getVariable("key")</code> - 获取流程变量</li>
+                                <li><code>userService.findById(userId)</code> - 根据ID查找用户</li>
+                                <li><code>userService.findByRole(roleKey)</code> - 根据角色查找用户</li>
+                                <li><code>deptService.findManager(deptId)</code> - 查找部门负责人</li>
+                              </ul>
+                              <p><strong>示例：</strong></p>
+                              <ul style="margin: 8px 0; padding-left: 20px">
+                                <li>条件判断：<code>${amount > 10000 ? 'manager' : 'staff'}</code></li>
+                                <li>方法调用：<code>${userService.findContactByRegion(regionCode)}</code></li>
+                                <li>链式调用：<code>${deptService.findById(deptId).getManager()}</code></li>
+                              </ul>
+                            </div>
+                          </n-space>
+                        </n-collapse-item>
+                      </n-collapse>
+                    </n-space>
+                  </n-form-item>
+                </template>
+
+                <n-form-item v-if="properties.assigneeUserName" label="已选用户">
+                  <n-tag type="info" closable @close="clearAssigneeUser">
+                    {{ properties.assigneeUserName }}
+                  </n-tag>
+                </n-form-item>
+              </template>
+
+              <!-- 候选用户 -->
+              <template v-if="properties.taskType === 'candidateUsers'">
+                <n-form-item label="候选用户">
+                  <n-space vertical size="small" style="width: 100%">
+                    <n-button
+                      type="primary"
+                      dashed
+                      block
+                      @click="openUserSelect('candidateUsers')"
+                    >
+                      <template #icon>
+                        <i class="i-material-symbols:group-add" />
+                      </template>
+                      从用户列表选择
+                    </n-button>
+                    <div v-if="properties.candidateUserNames.length > 0" style="margin-top: 8px">
+                      <n-tag
+                        v-for="(name, index) in properties.candidateUserNames"
+                        :key="index"
+                        type="info"
+                        closable
+                        style="margin: 2px"
+                        @close="removeCandidateUser(index)"
+                      >
+                        {{ name }}
+                      </n-tag>
+                    </div>
+                  </n-space>
+                </n-form-item>
+              </template>
+
+              <!-- 候选组 -->
+              <template v-if="properties.taskType === 'candidateGroups'">
+                <n-form-item label="候选组(角色)">
+                  <n-space vertical size="small" style="width: 100%">
+                    <n-button
+                      type="primary"
+                      dashed
+                      block
+                      @click="openRoleSelect"
+                    >
+                      <template #icon>
+                        <i class="i-material-symbols:shield" />
+                      </template>
+                      从角色列表选择
+                    </n-button>
+                    <div v-if="properties.candidateGroupNames.length > 0" style="margin-top: 8px">
+                      <n-tag
+                        v-for="(name, index) in properties.candidateGroupNames"
+                        :key="index"
+                        type="success"
+                        closable
+                        style="margin: 2px"
+                        @close="removeCandidateGroup(index)"
+                      >
+                        {{ name }}
+                      </n-tag>
+                    </div>
+                  </n-space>
+                </n-form-item>
+              </template>
+
+              <!-- 表单配置 -->
+              <n-form-item label="表单类型">
+                <n-select
+                  v-model:value="properties.formType"
+                  :options="formTypeOptions"
+                  @update:value="updateFormType"
+                />
+              </n-form-item>
+
+              <template v-if="properties.formType === 'dynamic'">
+                <n-form-item label="引用表单">
+                  <n-select
+                    v-model:value="properties.formKey"
+                    :options="formDefinitionOptions"
+                    :loading="formDefinitionLoading"
+                    placeholder="选择已有表单或输入表单Key"
+                    clearable
+                    filterable
+                    tag
+                    @update:value="handleFormKeyChange"
+                  />
+                </n-form-item>
+
+                <n-form-item label="节点表单">
+                  <div class="node-form-builder-card">
+                    <div class="node-form-builder-main">
+                      <div class="node-form-builder-icon">
+                        <i class="i-material-symbols:edit-document" />
+                      </div>
+                      <div class="node-form-builder-copy">
+                        <div class="node-form-builder-title">
+                          {{ nodeFormBuilderTitle }}
+                        </div>
+                        <div class="node-form-builder-desc">
+                          {{ nodeFormBuilderDesc }}
+                        </div>
+                      </div>
+                    </div>
+                    <n-space size="small" class="node-form-builder-actions">
+                      <n-button size="small" type="primary" @click="openNodeFormDesigner">
+                        <template #icon>
+                          <i class="i-material-symbols:edit-document" />
+                        </template>
+                        在线设计
+                      </n-button>
+                      <n-button
+                        size="small"
+                        :disabled="!canPreviewNodeForm"
+                        @click="openNodeFormPreview"
+                      >
+                        <template #icon>
+                          <i class="i-material-symbols:visibility" />
+                        </template>
+                        预览
+                      </n-button>
+                      <n-button
+                        size="small"
+                        :disabled="!properties.formJson"
+                        @click="clearNodeInlineForm"
+                      >
+                        <template #icon>
+                          <i class="i-material-symbols:delete" />
+                        </template>
+                        清空设计
+                      </n-button>
+                    </n-space>
                   </div>
-                  <!-- 描述文字 -->
-                  <div class="pass-rate-desc">
-                    <i class="i-material-symbols:info-outline" style="color:#2080f0;margin-right:4px" />
-                    {{ passRateDesc }}
+                </n-form-item>
+
+                <n-collapse class="node-form-json-collapse">
+                  <n-collapse-item title="高级 JSON 配置" name="formJson">
+                    <n-form-item label="表单JSON">
+                      <n-input
+                        v-model:value="properties.formJson"
+                        type="textarea"
+                        :autosize="{ minRows: 4, maxRows: 10 }"
+                        placeholder="由在线设计器自动生成；仅开发调试时手动修改"
+                        @input="markDirty"
+                      />
+                    </n-form-item>
+                  </n-collapse-item>
+                </n-collapse>
+              </template>
+
+              <template v-if="properties.formType === 'external'">
+                <n-form-item label="表单URL">
+                  <n-input
+                    v-model:value="properties.formUrl"
+                    placeholder="外部表单URL"
+                    @input="markDirty"
+                  />
+                </n-form-item>
+              </template>
+
+              <!-- 优先级 -->
+              <n-form-item label="优先级">
+                <n-slider
+                  v-model:value="properties.priority"
+                  :min="0"
+                  :max="100"
+                  :step="10"
+                  @update:value="updateExtensionProperty('priority')"
+                />
+              </n-form-item>
+
+              <!-- 截止日期 -->
+              <n-form-item label="截止日期(天)">
+                <n-input-number
+                  v-model:value="properties.dueDate"
+                  :min="0"
+                  placeholder="0表示不限制"
+                  @update:value="markDirty"
+                />
+              </n-form-item>
+            </n-form>
+          </n-tab-pane>
+
+          <!-- 办理控制Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="actionControl" tab="办理控制">
+            <n-form :model="properties" label-placement="top" size="small">
+              <div class="action-control-group">
+                <div class="action-control-title">
+                  可执行动作
+                </div>
+                <div class="action-switch-list">
+                  <div
+                    v-for="item in approvalActionOptions"
+                    :key="item.key"
+                    class="action-switch-row"
+                  >
+                    <div class="action-switch-main">
+                      <i :class="item.icon" />
+                      <span>{{ item.label }}</span>
+                    </div>
+                    <n-switch
+                      v-model:value="properties[item.key]"
+                      size="small"
+                      @update:value="markDirty"
+                    />
                   </div>
                 </div>
-              </n-form-item>
-            </template>
-          </n-form>
-        </n-tab-pane>
+              </div>
 
-        <!-- 任务监听器Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="listener" tab="监听器">
-          <div class="listener-list">
-            <div v-for="(listener, index) in properties.taskListeners" :key="index" class="listener-item">
-              <n-card size="small" :title="listener.event">
-                <template #header-extra>
-                  <n-button text type="error" @click="removeTaskListener(index)">
-                    <i class="i-material-symbols:delete" />
-                  </n-button>
-                </template>
-                <n-form :model="listener" label-placement="left" size="small">
-                  <n-form-item label="事件">
-                    <n-select
-                      v-model:value="listener.event"
-                      :options="taskEventOptions"
+              <div class="action-control-group">
+                <div class="action-control-title">
+                  办理要求
+                </div>
+                <div class="action-switch-list">
+                  <div class="action-switch-row">
+                    <div class="action-switch-main">
+                      <i class="i-material-symbols:rate-review" />
+                      <span>审批意见必填</span>
+                    </div>
+                    <n-switch
+                      v-model:value="properties.requireComment"
                       size="small"
+                      @update:value="markDirty"
                     />
-                  </n-form-item>
-                  <n-form-item label="类名">
-                    <n-input v-model:value="listener.class" placeholder="全限定类名" />
-                  </n-form-item>
-                </n-form>
-              </n-card>
-            </div>
-            <n-button dashed block @click="addTaskListener">
-              <template #icon>
-                <i class="i-material-symbols:add" />
-              </template>
-              添加监听器
-            </n-button>
-          </div>
-        </n-tab-pane>
+                  </div>
+                  <div class="action-switch-row">
+                    <div class="action-switch-main">
+                      <i class="i-material-symbols:draw" />
+                      <span>签名必填</span>
+                    </div>
+                    <n-switch
+                      v-model:value="properties.requireSignature"
+                      size="small"
+                      @update:value="markDirty"
+                    />
+                  </div>
+                </div>
+              </div>
+            </n-form>
+          </n-tab-pane>
 
-        <!-- 服务任务配置Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:ServiceTask'" name="service" tab="服务配置">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="实现方式">
-              <n-select
-                v-model:value="properties.implementationType"
-                :options="implementationTypeOptions"
-                @update:value="updateServiceImplementation"
-              />
-            </n-form-item>
-            <n-form-item label="实现值">
-              <n-input
-                v-model:value="properties.implementation"
-                :placeholder="getImplementationPlaceholder()"
-                @blur="updateServiceImplementation"
-              />
-            </n-form-item>
-            <n-form-item label="异步执行">
-              <n-switch v-model:value="properties.async" @update:value="markDirty" />
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-
-        <!-- 网关配置Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:ExclusiveGateway'" name="gateway" tab="网关配置">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="网关类型">
-              <n-radio-group v-model:value="properties.gatewayType" disabled>
-                <n-radio value="exclusive">
-                  排他网关
-                </n-radio>
-                <n-radio value="parallel">
-                  并行网关
-                </n-radio>
-                <n-radio value="inclusive">
-                  包容网关
-                </n-radio>
-              </n-radio-group>
-            </n-form-item>
-            <n-alert type="info" size="small">
-              排他网关：只选择一条路径执行<br>
-              并行网关：所有路径同时执行<br>
-              包容网关：满足条件的路径同时执行
-            </n-alert>
-          </n-form>
-        </n-tab-pane>
-
-        <!-- 流转条件Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:SequenceFlow'" name="sequence" tab="流转条件">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item>
-              <n-checkbox v-model:checked="properties.hasCondition" @update:checked="toggleCondition">
-                启用条件表达式
-              </n-checkbox>
-            </n-form-item>
-
-            <template v-if="properties.hasCondition">
-              <n-form-item label="条件类型">
-                <n-radio-group v-model:value="properties.conditionType" @update:value="updateConditionType">
-                  <n-radio-button value="expression">
-                    表达式
+          <!-- 会签配置Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="multiInstance" tab="会签配置">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="多人审批方式">
+                <n-radio-group v-model:value="properties.multiInstanceType" @update:value="updateMultiInstance">
+                  <n-radio-button value="none">
+                    单人审批
                   </n-radio-button>
-                  <n-radio-button value="script">
-                    脚本
+                  <n-radio-button value="parallel">
+                    并行会签
+                  </n-radio-button>
+                  <n-radio-button value="sequential">
+                    依次审批
                   </n-radio-button>
                 </n-radio-group>
               </n-form-item>
 
-              <n-form-item v-if="properties.conditionType === 'expression'" label="条件表达式">
-                <n-input
-                  v-model:value="properties.condition"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="${approved == true}"
-                  @blur="updateCondition"
-                />
-              </n-form-item>
+              <template v-if="properties.multiInstanceType !== 'none'">
+                <n-form-item label="完成条件">
+                  <n-select
+                    v-model:value="properties.completionCondition"
+                    :options="completionConditionOptions"
+                    @update:value="updateMultiInstance"
+                  />
+                </n-form-item>
 
-              <n-form-item v-if="properties.conditionType === 'script'" label="脚本内容">
-                <n-input
-                  v-model:value="properties.script"
-                  type="textarea"
-                  :rows="5"
-                  placeholder="return approved == true;"
-                  @blur="updateCondition"
-                />
-              </n-form-item>
-
-              <n-form-item v-if="properties.conditionType === 'script'" label="脚本语言">
-                <n-select
-                  v-model:value="properties.scriptFormat"
-                  :options="scriptFormatOptions"
-                  @update:value="updateCondition"
-                />
-              </n-form-item>
-            </template>
-
-            <n-form-item>
-              <n-checkbox v-model:checked="properties.isDefault" @update:checked="toggleDefault">
-                设为默认路径
-              </n-checkbox>
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-
-        <!-- 结束节点配置Tab -->
-        <n-tab-pane v-if="elementType === 'bpmn:EndEvent'" name="end" tab="结束配置">
-          <n-form :model="properties" label-placement="top" size="small">
-            <n-form-item label="结束类型">
-              <n-radio-group v-model:value="properties.endType">
-                <n-radio value="terminate">
-                  终止流程
-                </n-radio>
-                <n-radio value="normal">
-                  正常结束
-                </n-radio>
-              </n-radio-group>
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-
-        <!-- 执行监听器Tab（通用） -->
-        <n-tab-pane v-if="showExecutionListener" name="executionListener" tab="执行监听器">
-          <div class="listener-list">
-            <div v-for="(listener, index) in properties.executionListeners" :key="index" class="listener-item">
-              <n-card size="small" :title="listener.event">
-                <template #header-extra>
-                  <n-button text type="error" @click="removeExecutionListener(index)">
-                    <i class="i-material-symbols:delete" />
-                  </n-button>
-                </template>
-                <n-form :model="listener" label-placement="left" size="small">
-                  <n-form-item label="事件">
-                    <n-select
-                      v-model:value="listener.event"
-                      :options="executionEventOptions"
-                      size="small"
-                    />
-                  </n-form-item>
-                  <n-form-item label="类名">
-                    <n-input v-model:value="listener.class" placeholder="全限定类名" />
-                  </n-form-item>
-                </n-form>
-              </n-card>
-            </div>
-            <n-button dashed block @click="addExecutionListener">
-              <template #icon>
-                <i class="i-material-symbols:add" />
+                <n-form-item v-if="properties.completionCondition === 'rate'" label="通过比例">
+                  <div class="pass-rate-config">
+                    <!-- 预设快选 -->
+                    <div class="pass-rate-presets">
+                      <n-button-group size="tiny">
+                        <n-button
+                          v-for="preset in passRatePresets"
+                          :key="preset.value"
+                          :type="properties.passRate === preset.value ? 'primary' : 'default'"
+                          @click="setPassRate(preset.value)"
+                        >
+                          {{ preset.label }}
+                        </n-button>
+                      </n-button-group>
+                    </div>
+                    <!-- 滑块 + 精确输入 -->
+                    <div class="pass-rate-slider-row">
+                      <n-slider
+                        v-model:value="properties.passRate"
+                        :min="10"
+                        :max="100"
+                        :step="1"
+                        :marks="passRateMarks"
+                        :format-tooltip="v => `${v}%`"
+                        style="flex: 1"
+                        @update:value="updateMultiInstance"
+                      />
+                      <n-input-number
+                        v-model:value="properties.passRate"
+                        :min="10"
+                        :max="100"
+                        size="small"
+                        style="width: 82px; flex-shrink: 0"
+                        @update:value="updateMultiInstance"
+                      >
+                        <template #suffix>
+                          %
+                        </template>
+                      </n-input-number>
+                    </div>
+                    <!-- 描述文字 -->
+                    <div class="pass-rate-desc">
+                      <i class="i-material-symbols:info-outline" style="color:#2080f0;margin-right:4px" />
+                      {{ passRateDesc }}
+                    </div>
+                  </div>
+                </n-form-item>
               </template>
-              添加监听器
-            </n-button>
-          </div>
-        </n-tab-pane>
-      </n-tabs>
+            </n-form>
+          </n-tab-pane>
+
+          <!-- 任务监听器Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:UserTask'" name="listener" tab="监听器">
+            <div class="listener-list">
+              <div v-for="(listener, index) in properties.taskListeners" :key="index" class="listener-item">
+                <n-card size="small" :title="listener.event">
+                  <template #header-extra>
+                    <n-button text type="error" @click="removeTaskListener(index)">
+                      <i class="i-material-symbols:delete" />
+                    </n-button>
+                  </template>
+                  <n-form :model="listener" label-placement="left" size="small">
+                    <n-form-item label="事件">
+                      <n-select
+                        v-model:value="listener.event"
+                        :options="taskEventOptions"
+                        size="small"
+                      />
+                    </n-form-item>
+                    <n-form-item label="类名">
+                      <n-input v-model:value="listener.class" placeholder="全限定类名" />
+                    </n-form-item>
+                  </n-form>
+                </n-card>
+              </div>
+              <n-button dashed block @click="addTaskListener">
+                <template #icon>
+                  <i class="i-material-symbols:add" />
+                </template>
+                添加监听器
+              </n-button>
+            </div>
+          </n-tab-pane>
+
+          <!-- 服务任务配置Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:ServiceTask'" name="service" tab="服务配置">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="实现方式">
+                <n-select
+                  v-model:value="properties.implementationType"
+                  :options="implementationTypeOptions"
+                  @update:value="updateServiceImplementation"
+                />
+              </n-form-item>
+              <n-form-item label="实现值">
+                <n-input
+                  v-model:value="properties.implementation"
+                  :placeholder="getImplementationPlaceholder()"
+                  @blur="updateServiceImplementation"
+                />
+              </n-form-item>
+              <n-form-item label="异步执行">
+                <n-switch v-model:value="properties.async" @update:value="markDirty" />
+              </n-form-item>
+            </n-form>
+          </n-tab-pane>
+
+          <!-- 网关配置Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:ExclusiveGateway'" name="gateway" tab="网关配置">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="网关类型">
+                <n-radio-group v-model:value="properties.gatewayType" disabled>
+                  <n-radio value="exclusive">
+                    排他网关
+                  </n-radio>
+                  <n-radio value="parallel">
+                    并行网关
+                  </n-radio>
+                  <n-radio value="inclusive">
+                    包容网关
+                  </n-radio>
+                </n-radio-group>
+              </n-form-item>
+              <n-alert type="info" size="small">
+                排他网关：只选择一条路径执行<br>
+                并行网关：所有路径同时执行<br>
+                包容网关：满足条件的路径同时执行
+              </n-alert>
+            </n-form>
+          </n-tab-pane>
+
+          <!-- 流转条件Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:SequenceFlow'" name="sequence" tab="流转条件">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item>
+                <n-checkbox v-model:checked="properties.hasCondition" @update:checked="toggleCondition">
+                  启用条件表达式
+                </n-checkbox>
+              </n-form-item>
+
+              <template v-if="properties.hasCondition">
+                <n-form-item label="条件类型">
+                  <n-radio-group v-model:value="properties.conditionType" @update:value="updateConditionType">
+                    <n-radio-button value="expression">
+                      表达式
+                    </n-radio-button>
+                    <n-radio-button value="script">
+                      脚本
+                    </n-radio-button>
+                  </n-radio-group>
+                </n-form-item>
+
+                <n-form-item v-if="properties.conditionType === 'expression'" label="条件表达式">
+                  <n-input
+                    v-model:value="properties.condition"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="${approved == true}"
+                    @blur="updateCondition"
+                  />
+                </n-form-item>
+
+                <n-form-item v-if="properties.conditionType === 'script'" label="脚本内容">
+                  <n-input
+                    v-model:value="properties.script"
+                    type="textarea"
+                    :rows="5"
+                    placeholder="return approved == true;"
+                    @blur="updateCondition"
+                  />
+                </n-form-item>
+
+                <n-form-item v-if="properties.conditionType === 'script'" label="脚本语言">
+                  <n-select
+                    v-model:value="properties.scriptFormat"
+                    :options="scriptFormatOptions"
+                    @update:value="updateCondition"
+                  />
+                </n-form-item>
+              </template>
+
+              <n-form-item>
+                <n-checkbox v-model:checked="properties.isDefault" @update:checked="toggleDefault">
+                  设为默认路径
+                </n-checkbox>
+              </n-form-item>
+            </n-form>
+          </n-tab-pane>
+
+          <!-- 结束节点配置Tab -->
+          <n-tab-pane v-if="elementType === 'bpmn:EndEvent'" name="end" tab="结束配置">
+            <n-form :model="properties" label-placement="top" size="small">
+              <n-form-item label="结束类型">
+                <n-radio-group v-model:value="properties.endType">
+                  <n-radio value="terminate">
+                    终止流程
+                  </n-radio>
+                  <n-radio value="normal">
+                    正常结束
+                  </n-radio>
+                </n-radio-group>
+              </n-form-item>
+            </n-form>
+          </n-tab-pane>
+
+          <!-- 执行监听器Tab（通用） -->
+          <n-tab-pane v-if="showExecutionListener" name="executionListener" tab="执行监听器">
+            <div class="listener-list">
+              <div v-for="(listener, index) in properties.executionListeners" :key="index" class="listener-item">
+                <n-card size="small" :title="listener.event">
+                  <template #header-extra>
+                    <n-button text type="error" @click="removeExecutionListener(index)">
+                      <i class="i-material-symbols:delete" />
+                    </n-button>
+                  </template>
+                  <n-form :model="listener" label-placement="left" size="small">
+                    <n-form-item label="事件">
+                      <n-select
+                        v-model:value="listener.event"
+                        :options="executionEventOptions"
+                        size="small"
+                      />
+                    </n-form-item>
+                    <n-form-item label="类名">
+                      <n-input v-model:value="listener.class" placeholder="全限定类名" />
+                    </n-form-item>
+                  </n-form>
+                </n-card>
+              </div>
+              <n-button dashed block @click="addExecutionListener">
+                <template #icon>
+                  <i class="i-material-symbols:add" />
+                </template>
+                添加监听器
+              </n-button>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
+      </div>
     </div>
 
     <!-- 底部固定按钮区 -->
@@ -665,6 +783,10 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
+import flowApi from '@/api/flow'
+import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
+import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
+import { cloneValue, normalizeFormCreateRules } from '@/components/form-create/formCreateBridge'
 import { request } from '@/utils/http'
 import UserSelectModal from './UserSelectModal.vue'
 
@@ -683,6 +805,7 @@ const emit = defineEmits(['update'])
 
 // Tab控制状态
 const activeTab = ref('basic')
+const tabsWrapperRef = ref(null)
 
 // 保存状态
 const isDirty = ref(false)
@@ -714,6 +837,41 @@ const elementType = computed(() => rawElement.value?.type || '')
 // 是否显示执行监听器
 const showExecutionListener = computed(() => {
   return ['bpmn:UserTask', 'bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:StartEvent', 'bpmn:EndEvent'].includes(elementType.value)
+})
+
+const visibleTabs = computed(() => {
+  const tabs = [{ name: 'basic', label: '基础属性' }]
+  if (elementType.value === 'bpmn:StartEvent')
+    tabs.push({ name: 'startConfig', label: '开始配置' })
+  if (elementType.value === 'bpmn:UserTask') {
+    tabs.push(
+      { name: 'approval', label: '审批设置' },
+      { name: 'actionControl', label: '办理控制' },
+      { name: 'multiInstance', label: '会签配置' },
+      { name: 'listener', label: '监听器' },
+    )
+  }
+  if (elementType.value === 'bpmn:ServiceTask')
+    tabs.push({ name: 'service', label: '服务配置' })
+  if (elementType.value === 'bpmn:ExclusiveGateway')
+    tabs.push({ name: 'gateway', label: '网关配置' })
+  if (elementType.value === 'bpmn:SequenceFlow')
+    tabs.push({ name: 'sequence', label: '流转条件' })
+  if (elementType.value === 'bpmn:EndEvent')
+    tabs.push({ name: 'end', label: '结束配置' })
+  if (showExecutionListener.value)
+    tabs.push({ name: 'executionListener', label: '执行监听器' })
+  return tabs
+})
+
+const activeTabIndex = computed(() => Math.max(0, visibleTabs.value.findIndex(tab => tab.name === activeTab.value)))
+const canGoPrevTab = computed(() => activeTabIndex.value > 0)
+const canGoNextTab = computed(() => activeTabIndex.value < visibleTabs.value.length - 1)
+const activeTabPositionText = computed(() => {
+  const total = visibleTabs.value.length
+  if (!total)
+    return '0/0'
+  return `${activeTabIndex.value + 1}/${total} ${visibleTabs.value[activeTabIndex.value]?.label || ''}`
 })
 
 // 属性对象
@@ -790,6 +948,26 @@ const formTypeOptions = [
   { label: '无表单', value: 'none' },
 ]
 
+const nodeInlineFormRules = computed(() => normalizeFormCreateRules(properties.formJson))
+const nodeFormFieldCount = computed(() => countFormRules(nodeInlineFormRules.value))
+const canPreviewNodeForm = computed(() => Boolean(properties.formJson?.trim() || properties.formKey?.trim()))
+const nodeFormDesignerTitle = computed(() => `节点表单设计 - ${properties.name || properties.id || '未命名节点'}`)
+const nodeFormPreviewTitle = computed(() => `节点表单预览 - ${properties.name || properties.id || '未命名节点'}`)
+const nodeFormBuilderTitle = computed(() => {
+  if (nodeFormFieldCount.value > 0)
+    return `已内嵌 ${nodeFormFieldCount.value} 个字段`
+  if (properties.formKey)
+    return '引用已有动态表单'
+  return '未配置节点表单'
+})
+const nodeFormBuilderDesc = computed(() => {
+  if (nodeFormFieldCount.value > 0)
+    return '办理该节点时会优先渲染这里设计的表单，并把填写内容提交为流程变量'
+  if (properties.formKey)
+    return `当前引用 ${properties.formKey}，也可以点击在线设计生成节点专属表单`
+  return '点击在线设计为当前审批节点配置专属字段、校验和布局'
+})
+
 const approvalActionOptions = [
   { key: 'allowApprove', label: '通过', icon: 'i-material-symbols:check-circle' },
   { key: 'allowReject', label: '拒绝', icon: 'i-material-symbols:cancel' },
@@ -818,6 +996,15 @@ const roleColumns = [
   { title: '角色编码', key: 'roleKey' },
 ]
 
+// 节点动态表单
+const formDefinitionOptions = ref([])
+const formDefinitionLoading = ref(false)
+const showNodeFormDesigner = ref(false)
+const showNodeFormPreview = ref(false)
+const nodeFormDesignerRef = ref(null)
+const nodeFormDesignerSchema = ref([])
+const nodeFormPreviewSchema = ref([])
+
 // SPEL表达式相关
 const selectedSpelTemplate = ref('')
 const spelValidationError = ref('')
@@ -825,6 +1012,21 @@ const spelValidationError = ref('')
 // 标记为未保存状态
 function markDirty() {
   isDirty.value = true
+}
+
+function switchRelativeTab(offset) {
+  const tabs = visibleTabs.value
+  const nextIndex = Math.min(Math.max(activeTabIndex.value + offset, 0), tabs.length - 1)
+  activeTab.value = tabs[nextIndex]?.name || 'basic'
+}
+
+function scrollActiveTabIntoView() {
+  const activeNode = tabsWrapperRef.value?.querySelector?.('.n-tabs-tab--active')
+  activeNode?.scrollIntoView?.({
+    behavior: 'smooth',
+    block: 'nearest',
+    inline: 'center',
+  })
 }
 
 // 从API加载SPEL模板
@@ -841,6 +1043,27 @@ async function loadSpelTemplates() {
   }
   catch (e) {
     console.error('加载SPEL模板失败', e)
+  }
+}
+
+async function loadFormDefinitions() {
+  formDefinitionLoading.value = true
+  try {
+    const res = await flowApi.getEnabledForms()
+    if (res.code === 200) {
+      formDefinitionOptions.value = (res.data || [])
+        .filter(item => item.formKey)
+        .map(item => ({
+          label: item.formName ? `${item.formName}（${item.formKey}）` : item.formKey,
+          value: item.formKey,
+        }))
+    }
+  }
+  catch (error) {
+    console.error('加载流程表单失败:', error)
+  }
+  finally {
+    formDefinitionLoading.value = false
   }
 }
 
@@ -901,6 +1124,7 @@ async function handleSaveConfig() {
 // 组件挂载时加载SPEL模板
 onMounted(() => {
   loadSpelTemplates()
+  loadFormDefinitions()
 })
 
 const completionConditionOptions = [
@@ -969,8 +1193,13 @@ watch(() => props.element, (newElement) => {
     })
     // 切换节点时回到第一个Tab
     activeTab.value = 'basic'
+    nextTick(scrollActiveTabIntoView)
   }
 }, { immediate: true })
+
+watch(activeTab, () => {
+  nextTick(scrollActiveTabIntoView)
+})
 
 let spelSaveTimer = null
 watch(() => properties.assigneeExpr, (newVal) => {
@@ -1406,6 +1635,83 @@ function updateTaskType() {
   properties.candidateGroups = []
 }
 
+function handleFormKeyChange(value) {
+  properties.formKey = value || ''
+  markDirty()
+}
+
+async function openNodeFormDesigner() {
+  properties.formType = 'dynamic'
+  nodeFormDesignerSchema.value = cloneValue(await resolveNodeFormRules()) || []
+  showNodeFormDesigner.value = true
+}
+
+async function openNodeFormPreview() {
+  const rules = await resolveNodeFormRules()
+  if (!rules.length) {
+    window.$message?.warning('暂无可预览的节点表单')
+    return
+  }
+  nodeFormPreviewSchema.value = cloneValue(rules) || []
+  showNodeFormPreview.value = true
+}
+
+function handleSaveNodeFormSchema(schema) {
+  const rules = Array.isArray(schema) ? cloneValue(schema) : []
+  properties.formType = 'dynamic'
+  if (!properties.formKey)
+    properties.formKey = buildNodeFormKey()
+  properties.formJson = JSON.stringify(rules)
+  updateFormType()
+  showNodeFormDesigner.value = false
+  isDirty.value = false
+  window.$message?.success('节点表单已保存到当前节点')
+}
+
+function clearNodeInlineForm() {
+  properties.formJson = ''
+  updateFormType()
+  isDirty.value = false
+  window.$message?.success('已清空节点内嵌表单')
+}
+
+async function resolveNodeFormRules() {
+  const inlineRules = normalizeFormCreateRules(properties.formJson)
+  if (inlineRules.length || !properties.formKey)
+    return inlineRules
+  const schema = await loadFormSchemaByKey(properties.formKey)
+  return normalizeFormCreateRules(schema)
+}
+
+async function loadFormSchemaByKey(formKey) {
+  if (!formKey)
+    return []
+  try {
+    const res = await flowApi.getFormByKey(formKey)
+    if (res.code === 200 && res.data?.formSchema)
+      return res.data.formSchema
+  }
+  catch (error) {
+    console.error('加载引用表单失败:', error)
+    window.$message?.warning('引用表单加载失败，请检查表单Key')
+  }
+  return []
+}
+
+function buildNodeFormKey() {
+  const rawKey = `${properties.id || rawElement.value?.id || 'user_task'}_form`
+  return rawKey.replace(/[^\w-]/g, '_')
+}
+
+function countFormRules(rules) {
+  if (!Array.isArray(rules))
+    return 0
+  return rules.reduce((count, rule) => {
+    const childCount = Array.isArray(rule.children) ? countFormRules(rule.children) : 0
+    return count + 1 + childCount
+  }, 0)
+}
+
 // 更新表单类型
 function updateFormType() {
   if (!rawElement.value || !props.modeler)
@@ -1436,8 +1742,11 @@ function updateFormType() {
     properties.formUrl = ''
     modeling.updateProperties(rawElement.value, {
       'flowable:formUrl': null,
+      'flowable:formKey': properties.formKey || null,
+      'flowable:formJson': properties.formJson || null,
     })
   }
+  emit('update')
 }
 
 // 更新用户任务审批人
@@ -1859,6 +2168,39 @@ function updateProperty(prop) {
   margin-bottom: 8px;
 }
 
+.tabs-toolbar {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 2px 4px;
+}
+
+.tabs-position {
+  min-width: 76px;
+  text-align: center;
+  font-size: 12px;
+  color: #667085;
+  white-space: nowrap;
+}
+
+.tabs-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.tabs-shell.has-next::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 36px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), #fff 72%);
+}
+
 .config-tabs {
   width: 100%;
 }
@@ -1905,6 +2247,69 @@ function updateProperty(prop) {
   flex-shrink: 0;
 }
 
+.node-form-builder-card {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.node-form-builder-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.node-form-builder-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.node-form-builder-icon i {
+  width: 18px;
+  height: 18px;
+}
+
+.node-form-builder-copy {
+  min-width: 0;
+}
+
+.node-form-builder-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.node-form-builder-desc {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #667085;
+}
+
+.node-form-builder-actions {
+  margin-top: 12px;
+}
+
+.node-form-json-collapse {
+  margin-top: -4px;
+}
+
+.node-form-json-collapse :deep(.n-collapse-item__header) {
+  font-size: 12px;
+  color: #475569;
+}
+
 /* Tab导航栏可滚动 + 显示滚动条 */
 .config-tabs :deep(.n-tabs-nav) {
   overflow-x: auto !important;
@@ -1912,6 +2317,7 @@ function updateProperty(prop) {
   white-space: nowrap !important;
   scrollbar-width: thin;
   scrollbar-color: #d1d5db transparent;
+  padding-right: 28px;
 }
 
 /* 自定义滚动条样式（Webkit） */

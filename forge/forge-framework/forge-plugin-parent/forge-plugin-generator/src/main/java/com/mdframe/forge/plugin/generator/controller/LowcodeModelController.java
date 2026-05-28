@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDataModelDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDataModelStatusDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDdlPreviewDTO;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelImportRequest;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDataModelService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
+import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeModelImportService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeSchemaValidator;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeDataModelVO;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeDdlPreviewVO;
@@ -36,6 +38,7 @@ public class LowcodeModelController {
     private final LowcodeDataModelService modelService;
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlService ddlService;
+    private final LowcodeModelImportService importService;
 
     @GetMapping("/page")
     @OperationLog(module = "低代码模型", type = OperationType.QUERY, desc = "分页查询低代码数据模型")
@@ -98,5 +101,17 @@ public class LowcodeModelController {
     @OperationLog(module = "低代码模型", type = OperationType.QUERY, desc = "预览低代码建表DDL")
     public RespInfo<LowcodeDdlPreviewVO> previewDdl(@RequestBody LowcodeDdlPreviewDTO dto) {
         return RespInfo.success(ddlService.previewCreateTable(dto.getModelSchema()));
+    }
+
+    @PostMapping("/preview-db-table")
+    @OperationLog(module = "低代码模型", type = OperationType.QUERY, desc = "预览数据源表模型")
+    public RespInfo<LowcodeModelSchema> previewDbTable(@RequestBody LowcodeModelImportRequest request) {
+        return RespInfo.success(importService.previewDbTableModel(request));
+    }
+
+    @PostMapping("/import-db-table")
+    @OperationLog(module = "低代码模型", type = OperationType.ADD, desc = "从数据源表导入低代码模型")
+    public RespInfo<Long> importDbTable(@RequestBody LowcodeModelImportRequest request) {
+        return RespInfo.success(importService.importDbTableModel(request));
     }
 }

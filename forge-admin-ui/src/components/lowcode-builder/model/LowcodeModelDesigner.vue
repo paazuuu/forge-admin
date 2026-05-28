@@ -196,16 +196,6 @@
           </section>
         </n-tab-pane>
 
-        <n-tab-pane name="er" tab="ER 图">
-          <LowcodeErDiagram
-            title="模型 ER 图"
-            :subtitle="erDiagramSubtitle"
-            :models="erDiagramModels"
-            :primary-model-code="erCurrentModelCode"
-            :download-file-name="`${erCurrentModelCode || 'model'}-er.svg`"
-          />
-        </n-tab-pane>
-
         <n-tab-pane name="rules" tab="校验规则">
           <section class="designer-section rules-grid">
             <div class="rule-card">
@@ -214,19 +204,31 @@
               </div>
               <n-form label-placement="top" size="small" :show-feedback="false">
                 <n-form-item label="数据范围">
-                  <n-select v-model:value="localModel.policies.dataScope" :options="dataScopeOptions" />
+                  <n-select
+                    v-model:value="localModel.policies.dataScope"
+                    :options="dataScopeOptions"
+                    @update:value="handleDataScopeChange"
+                  />
                 </n-form-item>
-                <n-form-item label="区划字段">
-                  <n-select v-model:value="localModel.policies.regionField" clearable :options="businessFieldOptions" />
-                </n-form-item>
+                <template v-if="isFollowSystemDataScope">
+                  <n-form-item label="本人字段">
+                    <n-select v-model:value="localModel.policies.userField" clearable :options="fieldOptions" @update:value="handlePolicyFieldChange('user', $event)" />
+                  </n-form-item>
+                  <n-form-item label="组织字段">
+                    <n-select v-model:value="localModel.policies.orgField" clearable :options="fieldOptions" @update:value="handlePolicyFieldChange('org', $event)" />
+                  </n-form-item>
+                  <n-form-item label="区划字段">
+                    <n-select v-model:value="localModel.policies.regionField" clearable :options="fieldOptions" @update:value="handlePolicyFieldChange('region', $event)" />
+                  </n-form-item>
+                </template>
                 <n-form-item label="主键策略">
                   <n-input :value="`${localModel.policies.primaryKeyField || 'id'} / ${localModel.policies.primaryKeyStrategy || 'AUTO_INCREMENT'}`" disabled />
                 </n-form-item>
                 <n-form-item label="租户字段">
-                  <n-input :value="localModel.policies.tenantField || 'tenantId'" disabled />
+                  <n-input :value="`${localModel.policies.tenantField || 'tenantId'} / ${localModel.policies.tenantColumn || 'tenant_id'}`" disabled />
                 </n-form-item>
                 <n-form-item label="逻辑删除字段">
-                  <n-input :value="localModel.policies.logicDeleteField || 'delFlag'" disabled />
+                  <n-input :value="`${localModel.policies.logicDeleteField || 'delFlag'} / ${localModel.policies.logicDeleteColumn || 'del_flag'}`" disabled />
                 </n-form-item>
                 <n-form-item label="审计字段">
                   <n-switch :value="true" disabled />
@@ -238,6 +240,9 @@
                 树形模型
               </div>
               <n-form label-placement="top" size="small" :show-feedback="false">
+                <n-form-item label="启用树形数据">
+                  <n-switch v-model:value="localModel.treeConfig.enabled" @update:value="handleTreeEnabledChange" />
+                </n-form-item>
                 <n-form-item label="主键字段">
                   <n-select v-model:value="localModel.treeConfig.keyField" :options="fieldOptions" />
                 </n-form-item>
@@ -246,6 +251,9 @@
                 </n-form-item>
                 <n-form-item label="显示字段">
                   <n-select v-model:value="localModel.treeConfig.labelField" :options="fieldOptions" />
+                </n-form-item>
+                <n-form-item label="加载方式">
+                  <n-select v-model:value="localModel.treeConfig.loadMode" :options="treeLoadModeOptions" />
                 </n-form-item>
               </n-form>
             </div>
@@ -324,7 +332,6 @@
 import { AddOutline } from '@vicons/ionicons5'
 import { computed, ref, watch } from 'vue'
 import { lowcodeValidateModel } from '@/api/lowcode-crud'
-import LowcodeErDiagram from './LowcodeErDiagram.vue'
 import {
   appTypeOptions,
   cloneSchema,
@@ -338,6 +345,7 @@ import {
   isLockedSystemField,
   isSameSchema,
   isSystemField,
+  normalizeLowcodePolicies,
   normalizeObjectCode,
   normalizeTableName,
 } from './model-schema'
@@ -380,6 +388,10 @@ const fieldOptions = computed(() => (localModel.value.fields || []).map(field =>
   label: `${field.label || field.field} (${field.field})`,
   value: field.field,
 })))
+const treeLoadModeOptions = [
+  { label: '全量加载', value: 'full' },
+  { label: '懒加载', value: 'lazy' },
+]
 const businessFieldOptions = computed(() => (localModel.value.fields || [])
   .filter(field => !isSystemField(field))
   .map(field => ({
@@ -390,23 +402,6 @@ const targetModelOptions = computed(() => props.dataModels.map(model => ({
   label: `${model.modelName || model.modelCode} (${model.modelCode})`,
   value: model.modelCode,
 })))
-const erCurrentModelCode = computed(() => localModel.value.object?.code || localModel.value.tableName || 'current_model')
-const erDiagramModels = computed(() => {
-  const current = {
-    id: localModel.value.id || '__current',
-    modelCode: erCurrentModelCode.value,
-    modelName: localModel.value.object?.name || localModel.value.businessName || '当前模型',
-    modelSchema: cloneSchema(localModel.value),
-  }
-  const related = props.dataModels
-    .filter(model => model.modelCode && model.modelCode !== erCurrentModelCode.value)
-  return [current, ...related]
-})
-const erDiagramSubtitle = computed(() => {
-  const relationCount = (localModel.value.relations || []).length
-  const datasourceName = localModel.value.sourceTable?.datasourceName || '未绑定数据源'
-  return `当前模型高亮展示，配置关系 ${relationCount} 条；数据源：${datasourceName}`
-})
 const relationIndexFields = computed(() => Array.from(new Set((localModel.value.relations || [])
   .map(relation => relation.sourceField)
   .filter(Boolean))))
@@ -422,9 +417,9 @@ const relationTypeHints = {
 }
 const dataScopeOptions = [
   { label: '租户隔离', value: 'TENANT' },
-  { label: '区划权限', value: 'REGION' },
-  { label: '部门权限', value: 'DEPT' },
+  { label: '跟随系统角色', value: 'FOLLOW_SYSTEM' },
 ]
+const isFollowSystemDataScope = computed(() => localModel.value.policies?.dataScope === 'FOLLOW_SYSTEM')
 
 watch(
   () => props.modelValue,
@@ -560,6 +555,26 @@ function handleAppTypeChange(value) {
   ensureTreeModel()
 }
 
+function handleTreeEnabledChange(value) {
+  if (value)
+    ensureTreeModel()
+}
+
+function handleDataScopeChange() {
+  normalizeLowcodePolicies(localModel.value)
+}
+
+function handlePolicyFieldChange(kind, fieldName) {
+  const field = (localModel.value.fields || []).find(item => item.field === fieldName || item.columnName === fieldName)
+  const columnName = field?.columnName || ''
+  if (kind === 'user')
+    localModel.value.policies.userColumn = columnName
+  if (kind === 'org')
+    localModel.value.policies.orgColumn = columnName
+  if (kind === 'region')
+    localModel.value.policies.regionColumn = columnName
+}
+
 function ensureTreeModel() {
   const fields = localModel.value.fields || []
   if (!localModel.value.treeConfig)
@@ -568,13 +583,13 @@ function ensureTreeModel() {
   const parentField = localModel.value.treeConfig.parentField || 'parentId'
   if (!fields.some(field => field.field === parentField)) {
     fields.push({
-      ...createDefaultField(parentField, '父级ID'),
+      ...createDefaultField(parentField, '上级节点'),
       dataType: 'bigint',
-      componentType: 'number',
+      componentType: 'treeSelect',
       queryType: 'eq',
       searchable: false,
       listVisible: false,
-      formVisible: false,
+      formVisible: true,
       width: 120,
     })
     localModel.value.fields = fields
@@ -584,11 +599,13 @@ function ensureTreeModel() {
     || fields.find(field => field.field !== parentField)?.field
     || 'name'
   localModel.value.treeConfig = {
+    enabled: true,
     keyField: localModel.value.treeConfig.keyField || 'id',
     parentField,
     labelField: localModel.value.treeConfig.labelField || labelField,
     childrenField: localModel.value.treeConfig.childrenField || 'children',
     treeTitle: localModel.value.treeConfig.treeTitle || `${localModel.value.businessName || '业务'}树`,
+    loadMode: localModel.value.treeConfig.loadMode || 'full',
   }
 }
 
@@ -717,21 +734,7 @@ function ensureModelCollections() {
     localModel.value.relations = []
   if (!localModel.value.indexes)
     localModel.value.indexes = []
-  localModel.value.policies = {
-    dataScope: 'TENANT',
-    regionField: '',
-    auditEnabled: true,
-    primaryKeyStrategy: 'AUTO_INCREMENT',
-    primaryKeyField: 'id',
-    tenantField: 'tenantId',
-    logicDeleteField: 'delFlag',
-    ...(localModel.value.policies || {}),
-  }
-  localModel.value.policies.auditEnabled = true
-  localModel.value.policies.primaryKeyStrategy = 'AUTO_INCREMENT'
-  localModel.value.policies.primaryKeyField = 'id'
-  localModel.value.policies.tenantField = 'tenantId'
-  localModel.value.policies.logicDeleteField = 'delFlag'
+  normalizeLowcodePolicies(localModel.value)
   if (!localModel.value.tableName && localModel.value.object?.code)
     localModel.value.tableName = normalizeTableName(localModel.value.object.code)
   if (!localModel.value.treeConfig) {
@@ -741,8 +744,14 @@ function ensureModelCollections() {
       labelField: 'name',
       childrenField: 'children',
       treeTitle: '树形导航',
+      loadMode: 'full',
+      enabled: false,
     }
   }
+  if (localModel.value.treeConfig.enabled === undefined)
+    localModel.value.treeConfig.enabled = localModel.value.appType === 'TREE'
+  if (!localModel.value.treeConfig.loadMode)
+    localModel.value.treeConfig.loadMode = 'full'
 }
 
 async function validateModel() {

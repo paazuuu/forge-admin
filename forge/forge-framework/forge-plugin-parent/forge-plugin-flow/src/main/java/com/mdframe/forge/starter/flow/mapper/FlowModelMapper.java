@@ -17,5 +17,6 @@ public interface FlowModelMapper extends BaseMapper<FlowModel> {
      * 分页查询流程模型（支持父级分类查询子级数据）
      */
     IPage<FlowModel> selectModelPage(Page<FlowModel> page, @Param("modelName") String modelName,
-                                       @Param("category") String category, @Param("status") Integer status);
+                                      @Param("category") String category, @Param("status") Integer status,
+                                      @Param("createBy") String createBy);
 }

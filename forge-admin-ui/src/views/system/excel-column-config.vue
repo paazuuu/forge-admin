@@ -3,6 +3,7 @@
     <div class="mb-16 flex items-center justify-between">
       <div class="text-16 font-bold">
         {{ configName }} - 列配置
+        <span class="text-13 ml-8 text-gray-500 font-normal">{{ configTypeLabel }}</span>
       </div>
       <div class="flex gap-8">
         <NButton type="primary" size="small" @click="handleAdd">
@@ -36,7 +37,7 @@
       title="编辑列配置"
       positive-text="确定"
       negative-text="取消"
-      :style="{ width: '600px' }"
+      :style="{ width: '720px' }"
       @positive-click="handleConfirmEdit"
     >
       <NForm
@@ -82,8 +83,14 @@
             style="width: 100%"
           />
         </NFormItem>
-        <NFormItem label="是否导出" path="export">
-          <NSwitch v-model:value="editForm.export" />
+        <NFormItem v-if="exportEnabled" label="是否导出" path="export">
+          <NSwitch v-model:value="editForm.export" :disabled="!exportEnabled" />
+        </NFormItem>
+        <NFormItem v-if="importEnabled" label="是否可导入" path="importable">
+          <NSwitch v-model:value="editForm.importable" :disabled="!importEnabled" />
+        </NFormItem>
+        <NFormItem v-if="importEnabled" label="导入必填" path="required">
+          <NSwitch v-model:value="editForm.required" :disabled="!importEnabled" />
         </NFormItem>
         <NFormItem label="日期格式" path="dateFormat">
           <NInput
@@ -103,14 +110,37 @@
             placeholder="字典类型，如：user_status"
           />
         </NFormItem>
+        <NFormItem v-if="importEnabled" label="示例值" path="exampleValue">
+          <NInput
+            v-model:value="editForm.exampleValue"
+            :disabled="!importEnabled"
+            placeholder="导入模板示例值"
+          />
+        </NFormItem>
+        <NFormItem v-if="importEnabled" label="校验规则" path="validationRule">
+          <NInput
+            v-model:value="editForm.validationRule"
+            :disabled="!importEnabled"
+            placeholder="正则表达式，如：^.{1,64}$"
+          />
+        </NFormItem>
+        <NFormItem v-if="importEnabled" label="校验提示" path="validationMessage">
+          <NInput
+            v-model:value="editForm.validationMessage"
+            :disabled="!importEnabled"
+            placeholder="校验失败提示信息"
+          />
+        </NFormItem>
       </NForm>
     </NModal>
   </div>
 </template>
 
 <script setup>
-import { NButton, NDataTable, NForm, NFormItem, NInput, NInputNumber, NModal, NSwitch, NTag } from 'naive-ui'
-import { h, onMounted, ref } from 'vue'
+import { NButton, NDataTable, NForm, NFormItem, NInput, NInputNumber, NModal, NSwitch } from 'naive-ui'
+import { computed, h, onMounted, ref, watch } from 'vue'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
 const props = defineProps({
@@ -122,11 +152,23 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  configType: {
+    type: String,
+    default: 'BOTH',
+  },
 })
+
+const YES_NO_DICT = 'sys_yes_no'
+const CONFIG_TYPE_DICT = 'sys_excel_config_type'
 
 const dataList = ref([])
 const showEditModal = ref(false)
 const editFormRef = ref(null)
+const { dict, getLabel } = useDict(YES_NO_DICT, CONFIG_TYPE_DICT)
+const yesNoOptions = computed(() => dict.value[YES_NO_DICT] || [])
+const exportEnabled = computed(() => props.configType !== 'IMPORT')
+const importEnabled = computed(() => props.configType !== 'EXPORT')
+const configTypeLabel = computed(() => getLabel(CONFIG_TYPE_DICT, props.configType || 'BOTH') || props.configType || '导入导出')
 const editForm = ref({
   key: '',
   id: null,
@@ -135,66 +177,103 @@ const editForm = ref({
   width: 20,
   orderNum: 0,
   export: true,
+  importable: true,
+  required: false,
   dateFormat: '',
   numberFormat: '',
   dictType: '',
+  exampleValue: '',
+  validationRule: '',
+  validationMessage: '',
 })
 let editingIndex = -1
 
 // 表格列定义
-const columns = [
-  {
-    title: '排序',
-    key: 'orderNum',
-    width: 80,
-    align: 'center',
-  },
-  {
-    title: '字段名',
-    key: 'fieldName',
-    width: 150,
-  },
-  {
-    title: '列名',
-    key: 'columnName',
-    width: 150,
-  },
-  {
-    title: '列宽',
-    key: 'width',
-    width: 80,
-    align: 'center',
-  },
-  {
-    title: '是否导出',
-    key: 'export',
-    width: 100,
-    align: 'center',
-    render: (row) => {
-      return h(NTag, {
-        type: row.export ? 'success' : 'default',
-        size: 'small',
-      }, {
-        default: () => row.export ? '是' : '否',
-      })
+const columns = computed(() => {
+  const columnList = [
+    {
+      title: '排序',
+      key: 'orderNum',
+      width: 80,
+      align: 'center',
     },
-  },
-  {
-    title: '日期格式',
-    key: 'dateFormat',
-    width: 150,
-  },
-  {
-    title: '数字格式',
-    key: 'numberFormat',
-    width: 120,
-  },
-  {
-    title: '字典类型',
-    key: 'dictType',
-    width: 120,
-  },
-  {
+    {
+      title: '字段名',
+      key: 'fieldName',
+      width: 150,
+    },
+    {
+      title: '列名',
+      key: 'columnName',
+      width: 150,
+    },
+    {
+      title: '列宽',
+      key: 'width',
+      width: 80,
+      align: 'center',
+    },
+  ]
+
+  if (exportEnabled.value) {
+    columnList.push({
+      title: '是否导出',
+      key: 'export',
+      width: 100,
+      align: 'center',
+      render: row => h(DictTag, { options: yesNoOptions.value, value: boolToDictValue(row.export), size: 'small' }),
+    })
+  }
+
+  if (importEnabled.value) {
+    columnList.push(
+      {
+        title: '是否导入',
+        key: 'importable',
+        width: 100,
+        align: 'center',
+        render: row => h(DictTag, { options: yesNoOptions.value, value: boolToDictValue(row.importable), size: 'small' }),
+      },
+      {
+        title: '导入必填',
+        key: 'required',
+        width: 100,
+        align: 'center',
+        render: row => h(DictTag, { options: yesNoOptions.value, value: boolToDictValue(row.required), size: 'small' }),
+      },
+    )
+  }
+
+  columnList.push(
+    {
+      title: '日期格式',
+      key: 'dateFormat',
+      width: 150,
+    },
+    {
+      title: '数字格式',
+      key: 'numberFormat',
+      width: 120,
+    },
+    {
+      title: '字典类型',
+      key: 'dictType',
+      width: 120,
+    },
+  )
+
+  if (importEnabled.value) {
+    columnList.push({
+      title: '示例值',
+      key: 'exampleValue',
+      width: 140,
+      ellipsis: {
+        tooltip: true,
+      },
+    })
+  }
+
+  columnList.push({
     title: '操作',
     key: 'action',
     width: 180,
@@ -223,8 +302,10 @@ const columns = [
         }, '删除'),
       ])
     },
-  },
-]
+  })
+
+  return columnList
+})
 
 // 加载数据
 async function loadData() {
@@ -236,11 +317,14 @@ async function loadData() {
     if (res.code === 200) {
       dataList.value = (res.data || []).map((item, index) => ({
         ...item,
+        export: exportEnabled.value && item.export !== false,
+        importable: importEnabled.value && item.importable !== false,
+        required: importEnabled.value && item.required === true,
         key: `${item.id || index}_${Date.now()}`,
       }))
     }
   }
-  catch (error) {
+  catch {
     window.$message.error('加载列配置失败')
   }
 }
@@ -258,10 +342,15 @@ function handleAdd() {
     columnName: '',
     width: 20,
     orderNum: maxOrder + 1,
-    export: true,
+    export: exportEnabled.value,
+    importable: importEnabled.value,
+    required: false,
     dateFormat: '',
     numberFormat: '',
     dictType: '',
+    exampleValue: '',
+    validationRule: '',
+    validationMessage: '',
   }
   editingIndex = -1
   showEditModal.value = true
@@ -269,7 +358,7 @@ function handleAdd() {
 
 // 编辑
 function handleEdit(row, index) {
-  editForm.value = { ...row }
+  editForm.value = normalizeColumnForMode({ ...row })
   editingIndex = index
   showEditModal.value = true
 }
@@ -281,11 +370,11 @@ async function handleConfirmEdit() {
 
     if (editingIndex >= 0) {
       // 更新
-      dataList.value[editingIndex] = { ...editForm.value }
+      dataList.value[editingIndex] = normalizeColumnForMode({ ...editForm.value })
     }
     else {
       // 新增
-      dataList.value.push({ ...editForm.value })
+      dataList.value.push(normalizeColumnForMode({ ...editForm.value }))
     }
 
     // 重新排序
@@ -367,9 +456,14 @@ async function handleSave() {
       width: item.width,
       orderNum: item.orderNum,
       export: item.export,
+      importable: item.importable,
+      required: item.required,
       dateFormat: item.dateFormat || null,
       numberFormat: item.numberFormat || null,
       dictType: item.dictType || null,
+      exampleValue: item.exampleValue || null,
+      validationRule: item.validationRule || null,
+      validationMessage: item.validationMessage || null,
     }))
 
     const res = await request.post('/system/excel/column-config/batch', columns, {
@@ -392,6 +486,26 @@ async function handleSave() {
 onMounted(() => {
   loadData()
 })
+
+watch(() => props.configKey, () => {
+  loadData()
+})
+
+function boolToDictValue(value) {
+  return value ? '1' : '0'
+}
+
+function normalizeColumnForMode(column) {
+  return {
+    ...column,
+    export: exportEnabled.value ? column.export !== false : false,
+    importable: importEnabled.value ? column.importable !== false : false,
+    required: importEnabled.value ? column.required === true : false,
+    exampleValue: importEnabled.value ? column.exampleValue : '',
+    validationRule: importEnabled.value ? column.validationRule : '',
+    validationMessage: importEnabled.value ? column.validationMessage : '',
+  }
+}
 </script>
 
 <style scoped>
