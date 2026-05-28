@@ -130,7 +130,8 @@ async function main() {
   await writeGeneratedConfig(outputRoot, options, selection, catalog)
 
   const replacements = buildTextReplacements(artifactMap, applicationClassMap, options, selection)
-  await rewriteTextFiles(outputRoot, replacements)
+  const hasReportUi = selection?.frontendIds?.has('report-ui')
+  await rewriteTextFiles(outputRoot, replacements, hasReportUi)
   await moveJavaPackageDirectories(outputRoot, 'com.mdframe.forge', options.basePackage)
   await renameFilesByBasename(outputRoot, applicationClassMap, '.java')
   await renameArtifactDirectories(serverRoot, artifactMap)
@@ -631,19 +632,22 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
     // 前端环境变量替换 - 基础配置
     ['VITE_TITLE=企业级中后台基础框架', `VITE_TITLE=${options.adminTitle || options.displayName}`],
     ['VITE_TITLE=Forge Admin', `VITE_TITLE=${options.adminTitle || options.displayName}`],
+    ['VITE_HTTP_PORT=3000', `VITE_HTTP_PORT=${options.adminPort || '5173'}`],
     ['VITE_HTTP_PORT=5173', `VITE_HTTP_PORT=${options.adminPort || '5173'}`],
     ['VITE_HTTP_PORT=5174', `VITE_HTTP_PORT=${options.adminPort || '5174'}`],
-    // 路径替换 - 更通用的匹配
+    // 路径替换
     ['VITE_PUBLIC_PATH=/forge\n', `VITE_PUBLIC_PATH=${options.adminPublicPath || '/'}\n`],
     ['VITE_BASE_URL=/forge\n', `VITE_BASE_URL=${options.adminBaseUrl || '/'}\n`],
-    ['VITE_REQUEST_PREFIX=/forge-api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
-    ['VITE_REQUEST_PREFIX=/api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
-    ['/forge-api\n', `${options.adminApiPrefix || '/api'}\n`],
-    // 通用路径替换
     ['VITE_PUBLIC_PATH=/forge', `VITE_PUBLIC_PATH=${options.adminPublicPath || '/'}`],
     ['VITE_BASE_URL=/forge', `VITE_BASE_URL=${options.adminBaseUrl || '/'}`],
+    // API 前缀替换
+    ['VITE_REQUEST_PREFIX=/forge-api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
+    ['VITE_REQUEST_PREFIX=/dev-api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
+    ['VITE_REQUEST_PREFIX=/api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
     // 代理地址替换
     ['VITE_HTTP_PROXY_TARGET=http://localhost:8580', `VITE_HTTP_PROXY_TARGET=${options.adminProxyTarget || 'http://localhost:8580'}`],
+    ['VITE_HTTP_PROXY_TARGET=http://127.0.0.1:8580/', `VITE_HTTP_PROXY_TARGET=${options.adminProxyTarget || 'http://localhost:8580'}/`],
+    ['VITE_HTTP_PROXY_TARGET=http://127.0.0.1:8580', `VITE_HTTP_PROXY_TARGET=${options.adminProxyTarget || 'http://localhost:8580'}`],
   ]
 
   // 只有选择了报表模块才替换报表相关配置
@@ -686,7 +690,7 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
   return replacements
 }
 
-async function rewriteTextFiles(rootDir, replacements) {
+async function rewriteTextFiles(rootDir, replacements, hasReportUi) {
   const files = await collectFiles(rootDir, filePath => !isBinaryFile(filePath))
   for (const file of files) {
     let content
@@ -696,11 +700,37 @@ async function rewriteTextFiles(rootDir, replacements) {
     catch {
       continue
     }
-    const nextContent = applyTextReplacements(content, replacements)
+    let nextContent = applyTextReplacements(content, replacements)
+    
+    // 如果没有报表模块，删除 SSO 相关的配置行
+    if (!hasReportUi) {
+      nextContent = removeSsoConfigLines(nextContent)
+    }
+    
     if (nextContent !== content) {
       await fs.writeFile(file, nextContent)
     }
   }
+}
+
+function removeSsoConfigLines(content) {
+  const lines = content.split('\n')
+  const filteredLines = lines.filter(line => {
+    const trimmed = line.trim()
+    // 跳过 SSO 相关的配置行（包括注释掉的）
+    if (trimmed.startsWith('#') && (
+      trimmed.includes('VITE_SSO_') || 
+      trimmed.includes('VITE_REPORT_UI_')
+    )) {
+      return false
+    }
+    if (trimmed.startsWith('VITE_SSO_') || 
+        trimmed.startsWith('VITE_REPORT_UI_')) {
+      return false
+    }
+    return true
+  })
+  return filteredLines.join('\n')
 }
 
 function applyTextReplacements(content, replacements) {
