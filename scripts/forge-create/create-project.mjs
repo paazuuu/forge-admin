@@ -193,6 +193,14 @@ function normalizeOptions(args, catalog) {
   const groupId = String(args['group-id'] || basePackage).trim()
   const databaseName = String(args['database-name'] || toSnakeCase(projectName)).trim()
   const includeModuleIds = parseModuleList(args.include || args['include-modules'])
+  
+  // 前端配置参数
+  const adminTitle = String(args['admin-title'] || displayName)
+  const adminApiPrefix = String(args['admin-api-prefix'] || '/api')
+  const adminPort = String(args['admin-port'] || '5173')
+  const adminProxyTarget = String(args['admin-proxy-target'] || 'http://localhost:8580')
+  const adminPublicPath = String(args['admin-public-path'] || '/')
+  const adminBaseUrl = String(args['admin-base-url'] || '/')
 
   if (!catalog.presets[preset]) {
     throw new Error(`未知 preset：${preset}。可选值：${Object.keys(catalog.presets).join(', ')}`)
@@ -225,6 +233,13 @@ function normalizeOptions(args, catalog) {
     moduleArtifactPrefix,
     stripModulePrefix,
     force: args.force === true || args.force === 'true',
+    // 前端配置
+    adminTitle,
+    adminApiPrefix,
+    adminPort,
+    adminProxyTarget,
+    adminPublicPath,
+    adminBaseUrl,
   }
 }
 
@@ -613,12 +628,22 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
     ['forge_schema_history', `${snakeName}_schema_history`],
     ['vue-naive-admin', `${options.projectName}-admin-ui`],
     ['com.forge', options.basePackage],
-    // 前端环境变量替换
-    ['VITE_TITLE=企业级中后台基础框架', `VITE_TITLE=${options.displayName}`],
-    ['VITE_PUBLIC_PATH=/forge', `VITE_PUBLIC_PATH=/${options.projectName}`],
-    ['VITE_BASE_URL=/forge', `VITE_BASE_URL=/${options.projectName}`],
-    ['VITE_REQUEST_PREFIX=/forge-api', `VITE_REQUEST_PREFIX=/${options.projectName}-api`],
-    ['/forge-api', `/${options.projectName}-api`],
+    // 前端环境变量替换 - 基础配置
+    ['VITE_TITLE=企业级中后台基础框架', `VITE_TITLE=${options.adminTitle || options.displayName}`],
+    ['VITE_TITLE=Forge Admin', `VITE_TITLE=${options.adminTitle || options.displayName}`],
+    ['VITE_HTTP_PORT=5173', `VITE_HTTP_PORT=${options.adminPort || '5173'}`],
+    ['VITE_HTTP_PORT=5174', `VITE_HTTP_PORT=${options.adminPort || '5174'}`],
+    // 路径替换 - 更通用的匹配
+    ['VITE_PUBLIC_PATH=/forge\n', `VITE_PUBLIC_PATH=${options.adminPublicPath || '/'}\n`],
+    ['VITE_BASE_URL=/forge\n', `VITE_BASE_URL=${options.adminBaseUrl || '/'}\n`],
+    ['VITE_REQUEST_PREFIX=/forge-api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
+    ['VITE_REQUEST_PREFIX=/api', `VITE_REQUEST_PREFIX=${options.adminApiPrefix || '/api'}`],
+    ['/forge-api\n', `${options.adminApiPrefix || '/api'}\n`],
+    // 通用路径替换
+    ['VITE_PUBLIC_PATH=/forge', `VITE_PUBLIC_PATH=${options.adminPublicPath || '/'}`],
+    ['VITE_BASE_URL=/forge', `VITE_BASE_URL=${options.adminBaseUrl || '/'}`],
+    // 代理地址替换
+    ['VITE_HTTP_PROXY_TARGET=http://localhost:8580', `VITE_HTTP_PROXY_TARGET=${options.adminProxyTarget || 'http://localhost:8580'}`],
   ]
 
   // 只有选择了报表模块才替换报表相关配置
@@ -634,17 +659,11 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
       ['VITE_SSO_TARGET_CLIENT=forge_website_report', `VITE_SSO_TARGET_CLIENT=${snakeName}_website_report`],
       ['"forge_report":', `"${snakeName}_report":`],
       ['"forge_website_report":', `"${snakeName}_website_report":`],
-      ['VITE_REPORT_UI_BASE_URL=', `VITE_REPORT_UI_BASE_URL=http://localhost:8084/${options.projectName}-report`],
       ['VITE_REPORT_UI_PATH_PREFIX=/forge-report', `VITE_REPORT_UI_PATH_PREFIX=/${options.projectName}-report`],
       ['VITE_SSO_BRIDGE_ROUTE=/report/design', `VITE_SSO_BRIDGE_ROUTE=/${options.projectName}-report/design`],
       ['http://81.70.22.48:8084/forge-report', `http://localhost:8084/${options.projectName}-report`],
       ['http://localhost:3021/forge-report', `http://localhost:8084/${options.projectName}-report`],
       ['localhost:3021', `localhost:8084`],
-    )
-  } else {
-    // 没有报表模块，移除 SSO 相关配置
-    replacements.push(
-      ['forge_report', `${snakeName}_report`],
     )
   }
 
