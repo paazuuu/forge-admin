@@ -26,9 +26,6 @@
           <!--        </transition> -->
         </component>
 
-        <footer class="text-14 text-center text-gray-500 py-4">
-          蒙ICP备2026004895号
-        </footer>
       </div>
 
       <LayoutSetting v-if="layoutSettingVisible" class="fixed right-12 top-1/2 z-999" />

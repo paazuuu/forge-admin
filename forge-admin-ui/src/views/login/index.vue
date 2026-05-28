@@ -272,6 +272,11 @@
         </div>
       </div>
     </div>
+
+    <!-- ICP备案号 -->
+    <div class="icp-record">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蒙ICP备2026004895号</a>
+    </div>
   </div>
 
   <!-- 滑块验证浮层 -->
@@ -2084,6 +2089,35 @@ async function loadAndSetMenuData() {
   .login-card::after {
     animation: none;
   }
+}
+
+/* ICP Record */
+.icp-record {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  text-align: center;
+}
+
+.icp-record a {
+  font-size: 0.75rem;
+  color: rgba(100, 116, 139, 0.7);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.icp-record a:hover {
+  color: rgba(59, 130, 246, 0.9);
+}
+
+.dark .icp-record a {
+  color: rgba(148, 163, 184, 0.6);
+}
+
+.dark .icp-record a:hover {
+  color: rgba(96, 165, 250, 0.8);
 }
 
 /* Responsive */
