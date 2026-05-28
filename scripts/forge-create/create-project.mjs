@@ -129,7 +129,7 @@ async function main() {
   await copyProjectContextFiles(outputRoot)
   await writeGeneratedConfig(outputRoot, options, selection, catalog)
 
-  const replacements = buildTextReplacements(artifactMap, applicationClassMap, options)
+  const replacements = buildTextReplacements(artifactMap, applicationClassMap, options, selection)
   await rewriteTextFiles(outputRoot, replacements)
   await moveJavaPackageDirectories(outputRoot, 'com.mdframe.forge', options.basePackage)
   await renameFilesByBasename(outputRoot, applicationClassMap, '.java')
@@ -580,12 +580,14 @@ async function rewriteRootPomArtifact(serverRoot, rootArtifactId) {
   }
 }
 
-function buildTextReplacements(artifactMap, applicationClassMap, options) {
+function buildTextReplacements(artifactMap, applicationClassMap, options, selection) {
   const snakeName = toSnakeCase(options.projectName)
   const serverDirName = `${options.artifactPrefix}-server`
   const adminServerArtifactId = artifactMap['forge-admin-server']
   const reportServerArtifactId = artifactMap['forge-report-server']
   const reportPath = `/${options.projectName}-report`
+  const hasReportUi = selection?.frontendIds?.has('report-ui')
+  
   const replacements = [
     ['com.mdframe.forge', options.basePackage],
     ['com/mdframe/forge', options.basePackage.replaceAll('.', '/')],
@@ -600,11 +602,8 @@ function buildTextReplacements(artifactMap, applicationClassMap, options) {
     ['CREATE DATABASE forge ', `CREATE DATABASE ${options.databaseName} `],
     ['mysql -u root -p forge ', `mysql -u root -p ${options.databaseName} `],
     ['forge-admin-ui', `${options.projectName}-admin-ui`],
-    ['forge-report-ui', `${options.projectName}-report-ui`],
     ['forge/forge-admin/', `${serverDirName}/${adminServerArtifactId}/`],
-    ['forge/forge-report/', `${serverDirName}/${reportServerArtifactId}/`],
     ['forge-admin/', `${adminServerArtifactId}/`],
-    ['forge-report/', `${reportServerArtifactId}/`],
     ['forge/db', `${serverDirName}/db`],
     ['forge/scripts', `${serverDirName}/scripts`],
     ['forge/var', `${serverDirName}/var`],
@@ -612,12 +611,42 @@ function buildTextReplacements(artifactMap, applicationClassMap, options) {
     ['forge_admin', options.databaseName],
     ['forge_flow', `${options.databaseName}_flow`],
     ['forge_schema_history', `${snakeName}_schema_history`],
-    ['forge_report', `${snakeName}_report`],
-    ['forge_pc_001', `${snakeName}_pc_001`],
-    ['/forge-report', reportPath],
     ['vue-naive-admin', `${options.projectName}-admin-ui`],
     ['com.forge', options.basePackage],
+    // 前端环境变量替换
+    ['VITE_TITLE=企业级中后台基础框架', `VITE_TITLE=${options.displayName}`],
+    ['VITE_PUBLIC_PATH=/forge', `VITE_PUBLIC_PATH=/${options.projectName}`],
+    ['VITE_BASE_URL=/forge', `VITE_BASE_URL=/${options.projectName}`],
+    ['VITE_REQUEST_PREFIX=/forge-api', `VITE_REQUEST_PREFIX=/${options.projectName}-api`],
+    ['/forge-api', `/${options.projectName}-api`],
   ]
+
+  // 只有选择了报表模块才替换报表相关配置
+  if (hasReportUi) {
+    replacements.push(
+      ['forge-report-ui', `${options.projectName}-report-ui`],
+      ['forge/forge-report/', `${serverDirName}/${reportServerArtifactId}/`],
+      ['forge-report/', `${reportServerArtifactId}/`],
+      ['forge_report', `${snakeName}_report`],
+      ['forge_pc_001', `${snakeName}_pc_001`],
+      ['/forge-report', reportPath],
+      ['VITE_SSO_TARGET_CLIENT=forge_report', `VITE_SSO_TARGET_CLIENT=${snakeName}_report`],
+      ['VITE_SSO_TARGET_CLIENT=forge_website_report', `VITE_SSO_TARGET_CLIENT=${snakeName}_website_report`],
+      ['"forge_report":', `"${snakeName}_report":`],
+      ['"forge_website_report":', `"${snakeName}_website_report":`],
+      ['VITE_REPORT_UI_BASE_URL=', `VITE_REPORT_UI_BASE_URL=http://localhost:8084/${options.projectName}-report`],
+      ['VITE_REPORT_UI_PATH_PREFIX=/forge-report', `VITE_REPORT_UI_PATH_PREFIX=/${options.projectName}-report`],
+      ['VITE_SSO_BRIDGE_ROUTE=/report/design', `VITE_SSO_BRIDGE_ROUTE=/${options.projectName}-report/design`],
+      ['http://81.70.22.48:8084/forge-report', `http://localhost:8084/${options.projectName}-report`],
+      ['http://localhost:3021/forge-report', `http://localhost:8084/${options.projectName}-report`],
+      ['localhost:3021', `localhost:8084`],
+    )
+  } else {
+    // 没有报表模块，移除 SSO 相关配置
+    replacements.push(
+      ['forge_report', `${snakeName}_report`],
+    )
+  }
 
   for (const [from, to] of Object.entries(applicationClassMap)) {
     replacements.push([from, to])
