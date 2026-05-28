@@ -103,6 +103,9 @@ export default defineConfig(({ mode, command }) => {
       ],
     },
     css: {
+      postcss: {
+        plugins: []
+      },
       preprocessorOptions: {
         scss: {
           additionalData: `@use "@/styles/variables.scss";`,
@@ -143,7 +146,10 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     build: {
-      chunkSizeWarningLimit: 1024, // chunk 大小警告的限制（单位kb）
+      // 关闭源码映射（大幅降低内存）
+      sourcemap: false,
+      // 分包优化
+      chunkSizeWarningLimit: 2000, // chunk 大小警告的限制（单位kb）
     },
   }
 })

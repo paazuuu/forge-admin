@@ -77,9 +77,9 @@
 
 | 入口     | 地址 |
 |--------|------|
-| 后台管理   | http://81.70.22.48:8084/forge/login |
-| 项目文档   | http://81.70.22.48:8084/forge-docs/ |
-| 大屏设计器  | http://81.70.22.48:8084/forge-report/|
+| 后台管理   | http://www.dlforgelab.com:8084/forge/login |
+| 项目文档   | http://www.dlforgelab.com:8084/forge-docs/ |
+| 大屏设计器  | http://www.dlforgelab.com:8084/forge-report/|
 | Gitee  | https://gitee.com/ForgeLab/forge-admin |
 | GitHub | https://github.com/yaomindong1996/forge-admin |
 

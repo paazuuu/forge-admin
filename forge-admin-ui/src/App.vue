@@ -17,13 +17,19 @@
       </n-spin>
     </div>
     <router-view v-else v-slot="{ Component, route: curRoute }">
-      <component :is="LayoutComponent" :key="curRoute.meta?.layout || appStore.layout">
-        <!--        <transition name="fade-slide" mode="out-in" appear> -->
-        <KeepAlive :include="keepAliveNames">
-          <component :is="Component" v-if="!tabStore.reloading" :key="curRoute.fullPath" />
-        </KeepAlive>
-        <!--        </transition> -->
-      </component>
+      <div class="flex flex-col min-h-screen">
+        <component :is="LayoutComponent" :key="curRoute.meta?.layout || appStore.layout" class="flex-1">
+          <!--        <transition name="fade-slide" mode="out-in" appear> -->
+          <KeepAlive :include="keepAliveNames">
+            <component :is="Component" v-if="!tabStore.reloading" :key="curRoute.fullPath" />
+          </KeepAlive>
+          <!--        </transition> -->
+        </component>
+
+        <footer class="text-14 text-center text-gray-500 py-4">
+          蒙ICP备2026004895号
+        </footer>
+      </div>
 
       <LayoutSetting v-if="layoutSettingVisible" class="fixed right-12 top-1/2 z-999" />
     </router-view>
