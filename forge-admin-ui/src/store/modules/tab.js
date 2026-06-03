@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { nextTick } from 'vue'
 import { useRouterStore } from '@/store'
-import { getSessionStorage, setSessionStorage } from '@/utils'
+import { getSessionStorage, removeSessionStorage, setSessionStorage } from '@/utils/storage'
 
 const TABS_KEY = `${import.meta.env.VITE_TENANT || 'default'}_tabs`
 
@@ -172,7 +172,11 @@ export const useTabStore = defineStore('tab', {
       this.reloading = false
     },
     resetTabs() {
-      this.$reset()
+      removeSessionStorage(TABS_KEY)
+      this.tabs = []
+      this.activeTab = ''
+      this.reloading = false
+      this.cacheViews = []
     },
   },
   persist: {

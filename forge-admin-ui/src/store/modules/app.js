@@ -4,15 +4,19 @@ import { defineStore } from 'pinia'
 import { applyThemeConfig, defaultThemeConfig } from '@/config/theme.config'
 import { defaultLayout, defaultPrimaryColor, naiveThemeOverrides } from '@/settings'
 
+function cloneConfig(config) {
+  return JSON.parse(JSON.stringify(config))
+}
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     collapsed: false,
     isDark: useDark(),
     layout: import.meta.env.VITE_DEFAULT_LAYOUT || defaultLayout,
     primaryColor: defaultPrimaryColor,
-    naiveThemeOverrides,
+    naiveThemeOverrides: cloneConfig(naiveThemeOverrides),
     selectedTopMenuId: null, // 当前选中的顶部菜单ID
-    themeConfig: defaultThemeConfig, // 主题配置
+    themeConfig: cloneConfig(defaultThemeConfig), // 主题配置
     routeGuardCompleted: null,
   }),
   actions: {
@@ -47,6 +51,15 @@ export const useAppStore = defineStore('app', {
     },
     setSelectedTopMenuId(id) {
       this.selectedTopMenuId = id
+    },
+    resetAccountState() {
+      this.layout = import.meta.env.VITE_DEFAULT_LAYOUT || defaultLayout
+      this.primaryColor = defaultPrimaryColor
+      this.naiveThemeOverrides = cloneConfig(naiveThemeOverrides)
+      this.themeConfig = cloneConfig(defaultThemeConfig)
+      this.selectedTopMenuId = null
+      this.setThemeColor(defaultPrimaryColor)
+      applyThemeConfig(this.themeConfig, this.isDark)
     },
     setThemeConfig(config) {
       this.themeConfig = { ...this.themeConfig, ...config }
