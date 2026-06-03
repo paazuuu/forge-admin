@@ -43,6 +43,15 @@ export function setSessionStorage(key, value) {
   }
 }
 
+export function removeSessionStorage(key) {
+  try {
+    sessionStorage.removeItem(`${prefixKey}${key}`)
+  }
+  catch (error) {
+    console.error(error)
+  }
+}
+
 export function getLocalStorage(key) {
   try {
     const item = localStorage.getItem(`${prefixKey}${key}`)
@@ -57,6 +66,15 @@ export function getLocalStorage(key) {
 export function setLocalStorage(key, value) {
   try {
     localStorage.setItem(`${prefixKey}${key}`, JSON.stringify(value))
+  }
+  catch (error) {
+    console.error(error)
+  }
+}
+
+export function removeLocalStorage(key) {
+  try {
+    localStorage.removeItem(`${prefixKey}${key}`)
   }
   catch (error) {
     console.error(error)

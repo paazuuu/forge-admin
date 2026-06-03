@@ -720,17 +720,20 @@ async function handleLogin() {
 }
 
 async function onLoginSuccess(data = {}) {
+  authStore.resetLoginState({ resetAuth: false })
+  const accessToken = data.accessToken || data.token
+
   // 设置认证信息 - LoginResult 结构
-  if (data.accessToken) {
+  if (accessToken) {
     authStore.setToken({
-      accessToken: data.accessToken,
+      accessToken,
       tokenType: data.tokenType || 'Bearer',
       expiresIn: data.expiresIn,
     })
 
     // 密钥交换 - 使用 token 作为会话标识
     try {
-      await initKeyExchange(request, data.accessToken)
+      await initKeyExchange(request, accessToken)
     }
     catch (error) {
       console.warn('密钥交换失败，将使用降级方案:', error)
@@ -795,11 +798,14 @@ async function onLoginSuccess(data = {}) {
 async function handleSocialLoginMessage(event) {
   if (event.data?.type === 'SOCIAL_LOGIN_SUCCESS') {
     const { data } = event.data
+    const accessToken = data?.accessToken || data?.token
+
+    authStore.resetLoginState({ resetAuth: false })
 
     // 设置 token
-    if (data?.accessToken) {
+    if (accessToken) {
       authStore.setToken({
-        accessToken: data.accessToken,
+        accessToken,
         tokenType: data.tokenType || 'Bearer',
         expiresIn: data.expiresIn,
       })

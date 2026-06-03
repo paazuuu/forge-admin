@@ -35,9 +35,8 @@
 
 <script setup>
 import { darkTheme, dateZhCN, zhCN } from 'naive-ui'
-import { computed, defineAsyncComponent, markRaw, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, markRaw, onMounted, shallowRef, watch } from 'vue'
 // 初始化响应式字体功能
-import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { LayoutSetting } from '@/components'
 import { useWatermark } from '@/composables/useWatermark'
@@ -80,12 +79,12 @@ watch(() => route.meta?.layout || appStore.layout, (layoutName) => {
 // 1. 用户已登录但路由守卫未完成
 // 2. 菜单数据未加载完成
 const showLoading = computed(() => {
-  // 如果路由守卫已完成且菜单数据已加载，则不显示加载状态
-  if (appStore.routeGuardCompleted && permissionStore.menuDataLoaded) {
+  // 路由守卫完成后不再阻塞页面渲染，避免菜单接口异常时永久 loading。
+  if (appStore.routeGuardCompleted) {
     return false
   }
 
-  // 如果用户已登录但菜单数据未加载完成，则显示加载状态
+  // 已登录但守卫还在补拉菜单时显示加载状态。
   if (userStore.userInfo && !permissionStore.menuDataLoaded) {
     return true
   }
@@ -114,7 +113,7 @@ const { watermarkConfig, getWatermarkStyle } = useWatermark()
 // 水印样式
 const watermarkStyle = computed(() => getWatermarkStyle())
 onMounted(() => {
-  initResponsiveFont((scale) => {
+  initResponsiveFont(() => {
     // 更新Naive UI主题配置，使组件库字体也响应式变化
     appStore.updateNaiveThemeOverrides({
       fontSize: `calc(14px * var(--font-scale, 1))`,

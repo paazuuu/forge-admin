@@ -170,15 +170,18 @@ async function handleCallback() {
 }
 
 async function onLoginSuccess(data = {}) {
-  if (data.accessToken) {
+  authStore.resetLoginState({ resetAuth: false })
+  const accessToken = data.accessToken || data.token
+
+  if (accessToken) {
     authStore.setToken({
-      accessToken: data.accessToken,
+      accessToken,
       tokenType: data.tokenType || 'Bearer',
       expiresIn: data.expiresIn,
     })
 
     try {
-      await initKeyExchange(request, data.accessToken)
+      await initKeyExchange(request, accessToken)
     }
     catch (error) {
       console.warn('密钥交换失败，将使用降级方案:', error)
@@ -217,7 +220,8 @@ async function onLoginSuccess(data = {}) {
       window.opener.postMessage({
         type: 'SOCIAL_LOGIN_SUCCESS',
         data: {
-          accessToken: data.accessToken,
+          accessToken,
+          token: accessToken,
           tokenType: data.tokenType,
           expiresIn: data.expiresIn,
         },

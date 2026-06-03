@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { usePermissionStore, useRouterStore, useTabStore, useUserStore } from '@/store'
+import { useAppStore, usePermissionStore, useRouterStore, useTabStore, useTenantStore, useUserStore } from '@/store'
 import { resetKeyExchange } from '@/utils/crypto'
+import { lStorage } from '@/utils/storage'
 import { disconnectWebSocketClient } from '@/utils/websocket'
 
 export const useAuthStore = defineStore('auth', {
@@ -26,8 +27,9 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     // 设置token和用户信息（适配新的返回结构）
     setToken(data) {
-      if (data) {
-        this.accessToken = data.accessToken
+      const token = data?.accessToken || data?.token
+      if (token) {
+        this.accessToken = token
       }
       // 兼容旧的结
     },
@@ -46,11 +48,14 @@ export const useAuthStore = defineStore('auth', {
       await nextTick()
       this.setToken(data)
     },
-    resetLoginState() {
+    resetLoginState(options = {}) {
+      const { resetAuth = true } = options
+      const appStore = useAppStore()
       const { resetUser } = useUserStore()
       const { resetRouter } = useRouterStore()
       const { resetPermission, accessRoutes } = usePermissionStore()
       const { resetTabs } = useTabStore()
+      const { clearTenantConfig } = useTenantStore()
       // 重置路由
       resetRouter(accessRoutes)
       // 重置用户
@@ -59,12 +64,27 @@ export const useAuthStore = defineStore('auth', {
       resetPermission()
       // 重置Tabs
       resetTabs()
+      // 重置租户配置和账号相关的布局状态
+      clearTenantConfig()
+      appStore.resetAccountState()
+      // 清理本地缓存的账号资料和数据权限
+      lStorage.remove('userInfo')
+      lStorage.remove('staffInfo')
+      lStorage.remove('dataPermission')
       // 重置WebSocket连接
       disconnectWebSocketClient()
-      // 重置token
-      this.resetToken()
+      // 退出登录时清 token；登录成功前只清账号态，避免持久化短暂写入空 token。
+      if (resetAuth) {
+        this.resetToken()
+      }
+      else {
+        this.userInfo = null
+        this.staffInfo = null
+      }
       // 重置密钥交换状态
       resetKeyExchange()
+      // 重新登录后由新账号菜单重新推导首页
+      window.$homePath = import.meta.env.VITE_HOME_PATH
     },
     async logout() {
       this.resetLoginState()
