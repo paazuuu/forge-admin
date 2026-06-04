@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePermissionStore } from '@/store'
 import { isExternal } from '@/utils'
-import { findMenuItem, processMenuData } from '@/utils/menu-utils'
+import { findMenuIdByPath, findMenuItem, isSameMenuPath, processMenuData } from '@/utils/menu-utils'
 import {
   DEFAULT_REPORT_BASE_URL,
   DEFAULT_SSO_TARGET_CLIENT,
@@ -147,6 +147,56 @@ function normalizeOpenTarget(openTarget) {
   return openTarget === '_blank' ? '_blank' : '_self'
 }
 
+function stripRouteQuery(path) {
+  const value = String(path || '').trim()
+  if (!value || isExternal(value))
+    return value
+  const [pathWithoutHash] = value.split('#')
+  const [pathname] = pathWithoutHash.split('?')
+  return pathname || value
+}
+
+function parseLocalTarget(targetPath) {
+  const normalized = normalizeLocalPath(targetPath)
+  const [pathAndQuery, hashValue = ''] = normalized.split('#')
+  const [path, queryString = ''] = pathAndQuery.split('?')
+  const query = {}
+  const params = new URLSearchParams(queryString)
+  params.forEach((value, key) => {
+    query[key] = value
+  })
+  return {
+    path,
+    query,
+    hash: hashValue ? `#${hashValue}` : undefined,
+  }
+}
+
+function isBusinessAppRuntimeTarget(path) {
+  const normalizedPath = stripRouteQuery(path)
+  return normalizedPath.startsWith('/ai/crud-page/')
+    || /^\/app-center\/app\/[^/]+$/.test(normalizedPath)
+}
+
+function buildMenuNavigationLocation(targetPath, originalItem) {
+  if (!targetPath || isExternal(targetPath) || !isBusinessAppRuntimeTarget(targetPath))
+    return targetPath
+
+  const location = parseLocalTarget(targetPath)
+  const menuKey = originalItem?.key || originalItem?.id
+  if (menuKey !== undefined && menuKey !== null && menuKey !== '') {
+    location.query.menuKey = String(menuKey)
+    location.query.menuResourceId = location.query.menuResourceId || String(menuKey)
+  }
+  const appMatch = location.path.match(/^\/app-center\/app\/([^/]+)$/)
+  if (appMatch?.[1] && !location.query.appId)
+    location.query.appId = appMatch[1]
+  const title = originalItem?.resourceName || originalItem?.label || originalItem?.name
+  if (title && !location.query.title)
+    location.query.title = title
+  return location
+}
+
 function buildSsoBridgeDisplay(openTarget) {
   return normalizeOpenTarget(openTarget) === '_blank' ? 'redirect' : 'embed'
 }
@@ -203,29 +253,6 @@ function isNoMatchRoute(resolvedRoute) {
 }
 
 /**
- * 根据路由路径查找匹配的菜单ID
- * @param {Array} items - 已处理的菜单项
- * @param {string} targetPath - 要匹配的路由路径
- * @returns {string|null} 匹配的菜单key或null
- */
-function findMenuIdByPath(items, targetPath) {
-  if (!items || !Array.isArray(items))
-    return null
-
-  for (const item of items) {
-    if (item.path === targetPath) {
-      return item.key || item.id
-    }
-    if (item.children && item.children.length > 0) {
-      const found = findMenuIdByPath(item.children, targetPath)
-      if (found)
-        return found
-    }
-  }
-  return null
-}
-
-/**
  * 查找包含指定路径的顶级菜单
  * @param {Array} menus - 权限仓库中的原始菜单
  * @param {string} targetPath - 要匹配的路由路径
@@ -237,7 +264,7 @@ export function findTopMenuByPath(menus, targetPath) {
 
   const findInMenu = (items) => {
     for (const item of items) {
-      if (item.path === targetPath) {
+      if (isSameMenuPath(item.path, targetPath)) {
         return item
       }
       if (item.children && item.children.length > 0) {
@@ -374,13 +401,35 @@ export function useMenu() {
     return flatten(processedMenus.value)
   })
 
+  function resolveExplicitActiveKey() {
+    const candidates = [route.query?.menuKey, route.query?.menuResourceId]
+      .filter(value => value !== undefined && value !== null && value !== '')
+    for (const candidate of candidates) {
+      const item = findMenuItem(processedMenus.value, candidate)
+      if (item)
+        return String(item.key || item.id || candidate)
+    }
+
+    const appId = route.query?.appId
+    if (appId === undefined || appId === null || appId === '')
+      return ''
+    const appIdText = String(appId)
+    const matchedItem = flatMenuItems.value.find((item) => {
+      const location = parseLocalTarget(item.path || '')
+      if (location.query?.appId && String(location.query.appId) === appIdText)
+        return true
+      return location.path === `/app-center/app/${appIdText}`
+    })
+    return matchedItem ? String(matchedItem.key || matchedItem.id) : ''
+  }
+
   /**
    * 当前路由对应的活跃菜单key
    */
   const activeKey = computed(() => {
-    if (route.path === SSO_BRIDGE_ROUTE && route.query?.menuKey) {
-      return String(route.query.menuKey)
-    }
+    const explicitActiveKey = resolveExplicitActiveKey()
+    if (explicitActiveKey)
+      return explicitActiveKey
 
     // 优先级1: 使用 route.meta.parentKey（用于隐藏的二级页面）
     if (route.meta?.parentKey) {
@@ -441,6 +490,14 @@ export function useMenu() {
       return
     }
 
+    if (originalItem.type === 'module' && originalItem.children?.length) {
+      const firstMenu = findFirstMenuWithPath(originalItem)
+      if (firstMenu?.path) {
+        handleMenuSelect(firstMenu.key || firstMenu.id, firstMenu.path)
+      }
+      return
+    }
+
     const configuredSsoRoute = resolveConfiguredSsoRoute(originalItem)
     if (configuredSsoRoute) {
       navigateSsoBridge(router, configuredSsoRoute, originalItem.openTarget)
@@ -494,7 +551,7 @@ export function useMenu() {
         navigateSsoBridge(router, reportRoute, originalItem.openTarget)
         return
       }
-      router.push(targetPath)
+      router.push(buildMenuNavigationLocation(targetPath, originalItem))
     }
   }
 
@@ -503,7 +560,12 @@ export function useMenu() {
     flatMenuItems,
     activeKey,
     handleMenuSelect,
-    findMenuIdByPath: targetPath => findMenuIdByPath(processedMenus.value, targetPath),
+    findMenuIdByPath: (itemsOrTargetPath, maybeTargetPath) => {
+      if (Array.isArray(itemsOrTargetPath)) {
+        return findMenuIdByPath(itemsOrTargetPath, maybeTargetPath)
+      }
+      return findMenuIdByPath(processedMenus.value, itemsOrTargetPath)
+    },
     findTopMenuByPath: targetPath => findTopMenuByPath(permissionStore.menus, targetPath),
   }
 }

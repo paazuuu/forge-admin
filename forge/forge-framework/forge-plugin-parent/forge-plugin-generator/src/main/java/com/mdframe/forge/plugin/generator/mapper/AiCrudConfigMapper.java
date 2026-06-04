@@ -6,11 +6,16 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 @Mapper
 public interface AiCrudConfigMapper extends BaseMapper<AiCrudConfig> {
 
     AiCrudConfig selectByConfigKey(@Param("tenantId") Long tenantId,
                                    @Param("configKey") String configKey);
+
+    AiCrudConfig selectPublishedByObjectCode(@Param("tenantId") Long tenantId,
+                                             @Param("objectCode") String objectCode);
 
     Page<AiCrudConfig> selectLowcodePage(Page<AiCrudConfig> page,
                                          @Param("tenantId") Long tenantId,
@@ -19,5 +24,7 @@ public interface AiCrudConfigMapper extends BaseMapper<AiCrudConfig> {
                                          @Param("domainId") Long domainId,
                                          @Param("domainCode") String domainCode,
                                          @Param("generalDomain") Boolean generalDomain);
+
+    List<AiCrudConfig> selectPublishedLowcodeConfigs(@Param("tenantId") Long tenantId);
 
 }

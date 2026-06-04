@@ -5,15 +5,15 @@
         v-for="child in normalizedChildren"
         :key="resolveChildKey(child)"
         :name="resolveChildKey(child)"
-        :tab="child.modelName || child.modelCode || child.tableName"
+        :tab="child.tabTitle || child.relationName || child.modelName || child.modelCode || child.tableName"
       >
         <div class="child-table-panel">
           <div class="child-table-head">
             <div class="child-table-title">
-              {{ child.modelName || child.modelCode || '子表明细' }}
+              {{ child.tabTitle || child.relationName || child.modelName || child.modelCode || '子表明细' }}
             </div>
             <n-button v-if="!props.readonly" size="small" type="primary" secondary @click="addRow(child)">
-              新增行
+              {{ resolveAddButtonText(child) }}
             </n-button>
           </div>
 
@@ -40,8 +40,17 @@
                   :key="row.__rowKey"
                 >
                   <td v-for="field in child.fields" :key="field.field">
+                    <AiFormItem
+                      v-if="useRuntimeCell(field)"
+                      class="child-runtime-cell"
+                      :field="toRuntimeCellField(field)"
+                      :value="row[field.field]"
+                      :form-data="row"
+                      :context="buildRuntimeCellContext(child, rowIndex)"
+                      @update:value="updateCell(child, rowIndex, field, $event)"
+                    />
                     <n-input
-                      v-if="field.type === 'textarea'"
+                      v-else-if="field.type === 'textarea'"
                       type="textarea"
                       :value="row[field.field]"
                       :placeholder="field.props?.placeholder || `请输入${field.label || field.field}`"
@@ -70,6 +79,18 @@
                       filterable
                       v-bind="field.props"
                       @update:value="updateCell(child, rowIndex, field, $event)"
+                    />
+                    <UserSelectPicker
+                      v-else-if="field.type === 'userSelect'"
+                      :model-value="row[field.field]"
+                      :label-value="resolveUserLabel(row, field)"
+                      :placeholder="field.props?.placeholder || `请选择${field.label || field.field}`"
+                      :disabled="props.readonly || field.disabled || field.readonly"
+                      :multiple="field.multiple"
+                      :clearable="field.clearable !== false"
+                      v-bind="field.props"
+                      @update:model-value="updateCell(child, rowIndex, field, $event)"
+                      @update:label-value="updateCellLabel(child, rowIndex, field, $event)"
                     />
                     <n-date-picker
                       v-else-if="field.type === 'date' || field.type === 'datetime'"
@@ -124,6 +145,8 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AiFormItem from '@/components/ai-form/AiFormItem.vue'
+import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 
 const props = defineProps({
   value: {
@@ -163,6 +186,11 @@ function resolveChildKey(child) {
   return child.key || child.modelCode || child.tableName || 'children'
 }
 
+function resolveAddButtonText(child) {
+  const title = child.tabTitle || child.relationName || child.modelName || '关联数据'
+  return `新增${title}`
+}
+
 function rowsFor(child) {
   const key = resolveChildKey(child)
   return Array.isArray(localValue.value[key]) ? localValue.value[key] : []
@@ -174,6 +202,7 @@ function addRow(child) {
     ...localValue.value,
     [key]: [...rowsFor(child), createEmptyRow(child)],
   }
+  commit()
 }
 
 function removeRow(child, rowIndex) {
@@ -186,20 +215,91 @@ function removeRow(child, rowIndex) {
 }
 
 function updateCell(child, rowIndex, field, value) {
+  updateRow(child, rowIndex, { [field.field]: value })
+}
+
+function updateCellLabel(child, rowIndex, field, value) {
+  const labelField = resolveUserLabelField(field)
+  if (!labelField)
+    return
+  updateRow(child, rowIndex, {
+    [labelField]: Array.isArray(value) ? value.join(',') : value || undefined,
+  })
+}
+
+function updateRow(child, rowIndex, patch) {
   const key = resolveChildKey(child)
   const rows = rowsFor(child).map((row, index) => {
     if (index !== rowIndex)
       return row
-    return {
-      ...row,
-      [field.field]: value,
-    }
+    return applyRowPatch(row, patch)
   })
   localValue.value = {
     ...localValue.value,
     [key]: rows,
   }
   commit()
+}
+
+function useRuntimeCell(field = {}) {
+  if (field.type === 'select') {
+    return Boolean(field.dictType || field.props?.dictType || field.optionSource || field.props?.optionSource)
+  }
+  return [
+    'dictSelect',
+    'orgTreeSelect',
+    'regionTreeSelect',
+    'objectReference',
+    'fileUpload',
+    'imageUpload',
+    'cascader',
+    'treeSelect',
+    'customSelect',
+    'radio',
+    'checkbox',
+  ].includes(field.type)
+}
+
+function toRuntimeCellField(field = {}) {
+  return {
+    ...field,
+    disabled: props.readonly || field.disabled || field.readonly,
+    readonly: props.readonly || field.readonly,
+    showLabel: false,
+    showFeedback: false,
+    size: field.size || 'small',
+    props: {
+      ...(field.props || {}),
+      size: field.props?.size || field.size || 'small',
+    },
+  }
+}
+
+function buildRuntimeCellContext(child, rowIndex) {
+  return {
+    schema: child.fields || [],
+    allSchema: child.fields || [],
+    patchFormData: patch => updateRow(child, rowIndex, patch),
+  }
+}
+
+function applyRowPatch(row, patch) {
+  const next = { ...row }
+  Object.entries(patch || {}).forEach(([key, value]) => {
+    if (value === undefined)
+      delete next[key]
+    else
+      next[key] = value
+  })
+  return next
+}
+
+function resolveUserLabel(row, field) {
+  return row?.[resolveUserLabelField(field)] || ''
+}
+
+function resolveUserLabelField(field) {
+  return field?.props?.targetField || field?.targetField || `${field?.field || ''}Name`
 }
 
 function createEmptyRow(child) {
@@ -364,6 +464,19 @@ defineExpose({
   border-bottom: 1px solid #eef2f7;
   padding: 8px 10px;
   vertical-align: top;
+}
+
+.child-runtime-cell {
+  width: 100%;
+}
+
+.child-runtime-cell :deep(.n-form-item) {
+  margin: 0;
+}
+
+.child-runtime-cell :deep(.n-form-item-feedback-wrapper) {
+  display: none;
+  min-height: 0;
 }
 
 .child-edit-table tr:last-child td {

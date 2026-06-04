@@ -232,6 +232,49 @@ export const aiCrudPageProps = {
     validator: value => ['left', 'top'].includes(value),
   },
 
+  editLabelAlign: {
+    type: String,
+    default: 'right',
+    validator: value => ['left', 'right'].includes(value),
+  },
+
+  /**
+   * 编辑表单尺寸
+   * @type {'small'|'medium'|'large'}
+   */
+  editSize: {
+    type: String,
+    default: 'medium',
+    validator: value => ['small', 'medium', 'large'].includes(value),
+  },
+
+  /**
+   * 是否显示编辑表单校验反馈
+   * @type {boolean}
+   */
+  editShowFeedback: {
+    type: Boolean,
+    default: true,
+  },
+
+  /**
+   * 编辑表单列间距
+   * @type {number}
+   */
+  editXGap: {
+    type: Number,
+    default: 16,
+  },
+
+  /**
+   * 编辑表单行间距
+   * @type {number}
+   */
+  editYGap: {
+    type: Number,
+    default: 16,
+  },
+
   /**
    * 编辑表单自定义 class
    * @type {string | object | Array}
@@ -239,6 +282,15 @@ export const aiCrudPageProps = {
   editFormClass: {
     type: [String, Object, Array],
     default: '',
+  },
+
+  /**
+   * 编辑表单自定义 style
+   * @type {string | object | Array}
+   */
+  editFormStyle: {
+    type: [String, Object, Array],
+    default: undefined,
   },
 
   /**
@@ -265,7 +317,7 @@ export const aiCrudPageProps = {
    */
   modalType: {
     type: String,
-    default: 'drawer',
+    default: 'modal',
     validator: value => ['modal', 'drawer'].includes(value),
   },
 
@@ -359,6 +411,60 @@ export const aiCrudPageProps = {
   toolbarActions: {
     type: Array,
     default: () => [],
+  },
+
+  /**
+   * 运行态行操作配置。低代码业务对象可按记录状态追加动作。
+   * @type {Array<object>}
+   */
+  runtimeActions: {
+    type: Array,
+    default: () => [],
+  },
+
+  /**
+   * 是否只显示新增表单，不渲染列表和弹窗。
+   * @type {boolean}
+   */
+  formOnly: {
+    type: Boolean,
+    default: false,
+  },
+
+  /**
+   * 表单填报页标题
+   * @type {string}
+   */
+  formOnlyTitle: {
+    type: String,
+    default: '',
+  },
+
+  /**
+   * 表单填报页提交按钮文案
+   * @type {string}
+   */
+  formOnlySubmitText: {
+    type: String,
+    default: '提交',
+  },
+
+  /**
+   * 表单填报成功标题
+   * @type {string}
+   */
+  formOnlySuccessTitle: {
+    type: String,
+    default: '提交成功',
+  },
+
+  /**
+   * 表单填报成功说明
+   * @type {string}
+   */
+  formOnlySuccessDescription: {
+    type: String,
+    default: '单据已保存',
   },
 
   /**

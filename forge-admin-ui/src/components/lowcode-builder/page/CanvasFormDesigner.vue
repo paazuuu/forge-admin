@@ -125,6 +125,7 @@ let leaferApp = null
 let leaferApi = null
 let resizeObserver
 let transformTimer = null
+let destroyed = false
 
 const fieldMap = computed(() => new Map(props.fields.map(field => [field.field, field])))
 const zoneTitle = computed(() => resolveZoneTitle(props.zone?.zoneKey))
@@ -177,6 +178,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  destroyed = true
   if (transformTimer)
     window.clearTimeout(transformTimer)
   window.removeEventListener('keydown', handleGlobalKeydown)
@@ -188,9 +190,11 @@ onBeforeUnmount(() => {
 })
 
 async function initLeafer() {
-  if (!leaferViewRef.value || leaferApp)
+  if (destroyed || !leaferViewRef.value || leaferApp)
     return
   const api = await import('leafer-editor')
+  if (destroyed || !leaferViewRef.value || leaferApp)
+    return
   leaferApi = markRaw(api)
   const app = markRaw(new api.App({
     view: leaferViewRef.value,
@@ -459,6 +463,7 @@ function drawDetailPreview(api, group, item, width, height) {
     y: 10 + contentHeight / 2 - 6,
     width: Math.max(24, width - labelWidth - 42),
     fill: '#0f172a',
+    textAlign: item.style?.textAlign || 'left',
   })
 }
 
@@ -470,6 +475,7 @@ function drawFormFieldPreview(api, group, item, width, height) {
     y: Math.max(40, height / 2 + 4),
     width: labelWidth,
     fill: '#475569',
+    textAlign: item.style?.textAlign === 'right' ? 'right' : 'left',
   })
   drawControlSketch(api, group, item, 22 + labelWidth, 40, Math.max(72, width - labelWidth - 36), Math.max(28, height - 52))
 }
@@ -522,6 +528,7 @@ function drawControlSketch(api, group, item, x, y, width, height) {
     y: y + 9,
     width: width - 20,
     fill: isUpload ? '#1d4ed8' : '#94a3b8',
+    textAlign: item.style?.textAlign || 'left',
   })
   if (['field-select', 'field-dict-select', 'field-tree-select', 'field-org-tree-select', 'field-user-select', 'field-region-tree-select', 'field-cascader'].includes(componentKey)
     || field.dictType || ['select', 'radio', 'checkbox', 'dictSelect', 'treeSelect', 'orgTreeSelect', 'userSelect', 'regionTreeSelect', 'cascader'].includes(componentType)) {
@@ -776,11 +783,11 @@ function applyColumnLayout(cols) {
     return
   const columnCount = Math.max(1, Math.min(3, Number(cols || 1)))
   const paddingX = 32
-  const gapX = 24
-  const startY = 36
-  const rowGap = props.zone.zoneKey === 'detail' ? 16 : 22
+  const gapX = 18
+  const startY = 32
+  const rowGap = props.zone.zoneKey === 'detail' ? 10 : 12
   const availableWidth = Number(canvas.value.width || 1040) - paddingX * 2 - gapX * (columnCount - 1)
-  const columnWidth = Math.max(220, Math.floor(availableWidth / columnCount))
+  const columnWidth = Math.max(220, Math.min(340, Math.floor(availableWidth / columnCount)))
   const fieldItems = sortCanvasItemsByPosition(canvasItems.value.filter(item => item.fieldRef))
   const fieldOrderMap = new Map(fieldItems.map((item, index) => [item.id, index]))
   const fieldHeights = fieldItems

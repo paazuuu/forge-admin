@@ -68,6 +68,44 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+
+  // 当前表单数据，用于字典级联过滤
+  formData: {
+    type: Object,
+    default: () => ({}),
+  },
+
+  // { enabled, sourceField, mode: parentDictCode | linkedDict }
+  cascade: {
+    type: Object,
+    default: null,
+  },
+
+  // 静态父级/关联过滤，便于非 AiForm 场景直接使用
+  parentDictCode: {
+    type: [String, Number],
+    default: null,
+  },
+  linkedDictType: {
+    type: String,
+    default: '',
+  },
+  linkedDictValue: {
+    type: [String, Number],
+    default: null,
+  },
+  sourceField: {
+    type: String,
+    default: '',
+  },
+  sourceDictType: {
+    type: String,
+    default: '',
+  },
+  matchMode: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits(['update:value'])
@@ -75,12 +113,28 @@ const emit = defineEmits(['update:value'])
 const dictList = ref([])
 const loading = ref(false)
 
+const effectiveCascade = computed(() => {
+  const source = props.cascade || {}
+  const mode = props.matchMode || source.mode || source.matchMode || (props.parentDictCode !== null ? 'parentDictCode' : 'linkedDict')
+  return {
+    ...source,
+    enabled: source.enabled !== false && Boolean(source.sourceField || props.sourceField || props.parentDictCode !== null || props.linkedDictValue !== null),
+    sourceField: source.sourceField || props.sourceField,
+    sourceDictType: source.sourceDictType || props.sourceDictType,
+    linkedDictType: source.linkedDictType || props.linkedDictType,
+    linkedDictValue: source.linkedDictValue ?? props.linkedDictValue,
+    parentDictCode: source.parentDictCode ?? props.parentDictCode,
+    mode,
+  }
+})
+
 // 字典选项
 const dictOptions = computed(() => {
-  return dictList.value.map(item => ({
+  return filterDictList(dictList.value).map(item => ({
     label: item.label,
     value: item.value,
     disabled: item.status === 0, // 状态为 0 时禁用
+    raw: item.raw || item,
   }))
 })
 
@@ -108,5 +162,58 @@ watch(() => props.dictType, () => {
 // 更新值
 function handleUpdate(val) {
   emit('update:value', val)
+}
+
+function filterDictList(list = []) {
+  const cascade = effectiveCascade.value
+  if (!cascade.enabled || !cascade.sourceField)
+    return filterByStaticCascade(list, cascade)
+  const sourceValue = cascade.sourceField ? props.formData?.[cascade.sourceField] : undefined
+  if (sourceValue === null || sourceValue === undefined || sourceValue === '')
+    return []
+  const mode = cascade.mode || 'linkedDict'
+  return list.filter((item) => {
+    const raw = item.raw || item
+    if (mode === 'parentDictCode') {
+      return isSameValue(raw.parentDictCode ?? item.parentDictCode, sourceValue)
+        || isSameValue(raw.parentDictCode ?? item.parentDictCode, resolveSourceDictCode(sourceValue))
+    }
+    if (mode === 'linkedDict') {
+      const linkedType = cascade.linkedDictType || cascade.sourceDictType
+      const typeMatched = !linkedType || isSameValue(raw.linkedDictType ?? item.linkedDictType, linkedType)
+      return typeMatched && isSameValue(raw.linkedDictValue ?? item.linkedDictValue, sourceValue)
+    }
+    return true
+  })
+}
+
+function filterByStaticCascade(list = [], cascade = {}) {
+  if (cascade.parentDictCode === null && cascade.parentDictCode === undefined && cascade.linkedDictValue === null && cascade.linkedDictValue === undefined)
+    return list
+  const mode = cascade.mode || 'linkedDict'
+  return list.filter((item) => {
+    const raw = item.raw || item
+    if (mode === 'parentDictCode')
+      return isSameValue(raw.parentDictCode ?? item.parentDictCode, cascade.parentDictCode)
+    if (mode === 'linkedDict') {
+      const typeMatched = !cascade.linkedDictType || isSameValue(raw.linkedDictType ?? item.linkedDictType, cascade.linkedDictType)
+      return typeMatched && isSameValue(raw.linkedDictValue ?? item.linkedDictValue, cascade.linkedDictValue)
+    }
+    return true
+  })
+}
+
+function resolveSourceDictCode(sourceValue) {
+  const sourceOptions = props.cascade?.sourceOptions || []
+  const matched = sourceOptions.find(item => isSameValue(item.value, sourceValue))
+  return matched?.dictCode ?? matched?.raw?.dictCode ?? sourceValue
+}
+
+function isSameValue(left, right) {
+  if (left === right)
+    return true
+  if (left === null || left === undefined || right === null || right === undefined)
+    return false
+  return String(left) === String(right)
 }
 </script>

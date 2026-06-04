@@ -21,588 +21,611 @@
     :show-label="field.showLabel !== false"
     :show-feedback="field.showFeedback !== false"
     :style="field.formItemStyle"
+    :class="formItemClass"
   >
-    <!-- 输入框 -->
-    <n-input
-      v-if="field.type === 'input'"
-      :value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      :maxlength="field.maxlength"
-      :show-count="field.showCount"
-      :size="field.size"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 多行文本 -->
-    <n-input
-      v-else-if="field.type === 'textarea'"
-      type="textarea"
-      :value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      :rows="field.rows || 3"
-      :maxlength="field.maxlength"
-      :show-count="field.showCount"
-      :autosize="field.autosize"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 数字输入框 -->
-    <n-input-number
-      v-else-if="field.type === 'number' || field.type === 'inputNumber'"
-      :value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :min="field.min"
-      :max="field.max"
-      :step="field.step || 1"
-      :precision="field.precision"
-      :show-button="field.showButton !== false"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 下拉选择 -->
-    <n-select
-      v-else-if="field.type === 'select'"
-      :value="resolveOptionValue(value)"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :options="currentOptions"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable !== false"
-      :multiple="field.multiple"
-      :loading="field.loading"
-      :remote="field.remote"
-      :on-search="field.onSearch"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 字典选择器 -->
-    <DictSelect
-      v-else-if="field.type === 'dictSelect'"
-      :value="value"
-      :dict-type="field.dictType || field.props?.dictType"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable !== false"
-      :multiple="field.multiple"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-    />
-
-    <!-- 单选框 -->
-    <n-radio-group
-      v-else-if="field.type === 'radio'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    >
-      <n-space>
-        <n-radio
-          v-for="option in currentOptions"
-          :key="option.value"
-          :value="option.value"
-          :disabled="option.disabled"
-        >
-          {{ option.label }}
-        </n-radio>
-      </n-space>
-    </n-radio-group>
-
-    <!-- 单选按钮组 -->
-    <n-radio-group
-      v-else-if="field.type === 'radioButton'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    >
-      <n-radio-button
-        v-for="option in currentOptions"
-        :key="option.value"
-        :value="option.value"
-        :disabled="option.disabled"
-      >
-        {{ option.label }}
-      </n-radio-button>
-    </n-radio-group>
-
-    <!-- 多选框 -->
-    <n-checkbox-group
-      v-else-if="field.type === 'checkbox'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    >
-      <n-space>
-        <n-checkbox
-          v-for="option in currentOptions"
-          :key="option.value"
-          :value="option.value"
-          :disabled="option.disabled"
-        >
-          {{ option.label }}
-        </n-checkbox>
-      </n-space>
-    </n-checkbox-group>
-
-    <!-- 开关 -->
-    <n-switch
-      v-else-if="field.type === 'switch'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      :checked-value="field.checkedValue ?? true"
-      :unchecked-value="field.uncheckedValue ?? false"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    >
-      <template v-if="field.checkedText" #checked>
-        {{ field.checkedText }}
-      </template>
-      <template v-if="field.uncheckedText" #unchecked>
-        {{ field.uncheckedText }}
-      </template>
-    </n-switch>
-
-    <!-- 日期选择 -->
-    <n-date-picker
-      v-else-if="field.type === 'date'"
-      :value="value"
-      type="date"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field)"
-      :format="field.props?.format || field.format || 'yyyy-MM-dd'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 日期时间选择 -->
-    <n-date-picker
-      v-else-if="field.type === 'datetime'"
-      :value="value"
-      type="datetime"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field)"
-      :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 日期范围选择 -->
-    <n-date-picker
-      v-else-if="field.type === 'daterange'"
-      :value="normalizeRangePickerValue(value)"
-      type="daterange"
-      :placeholder="field.placeholder"
-      :start-placeholder="field.startPlaceholder || '开始日期'"
-      :end-placeholder="field.endPlaceholder || '结束日期'"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field, true)"
-      :format="field.props?.format || field.format || 'yyyy-MM-dd'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 日期时间范围选择 -->
-    <n-date-picker
-      v-else-if="field.type === 'datetimerange'"
-      :value="normalizeRangePickerValue(value)"
-      type="datetimerange"
-      :placeholder="field.placeholder"
-      :start-placeholder="field.startPlaceholder || '开始时间'"
-      :end-placeholder="field.endPlaceholder || '结束时间'"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field, true)"
-      :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 月份选择 -->
-    <n-date-picker
-      v-else-if="field.type === 'month'"
-      :value="value"
-      type="month"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field)"
-      :format="field.props?.format || field.format || 'yyyy-MM'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 年份选择 -->
-    <n-date-picker
-      v-else-if="field.type === 'year'"
-      :value="value"
-      type="year"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field)"
-      :format="field.props?.format || field.format || 'yyyy'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 时间选择 -->
-    <n-time-picker
-      v-else-if="field.type === 'time'"
-      :value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      style="width: 100%"
-      v-bind="field.props"
-      :default-value="resolvePickerDefaultValue(field)"
-      :format="field.props?.format || field.format || 'HH:mm:ss'"
-      :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 时间范围选择 -->
-    <div v-else-if="field.type === 'timerange'" class="time-range-picker">
-      <n-time-picker
-        :value="resolveRangeValue(value, 0)"
-        :placeholder="field.startPlaceholder || '开始时间'"
-        :disabled="disabledHandler(field)"
-        :clearable="field.clearable !== false"
-        style="width: 100%"
-        v-bind="field.props"
-        :default-value="resolvePickerDefaultValue(field)"
-        :format="field.props?.format || field.format || 'HH:mm:ss'"
-        :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
-        @update:value="handleRangeUpdate(0, $event)"
-        v-on="getComponentEvents(field)"
-      />
-      <span class="time-range-separator">至</span>
-      <n-time-picker
-        :value="resolveRangeValue(value, 1)"
-        :placeholder="field.endPlaceholder || '结束时间'"
-        :disabled="disabledHandler(field)"
-        :clearable="field.clearable !== false"
-        style="width: 100%"
-        v-bind="field.props"
-        :default-value="resolvePickerDefaultValue(field)"
-        :format="field.props?.format || field.format || 'HH:mm:ss'"
-        :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
-        @update:value="handleRangeUpdate(1, $event)"
-        v-on="getComponentEvents(field)"
-      />
-    </div>
-
-    <!-- 文件上传 -->
-    <n-upload
-      v-else-if="field.type === 'upload'"
-      :action="field.action"
-      :headers="field.headers"
-      :data="field.data"
-      :max="field.max"
-      :accept="field.accept"
-      :multiple="field.multiple"
-      :disabled="disabledHandler(field)"
-      :list-type="field.listType || 'text'"
-      :show-file-list="field.showFileList !== false"
-      :on-change="handleUploadChange"
-      v-bind="field.props"
-      v-on="getComponentEvents(field)"
-    >
-      <n-button>{{ field.uploadText || '点击上传' }}</n-button>
-    </n-upload>
-
-    <!-- 文件上传组件 -->
-    <FileUpload
-      v-else-if="field.type === 'fileUpload'"
-      :model-value="value"
-      :action="field.action"
-      :business-type="field.businessType"
-      :business-id="field.businessId"
-      :storage-type="field.storageType"
-      :limit="field.limit"
-      :file-size="field.fileSize"
-      :file-type="field.fileType"
-      :multiple="field.multiple"
-      :show-file-list="field.showFileList"
-      :show-tip="field.showTip"
-      :upload-button-text="field.uploadButtonText"
-      :disabled="disabledHandler(field)"
-      :value-type="field.valueType"
-      v-bind="field.props"
-      @update:model-value="handleUpdate"
-      @success="(data) => handleUploadSuccess(field, data)"
-      @error="(error) => handleUploadError(field, error)"
-      @remove="(file) => handleUploadRemove(field, file)"
-    />
-
-    <!-- 图片上传组件 -->
-    <ImageUpload
-      v-else-if="field.type === 'imageUpload'"
-      :model-value="value"
-      :action="field.action"
-      :business-type="field.businessType"
-      :business-id="field.businessId"
-      :storage-type="field.storageType"
-      :limit="field.limit"
-      :file-size="field.fileSize"
-      :file-type="field.fileType"
-      :multiple="field.multiple"
-      :show-tip="field.showTip"
-      :disabled="disabledHandler(field)"
-      :value-type="field.valueType"
-      v-bind="field.props"
-      @update:model-value="handleUpdate"
-      @success="(data) => handleUploadSuccess(field, data)"
-      @error="(error) => handleUploadError(field, error)"
-      @remove="(file) => handleUploadRemove(field, file)"
-    />
-
-    <!-- 滑块 -->
-    <n-slider
-      v-else-if="field.type === 'slider'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      :min="field.min || 0"
-      :max="field.max || 100"
-      :step="field.step || 1"
-      :marks="field.marks"
-      :tooltip="field.tooltip !== false"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 评分 -->
-    <n-rate
-      v-else-if="field.type === 'rate'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      :count="field.count || 5"
-      :allow-half="field.allowHalf"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 颜色选择器 -->
-    <n-color-picker
-      v-else-if="field.type === 'color'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      :show-alpha="field.showAlpha"
-      :modes="field.modes || ['hex']"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 级联选择 -->
-    <n-cascader
-      v-else-if="field.type === 'cascader'"
-      :value="resolveOptionValue(value)"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :options="currentOptions"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable"
-      :multiple="field.multiple"
-      :cascade="field.cascade !== false"
-      :show-path="field.showPath !== false"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 系统组织树选择 -->
-    <n-tree-select
-      v-else-if="field.type === 'orgTreeSelect'"
-      :value="resolveOptionValue(value)"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :options="currentOptions"
-      :loading="remoteLoading"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable !== false"
-      :multiple="field.multiple"
-      :cascade="field.cascade !== false"
-      v-bind="field.props"
-      @update:value="handleTreeSelectUpdate(field, $event)"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 系统用户选择 -->
-    <n-select
-      v-else-if="field.type === 'userSelect'"
-      :value="resolveOptionValue(value)"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :options="currentOptions"
-      :loading="remoteLoading"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable !== false"
-      :multiple="field.multiple"
-      remote
-      v-bind="field.props"
-      @search="handleRemoteSearch"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 行政区划树选择 -->
-    <RegionTreeSelect
-      v-else-if="field.type === 'regionTreeSelect'"
-      :model-value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable !== false"
-      :virtual-disabled="field.props?.virtualDisabled ?? !context?.isSearch"
-      v-bind="field.props"
-      @update:model-value="handleRegionTreeSelectUpdate(field, $event)"
-    />
-
-    <!-- 树形选择 -->
-    <n-tree-select
-      v-else-if="field.type === 'treeSelect'"
-      :value="resolveOptionValue(value)"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :options="currentOptions"
-      :loading="remoteLoading"
-      :clearable="field.clearable !== false"
-      :filterable="field.filterable"
-      :multiple="field.multiple"
-      :cascade="field.cascade !== false"
-      :show-path="field.showPath !== false"
-      v-bind="field.props"
-      @update:value="handleTreeSelectUpdate(field, $event)"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 穿梭框 -->
-    <n-transfer
-      v-else-if="field.type === 'transfer'"
-      :value="value"
-      :disabled="disabledHandler(field)"
-      :options="currentOptions"
-      :filterable="field.filterable"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 远程搜索下拉框 -->
-    <AiCustomSelect
-      v-else-if="field.type === 'customSelect'"
-      :value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      :api="field.api"
-      :method="field.method"
-      :label-field="field.labelField || field.props?.labelName || 'label'"
-      :value-field="field.valueField || field.props?.valueName || 'value'"
-      :filterable="field.filterable !== false"
-      :multiple="field.multiple"
-      :remote="field.remote"
-      :options="field.options"
-      :params="field.params"
-      :transform="field.transform"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
-
-    <!-- 纯文本展示 -->
     <div
-      v-else-if="field.type === 'text'"
-      :style="field.style"
+      class="ai-form-control"
+      :style="componentControlStyle"
+      :class="componentControlClass"
     >
-      <span v-if="field.formatter">
-        {{ field.formatter(value, field, formData) }}
-      </span>
-      <span v-else>
-        {{ value }}
-      </span>
-      <n-button
-        v-if="field.copy"
-        text
-        size="small"
-        style="margin-left: 8px"
-        @click="handleCopy(value)"
+      <!-- 输入框 -->
+      <n-input
+        v-if="field.type === 'input'"
+        :value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        :maxlength="field.maxlength"
+        :show-count="field.showCount"
+        :size="field.size"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 多行文本 -->
+      <n-input
+        v-else-if="field.type === 'textarea'"
+        type="textarea"
+        :value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        :rows="field.rows || 3"
+        :maxlength="field.maxlength"
+        :show-count="field.showCount"
+        :autosize="field.autosize"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 数字输入框 -->
+      <n-input-number
+        v-else-if="field.type === 'number' || field.type === 'inputNumber'"
+        :value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :min="field.min"
+        :max="field.max"
+        :step="field.step || 1"
+        :precision="field.precision"
+        :show-button="field.showButton !== false"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 下拉选择 -->
+      <n-select
+        v-else-if="field.type === 'select'"
+        :value="resolveOptionValue(value)"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :options="currentOptions"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable !== false"
+        :multiple="field.multiple"
+        :loading="field.loading"
+        :remote="field.remote"
+        :on-search="field.onSearch"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 字典选择器 -->
+      <DictSelect
+        v-else-if="field.type === 'dictSelect'"
+        :value="value"
+        :dict-type="field.dictType || field.props?.dictType"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable !== false"
+        :multiple="field.multiple"
+        :form-data="formData"
+        :cascade="dictCascadeConfig"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+      />
+
+      <!-- 单选框 -->
+      <n-radio-group
+        v-else-if="field.type === 'radio'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
       >
-        <template #icon>
-          <n-icon><CopyOutline /></n-icon>
+        <n-space>
+          <n-radio
+            v-for="option in currentOptions"
+            :key="option.value"
+            :value="option.value"
+            :disabled="option.disabled"
+          >
+            {{ option.label }}
+          </n-radio>
+        </n-space>
+      </n-radio-group>
+
+      <!-- 单选按钮组 -->
+      <n-radio-group
+        v-else-if="field.type === 'radioButton'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      >
+        <n-radio-button
+          v-for="option in currentOptions"
+          :key="option.value"
+          :value="option.value"
+          :disabled="option.disabled"
+        >
+          {{ option.label }}
+        </n-radio-button>
+      </n-radio-group>
+
+      <!-- 多选框 -->
+      <n-checkbox-group
+        v-else-if="field.type === 'checkbox'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      >
+        <n-space>
+          <n-checkbox
+            v-for="option in currentOptions"
+            :key="option.value"
+            :value="option.value"
+            :disabled="option.disabled"
+          >
+            {{ option.label }}
+          </n-checkbox>
+        </n-space>
+      </n-checkbox-group>
+
+      <!-- 开关 -->
+      <n-switch
+        v-else-if="field.type === 'switch'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        :checked-value="field.checkedValue ?? true"
+        :unchecked-value="field.uncheckedValue ?? false"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      >
+        <template v-if="field.checkedText" #checked>
+          {{ field.checkedText }}
         </template>
-      </n-button>
+        <template v-if="field.uncheckedText" #unchecked>
+          {{ field.uncheckedText }}
+        </template>
+      </n-switch>
+
+      <!-- 日期选择 -->
+      <n-date-picker
+        v-else-if="field.type === 'date'"
+        :value="value"
+        type="date"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
+        :format="field.props?.format || field.format || 'yyyy-MM-dd'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 日期时间选择 -->
+      <n-date-picker
+        v-else-if="field.type === 'datetime'"
+        :value="value"
+        type="datetime"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
+        :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 日期范围选择 -->
+      <n-date-picker
+        v-else-if="field.type === 'daterange'"
+        :value="normalizeRangePickerValue(value)"
+        type="daterange"
+        :placeholder="field.placeholder"
+        :start-placeholder="field.startPlaceholder || '开始日期'"
+        :end-placeholder="field.endPlaceholder || '结束日期'"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field, true)"
+        :format="field.props?.format || field.format || 'yyyy-MM-dd'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 日期时间范围选择 -->
+      <n-date-picker
+        v-else-if="field.type === 'datetimerange'"
+        :value="normalizeRangePickerValue(value)"
+        type="datetimerange"
+        :placeholder="field.placeholder"
+        :start-placeholder="field.startPlaceholder || '开始时间'"
+        :end-placeholder="field.endPlaceholder || '结束时间'"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field, true)"
+        :format="field.props?.format || field.format || 'yyyy-MM-dd HH:mm:ss'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 月份选择 -->
+      <n-date-picker
+        v-else-if="field.type === 'month'"
+        :value="value"
+        type="month"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
+        :format="field.props?.format || field.format || 'yyyy-MM'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 年份选择 -->
+      <n-date-picker
+        v-else-if="field.type === 'year'"
+        :value="value"
+        type="year"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
+        :format="field.props?.format || field.format || 'yyyy'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 时间选择 -->
+      <n-time-picker
+        v-else-if="field.type === 'time'"
+        :value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        style="width: 100%"
+        v-bind="field.props"
+        :default-value="resolvePickerDefaultValue(field)"
+        :format="field.props?.format || field.format || 'HH:mm:ss'"
+        :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 时间范围选择 -->
+      <div v-else-if="field.type === 'timerange'" class="time-range-picker">
+        <n-time-picker
+          :value="resolveRangeValue(value, 0)"
+          :placeholder="field.startPlaceholder || '开始时间'"
+          :disabled="disabledHandler(field)"
+          :clearable="field.clearable !== false"
+          style="width: 100%"
+          v-bind="field.props"
+          :default-value="resolvePickerDefaultValue(field)"
+          :format="field.props?.format || field.format || 'HH:mm:ss'"
+          :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
+          @update:value="handleRangeUpdate(0, $event)"
+          v-on="getComponentEvents(field)"
+        />
+        <span class="time-range-separator">至</span>
+        <n-time-picker
+          :value="resolveRangeValue(value, 1)"
+          :placeholder="field.endPlaceholder || '结束时间'"
+          :disabled="disabledHandler(field)"
+          :clearable="field.clearable !== false"
+          style="width: 100%"
+          v-bind="field.props"
+          :default-value="resolvePickerDefaultValue(field)"
+          :format="field.props?.format || field.format || 'HH:mm:ss'"
+          :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
+          @update:value="handleRangeUpdate(1, $event)"
+          v-on="getComponentEvents(field)"
+        />
+      </div>
+
+      <!-- 文件上传 -->
+      <n-upload
+        v-else-if="field.type === 'upload'"
+        :action="field.action"
+        :headers="field.headers"
+        :data="field.data"
+        :max="field.max"
+        :accept="field.accept"
+        :multiple="field.multiple"
+        :disabled="disabledHandler(field)"
+        :list-type="field.listType || 'text'"
+        :show-file-list="field.showFileList !== false"
+        :on-change="handleUploadChange"
+        v-bind="field.props"
+        v-on="getComponentEvents(field)"
+      >
+        <n-button>{{ field.uploadText || '点击上传' }}</n-button>
+      </n-upload>
+
+      <!-- 文件上传组件 -->
+      <FileUpload
+        v-else-if="field.type === 'fileUpload'"
+        :model-value="value"
+        :action="field.action"
+        :business-type="field.businessType"
+        :business-id="field.businessId"
+        :storage-type="field.storageType"
+        :limit="field.limit"
+        :file-size="field.fileSize"
+        :file-type="field.fileType"
+        :multiple="field.multiple"
+        :show-file-list="field.showFileList"
+        :show-tip="field.showTip"
+        :upload-button-text="field.uploadButtonText"
+        :disabled="disabledHandler(field)"
+        :value-type="field.valueType"
+        v-bind="field.props"
+        @update:model-value="handleUpdate"
+        @success="(data) => handleUploadSuccess(field, data)"
+        @error="(error) => handleUploadError(field, error)"
+        @remove="(file) => handleUploadRemove(field, file)"
+      />
+
+      <!-- 图片上传组件 -->
+      <ImageUpload
+        v-else-if="field.type === 'imageUpload'"
+        :model-value="value"
+        :action="field.action"
+        :business-type="field.businessType"
+        :business-id="field.businessId"
+        :storage-type="field.storageType"
+        :limit="field.limit"
+        :file-size="field.fileSize"
+        :file-type="field.fileType"
+        :multiple="field.multiple"
+        :show-tip="field.showTip"
+        :disabled="disabledHandler(field)"
+        :value-type="field.valueType"
+        v-bind="field.props"
+        @update:model-value="handleUpdate"
+        @success="(data) => handleUploadSuccess(field, data)"
+        @error="(error) => handleUploadError(field, error)"
+        @remove="(file) => handleUploadRemove(field, file)"
+      />
+
+      <!-- 滑块 -->
+      <n-slider
+        v-else-if="field.type === 'slider'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        :min="field.min || 0"
+        :max="field.max || 100"
+        :step="field.step || 1"
+        :marks="field.marks"
+        :tooltip="field.tooltip !== false"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 评分 -->
+      <n-rate
+        v-else-if="field.type === 'rate'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        :count="field.count || 5"
+        :allow-half="field.allowHalf"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 颜色选择器 -->
+      <n-color-picker
+        v-else-if="field.type === 'color'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        :show-alpha="field.showAlpha"
+        :modes="field.modes || ['hex']"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 级联选择 -->
+      <n-cascader
+        v-else-if="field.type === 'cascader'"
+        :value="resolveOptionValue(value)"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :options="currentOptions"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable"
+        :multiple="field.multiple"
+        :cascade="field.cascade !== false"
+        :show-path="field.showPath !== false"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 系统组织树选择 -->
+      <n-tree-select
+        v-else-if="isOrgTreeSelectField(field)"
+        v-bind="field.props"
+        :value="resolveOptionValue(value)"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :options="currentOptions"
+        :loading="remoteLoading"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable !== false"
+        :multiple="field.multiple"
+        :cascade="field.cascade !== false"
+        @update:value="handleTreeSelectUpdate(field, $event)"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 系统用户选择 -->
+      <UserSelectPicker
+        v-else-if="isUserSelectField(field)"
+        v-bind="field.props"
+        :model-value="value"
+        :label-value="resolveUserSelectLabel(field)"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        :multiple="field.multiple"
+        :size="field.size"
+        @update:model-value="handleUpdate"
+        @update:label-value="handleUserSelectLabelUpdate(field, $event)"
+        @select="handleUserSelect(field, $event)"
+      />
+
+      <!-- 行政区划树选择 -->
+      <RegionTreeSelect
+        v-else-if="field.type === 'regionTreeSelect'"
+        :model-value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable !== false"
+        :virtual-disabled="field.props?.virtualDisabled ?? !context?.isSearch"
+        v-bind="field.props"
+        @update:model-value="handleRegionTreeSelectUpdate(field, $event)"
+      />
+
+      <!-- 树形选择 -->
+      <n-tree-select
+        v-else-if="field.type === 'treeSelect'"
+        :value="resolveOptionValue(value)"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :options="currentOptions"
+        :loading="remoteLoading"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable"
+        :multiple="field.multiple"
+        :cascade="field.cascade !== false"
+        :show-path="field.showPath !== false"
+        v-bind="field.props"
+        @update:value="handleTreeSelectUpdate(field, $event)"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 穿梭框 -->
+      <n-transfer
+        v-else-if="field.type === 'transfer'"
+        :value="value"
+        :disabled="disabledHandler(field)"
+        :options="currentOptions"
+        :filterable="field.filterable"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 远程搜索下拉框 -->
+      <AiCustomSelect
+        v-else-if="field.type === 'customSelect'"
+        :value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        :api="field.api"
+        :method="field.method"
+        :label-field="field.labelField || field.props?.labelName || 'label'"
+        :value-field="field.valueField || field.props?.valueName || 'value'"
+        :filterable="field.filterable !== false"
+        :multiple="field.multiple"
+        :remote="field.remote"
+        :options="field.options"
+        :params="field.params"
+        :transform="field.transform"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 业务对象引用选择 -->
+      <n-select
+        v-else-if="field.type === 'objectReference'"
+        :value="resolveOptionValue(value)"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :options="currentOptions"
+        :loading="remoteLoading"
+        :clearable="field.clearable !== false"
+        :filterable="field.filterable !== false"
+        :multiple="field.multiple"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
+
+      <!-- 纯文本展示 -->
+      <div
+        v-else-if="field.type === 'text'"
+        :style="field.style"
+      >
+        <span v-if="field.formatter">
+          {{ field.formatter(value, field, formData) }}
+        </span>
+        <span v-else>
+          {{ value }}
+        </span>
+        <n-button
+          v-if="field.copy"
+          text
+          size="small"
+          style="margin-left: 8px"
+          @click="handleCopy(value)"
+        >
+          <template #icon>
+            <n-icon><CopyOutline /></n-icon>
+          </template>
+        </n-button>
+      </div>
+
+      <!-- 自定义插槽 -->
+      <slot
+        v-else-if="field.type === 'slot'"
+        :name="field.slotName || field.field"
+        :value="value"
+        :field="field"
+        :form-data="formData"
+        :update-value="handleUpdate"
+      />
+
+      <!-- 默认为输入框 -->
+      <n-input
+        v-else
+        :value="value"
+        :placeholder="getPlaceholder(field)"
+        :disabled="disabledHandler(field)"
+        :clearable="field.clearable !== false"
+        v-bind="field.props"
+        @update:value="handleUpdate"
+        v-on="getComponentEvents(field)"
+      />
     </div>
-
-    <!-- 自定义插槽 -->
-    <slot
-      v-else-if="field.type === 'slot'"
-      :name="field.slotName || field.field"
-      :value="value"
-      :field="field"
-      :form-data="formData"
-      :update-value="handleUpdate"
-    />
-
-    <!-- 默认为输入框 -->
-    <n-input
-      v-else
-      :value="value"
-      :placeholder="getPlaceholder(field)"
-      :disabled="disabledHandler(field)"
-      :clearable="field.clearable !== false"
-      v-bind="field.props"
-      @update:value="handleUpdate"
-      v-on="getComponentEvents(field)"
-    />
   </n-form-item>
 </template>
 
@@ -610,10 +633,12 @@
 import { CopyOutline } from '@vicons/ionicons5'
 import { useClipboard } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
+import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictSelect from '@/components/DictSelect.vue'
 import FileUpload from '@/components/file-upload/index.vue'
 import ImageUpload from '@/components/image-upload/index.vue'
 import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
+import { getDictData } from '@/composables/useDict'
 import { request } from '@/utils'
 import AiCustomSelect from './AiCustomSelect.vue'
 
@@ -641,8 +666,32 @@ const emit = defineEmits(['update:value'])
 const { copy } = useClipboard()
 const remoteOptions = ref([])
 const remoteLoading = ref(false)
+const dictOptions = ref([])
+const sourceDictOptions = ref([])
 const pickerDefaultTimestamp = Date.now()
 let remoteRequestSeq = 0
+
+const ORG_TREE_SELECT_TYPES = new Set([
+  'orgTreeSelect',
+  'orgSelect',
+  'organizationSelect',
+  'departmentSelect',
+  'departmentTreeSelect',
+  'deptSelect',
+  'deptTreeSelect',
+  'elTreeSelect',
+  'orgName',
+  'deptName',
+  'forgeOrgTreeSelect',
+])
+const USER_SELECT_TYPES = new Set([
+  'userSelect',
+  'userPicker',
+  'user',
+  'userName',
+  'sysUserSelect',
+  'forgeUserSelect',
+])
 
 /**
  * 获取占位符文本
@@ -661,6 +710,8 @@ function getPlaceholder(field) {
  * 处理禁用状态
  */
 function disabledHandler(field) {
+  if (isCascadeDisabledByEmptyParent())
+    return true
   if (typeof field.disabled === 'boolean') {
     return field.disabled
   }
@@ -674,7 +725,39 @@ function disabledHandler(field) {
   return false
 }
 
-const remoteOptionSource = computed(() => resolveOptionSource(props.field))
+const fieldAlign = computed(() => normalizeAlign(props.field?.align || props.field?.textAlign || props.field?.props?.align))
+const fieldAlignClass = computed(() => fieldAlign.value === 'left' ? '' : `ai-form-item-align-${fieldAlign.value}`)
+const formItemClass = computed(() => [
+  fieldAlignClass.value,
+  props.field?.formItemClass,
+].filter(Boolean))
+const componentControlStyle = computed(() => props.field?.componentStyle || props.field?.style || undefined)
+const componentControlClass = computed(() => props.field?.componentClass || undefined)
+const fieldDictType = computed(() => props.field?.dictType || props.field?.props?.dictType || '')
+const cascadeConfig = computed(() => resolveCascadeConfig(props.field))
+const dictCascadeConfig = computed(() => {
+  if (!cascadeConfig.value)
+    return null
+  return {
+    ...cascadeConfig.value,
+    sourceOptions: sourceDictOptions.value,
+  }
+})
+const remoteOptionSource = computed(() => resolveDynamicOptionSource(props.field))
+const cascadeSourceValue = computed(() => {
+  const cascade = cascadeConfig.value
+  return cascade?.enabled && cascade.sourceField ? props.formData?.[cascade.sourceField] : undefined
+})
+const sourceFieldConfig = computed(() => findSchemaField(cascadeConfig.value?.sourceField))
+const sourceDictType = computed(() => cascadeConfig.value?.sourceDictType || sourceFieldConfig.value?.dictType || sourceFieldConfig.value?.props?.dictType || '')
+
+function isCascadeDisabledByEmptyParent() {
+  const cascade = cascadeConfig.value
+  if (!cascade?.enabled || cascade.emptyStrategy !== 'disabled' || !cascade.sourceField)
+    return false
+  const sourceValue = props.formData?.[cascade.sourceField]
+  return sourceValue === null || sourceValue === undefined || sourceValue === ''
+}
 
 watch(
   remoteOptionSource,
@@ -687,6 +770,14 @@ watch(
   },
   { immediate: true, deep: true },
 )
+
+watch(fieldDictType, loadDictOptions, { immediate: true })
+watch(sourceDictType, loadSourceDictOptions, { immediate: true })
+watch(cascadeSourceValue, (value, oldValue) => {
+  if (oldValue === undefined || value === oldValue || !cascadeConfig.value?.clearOnParentChange)
+    return
+  clearCurrentValue()
+})
 
 /**
  * 获取选项数据 - 使用 computed 确保响应式
@@ -714,21 +805,28 @@ const currentOptions = computed(() => {
       return []
     }
 
-    return result
+    return resolveCascadedOptions(result)
   }
 
   // 其次使用 options 数组
   if (field.options && Array.isArray(field.options) && field.options.length > 0) {
-    return field.options
+    return resolveCascadedOptions(field.options)
   }
 
   // 检查 props.options（兼容旧的配置方式）
   if (field.props?.options && Array.isArray(field.props.options) && field.props.options.length > 0) {
-    return field.props.options
+    return resolveCascadedOptions(field.props.options)
+  }
+
+  if (fieldDictType.value) {
+    const options = resolveCascadedOptions(dictOptions.value)
+    if (field.type === 'cascader')
+      return buildDictTreeOptions(options)
+    return withCurrentValueOption(options)
   }
 
   if (remoteOptionSource.value) {
-    return remoteOptions.value
+    return withCurrentValueOption(resolveCascadedOptions(remoteOptions.value))
   }
 
   // 最后处理 enumType (仅当 options 为空时)
@@ -744,16 +842,63 @@ const currentOptions = computed(() => {
   return []
 })
 
+function withCurrentValueOption(options = []) {
+  const result = Array.isArray(options) ? [...options] : []
+  const field = props.field || {}
+  if (props.value === null || props.value === undefined || props.value === '')
+    return result
+  const labelValue = resolveSelectionLabelValue(field)
+  if (labelValue === null || labelValue === undefined || labelValue === '')
+    return result
+  const values = Array.isArray(props.value)
+    ? props.value
+    : field.multiple && typeof props.value === 'string'
+      ? props.value.split(',').map(item => item.trim()).filter(Boolean)
+      : [props.value]
+  const labels = Array.isArray(labelValue)
+    ? labelValue
+    : String(labelValue).split(',').map(item => item.trim()).filter(Boolean)
+  values.forEach((value, index) => {
+    if (flattenOptionNodes(result).some(option => isSameOptionValue(option?.value ?? option?.key, value)))
+      return
+    result.unshift({
+      value,
+      key: value,
+      label: labels[index] || labels[0] || String(value),
+    })
+  })
+  return result
+}
+
 function cacheAsyncOptions(field, promise) {
   promise.then((options) => {
     field._cachedOptions = options
   })
 }
 
+async function loadDictOptions(dictType) {
+  if (!dictType) {
+    dictOptions.value = []
+    return
+  }
+  dictOptions.value = await getDictData(dictType)
+}
+
+async function loadSourceDictOptions(dictType) {
+  if (!dictType) {
+    sourceDictOptions.value = []
+    return
+  }
+  sourceDictOptions.value = await getDictData(dictType)
+}
+
 function resolveOptionSource(field = {}) {
-  if (field.optionSource || field.props?.optionSource)
-    return field.optionSource || field.props.optionSource
-  if (field.type === 'orgTreeSelect') {
+  if (isUserSelectField(field))
+    return null
+  const configuredSource = field.optionSource || field.props?.optionSource
+  if (hasEffectiveOptionSource(configuredSource))
+    return normalizeOptionSource(configuredSource)
+  if (isOrgTreeSelectField(field)) {
     return {
       type: 'tree',
       api: 'get@/system/org/tree',
@@ -764,24 +909,74 @@ function resolveOptionSource(field = {}) {
       childrenField: 'children',
     }
   }
-  if (field.type === 'userSelect') {
-    return {
-      type: 'page',
-      api: 'get@/system/user/page',
-      valueField: 'id',
-      labelField: 'realName',
-      fallbackLabelFields: ['name', 'nickname', 'username'],
-      keywordParam: 'keyword',
-      recordsField: 'records',
-      params: { pageNum: 1, pageSize: 50 },
+  return null
+}
+
+function hasEffectiveOptionSource(source) {
+  if (!source)
+    return false
+  if (typeof source === 'string')
+    return source.trim() !== ''
+  if (typeof source !== 'object')
+    return false
+  return Boolean(
+    String(source.api || source.url || '').trim()
+    || Array.isArray(source.options)
+    || Array.isArray(source.data),
+  )
+}
+
+function normalizeOptionSource(source) {
+  if (typeof source === 'string')
+    return { api: source }
+  const next = { ...(source || {}) }
+  if (!next.api && next.url)
+    next.api = next.url
+  return next
+}
+
+function resolveDynamicOptionSource(field = {}) {
+  const source = resolveOptionSource(field)
+  if (!source)
+    return null
+  const next = {
+    ...source,
+    params: resolveDynamicParams(source.params || {}),
+  }
+  const cascade = cascadeConfig.value
+  if (cascade?.enabled && cascade.mode === 'remoteParam' && cascade.sourceField && cascade.paramName) {
+    const sourceValue = props.formData?.[cascade.sourceField]
+    if ((sourceValue === null || sourceValue === undefined || sourceValue === '') && cascade.emptyStrategy !== 'all') {
+      next.waitForParent = true
+    }
+    next.params = {
+      ...next.params,
+      [cascade.paramName]: sourceValue,
     }
   }
-  return null
+  return next
+}
+
+function resolveDynamicParams(params = {}) {
+  const result = {}
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (typeof value === 'string') {
+      const matched = value.match(/^\$\{(.+)\}$/) || value.match(/^\$form\.(.+)$/)
+      result[key] = matched ? props.formData?.[matched[1]] : value
+      return
+    }
+    result[key] = value
+  })
+  return result
 }
 
 async function loadRemoteOptions(source, keyword = '') {
   if (!source?.api)
     return
+  if (source.waitForParent) {
+    remoteOptions.value = []
+    return
+  }
   const requestSeq = ++remoteRequestSeq
   remoteLoading.value = true
   try {
@@ -799,7 +994,7 @@ async function loadRemoteOptions(source, keyword = '') {
     })
     if (requestSeq !== remoteRequestSeq)
       return
-    remoteOptions.value = normalizeRemoteOptions(res?.data, source)
+    remoteOptions.value = normalizeRemoteOptions(res, source)
   }
   catch (error) {
     console.warn(`[AiFormItem] 加载 ${props.field?.field || ''} 选项失败:`, error)
@@ -828,17 +1023,25 @@ function normalizeRemoteOptions(data, source = {}) {
   return rows.map(row => normalizeOptionNode(row, source, isTree)).filter(Boolean)
 }
 
-function extractOptionRows(data, source = {}) {
+function extractOptionRows(data, source = {}, depth = 0) {
   if (Array.isArray(data))
     return data
-  if (!data || typeof data !== 'object')
+  if (!data || typeof data !== 'object' || depth > 4)
     return []
   if (source.recordsField) {
     const nested = getNestedValue(data, source.recordsField)
     if (Array.isArray(nested))
       return nested
   }
-  return data.records || data.list || data.rows || []
+  for (const key of ['records', 'list', 'rows', 'items']) {
+    if (Array.isArray(data[key]))
+      return data[key]
+  }
+  if (Array.isArray(data.data))
+    return data.data
+  if (data.data && typeof data.data === 'object')
+    return extractOptionRows(data.data, source, depth + 1)
+  return []
 }
 
 function normalizeOptionNode(row, source = {}, includeChildren = false) {
@@ -848,9 +1051,12 @@ function normalizeOptionNode(row, source = {}, includeChildren = false) {
   const keyField = source.keyField || valueField
   const labelField = source.labelField || 'label'
   const childrenField = source.childrenField || 'children'
-  const fallbackLabelFields = source.fallbackLabelFields || ['label', 'name', 'title']
-  const value = row[valueField] ?? row.value ?? row.key ?? row[keyField]
-  const label = row[labelField] ?? fallbackLabelFields.map(field => row[field]).find(item => item !== undefined && item !== null && item !== '')
+  const fallbackValueFields = source.fallbackValueFields || ['value', 'key', keyField, 'id', 'orgId', 'deptId', 'code']
+  const fallbackLabelFields = source.fallbackLabelFields || ['label', 'name', 'title', 'orgName', 'deptName', 'orgShortName']
+  const value = resolveFirstFilled(row, [valueField, ...fallbackValueFields])
+  const label = resolveFirstFilled(row, [labelField, ...fallbackLabelFields])
+  if (value === undefined || value === null || value === '')
+    return null
   const option = {
     ...row,
     value,
@@ -868,18 +1074,128 @@ function normalizeOptionNode(row, source = {}, includeChildren = false) {
   return option
 }
 
+function resolveFirstFilled(source, fields = []) {
+  const keys = fields.filter((field, index, all) => field && all.indexOf(field) === index)
+  for (const key of keys) {
+    const value = source?.[key]
+    if (value !== undefined && value !== null && value !== '')
+      return value
+  }
+  return undefined
+}
+
+function resolveCascadeConfig(field = {}) {
+  const configured = [field.cascade, field.cascadeConfig, field.props?.cascade, field.props?.cascadeConfig]
+    .find(item => item && typeof item === 'object' && item.sourceField)
+  const raw = configured || {
+    sourceField: field.sourceField || field.props?.sourceField,
+    sourceDictType: field.sourceDictType || field.props?.sourceDictType,
+    linkedDictType: field.linkedDictType || field.props?.linkedDictType,
+    mode: field.matchMode || field.props?.matchMode || field.mode || field.props?.mode,
+    paramName: field.paramName || field.props?.paramName,
+    emptyStrategy: field.emptyStrategy || field.props?.emptyStrategy,
+    clearOnParentChange: field.clearOnParentChange ?? field.clearOnSourceChange ?? field.props?.clearOnParentChange ?? field.props?.clearOnSourceChange,
+  }
+  if (!raw || raw.enabled === false || !raw.sourceField)
+    return null
+  return {
+    enabled: true,
+    sourceField: raw.sourceField,
+    sourceDictType: raw.sourceDictType || '',
+    linkedDictType: raw.linkedDictType || '',
+    mode: raw.mode || raw.matchMode || 'linkedDict',
+    paramName: raw.paramName || '',
+    emptyStrategy: raw.emptyStrategy || 'empty',
+    clearOnParentChange: raw.clearOnParentChange !== false && raw.clearOnSourceChange !== false,
+  }
+}
+
+function resolveCascadedOptions(options = []) {
+  const cascade = cascadeConfig.value
+  if (!cascade?.enabled || !cascade.sourceField)
+    return options
+  const sourceValue = props.formData?.[cascade.sourceField]
+  if (sourceValue === null || sourceValue === undefined || sourceValue === '')
+    return cascade.emptyStrategy === 'all' ? options : []
+  if (cascade.mode === 'remoteParam')
+    return options
+  return (Array.isArray(options) ? options : []).filter(option => matchesCascade(option, sourceValue, cascade))
+}
+
+function matchesCascade(option, sourceValue, cascade) {
+  const raw = option.raw || option
+  if (cascade.mode === 'parentDictCode') {
+    const parentDictCode = raw.parentDictCode ?? raw.parent_dict_code
+    const sourceDictCode = resolveSourceDictCode(sourceValue)
+    return isSameOptionValue(parentDictCode, sourceDictCode) || isSameOptionValue(parentDictCode, sourceValue)
+  }
+  if (cascade.mode === 'linkedDict') {
+    const linkedType = raw.linkedDictType ?? raw.linked_dict_type
+    const linkedValue = raw.linkedDictValue ?? raw.linked_dict_value
+    const expectedType = cascade.linkedDictType || cascade.sourceDictType || sourceDictType.value
+    const typeMatched = !expectedType || isSameOptionValue(linkedType, expectedType)
+    return typeMatched && isSameOptionValue(linkedValue, sourceValue)
+  }
+  return true
+}
+
+function resolveSourceDictCode(sourceValue) {
+  const matched = sourceDictOptions.value.find(option => isSameOptionValue(option.value, sourceValue))
+  return matched?.dictCode ?? matched?.raw?.dictCode ?? sourceValue
+}
+
+function buildDictTreeOptions(options = []) {
+  const nodes = (Array.isArray(options) ? options : []).map(option => ({
+    ...option,
+    key: option.dictCode ?? option.key ?? option.value,
+    value: option.value,
+    label: option.label,
+    children: [],
+  }))
+  const byCode = new Map(nodes.map(node => [String(node.dictCode ?? node.key), node]))
+  const roots = []
+  nodes.forEach((node) => {
+    const parentCode = node.parentDictCode ?? node.raw?.parentDictCode
+    if (parentCode !== null && parentCode !== undefined && parentCode !== '' && Number(parentCode) !== 0 && byCode.has(String(parentCode))) {
+      byCode.get(String(parentCode)).children.push(node)
+    }
+    else {
+      roots.push(node)
+    }
+  })
+  nodes.forEach((node) => {
+    if (!node.children.length)
+      delete node.children
+  })
+  return roots
+}
+
+function findSchemaField(fieldName) {
+  if (!fieldName)
+    return null
+  const schemas = [
+    ...(props.context?.schema || []),
+    ...(props.context?.allSchema || []),
+  ]
+  return schemas.find(item => item?.field === fieldName) || null
+}
+
+function normalizeAlign(value) {
+  const align = String(value || '').toLowerCase()
+  return ['left', 'center', 'right'].includes(align) ? align : 'left'
+}
+
+function clearCurrentValue() {
+  if (props.value === null || props.value === undefined || props.value === '')
+    return
+  emit('update:value', props.field?.multiple ? [] : null)
+}
+
 function getNestedValue(source, path) {
   return String(path || '')
     .split('.')
     .filter(Boolean)
     .reduce((value, key) => value?.[key], source)
-}
-
-function handleRemoteSearch(keyword) {
-  const source = remoteOptionSource.value
-  if (!source)
-    return
-  loadRemoteOptions(source, keyword)
 }
 
 function resolveOptionValue(rawValue) {
@@ -931,9 +1247,118 @@ function isSameOptionValue(left, right) {
   return String(left) === String(right)
 }
 
+function normalizeRuntimeFieldType(type) {
+  const value = String(type || '')
+  if (ORG_TREE_SELECT_TYPES.has(value))
+    return 'orgTreeSelect'
+  if (USER_SELECT_TYPES.has(value))
+    return 'userSelect'
+  return value
+}
+
+function isOrgTreeSelectField(field = {}) {
+  return normalizeRuntimeFieldType(field.type || field.componentType) === 'orgTreeSelect'
+}
+
+function isUserSelectField(field = {}) {
+  return normalizeRuntimeFieldType(field.type || field.componentType) === 'userSelect'
+}
+
+function resolveSelectionLabelValue(field = {}) {
+  for (const candidate of resolveSelectionLabelFields(field)) {
+    const value = props.formData?.[candidate]
+    if (isFilledValue(value))
+      return value
+  }
+  return field.labelValue ?? field.props?.labelValue ?? ''
+}
+
+function resolveSelectionLabelFields(field = {}) {
+  const fieldName = String(field.field || '')
+  const candidates = [
+    field.props?.labelValueField,
+    field.labelValueField,
+    field.props?.targetField,
+    field.targetField,
+  ]
+  if (fieldName) {
+    candidates.push(`${fieldName}Name`)
+    if (fieldName.endsWith('UserId')) {
+      candidates.push(fieldName.replace(/UserId$/, 'UserName'))
+      candidates.push(fieldName.replace(/UserId$/, 'Name'))
+    }
+    if (fieldName.endsWith('DeptId')) {
+      candidates.push(fieldName.replace(/DeptId$/, 'DeptName'))
+      candidates.push(fieldName.replace(/DeptId$/, 'Name'))
+    }
+    if (fieldName.endsWith('OrgId')) {
+      candidates.push(fieldName.replace(/OrgId$/, 'OrgName'))
+      candidates.push(fieldName.replace(/OrgId$/, 'Name'))
+    }
+    if (fieldName.endsWith('Id'))
+      candidates.push(fieldName.replace(/Id$/, 'Name'))
+    candidates.push(`${fieldName}Label`, `${fieldName}Text`)
+  }
+  if (isUserSelectField(field))
+    candidates.push('userName', 'realName', 'nickname')
+  if (isOrgTreeSelectField(field))
+    candidates.push('orgName', 'deptName', 'departmentName')
+  return candidates
+    .map(value => String(value || '').trim())
+    .filter((value, index, all) => value && all.indexOf(value) === index)
+}
+
+function patchSelectionLabelValue(field = {}, labelValue) {
+  const candidates = resolveSelectionLabelFields(field)
+  if (!candidates.length || typeof props.context?.patchFormData !== 'function')
+    return
+  const normalizedLabel = normalizeLabelValue(labelValue)
+  const patch = {}
+  candidates.forEach((candidate, index) => {
+    if (index === 0 || Object.prototype.hasOwnProperty.call(props.formData || {}, candidate))
+      patch[candidate] = isFilledValue(normalizedLabel) ? normalizedLabel : undefined
+  })
+  props.context.patchFormData(patch)
+}
+
+function syncSelectionLabelFromOptions(field = {}, value) {
+  const values = Array.isArray(value)
+    ? value
+    : field.multiple && typeof value === 'string'
+      ? value.split(',').map(item => item.trim()).filter(Boolean)
+      : [value]
+  const labels = values
+    .map(item => flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, item))?.label)
+    .filter(Boolean)
+  if (labels.length)
+    patchSelectionLabelValue(field, field.multiple ? labels : labels[0])
+}
+
+function normalizeLabelValue(value) {
+  if (Array.isArray(value))
+    return value.map(item => String(item || '').trim()).filter(Boolean).join(',')
+  return value === null || value === undefined ? '' : String(value).trim()
+}
+
+function resolveUserLabel(user = {}) {
+  return String(user?.realName || user?.name || user?.nickname || user?.username || '').trim()
+}
+
+function isFilledValue(value) {
+  if (Array.isArray(value))
+    return value.length > 0
+  return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
 function handleTreeSelectUpdate(field, newValue) {
   const normalizedValue = normalizeOptionValue(newValue, currentOptions.value, field?.multiple)
   syncIncludeChildrenFlag(field, normalizedValue)
+  if (isOrgTreeSelectField(field) || field?.type === 'treeSelect') {
+    if (isFilledValue(normalizedValue))
+      syncSelectionLabelFromOptions(field, normalizedValue)
+    else
+      patchSelectionLabelValue(field, '')
+  }
   emit('update:value', normalizedValue)
 }
 
@@ -958,15 +1383,33 @@ function handleRegionTreeSelectUpdate(field, newValue) {
   emit('update:value', newValue)
 }
 
+function resolveUserSelectLabel(field) {
+  return resolveSelectionLabelValue(field) ?? ''
+}
+
+function handleUserSelectLabelUpdate(field, labelValue) {
+  patchSelectionLabelValue(field, labelValue)
+}
+
+function handleUserSelect(field, users) {
+  const selectedUsers = Array.isArray(users) ? users : users ? [users] : []
+  const labels = selectedUsers.map(resolveUserLabel).filter(Boolean)
+  if (labels.length)
+    patchSelectionLabelValue(field, field?.multiple ? labels : labels[0])
+  const events = getComponentEvents(field)
+  if (typeof events.select === 'function')
+    events.select(users)
+}
+
 function syncIncludeChildrenFlag(field, value) {
-  if (!props.context?.isSearch || !field?.field || !['treeSelect', 'orgTreeSelect'].includes(field.type))
+  if (!props.context?.isSearch || !field?.field || !(field.type === 'treeSelect' || isOrgTreeSelectField(field)))
     return
   const includeChildrenKey = `${field.field}_includeChildren`
   if (Array.isArray(value) || value === null || value === undefined || value === '') {
     props.context?.patchFormData?.({ [includeChildrenKey]: undefined })
     return
   }
-  if (field.type === 'orgTreeSelect') {
+  if (isOrgTreeSelectField(field)) {
     props.context?.patchFormData?.({ [includeChildrenKey]: true })
     return
   }
@@ -1090,6 +1533,11 @@ function handleUploadRemove(field, file) {
 </script>
 
 <style scoped>
+.ai-form-control {
+  width: 100%;
+  min-width: 0;
+}
+
 .time-range-picker {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1100,5 +1548,28 @@ function handleUploadRemove(field, file) {
 .time-range-separator {
   color: #64748b;
   font-size: 12px;
+}
+
+.ai-form-item-align-center :deep(.n-input__input-el),
+.ai-form-item-align-center :deep(.n-input__textarea-el),
+.ai-form-item-align-center :deep(.n-input-number-input),
+.ai-form-item-align-center :deep(.n-base-selection-label__render-label) {
+  text-align: center;
+}
+
+.ai-form-item-align-right :deep(.n-input__input-el),
+.ai-form-item-align-right :deep(.n-input__textarea-el),
+.ai-form-item-align-right :deep(.n-input-number-input),
+.ai-form-item-align-right :deep(.n-base-selection-label__render-label) {
+  text-align: right;
+}
+
+.ai-form-item-align-center :deep(.n-base-selection-label),
+.ai-form-item-align-right :deep(.n-base-selection-label) {
+  justify-content: center;
+}
+
+.ai-form-item-align-right :deep(.n-base-selection-label) {
+  justify-content: flex-end;
 }
 </style>

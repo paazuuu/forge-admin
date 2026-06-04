@@ -168,11 +168,12 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         vo.setTableComment(config.getTableComment());
         vo.setAppName(config.getAppName());
         vo.setMenuName(config.getMenuName());
+        vo.setObjectCode(config.getObjectCode());
         vo.setObjectName(config.getObjectName());
         vo.setPublishStatus(config.getPublishStatus());
         vo.setPublishedVersion(config.getPublishedVersion());
         vo.setRowKey("id");
-        vo.setModalType("drawer");
+        vo.setModalType("modal");
         vo.setModalWidth("800px");
         vo.setEditGridCols(1);
         vo.setSearchGridCols(4);

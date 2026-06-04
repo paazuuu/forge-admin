@@ -7,6 +7,7 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryConditionDTO;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryExecuteDTO;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudQuery;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
@@ -28,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -169,6 +171,45 @@ public class DynamicCrudService {
                                                       Integer maxRows) {
         int limit = normalizeExportLimit(maxRows);
         return selectExportPageRows(configKey, query, 1, limit, null);
+    }
+
+    /**
+     * 定时触发器候选记录读取。只允许按运行配置字段白名单内的到期字段做区间查询，
+     * 避免后台扫描器出现无条件全表读取。
+     */
+    public List<Map<String, Object>> selectScheduledCandidateRows(String configKey,
+                                                                  String dueField,
+                                                                  LocalDateTime windowStart,
+                                                                  LocalDateTime windowEnd,
+                                                                  Integer batchSize) {
+        AiCrudConfig config = getConfig(configKey);
+        if (StringUtils.isBlank(dueField)) {
+            throw new BusinessException("定时触发缺少到期字段");
+        }
+        Set<String> allowedFields = buildAllowedCustomFields(config);
+        if (!allowedFields.contains(dueField)) {
+            throw new BusinessException("定时触发到期字段不在运行配置字段范围内: " + dueField);
+        }
+
+        Map<String, String> columnMapping = repository.getColumnMapping(config.getTableName());
+        Map<String, Object> searchParams = new LinkedHashMap<>();
+        searchParams.put(dueField, List.of(windowStart, windowEnd));
+        Map<String, String> searchTypeMap = new LinkedHashMap<>();
+        searchTypeMap.put(dueField, "between");
+
+        List<Map<String, Object>> rows = repository.selectList(
+                config.getTableName(),
+                searchParams,
+                allowedFields,
+                searchTypeMap,
+                columnMapping,
+                "id ASC",
+                normalizeScheduledBatchSize(batchSize),
+                null
+        );
+        List<Map<String, Object>> camelCaseRows = DynamicQueryGenerator.convertListToCamelCase(rows);
+        applyReadPipeline(camelCaseRows, config);
+        return camelCaseRows;
     }
 
     /**
@@ -436,7 +477,7 @@ public class DynamicCrudService {
      * 新增
      */
     @Transactional(rollbackFor = Exception.class)
-    public void insert(String configKey, Map<String, Object> data) {
+    public Map<String, Object> insert(String configKey, Map<String, Object> data) {
         AiCrudConfig config = getConfig(configKey);
         String tableName = config.getTableName();
         
@@ -449,11 +490,11 @@ public class DynamicCrudService {
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
         if (isMasterDetailRuntime(config) && joinContext != null) {
             insertMasterDetailData(config, data, allowedFields, joinContext);
-            return;
+            return data;
         }
         if (joinContext != null) {
             insertJoinedData(config, data, allowedFields, joinContext);
-            return;
+            return data;
         }
         
         // 过滤并转换字段名
@@ -476,7 +517,43 @@ public class DynamicCrudService {
         applyEncrypt(filteredData, config.getEncryptConfig());
         
         // 执行插入
-        repository.insert(tableName, filteredData);
+        Long id = repository.insertReturningId(tableName, filteredData);
+        if (id == null) {
+            return data;
+        }
+        Map<String, Object> result = selectById(configKey, id);
+        if (result != null) {
+            return result;
+        }
+        Map<String, Object> fallback = new LinkedHashMap<>(data);
+        fallback.put("id", id);
+        return fallback;
+    }
+
+    /**
+     * 内部运行态创建记录。用于触发器创建关联记录，校验发布态配置和模型字段，
+     * 不依赖前端编辑表单是否展示该字段。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> insertInternal(String configKey, Map<String, Object> data) {
+        if (data == null || data.isEmpty()) {
+            throw new BusinessException("没有可写入的字段");
+        }
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        Map<String, Object> filteredData = filterInternalWriteData(config, tableName, data);
+        if (filteredData.isEmpty()) {
+            throw new BusinessException("没有可写入的字段");
+        }
+        applyEncrypt(filteredData, config.getEncryptConfig());
+        Long id = repository.insertReturningId(tableName, filteredData);
+        Map<String, Object> result = id == null ? null : selectById(configKey, id);
+        if (result != null) {
+            return result;
+        }
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        fallback.put("id", id);
+        return fallback;
     }
 
     // ==================== 更新操作 ====================
@@ -534,6 +611,75 @@ public class DynamicCrudService {
         applyEncrypt(filteredData, config.getEncryptConfig());
         
         // 执行更新
+        int affected = repository.updateById(tableName, id, filteredData, buildDataScopeCondition(config, tableName, null));
+        if (affected <= 0) {
+            throw new BusinessException("无权限更新该数据或数据不存在");
+        }
+    }
+
+    /**
+     * 内部运行态字段更新。用于单据状态等系统驱动字段，不受编辑表单 schema 限制，
+     * 但仍校验动态表真实列名、租户条件和数据权限。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateInternalFieldsById(String configKey, Long id, Map<String, Object> data) {
+        if (id == null) {
+            throw new BusinessException("更新操作缺少id");
+        }
+        if (data == null || data.isEmpty()) {
+            throw new BusinessException("没有可更新的字段");
+        }
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        Map<String, String> columnMapping = repository.getColumnMapping(tableName);
+        Set<String> tableColumns = repository.getTableColumns(tableName);
+
+        Map<String, Object> filteredData = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            String key = entry.getKey();
+            if (isImmutableWriteField(key)) {
+                continue;
+            }
+            String columnName = columnMapping.getOrDefault(key, DynamicQueryGenerator.camelToSnake(key));
+            repository.validateIdentifier(columnName);
+            if (!tableColumns.contains(columnName)) {
+                throw new BusinessException("字段不存在: " + key);
+            }
+            if (isImmutableWriteField(columnName)) {
+                continue;
+            }
+            filteredData.put(columnName, entry.getValue());
+        }
+
+        if (filteredData.isEmpty()) {
+            throw new BusinessException("没有可更新的字段");
+        }
+
+        applyEncrypt(filteredData, config.getEncryptConfig());
+        int affected = repository.updateById(tableName, id, filteredData, buildDataScopeCondition(config, tableName, null));
+        if (affected <= 0) {
+            throw new BusinessException("无权限更新该数据或数据不存在");
+        }
+    }
+
+    /**
+     * 内部运行态字段更新。用于触发器更新字段，字段必须存在于发布态模型或动态表。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateFieldsInternal(String configKey, Long id, Map<String, Object> fields) {
+        if (id == null) {
+            throw new BusinessException("更新操作缺少id");
+        }
+        if (fields == null || fields.isEmpty()) {
+            throw new BusinessException("没有可更新的字段");
+        }
+        AiCrudConfig config = getConfig(configKey);
+        String tableName = config.getTableName();
+        Map<String, Object> filteredData = filterInternalWriteData(config, tableName, fields);
+        if (filteredData.isEmpty()) {
+            throw new BusinessException("没有可更新的字段");
+        }
+        applyEncrypt(filteredData, config.getEncryptConfig());
         int affected = repository.updateById(tableName, id, filteredData, buildDataScopeCondition(config, tableName, null));
         if (affected <= 0) {
             throw new BusinessException("无权限更新该数据或数据不存在");
@@ -897,6 +1043,62 @@ public class DynamicCrudService {
 
     private boolean isImmutableWriteField(String key) {
         return IMMUTABLE_WRITE_FIELDS.contains(key);
+    }
+
+    private Map<String, Object> filterInternalWriteData(AiCrudConfig config, String tableName, Map<String, Object> data) {
+        Map<String, String> columnMapping = repository.getColumnMapping(tableName);
+        Set<String> tableColumns = repository.getTableColumns(tableName);
+        Set<String> allowedFields = collectInternalWriteFields(config, tableName);
+        Map<String, Object> filteredData = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            String key = entry.getKey();
+            if (isImmutableWriteField(key)) {
+                continue;
+            }
+            if (!allowedFields.contains(key)) {
+                throw new BusinessException("字段不在模型中: " + key);
+            }
+            String columnName = columnMapping.getOrDefault(key, DynamicQueryGenerator.camelToSnake(key));
+            repository.validateIdentifier(columnName);
+            if (!tableColumns.contains(columnName)) {
+                throw new BusinessException("字段不存在: " + key);
+            }
+            if (isImmutableWriteField(columnName)) {
+                continue;
+            }
+            filteredData.put(columnName, entry.getValue());
+        }
+        return filteredData;
+    }
+
+    private Set<String> collectInternalWriteFields(AiCrudConfig config, String tableName) {
+        Set<String> fields = new LinkedHashSet<>();
+        fields.addAll(DynamicQueryGenerator.extractFieldNames(config.getEditSchema(), objectMapper));
+        fields.addAll(DynamicQueryGenerator.extractFieldNames(config.getColumnsSchema(), objectMapper));
+        LowcodeModelSchema modelSchema = StringUtils.isNotBlank(config.getModelSchema()) ? readModelSchema(config) : null;
+        if (modelSchema != null && modelSchema.getFields() != null) {
+            for (LowcodeFieldSchema field : modelSchema.getFields()) {
+                if (field == null) {
+                    continue;
+                }
+                addFieldAlias(fields, field.getField());
+                addFieldAlias(fields, field.getColumnName());
+            }
+        }
+        for (String column : repository.getTableColumns(tableName)) {
+            addFieldAlias(fields, column);
+        }
+        fields.removeAll(IMMUTABLE_WRITE_FIELDS);
+        return fields;
+    }
+
+    private void addFieldAlias(Set<String> fields, String field) {
+        if (StringUtils.isBlank(field)) {
+            return;
+        }
+        fields.add(field);
+        fields.add(DynamicQueryGenerator.snakeToCamel(field));
+        fields.add(DynamicQueryGenerator.camelToSnake(field));
     }
 
     // ==================== 删除操作 ====================
@@ -2280,6 +2482,10 @@ public class DynamicCrudService {
         if (ref == null || ref.getFields() == null || ref.getFields().isEmpty()) {
             return null;
         }
+        String configured = resolveRefSourceField(ref, relation == null ? null : relation.getDisplayField());
+        if (hasRefSourceField(ref, configured)) {
+            return configured;
+        }
         Set<String> excluded = new LinkedHashSet<>();
         excluded.add(resolveRefSourceField(ref, relation == null ? null : relation.getTargetField()));
         excluded.add(resolveRefSourceField(ref, relation == null ? null : relation.getSourceField()));
@@ -2310,6 +2516,20 @@ public class DynamicCrudService {
             return sourceField;
         }
         return null;
+    }
+
+    private boolean hasRefSourceField(LowcodePageModelRef ref, String sourceField) {
+        if (ref == null || ref.getFields() == null || StringUtils.isBlank(sourceField)) {
+            return false;
+        }
+        for (Map<String, Object> field : ref.getFields()) {
+            String candidate = StringUtils.defaultIfBlank(text(field.get("sourceField")), text(field.get("field")));
+            String columnName = text(field.get("columnName"));
+            if (sourceField.equals(candidate) || sourceField.equals(columnName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String resolveRefSourceField(LowcodePageModelRef ref, String value) {
@@ -2520,6 +2740,13 @@ public class DynamicCrudService {
             return MAX_EXPORT_ROWS;
         }
         return Math.min(maxRows, MAX_EXPORT_ROWS);
+    }
+
+    private int normalizeScheduledBatchSize(Integer batchSize) {
+        if (batchSize == null || batchSize < 1) {
+            return 50;
+        }
+        return Math.min(batchSize, 200);
     }
 
     private int normalizeExportPageSize(Integer pageSize) {
