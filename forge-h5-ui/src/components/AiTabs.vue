@@ -59,7 +59,7 @@ provide('activeIndex', activeIndex)
     position: relative;
     
     &--active {
-      color: var(--primary-color, #d12723FF);
+      color: var(--primary-color, #0891b2);
       
       &::after {
         content: '';
@@ -69,7 +69,7 @@ provide('activeIndex', activeIndex)
         transform: translateX(-50%);
         width: 40rpx;
         height: 4rpx;
-        background: var(--primary-color, #d12723FF);
+        background: var(--primary-color, #0891b2);
       }
     }
   }
@@ -79,7 +79,7 @@ provide('activeIndex', activeIndex)
     color: #666;
     
     .ai-tabs-tab--active & {
-      color: var(--primary-color, #d12723FF);
+      color: var(--primary-color, #0891b2);
       font-weight: 500;
     }
   }

@@ -16,10 +16,16 @@ export const useAuthStore = defineStore('auth', {
     tokenType: 'Bearer',
     expiresIn: null,
     userInfo: null,
+    menus: [],
+    permissions: [],
   }),
   getters: {
     isLogin: state => !!state.accessToken,
     displayName: state => getDisplayName(state.userInfo),
+    roleText: state => {
+      const roles = state.userInfo?.roleKeys || state.userInfo?.roles || []
+      return Array.isArray(roles) && roles.length ? roles.join(' / ') : '移动端用户'
+    },
   },
   actions: {
     setToken(data = {}) {
@@ -34,11 +40,19 @@ export const useAuthStore = defineStore('auth', {
     setUserInfo(userInfo) {
       this.userInfo = userInfo || null
     },
+    setMenus(menus) {
+      this.menus = Array.isArray(menus) ? menus : []
+    },
+    setPermissions(permissions) {
+      this.permissions = Array.isArray(permissions) ? permissions : []
+    },
     resetAuth() {
       this.accessToken = ''
       this.tokenType = 'Bearer'
       this.expiresIn = null
       this.userInfo = null
+      this.menus = []
+      this.permissions = []
     },
     async encryptPassword(password) {
       try {
@@ -56,15 +70,18 @@ export const useAuthStore = defineStore('auth', {
       const payload = {
         username: form.username,
         password,
+        code: form.code,
+        codeKey: form.codeKey,
         tenantId: form.tenantId || undefined,
-        authType: 'password',
-        userClient: import.meta.env.VITE_USER_CLIENT || 'h5',
+        authType: 'password_captcha',
+        userClient: import.meta.env.VITE_USER_CLIENT || 'app',
         appId: import.meta.env.VITE_APP_ID || undefined,
         appSecret: import.meta.env.VITE_APP_SECRET || undefined,
       }
       const res = await api.login(payload)
       this.setToken(res.data || {})
       await this.fetchUserInfo()
+      this.fetchAccessSnapshot()
       return res
     },
     async fetchUserInfo() {
@@ -74,6 +91,21 @@ export const useAuthStore = defineStore('auth', {
       const res = await api.getUserInfo()
       this.setUserInfo(res.data || null)
       return this.userInfo
+    },
+    async fetchAccessSnapshot() {
+      if (!this.accessToken) {
+        return
+      }
+      const [menuResult, permissionResult] = await Promise.allSettled([
+        api.getCurrentMenu(),
+        api.getCurrentPermissions(),
+      ])
+      if (menuResult.status === 'fulfilled') {
+        this.setMenus(menuResult.value?.data)
+      }
+      if (permissionResult.status === 'fulfilled') {
+        this.setPermissions(permissionResult.value?.data)
+      }
     },
     async logout() {
       try {
@@ -88,6 +120,6 @@ export const useAuthStore = defineStore('auth', {
   },
   persist: {
     key: `${import.meta.env.VITE_TENANT || 'default'}_auth`,
-    pick: ['accessToken', 'tokenType', 'expiresIn', 'userInfo'],
+    pick: ['accessToken', 'tokenType', 'expiresIn', 'userInfo', 'menus', 'permissions'],
   },
 })

@@ -14,6 +14,8 @@ const uni = uniPlugin.default
 export default defineConfig(({ mode }) => {
   const viteEnv = loadEnv(mode, process.cwd())
   const { VITE_HTTP_PORT, VITE_REQUEST_PREFIX, VITE_PUBLIC_PATH, VITE_HTTP_PROXY_TARGET } = viteEnv
+  const requestPrefix = VITE_REQUEST_PREFIX || '/dev-api'
+  const proxyTarget = VITE_HTTP_PROXY_TARGET || 'http://127.0.0.1:8581/'
 
   return {
     base: VITE_PUBLIC_PATH || '/',
@@ -52,11 +54,12 @@ export default defineConfig(({ mode }) => {
       open: false,
       host: '0.0.0.0',
       proxy: {
-        // App 服务代理
-        [VITE_REQUEST_PREFIX || '/cbc-server']: {
-          target: VITE_HTTP_PROXY_TARGET || 'http://localhost:8581/',
+        // Forge App 服务代理：H5 登录、用户信息、验证码等基础接口默认走 app-server。
+        [requestPrefix]: {
+          target: proxyTarget,
           changeOrigin: true,
           secure: false,
+          rewrite: path => path.replace(new RegExp(`^${requestPrefix}`), ''),
           configure: (proxy, options) => {
             proxy.on('proxyRes', (proxyRes, req) => {
               proxyRes.headers['x-real-url'] = new URL(req.url || '', options.target)?.href || ''
@@ -65,7 +68,7 @@ export default defineConfig(({ mode }) => {
         },
         // WebSocket
         '/ws': {
-          target: VITE_HTTP_PROXY_TARGET || 'http://localhost:8581/',
+          target: proxyTarget,
           changeOrigin: true,
           ws: true,
           secure: false,

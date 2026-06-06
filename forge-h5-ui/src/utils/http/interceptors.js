@@ -3,6 +3,13 @@ import { useAuthStore } from '@/store'
 
 export function setupInterceptors(axiosInstance) {
   const SUCCESS_CODES = [0, 200]
+  const AUTH_EXPIRED_CODES = ['-8', -8, 401, 11007, 11008]
+
+  function resetAuthIfExpired(code) {
+    if (AUTH_EXPIRED_CODES.includes(code)) {
+      useAuthStore().resetAuth()
+    }
+  }
 
   /**
    * 响应成功拦截器
@@ -54,6 +61,7 @@ export function setupInterceptors(axiosInstance) {
       // 如果是业务错误（从 resResolve 传来的）
       if (error?.isBusinessError) {
         const { code, message, needTip = true } = error
+        resetAuthIfExpired(code)
         const finalMessage = resolveResError(code, message, needTip)
         return Promise.reject({ code, message: finalMessage, error: error.error })
       }
@@ -70,6 +78,7 @@ export function setupInterceptors(axiosInstance) {
     const code = data?.code ?? data?.respCode ?? status
     const message = data?.message ?? data?.msg ?? data?.respDesc ?? error.message
     const needTip = config?.needTip !== false
+    resetAuthIfExpired(code)
     const finalMessage = resolveResError(code, message, needTip)
     return Promise.reject({
       code,

@@ -72,6 +72,20 @@ const authTypeOptions = [
   { label: '邮箱验证码', value: 'email_captcha' },
 ]
 
+// 验证码类型选项
+const captchaTypeOptions = [
+  { label: '继承全局配置', value: '' },
+  { label: '图形验证码', value: 'graphical' },
+  { label: '滑块验证码', value: 'slider' },
+  { label: '短信验证码', value: 'sms' },
+]
+
+const captchaTypeMap = {
+  graphical: { label: '图形验证码', type: 'success' },
+  slider: { label: '滑块验证码', type: 'info' },
+  sms: { label: '短信验证码', type: 'warning' },
+}
+
 // 搜索配置
 const searchSchema = [
   {
@@ -160,6 +174,20 @@ const tableColumns = computed(() => [
       return types.map(type =>
         h(NTag, { type: 'info', size: 'small', style: 'margin: 2px' }, { default: () => type }),
       )
+    },
+  },
+  {
+    prop: 'captchaType',
+    label: '验证码类型',
+    width: 120,
+    render: (row) => {
+      const config = captchaTypeMap[row.captchaType]
+      return h(NTag, {
+        type: config?.type || 'default',
+        size: 'small',
+      }, {
+        default: () => config?.label || '继承全局',
+      })
     },
   },
   {
@@ -294,6 +322,16 @@ const editSchema = [
       placeholder: '请选择支持的认证方式',
       options: authTypeOptions,
       multiple: true,
+    },
+  },
+  {
+    field: 'captchaType',
+    label: '验证码类型',
+    type: 'select',
+    defaultValue: '',
+    props: {
+      placeholder: '请选择验证码类型',
+      options: captchaTypeOptions,
     },
   },
   {

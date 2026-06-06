@@ -118,7 +118,7 @@ watch(() => props.modelValue, (val) => {
 }
 
 .ai-picker-confirm {
-  color: var(--primary-color, #d12723FF);
+  color: var(--primary-color, #0891b2);
 }
 
 .ai-picker-title {

@@ -1,11 +1,15 @@
+import { showConfirmDialog } from '@/utils/dialog'
+import { toast } from '@/utils/notify'
+
 let isConfirming = false
 const LOGIN_PAGE = '/pages/login/index'
 
 function redirectToLogin() {
-  import('@/store').then(({ useAuthStore }) => {
-    useAuthStore().resetAuth()
-  })
-  uni.reLaunch({ url: LOGIN_PAGE })
+  const pages = getCurrentPages()
+  const current = pages[pages.length - 1]
+  const redirect = current?.route ? `/${current.route}` : ''
+  const query = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
+  uni.reLaunch({ url: `${LOGIN_PAGE}${query}` })
 }
 
 export function resolveResError(code, message, needTip = true) {
@@ -14,41 +18,43 @@ export function resolveResError(code, message, needTip = true) {
     case 401:
       if (isConfirming || !needTip) return
       isConfirming = true
-      uni.showModal({
+      showConfirmDialog({
         title: '提示',
-        content: message || '登录已过期，是否重新登录？',
+        description: message || '登录已过期，是否重新登录？',
+        icon: 'warning',
         confirmText: '重新登录',
         cancelText: '取消',
-        success: (res) => {
+      })
+        .then((confirmed) => {
           isConfirming = false
-          if (res.confirm) {
+          if (confirmed) {
             redirectToLogin()
           }
-        },
-        fail: () => {
+        })
+        .catch(() => {
           isConfirming = false
-        }
-      })
+        })
       return false
     case 11007:
     case 11008:
       if (isConfirming || !needTip) return
       isConfirming = true
-      uni.showModal({
+      showConfirmDialog({
         title: '提示',
-        content: `${message}，是否重新登录？`,
+        description: `${message}，是否重新登录？`,
+        icon: 'warning',
         confirmText: '重新登录',
         cancelText: '取消',
-        success: (res) => {
+      })
+        .then((confirmed) => {
           isConfirming = false
-          if (res.confirm) {
+          if (confirmed) {
             redirectToLogin()
           }
-        },
-        fail: () => {
+        })
+        .catch(() => {
           isConfirming = false
-        }
-      })
+        })
       return false
     case 403:
       message = message || '请求被拒绝'
@@ -64,11 +70,7 @@ export function resolveResError(code, message, needTip = true) {
       break
   }
   if (needTip) {
-    uni.showToast({
-      title: message,
-      icon: 'none',
-      duration: 2000
-    })
+    toast(message, { type: code === 403 ? 'warning' : 'error', duration: 2200 })
   }
   return message
 }

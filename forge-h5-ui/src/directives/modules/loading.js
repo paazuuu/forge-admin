@@ -14,8 +14,13 @@ function showH5Loading(options = {}) {
 
   const loadingApp = createApp(Loading, {
     visible: true,
-    fullscreen: true,
+    fullScreen: true,
     text: options.text || '加载中...',
+    type: options.type || 'brand',
+    theme: options.theme || 'brand',
+    size: options.size || 'md',
+    blur: options.blur !== false,
+    zIndex: options.zIndex || 200,
   })
 
   const instance = loadingApp.mount(container)
@@ -71,9 +76,10 @@ const loadingDirective = {
       el.style.position = 'relative'
     }
 
-    const mask = document.createElement('view')
+    const mask = document.createElement('div')
     mask.className = 'v-loading-mask'
-    mask.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:999;display:none;background:rgba(255,255,255,0.7);align-items:center;justify-content:center;'
+    mask.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:999;display:none;background:rgba(255,255,255,0.58);backdrop-filter:blur(8px);align-items:center;justify-content:center;border-radius:inherit;'
+    mask.innerHTML = '<div class="v-loading-card"><div class="v-loading-dots"><span></span><span></span><span></span></div><div class="v-loading-text">加载中...</div></div>'
     el.appendChild(mask)
     el._loadingMask = mask
   },

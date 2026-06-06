@@ -1,6 +1,8 @@
 package com.mdframe.forge.plugin.system.strategy;
 
 import cn.hutool.core.util.StrUtil;
+import com.mdframe.forge.plugin.system.entity.SysClient;
+import com.mdframe.forge.plugin.system.service.IClientService;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
 import com.mdframe.forge.starter.auth.service.ICaptchaService;
 import com.mdframe.forge.starter.config.config.LoginConfig;
@@ -31,14 +33,16 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
     @Autowired
     private ConfigManagerService configManagerService;
 
+    @Autowired
+    private IClientService clientService;
+
     @Override
     protected void validateRequest(LoginRequest request) {
         validateUsername(request.getUsername());
         validatePassword(request.getPassword());
 
         // 根据验证码类型校验不同参数
-        LoginConfig loginConfig = configManagerService.getLoginConfig();
-        String captchaType = loginConfig.getCaptchaType();
+        String captchaType = resolveCaptchaType(request);
 
         if ("sms".equals(captchaType)) {
             // 短信验证码需要手机号和验证码
@@ -65,8 +69,7 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
         String username = request.getUsername();
 
         // 1. 获取登录配置，确定验证码类型
-        LoginConfig loginConfig = configManagerService.getLoginConfig();
-        String captchaType = loginConfig.getCaptchaType();
+        String captchaType = resolveCaptchaType(request);
 
         // 2. 根据验证码类型进行验证
         boolean captchaValid = validateCaptchaByType(request, captchaType);
@@ -120,6 +123,19 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
                 // 图形验证码
                 return userLoadService.validateCode(request.getCodeKey(), request.getCode());
         }
+    }
+
+    /**
+     * 客户端验证码类型优先；未配置时继承全局登录配置。
+     */
+    private String resolveCaptchaType(LoginRequest request) {
+        SysClient client = clientService.getByCode(request.getUserClient());
+        if (client != null && StrUtil.isNotBlank(client.getCaptchaType())) {
+            return client.getCaptchaType();
+        }
+
+        LoginConfig loginConfig = configManagerService.getLoginConfig();
+        return loginConfig.getCaptchaType();
     }
 
     @Override

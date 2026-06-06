@@ -101,7 +101,7 @@ const selectOption = (option) => {
   border-bottom: 1px solid #eee;
   
   &--selected {
-    color: var(--primary-color, #d12723FF);
+    color: var(--primary-color, #0891b2);
     background: #f5f5f5;
   }
 }
