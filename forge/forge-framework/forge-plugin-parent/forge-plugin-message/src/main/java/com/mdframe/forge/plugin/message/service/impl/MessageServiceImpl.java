@@ -93,6 +93,23 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         
         return msg;
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SysMessage sendIfAbsent(MessageSendRequestDTO req, String bizType, String bizKey) {
+        if (StrUtil.isBlank(bizType) || StrUtil.isBlank(bizKey)) {
+            return send(req);
+        }
+        SysMessage existing = messageMapper.selectByBizTypeAndBizKey(bizType, bizKey);
+        if (existing != null) {
+            log.debug("消息已存在，跳过重复发送: bizType={}, bizKey={}, messageId={}",
+                    bizType, bizKey, existing.getId());
+            return existing;
+        }
+        req.setBizType(bizType);
+        req.setBizKey(bizKey);
+        return send(req);
+    }
     
     /**
      * 渲染消息内容（处理模板）

@@ -77,6 +77,36 @@ public class TaskFormInfo {
     private Map<String, Object> variables;
 
     /**
+     * 流程表单实例ID
+     */
+    private Long formInstanceId;
+
+    /**
+     * 提交时表单Schema快照
+     */
+    private String schemaSnapshot;
+
+    /**
+     * 提交时表单数据快照（JSON）
+     */
+    private String formData;
+
+    /**
+     * 数据模式：PROCESS_ONLY/BUSINESS_OBJECT/HYBRID
+     */
+    private String dataMode;
+
+    /**
+     * 业务对象编码
+     */
+    private String objectCode;
+
+    /**
+     * 业务记录ID
+     */
+    private Long recordId;
+
+    /**
      * 发起人ID
      */
     private String startUserId;

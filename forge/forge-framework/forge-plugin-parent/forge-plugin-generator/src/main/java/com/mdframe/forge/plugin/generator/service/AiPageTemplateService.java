@@ -9,6 +9,7 @@ import com.mdframe.forge.plugin.generator.dto.AiPageTemplateDTO;
 import com.mdframe.forge.plugin.generator.mapper.AiPageTemplateMapper;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -58,6 +59,7 @@ public class AiPageTemplateService extends ServiceImpl<AiPageTemplateMapper, AiP
      */
     @Transactional(rollbackFor = Exception.class)
     public void createTemplate(AiPageTemplateDTO dto) {
+        assertSuperAdmin();
         if (StringUtils.isBlank(dto.getTemplateKey())) {
             throw new BusinessException("模板标识不能为空");
         }
@@ -79,6 +81,7 @@ public class AiPageTemplateService extends ServiceImpl<AiPageTemplateMapper, AiP
      */
     @Transactional(rollbackFor = Exception.class)
     public void updateTemplate(AiPageTemplateDTO dto) {
+        assertSuperAdmin();
         if (dto.getId() == null) {
             throw new BusinessException("ID不能为空");
         }
@@ -96,6 +99,7 @@ public class AiPageTemplateService extends ServiceImpl<AiPageTemplateMapper, AiP
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteTemplate(Long id) {
+        assertSuperAdmin();
         AiPageTemplate template = getById(id);
         if (template == null) {
             throw new BusinessException("模板不存在");
@@ -130,6 +134,12 @@ public class AiPageTemplateService extends ServiceImpl<AiPageTemplateMapper, AiP
             objectMapper.readTree(json);
         } catch (Exception e) {
             throw new BusinessException(fieldName + " JSON格式不正确");
+        }
+    }
+
+    private void assertSuperAdmin() {
+        if (!SessionHelper.isAdmin()) {
+            throw new BusinessException("只有超级管理员可以维护页面模板");
         }
     }
 }

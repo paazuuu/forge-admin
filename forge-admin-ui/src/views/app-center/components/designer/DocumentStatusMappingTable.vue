@@ -1,20 +1,31 @@
 <template>
   <div class="status-mapping-table">
     <div class="table-toolbar">
+      <div class="status-source">
+        <n-tag size="small" :type="statusValueOptions.length ? 'success' : 'warning'" :bordered="false">
+          {{ statusValueOptions.length ? `${statusValueOptions.length} 个状态值` : '未绑定状态选项' }}
+        </n-tag>
+        <span v-if="statusField">{{ statusField }}</span>
+        <span v-else>请先选择状态字段</span>
+      </div>
       <n-space size="small">
-        <n-button size="small" secondary :disabled="disabled" @click="useDefaultRows">
-          使用默认状态集
+        <n-button size="small" secondary :disabled="disabled || !statusValueOptions.length" @click="useDefaultRows">
+          按标准状态匹配
         </n-button>
-        <n-button size="small" secondary :disabled="disabled" @click="generateFromStatusField">
+        <n-button size="small" secondary :disabled="disabled || !statusValueOptions.length" :loading="loadingOptions" @click="generateFromStatusField">
           从状态字段生成
         </n-button>
       </n-space>
     </div>
 
+    <n-alert v-if="statusField && !statusValueOptions.length" type="warning" :bordered="false" class="status-alert">
+      当前状态字段没有字典或本地选项，请先在字段配置中绑定字典或维护选项。
+    </n-alert>
+
     <div class="status-table">
       <div class="status-header">
         <span>标准状态</span>
-        <span>存储值</span>
+        <span>字段值</span>
         <span>展示名</span>
         <span>标签</span>
         <span>允许编辑</span>
@@ -23,20 +34,16 @@
       </div>
       <div v-for="row in localRows" :key="row.standardStatus" class="status-row">
         <strong>{{ row.standardLabel || row.standardStatus }}</strong>
-        <n-input
+        <n-select
           v-model:value="row.statusValue"
-          :disabled="disabled"
+          :disabled="disabled || !statusSelectOptions.length"
+          :options="statusSelectOptions"
           size="small"
-          placeholder="存储值"
-          @update:value="emitRows"
+          filterable
+          placeholder="选择字段值"
+          @update:value="value => handleStatusValueChange(row, value)"
         />
-        <n-input
-          v-model:value="row.displayName"
-          :disabled="disabled"
-          size="small"
-          placeholder="展示名"
-          @update:value="emitRows"
-        />
+        <span class="display-name">{{ row.displayName || '-' }}</span>
         <n-select
           v-model:value="row.tagType"
           :disabled="disabled"
@@ -54,7 +61,7 @@
 
 <script setup>
 import { useMessage } from 'naive-ui'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   rows: {
@@ -73,6 +80,14 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  statusValueOptions: {
+    type: Array,
+    default: () => [],
+  },
+  loadingOptions: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['update:rows'])
@@ -87,39 +102,98 @@ const tagOptions = [
   { label: '错误', value: 'error' },
 ]
 
+const statusSelectOptions = computed(() => {
+  const options = [...props.statusValueOptions]
+  const existing = new Set(options.map(option => String(option.value)))
+  localRows.value.forEach((row) => {
+    if (!row.statusValue || existing.has(String(row.statusValue)))
+      return
+    options.push({
+      label: `${row.displayName || row.statusValue}（已保存值）`,
+      value: String(row.statusValue),
+      tagType: normalizeTagType(row.tagType),
+    })
+  })
+  return options.map(option => ({
+    label: option.label,
+    value: String(option.value),
+  }))
+})
+
 watch(() => props.rows, (rows) => {
   localRows.value = normalizeRows(rows)
+  hydrateRowsFromOptions()
+}, { deep: true })
+
+watch(() => props.statusValueOptions, () => {
+  hydrateRowsFromOptions()
 }, { deep: true })
 
 function useDefaultRows() {
-  localRows.value = defaultRows()
+  if (!props.statusValueOptions.length) {
+    message.warning('状态字段没有可选值，无法生成状态映射')
+    return
+  }
+  const options = props.statusValueOptions
+  localRows.value = defaultRows().map((row) => {
+    const option = findOptionForStandardRow(row, options)
+    if (!option)
+      return row
+    return applyOptionToRow(row, option)
+  })
   emitRows()
 }
 
 function generateFromStatusField() {
-  const field = props.fields.find(item => fieldCode(item) === props.statusField)
-  const options = Array.isArray(field?.basicProps?.options)
-    ? field.basicProps.options
-    : Array.isArray(field?.advancedProps?.options)
-      ? field.advancedProps.options
-      : []
-  if (!options.length) {
-    message.info('状态字段未包含本地选项，已使用默认状态集')
-    useDefaultRows()
+  if (!props.statusValueOptions.length) {
+    message.warning('状态字段没有可选值，无法生成状态映射')
     return
   }
   const defaults = defaultRows()
   localRows.value = defaults.map((row, index) => {
-    const option = options[index]
-    if (!option)
-      return row
-    return {
-      ...row,
-      statusValue: String(option.value ?? option.dictValue ?? row.statusValue),
-      displayName: String(option.label ?? option.dictLabel ?? row.displayName),
-    }
+    const option = findOptionForStandardRow(row, props.statusValueOptions) || props.statusValueOptions[index]
+    return option ? applyOptionToRow(row, option) : row
   })
   emitRows()
+}
+
+function handleStatusValueChange(row, value) {
+  const option = props.statusValueOptions.find(item => String(item.value) === String(value))
+  if (option)
+    applyOptionToRow(row, option)
+  emitRows()
+}
+
+function hydrateRowsFromOptions() {
+  if (!props.statusValueOptions.length)
+    return
+  let changed = false
+  localRows.value.forEach((row) => {
+    const option = props.statusValueOptions.find(item => String(item.value) === String(row.statusValue))
+    if (!option)
+      return
+    const nextDisplayName = option.label || row.displayName
+    const nextTagType = normalizeTagType(option.tagType || row.tagType)
+    if (row.displayName !== nextDisplayName || row.tagType !== nextTagType) {
+      row.displayName = nextDisplayName
+      row.tagType = nextTagType
+      changed = true
+    }
+  })
+  if (changed)
+    emitRows()
+}
+
+function findOptionForStandardRow(row, options = []) {
+  return options.find(option => String(option.value).toUpperCase() === row.standardStatus)
+    || options.find(option => String(option.label || '').trim() === row.standardLabel)
+}
+
+function applyOptionToRow(row, option) {
+  row.statusValue = String(option.value)
+  row.displayName = option.label || row.displayName
+  row.tagType = normalizeTagType(option.tagType || row.tagType)
+  return row
 }
 
 function emitRows() {
@@ -136,6 +210,7 @@ function normalizeRows(rows = []) {
       ...(byKey.get(key) || {}),
       ...row,
       standardStatus: key,
+      statusValue: row.statusValue === null || row.statusValue === undefined ? '' : String(row.statusValue),
     })
   }
   return Array.from(byKey.values())
@@ -157,8 +232,9 @@ function row(standardStatus, standardLabel, statusValue, displayName, tagType, a
   return { standardStatus, standardLabel, statusValue, displayName, tagType, allowEdit, allowDelete, allowStartFlow }
 }
 
-function fieldCode(field = {}) {
-  return field.fieldCode || field.field || ''
+function normalizeTagType(value) {
+  const text = String(value || '').toLowerCase()
+  return ['default', 'info', 'success', 'warning', 'error'].includes(text) ? text : 'default'
 }
 </script>
 
@@ -170,12 +246,33 @@ function fieldCode(field = {}) {
 
 .table-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-source {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.status-source span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-alert {
+  font-size: 12px;
 }
 
 .status-table {
   display: grid;
-  min-width: 760px;
+  min-width: 820px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
@@ -184,7 +281,7 @@ function fieldCode(field = {}) {
 .status-header,
 .status-row {
   display: grid;
-  grid-template-columns: 92px minmax(120px, 1fr) minmax(120px, 1fr) 96px 68px 68px 68px;
+  grid-template-columns: 92px minmax(150px, 1fr) minmax(120px, .8fr) 96px 68px 68px 68px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -206,9 +303,28 @@ function fieldCode(field = {}) {
   font-weight: 600;
 }
 
+.display-name {
+  overflow: hidden;
+  min-height: 28px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  line-height: 26px;
+  padding: 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .status-mapping-table {
     overflow-x: auto;
+  }
+
+  .table-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

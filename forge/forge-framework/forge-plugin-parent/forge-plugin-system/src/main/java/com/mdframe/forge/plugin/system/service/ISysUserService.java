@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
+import com.mdframe.forge.plugin.system.dto.UserTenantBindDTO;
 import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
 
 import java.util.List;
 
@@ -113,6 +115,16 @@ public interface ISysUserService extends IService<SysUser> {
      * @return 组织ID列表
      */
     List<Long> selectUserOrgIds(Long userId);
+
+    /**
+     * 查询用户绑定租户
+     */
+    List<SysUserTenantVO> selectUserTenants(Long userId);
+
+    /**
+     * 批量绑定用户租户
+     */
+    boolean bindUserTenants(Long userId, UserTenantBindDTO dto);
     
     /**
      * 批量绑定用户组织
@@ -156,4 +168,22 @@ public interface ISysUserService extends IService<SysUser> {
      * @return 是否成功
      */
     boolean updateUserProfile(SysUserDTO dto);
+
+    /**
+     * 查询用户的岗位ID列表
+     *
+     * @param userId 用户ID
+     * @return 岗位ID列表
+     */
+    List<Long> selectUserPostIds(Long userId);
+
+    /**
+     * 批量绑定用户岗位
+     *
+     * @param userId     用户ID
+     * @param postIds    岗位ID列表
+     * @param mainPostId 主岗位ID
+     * @return 是否成功
+     */
+    boolean bindUserPosts(Long userId, List<Long> postIds, Long mainPostId);
 }

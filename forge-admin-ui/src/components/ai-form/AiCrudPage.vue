@@ -10,6 +10,14 @@
 
 <template>
   <div class="ai-crud-page" :class="{ 'is-form-only': formOnly }">
+    <div v-if="flowStartPageLoading" class="ai-crud-page-loading-mask">
+      <n-spin size="large">
+        <template #description>
+          正在发起流程...
+        </template>
+      </n-spin>
+    </div>
+
     <div v-if="formOnlySubmitted" class="ai-crud-form-only-result">
       <n-result
         status="success"
@@ -32,7 +40,7 @@
         <AiForm
           ref="formRef"
           v-model:value="formData"
-          :class="editFormClass"
+          :class="resolvedEditFormClass"
           :style="editFormStyle"
           :schema="modalFormSchema"
           :grid-cols="editGridCols"
@@ -236,47 +244,95 @@
       </div>
     </div>
 
-    <!-- 新增/编辑弹窗 - Modal 模式 -->
+    <!-- 新增/编辑/详情弹窗 - Modal 模式。详情默认使用弹窗，避免动态页详情占用右侧抽屉。 -->
     <n-modal
-      v-if="!formOnly && modalType === 'modal'"
+      v-if="!formOnly && (modalType === 'modal' || isDetailMode)"
       v-model:show="modalVisible"
       :title="modalTitle"
       preset="card"
-      :style="{ width: modalWidth }"
+      :style="{ width: activeModalWidth }"
       :segmented="{ content: 'soft', footer: 'soft' }"
       :closable="true"
       :mask-closable="false"
       @after-leave="handleModalClose"
     >
-      <AiForm
-        ref="formRef"
-        v-model:value="formData"
-        :class="editFormClass"
-        :style="editFormStyle"
-        :schema="modalFormSchema"
-        :grid-cols="editGridCols"
-        :label-width="editLabelWidth"
-        :label-placement="editLabelPlacement"
-        :label-align="editLabelAlign"
-        :size="editSize"
-        :x-gap="editXGap"
-        :y-gap="editYGap"
-        :show-feedback="editShowFeedback"
-        :show-actions="false"
-        :context="formContext"
+      <n-tabs
+        v-if="showDetailFlowTabs"
+        v-model:value="detailActiveTab"
+        type="line"
+        animated
+        class="ai-crud-detail-tabs"
       >
-        <!-- 透传表单插槽 -->
-        <template v-for="slotName in formSlots" #[slotName]="slotProps">
-          <slot :name="`form-${slotName}`" v-bind="slotProps" />
-        </template>
-      </AiForm>
-      <ChildTableEditor
-        v-if="hasChildrenConfig"
-        ref="childFormRef"
-        v-model:value="childFormData"
-        :children-config="visibleChildrenConfig"
-        :readonly="isDetailMode"
-      />
+        <n-tab-pane name="business" tab="业务数据">
+          <AiForm
+            ref="formRef"
+            v-model:value="formData"
+            :class="resolvedEditFormClass"
+            :style="editFormStyle"
+            :schema="modalFormSchema"
+            :grid-cols="editGridCols"
+            :label-width="editLabelWidth"
+            :label-placement="editLabelPlacement"
+            :label-align="editLabelAlign"
+            :size="editSize"
+            :x-gap="editXGap"
+            :y-gap="editYGap"
+            :show-feedback="editShowFeedback"
+            :show-actions="false"
+            :context="formContext"
+          >
+            <template v-for="slotName in formSlots" #[slotName]="slotProps">
+              <slot :name="`form-${slotName}`" v-bind="slotProps" />
+            </template>
+          </AiForm>
+          <ChildTableEditor
+            v-if="hasChildrenConfig"
+            ref="childFormRef"
+            v-model:value="childFormData"
+            :children-config="visibleChildrenConfig"
+            :readonly="isDetailMode"
+          />
+        </n-tab-pane>
+        <n-tab-pane name="flow" tab="流程进度" display-directive="show:lazy">
+          <AiCrudFlowDetail
+            :runtime="detailRuntime"
+            :loading="detailRuntimeLoading"
+            :show-timeline="detailFlowTimelineVisible"
+            :show-diagram="detailFlowDiagramVisible"
+          />
+        </n-tab-pane>
+      </n-tabs>
+      <template v-else>
+        <AiForm
+          ref="formRef"
+          v-model:value="formData"
+          :class="resolvedEditFormClass"
+          :style="editFormStyle"
+          :schema="modalFormSchema"
+          :grid-cols="editGridCols"
+          :label-width="editLabelWidth"
+          :label-placement="editLabelPlacement"
+          :label-align="editLabelAlign"
+          :size="editSize"
+          :x-gap="editXGap"
+          :y-gap="editYGap"
+          :show-feedback="editShowFeedback"
+          :show-actions="false"
+          :context="formContext"
+        >
+          <!-- 透传表单插槽 -->
+          <template v-for="slotName in formSlots" #[slotName]="slotProps">
+            <slot :name="`form-${slotName}`" v-bind="slotProps" />
+          </template>
+        </AiForm>
+        <ChildTableEditor
+          v-if="hasChildrenConfig"
+          ref="childFormRef"
+          v-model:value="childFormData"
+          :children-config="visibleChildrenConfig"
+          :readonly="isDetailMode"
+        />
+      </template>
 
       <!-- 弹窗底部按钮 -->
       <template v-if="!hideModalFooter && !isDetailMode" #footer>
@@ -297,7 +353,7 @@
 
     <!-- 新增/编辑抽屉 - Drawer 模式 -->
     <n-drawer
-      v-else-if="!formOnly"
+      v-else-if="!formOnly && !isDetailMode"
       v-model:show="modalVisible"
       :width="modalWidth"
       :placement="drawerPlacement"
@@ -308,7 +364,7 @@
         <AiForm
           ref="formRef"
           v-model:value="formData"
-          :class="editFormClass"
+          :class="resolvedEditFormClass"
           :style="editFormStyle"
           :schema="modalFormSchema"
           :grid-cols="editGridCols"
@@ -469,6 +525,7 @@ import DictTag from '@/components/DictTag.vue'
 import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { downloadFile, request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
+import AiCrudFlowDetail from './AiCrudFlowDetail.vue'
 import { aiCrudPageProps } from './AiCrudPageProps'
 import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
@@ -538,6 +595,11 @@ const childFormData = ref({})
 const confirmLoading = ref(false)
 const currentRow = ref(null)
 const formOnlySubmitted = ref(false)
+const detailRuntime = ref(null)
+const detailRuntimeLoading = ref(false)
+const detailActiveTab = ref('business')
+const actionLoadingKeys = ref(new Set())
+const flowStartPageLoading = ref(false)
 
 // 导入
 const importModalVisible = ref(false)
@@ -593,7 +655,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
       }
       const typeClass = action.type ? `type-${action.type}` : ''
       const isDanger = action.type === 'error' || action.type === 'danger'
-      const disabled = isActionDisabled(action, row)
+      const disabled = isActionDisabled(action, row) || isActionLoading(action, row)
       nodes.push(h('a', {
         class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : ''],
         title: disabled ? actionDisabledReason(action, row) : action.label,
@@ -618,7 +680,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
   const dropdownOptions = visibleActions.slice(maxVisibleActions).map(action => ({
     label: action.label,
     key: action.key || action.label,
-    disabled: isActionDisabled(action, row),
+    disabled: isActionDisabled(action, row) || isActionLoading(action, row),
   }))
 
   const inlineNodes = inlineActions.map((action, index) => {
@@ -628,7 +690,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
     }
     const typeClass = action.type ? `type-${action.type}` : ''
     const isDanger = action.type === 'error' || action.type === 'danger'
-    const disabled = isActionDisabled(action, row)
+    const disabled = isActionDisabled(action, row) || isActionLoading(action, row)
     nodes.push(h('a', {
       class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : ''],
       title: disabled ? actionDisabledReason(action, row) : action.label,
@@ -729,6 +791,8 @@ function isActionDisabled(action, row) {
 }
 
 function actionDisabledReason(action, row) {
+  if (isActionLoading(action, row))
+    return '正在发起流程，请稍候'
   if (typeof action.disabledReason === 'function')
     return action.disabledReason(row)
   return action.disabledReason || '当前状态不可执行'
@@ -766,15 +830,15 @@ function handleActionClick(actionOrKey, row) {
   }
 }
 
-function handleConfiguredAction(action, row) {
-  emit('custom-action', { action, row })
-  if (action.confirmText && !confirmConfiguredAction(resolveActionText(action.confirmText, row)))
-    return
+async function handleConfiguredAction(action, row) {
   const actionType = action.actionType || 'route'
   if (actionType === 'START_FLOW' || action.key === 'START_FLOW') {
-    startFlowAction(action, row)
+    await startFlowAction(action, row)
     return
   }
+  emit('custom-action', { action, row })
+  if (action.confirmText && !(await confirmConfiguredAction(resolveActionText(action.confirmText, row))))
+    return
   if (actionType === 'refresh') {
     loadList()
     return
@@ -802,22 +866,77 @@ async function startFlowAction(action, row) {
     window.$message.warning('缺少业务对象或记录ID，无法发起主流程')
     return
   }
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message.info('流程正在发起，请稍候')
+    return
+  }
+  const confirmed = await confirmConfiguredAction(
+    resolveActionText(action.confirmText || '确定要发起该记录的主流程吗？', row),
+    { title: action.label || '发起主流程', positiveText: '发起流程' },
+  )
+  if (!confirmed)
+    return
+  setActionLoading(loadingKey, true)
+  flowStartPageLoading.value = true
   try {
-    await request.post('/ai/business/flow/start', {
+    const res = await request.post('/ai/business/flow/start', {
       objectCode,
       recordId,
     })
+    if (row)
+      row._documentRuntime = res?.data || row?._documentRuntime || null
     window.$message.success('流程已发起')
-    loadList()
+    await loadList()
   }
   catch (error) {
     window.$message.error(error.message || '发起主流程失败')
   }
+  finally {
+    flowStartPageLoading.value = false
+    setActionLoading(loadingKey, false)
+  }
 }
 
-function confirmConfiguredAction(message) {
-  const nativeConfirm = globalThis?.confirm
-  return typeof nativeConfirm !== 'function' || nativeConfirm(message)
+function confirmConfiguredAction(message, options = {}) {
+  if (!window.$dialog?.warning) {
+    const nativeConfirm = globalThis?.confirm
+    return Promise.resolve(typeof nativeConfirm !== 'function' || nativeConfirm(message))
+  }
+  return new Promise((resolve) => {
+    window.$dialog.warning({
+      title: options.title || '确认操作',
+      content: message,
+      positiveText: options.positiveText || '确定',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+      onMaskClick: () => resolve(false),
+    })
+  })
+}
+
+function getActionLoadingKey(action, row) {
+  const actionType = String(action?.actionType || action?.key || '').toUpperCase()
+  const objectCode = action?.objectCode || row?._runtimeObjectCode || row?.objectCode || ''
+  const recordId = action?.recordId || resolveRowKeyValue(row) || ''
+  return `${actionType}:${objectCode}:${recordId}`
+}
+
+function isActionLoading(action, row) {
+  return actionLoadingKeys.value.has(getActionLoadingKey(action, row))
+}
+
+function setActionLoading(key, loading) {
+  if (!key)
+    return
+  const next = new Set(actionLoadingKeys.value)
+  if (loading)
+    next.add(key)
+  else
+    next.delete(key)
+  actionLoadingKeys.value = next
 }
 
 function buildActionTarget(action, row) {
@@ -878,6 +997,16 @@ function isUsableKeyValue(value) {
     return false
   const textValue = String(value).trim()
   return textValue !== '' && textValue !== 'undefined' && textValue !== 'null'
+}
+
+function readBoolean(value, defaultValue = false) {
+  if (value === null || value === undefined)
+    return defaultValue
+  if (typeof value === 'boolean')
+    return value
+  if (typeof value === 'number')
+    return value !== 0
+  return ['true', '1', 'yes'].includes(String(value).trim().toLowerCase())
 }
 
 function resolveRowKeyValue(row) {
@@ -1209,6 +1338,30 @@ const formSlots = computed(() => {
 
 const isDetailMode = computed(() => modalStatus.value === 'detail')
 
+const activeModalWidth = computed(() => {
+  if (isDetailMode.value)
+    return props.detailModalWidth
+  return props.modalWidth
+})
+
+const detailFlowTimelineVisible = computed(() => {
+  return readBoolean(detailRuntime.value?.detailFlowTimelineVisible, true)
+})
+
+const detailFlowDiagramVisible = computed(() => {
+  return readBoolean(detailRuntime.value?.detailFlowDiagramVisible, true)
+})
+
+const showDetailFlowTabs = computed(() => {
+  if (!isDetailMode.value)
+    return false
+  if (!detailRuntime.value || detailRuntime.value.documentEnabled !== true)
+    return false
+  if (!detailRuntime.value.processInstanceId && detailRuntime.value.nextAction === 'CONFIG_FLOW')
+    return false
+  return detailFlowTimelineVisible.value || detailFlowDiagramVisible.value
+})
+
 const visibleChildrenConfig = computed(() => {
   const status = modalStatus.value || 'add'
   return (props.childrenConfig || []).filter((child) => {
@@ -1261,6 +1414,11 @@ const formContext = computed(() => {
 })
 
 const resolvedFormOnlyTitle = computed(() => props.formOnlyTitle || props.addButtonText || '单据填报')
+
+const resolvedEditFormClass = computed(() => [
+  'ai-crud-edit-form',
+  props.editFormClass,
+].filter(Boolean))
 
 /**
  * 计算横向滚动宽度
@@ -1885,6 +2043,8 @@ async function handleDetail(row) {
   modalTitle.value = row?.__modalTitle || '查看详情'
   modalStatus.value = 'detail'
   currentRow.value = row
+  detailActiveTab.value = 'business'
+  detailRuntime.value = row?._documentRuntime || null
 
   const processedRow = await callHook('beforeRenderForm', row, data => data)
   const renderRow = mergeHookRowWithOriginal(row, processedRow)
@@ -1899,12 +2059,35 @@ async function handleDetail(row) {
     applyDetailData(data)
   }
 
+  await loadDetailRuntime(renderRow)
+
   modalVisible.value = true
   await nextTick()
   formRef.value?.restoreValidation()
 
   emit('detail', row)
   emit('modal-open', { status: 'detail', row })
+}
+
+async function loadDetailRuntime(row) {
+  const objectCode = props.businessObjectCode || row?._runtimeObjectCode || row?.objectCode
+  const recordId = resolveRowKeyValue(row)
+  if (!objectCode || !recordId) {
+    return
+  }
+  detailRuntimeLoading.value = true
+  try {
+    const res = await request.get(`/ai/business/document/${objectCode}/${recordId}/runtime`, { needTip: false })
+    detailRuntime.value = res?.data || null
+  }
+  catch (error) {
+    if (!detailRuntime.value)
+      detailRuntime.value = null
+    console.warn('[AiCrudPage] 加载单据流程运行态失败:', error?.message || error)
+  }
+  finally {
+    detailRuntimeLoading.value = false
+  }
 }
 
 /**
@@ -2773,12 +2956,24 @@ watch(() => props.publicQuery, () => {
 
 <style scoped>
 .ai-crud-page {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 0;
   background: var(--bg-primary);
+}
+
+.ai-crud-page-loading-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 64%);
+  backdrop-filter: blur(1px);
 }
 
 .ai-crud-page.is-form-only {
@@ -2826,6 +3021,23 @@ watch(() => props.publicQuery, () => {
   border-top: 1px solid #e5e7eb;
   background: #f8fafc;
   padding: 12px 18px;
+}
+
+.ai-crud-edit-form {
+  --ai-crud-form-item-gap: 6px;
+}
+
+.ai-crud-edit-form :deep(.n-form-item) {
+  --n-feedback-height: 18px;
+  margin-bottom: 0;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-label) {
+  min-height: 30px;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-feedback-wrapper) {
+  min-height: 18px;
 }
 
 /* 搜索区域 */
@@ -2932,6 +3144,10 @@ watch(() => props.publicQuery, () => {
   cursor: not-allowed;
 }
 
+:deep(.table-action-link.loading) {
+  color: var(--success-600);
+}
+
 :deep(.table-action-link.type-info) {
   color: var(--info-600);
 }
@@ -2976,6 +3192,14 @@ watch(() => props.publicQuery, () => {
 /* 操作列折叠下拉样式 */
 :deep(.table-action-column .n-dropdown) {
   min-width: 80px;
+}
+
+.ai-crud-detail-tabs {
+  min-height: 360px;
+}
+
+.ai-crud-detail-tabs :deep(.n-tab-pane) {
+  padding-top: 10px;
 }
 
 .export-task-current {

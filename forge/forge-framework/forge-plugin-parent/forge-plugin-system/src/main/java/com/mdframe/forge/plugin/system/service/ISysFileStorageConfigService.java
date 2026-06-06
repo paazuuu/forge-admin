@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.mdframe.forge.plugin.system.entity.SysFileStorageConfig;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 
+import java.util.List;
+
 /**
  * 文件存储配置Service
  */
@@ -39,4 +41,9 @@ public interface ISysFileStorageConfigService extends IService<SysFileStorageCon
      * 查询默认配置
      */
     SysFileStorageConfig getDefaultConfig();
+
+    /**
+     * 查询启用的存储配置选项
+     */
+    List<SysFileStorageConfig> listEnabledOptions();
 }

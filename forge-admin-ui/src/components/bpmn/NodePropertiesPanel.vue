@@ -169,6 +169,9 @@
                       tag
                       @update:value="updateUserTaskAssignee"
                     />
+                    <div v-if="formVariableOptions.length > 0" class="field-catalog-tip">
+                      可直接选择绑定表单中的用户、部门或负责人字段作为审批人变量。
+                    </div>
                     <n-button
                       v-if="properties.assignee === 'custom'"
                       type="primary"
@@ -209,6 +212,14 @@
 
                   <n-form-item label="SPEL 表达式">
                     <n-space vertical size="small" style="width: 100%">
+                      <n-select
+                        v-model:value="selectedSpelVariable"
+                        :options="variableCatalogOptions"
+                        placeholder="插入表单字段或系统变量"
+                        filterable
+                        clearable
+                        @update:value="insertSpelVariable"
+                      />
                       <n-input
                         v-model:value="properties.assigneeExpr"
                         type="textarea"
@@ -266,6 +277,15 @@
               <template v-if="properties.taskType === 'candidateUsers'">
                 <n-form-item label="候选用户">
                   <n-space vertical size="small" style="width: 100%">
+                    <n-select
+                      v-if="formVariableOptions.length > 0"
+                      :value="null"
+                      :options="variableCatalogOptions"
+                      placeholder="选择表单字段作为候选用户变量"
+                      filterable
+                      clearable
+                      @update:value="field => applyCandidateVariable('users', field)"
+                    />
                     <n-button
                       type="primary"
                       dashed
@@ -297,6 +317,15 @@
               <template v-if="properties.taskType === 'candidateGroups'">
                 <n-form-item label="候选组(角色)">
                   <n-space vertical size="small" style="width: 100%">
+                    <n-select
+                      v-if="formVariableOptions.length > 0"
+                      :value="null"
+                      :options="variableCatalogOptions"
+                      placeholder="选择表单字段作为候选组变量"
+                      filterable
+                      clearable
+                      @update:value="field => applyCandidateVariable('groups', field)"
+                    />
                     <n-button
                       type="primary"
                       dashed
@@ -678,13 +707,38 @@
                 </n-form-item>
 
                 <n-form-item v-if="properties.conditionType === 'expression'" label="条件表达式">
-                  <n-input
-                    v-model:value="properties.condition"
-                    type="textarea"
-                    :rows="3"
-                    placeholder="${approved == true}"
-                    @blur="updateCondition"
-                  />
+                  <n-space vertical size="small" style="width: 100%">
+                    <div class="condition-builder">
+                      <n-select
+                        v-model:value="conditionBuilder.field"
+                        :options="variableCatalogOptions"
+                        placeholder="选择字段"
+                        filterable
+                        clearable
+                      />
+                      <n-select
+                        v-model:value="conditionBuilder.operator"
+                        :options="conditionOperatorOptions"
+                        class="condition-operator"
+                      />
+                      <n-input
+                        v-model:value="conditionBuilder.value"
+                        placeholder="比较值"
+                        clearable
+                        @keydown.enter="applyConditionBuilder"
+                      />
+                      <n-button type="primary" secondary @click="applyConditionBuilder">
+                        生成
+                      </n-button>
+                    </div>
+                    <n-input
+                      v-model:value="properties.condition"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="${approved == true}"
+                      @blur="updateCondition"
+                    />
+                  </n-space>
                 </n-form-item>
 
                 <n-form-item v-if="properties.conditionType === 'script'" label="脚本内容">
@@ -798,6 +852,10 @@ const props = defineProps({
   modeler: {
     type: Object,
     default: null,
+  },
+  fieldCatalog: {
+    type: Array,
+    default: () => [],
   },
 })
 
@@ -933,13 +991,78 @@ const taskTypeOptions = [
   { label: '候选组(角色)', value: 'candidateGroups' },
 ]
 
-const assigneeOptions = [
+const staticAssigneeOptions = [
   { label: '发起人', value: '$' + '{initiator}' },
   { label: '发起人上级', value: '$' + '{initiatorLeader}' },
   { label: '部门经理', value: '$' + '{deptManager}' },
   { label: 'HR', value: '$' + '{hr}' },
   { label: '指定用户', value: 'custom' },
   { label: 'SPEL 表达式', value: 'spel' },
+]
+
+const systemVariableOptions = [
+  { label: '发起人', value: 'initiator', source: 'system' },
+  { label: '发起人ID', value: 'startUserId', source: 'system' },
+  { label: '发起部门ID', value: 'startDeptId', source: 'system' },
+  { label: '业务键', value: 'businessKey', source: 'system' },
+  { label: '流程实例ID', value: 'processInstanceId', source: 'system' },
+  { label: '流程入口编码', value: 'flowEntryCode', source: 'system' },
+  { label: '表单实例ID', value: 'flowFormInstanceId', source: 'system' },
+]
+
+const formVariableOptions = computed(() => {
+  return (props.fieldCatalog || [])
+    .filter(item => item?.field)
+    .map(item => ({
+      label: item.label ? `${item.label}（${item.field}）` : item.field,
+      value: item.field,
+      source: item.source || 'form',
+      componentType: item.componentType || '',
+      dataType: item.dataType || '',
+    }))
+})
+
+const variableCatalogOptions = computed(() => [
+  {
+    type: 'group',
+    label: '表单字段',
+    key: 'form-fields',
+    children: formVariableOptions.value,
+  },
+  {
+    type: 'group',
+    label: '系统变量',
+    key: 'system-vars',
+    children: systemVariableOptions,
+  },
+])
+
+const assigneeOptions = computed(() => {
+  const formAssignees = formVariableOptions.value.map(item => ({
+    label: `表单字段：${item.label}`,
+    value: toExpression(item.value),
+  }))
+  return [
+    ...staticAssigneeOptions,
+    ...(formAssignees.length
+      ? [{
+          type: 'group',
+          label: '表单字段',
+          key: 'form-assignee-fields',
+          children: formAssignees,
+        }]
+      : []),
+  ]
+})
+
+const conditionOperatorOptions = [
+  { label: '等于', value: '==' },
+  { label: '不等于', value: '!=' },
+  { label: '大于', value: '>' },
+  { label: '大于等于', value: '>=' },
+  { label: '小于', value: '<' },
+  { label: '小于等于', value: '<=' },
+  { label: '包含', value: 'contains' },
 ]
 
 const formTypeOptions = [
@@ -1008,6 +1131,47 @@ const nodeFormPreviewSchema = ref([])
 // SPEL表达式相关
 const selectedSpelTemplate = ref('')
 const spelValidationError = ref('')
+const selectedSpelVariable = ref(null)
+const conditionBuilder = reactive({
+  field: '',
+  operator: '==',
+  value: '',
+})
+
+function toExpression(field) {
+  return '$' + `{${field}}`
+}
+
+function unwrapExpression(value) {
+  const text = String(value || '').trim()
+  const prefix = '$' + '{'
+  if (text.startsWith(prefix) && text.endsWith('}'))
+    return text.slice(2, -1).trim()
+  return ''
+}
+
+function isSimpleVariableExpression(value) {
+  const inner = unwrapExpression(value)
+  return /^[A-Za-z_][\w.]*$/.test(inner)
+}
+
+function getCatalogField(field) {
+  return formVariableOptions.value.find(item => item.value === field)
+    || systemVariableOptions.find(item => item.value === field)
+}
+
+function quoteConditionValue(value) {
+  const text = String(value ?? '').trim()
+  if (text === '')
+    return 'null'
+  if (['true', 'false', 'null'].includes(text))
+    return text
+  if (/^-?\d+(\.\d+)?$/.test(text))
+    return text
+  if ((text.startsWith('\'') && text.endsWith('\'')) || (text.startsWith('"') && text.endsWith('"')))
+    return text
+  return `'${text.replaceAll('\'', '\\\'')}'`
+}
 
 // 标记为未保存状态
 function markDirty() {
@@ -1209,6 +1373,17 @@ watch(() => properties.assigneeExpr, (newVal) => {
   spelSaveTimer = setTimeout(() => {
     updateUserTaskAssignee()
   }, 500)
+})
+
+watch(formVariableOptions, () => {
+  if (properties.assignee === 'spel' && isSimpleVariableExpression(properties.assigneeExpr)) {
+    const field = unwrapExpression(properties.assigneeExpr)
+    if (getCatalogField(field)) {
+      properties.assignee = properties.assigneeExpr
+      properties.assigneeExpr = ''
+      properties.assigneeUserName = ''
+    }
+  }
 })
 
 // 打开用户选择弹窗
@@ -1426,6 +1601,10 @@ function loadUserTaskProperties(bo) {
     else if (['$' + '{initiator}', '$' + '{initiatorLeader}', '$' + '{deptManager}', '$' + '{hr}'].includes(assignee)) {
       properties.assignee = assignee
     }
+    // 简单变量表达式可直接作为 Flowable 审批人表达式回显
+    else if (isSimpleVariableExpression(assignee)) {
+      properties.assignee = assignee
+    }
     // 其他 ${} 表达式默认当作 SPEL（向后兼容旧数据）
     else if (assignee.startsWith('$' + '{') && assignee.endsWith('}')) {
       properties.assignee = 'spel'
@@ -1631,8 +1810,53 @@ function updateTaskType() {
   // 清空其他审批人配置
   properties.assignee = ''
   properties.assigneeExpr = ''
+  properties.assigneeUserName = ''
   properties.candidateUsers = []
+  properties.candidateUserNames = []
   properties.candidateGroups = []
+  properties.candidateGroupNames = []
+}
+
+function insertSpelVariable(field) {
+  if (!field)
+    return
+  properties.assigneeExpr = toExpression(field)
+  selectedSpelVariable.value = null
+  updateUserTaskAssignee()
+}
+
+function applyConditionBuilder() {
+  if (!conditionBuilder.field) {
+    window.$message?.warning('请选择条件字段')
+    return
+  }
+  const field = conditionBuilder.field
+  const operator = conditionBuilder.operator || '=='
+  const rightValue = operator === 'contains'
+    ? `.contains(${quoteConditionValue(conditionBuilder.value)})`
+    : ` ${operator} ${quoteConditionValue(conditionBuilder.value)}`
+  properties.hasCondition = true
+  properties.conditionType = 'expression'
+  properties.condition = operator === 'contains'
+    ? toExpression(`${field}${rightValue}`)
+    : toExpression(`${field}${rightValue}`)
+  updateCondition()
+}
+
+function applyCandidateVariable(type, field) {
+  if (!field)
+    return
+  const option = getCatalogField(field)
+  const expression = toExpression(field)
+  if (type === 'users') {
+    properties.candidateUsers = [expression]
+    properties.candidateUserNames = [option?.label ? `表单字段：${option.label}` : expression]
+    updateCandidateUsers()
+    return
+  }
+  properties.candidateGroups = [expression]
+  properties.candidateGroupNames = [option?.label ? `表单字段：${option.label}` : expression]
+  updateCandidateGroups()
 }
 
 function handleFormKeyChange(value) {
@@ -2310,6 +2534,23 @@ function updateProperty(prop) {
   color: #475569;
 }
 
+.field-catalog-tip {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.condition-builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.condition-operator {
+  min-width: 0;
+}
+
 /* Tab导航栏可滚动 + 显示滚动条 */
 .config-tabs :deep(.n-tabs-nav) {
   overflow-x: auto !important;
@@ -2404,5 +2645,11 @@ function updateProperty(prop) {
   background: #f0f7ff;
   border-radius: 4px;
   padding: 5px 8px;
+}
+
+@media (max-width: 720px) {
+  .condition-builder {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

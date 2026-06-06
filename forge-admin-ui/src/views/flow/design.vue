@@ -5,9 +5,9 @@
       <div class="top-bar-left">
         <n-button text @click="handleBack">
           <template #icon>
-            <i class="i-material-symbols:arrow-back" />
+            <i :class="embedded ? 'i-material-symbols:close' : 'i-material-symbols:arrow-back'" />
           </template>
-          返回
+          {{ embedded ? '关闭' : '返回' }}
         </n-button>
         <n-divider vertical />
         <n-input
@@ -58,65 +58,87 @@
     <div class="main-content">
       <!-- 中间区域（画布 + 顶部配置栏） -->
       <div class="center-area">
-        <!-- 顶部横向配置栏 -->
-        <div class="config-bar" :class="{ collapsed: configCollapsed }">
-          <div class="config-bar-toggle" @click="configCollapsed = !configCollapsed">
-            <i class="i-material-symbols:settings-outline-rounded config-toggle-icon" />
-            <span class="config-bar-title">流程配置</span>
-            <i class="i-material-symbols:expand-more config-toggle-arrow" :class="{ expanded: !configCollapsed }" />
-          </div>
-          <div v-show="!configCollapsed" class="config-bar-body">
-            <div class="config-bar-row">
-              <div class="config-field">
-                <span class="config-field-label">流程分类</span>
+        <!-- 顶部配置工作区 -->
+        <div class="config-workspace">
+          <div class="config-section model-config-section">
+            <div class="config-section-head">
+              <i class="i-material-symbols:tune" />
+              <span>流程属性</span>
+            </div>
+            <div class="config-section-body">
+              <label class="config-field">
+                <span class="config-field-label">分类</span>
                 <NTreeSelect
                   v-model:value="modelInfo.category"
                   :options="categoryTreeOptions"
                   placeholder="选择分类"
                   size="small"
-                  style="width: 160px"
                   :default-expand-all="true"
                 />
-              </div>
-              <div class="config-field">
-                <span class="config-field-label">流程类型</span>
-                <n-input v-model:value="modelInfo.flowType" placeholder="如：审批流程" size="small" style="width: 140px" />
-              </div>
-              <div class="config-field">
+              </label>
+              <label class="config-field compact">
+                <span class="config-field-label">类型</span>
+                <n-input v-model:value="modelInfo.flowType" placeholder="approval" size="small" />
+              </label>
+            </div>
+          </div>
+
+          <div class="config-section form-config-section">
+            <div class="config-section-head">
+              <i class="i-material-symbols:dynamic-form" />
+              <span>表单配置</span>
+              <NTag size="small" :type="formConfigStatus.type" :bordered="false">
+                {{ formConfigStatus.label }}
+              </NTag>
+            </div>
+            <div class="config-section-body">
+              <label class="config-field compact">
                 <span class="config-field-label">表单类型</span>
                 <n-select
                   v-model:value="modelInfo.formType"
                   :options="formTypeOptions"
                   size="small"
-                  style="width: 120px"
                   @update:value="handleFormTypeChange"
                 />
-              </div>
-              <template v-if="modelInfo.formType === 'dynamic'">
-                <div class="config-field">
-                  <span class="config-field-label">表单选择</span>
-                  <n-select
-                    v-model:value="modelInfo.formId"
-                    :options="formOptions"
-                    placeholder="选择已有表单"
-                    clearable
-                    size="small"
-                    style="width: 160px"
-                    @update:value="handleFormSelect"
-                  />
-                </div>
-                <n-button size="small" type="primary" dashed @click="handleOpenFormDesigner">
+              </label>
+              <label v-if="modelInfo.formType === 'dynamic'" class="config-field">
+                <span class="config-field-label">已有表单</span>
+                <n-select
+                  v-model:value="modelInfo.formId"
+                  :options="formOptions"
+                  placeholder="不选择则使用模型内表单"
+                  clearable
+                  size="small"
+                  @update:value="handleFormSelect"
+                />
+              </label>
+              <label v-if="modelInfo.formType === 'external'" class="config-field wide">
+                <span class="config-field-label">外置表单</span>
+                <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
+              </label>
+              <div v-if="modelInfo.formType === 'dynamic'" class="form-config-actions">
+                <n-button size="small" type="primary" @click="handleOpenFormDesigner">
                   <template #icon>
                     <i class="i-material-symbols:edit-document" />
                   </template>
                   {{ modelInfo.formJson ? '编辑表单' : '设计表单' }}
                 </n-button>
-              </template>
-              <div class="config-field" style="flex: 1; min-width: 200px;">
-                <span class="config-field-label">流程描述</span>
-                <n-input v-model:value="modelInfo.description" placeholder="描述流程用途" size="small" />
+                <n-button size="small" :disabled="!formSchema.length" @click="showFormPreview = true">
+                  <template #icon>
+                    <i class="i-material-symbols:visibility-outline" />
+                  </template>
+                  预览
+                </n-button>
               </div>
             </div>
+          </div>
+
+          <div class="config-section description-config-section">
+            <div class="config-section-head">
+              <i class="i-material-symbols:notes" />
+              <span>说明</span>
+            </div>
+            <n-input v-model:value="modelInfo.description" placeholder="描述流程用途" size="small" />
           </div>
         </div>
 
@@ -215,6 +237,7 @@
                 v-if="modelerInstance"
                 :element="dockedElement"
                 :modeler="modelerInstance"
+                :field-catalog="formFieldCatalog"
                 @update="handlePropertiesUpdate"
               />
             </div>
@@ -458,12 +481,14 @@
         preset="card"
         title="表单设计器"
         style="width: 95vw; height: 90vh"
+        content-style="height: calc(90vh - 58px); padding: 0; overflow: hidden;"
         :mask-closable="false"
       >
-        <div class="h-full -m-4">
+        <div class="flow-form-designer-modal-body">
           <FlowFormCreateDesigner
             ref="formDesignerRef"
             v-model="formSchema"
+            height="100%"
             @save="handleSaveFormSchema"
           />
         </div>
@@ -532,6 +557,21 @@ const route = useRoute()
 const router = useRouter()
 const message = window.$message
 
+const props = defineProps({
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
+  modelId: {
+    type: [String, Number],
+    default: '',
+  },
+})
+
+const emit = defineEmits(['close', 'saved', 'deployed'])
+
+const embedded = computed(() => props.embedded)
+
 const saving = ref(false)
 const deploying = ref(false)
 const pageLoading = ref(true)
@@ -569,7 +609,6 @@ const rightActiveTab = ref('ai')
 
 const dockedElement = ref(null)
 const modelerInstance = ref(null)
-const configCollapsed = ref(true)
 
 const modelInfo = reactive({
   id: '',
@@ -592,6 +631,7 @@ const showFormDesigner = ref(false)
 const formDesignerRef = ref(null)
 const formSchema = ref([])
 const formOptions = ref([])
+const formFieldCatalog = ref([])
 const showFormPreview = ref(false)
 
 const categoryOptions = ref([])
@@ -661,6 +701,19 @@ const currentModelLabel = computed(() => {
   return item.modelCode || item.label
 })
 
+const formConfigStatus = computed(() => {
+  if (modelInfo.formType === 'none')
+    return { label: '无表单', type: 'default' }
+  if (modelInfo.formType === 'external') {
+    return modelInfo.formUrl
+      ? { label: '已配置', type: 'success' }
+      : { label: '未配置', type: 'warning' }
+  }
+  if (modelInfo.formId || modelInfo.formJson || formSchema.value.length)
+    return { label: '已配置', type: 'success' }
+  return { label: '未配置', type: 'warning' }
+})
+
 watch(aiProviderId, async (val, old) => {
   if (val && val !== old) {
     await loadModelOptions(val, false)
@@ -673,7 +726,7 @@ onMounted(async () => {
     await loadForms()
     await loadProviderOptions()
 
-    const modelId = route.query.id
+    const modelId = props.modelId || route.query.id
     if (modelId) {
       await loadModel(modelId)
     }
@@ -681,6 +734,22 @@ onMounted(async () => {
       modelInfo.modelKey = `process_${Date.now()}`
       modelInfo.modelName = '新流程'
     }
+  }
+  finally {
+    pageLoading.value = false
+  }
+})
+
+watch(() => props.modelId, async (value, oldValue) => {
+  if (!props.embedded || !value || value === oldValue)
+    return
+  pageLoading.value = true
+  try {
+    await loadModel(value)
+    await nextTick()
+    if (bpmnXml.value)
+      await modelerRef.value?.setXML(bpmnXml.value)
+    hasChanges.value = false
   }
   finally {
     pageLoading.value = false
@@ -774,12 +843,80 @@ async function loadForms() {
       formOptions.value = (res.data || []).map(item => ({
         label: item.formName,
         value: item.id,
+        formKey: item.formKey,
+        currentVersionId: item.currentVersionId,
       }))
     }
   }
   catch (error) {
     console.error('加载表单列表失败:', error)
   }
+}
+
+async function refreshFormFieldCatalog(formDetail = null) {
+  if (modelInfo.formType !== 'dynamic') {
+    formFieldCatalog.value = []
+    return
+  }
+
+  let detail = formDetail
+  if (!detail && modelInfo.formId) {
+    const option = formOptions.value.find(item => item.value === modelInfo.formId)
+    detail = option ? { formKey: option.formKey, currentVersionId: option.currentVersionId } : null
+  }
+
+  const formKey = detail?.formKey
+  const versionId = detail?.currentVersionId
+  if (formKey || versionId) {
+    try {
+      const res = await flowApi.getFormFieldCatalog({
+        formKey,
+        versionId,
+        modelKey: modelInfo.modelKey,
+      })
+      if (res.code === 200) {
+        formFieldCatalog.value = res.data || []
+        return
+      }
+    }
+    catch (error) {
+      console.warn('[FlowDesign] 加载表单字段目录失败:', error?.message || error)
+    }
+  }
+
+  formFieldCatalog.value = resolveLocalFormFieldCatalog()
+}
+
+function resolveLocalFormFieldCatalog() {
+  const rules = Array.isArray(formSchema.value) ? formSchema.value : []
+  return rules
+    .map((rule) => {
+      const field = rule.field || rule.fieldName || rule.name || rule.key
+      if (!field)
+        return null
+      return {
+        field,
+        label: rule.title || rule.label || field,
+        componentType: rule.type || rule.component || '',
+        dataType: inferFieldDataType(rule),
+        required: Array.isArray(rule.validate) ? rule.validate.some(item => item?.required) : false,
+        source: 'model-inline',
+      }
+    })
+    .filter(Boolean)
+}
+
+function inferFieldDataType(rule) {
+  const type = String(rule.type || '').toLowerCase()
+  if (['inputnumber', 'number', 'slider', 'rate'].some(key => type.includes(key)))
+    return 'number'
+  if (['switch', 'checkbox'].some(key => type.includes(key)))
+    return 'boolean'
+  if (['date', 'time'].some(key => type.includes(key)))
+    return 'datetime'
+  if (['select', 'radio', 'cascader', 'tree'].some(key => type.includes(key)))
+    return 'enum'
+  return 'string'
 }
 
 async function loadModel(id) {
@@ -798,6 +935,7 @@ async function loadModel(id) {
           formSchema.value = []
         }
       }
+      await refreshFormFieldCatalog()
     }
   }
   catch (error) {
@@ -830,16 +968,20 @@ function handleFormTypeChange(value) {
     formSchema.value = []
     modelInfo.formId = null
     modelInfo.formJson = ''
+    formFieldCatalog.value = []
   }
   if (value !== 'external') {
     modelInfo.formUrl = ''
   }
+  if (value === 'dynamic')
+    refreshFormFieldCatalog()
 }
 
 async function handleFormSelect(formId) {
   if (!formId) {
     formSchema.value = []
     modelInfo.formJson = ''
+    formFieldCatalog.value = resolveLocalFormFieldCatalog()
     return
   }
 
@@ -850,6 +992,7 @@ async function handleFormSelect(formId) {
         formSchema.value = JSON.parse(res.data.formSchema)
         modelInfo.formJson = res.data.formSchema
       }
+      await refreshFormFieldCatalog(res.data)
     }
   }
   catch (error) {
@@ -867,6 +1010,7 @@ function handleSaveFormSchema(schema) {
   modelInfo.formJson = JSON.stringify(schema)
   showFormDesigner.value = false
   hasChanges.value = true
+  formFieldCatalog.value = resolveLocalFormFieldCatalog()
   message.success('表单设计已保存')
 }
 
@@ -1699,6 +1843,7 @@ async function handleSaveDraft() {
     if (res.code === 200) {
       window.$message?.success('保存成功')
       hasChanges.value = false
+      emit('saved', { ...modelInfo })
     }
     else {
       window.$message?.error(res.message || '保存失败')
@@ -1734,6 +1879,7 @@ async function handleDeploy() {
     if (res.code === 200) {
       window.$message?.success('部署成功')
       await loadModel(modelInfo.id)
+      emit('deployed', { ...modelInfo })
     }
     else {
       window.$message?.error(res.message || '部署失败')
@@ -1749,6 +1895,13 @@ async function handleDeploy() {
 }
 
 function handleBack() {
+  const close = () => {
+    if (props.embedded)
+      emit('close')
+    else
+      router.back()
+  }
+
   if (hasChanges.value) {
     window.$dialog?.warning({
       title: '提示',
@@ -1757,15 +1910,15 @@ function handleBack() {
       negativeText: '直接离开',
       onPositiveClick: async () => {
         await handleSaveDraft()
-        router.back()
+        close()
       },
       onNegativeClick: () => {
-        router.back()
+        close()
       },
     })
   }
   else {
-    router.back()
+    close()
   }
 }
 
@@ -1852,70 +2005,70 @@ function getElementTitle(el) {
   min-width: 0;
 }
 
-.config-bar {
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+.config-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(420px, 1.45fr) minmax(260px, 1fr);
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #eef3f9;
   flex-shrink: 0;
 }
 
-.config-bar.collapsed .config-bar-body {
-  display: none;
+.config-section {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
 }
 
-.config-bar-toggle {
+.form-config-section {
+  border-color: #bfdbfe;
+  background: #fbfdff;
+}
+
+.config-section-head {
+  min-height: 22px;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 16px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 150ms ease;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.config-bar-toggle:hover {
-  background: #f1f5f9;
-}
-
-.config-toggle-icon {
-  font-size: 16px;
-  color: #6366f1;
+.config-section-head i {
+  color: #2563eb;
+  font-size: 15px;
   flex-shrink: 0;
 }
 
-.config-bar-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #1e1b4b;
-}
-
-.config-toggle-arrow {
-  font-size: 16px;
-  color: #94a3b8;
-  transition: transform 200ms ease;
-}
-
-.config-toggle-arrow.expanded {
-  transform: rotate(180deg);
-}
-
-.config-bar-body {
-  padding: 10px 16px;
-  background: #fff;
-}
-
-.config-bar-row {
+.config-section-body {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
 .config-field {
+  min-width: 0;
+  width: 180px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+}
+
+.config-field.compact {
+  width: 128px;
+}
+
+.config-field.wide {
+  width: 260px;
 }
 
 .config-field-label {
@@ -1923,6 +2076,17 @@ function getElementTitle(el) {
   font-weight: 500;
   color: #64748b;
   white-space: nowrap;
+}
+
+.form-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.description-config-section :deep(.n-input) {
+  width: 100%;
 }
 
 .designer-container {
@@ -2848,12 +3012,10 @@ function getElementTitle(el) {
   margin-top: 2px;
 }
 
-.h-full {
+.flow-form-designer-modal-body {
   height: 100%;
-}
-
-.-m-4 {
-  margin: -16px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 1024px) {
@@ -2861,8 +3023,12 @@ function getElementTitle(el) {
     width: 340px;
   }
 
-  .config-bar-row {
-    gap: 8px;
+  .config-workspace {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .description-config-section {
+    grid-column: 1 / -1;
   }
 }
 
@@ -2889,13 +3055,22 @@ function getElementTitle(el) {
     box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
   }
 
-  .config-bar-row {
-    flex-direction: column;
-    align-items: stretch;
+  .config-workspace {
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+
+  .description-config-section {
+    grid-column: auto;
+  }
+
+  .config-section-body {
+    flex-wrap: wrap;
   }
 
   .config-field {
-    width: 100%;
+    flex: 1 1 160px;
+    width: auto;
   }
 
   .config-field :deep(.n-select),
@@ -2949,8 +3124,4 @@ function getElementTitle(el) {
   outline-offset: 2px;
 }
 
-.config-bar-toggle:focus-visible {
-  outline: 2px solid #6366f1;
-  outline-offset: -2px;
-}
 </style>

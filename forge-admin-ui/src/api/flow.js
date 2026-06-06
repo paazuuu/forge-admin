@@ -497,4 +497,68 @@ export default {
    */
   previewForm: id =>
     request.get(`/api/flow/form/${id}/preview`),
+
+  /**
+   * 发布表单版本
+   */
+  publishForm: id =>
+    request.post(`/api/flow/form/${id}/publish`),
+
+  /**
+   * 获取表单版本
+   */
+  getFormVersions: id =>
+    request.get(`/api/flow/form/${id}/versions`),
+
+  /**
+   * 获取表单字段目录
+   */
+  getFormFieldCatalog: params =>
+    request.get('/api/flow/form/field-catalog', { params }),
+
+  // ========== 流程入口 ==========
+
+  getEntryPage: params =>
+    request.get('/api/flow/entry/page', { params }),
+
+  getEntryDetail: id =>
+    request.get(`/api/flow/entry/${id}`),
+
+  createEntry: data =>
+    request.post('/api/flow/entry', data),
+
+  updateEntry: data =>
+    request.put('/api/flow/entry', data),
+
+  deleteEntry: id =>
+    request.delete(`/api/flow/entry/${id}`),
+
+  getRuntimeEntry: entryCode =>
+    request.get(`/api/flow/runtime/entry/${entryCode}`),
+
+  submitEntryForm: (entryCode, data) =>
+    request.post(`/api/flow/runtime/submit/${entryCode}`, data),
+
+  getRuntimeInstance: processInstanceId =>
+    request.get(`/api/flow/runtime/instance/${processInstanceId}`),
+
+  // ========== 组织填报批次 ==========
+
+  getFillBatchPage: params =>
+    request.get('/api/flow/fill-batch/page', { params }),
+
+  createFillBatch: data =>
+    request.post('/api/flow/fill-batch', data),
+
+  updateFillBatch: data =>
+    request.put('/api/flow/fill-batch', data),
+
+  publishFillBatch: id =>
+    request.post(`/api/flow/fill-batch/${id}/publish`),
+
+  deleteFillBatch: id =>
+    request.delete(`/api/flow/fill-batch/${id}`),
+
+  getFillBatchItems: id =>
+    request.get(`/api/flow/fill-batch/${id}/items`),
 }

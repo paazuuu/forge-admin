@@ -11,6 +11,7 @@ import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +30,11 @@ public class SysApiConfigController {
 
     private final ISysApiConfigService apiConfigService;
     private final ApplicationEventPublisher eventPublisher;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护API权限配置");
+    }
 
     /**
      * 分页查询API配置列表

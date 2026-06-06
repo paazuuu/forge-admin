@@ -16,6 +16,7 @@
 
 <script setup>
 import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { hydrateForgeBusinessPreviewRules } from '@/views/app-center/components/designer/form-first/forgeBusinessComponents'
 import {
   buildDefaultFormOptions,
   cloneValue,
@@ -51,8 +52,11 @@ installFormCreate(getCurrentInstance()?.appContext?.app)
 const FormCreateComponent = getFormCreateComponent()
 const formApi = ref(null)
 const innerValue = ref(cloneValue(props.modelValue) || {})
+const hydratedRules = ref([])
+let hydrateSeq = 0
 
-const rules = computed(() => normalizeFormCreateRules(props.schema))
+const rawRules = computed(() => normalizeFormCreateRules(props.schema))
+const rules = computed(() => hydratedRules.value)
 const mergedOptions = computed(() => ({
   ...buildDefaultFormOptions(),
   ...normalizeFormCreateOptions(props.options),
@@ -66,9 +70,25 @@ watch(
   { deep: true },
 )
 
+watch(
+  rawRules,
+  () => hydrateRules(),
+  { immediate: true, deep: true },
+)
+
 function handleChange() {
   emit('update:modelValue', cloneValue(innerValue.value) || {})
   emit('change', cloneValue(innerValue.value) || {})
+}
+
+async function hydrateRules() {
+  const seq = ++hydrateSeq
+  const normalizedRules = cloneValue(rawRules.value) || []
+  hydratedRules.value = normalizedRules
+  const nextRules = await hydrateForgeBusinessPreviewRules(normalizedRules)
+  if (seq !== hydrateSeq)
+    return
+  hydratedRules.value = nextRules
 }
 
 async function validate() {

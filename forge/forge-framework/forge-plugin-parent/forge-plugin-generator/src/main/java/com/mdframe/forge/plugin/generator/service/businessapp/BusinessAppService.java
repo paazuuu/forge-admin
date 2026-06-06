@@ -106,6 +106,24 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public void syncRuntimeAppsForObject(String suiteCode, String objectCode, String configKey) {
+        String normalizedSuiteCode = StringUtils.trimToNull(suiteCode);
+        String normalizedObjectCode = StringUtils.trimToNull(objectCode);
+        if (normalizedSuiteCode == null || normalizedObjectCode == null) {
+            return;
+        }
+        List<AiBusinessApp> apps = baseMapper.selectRuntimeAppsByObject(
+                resolveTenantId(), normalizedSuiteCode, normalizedObjectCode);
+        for (AiBusinessApp app : apps) {
+            if (StringUtils.isNotBlank(configKey) && !StringUtils.equals(configKey, app.getConfigKey())) {
+                app.setConfigKey(configKey);
+                updateById(app);
+            }
+            syncManagementMenu(app);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         AiBusinessApp app = requireEntity(id);
         deleteManagementMenu(app);
@@ -201,8 +219,15 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         Long originalParentId = readLong(firstNonNull(
                 adminMenu.get("originalParentId"),
                 firstNonNull(adminMenu.get("parentId"), options.get("adminMenuParentId"))));
-        Long parentId = originalParentId;
         boolean suiteAsParent = readBoolean(firstNonNull(adminMenu.get("suiteAsParent"), options.get("suiteAsMenuParent")), true);
+        if (suiteAsParent) {
+            originalParentId = normalizeSuiteMenuParentId(
+                    originalParentId,
+                    readLong(adminMenu.get("suiteMenuResourceId")),
+                    readLong(adminMenu.get("actualParentId")),
+                    menuResourceId);
+        }
+        Long parentId = originalParentId;
         Integer sort = readInteger(firstNonNull(adminMenu.get("sort"), options.get("menuSort")), app.getSortOrder());
         if (suiteAsParent) {
             AiBusinessSuite suite = suiteService.requireByCode(app.getSuiteCode());
@@ -338,12 +363,41 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         JSONObject adminMenu = readAdminMenu(options);
         vo.setRuntimeOpenMode(resolveRuntimeOpenMode(options.get("runtimeOpenMode")));
         vo.setMenuResourceId(readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId"))));
-        vo.setAdminMenuParentId(readLong(firstNonNull(
+        Object activeMenuKey = firstNonNull(adminMenu.get("activeMenuKey"), vo.getMenuResourceId());
+        vo.setActiveMenuKey(activeMenuKey == null ? null : StringUtils.trimToNull(String.valueOf(activeMenuKey)));
+        Long adminMenuParentId = readLong(firstNonNull(
                 adminMenu.get("originalParentId"),
-                firstNonNull(adminMenu.get("parentId"), options.get("adminMenuParentId")))));
+                firstNonNull(adminMenu.get("parentId"), options.get("adminMenuParentId"))));
+        Long actualParentId = readLong(adminMenu.get("actualParentId"));
+        Long suiteMenuResourceId = readLong(adminMenu.get("suiteMenuResourceId"));
+        boolean suiteAsParent = readBoolean(firstNonNull(adminMenu.get("suiteAsParent"), options.get("suiteAsMenuParent")), true);
+        if (suiteAsParent) {
+            adminMenuParentId = normalizeSuiteMenuParentId(
+                    adminMenuParentId, suiteMenuResourceId, actualParentId, vo.getMenuResourceId());
+        }
+        vo.setAdminMenuParentId(adminMenuParentId);
+        vo.setAdminMenuActualParentId(actualParentId);
+        vo.setSuiteMenuResourceId(suiteMenuResourceId);
         vo.setAdminMenuSyncEnabled(readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), true));
-        vo.setSuiteAsMenuParent(readBoolean(firstNonNull(adminMenu.get("suiteAsParent"), options.get("suiteAsMenuParent")), true));
+        vo.setSuiteAsMenuParent(suiteAsParent);
         vo.setMenuSort(readInteger(firstNonNull(adminMenu.get("sort"), options.get("menuSort")), vo.getSortOrder()));
+    }
+
+    private Long normalizeSuiteMenuParentId(Long parentId, Long suiteMenuResourceId, Long actualParentId,
+                                            Long menuResourceId) {
+        if (parentId == null) {
+            return null;
+        }
+        if (isSameResource(parentId, suiteMenuResourceId)
+                || isSameResource(parentId, actualParentId)
+                || isSameResource(parentId, menuResourceId)) {
+            return null;
+        }
+        return parentId;
+    }
+
+    private boolean isSameResource(Long left, Long right) {
+        return left != null && right != null && left.equals(right);
     }
 
     private String writeOptions(JSONObject options) {

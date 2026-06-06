@@ -211,6 +211,23 @@
                       @update:value="patchBlockProps(selectedBlock.id, { defaultSortOrder: $event || 'desc' })"
                     />
                   </n-form-item>
+                  <n-form-item label="全部列对齐">
+                    <n-select
+                      :value="selectedBlock.props?.globalAlign || 'left'"
+                      :options="alignOptions"
+                      @update:value="applySelectedTableGlobalAlign"
+                    />
+                  </n-form-item>
+                  <n-form-item label="行间距">
+                    <n-input-number
+                      :value="selectedBlock.props?.rowGap ?? 8"
+                      :min="0"
+                      :max="32"
+                      :step="2"
+                      :show-button="false"
+                      @update:value="patchBlockProps(selectedBlock.id, { rowGap: normalizeTableRowGap($event) })"
+                    />
+                  </n-form-item>
                 </template>
               </template>
 
@@ -1313,6 +1330,27 @@ function updateFieldSetting(fieldName, settingPatch) {
       },
     },
   })
+}
+
+function applySelectedTableGlobalAlign(value) {
+  if (!selectedBlock.value || selectedBlock.value.blockType !== 'data-table')
+    return
+  const align = ['left', 'center', 'right'].includes(value) ? value : 'left'
+  const nextSettings = { ...(selectedBlock.value.props?.fieldSettings || {}) }
+  ;(selectedBlock.value.fieldRefs || []).forEach((fieldName) => {
+    nextSettings[fieldName] = {
+      ...(nextSettings[fieldName] || {}),
+      align,
+    }
+  })
+  patchBlockProps(selectedBlock.value.id, {
+    globalAlign: align,
+    fieldSettings: nextSettings,
+  })
+}
+
+function normalizeTableRowGap(value) {
+  return Math.max(0, Math.min(32, Number(value ?? 8)))
 }
 
 // Metric editing

@@ -171,6 +171,13 @@ function resolveLayoutFormCreateType(componentKey = '') {
 function buildRuleProps(component = {}, field = {}, gridColumns = 2, label = '') {
   const props = sanitizeRuleProps(component.props || {})
   const componentKey = component.componentKey || field.componentType || 'input'
+  if (isFieldComponent(component) && component.fieldBinding?.fieldCode) {
+    props.fieldCode = component.fieldBinding.fieldCode
+    props.fieldBinding = {
+      ...(props.fieldBinding || {}),
+      fieldCode: component.fieldBinding.fieldCode,
+    }
+  }
   if (!isFieldComponent(component))
     applyLayoutRuleProps(props, component, gridColumns, label)
   if (componentKey === 'textarea') {

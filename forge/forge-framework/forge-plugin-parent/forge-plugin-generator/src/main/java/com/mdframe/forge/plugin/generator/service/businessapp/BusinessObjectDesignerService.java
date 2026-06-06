@@ -118,6 +118,7 @@ public class BusinessObjectDesignerService {
     private final LowcodeSchemaValidator schemaValidator;
     private final BusinessFieldSchemaService fieldSchemaService;
     private final BusinessDocumentConfigService documentConfigService;
+    private final BusinessAppService businessAppService;
 
     public BusinessObjectDesignerVO getDesigner(Long objectId) {
         DesignerContext context = loadContext(objectId);
@@ -283,6 +284,7 @@ public class BusinessObjectDesignerService {
             object.setDesignerOptions("{}");
         }
         businessObjectMapper.updateById(object);
+        businessAppService.syncRuntimeAppsForObject(object.getSuiteCode(), object.getObjectCode(), config.getConfigKey());
 
         context.setModel(model);
         context.setConfig(config);
@@ -1812,20 +1814,23 @@ public class BusinessObjectDesignerService {
 
     private ViewSchemaDTO resolveViewSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema,
                                             Map<String, Object> designerOptions) {
+        ViewSchemaDTO schema = null;
         if (designerOptions != null && designerOptions.containsKey(VIEW_SCHEMA_OPTION_KEY)) {
             Object value = designerOptions.get(VIEW_SCHEMA_OPTION_KEY);
             try {
                 if (value instanceof String text && StringUtils.isNotBlank(text)) {
-                    return objectMapper.readValue(text, ViewSchemaDTO.class);
-                }
-                if (value != null) {
-                    return objectMapper.convertValue(value, ViewSchemaDTO.class);
+                    schema = objectMapper.readValue(text, ViewSchemaDTO.class);
+                } else if (value != null) {
+                    schema = objectMapper.convertValue(value, ViewSchemaDTO.class);
                 }
             } catch (Exception ignored) {
-                return buildDefaultViewSchema(modelSchema, pageSchema);
+                schema = buildDefaultViewSchema(modelSchema, pageSchema);
             }
         }
-        return buildDefaultViewSchema(modelSchema, pageSchema);
+        if (schema == null) {
+            schema = buildDefaultViewSchema(modelSchema, pageSchema);
+        }
+        return sanitizeViewSchemaFieldRefs(schema, modelSchema);
     }
 
     private ViewSchemaDTO buildDefaultViewSchema(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
@@ -1853,6 +1858,46 @@ public class BusinessObjectDesignerService {
             schema.getOverrides().put("layoutType", pageSchema.getLayoutType());
         }
         return schema;
+    }
+
+    private ViewSchemaDTO sanitizeViewSchemaFieldRefs(ViewSchemaDTO schema, LowcodeModelSchema modelSchema) {
+        if (schema == null) {
+            return null;
+        }
+        Set<String> modelFields = lowcodeFieldMap(modelSchema).keySet();
+        if (modelFields.isEmpty()) {
+            return schema;
+        }
+        if (schema.getSearch() == null) {
+            schema.setSearch(new LinkedHashMap<>());
+        }
+        if (schema.getList() == null) {
+            schema.setList(new LinkedHashMap<>());
+        }
+        if (schema.getDetail() == null) {
+            schema.setDetail(new LinkedHashMap<>());
+        }
+        schema.getSearch().put("fields", filterViewFieldRefs(listOfMap(schema.getSearch().get("fields")), modelFields));
+        schema.getList().put("columns", filterViewFieldRefs(listOfMap(schema.getList().get("columns")), modelFields));
+        List<Map<String, Object>> sections = listOfMap(schema.getDetail().get("sections")).stream()
+                .map(section -> {
+                    Map<String, Object> next = new LinkedHashMap<>(section);
+                    next.put("fields", filterViewFieldRefs(listOfMap(section.get("fields")), modelFields));
+                    return next;
+                })
+                .toList();
+        schema.getDetail().put("sections", sections);
+        return schema;
+    }
+
+    private List<Map<String, Object>> filterViewFieldRefs(List<Map<String, Object>> refs, Set<String> modelFields) {
+        return refs.stream()
+                .filter(item -> modelFields.contains(viewFieldCode(item)))
+                .toList();
+    }
+
+    private String viewFieldCode(Map<String, Object> item) {
+        return StringUtils.defaultIfBlank(text(item.get("fieldCode")), text(item.get("field")));
     }
 
     private Map<String, Object> buildDefaultSearchField(LowcodeFieldSchema field) {

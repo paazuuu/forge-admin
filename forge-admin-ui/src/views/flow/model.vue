@@ -122,7 +122,7 @@
                 部署
               </n-button>
               <n-button
-                v-else-if="item.status === 1"
+                v-if="item.status === 1"
                 size="small"
                 @click.stop="handleViewInstances(item)"
               >
@@ -275,6 +275,82 @@
       </n-modal>
     </Teleport>
 
+    <Teleport to="body">
+      <n-modal
+        v-model:show="showStartTestModal"
+        preset="card"
+        :title="startTestTitle"
+        style="width: min(760px, calc(100vw - 32px))"
+        content-style="max-height: calc(100vh - 180px); overflow: auto;"
+        :mask-closable="false"
+      >
+        <div class="start-test-modal">
+          <div class="start-test-summary">
+            <div class="summary-icon">
+              <i class="i-material-symbols:play-circle-outline" />
+            </div>
+            <div class="summary-main">
+              <div class="summary-title">
+                {{ currentStartModel?.modelName || '-' }}
+              </div>
+              <div class="summary-subtitle">
+                {{ currentStartModel?.modelKey || '-' }}
+              </div>
+            </div>
+            <span class="status-tag deployed">测试发起</span>
+          </div>
+
+          <n-alert v-if="startTestAlert" :type="startTestAlert.type" :show-icon="false" class="start-test-alert">
+            {{ startTestAlert.text }}
+          </n-alert>
+
+          <FlowFormCreateRenderer
+            v-if="startTestFormSchema.length"
+            ref="startTestFormRef"
+            v-model="startTestFormData"
+            :schema="startTestFormSchema"
+          />
+          <n-empty v-else size="small" description="当前模型没有可渲染的动态表单，将以空变量发起测试流程" />
+        </div>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="showStartTestModal = false">
+              取消
+            </n-button>
+            <n-button secondary @click="handleViewStarted">
+              我发起的
+            </n-button>
+            <n-button type="primary" :loading="startTestLoading" @click="handleSubmitStartTest">
+              发起测试
+            </n-button>
+          </n-space>
+        </template>
+      </n-modal>
+    </Teleport>
+
+    <Teleport to="body">
+      <n-modal
+        v-model:show="showDesignModal"
+        :mask-closable="false"
+        :close-on-esc="false"
+        display-directive="if"
+        class="flow-design-modal"
+        style="width: 100vw; height: 100vh; max-width: none; margin: 0;"
+      >
+        <div class="flow-design-modal-shell">
+          <FlowDesignPage
+            v-if="currentDesignModelId"
+            embedded
+            :model-id="currentDesignModelId"
+            @close="handleDesignModalClose"
+            @saved="fetchData"
+            @deployed="fetchData"
+          />
+        </div>
+      </n-modal>
+    </Teleport>
+
     <VersionHistory
       v-if="showVersionHistory"
       :model-id="currentModelId"
@@ -282,6 +358,7 @@
       @close="showVersionHistory = false"
       @refresh="fetchData"
     />
+
   </div>
 </template>
 
@@ -291,8 +368,10 @@ import { NIcon, NTreeSelect } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
+import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import FlowModelStats from '@/components/flow/FlowModelStats.vue'
 import { useDict } from '@/composables/useDict'
+import FlowDesignPage from './design.vue'
 import VersionHistory from './version.vue'
 
 const router = useRouter()
@@ -370,6 +449,7 @@ function getActionOptions(row) {
     { label: '复制模型', key: 'copy', icon: renderIcon(CopyOutline) },
   ]
   if (row.status === 1) {
+    opts.splice(1, 0, { label: '发起测试', key: 'startTest', icon: renderIcon(PlayCircleOutline) })
     opts.push({ label: '挂起', key: 'suspend', icon: renderIcon(PauseCircleOutline) })
   }
   if (row.status === 2) {
@@ -381,7 +461,7 @@ function getActionOptions(row) {
 }
 
 function handleActionSelect(key, row) {
-  const map = { edit: handleEdit, copy: handleCopy, versionHistory: handleVersionHistory, suspend: handleSuspend, activate: handleActivate, delete: handleDelete }
+  const map = { edit: handleEdit, startTest: handleStartTest, copy: handleCopy, versionHistory: handleVersionHistory, suspend: handleSuspend, activate: handleActivate, delete: handleDelete }
   map[key]?.(row)
 }
 
@@ -392,6 +472,29 @@ const pagination = reactive({ page: 1, pageSize: 20, itemCount: 0 })
 const showVersionHistory = ref(false)
 const currentModelId = ref('')
 const currentModelVersion = ref(null)
+const showDesignModal = ref(false)
+const currentDesignModelId = ref('')
+const showStartTestModal = ref(false)
+const startTestLoading = ref(false)
+const startTestFormRef = ref(null)
+const startTestFormData = ref({})
+const startTestFormSchema = ref([])
+const currentStartModel = ref(null)
+const startTestTitle = computed(() => `发起测试 - ${currentStartModel.value?.modelName || '流程模型'}`)
+const startTestAlert = computed(() => {
+  if (!currentStartModel.value)
+    return null
+  if (currentStartModel.value.status !== 1) {
+    return { type: 'warning', text: '当前模型尚未部署，部署后才能发起测试流程。' }
+  }
+  if (currentStartModel.value.formType === 'external') {
+    return { type: 'warning', text: '当前模型使用外置表单，测试工具不会渲染外置页面，将以空变量发起。' }
+  }
+  if (!startTestFormSchema.value.length) {
+    return { type: 'info', text: '当前模型没有动态表单字段，发起后仅使用系统内置流程变量。' }
+  }
+  return { type: 'info', text: '这是流程模型测试入口，只用于验证流程流转；正式业务入口仍由低代码应用或业务页面承载。' }
+})
 
 const totalCount = ref(0)
 const designingCount = ref(0)
@@ -529,11 +632,95 @@ async function handleSubmit() {
 }
 
 function handleDesign(row) {
-  router.push({ path: '/flow/design', query: { id: row.id } })
+  currentDesignModelId.value = row.id
+  showDesignModal.value = true
+}
+
+function handleDesignModalClose() {
+  showDesignModal.value = false
+  currentDesignModelId.value = ''
+  fetchData()
 }
 
 function handleViewInstances(row) {
   router.push({ path: '/flow/monitor', query: { modelKey: row.modelKey } })
+}
+
+async function handleStartTest(row) {
+  if (row.status !== 1) {
+    window.$message?.warning('请先部署流程模型后再发起测试')
+    return
+  }
+  currentStartModel.value = row
+  startTestFormData.value = {}
+  startTestFormSchema.value = []
+  showStartTestModal.value = true
+  try {
+    const res = await flowApi.getModelDetail(row.id)
+    if (res.code === 200 && res.data) {
+      currentStartModel.value = { ...row, ...res.data }
+      startTestFormSchema.value = parseFormSchema(res.data.formJson)
+    }
+  }
+  catch (error) {
+    console.error('加载流程模型表单失败:', error)
+    window.$message?.warning('加载流程模型表单失败，将以空变量发起')
+  }
+}
+
+function parseFormSchema(formJson) {
+  if (!formJson)
+    return []
+  if (Array.isArray(formJson))
+    return formJson
+  try {
+    const parsed = JSON.parse(formJson)
+    return Array.isArray(parsed) ? parsed : []
+  }
+  catch {
+    return []
+  }
+}
+
+async function handleSubmitStartTest() {
+  if (!currentStartModel.value)
+    return
+  startTestLoading.value = true
+  try {
+    const variables = startTestFormSchema.value.length
+      ? await startTestFormRef.value?.submit?.()
+      : {}
+    const now = Date.now()
+    const businessKey = `FLOW_TEST:${currentStartModel.value.modelKey}:${now}`
+    const title = `${currentStartModel.value.modelName || currentStartModel.value.modelKey}-测试发起`
+    const res = await flowApi.startProcess(currentStartModel.value.modelKey, {
+      businessKey,
+      businessType: 'FLOW_MODEL_TEST',
+      title,
+      variables: variables || {},
+      testStart: true,
+    })
+    if (res.code === 200) {
+      window.$message?.success('测试流程已发起')
+      showStartTestModal.value = false
+      router.push({ path: '/flow/started', query: { title } })
+    }
+    else {
+      window.$message?.error(res.message || '发起测试失败')
+    }
+  }
+  catch (error) {
+    console.error('发起测试失败:', error)
+    window.$message?.error(error?.message || '发起测试失败')
+  }
+  finally {
+    startTestLoading.value = false
+  }
+}
+
+function handleViewStarted() {
+  showStartTestModal.value = false
+  router.push('/flow/started')
 }
 
 async function handleDeploy(row) {
@@ -955,6 +1142,65 @@ onMounted(() => {
   width: 100%;
 }
 
+.start-test-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.start-test-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.summary-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.summary-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.summary-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.start-test-alert {
+  border-radius: 8px;
+}
+
 .radio-group {
   margin-bottom: 8px;
 }
@@ -982,6 +1228,30 @@ onMounted(() => {
 .model-list-spin :deep(.n-spin-container) {
   flex: 1;
   min-width: 0;
+}
+
+:deep(.flow-design-modal) {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.flow-design-modal-shell {
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.flow-design-modal-shell :deep(.model-design-page) {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 @media (max-width: 1500px) {
@@ -1019,6 +1289,11 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
+  .flow-design-modal {
+    width: 100vw;
+    height: 100vh;
+  }
+
   .flow-page {
     padding: 12px;
   }

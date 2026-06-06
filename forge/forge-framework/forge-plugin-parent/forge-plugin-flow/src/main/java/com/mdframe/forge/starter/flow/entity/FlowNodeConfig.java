@@ -24,6 +24,11 @@ public class FlowNodeConfig implements Serializable {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 流程模型ID
      */
     private String modelId;

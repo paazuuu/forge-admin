@@ -187,7 +187,8 @@ public class DataScopeInterceptor implements InnerInterceptor {
                 if (context.getOrgIds() != null && !context.getOrgIds().isEmpty()) {
                     return buildColumnCondition(tableAlias, orgIdColumn, context, scopeType, context.getOrgIds(), null);
                 }
-                break;
+                log.warn("数据权限拦截器：用户无组织，ORG 数据权限强制无数据: userId={}", context.getUserId());
+                return buildAlwaysFalse();
             
             case ORG_AND_CHILD:
                 // 本组织及子组织数据权限
@@ -195,21 +196,24 @@ public class DataScopeInterceptor implements InnerInterceptor {
                 if (allOrgIds != null && !allOrgIds.isEmpty()) {
                     return buildColumnCondition(tableAlias, orgIdColumn, context, scopeType, new ArrayList<>(allOrgIds), null);
                 }
-                break;
+                log.warn("数据权限拦截器：用户无组织或无下级组织，ORG_AND_CHILD 数据权限强制无数据: userId={}", context.getUserId());
+                return buildAlwaysFalse();
             
             case CUSTOM:
                 // 自定义数据权限
                 if (context.getCustomOrgIds() != null && !context.getCustomOrgIds().isEmpty()) {
                     return buildColumnCondition(tableAlias, orgIdColumn, context, scopeType, null, context.getCustomOrgIds());
                 }
-                break;
+                log.warn("数据权限拦截器：用户自定义组织范围为空，CUSTOM 数据权限强制无数据: userId={}", context.getUserId());
+                return buildAlwaysFalse();
             
             case TENANT_ALL:
                 // 租户全部数据权限
                 if (tenantIdColumn != null && !tenantIdColumn.isEmpty()) {
                     return buildColumnCondition(tableAlias, tenantIdColumn, context, scopeType, null, null);
                 }
-                break;
+                log.warn("数据权限拦截器：TENANT_ALL 未配置租户字段，强制无数据: mapper={}", config.getMapperMethod());
+                return buildAlwaysFalse();
 
             case REGION:
                 // 本行政区划数据权限
@@ -290,7 +294,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
             return expression;
         } catch (Exception e) {
             log.error("数据权限拦截器：解析自定义SQL条件失败: {}", customSql, e);
-            return null;
+            return buildAlwaysFalse();
         }
     }
     
@@ -315,6 +319,8 @@ public class DataScopeInterceptor implements InnerInterceptor {
             String orgIdsStr = context.getOrgIds().stream().map(String::valueOf)
                     .collect(java.util.stream.Collectors.joining(","));
             result = result.replace("#{orgIds}", orgIdsStr);
+        } else {
+            result = result.replace("#{orgIds}", "NULL");
         }
         
         // 替换 #{customOrgIds}
@@ -322,6 +328,8 @@ public class DataScopeInterceptor implements InnerInterceptor {
             String customOrgIdsStr = context.getCustomOrgIds().stream().map(String::valueOf)
                     .collect(java.util.stream.Collectors.joining(","));
             result = result.replace("#{customOrgIds}", customOrgIdsStr);
+        } else {
+            result = result.replace("#{customOrgIds}", "NULL");
         }
 
         // 替换 #{regionCode}
@@ -385,13 +393,13 @@ public class DataScopeInterceptor implements InnerInterceptor {
         String regionCodeColumn = config.getRegionCodeColumn();
         if (regionCodeColumn == null || regionCodeColumn.isEmpty()) {
             log.warn("数据权限拦截器：REGION 权限类型但 regionCodeColumn 未配置");
-            return null;
+            return buildAlwaysFalse();
         }
 
         String regionCode = context.getRegionCode();
         if (regionCode == null || regionCode.isEmpty()) {
-            log.debug("数据权限拦截器：REGION 权限类型但用户无 regionCode，返回恒真条件");
-            return buildAlwaysTrue();
+            log.warn("数据权限拦截器：REGION 权限类型但用户无 regionCode，强制无数据: userId={}", context.getUserId());
+            return buildAlwaysFalse();
         }
 
         String tableAlias = config.getTableAlias();
@@ -464,12 +472,12 @@ public class DataScopeInterceptor implements InnerInterceptor {
     }
 
     /**
-     * 构建恒真条件 1=1（用于无需限制的场景）
+     * 构建恒假条件 1=0（用于用户无可用数据范围时的安全兜底）
      */
-    private Expression buildAlwaysTrue() {
+    private Expression buildAlwaysFalse() {
         EqualsTo eq = new EqualsTo();
         eq.setLeftExpression(new LongValue(1));
-        eq.setRightExpression(new LongValue(1));
+        eq.setRightExpression(new LongValue(0));
         return eq;
     }
 

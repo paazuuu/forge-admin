@@ -1,5 +1,7 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.constant.BusinessObjectDesignStatus;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFieldDTO;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
@@ -46,6 +48,7 @@ public class BusinessFieldDesignService {
     private final BusinessFieldSchemaService fieldSchemaService;
     private final LowcodeDdlService ddlService;
     private final LowcodeModelSchemaNormalizer schemaNormalizer;
+    private final ObjectMapper objectMapper;
 
     public List<BusinessFieldVO> listFields(Long objectId) {
         BusinessObjectDesignerService.DesignerContext context = designerService.loadContext(objectId);
@@ -100,6 +103,8 @@ public class BusinessFieldDesignService {
                     existing.getColumnName(), updated.getColumnName());
             context.setPageSchema(replaceFieldRefs(context.getPageSchema(), existing.getField(), updated.getField(),
                     existing.getColumnName(), updated.getColumnName()));
+            replaceDesignerOptionsFieldRefs(context, existing.getField(), updated.getField(),
+                    existing.getColumnName(), updated.getColumnName());
         }
         context.setModelSchema(schemaNormalizer.normalizeModelFields(context.getModelSchema(), true));
         LowcodeFieldSchema normalized = requireField(context.getModelSchema(), updated.getField());
@@ -126,6 +131,7 @@ public class BusinessFieldDesignService {
         field.setImportable(false);
         field.setExportable(false);
         context.setPageSchema(removeFieldRefs(context.getPageSchema(), field.getField()));
+        removeDesignerOptionsFieldRefs(context, field.getField());
         context.setModelSchema(schemaNormalizer.normalizeModelFields(context.getModelSchema(), true));
         designerService.saveDraft(context, BusinessObjectDesignStatus.CHANGED);
     }
@@ -361,6 +367,39 @@ public class BusinessFieldDesignService {
         return pageSchema;
     }
 
+    private void removeDesignerOptionsFieldRefs(BusinessObjectDesignerService.DesignerContext context, String fieldCode) {
+        Map<String, Object> designerOptions = readDesignerOptions(context);
+        if (designerOptions.isEmpty()) {
+            return;
+        }
+        removeFieldFromNestedValue(designerOptions, fieldCode);
+        context.getObject().setDesignerOptions(designerService.writeJson(designerOptions, "designerOptions"));
+    }
+
+    private void replaceDesignerOptionsFieldRefs(BusinessObjectDesignerService.DesignerContext context,
+                                                 String oldFieldCode, String newFieldCode,
+                                                 String oldColumnName, String newColumnName) {
+        Map<String, Object> designerOptions = readDesignerOptions(context);
+        if (designerOptions.isEmpty()) {
+            return;
+        }
+        replaceFieldInNestedValue(designerOptions, oldFieldCode, newFieldCode, oldColumnName, newColumnName);
+        context.getObject().setDesignerOptions(designerService.writeJson(designerOptions, "designerOptions"));
+    }
+
+    private Map<String, Object> readDesignerOptions(BusinessObjectDesignerService.DesignerContext context) {
+        if (context == null || context.getObject() == null
+                || StringUtils.isBlank(context.getObject().getDesignerOptions())) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return objectMapper.readValue(context.getObject().getDesignerOptions(), new TypeReference<>() {
+            });
+        } catch (Exception ignored) {
+            return new LinkedHashMap<>();
+        }
+    }
+
     private void replaceModelFieldReferences(LowcodeModelSchema modelSchema, String oldFieldCode, String newFieldCode,
                                              String oldColumnName, String newColumnName) {
         if (modelSchema == null) {
@@ -521,6 +560,12 @@ public class BusinessFieldDesignService {
             if (StringUtils.equals(String.valueOf(map.get("fieldRef")), fieldCode)) {
                 map.remove("fieldRef");
             }
+            if (StringUtils.equals(String.valueOf(map.get("fieldCode")), fieldCode)) {
+                map.remove("fieldCode");
+            }
+            if (StringUtils.equals(String.valueOf(map.get("queryField")), fieldCode)) {
+                map.remove("queryField");
+            }
             for (Object child : new ArrayList<>(map.values())) {
                 removeFieldFromNestedValue(child, fieldCode);
             }
@@ -529,7 +574,7 @@ public class BusinessFieldDesignService {
         if (value instanceof List<?> list) {
             list.removeIf(item -> isFieldReferenceItem(item, fieldCode));
             for (Object child : new ArrayList<>(list)) {
-            removeFieldFromNestedValue(child, fieldCode);
+                removeFieldFromNestedValue(child, fieldCode);
             }
         }
     }
@@ -552,7 +597,9 @@ public class BusinessFieldDesignService {
                 }
             }
             replaceMapStringValue(map, "fieldRef", oldFieldCode, newFieldCode);
+            replaceMapStringValue(map, "fieldCode", oldFieldCode, newFieldCode);
             replaceMapStringValue(map, "field", oldFieldCode, newFieldCode);
+            replaceMapStringValue(map, "queryField", oldFieldCode, newFieldCode);
             replaceMapStringValue(map, "sourceField", oldFieldCode, newFieldCode);
             replaceMapStringValue(map, "displayField", oldFieldCode, newFieldCode);
             replaceMapStringValue(map, "columnName", oldColumnName, newColumnName);
@@ -607,12 +654,16 @@ public class BusinessFieldDesignService {
             return false;
         }
         return StringUtils.equals(String.valueOf(map.get("fieldRef")), fieldCode)
+                || StringUtils.equals(String.valueOf(map.get("fieldCode")), fieldCode)
+                || StringUtils.equals(String.valueOf(map.get("queryField")), fieldCode)
                 || StringUtils.equals(String.valueOf(map.get("field")), fieldCode);
     }
 
     private boolean containsFieldReference(Object value, String fieldCode) {
         if (value instanceof Map<?, ?> map) {
             if (StringUtils.equals(String.valueOf(map.get("fieldRef")), fieldCode)
+                    || StringUtils.equals(String.valueOf(map.get("fieldCode")), fieldCode)
+                    || StringUtils.equals(String.valueOf(map.get("queryField")), fieldCode)
                     || StringUtils.equals(String.valueOf(map.get("field")), fieldCode)) {
                 return true;
             }

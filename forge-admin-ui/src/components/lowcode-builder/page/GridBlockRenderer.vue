@@ -103,6 +103,7 @@
         :bordered="false"
         size="small"
         class="block-table"
+        :style="{ '--block-table-row-height': blockTableRowHeight }"
       />
       <div v-else class="block-empty">
         点击右侧"配置字段"按钮添加列表列
@@ -230,6 +231,7 @@ const tableColumns = computed(() => [
   })),
   { key: '__actions', title: '操作', width: 96, fixed: 'right' },
 ])
+const blockTableRowHeight = computed(() => `${Math.max(34, 32 + Number(props.block.props?.rowGap ?? 8))}px`)
 const toolbarCustomActions = computed(() => (props.block.props?.customActions || [])
   .filter(action => (action.position || 'toolbar') === 'toolbar'))
 
@@ -355,6 +357,10 @@ function sampleValue(field, idx) {
 .block-table {
   flex: 1;
   min-height: 0;
+}
+
+.block-table :deep(.n-data-table-tr) {
+  height: var(--block-table-row-height, 40px);
 }
 
 .tree-title {

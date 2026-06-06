@@ -1398,3 +1398,242 @@ seed 流程绑定和触发器 `START_FLOW` 动作时，需要对照已部署 BPM
 - `ai_business_binding` 中 `binding_type=FLOW` 的变量映射
 - `ai_business_trigger` 中 `START_FLOW` 动作配置
 - 所有使用 Flowable 表达式分配审批人的低代码单据流程
+
+## 43. Flyway 迁移 tenant_id 0 归一化前必须先处理唯一键重复
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+多租户迁移中把历史 `tenant_id = 0` 统一改为默认租户 `1` 时，开发库启动失败：
+
+```text
+Validate failed: Detected failed migration to version 1.0.56
+Duplicate entry '1-sys_notice_status' for key 'sys_dict_type.uk_tenant_dict_type'
+```
+
+**根本原因**:
+`sys_dict_type` 同时存在 tenant 0 和 tenant 1 的同名 `dict_type`，直接执行 `UPDATE ... SET tenant_id = 1` 会撞上租户内唯一键。失败后 Flyway 会保留 `success = 0` 的历史记录，后续启动会先卡在 validation。
+
+**解决方案**:
+1. 确认失败迁移尚未成功落库，先删除或 repair 对应的失败 history 行。
+2. 在迁移脚本的归一化语句前增加去重逻辑，删除 tenant 0/null 中已被 tenant 1 覆盖的重复字典类型和字典数据。
+3. 重新通过应用启动或 Flyway migrate 执行迁移，让 `forge_schema_history` 正常记录 `success = 1`。
+
+**影响范围**:
+- 所有把 `tenant_id IS NULL OR tenant_id = 0` 回填到默认租户 `1` 的 Flyway 脚本。
+- 带租户内唯一键的表，例如字典、角色编码、流程 key、业务自然键等。
+
+## 44. sys_flow_task.assignee 必须存用户 ID
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+低代码动态页发起 Flowable 主流程时，BPMN assignee 表达式可能返回姓名或账号。如果监听器直接把 `task.getAssignee()` 写入 `sys_flow_task.assignee`，待办表会存成显示名，后续按用户 ID 查询待办、通知或事件消费都会不稳定。
+
+**解决方案**:
+`FlowTaskEventListener` 写入 `FlowTask.assignee/owner` 前必须归一为用户 ID：数值 ID 原样保留，非数值值通过 `FlowOrgIntegrationService.getUserList` 精确匹配 `id/username/name/realName`，只能唯一匹配时才替换为用户 ID；创建、分配、完成事件的 payload 也应使用归一后的 `flowTask.getAssignee()`。
+
+**影响范围**:
+- `sys_flow_task.assignee`、`sys_flow_task.owner`
+- `TASK_CREATED`、`TASK_ASSIGNED`、`TASK_COMPLETED` 业务事件
+- 所有通过低代码变量映射或 BPMN 表达式分配审批人的流程
+
+## 45. 单据详情运行态也要归一 objectCode/configKey
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+动态详情页读取 `/ai/business/document/{objectCode}/{recordId}/runtime` 时，前端可能传入运行配置 `configKey` 或历史 `ai_crud_config.object_code`，但单据配置和流程实例关联按标准业务对象 `objectCode` 保存。只修复发起流程链路的对象标识归一还不够，详情页会继续读不到 `ai_business_document_config.options` 中的流程时间轴/流程图开关，也可能用错误的 `businessKey` 查不到流程实例。
+
+**解决方案**:
+`BusinessDocumentRuntimeService` 必须和流程发起服务一样做运行态上下文解析：按请求值查发布运行配置、单据配置和业务对象，归一出标准业务对象 `objectCode`；用标准 `objectCode:recordId` 查询流程实例和权限动作，用单据配置 `configKey` 读取动态 CRUD 记录数据。前端也应优先传 `businessObjectCode/options.businessObjectCode/modelSchema.objectCode`，最后再回退历史 `cfg.objectCode/configKey`。
+
+**影响范围**:
+- `/ai/business/document/{objectCode}/{recordId}/runtime`
+- 动态详情页“业务数据 / 流程进度”Tab
+- 单据配置 `options.detailFlowTimelineVisible/detailFlowDiagramVisible`
+- `ai_business_flow_instance_link.business_key`
+
+## 46. 低代码 START_FLOW 不能同时走 custom-action 和内置发起
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+动态页操作按钮如果先向外 `emit('custom-action')`，再执行内置 `START_FLOW`，同一次点击可能被运行态外层和 `AiCrudPage` 各发起一次流程，最终创建两个 Flowable 流程实例和两条待办。即使前端消除了双路径，后端“先查运行中实例、再启动流程、最后插入关联”的流程也存在并发竞态。
+
+**解决方案**:
+`AiCrudPage` 对内置 `START_FLOW` 必须优先拦截并直接返回，不再抛 `custom-action`。后端 `POST /ai/business/flow/start` 必须按 `tenantId + canonical businessKey` 加流程发起锁，并在锁内重新检查运行中实例；事务开启时锁要延迟到事务完成后释放，避免关联表提交前的第二个请求穿透。Redisson 锁不要设置可能早于事务完成的固定 lease，使用 watchdog 续期；本地 `ReentrantLock` 兜底释放后有等待线程时不能从锁缓存移除。
+
+**影响范围**:
+- `AiCrudPage` 自定义操作处理顺序
+- `/ai/business/flow/start`
+- `ai_business_flow_instance_link`
+- Flowable 流程实例和 `sys_flow_task` 待办生成
+
+## 47. Flow 服务 sys_flow_business 也必须做 businessKey 幂等
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+低代码发起流程的 admin 侧即使做了发起锁，Flow 服务 `/api/flow/instance/start/{modelKey}` 也可能因为重试或 admin 关联表写入失败而再次收到同一 `businessKey`。如果 Flow 服务直接插入 `sys_flow_business`，会撞 `uk_flow_business_tenant_key (tenant_id, business_key)`，暴露 `DuplicateKeyException`，例如 `Duplicate entry '1-LEAVE_APPLICATION:5'`。
+
+**解决方案**:
+Flow 服务启动前必须按 `tenant_id + business_key` 查询 `sys_flow_business`。已有运行中/草稿或 Flowable runtime 仍存在的记录时，直接返回原 `processInstanceId`；已结束状态不能复用，应返回明确的不可重复发起错误。插入时显式写入 `tenantId`，同 JVM 内按业务 Key 加本地锁并延迟到事务完成后释放，跨实例并发依赖唯一键并捕获 `DuplicateKeyException` 后转换为幂等返回或“流程正在发起，请稍后重试”。
+
+**影响范围**:
+- `/api/flow/instance/start/{modelKey}`
+- `sys_flow_business.uk_flow_business_tenant_key`
+- `FlowBusinessMapper`
+- 低代码流程发起重试和 admin 侧关联表补偿
+
+## 48. 同一流程实例重复待办优先检查 BPMN 重复 sequenceFlow
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+动态页发起流程后，如果 `businessKey` 和 `processInstanceId` 都相同，但生成了两条不同 `task_id` 的待办，这通常不是前端重复调用，也不是 `sys_flow_task` 监听器重复 insert。Flowable 可能是在同一个流程定义里发现了两条语义相同的出线，例如同时存在：
+
+```xml
+<bpmn:sequenceFlow id="flow1" sourceRef="startEvent" targetRef="deptApprove"/>
+<bpmn:sequenceFlow id="Flow_0fnqi4c" sourceRef="startEvent" targetRef="deptApprove"/>
+```
+
+即使节点 `<outgoing>` 只引用其中一条，Flowable 仍会按 `sourceRef` 解析实际出线，两条出线会创建两条执行路径，从而在同一个流程实例下产生两个相同节点待办。
+
+**解决方案**:
+流程模型保存、导入、复制、部署和版本回退前必须规范化 BPMN XML，删除同一流程/子流程作用域内语义完全相同的重复 `sequenceFlow`。清理时优先保留被 `<incoming>/<outgoing>`、节点 `default` 或 BPMNDI `BPMNEdge` 引用的连线，并同步清理被删除连线对应的引用和图形边。
+
+**影响范围**:
+- `FlowModelServiceImpl` 保存、导入、复制、部署流程模型
+- `FlowModelVersionServiceImpl` 版本回退部署
+- Flowable `ACT_RU_TASK` 同一 `PROC_INST_ID_` 下重复活跃用户任务
+- 低代码 AI 生成或 BPMN.js 编辑后残留旧连线的流程模型
+
+## 49. 应用入口套件目录父级不能回填为实际菜单 ID
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+应用入口勾选“同步为菜单 + 套件作为父级目录”时，`adminMenu.parentId/originalParentId` 表示套件目录的上级，`adminMenu.actualParentId/suiteMenuResourceId` 表示已生成的套件目录自身 ID。如果前端回显或保存时把实际套件目录 ID 写回 `parentId/originalParentId`，后端复用套件目录菜单时会把 `sys_resource.parent_id` 更新成自己的 `id`，菜单树无法正常渲染。
+
+**解决方案**:
+应用入口保存前必须过滤 `actualParentId/suiteMenuResourceId/menuResourceId`，不能把这些已占用资源 ID 作为套件目录上级。后端同步菜单时也必须归一旧污染配置：当原始父级等于套件目录自身 ID 或应用菜单自身 ID 时，按顶级挂载处理；菜单适配器层还要兜底防止 `parentId == resourceId` 写入数据库。
+
+**影响范围**:
+- `ai_business_app.options.adminMenu.parentId/originalParentId`
+- `ai_business_app.options.adminMenu.actualParentId/suiteMenuResourceId`
+- `sys_resource.parent_id`
+- 应用入口编辑抽屉和动态挂载菜单树
+
+## 50. form-create 随机字段 ID 未同步导致低代码页面引用不存在字段
+
+**发现日期**: 2026-06-04
+
+**问题描述**:
+表单设计器新增组件后，form-create 会先生成类似 `Frpjmpzgzlc1hfc` 的临时字段 ID。用户还没保存表单设计，就切换到单据设置并保存时，页面区域仍引用这个临时字段，但字段资产没有同步落库，后端校验会报 `页面区域引用了不存在的字段: Frpjmpzgzlc1hfc`。
+
+**根本原因**:
+跨设计面板保存只持久化了当前面板配置，没有先把表单设计器里的草稿字段、页面 Schema 和模型字段同步出来；同时基础配置允许直接输入字段 ID，容易把 form-create 临时 `F...` 字段当成正式业务字段。后续又发现另一个同源问题：保存自动字段资产时如果用 `modelSchema.fields` 作为基准，而不是用真实 `draft.fields/props.fields` 字段资产，字段名会从完整的 `fieldName/fieldCode` 退化成页面模型里的 `field/label`，最终字段资产列表显示“未命名字段”。
+
+**解决方案**:
+表单设计器基础配置的“组件字段ID”必须优先从已有字段中选择；转换时把 form-create 自动生成的 `F...` 字段视为临时字段，不直接作为永久业务字段。`form-create -> Forge schema` 转换必须同时兼容 `rule.field/name`、`props.fieldCode`、`props.fieldBinding.fieldCode` 和根级 `fieldBinding.fieldCode`，当旧 `_forge.fieldBinding` 与新选择不一致时优先保留用户刚修改的字段。切换出表单设计面板前调用 `syncDesignerDraft()` 同步草稿字段和 Schema；单据、流程、动作等面板保存前如果存在未持久化表单草稿，先静默保存草稿且不 reload 页面，避免当前面板输入丢失。自动字段资产合并必须优先使用真实字段资产 `props.fields`，不能用页面模型 `modelSchema.fields` 反向覆盖字段资产名称。
+
+**影响范围**:
+- `BusinessFormDesigner` 面板切换和保存流程
+- `form-first/formCreateToForge`
+- `form-first/forgeToFormCreate`
+- 表单设计器基础配置字段绑定控件
+- 单据设置、流程设置、动作设置保存前的草稿同步
+
+## 51. 对象设计保存后必须同步关联运行态入口菜单
+
+**发现日期**: 2026-06-05
+
+**问题描述**:
+应用入口勾选“同步为菜单 + 套件作为父级目录”后，`ai_business_app.options.adminMenu` 会保存实际菜单资源、套件目录和运行态 path。对象设计器保存会重新生成或刷新业务对象运行态 `configKey`，但如果只更新 `ai_business_object.config_key`，不重新同步已关联的 `BUSINESS/RUNTIME` 应用入口，返回应用入口时就可能看不到实际挂载目录，管理端菜单也可能继续引用旧 path。
+
+**解决方案**:
+对象设计器保存运行态草稿后，必须按 `tenant_id + suite_code + object_code` 找到所有关联运行态入口，刷新入口 `configKey` 并重新执行管理端菜单同步，回写 `menuResourceId`、`activeMenuKey`、`actualParentId`、`suiteMenuResourceId`、path 和 component。应用入口自身保存时仍要保留自父级归一化保护，避免实际套件目录 ID 反写成“套件目录上级”。
+
+**影响范围**:
+- `BusinessObjectDesignerService.saveDraft`
+- `BusinessAppService.syncRuntimeAppsForObject`
+- `BusinessAppMapper.selectRuntimeAppsByObject`
+- `ai_business_app.options.adminMenu`
+- 管理端动态菜单渲染和应用入口编辑抽屉回显
+
+## 52. 字段资产全局保存不能强制要求当前选中字段
+
+**发现日期**: 2026-06-05
+
+**问题描述**:
+对象设计器顶部全局保存会调用字段资产面板的保存钩子。用户修改字段属性后，如果属性面板关闭或当前没有选中字段，旧逻辑直接提示“请先选择需要保存的字段”，导致整页保存被阻断，即使当前字段资产实际上没有待保存内容。
+
+**解决方案**:
+字段属性面板打开时应直接读取当前面板 payload 和字段编码保存，不依赖外层选中行仍然存在。属性面板未打开且没有选中字段时，应视为字段资产无待保存内容，返回成功并允许整页保存继续执行；只有真正保存某个字段失败时才阻断。
+
+**影响范围**:
+- `BusinessFieldManager.saveSelectedField`
+- `BusinessFieldManager.saveField`
+- 对象设计器全局保存流程
+- 字段资产属性面板打开、关闭和切换字段场景
+
+## 53. 表单优先 viewSchema 的 fieldCode 也是字段改名/删除引用点
+
+**发现日期**: 2026-06-05
+
+**问题描述**:
+低代码对象字段从 form-create 临时编码（如 `Frpjmpzgzlc1hfc` / `frpjmpzgzlc1hfc`）改成正式字段名后，发布检查仍可能报 `查询条件引用了不存在字段: xxx`，但用户在查询条件 UI 里找不到这个字段。
+
+**根本原因**:
+发布检查读取的是 `ai_business_object.designer_options.viewSchema.search.fields[].fieldCode`。旧字段改名清理只处理了 `fieldRef`、`field`、`sourceField` 等键，漏掉了表单优先视图 schema 的 `fieldCode`；列表自由布局还可能在 `props.fieldSettings[*].queryField` 里保留隐藏查询映射。
+
+**解决方案**:
+字段改名/删除必须递归处理 `fieldCode` 和 `queryField`，并同步清理 `designerOptions`。读取设计器、发布检查和前端保存 payload 时，都要按当前字段资产/模型字段集过滤 `viewSchema.search/list/detail`。运行态构建搜索 schema 时，如果 `queryField` 指向不存在字段，必须回退到当前查询字段或删除该映射。
+
+**影响范围**:
+- `BusinessFieldDesignService` 字段改名/删除
+- `BusinessObjectDesignerService.resolveViewSchema`
+- `BusinessObjectPublishService.checkFormFirstSchemas`
+- `form-first/viewSchema.js`
+- `page-schema.js` 的 `fieldSettings.queryField`
+
+## 54. flow server 直接引入 generator 插件会暴露管理端桥接依赖
+
+**发现日期**: 2026-06-06
+
+**问题描述**:
+`forge-flow-server` 为了复用低代码动态 CRUD 落表能力直接引入 `forge-plugin-generator` 后，启动时会扫描 generator 插件的完整 Service/Controller。由于部分能力原本只在 admin server 中通过 bridge 实现，独立 flow server 会出现 `MenuRegisterAdapter`、`AiClientAdapter` 等 bean 缺失，或 optional 依赖不传递导致 `FlowClient` 类缺失。
+
+**根本原因**:
+`forge-plugin-generator` 同时包含运行态动态 CRUD、AI 生成、菜单注册、业务流程绑定等能力；独立 flow server 只需要运行态 CRUD，但组件扫描会装配更多 generator bean。`forge-flow-client` 在 generator 中是 optional 依赖，作为传递依赖不会进入 flow server 启动包。
+
+**解决方案**:
+flow server 侧为管理端专属桥接点提供明确 no-op/fallback 实现，例如 `FlowMenuRegisterAdapter`、`FlowAiClientAdapter`；对 generator 运行期会反射到的 optional 类，flow server 必须显式引入对应依赖，例如 `forge-flow-client`。验证时必须跑可执行 jar 启动，而不仅是 `compile`，因为 optional 依赖和 Spring 装配问题可能只在启动包里暴露。
+
+**影响范围**:
+- `forge-flow-server` 直接依赖 `forge-plugin-generator`
+- `MenuRegisterAdapter`、`AiClientAdapter` 等 admin bridge 接口
+- `forge-flow-client` optional 依赖传递
+- flow server 可执行 jar 启动验证
+
+## 55. Flyway 低版本补脚本会被默认校验拦截
+
+**发现日期**: 2026-06-06
+
+**问题描述**:
+启动时报 `jobAutoRegistrar -> jobScheduler -> flywayInitializer` 依赖创建失败，真正根因是 Flyway 校验失败：
+
+```text
+Detected resolved migration not applied to database: 1.0.55
+Detected resolved migration not applied to database: 1.0.56
+```
+
+**根本原因**:
+开发库 `forge_schema_history` 已经存在更高版本，例如 `1.0.57/1.0.58`，但本地后来新增或恢复了更低版本的迁移脚本。Flyway 默认 `outOfOrder=false`，会拒绝这种低版本补迁移。
+
+**解决方案**:
+先查 `forge_schema_history` 确认缺失版本和已执行高版本；再确认缺失脚本具备重复执行保护。对已经出现历史缺口的开发库，用 Flyway `outOfOrder=true` 正式补跑一次迁移，让历史表记录缺失版本。补跑后再用默认配置执行 Flyway validate，确认 `validationSuccessful=true`。
+
+**注意**:
+不要手工插入 `forge_schema_history`，不要修改已经执行过的迁移脚本。后续新增迁移必须继续按当前最高版本顺延，不能再补低版本脚本。

@@ -261,7 +261,7 @@
           </n-space>
         </div>
 
-        <!-- 统计和刷新 -->
+        <!-- 统计和操作 -->
         <div class="users-toolbar">
           <n-space justify="space-between">
             <div class="user-count-info">
@@ -269,12 +269,20 @@
                 共 {{ userPagination.itemCount }} 个用户
               </NTag>
             </div>
-            <n-button size="small" @click="loadRoleUsers">
-              <template #icon>
-                <i class="i-material-symbols:refresh" />
-              </template>
-              刷新
-            </n-button>
+            <n-space size="small">
+              <n-button size="small" type="primary" @click="handleAddUser">
+                <template #icon>
+                  <i class="i-material-symbols:person-add" />
+                </template>
+                添加用户
+              </n-button>
+              <n-button size="small" @click="loadRoleUsers">
+                <template #icon>
+                  <i class="i-material-symbols:refresh" />
+                </template>
+                刷新
+              </n-button>
+            </n-space>
           </n-space>
         </div>
 
@@ -306,15 +314,27 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 添加用户弹窗 -->
+    <UserSelectPanel
+      :show="addUserModalVisible"
+      :title="`添加用户到角色 - ${currentRole.roleName || ''}`"
+      :confirm-loading="addUserLoading"
+      :assigned-user-ids="assignedUserIds"
+      @update:show="val => addUserModalVisible = val"
+      @confirm="handleConfirmAddUsers"
+    />
   </div>
 </template>
 
 <script setup>
 import { NTag } from 'naive-ui'
-import { computed, h, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
+import UserSelectPanel from '@/components/UserSelectPanel.vue'
 import { useDict } from '@/composables/useDict'
+import { useUserStore } from '@/store'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemRole' })
@@ -328,6 +348,8 @@ const YES_NO_DICT = 'sys_yes_no'
 
 const crudRef = ref(null)
 const treeRef = ref(null)
+const userStore = useUserStore()
+const tenantOptions = ref([])
 
 // 授权相关
 const authModalVisible = ref(false)
@@ -347,6 +369,9 @@ const usersModalVisible = ref(false)
 const usersLoading = ref(false)
 const roleUsers = ref([]) // 角色下的用户列表
 const currentRole = ref({})
+const addUserModalVisible = ref(false)
+const addUserLoading = ref(false)
+const assignedUserIds = ref([]) // 当前角色已授权的用户ID列表
 const userSearchParams = ref({
   username: '',
   realName: '',
@@ -366,6 +391,10 @@ const dataScopeOptions = computed(() => toNumberOptions(dict.value[ROLE_DATA_SCO
 const roleTypeOptions = computed(() => toNumberOptions(dict.value[ROLE_TYPE_DICT]))
 const roleStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
 const yesNoOptions = computed(() => toNumberOptions(dict.value[YES_NO_DICT]))
+const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
+  label: item.tenantName,
+  value: item.id,
+})))
 
 // 计算分页配置
 const userPaginationConfig = computed(() => ({
@@ -480,6 +509,18 @@ function renderTreeLabel({ option }) {
 
 // 搜索表单配置
 const searchSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        props: {
+          placeholder: '请选择租户',
+          clearable: true,
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   {
     field: 'roleName',
     label: '角色名称',
@@ -518,6 +559,14 @@ const searchSchema = computed(() => [
 
 // 表格列配置
 const tableColumns = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        prop: 'tenantName',
+        label: '所属租户',
+        width: 160,
+        render: row => row.tenantName || row.tenantId || '-',
+      }]
+    : []),
   {
     prop: 'roleName',
     label: '角色名称',
@@ -573,11 +622,12 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 220,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
       { label: '查看用户', key: 'viewUsers', onClick: handleViewUsers },
+      { label: '添加用户', key: 'addUsers', type: 'success', onClick: handleAddUserFromList },
       { label: '授权', key: 'auth', onClick: handleAuth },
       { label: '删除', key: 'delete', type: 'error', onClick: handleDelete, visible: row => row.id !== 1 },
     ],
@@ -586,6 +636,19 @@ const tableColumns = computed(() => [
 
 // 编辑表单配置
 const editSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        defaultValue: userStore.userInfo?.tenantId,
+        rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
+        props: {
+          placeholder: '请选择所属租户',
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   {
     field: 'roleName',
     label: '角色名称',
@@ -735,7 +798,25 @@ function toNumberOptions(options = []) {
 
 // 表单提交前处理
 function beforeSubmit(formData) {
+  if (!userStore.isAdmin) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
+  else if (!formData.tenantId) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
   return formData
+}
+
+async function loadTenantOptions() {
+  try {
+    const res = await request.get('/system/tenant/assignable/options')
+    if (res.code === 200) {
+      tenantOptions.value = res.data || []
+    }
+  }
+  catch (error) {
+    console.error('加载租户选项失败:', error)
+  }
 }
 
 // 编辑
@@ -846,7 +927,7 @@ function handleUserPageSizeChange(pageSize) {
 async function handleRemoveUserRole(user) {
   window.$dialog.warning({
     title: '确认移除',
-    content: `确定要从角色"${currentRole.value.roleName}"中移除用户"${user.username}"吗？`,
+    content: `确定要从角色“${currentRole.value.roleName}”中移除用户“${user.username}”吗？`,
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -868,6 +949,56 @@ async function handleRemoveUserRole(user) {
       }
     },
   })
+}
+
+// 加载角色已授权用户ID列表
+async function loadAssignedUserIds() {
+  try {
+    const res = await request.get(`/system/role/${currentRole.value.id}/users`, {
+      params: { pageNum: 1, pageSize: 9999 },
+    })
+    if (res.code === 200 && res.data) {
+      assignedUserIds.value = (res.data.records || []).map(u => u.id)
+    }
+  }
+  catch (e) {
+    assignedUserIds.value = []
+  }
+}
+
+// 打开添加用户弹窗
+async function handleAddUser() {
+  await loadAssignedUserIds()
+  addUserModalVisible.value = true
+}
+
+// 从角色列表直接添加用户
+async function handleAddUserFromList(row) {
+  currentRole.value = row
+  await loadAssignedUserIds()
+  addUserModalVisible.value = true
+}
+
+// 确认添加用户到角色
+async function handleConfirmAddUsers(userIds) {
+  if (!userIds || userIds.length === 0)
+    return
+  try {
+    addUserLoading.value = true
+    const res = await request.post(`/system/role/${currentRole.value.id}/addUsers`, userIds)
+    if (res.code === 200) {
+      window.$message.success(`成功添加 ${userIds.length} 个用户`)
+      addUserModalVisible.value = false
+      await loadRoleUsers()
+    }
+  }
+  catch (error) {
+    console.error('添加用户失败:', error)
+    window.$message.error('添加用户失败')
+  }
+  finally {
+    addUserLoading.value = false
+  }
 }
 
 // 授权
@@ -1029,6 +1160,10 @@ async function handleSubmitAuth() {
     authSubmitLoading.value = false
   }
 }
+
+onMounted(() => {
+  loadTenantOptions()
+})
 </script>
 
 <style scoped>

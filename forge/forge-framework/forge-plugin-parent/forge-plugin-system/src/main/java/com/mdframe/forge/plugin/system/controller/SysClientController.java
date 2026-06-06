@@ -12,6 +12,7 @@ import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +38,7 @@ public class SysClientController {
         @RequestParam(required = false) String clientName,
         @RequestParam(required = false) Integer status
     ) {
+        assertPlatformAdmin();
         Page<SysClient> page = new Page<>();
         page.setSize(size);
         page.setCurrent(current);
@@ -67,6 +69,7 @@ public class SysClientController {
     
     @GetMapping("/{id}")
     public RespInfo<SysClientVO> getById(@PathVariable Long id) {
+        assertPlatformAdmin();
         SysClient client = clientService.getById(id);
         if (client == null) {
             return RespInfo.error("客户端不存在");
@@ -76,6 +79,7 @@ public class SysClientController {
     
     @PostMapping
     public RespInfo<Boolean> create(@RequestBody SysClientDTO dto) {
+        assertPlatformAdmin();
         SysClient client = new SysClient();
         BeanUtils.copyProperties(dto, client);
         boolean success = clientService.save(client);
@@ -84,6 +88,7 @@ public class SysClientController {
     
     @PutMapping
     public RespInfo<Boolean> update(@RequestBody SysClientDTO dto) {
+        assertPlatformAdmin();
         SysClient client = new SysClient();
         BeanUtils.copyProperties(dto, client);
         boolean success = clientService.updateById(client);
@@ -97,12 +102,14 @@ public class SysClientController {
     
     @DeleteMapping("/{id}")
     public RespInfo<Boolean> delete(@PathVariable Long id) {
+        assertPlatformAdmin();
         boolean success = clientService.removeById(id);
         return RespInfo.success(success);
     }
     
     @GetMapping("/online/{clientCode}")
     public RespInfo<List<SysOnlineUser>> getOnlineUsers(@PathVariable String clientCode) {
+        assertPlatformAdmin();
         List<SysOnlineUser> onlineUsers = onlineUserService.getOnlineUsersByClient(clientCode);
         return RespInfo.success(onlineUsers);
     }
@@ -114,39 +121,56 @@ public class SysClientController {
         wrapper.orderByAsc(SysClient::getId);
         
         List<SysClient> clients = clientService.list(wrapper);
-        List<SysClientVO> voList = clients.stream().map(this::convertToVO).toList();
+        List<SysClientVO> voList = clients.stream().map(this::convertToOptionVO).toList();
         
         return RespInfo.success(voList);
     }
     
     @GetMapping("/online/stats")
     public RespInfo<Map<String, Long>> getOnlineStats() {
+        assertPlatformAdmin();
         Map<String, Long> stats = onlineUserService.getOnlineCountByClient();
         return RespInfo.success(stats);
     }
     
     @PostMapping("/kickout/{userId}/{clientCode}")
     public RespInfo<Boolean> kickout(@PathVariable Long userId, @PathVariable String clientCode) {
+        assertPlatformAdmin();
         onlineUserService.kickoutByClient(userId, clientCode);
         return RespInfo.success(true);
     }
     
     @GetMapping("/secret/{id}")
     public RespInfo<String> getAppSecret(@PathVariable Long id) {
+        assertPlatformAdmin();
         String maskedSecret = clientService.getMaskedAppSecret(id);
         return RespInfo.success(maskedSecret);
     }
     
     @PostMapping("/reload-cache/{clientCode}")
     public RespInfo<Boolean> reloadCache(@PathVariable String clientCode) {
+        assertPlatformAdmin();
         clientService.reloadClientConfigCache(clientCode);
         return RespInfo.success(true);
+    }
+
+    private void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护客户端配置");
     }
     
     private SysClientVO convertToVO(SysClient client) {
         SysClientVO vo = new SysClientVO();
         BeanUtils.copyProperties(client, vo);
         vo.setAppSecretMasked(clientService.getMaskedAppSecret(client.getId()));
+        return vo;
+    }
+
+    private SysClientVO convertToOptionVO(SysClient client) {
+        SysClientVO vo = new SysClientVO();
+        vo.setId(client.getId());
+        vo.setClientCode(client.getClientCode());
+        vo.setClientName(client.getClientName());
+        vo.setStatus(client.getStatus());
         return vo;
     }
 }

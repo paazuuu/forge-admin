@@ -4,7 +4,13 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.mdframe.forge.plugin.system.dto.SysTenantDTO;
 import com.mdframe.forge.plugin.system.dto.SysTenantQuery;
+import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
+import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
+import com.mdframe.forge.starter.core.session.LoginUser;
+
+import java.util.List;
 
 /**
  * 租户Service接口
@@ -33,6 +39,26 @@ public interface ISysTenantService extends IService<SysTenant> {
      * @return 租户配置
      */
     SysTenant selectUserTenantConfig(Long tenantId);
+
+    /**
+     * 查询当前用户可访问租户
+     */
+    List<SysUserTenantVO> selectCurrentUserTenants();
+
+    /**
+     * 查询当前用户可分配租户选项
+     */
+    List<SysTenant> selectAssignableTenantOptions();
+
+    /**
+     * 分页查询租户下用户列表
+     */
+    IPage<SysUser> selectTenantUsers(Long tenantId, SysUserQuery query);
+
+    /**
+     * 切换当前登录租户
+     */
+    LoginUser switchTenant(Long tenantId);
 
     /**
      * 新增租户

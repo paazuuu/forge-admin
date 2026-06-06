@@ -36,6 +36,15 @@ public interface IUserLoadService {
     LoginUser loadUserByEmail(String email, Long tenantId);
 
     /**
+     * 根据用户ID和当前租户加载用户信息
+     *
+     * @param userId 用户ID
+     * @param tenantId 当前租户ID
+     * @return 登录用户信息
+     */
+    LoginUser loadUserByUserId(Long userId, Long tenantId);
+
+    /**
      * 获取用户密码
      *
      * @param userId 用户ID

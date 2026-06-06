@@ -38,6 +38,12 @@ public class BusinessAppVO {
 
     private Long adminMenuParentId;
 
+    private Long adminMenuActualParentId;
+
+    private Long suiteMenuResourceId;
+
+    private String activeMenuKey;
+
     private Boolean adminMenuSyncEnabled;
 
     private Boolean suiteAsMenuParent;

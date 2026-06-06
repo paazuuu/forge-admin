@@ -17,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
  * 文件存储配置Service实现
  */
@@ -131,6 +133,20 @@ public class SysFileStorageConfigServiceImpl extends ServiceImpl<SysFileStorageC
                 .eq(SysFileStorageConfig::getEnabled, true)
                 .last("limit 1")
                 .one();
+    }
+
+    @Override
+    public List<SysFileStorageConfig> listEnabledOptions() {
+        return this.lambdaQuery()
+                .select(SysFileStorageConfig::getId,
+                        SysFileStorageConfig::getConfigName,
+                        SysFileStorageConfig::getStorageType,
+                        SysFileStorageConfig::getIsDefault,
+                        SysFileStorageConfig::getEnabled)
+                .eq(SysFileStorageConfig::getEnabled, true)
+                .orderByDesc(SysFileStorageConfig::getIsDefault)
+                .orderByAsc(SysFileStorageConfig::getOrderNum)
+                .list();
     }
 
     @Override

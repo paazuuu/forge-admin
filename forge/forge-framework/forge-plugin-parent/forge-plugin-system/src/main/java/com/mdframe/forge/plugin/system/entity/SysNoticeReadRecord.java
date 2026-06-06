@@ -3,9 +3,7 @@ package com.mdframe.forge.plugin.system.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.mdframe.forge.starter.tenant.core.TenantEntity;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -23,6 +21,11 @@ public class SysNoticeReadRecord {
      */
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
+
+    /**
+     * 租户ID
+     */
+    private Long tenantId;
 
     /**
      * 公告ID

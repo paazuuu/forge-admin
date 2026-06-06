@@ -812,6 +812,9 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
     const meta = resolveListPageBlockMeta(item.blockType) || {}
     const fieldSet = item.blockType === 'search-form' ? searchFieldSet : tableFieldSet
     const refs = (item.fieldRefs || []).filter(field => fieldSet.has(field))
+    const props = item.blockType === 'tree-panel'
+      ? resolveDefaultTreeConfig(modelSchema, item.props || {})
+      : sanitizeGridBlockProps(item.blockType, item.props || {}, new Set(refs), fieldSet)
     return {
       id: item.id || createBlockId(item.blockType),
       blockType: item.blockType,
@@ -820,9 +823,7 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
       gridY: Math.max(0, Number(item.gridY) || 0),
       gridW: clampNumber(item.gridW, 1, LIST_PAGE_GRID_COLS),
       gridH: Math.max(resolveBlockMinGridH(item.blockType, meta), Number(item.gridH) || meta.defaultH || 2),
-      props: item.blockType === 'tree-panel'
-        ? resolveDefaultTreeConfig(modelSchema, item.props || {})
-        : { ...(item.props || {}) },
+      props,
       fieldRefs: refs,
     }
   })
@@ -883,6 +884,8 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
   const items = []
   const mainX = isTree ? 3 : 0
   const mainW = isTree ? 9 : 12
+  const searchFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'search').map(f => f.field))
+  const tableFieldSet = new Set(filterPageFields(modelSchema?.fields || [], 'table').map(f => f.field))
 
   if (isTree) {
     const treeConfig = table?.props?.treeConfig || {}
@@ -904,6 +907,7 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
 
   let yCursor = 0
   if (search?.enabled !== false) {
+    const searchRefs = (search?.fieldRefs || []).filter(ref => searchFieldSet.has(ref))
     items.push({
       id: 'block_search',
       blockType: 'search-form',
@@ -913,10 +917,10 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
       gridH: 4,
       label: '查询表单',
       props: {
-        fieldSettings: search?.props?.fieldSettings || {},
+        fieldSettings: sanitizeFieldSettings(search?.props?.fieldSettings, new Set(searchRefs), searchFieldSet),
         collapsible: true,
       },
-      fieldRefs: search?.fieldRefs || [],
+      fieldRefs: searchRefs,
     })
     yCursor += 4
   }
@@ -947,6 +951,7 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
   yCursor += 2
 
   if (table?.enabled !== false) {
+    const tableRefs = (table?.fieldRefs || []).filter(ref => tableFieldSet.has(ref))
     items.push({
       id: 'block_table',
       blockType: 'data-table',
@@ -956,11 +961,11 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
       gridH: 10,
       label: '数据列表',
       props: {
-        fieldSettings: table?.props?.fieldSettings || {},
+        fieldSettings: sanitizeFieldSettings(table?.props?.fieldSettings, new Set(tableRefs)),
         defaultSortField: table?.props?.defaultSortField || 'id',
         defaultSortOrder: table?.props?.defaultSortOrder || 'desc',
       },
-      fieldRefs: table?.fieldRefs || [],
+      fieldRefs: tableRefs,
     })
   }
 
@@ -991,7 +996,11 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
         fieldRefs: refs,
         props: {
           ...(zone.props || {}),
-          fieldSettings: search?.props?.fieldSettings || zone.props?.fieldSettings || {},
+          fieldSettings: sanitizeFieldSettings(
+            search?.props?.fieldSettings || zone.props?.fieldSettings,
+            new Set(refs),
+            searchFieldSet,
+          ),
         },
       }
     }
@@ -1000,7 +1009,7 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
       const actions = toolbar?.props?.actions || []
       const nextProps = {
         ...(zone.props || {}),
-        fieldSettings: table?.props?.fieldSettings || zone.props?.fieldSettings || {},
+        fieldSettings: sanitizeFieldSettings(table?.props?.fieldSettings || zone.props?.fieldSettings, new Set(refs)),
         showImport: actions.includes('import'),
         showExport: actions.includes('export'),
         hideBatchDelete: !actions.includes('batch-delete'),
@@ -1035,6 +1044,31 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
     }
     return zone
   })
+}
+
+function sanitizeGridBlockProps(blockType, props = {}, ownerFieldSet = new Set(), queryFieldSet = new Set()) {
+  const next = { ...(props || {}) }
+  if (blockType === 'search-form') {
+    next.fieldSettings = sanitizeFieldSettings(next.fieldSettings, ownerFieldSet, queryFieldSet)
+  } else if (blockType === 'data-table') {
+    next.fieldSettings = sanitizeFieldSettings(next.fieldSettings, ownerFieldSet)
+  }
+  return next
+}
+
+function sanitizeFieldSettings(settings = {}, ownerFieldSet = new Set(), queryFieldSet = null) {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings))
+    return {}
+  const next = {}
+  Object.entries(settings).forEach(([fieldName, value]) => {
+    if (!ownerFieldSet.has(fieldName) || !value || typeof value !== 'object' || Array.isArray(value))
+      return
+    const setting = { ...value }
+    if (queryFieldSet instanceof Set && setting.queryField && !queryFieldSet.has(setting.queryField))
+      delete setting.queryField
+    next[fieldName] = setting
+  })
+  return next
 }
 
 export function ensureGridBlockId(blockType, existingIds = new Set()) {

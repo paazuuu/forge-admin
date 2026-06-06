@@ -25,8 +25,7 @@ public class FlowApprovalLevel implements Serializable {
     /**
      * 租户ID
      */
-    @TableField(fill = FieldFill.INSERT)
-    private String tenantId;
+    private Long tenantId;
 
     /**
      * 节点配置ID

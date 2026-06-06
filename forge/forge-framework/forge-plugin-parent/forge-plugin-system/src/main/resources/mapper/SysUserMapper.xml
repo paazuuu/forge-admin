@@ -25,6 +25,7 @@
         <result column="remark" property="remark" />
         <result column="create_dept" property="createDept" />
         <result column="org_name" property="orgName" />
+        <result column="tenant_name" property="tenantName" />
         <result column="dept_name" property="deptName" />
         <result column="create_by" property="createBy" />
         <result column="create_time" property="createTime" />
@@ -34,17 +35,33 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        u.id, u.tenant_id, u.username, u.real_name, u.user_type, u.user_client, u.email, u.phone,
-        id_card, gender, password, salt, user_status, avatar, region_code,
-        last_login_time, last_login_ip, login_count, remark, create_dept,
-        create_by, create_time, update_by, update_time,
+        u.id, u.tenant_id, u.username, u.real_name,
+        <choose>
+            <when test="query != null and query.tenantId != null">
+                CASE WHEN u.user_type = 0 THEN 0 WHEN sut_current.member_type = 1 THEN 1 ELSE 2 END AS user_type,
+            </when>
+            <otherwise>
+                u.user_type,
+            </otherwise>
+        </choose>
+        u.user_client, u.email, u.phone,
+        u.id_card, u.gender, u.password, u.salt, u.user_status, u.avatar, u.region_code,
+        u.last_login_time, u.last_login_ip, u.login_count, u.remark, u.create_dept,
+        u.create_by, u.create_time, u.update_by, u.update_time,
+        t.tenant_name,
         orgs.org_name, orgs.org_name AS dept_name
     </sql>
 
     <!-- 通用查询条件 -->
     <sql id="queryCondition">
         <if test="query.tenantId != null">
-            AND u.tenant_id = #{query.tenantId}
+            AND EXISTS (
+                SELECT 1
+                FROM sys_user_tenant sut
+                WHERE sut.user_id = u.id
+                  AND sut.tenant_id = #{query.tenantId}
+                  AND sut.status = 1
+            )
         </if>
         <if test="query.username != null and query.username != ''">
             AND u.username LIKE CONCAT('%', #{query.username}, '%')
@@ -71,8 +88,16 @@
         <!-- 组织ID过滤：查询该组织及其子组织下的用户 -->
         <if test="query.orgId != null">
             AND u.id IN (
-                SELECT user_id FROM sys_user_org WHERE org_id IN (
-                    SELECT id FROM sys_org WHERE id = #{query.orgId} OR FIND_IN_SET(#{query.orgId}, ancestors) > 0
+                SELECT user_id FROM sys_user_org WHERE
+                <if test="query.tenantId != null">
+                    tenant_id = #{query.tenantId} AND
+                </if>
+                org_id IN (
+                    SELECT id FROM sys_org WHERE
+                    <if test="query.tenantId != null">
+                        tenant_id = #{query.tenantId} AND
+                    </if>
+                    (id = #{query.orgId} OR FIND_IN_SET(#{query.orgId}, ancestors) > 0)
                 )
             )
         </if>
@@ -90,16 +115,109 @@
     <select id="selectUserPage" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List" />
         FROM sys_user u
+        LEFT JOIN sys_tenant t ON t.id = u.tenant_id
+        <if test="query.tenantId != null">
+            LEFT JOIN sys_user_tenant sut_current
+                ON sut_current.user_id = u.id
+               AND sut_current.tenant_id = #{query.tenantId}
+               AND sut_current.status = 1
+        </if>
         LEFT JOIN (
             SELECT uo.user_id, GROUP_CONCAT(o.org_name ORDER BY o.sort SEPARATOR ',') AS org_name
             FROM sys_user_org uo
             LEFT JOIN sys_org o ON o.id = uo.org_id
+            <where>
+                <if test="query.tenantId != null">
+                    uo.tenant_id = #{query.tenantId}
+                </if>
+            </where>
             GROUP BY uo.user_id
         ) orgs ON orgs.user_id = u.id
         <where>
             <include refid="queryCondition" />
         </where>
         ORDER BY u.create_time DESC
+    </select>
+
+    <select id="selectByUsernameForLogin" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.username = #{username}
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <select id="selectByPhoneForLogin" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.phone = #{phone}
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <select id="selectByEmailForLogin" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.email = #{email}
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
     </select>
 
 </mapper>

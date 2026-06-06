@@ -31,6 +31,9 @@ public interface BusinessObjectMapper extends BaseMapper<AiBusinessObject> {
                                         @Param("suiteCode") String suiteCode,
                                         @Param("objectCode") String objectCode);
 
+    AiBusinessObject selectByConfigKey(@Param("tenantId") Long tenantId,
+                                       @Param("configKey") String configKey);
+
     Long countByObjectCode(@Param("tenantId") Long tenantId,
                            @Param("suiteCode") String suiteCode,
                            @Param("objectCode") String objectCode,

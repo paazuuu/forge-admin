@@ -28,6 +28,11 @@ public class FlowNodeOperation implements Serializable {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 节点配置ID
      */
     private String nodeConfigId;

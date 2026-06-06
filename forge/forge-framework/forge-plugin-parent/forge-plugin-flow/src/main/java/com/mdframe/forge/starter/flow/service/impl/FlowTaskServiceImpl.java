@@ -13,10 +13,12 @@ import com.mdframe.forge.starter.flow.dto.TaskFormInfo;
 import com.mdframe.forge.starter.flow.entity.FlowBusiness;
 import com.mdframe.forge.starter.flow.entity.FlowErrorLog;
 import com.mdframe.forge.starter.flow.entity.FlowForm;
+import com.mdframe.forge.starter.flow.entity.FlowFormInstance;
 import com.mdframe.forge.starter.flow.entity.FlowModel;
 import com.mdframe.forge.starter.flow.entity.FlowNodeConfig;
 import com.mdframe.forge.starter.flow.entity.FlowTask;
 import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
+import com.mdframe.forge.starter.flow.mapper.FlowFormInstanceMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.FlowFormService;
@@ -123,6 +125,9 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Autowired(required = false)
     private FlowFormService flowFormService;
+
+    @Autowired(required = false)
+    private FlowFormInstanceMapper flowFormInstanceMapper;
 
 @Override
     public IPage<FlowTask> todoTasks(Page<FlowTask> page, String userId, String title, String category, Integer status) {
@@ -1251,6 +1256,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             formInfo.setStartDeptId(business.getApplyDeptId());
             formInfo.setStartDeptName(business.getApplyDeptName());
         }
+        hydrateFormInstanceSnapshot(formInfo, task.getProcessInstanceId());
 
         // 5. 获取流程模型信息（全局表单配置）
         FlowModel flowModel = flowModelService.getModelByKey(processDefKey);
@@ -1354,6 +1360,32 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                 taskId, formInfo.getFormType(), formInfo.getFormKey());
 
         return formInfo;
+    }
+
+    private void hydrateFormInstanceSnapshot(TaskFormInfo formInfo, String processInstanceId) {
+        if (flowFormInstanceMapper == null || processInstanceId == null || processInstanceId.isEmpty()) {
+            return;
+        }
+        try {
+            FlowFormInstance instance = flowFormInstanceMapper.selectByProcessInstanceId(processInstanceId);
+            if (instance == null) {
+                return;
+            }
+            formInfo.setFormInstanceId(instance.getId());
+            formInfo.setSchemaSnapshot(instance.getSchemaSnapshot());
+            formInfo.setFormData(instance.getFormData());
+            formInfo.setDataMode(instance.getDataMode());
+            formInfo.setObjectCode(instance.getObjectCode());
+            formInfo.setRecordId(instance.getRecordId());
+            if (formInfo.getFormJson() == null || formInfo.getFormJson().isEmpty()) {
+                formInfo.setFormJson(instance.getSchemaSnapshot());
+            }
+            if (formInfo.getFormKey() == null || formInfo.getFormKey().isEmpty()) {
+                formInfo.setFormKey(instance.getFormKey());
+            }
+        } catch (Exception e) {
+            log.warn("加载流程表单实例快照失败: processInstanceId={}", processInstanceId, e);
+        }
     }
 
     private String resolveFormJson(String formKey, String inlineFormJson) {

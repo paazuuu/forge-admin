@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.plugin.job.service.ISysJobLogService;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +26,11 @@ import org.springframework.web.bind.annotation.*;
 public class JobLogController {
     
     private final ISysJobLogService jobLogService;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以查看任务日志");
+    }
     
     /**
      * 分页查询日志

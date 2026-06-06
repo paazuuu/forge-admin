@@ -18,14 +18,16 @@
 
 <script setup>
 import mainApi from '@/api'
-import { useAuthStore, usePermissionStore, useUserStore } from '@/store'
+import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
 import { initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
+import { applyTenantConfig } from '@/utils/tenant-config'
 import api from './api'
 
 const authStore = useAuthStore()
 const userStore = useUserStore()
+const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -200,6 +202,8 @@ async function onLoginSuccess(data = {}) {
       userType: loginUser.userType,
       userStatus: loginUser.userStatus,
       tenantId: loginUser.tenantId,
+      tenantName: loginUser.tenantName,
+      tenantIds: loginUser.tenantIds || [],
       roleIds: loginUser.roleIds || [],
       roleKeys: loginUser.roleKeys || [],
       permissions: loginUser.permissions || [],
@@ -253,6 +257,10 @@ async function onLoginSuccess(data = {}) {
 async function loadAndSetMenuData() {
   try {
     const permissionStore = usePermissionStore()
+    const tenantStore = useTenantStore()
+    const tenantConfig = await tenantStore.loadTenantConfig(userStore.userInfo?.tenantId)
+    await applyTenantConfig(tenantConfig, appStore)
+
     const res = await mainApi.getMenu(1)
     if (res.code === 200 && res.data) {
       permissionStore.setMenuData(res.data)

@@ -16,6 +16,11 @@ public class FlowCc {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 流程实例ID
      */
     private String processInstanceId;

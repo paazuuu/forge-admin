@@ -2,7 +2,11 @@ package com.mdframe.forge.plugin.generator.service.businessapp;
 
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessDocumentConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessFlowInstanceLink;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessObject;
+import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
+import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessFlowInstanceLinkMapper;
+import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentConfigVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentRuntimeVO;
@@ -25,6 +29,8 @@ public class BusinessDocumentRuntimeService {
 
     private final BusinessDocumentConfigService documentConfigService;
     private final BusinessFlowInstanceLinkMapper flowInstanceLinkMapper;
+    private final AiCrudConfigMapper crudConfigMapper;
+    private final BusinessObjectMapper businessObjectMapper;
     private final BusinessPermissionService permissionService;
     private final DynamicCrudService dynamicCrudService;
 
@@ -35,15 +41,20 @@ public class BusinessDocumentRuntimeService {
             vo.setMessage("业务对象编码不能为空");
             return vo;
         }
-        String businessKey = buildBusinessKey(objectCode, recordId);
+        Long tenantId = resolveTenantId();
+        DocumentRuntimeContext context = resolveRuntimeContext(tenantId, objectCode);
+        String canonicalObjectCode = context.objectCode();
+        String businessKey = buildBusinessKey(canonicalObjectCode, recordId);
         vo.setBusinessKey(businessKey);
 
-        AiBusinessDocumentConfig config = documentConfigService.selectEnabledByObjectCode(objectCode);
+        AiBusinessDocumentConfig config = context.documentConfig();
         if (config == null) {
             vo.setMessage("当前对象未启用单据模式");
             return vo;
         }
         vo.setDocumentEnabled(true);
+        BusinessDocumentConfigVO configVO = documentConfigService.toVO(config);
+        fillDetailFlowDisplayOptions(vo, configVO);
 
         Map<String, Object> recordData = loadRecordData(config, recordId);
         if (recordData == null) {
@@ -56,17 +67,23 @@ public class BusinessDocumentRuntimeService {
         vo.setDocumentStatus(documentStatus);
         vo.setDocumentStatusLabel(resolveStatusLabel(config, documentStatus));
 
-        AiBusinessFlowInstanceLink link = flowInstanceLinkMapper.selectLatestByBusinessKey(resolveTenantId(), businessKey);
+        AiBusinessFlowInstanceLink link = flowInstanceLinkMapper.selectLatestByBusinessKey(tenantId, businessKey);
         if (link != null) {
             vo.setFlowStatus(link.getFlowStatus());
             vo.setProcessInstanceId(link.getProcessInstanceId());
         }
 
-        List<String> actions = permissionService.resolveAvailableActions(objectCode, recordId, recordData);
+        List<String> actions = permissionService.resolveAvailableActions(canonicalObjectCode, recordId, recordData);
         vo.setAvailableActions(actions);
         fillNextAction(vo, config, link, actions);
         fillRuntimeActions(vo, config, link, actions);
         return vo;
+    }
+
+    private void fillDetailFlowDisplayOptions(BusinessDocumentRuntimeVO vo, BusinessDocumentConfigVO configVO) {
+        Map<String, Object> options = configVO == null ? null : configVO.getOptions();
+        vo.setDetailFlowTimelineVisible(readBoolean(options == null ? null : options.get("detailFlowTimelineVisible"), true));
+        vo.setDetailFlowDiagramVisible(readBoolean(options == null ? null : options.get("detailFlowDiagramVisible"), true));
     }
 
     public void validateStartAllowed(String objectCode, Long recordId, boolean checkPermission) {
@@ -290,8 +307,99 @@ public class BusinessDocumentRuntimeService {
         return objectCode + ":" + (recordId == null ? "" : recordId);
     }
 
+    private DocumentRuntimeContext resolveRuntimeContext(Long tenantId, String objectCodeOrConfigKey) {
+        String requestedObjectCode = StringUtils.trimToNull(objectCodeOrConfigKey);
+        AiCrudConfig runtimeConfig = resolvePublishedRuntimeConfig(tenantId, requestedObjectCode);
+        AiBusinessDocumentConfig documentConfig = resolveEnabledDocumentConfig(tenantId, requestedObjectCode, runtimeConfig);
+        AiBusinessObject businessObject = resolveBusinessObject(tenantId, requestedObjectCode, runtimeConfig, documentConfig);
+        String canonicalObjectCode = StringUtils.firstNonBlank(
+                documentConfig == null ? null : documentConfig.getObjectCode(),
+                businessObject == null ? null : businessObject.getObjectCode(),
+                runtimeConfig == null ? null : runtimeConfig.getObjectCode(),
+                requestedObjectCode);
+
+        if (documentConfig == null && !StringUtils.equals(canonicalObjectCode, requestedObjectCode)) {
+            documentConfig = resolveEnabledDocumentConfig(tenantId, canonicalObjectCode, runtimeConfig);
+        }
+        if (runtimeConfig == null) {
+            runtimeConfig = resolvePublishedRuntimeConfig(tenantId, StringUtils.firstNonBlank(
+                    documentConfig == null ? null : documentConfig.getConfigKey(),
+                    businessObject == null ? null : businessObject.getConfigKey(),
+                    canonicalObjectCode));
+        }
+        String configKey = StringUtils.firstNonBlank(
+                documentConfig == null ? null : documentConfig.getConfigKey(),
+                runtimeConfig == null ? null : runtimeConfig.getConfigKey(),
+                businessObject == null ? null : businessObject.getConfigKey());
+        return new DocumentRuntimeContext(requestedObjectCode, canonicalObjectCode, configKey, documentConfig, runtimeConfig);
+    }
+
+    private AiCrudConfig resolvePublishedRuntimeConfig(Long tenantId, String objectCodeOrConfigKey) {
+        if (StringUtils.isBlank(objectCodeOrConfigKey)) {
+            return null;
+        }
+        return crudConfigMapper.selectPublishedByObjectCodeOrConfigKey(
+                tenantId != null ? tenantId : resolveTenantId(), objectCodeOrConfigKey);
+    }
+
+    private AiBusinessDocumentConfig resolveEnabledDocumentConfig(Long tenantId,
+                                                                  String objectCodeOrConfigKey,
+                                                                  AiCrudConfig runtimeConfig) {
+        Long effectiveTenantId = tenantId != null ? tenantId : resolveTenantId();
+        AiBusinessDocumentConfig config = documentConfigService.selectEnabledByObjectCode(effectiveTenantId, objectCodeOrConfigKey);
+        if (config != null) {
+            return config;
+        }
+        config = documentConfigService.selectEnabledByConfigKey(effectiveTenantId, objectCodeOrConfigKey);
+        if (config != null || runtimeConfig == null) {
+            return config;
+        }
+        config = documentConfigService.selectEnabledByConfigKey(effectiveTenantId, runtimeConfig.getConfigKey());
+        if (config != null) {
+            return config;
+        }
+        return documentConfigService.selectEnabledByObjectCode(effectiveTenantId, runtimeConfig.getObjectCode());
+    }
+
+    private AiBusinessObject resolveBusinessObject(Long tenantId,
+                                                   String objectCodeOrConfigKey,
+                                                   AiCrudConfig runtimeConfig,
+                                                   AiBusinessDocumentConfig documentConfig) {
+        Long effectiveTenantId = tenantId != null ? tenantId : resolveTenantId();
+        AiBusinessObject object = null;
+        if (documentConfig != null && StringUtils.isNotBlank(documentConfig.getConfigKey())) {
+            object = businessObjectMapper.selectByConfigKey(effectiveTenantId, documentConfig.getConfigKey());
+        }
+        if (object == null && runtimeConfig != null && StringUtils.isNotBlank(runtimeConfig.getConfigKey())) {
+            object = businessObjectMapper.selectByConfigKey(effectiveTenantId, runtimeConfig.getConfigKey());
+        }
+        if (object == null && StringUtils.isNotBlank(objectCodeOrConfigKey)) {
+            object = businessObjectMapper.selectByConfigKey(effectiveTenantId, objectCodeOrConfigKey);
+        }
+        return object;
+    }
+
     private String text(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private boolean readBoolean(Object value, boolean defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        String text = String.valueOf(value).trim();
+        if (StringUtils.isBlank(text)) {
+            return defaultValue;
+        }
+        return "true".equalsIgnoreCase(text)
+                || "1".equals(text)
+                || "yes".equalsIgnoreCase(text);
     }
 
     private String snakeToCamel(String value) {
@@ -319,6 +427,13 @@ public class BusinessDocumentRuntimeService {
             tenantId = null;
         }
         return tenantId != null ? tenantId : 1L;
+    }
+
+    private record DocumentRuntimeContext(String requestedObjectCode,
+                                          String objectCode,
+                                          String configKey,
+                                          AiBusinessDocumentConfig documentConfig,
+                                          AiCrudConfig runtimeConfig) {
     }
 
     private record StatusPolicy(boolean allowStartFlow, String reason) {

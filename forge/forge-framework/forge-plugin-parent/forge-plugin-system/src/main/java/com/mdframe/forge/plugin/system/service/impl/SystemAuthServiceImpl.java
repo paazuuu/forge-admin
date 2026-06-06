@@ -304,6 +304,11 @@ public class SystemAuthServiceImpl implements IAuthService {
     }
 
     @Override
+    public LoginUser loadUserByUserId(Long userId, Long tenantId) {
+        return userLoadService.loadUserByUserId(userId, tenantId);
+    }
+
+    @Override
     public boolean matchPassword(String rawPassword, String encodedPassword) {
         return userLoadService.matchPassword(rawPassword, encodedPassword);
     }
@@ -544,6 +549,7 @@ public class SystemAuthServiceImpl implements IAuthService {
                 .accessToken(token)
                 .expiresIn(tokenTimeout)
                 .tokenType("Bearer")
+                .userInfo(loginUser)
                 .build();
     }
 

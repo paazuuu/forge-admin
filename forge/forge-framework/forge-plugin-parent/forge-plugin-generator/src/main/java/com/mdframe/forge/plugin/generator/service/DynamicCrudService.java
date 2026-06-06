@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessDocumentConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryConditionDTO;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryExecuteDTO;
@@ -13,6 +14,7 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRelationSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeTreeConfig;
+import com.mdframe.forge.plugin.generator.service.businessapp.BusinessDocumentConfigService;
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -94,6 +96,7 @@ public class DynamicCrudService {
     private final DesensitizeStrategyFactory desensitizeStrategyFactory;
     private final EncryptorFactory encryptorFactory;
     private final DynamicDataScopeService dynamicDataScopeService;
+    private final BusinessDocumentConfigService documentConfigService;
 
     // ==================== 查询操作 ====================
 
@@ -486,6 +489,7 @@ public class DynamicCrudService {
         
         // 获取允许写入的字段
         Set<String> allowedFields = DynamicQueryGenerator.extractFieldNames(config.getEditSchema(), objectMapper);
+        applyDocumentNoIfNeeded(config, data, allowedFields);
 
         RuntimeJoinContext joinContext = buildRuntimeJoinContext(config);
         if (isMasterDetailRuntime(config) && joinContext != null) {
@@ -541,6 +545,7 @@ public class DynamicCrudService {
         }
         AiCrudConfig config = getConfig(configKey);
         String tableName = config.getTableName();
+        applyDocumentNoIfNeeded(config, data, collectInternalWriteFields(config, tableName));
         Map<String, Object> filteredData = filterInternalWriteData(config, tableName, data);
         if (filteredData.isEmpty()) {
             throw new BusinessException("没有可写入的字段");
@@ -1099,6 +1104,106 @@ public class DynamicCrudService {
         fields.add(field);
         fields.add(DynamicQueryGenerator.snakeToCamel(field));
         fields.add(DynamicQueryGenerator.camelToSnake(field));
+    }
+
+    private void applyDocumentNoIfNeeded(AiCrudConfig config, Map<String, Object> data, Set<String> allowedFields) {
+        if (config == null || data == null) {
+            return;
+        }
+        AiBusinessDocumentConfig documentConfig = resolveEnabledDocumentConfig(config);
+        if (documentConfig == null) {
+            return;
+        }
+        String documentNoField = documentConfigService.resolveDocumentNoField(documentConfig, config);
+        if (StringUtils.isBlank(documentNoField)) {
+            return;
+        }
+        Set<String> writableAliases = resolveDocumentNoWritableAliases(config, documentNoField);
+        if (writableAliases.isEmpty()) {
+            log.warn("[DynamicCrudService] 单据编号字段未匹配到业务表列, configKey={}, documentNoField={}",
+                    config.getConfigKey(), documentNoField);
+            return;
+        }
+        if (allowedFields != null) {
+            allowedFields.addAll(writableAliases);
+        }
+        Map<String, Object> mainPayload = extractMainPayload(data);
+        String documentNo = documentConfigService.generateDocumentNo(documentConfig, mainPayload);
+        if (StringUtils.isBlank(documentNo)) {
+            return;
+        }
+        // 单据编号由平台规则统一生成，覆盖客户端传入值，避免用户手填造成冲突。
+        for (String alias : writableAliases) {
+            mainPayload.put(alias, documentNo);
+        }
+    }
+
+    private AiBusinessDocumentConfig resolveEnabledDocumentConfig(AiCrudConfig config) {
+        AiBusinessDocumentConfig documentConfig = documentConfigService.selectEnabledByConfigKey(
+                config.getTenantId(), config.getConfigKey());
+        if (documentConfig == null && StringUtils.isNotBlank(config.getObjectCode())) {
+            documentConfig = documentConfigService.selectEnabledByObjectCode(config.getTenantId(), config.getObjectCode());
+        }
+        return documentConfig;
+    }
+
+    private Set<String> resolveDocumentNoWritableAliases(AiCrudConfig config, String documentNoField) {
+        Set<String> aliases = new LinkedHashSet<>();
+        if (config == null || StringUtils.isBlank(config.getTableName()) || StringUtils.isBlank(documentNoField)) {
+            return aliases;
+        }
+        Map<String, String> columnMapping = repository.getColumnMapping(config.getTableName());
+        addDocumentNoAliasIfWritable(aliases, documentNoField, columnMapping);
+        if (StringUtils.isNotBlank(config.getModelSchema())) {
+            LowcodeModelSchema modelSchema = readModelSchema(config);
+            if (modelSchema != null && modelSchema.getFields() != null) {
+                Set<String> requestedAliases = documentNoAliasSet(documentNoField);
+                for (LowcodeFieldSchema field : modelSchema.getFields()) {
+                    if (field == null) {
+                        continue;
+                    }
+                    if (matchesAnyAlias(field.getField(), requestedAliases)
+                            || matchesAnyAlias(field.getColumnName(), requestedAliases)) {
+                        addDocumentNoAliasIfWritable(aliases, field.getField(), columnMapping);
+                        addDocumentNoAliasIfWritable(aliases, field.getColumnName(), columnMapping);
+                    }
+                }
+            }
+        }
+        return aliases;
+    }
+
+    private Set<String> documentNoAliasSet(String field) {
+        Set<String> aliases = new LinkedHashSet<>();
+        if (StringUtils.isBlank(field)) {
+            return aliases;
+        }
+        aliases.add(field);
+        aliases.add(DynamicQueryGenerator.snakeToCamel(field));
+        aliases.add(DynamicQueryGenerator.camelToSnake(field));
+        return aliases;
+    }
+
+    private boolean matchesAnyAlias(String field, Set<String> aliases) {
+        if (StringUtils.isBlank(field) || aliases == null || aliases.isEmpty()) {
+            return false;
+        }
+        return aliases.contains(field)
+                || aliases.contains(DynamicQueryGenerator.snakeToCamel(field))
+                || aliases.contains(DynamicQueryGenerator.camelToSnake(field));
+    }
+
+    private void addDocumentNoAliasIfWritable(Set<String> aliases,
+                                              String field,
+                                              Map<String, String> columnMapping) {
+        if (StringUtils.isBlank(field) || columnMapping == null || columnMapping.isEmpty()) {
+            return;
+        }
+        for (String alias : documentNoAliasSet(field)) {
+            if (columnMapping.containsKey(alias)) {
+                aliases.add(alias);
+            }
+        }
     }
 
     // ==================== 删除操作 ====================

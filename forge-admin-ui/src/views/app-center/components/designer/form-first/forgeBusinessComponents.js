@@ -31,16 +31,22 @@ let dictTypeOptions = []
 let dictTypeOptionsLoaded = false
 let dictTypeOptionsLoading = null
 
-export function installForgeBusinessComponents(designer) {
+export function installForgeBusinessComponents(designer, fields = [], options = {}) {
   if (!designer)
     return
+  const config = {
+    installBaseRules: true,
+    ...options,
+  }
   if (!installedDesigners.has(designer)) {
     designer.addMenu?.({ ...FORGE_BUSINESS_MENU, list: [] })
     designer.addComponent?.(createForgeBusinessDragRules())
     installedDesigners.add(designer)
   }
-  installForgeBusinessComponentRules(designer)
-  loadDictTypeOptions().then(() => installForgeBusinessComponentRules(designer))
+  if (config.installBaseRules)
+    installForgeBusinessBaseRules(designer, fields)
+  installForgeBusinessComponentRules(designer, fields)
+  loadDictTypeOptions().then(() => installForgeBusinessComponentRules(designer, fields))
 }
 
 export function resolveDesignerDragTag(componentKey) {
@@ -162,9 +168,38 @@ function createForgeBusinessDragRules() {
   ]
 }
 
-function createForgeBusinessComponentRules() {
+function createForgeBusinessComponentRules(fields = []) {
+  const fieldBindingRules = () => createFieldBindingRules(fields)
   return {
+    input: () => [
+      ...fieldBindingRules(),
+    ],
+    inputNumber: () => [
+      ...fieldBindingRules(),
+    ],
+    datePicker: () => [
+      ...fieldBindingRules(),
+    ],
+    timePicker: () => [
+      ...fieldBindingRules(),
+    ],
+    switch: () => [
+      ...fieldBindingRules(),
+    ],
+    upload: () => [
+      ...fieldBindingRules(),
+    ],
+    cascader: () => [
+      ...fieldBindingRules(),
+    ],
+    tree: () => [
+      ...fieldBindingRules(),
+    ],
+    elTreeSelect: () => [
+      ...fieldBindingRules(),
+    ],
     [DRAG_TAG_BY_COMPONENT.dictSelect]: () => [
+      ...fieldBindingRules(),
       dictTypeRule(),
       switchRule('multiple', '多选'),
       switchRule('filterable', '可搜索', true),
@@ -181,6 +216,7 @@ function createForgeBusinessComponentRules() {
       switchRule('cascadeConfig>clearOnParentChange', '上级变化清空当前值', true),
     ],
     [DRAG_TAG_BY_COMPONENT.regionTreeSelect]: () => [
+      ...fieldBindingRules(),
       inputRule('rootCode', '根区划编码', '默认 150000'),
       switchRule('dataRight', '启用数据权限', true),
       switchRule('virtualDisabled', '编辑态禁选 ALL 节点', true),
@@ -188,6 +224,7 @@ function createForgeBusinessComponentRules() {
       switchRule('clearable', '可清空', true),
     ],
     [DRAG_TAG_BY_COMPONENT.orgTreeSelect]: () => [
+      ...fieldBindingRules(),
       switchRule('multiple', '多选'),
       switchRule('filterable', '可搜索', true),
       switchRule('clearable', '可清空', true),
@@ -196,14 +233,22 @@ function createForgeBusinessComponentRules() {
       inputRule('optionSource>valueField', '值字段', '默认 id'),
     ],
     [DRAG_TAG_BY_COMPONENT.userSelect]: () => [
+      ...fieldBindingRules(),
       switchRule('multiple', '多选'),
       switchRule('clearable', '可清空', true),
       inputRule('targetField', '名称回填字段', '例如：ownerUserIdName'),
       inputRule('labelValueField', '已有名称字段', '编辑回显时使用'),
     ],
-    [DRAG_TAG_BY_COMPONENT.fileUpload]: () => uploadRules(false),
-    [DRAG_TAG_BY_COMPONENT.imageUpload]: () => uploadRules(true),
+    [DRAG_TAG_BY_COMPONENT.fileUpload]: () => [
+      ...fieldBindingRules(),
+      ...uploadRules(false),
+    ],
+    [DRAG_TAG_BY_COMPONENT.imageUpload]: () => [
+      ...fieldBindingRules(),
+      ...uploadRules(true),
+    ],
     [DRAG_TAG_BY_COMPONENT.objectReference]: () => [
+      ...fieldBindingRules(),
       inputRule('referenceObjectCode', '目标对象编码', '例如：crm_customer'),
       inputRule('referenceDisplayField', '显示字段', '例如：customerName'),
       inputRule('optionSource>api', '远程接口', '例如：get@/ai/crud/crm_customer/page'),
@@ -220,25 +265,100 @@ function createForgeBusinessComponentRules() {
       switchRule('showInDetail', '详情页展示', true),
     ],
     select: () => [
+      ...fieldBindingRules(),
       dictTypeRule('dictType', '系统字典'),
     ],
     radio: () => [
+      ...fieldBindingRules(),
       dictTypeRule('dictType', '系统字典'),
     ],
     checkbox: () => [
+      ...fieldBindingRules(),
       dictTypeRule('dictType', '系统字典'),
     ],
   }
 }
 
-function installForgeBusinessComponentRules(designer) {
-  const version = dictTypeOptionsLoaded ? `dict-loaded-${dictTypeOptions.length}` : 'dict-loading'
+function installForgeBusinessComponentRules(designer, fields = []) {
+  const fieldSignature = buildFieldOptions(fields).map(item => item.value).join(',')
+  const version = `${dictTypeOptionsLoaded ? `dict-loaded-${dictTypeOptions.length}` : 'dict-loading'}|fields:${fieldSignature}`
   if (componentRuleVersions.get(designer) === version)
     return
-  Object.entries(createForgeBusinessComponentRules()).forEach(([name, rule]) => {
+  Object.entries(createForgeBusinessComponentRules(fields)).forEach(([name, rule]) => {
     designer.setComponentRuleConfig?.(name, rule, true)
   })
   componentRuleVersions.set(designer, version)
+}
+
+function installForgeBusinessBaseRules(designer, fields = []) {
+  designer.setBaseRuleConfig?.(({ t }) => [
+    selectRule('field', t?.('form.field') || '组件字段ID', buildFieldOptions(fields), undefined, {
+      filterable: true,
+      clearable: true,
+      placeholder: '从已有字段选择',
+    }),
+    {
+      type: 'LanguageInput',
+      field: 'title',
+      value: '',
+      title: t?.('form.title') || '标题',
+    },
+    {
+      type: 'LanguageInput',
+      field: 'info',
+      value: '',
+      title: t?.('form.info') || '说明',
+    },
+    {
+      type: 'SizeInput',
+      field: 'formCreateWrap>labelWidth',
+      value: '',
+      title: t?.('form.labelWidth') || '标签宽度',
+    },
+    {
+      type: 'Struct',
+      field: '_control',
+      name: 'control',
+      value: [],
+      title: t?.('form.control') || '控制',
+      warning: t?.('form.controlDocument', { doc: '<a target="_blank" href="https://view.form-create.com/control" style="color: inherit;text-decoration: underline;">文档</a>' }) || '',
+      props: {
+        defaultValue: [],
+        validate(val) {
+          if (!Array.isArray(val))
+            return false
+          if (!val.length)
+            return true
+          return !val.some(({ rule }) => !Array.isArray(rule))
+        },
+      },
+    },
+  ], false)
+}
+
+function createFieldBindingRules(fields = []) {
+  return [
+    selectRule('fieldBinding>fieldCode', '组件字段ID', buildFieldOptions(fields), undefined, {
+      filterable: true,
+      clearable: true,
+      placeholder: '从已有字段选择',
+    }),
+  ]
+}
+
+function buildFieldOptions(fields = []) {
+  return (Array.isArray(fields) ? fields : [])
+    .map((field) => {
+      const value = field?.fieldCode || field?.field || ''
+      if (!value)
+        return null
+      const label = field.fieldName || field.label || value
+      return {
+        label: `${label}（${value}）`,
+        value,
+      }
+    })
+    .filter(Boolean)
 }
 
 function createSelectDragRule({ name, label, title, componentKey, props = {}, options = [] }) {

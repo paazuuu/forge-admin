@@ -184,6 +184,7 @@ public class LowcodeRuntimeConfigBuilder {
             copyOption(tableZone.getProps(), options, "showExport");
             copyOption(tableZone.getProps(), options, "hideBatchDelete");
             copyOption(tableZone.getProps(), options, "enableCustomQuery");
+            options.put("tableRowGap", intValue(tableZone.getProps().get("rowGap"), 8));
         }
         Set<String> toolbarActions = resolveToolbarStandardActions(pageSchema);
         if (!toolbarActions.isEmpty()) {
@@ -1265,8 +1266,9 @@ public class LowcodeRuntimeConfigBuilder {
                                                  LowcodeModelSchema modelSchema,
                                                  LowcodePageSchema pageSchema) {
         Map<String, Object> item = new LinkedHashMap<>();
-        String queryFieldName = StringUtils.defaultIfBlank(text(pageSetting.get("queryField")), field.getField());
-        LowcodeFieldSchema queryField = findRuntimeField(modelSchema, pageSchema, queryFieldName);
+        String configuredQueryFieldName = StringUtils.defaultIfBlank(text(pageSetting.get("queryField")), field.getField());
+        LowcodeFieldSchema queryField = findRuntimeField(modelSchema, pageSchema, configuredQueryFieldName);
+        String queryFieldName = queryField == null ? field.getField() : configuredQueryFieldName;
         LowcodeFieldSchema effectiveField = queryField == null ? field : queryField;
         String queryType = StringUtils.defaultIfBlank(text(pageSetting.get("queryType")),
                 StringUtils.defaultIfBlank(effectiveField.getQueryType(), StringUtils.defaultIfBlank(field.getQueryType(), "eq")))

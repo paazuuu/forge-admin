@@ -11,6 +11,9 @@ public interface BusinessDocumentConfigMapper extends BaseMapper<AiBusinessDocum
     AiBusinessDocumentConfig selectByObjectCode(@Param("tenantId") Long tenantId,
                                                 @Param("objectCode") String objectCode);
 
+    AiBusinessDocumentConfig selectByConfigKey(@Param("tenantId") Long tenantId,
+                                               @Param("configKey") String configKey);
+
     AiBusinessDocumentConfig selectByObjectId(@Param("tenantId") Long tenantId,
                                               @Param("objectId") Long objectId);
 }

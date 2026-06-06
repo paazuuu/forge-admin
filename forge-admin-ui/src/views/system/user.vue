@@ -95,6 +95,7 @@
           :edit-schema="editSchema"
           :before-submit="beforeSubmit"
           :before-load-list="beforeLoadList"
+          :load-detail-on-edit="true"
           row-key="id"
           :edit-grid-cols="2"
           modal-width="900px"
@@ -297,15 +298,123 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 租户绑定弹窗 -->
+    <n-modal
+      v-model:show="tenantModalVisible"
+      :title="`用户租户 - ${currentUser.username || ''}`"
+      preset="card"
+      style="width: 640px"
+      :mask-closable="false"
+    >
+      <div class="tenant-modal-content">
+        <n-spin :show="tenantLoading">
+          <n-form label-placement="left" label-width="90">
+            <n-form-item label="绑定租户">
+              <n-checkbox-group v-model:value="checkedTenantKeys">
+                <n-space vertical>
+                  <n-checkbox
+                    v-for="tenant in tenantOptions"
+                    :key="tenant.id"
+                    :value="tenant.id"
+                  >
+                    {{ tenant.tenantName }}
+                  </n-checkbox>
+                </n-space>
+              </n-checkbox-group>
+            </n-form-item>
+            <n-form-item label="默认租户">
+              <n-select
+                v-model:value="defaultTenantId"
+                :options="selectedTenantOptions"
+                placeholder="请选择默认租户"
+              />
+            </n-form-item>
+          </n-form>
+        </n-spin>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="tenantModalVisible = false">
+            取消
+          </n-button>
+          <n-button
+            type="primary"
+            :loading="tenantSubmitLoading"
+            @click="handleSubmitTenant"
+          >
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 岗位绑定弹窗 -->
+    <n-modal
+      v-model:show="postModalVisible"
+      :title="`用户岗位 - ${currentUser.username || ''}`"
+      preset="card"
+      style="width: 640px"
+      :mask-closable="false"
+    >
+      <div class="post-modal-content">
+        <n-spin :show="postLoading">
+          <n-form label-placement="left" label-width="90">
+            <n-form-item label="主岗位">
+              <n-select
+                v-model:value="mainPostId"
+                :options="selectedPostOptions"
+                placeholder="请选择主岗位"
+                clearable
+              />
+            </n-form-item>
+            <n-form-item label="绑定岗位">
+              <n-checkbox-group v-model:value="checkedPostKeys">
+                <n-space vertical>
+                  <n-checkbox
+                    v-for="post in postList"
+                    :key="post.id"
+                    :value="post.id"
+                  >
+                    {{ post.postName }}
+                    <n-tag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
+                      {{ post.postCode }}
+                    </n-tag>
+                  </n-checkbox>
+                </n-space>
+              </n-checkbox-group>
+              <n-empty v-if="!postLoading && postList.length === 0" description="暂无岗位数据" size="small" />
+            </n-form-item>
+          </n-form>
+        </n-spin>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="postModalVisible = false">
+            取消
+          </n-button>
+          <n-button
+            type="primary"
+            :loading="postSubmitLoading"
+            @click="handleSubmitPost"
+          >
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { NTag } from 'naive-ui'
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import { useUserStore } from '@/store'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemUser' })
@@ -317,6 +426,7 @@ const USER_SEX_DICT = 'sys_user_sex'
 const crudRef = ref(null)
 const treeRef = ref(null)
 const orgTreeRef = ref(null)
+const userStore = useUserStore()
 
 // 左侧组织树相关
 const leftOrgTreeData = ref([])
@@ -361,6 +471,22 @@ const mainOrgId = ref(null)
 const orgTreeExpandAll = ref(true)
 const orgTreeExpandedKeys = ref([])
 
+// 岗位绑定相关
+const postModalVisible = ref(false)
+const postLoading = ref(false)
+const postSubmitLoading = ref(false)
+const postList = ref([])
+const checkedPostKeys = ref([])
+const mainPostId = ref(null)
+
+// 租户绑定相关
+const tenantModalVisible = ref(false)
+const tenantLoading = ref(false)
+const tenantSubmitLoading = ref(false)
+const tenantOptions = ref([])
+const checkedTenantKeys = ref([])
+const defaultTenantId = ref(null)
+
 // 行政区划选项（搜索用：虚拟节点可选；编辑用：虚拟节点不可选）
 const searchRegionOptions = ref([])
 const editRegionOptions = ref([])
@@ -370,6 +496,42 @@ const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, USER_SEX_DICT)
 const userTypeOptions = computed(() => toNumberOptions(dict.value[USER_TYPE_DICT]))
 const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
 const genderOptions = computed(() => toNumberOptions(dict.value[USER_SEX_DICT]))
+const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
+  label: item.tenantName,
+  value: item.id,
+})))
+const selectedTenantOptions = computed(() => tenantOptions.value
+  .filter(item => checkedTenantKeys.value.includes(item.id))
+  .map(item => ({
+    label: item.tenantName,
+    value: item.id,
+  })))
+
+watch(checkedTenantKeys, (keys) => {
+  if (defaultTenantId.value && !keys.includes(defaultTenantId.value)) {
+    defaultTenantId.value = keys[0] || null
+  }
+})
+
+// 岗位选项（仅已勾选的岗位可选为主岗）
+const selectedPostOptions = computed(() => postList.value
+  .filter(item => checkedPostKeys.value.includes(item.id))
+  .map(item => ({
+    label: item.postName,
+    value: item.id,
+  })))
+
+// 编辑表单中的岗位下拉选项
+const postSelectOptions = computed(() => postList.value.map(item => ({
+  label: item.postName,
+  value: item.id,
+})))
+
+watch(checkedPostKeys, (keys) => {
+  if (mainPostId.value && !keys.includes(mainPostId.value)) {
+    mainPostId.value = null
+  }
+})
 
 // 搜索表单配置
 const searchSchema = computed(() => [
@@ -439,6 +601,14 @@ const tableColumns = computed(() => [
       return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small' })
     },
   },
+  ...(userStore.isAdmin
+    ? [{
+        prop: 'tenantName',
+        label: '默认租户',
+        width: 150,
+        render: row => row.tenantName || row.tenantId || '-',
+      }]
+    : []),
   {
     prop: 'phone',
     label: '手机号',
@@ -484,12 +654,14 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 200,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
       { label: '授权', key: 'auth', onClick: handleAuth },
       { label: '组织', key: 'org', onClick: handleOrg },
+      { label: '岗位', key: 'post', onClick: handlePost },
+      { label: '租户', key: 'tenant', onClick: handleTenant, visible: () => userStore.isAdmin },
       {
         label: '重置密码',
         key: 'resetPwd',
@@ -544,6 +716,18 @@ const editSchema = computed(() => [
       placeholder: '请输入密码',
     },
     vIf: formData => !formData.id,
+  },
+  {
+    field: 'tenantId',
+    label: '所属租户',
+    type: 'select',
+    defaultValue: userStore.userInfo?.tenantId,
+    rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
+    props: {
+      placeholder: '请选择所属租户',
+      options: tenantSelectOptions.value,
+      disabled: !userStore.isAdmin,
+    },
   },
   {
     field: 'userType',
@@ -644,6 +828,19 @@ const editSchema = computed(() => [
     },
   },
   {
+    field: 'postIds',
+    label: '岗位',
+    type: 'select',
+    span: 2,
+    props: {
+      placeholder: '请选择岗位',
+      options: postSelectOptions.value,
+      multiple: true,
+      clearable: true,
+      filterable: true,
+    },
+  },
+  {
     field: 'remark',
     label: '备注',
     type: 'textarea',
@@ -665,6 +862,8 @@ function toNumberOptions(options = []) {
 // 组件挂载时加载左侧组织树
 onMounted(() => {
   loadLeftOrgTree()
+  loadTenantOptions()
+  loadPostList()
 })
 
 const orgTreeSummaryText = computed(() => {
@@ -727,6 +926,18 @@ async function loadRegionOptions() {
   }
   catch (error) {
     console.error('加载行政区划选项失败:', error)
+  }
+}
+
+async function loadTenantOptions() {
+  try {
+    const res = await request.get('/system/tenant/assignable/options')
+    if (res.code === 200) {
+      tenantOptions.value = res.data || []
+    }
+  }
+  catch (error) {
+    console.error('加载租户选项失败:', error)
   }
 }
 
@@ -916,6 +1127,10 @@ async function handleUntieDisable(row) {
 
 // 表单提交前处理
 function beforeSubmit(formData) {
+  if (!userStore.isAdmin) {
+    formData.tenantId = userStore.userInfo?.tenantId
+    formData.userType = 2
+  }
   return formData
 }
 
@@ -1150,12 +1365,160 @@ async function handleSubmitOrg() {
     orgSubmitLoading.value = false
   }
 }
+
+// 岗位管理
+async function handlePost(row) {
+  currentUser.value = row
+  postModalVisible.value = true
+  checkedPostKeys.value = []
+  mainPostId.value = null
+
+  await loadPostList()
+  await loadUserPosts(row.id)
+}
+
+// 加载岗位列表
+async function loadPostList() {
+  try {
+    postLoading.value = true
+    const res = await request.get('/system/post/list')
+    if (res.code === 200) {
+      postList.value = res.data || []
+    }
+  }
+  catch (error) {
+    console.error('加载岗位列表失败:', error)
+    window.$message.error('加载岗位列表失败')
+  }
+  finally {
+    postLoading.value = false
+  }
+}
+
+// 加载用户已绑定的岗位
+async function loadUserPosts(userId) {
+  try {
+    postLoading.value = true
+    const res = await request.get(`/system/user/${userId}/posts`)
+    if (res.code === 200) {
+      checkedPostKeys.value = res.data || []
+      mainPostId.value = checkedPostKeys.value.length > 0 ? checkedPostKeys.value[0] : null
+    }
+  }
+  catch (error) {
+    console.error('加载用户岗位失败:', error)
+    window.$message.error('加载用户岗位失败')
+  }
+  finally {
+    postLoading.value = false
+  }
+}
+
+// 提交岗位绑定
+async function handleSubmitPost() {
+  if (checkedPostKeys.value.length === 0) {
+    window.$message.warning('请至少选择一个岗位')
+    return
+  }
+
+  try {
+    postSubmitLoading.value = true
+    const res = await request.post(
+      `/system/user/${currentUser.value.id}/posts`,
+      {
+        postIds: checkedPostKeys.value,
+        mainPostId: mainPostId.value,
+      },
+    )
+    if (res.code === 200) {
+      window.$message.success('岗位绑定成功')
+      postModalVisible.value = false
+      crudRef.value?.refresh()
+    }
+  }
+  catch (error) {
+    console.error('岗位绑定失败:', error)
+    window.$message.error('岗位绑定失败')
+  }
+  finally {
+    postSubmitLoading.value = false
+  }
+}
+
+// 租户管理
+async function handleTenant(row) {
+  currentUser.value = row
+  tenantModalVisible.value = true
+  checkedTenantKeys.value = []
+  defaultTenantId.value = null
+
+  if (tenantOptions.value.length === 0) {
+    await loadTenantOptions()
+  }
+  await loadUserTenants(row.id)
+}
+
+async function loadUserTenants(userId) {
+  try {
+    tenantLoading.value = true
+    const res = await request.get(`/system/user/${userId}/tenants`)
+    if (res.code === 200) {
+      const list = res.data || []
+      checkedTenantKeys.value = list
+        .filter(item => item.status !== 0)
+        .map(item => item.tenantId)
+      const defaultTenant = list.find(item => item.isDefault === 1)
+      defaultTenantId.value = defaultTenant?.tenantId || checkedTenantKeys.value[0] || null
+    }
+  }
+  catch (error) {
+    console.error('加载用户租户失败:', error)
+    window.$message.error('加载用户租户失败')
+  }
+  finally {
+    tenantLoading.value = false
+  }
+}
+
+async function handleSubmitTenant() {
+  if (checkedTenantKeys.value.length === 0) {
+    window.$message.warning('请至少选择一个租户')
+    return
+  }
+  if (!defaultTenantId.value || !checkedTenantKeys.value.includes(defaultTenantId.value)) {
+    defaultTenantId.value = checkedTenantKeys.value[0]
+  }
+
+  try {
+    tenantSubmitLoading.value = true
+    const res = await request.post(
+      `/system/user/${currentUser.value.id}/tenants`,
+      {
+        tenantIds: checkedTenantKeys.value,
+        defaultTenantId: defaultTenantId.value,
+        memberType: currentUser.value.userType === 1 ? 1 : 2,
+      },
+    )
+    if (res.code === 200) {
+      window.$message.success('租户绑定成功')
+      tenantModalVisible.value = false
+      crudRef.value?.refresh()
+    }
+  }
+  catch (error) {
+    console.error('租户绑定失败:', error)
+    window.$message.error('租户绑定失败')
+  }
+  finally {
+    tenantSubmitLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
 .system-user-page {
   height: 100%;
-  //padding: 20px;
+  /* padding: 20px; */
   display: flex;
   flex-direction: column;
 }

@@ -23,6 +23,7 @@
         ref="designerRef"
         :height="height"
         :config="designerConfig"
+        :locale="designerLocale"
         @create="queueFlush"
         @copy="queueFlush"
         @delete="queueFlush"
@@ -38,8 +39,14 @@
 
 <script setup>
 import FcDesigner from '@form-create/designer'
+import designerZhCn from '@form-create/designer/locale/zh-cn.es'
 import { getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { buildDefaultFormOptions, cloneValue, installFormCreate, normalizeFormCreateRules } from './formCreateBridge'
+import { hydrateForgeBusinessPreviewRules, installForgeBusinessComponents } from '@/views/app-center/components/designer/form-first/forgeBusinessComponents'
+import { DEFAULT_FORM_ITEM_GAP, buildDefaultFormOptions, cloneValue, installFormCreate, normalizeFormCreateRules } from './formCreateBridge'
+
+const FORM_ITEM_GAP_OPTION_KEY = 'forgeFormItemGap'
+const MIN_FORM_ITEM_GAP = 0
+const MAX_FORM_ITEM_GAP = 80
 
 const props = defineProps({
   modelValue: {
@@ -48,7 +55,7 @@ const props = defineProps({
   },
   height: {
     type: String,
-    default: '680px',
+    default: '100%',
   },
 })
 
@@ -59,7 +66,12 @@ installFormCreate(getCurrentInstance()?.appContext?.app)
 const designerRef = ref(null)
 const syncingDesigner = ref(false)
 const flushTimer = ref(null)
+const previewHydrateTimer = ref(null)
 const localRulesSnapshot = ref('')
+const formItemGap = ref(parseFormItemGapValue(DEFAULT_FORM_ITEM_GAP))
+const designerLocale = designerZhCn
+let loadSeq = 0
+let destroyed = false
 
 const designerConfig = {
   showAi: false,
@@ -72,7 +84,29 @@ const designerConfig = {
   showPreviewBtn: true,
   showJsonPreview: true,
   exitConfirm: false,
-  formOptions: buildDefaultFormOptions(),
+  formOptions: buildDesignerFormOptions(),
+  formRule: {
+    append: true,
+    rule: () => [
+      {
+        type: 'inputNumber',
+        field: FORM_ITEM_GAP_OPTION_KEY,
+        title: '字段行间距（px）',
+        value: parseFormItemGapValue(DEFAULT_FORM_ITEM_GAP),
+        props: {
+          min: MIN_FORM_ITEM_GAP,
+          max: MAX_FORM_ITEM_GAP,
+          step: 2,
+          precision: 0,
+          controlsPosition: 'right',
+          placeholder: '默认 20',
+        },
+        on: {
+          change: handleFormItemGapChange,
+        },
+      },
+    ],
+  },
 }
 
 watch(
@@ -81,24 +115,41 @@ watch(
   { deep: true },
 )
 
-onMounted(() => loadDesignerRules())
+onMounted(() => {
+  destroyed = false
+  ensureForgeBusinessComponents()
+  loadDesignerRules()
+})
 
 onBeforeUnmount(() => {
+  destroyed = true
+  loadSeq += 1
   if (flushTimer.value)
     window.clearTimeout(flushTimer.value)
+  if (previewHydrateTimer.value)
+    window.clearTimeout(previewHydrateTimer.value)
+  flushTimer.value = null
+  previewHydrateTimer.value = null
 })
 
 function loadDesignerRules() {
-  nextTick(() => {
-    if (!designerRef.value)
+  const seq = ++loadSeq
+  nextTick(async () => {
+    if (destroyed || seq !== loadSeq || !designerRef.value)
       return
-    const rules = normalizeFormCreateRules(props.modelValue)
+    ensureForgeBusinessComponents()
+    const normalizedRules = normalizeFormCreateRules(props.modelValue)
+    const gap = resolveFormItemGapFromRules(normalizedRules)
+    formItemGap.value = gap
+    const rules = applyFormItemGapToRules(await hydrateForgeBusinessPreviewRules(normalizedRules), gap)
+    if (destroyed || seq !== loadSeq || !designerRef.value)
+      return
     const snapshot = JSON.stringify(rules)
     if (snapshot === localRulesSnapshot.value)
       return
     syncingDesigner.value = true
     designerRef.value.setRule(cloneValue(rules))
-    designerRef.value.setOption(buildDefaultFormOptions())
+    designerRef.value.setOption(buildDesignerFormOptions(gap))
     localRulesSnapshot.value = snapshot
     nextTick(() => {
       syncingDesigner.value = false
@@ -107,21 +158,105 @@ function loadDesignerRules() {
 }
 
 function queueFlush() {
-  if (syncingDesigner.value)
+  if (destroyed || syncingDesigner.value)
     return
   if (flushTimer.value)
     window.clearTimeout(flushTimer.value)
-  flushTimer.value = window.setTimeout(() => flushDesigner(), 160)
+  flushTimer.value = window.setTimeout(() => {
+    flushTimer.value = null
+    flushDesigner()
+    queuePreviewHydration()
+  }, 160)
 }
 
 function flushDesigner() {
-  if (!designerRef.value)
+  if (destroyed || !designerRef.value)
     return []
   const rules = designerRef.value.getRule?.() || []
-  const clonedRules = cloneValue(rules) || []
+  const gap = readDesignerFormItemGap()
+  const clonedRules = applyFormItemGapToRules(normalizeFormCreateRules(rules), gap)
   localRulesSnapshot.value = JSON.stringify(clonedRules)
   emit('update:modelValue', clonedRules)
   return clonedRules
+}
+
+function ensureForgeBusinessComponents() {
+  installForgeBusinessComponents(designerRef.value, resolveCurrentFields(), {
+    installBaseRules: false,
+  })
+}
+
+function resolveCurrentFields() {
+  return normalizeFormCreateRules(props.modelValue)
+    .map((rule) => {
+      const fieldCode = rule.field || rule.fieldName || rule.name || ''
+      if (!fieldCode)
+        return null
+      return {
+        fieldCode,
+        fieldName: rule.title || rule.label || fieldCode,
+      }
+    })
+    .filter(Boolean)
+}
+
+function queuePreviewHydration() {
+  if (previewHydrateTimer.value)
+    window.clearTimeout(previewHydrateTimer.value)
+  previewHydrateTimer.value = window.setTimeout(() => {
+    previewHydrateTimer.value = null
+    refreshPreviewOptions()
+  }, 220)
+}
+
+async function refreshPreviewOptions() {
+  const seq = loadSeq
+  if (destroyed || !designerRef.value || syncingDesigner.value)
+    return
+  const rules = designerRef.value.getRule?.() || []
+  const gap = readDesignerFormItemGap()
+  const hydratedRules = applyFormItemGapToRules(await hydrateForgeBusinessPreviewRules(rules), gap)
+  const designer = designerRef.value
+  if (destroyed || seq !== loadSeq || !designer || syncingDesigner.value)
+    return
+  const nextSnapshot = JSON.stringify(hydratedRules)
+  if (nextSnapshot === localRulesSnapshot.value)
+    return
+  syncingDesigner.value = true
+  designer.setRule?.(cloneValue(hydratedRules))
+  localRulesSnapshot.value = nextSnapshot
+  nextTick(() => {
+    if (destroyed)
+      return
+    syncingDesigner.value = false
+  })
+}
+
+function handleFormItemGapChange(value) {
+  if (destroyed || syncingDesigner.value)
+    return
+  const gap = parseFormItemGapValue(value)
+  if (gap === formItemGap.value)
+    return
+  formItemGap.value = gap
+  applyDesignerFormItemGap()
+}
+
+function applyDesignerFormItemGap() {
+  if (destroyed || !designerRef.value)
+    return
+  const rules = applyFormItemGapToRules(normalizeFormCreateRules(designerRef.value.getRule?.() || []), formItemGap.value)
+  const snapshot = JSON.stringify(rules)
+  syncingDesigner.value = true
+  designerRef.value.setRule?.(cloneValue(rules))
+  designerRef.value.setOption?.(buildDesignerFormOptions(formItemGap.value))
+  localRulesSnapshot.value = snapshot
+  emit('update:modelValue', rules)
+  nextTick(() => {
+    if (destroyed)
+      return
+    syncingDesigner.value = false
+  })
 }
 
 function handleReset() {
@@ -143,6 +278,74 @@ function getRules() {
 defineExpose({
   getRules,
 })
+
+function buildDesignerFormOptions(gap = formItemGap.value) {
+  const options = buildDefaultFormOptions()
+  return {
+    ...options,
+    form: {
+      ...options.form,
+      [FORM_ITEM_GAP_OPTION_KEY]: parseFormItemGapValue(gap),
+    },
+  }
+}
+
+function readDesignerFormItemGap() {
+  const options = designerRef.value?.getOptions?.() || designerRef.value?.getOption?.() || {}
+  const gap = parseFormItemGapValue(options?.form?.[FORM_ITEM_GAP_OPTION_KEY])
+  formItemGap.value = gap
+  return gap
+}
+
+function resolveFormItemGapFromRules(rules = []) {
+  let resolved = null
+  walkRules(rules, (rule) => {
+    if (resolved !== null)
+      return
+    const value = rule?.wrap?.style?.marginBottom
+    if (value !== undefined && value !== null && value !== '')
+      resolved = parseFormItemGapValue(value)
+  })
+  return resolved ?? parseFormItemGapValue(DEFAULT_FORM_ITEM_GAP)
+}
+
+function applyFormItemGapToRules(rules = [], gap = formItemGap.value) {
+  const marginBottom = `${parseFormItemGapValue(gap)}px`
+  const nextRules = cloneValue(Array.isArray(rules) ? rules : [])
+  walkRules(nextRules, (rule) => {
+    if (!rule || typeof rule !== 'object')
+      return
+    const wrap = rule.wrap && typeof rule.wrap === 'object' && !Array.isArray(rule.wrap)
+      ? rule.wrap
+      : {}
+    const style = wrap.style && typeof wrap.style === 'object' && !Array.isArray(wrap.style)
+      ? wrap.style
+      : {}
+    style.marginBottom = marginBottom
+    wrap.style = style
+    rule.wrap = wrap
+  })
+  return nextRules
+}
+
+function walkRules(rules = [], visitor) {
+  if (!Array.isArray(rules))
+    return
+  rules.forEach((rule) => {
+    visitor(rule)
+    if (Array.isArray(rule?.children))
+      walkRules(rule.children, visitor)
+  })
+}
+
+function parseFormItemGapValue(value) {
+  const numberValue = typeof value === 'number'
+    ? value
+    : Number.parseFloat(String(value ?? DEFAULT_FORM_ITEM_GAP).replace('px', ''))
+  if (!Number.isFinite(numberValue))
+    return parseFormItemGapValue(DEFAULT_FORM_ITEM_GAP)
+  return Math.min(MAX_FORM_ITEM_GAP, Math.max(MIN_FORM_ITEM_GAP, Math.round(numberValue)))
+}
 </script>
 
 <style scoped>
@@ -182,12 +385,33 @@ defineExpose({
 
 .designer-shell {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   background: #f6f8fb;
+  overflow: auto;
 }
 
-:deep(.fc-designer) {
+:deep(.fc-designer),
+:deep(._fc-designer) {
   --fc-primary: #2563eb;
   border: 0;
+  min-width: 1060px;
+  height: 100%;
+}
+
+:deep(.fc-designer ._fc-l),
+:deep(.fc-designer ._fc-r),
+:deep(._fc-designer ._fc-l),
+:deep(._fc-designer ._fc-r) {
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .designer-toolbar {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 12px;
+  }
 }
 </style>

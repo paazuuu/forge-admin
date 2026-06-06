@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.message.mapper.SysMessageMapper">
+
+    <select id="selectByBizTypeAndBizKey" resultType="com.mdframe.forge.plugin.message.domain.entity.SysMessage">
+        SELECT m.*
+        FROM sys_message m
+        WHERE m.biz_type = #{bizType}
+          AND m.biz_key = #{bizKey}
+        ORDER BY m.create_time DESC, m.id DESC
+        LIMIT 1
+    </select>
+</mapper>

@@ -9,10 +9,12 @@ import com.mdframe.forge.plugin.system.service.IUserLoadService;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.auth.service.ICaptchaService;
 import com.mdframe.forge.starter.auth.util.PasswordUtil;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +34,8 @@ public class UserLoadServiceImpl implements IUserLoadService {
     private final SysUserRoleMapper userRoleMapper;
     private final SysRoleMapper roleMapper;
     private final SysUserOrgMapper userOrgMapper;
+    private final SysUserTenantMapper userTenantMapper;
+    private final SysTenantMapper tenantMapper;
     private final SysRoleResourceMapper roleResourceMapper;
     private final SysResourceMapper resourceMapper;
     private final ICaptchaService captchaService;
@@ -42,50 +46,47 @@ public class UserLoadServiceImpl implements IUserLoadService {
     
     @Override
     public LoginUser loadUserByUsername(String username, Long tenantId) {
-        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUser::getUsername, username);
-        if (tenantId != null) {
-            wrapper.eq(SysUser::getTenantId, tenantId);
-        }
-        SysUser user = userMapper.selectOne(wrapper);
+        SysUser user = TenantContextHolder.executeIgnore(() ->
+                userMapper.selectByUsernameForLogin(username, tenantId));
         
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
 
-        return buildLoginUser(user);
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
     }
 
     @Override
     public LoginUser loadUserByPhone(String phone, Long tenantId) {
-        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUser::getPhone, phone);
-        if (tenantId != null) {
-            wrapper.eq(SysUser::getTenantId, tenantId);
-        }
-        SysUser user = userMapper.selectOne(wrapper);
+        SysUser user = TenantContextHolder.executeIgnore(() ->
+                userMapper.selectByPhoneForLogin(phone, tenantId));
         
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
 
-        return buildLoginUser(user);
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
     }
 
     @Override
     public LoginUser loadUserByEmail(String email, Long tenantId) {
-        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUser::getEmail, email);
-        if (tenantId != null) {
-            wrapper.eq(SysUser::getTenantId, tenantId);
-        }
-        SysUser user = userMapper.selectOne(wrapper);
+        SysUser user = TenantContextHolder.executeIgnore(() ->
+                userMapper.selectByEmailForLogin(email, tenantId));
         
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
 
-        return buildLoginUser(user);
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
+    }
+
+    @Override
+    public LoginUser loadUserByUserId(Long userId, Long tenantId) {
+        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
     }
 
     @Override
@@ -116,34 +117,41 @@ public class UserLoadServiceImpl implements IUserLoadService {
     /**
      * 构建LoginUser（包含角色、权限、组织）
      */
-    private LoginUser buildLoginUser(SysUser user) {
+    private LoginUser buildLoginUser(SysUser user, Long effectiveTenantId) {
+        SysUserTenant tenantMember = validateTenantMembership(user, effectiveTenantId);
+        SysTenant tenant = tenantMapper.selectById(effectiveTenantId);
+
         // 1. 构建基本信息
         LoginUser loginUser = new LoginUser();
         loginUser.setUserId(user.getId());
-        loginUser.setTenantId(user.getTenantId());
+        loginUser.setTenantId(effectiveTenantId);
+        loginUser.setTenantName(tenant != null ? tenant.getTenantName() : null);
         loginUser.setUsername(user.getUsername());
         loginUser.setRealName(user.getRealName());
-        loginUser.setUserType(user.getUserType());
+        loginUser.setUserType(resolveEffectiveUserType(user, tenantMember));
         loginUser.setPhone(user.getPhone());
         loginUser.setEmail(user.getEmail());
         loginUser.setAvatar(user.getAvatar());
         loginUser.setUserStatus(user.getUserStatus());
         loginUser.setCreateTime(user.getCreateTime());
+        loginUser.setTenantIds(loadAvailableTenantIds(user));
 
-        // 2. 加载用户角色
-        loadUserRoles(loginUser);
+        TenantContextHolder.executeWithTenant(effectiveTenantId, () -> {
+            // 2. 加载用户角色
+            loadUserRoles(loginUser);
 
-        // 3. 加载用户组织
-        loadUserOrgs(loginUser);
+            // 3. 加载用户组织
+            loadUserOrgs(loginUser);
 
-        // 4. 加载用户权限（按钮权限）
-        loadUserPermissions(loginUser);
+            // 4. 加载用户权限（按钮权限）
+            loadUserPermissions(loginUser);
 
-        // 5. 加载API接口权限（缓存到Session）
-        loadApiPermissions(loginUser);
+            // 5. 加载API接口权限（缓存到Session）
+            loadApiPermissions(loginUser);
 
-        // 6. 加载用户行政区划
-        loadUserRegion(loginUser);
+            // 6. 加载用户行政区划
+            loadUserRegion(loginUser);
+        });
 
         return loginUser;
     }
@@ -153,7 +161,8 @@ public class UserLoadServiceImpl implements IUserLoadService {
      */
     private void loadUserRoles(LoginUser loginUser) {
         LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUserRole::getUserId, loginUser.getUserId());
+        wrapper.eq(SysUserRole::getUserId, loginUser.getUserId())
+                .eq(SysUserRole::getTenantId, loginUser.getTenantId());
         List<SysUserRole> userRoles = userRoleMapper.selectList(wrapper);
 
         if (CollUtil.isNotEmpty(userRoles)) {
@@ -165,6 +174,7 @@ public class UserLoadServiceImpl implements IUserLoadService {
             if (CollUtil.isNotEmpty(roleIds)) {
                 LambdaQueryWrapper<SysRole> roleWrapper = new LambdaQueryWrapper<>();
                 roleWrapper.in(SysRole::getId, roleIds)
+                        .eq(SysRole::getTenantId, loginUser.getTenantId())
                         .eq(SysRole::getRoleStatus, 1);
                 List<SysRole> roles = roleMapper.selectList(roleWrapper);
 
@@ -191,7 +201,8 @@ public class UserLoadServiceImpl implements IUserLoadService {
      */
     private void loadUserOrgs(LoginUser loginUser) {
         LambdaQueryWrapper<SysUserOrg> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUserOrg::getUserId, loginUser.getUserId());
+        wrapper.eq(SysUserOrg::getUserId, loginUser.getUserId())
+                .eq(SysUserOrg::getTenantId, loginUser.getTenantId());
         List<SysUserOrg> userOrgs = userOrgMapper.selectList(wrapper);
 
         if (CollUtil.isNotEmpty(userOrgs)) {
@@ -230,7 +241,8 @@ public class UserLoadServiceImpl implements IUserLoadService {
         }
 
         LambdaQueryWrapper<SysRoleResource> wrapper = new LambdaQueryWrapper<>();
-        wrapper.in(SysRoleResource::getRoleId, roleIds);
+        wrapper.in(SysRoleResource::getRoleId, roleIds)
+                .eq(SysRoleResource::getTenantId, loginUser.getTenantId());
         List<SysRoleResource> roleResources = roleResourceMapper.selectList(wrapper);
 
         if (CollUtil.isNotEmpty(roleResources)) {
@@ -287,7 +299,8 @@ public class UserLoadServiceImpl implements IUserLoadService {
 
         // 3. 查询角色关联的资源ID列表
         LambdaQueryWrapper<SysRoleResource> roleResourceWrapper = new LambdaQueryWrapper<>();
-        roleResourceWrapper.in(SysRoleResource::getRoleId, roleIds);
+        roleResourceWrapper.in(SysRoleResource::getRoleId, roleIds)
+                .eq(SysRoleResource::getTenantId, loginUser.getTenantId());
         List<SysRoleResource> roleResources = roleResourceMapper.selectList(roleResourceWrapper);
 
         if (CollUtil.isEmpty(roleResources)) {
@@ -321,6 +334,76 @@ public class UserLoadServiceImpl implements IUserLoadService {
 
         log.debug("加载用户API权限: userId={}, apiCount={}, apis={}",
                 loginUser.getUserId(), apiUrls.size(), apiUrls);
+    }
+
+    private Long resolveEffectiveTenantId(SysUser user, Long requestedTenantId) {
+        if (requestedTenantId != null) {
+            return requestedTenantId;
+        }
+        if (user.getTenantId() != null) {
+            return user.getTenantId();
+        }
+        return 1L;
+    }
+
+    private SysUserTenant validateTenantMembership(SysUser user, Long tenantId) {
+        if (tenantId == null) {
+            throw new RuntimeException("租户不能为空");
+        }
+        SysTenant tenant = TenantContextHolder.executeIgnore(() -> tenantMapper.selectById(tenantId));
+        if (tenant == null) {
+            throw new RuntimeException("租户不存在");
+        }
+        if (tenant.getTenantStatus() == null || tenant.getTenantStatus() != 1) {
+            throw new RuntimeException("租户已禁用");
+        }
+        if (tenant.getExpireTime() != null && tenant.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("租户已过期");
+        }
+
+        if (user.getUserType() != null && user.getUserType() == 0) {
+            return null;
+        }
+
+        LambdaQueryWrapper<SysUserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysUserTenant::getUserId, user.getId())
+                .eq(SysUserTenant::getTenantId, tenantId)
+                .eq(SysUserTenant::getStatus, 1);
+        SysUserTenant member = TenantContextHolder.executeIgnore(() -> userTenantMapper.selectOne(wrapper));
+        if (member == null) {
+            throw new RuntimeException("用户未绑定该租户");
+        }
+        return member;
+    }
+
+    private Integer resolveEffectiveUserType(SysUser user, SysUserTenant tenantMember) {
+        if (user.getUserType() != null && user.getUserType() == 0) {
+            return 0;
+        }
+        if (tenantMember != null && tenantMember.getMemberType() != null && tenantMember.getMemberType() == 1) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private List<Long> loadAvailableTenantIds(SysUser user) {
+        if (user.getUserType() != null && user.getUserType() == 0) {
+            return TenantContextHolder.executeIgnore(() -> tenantMapper.selectList(
+                            new LambdaQueryWrapper<SysTenant>()
+                                    .eq(SysTenant::getTenantStatus, 1)
+                                    .select(SysTenant::getId)))
+                    .stream()
+                    .map(SysTenant::getId)
+                    .collect(Collectors.toList());
+        }
+        LambdaQueryWrapper<SysUserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysUserTenant::getUserId, user.getId())
+                .eq(SysUserTenant::getStatus, 1)
+                .select(SysUserTenant::getTenantId);
+        return TenantContextHolder.executeIgnore(() -> userTenantMapper.selectList(wrapper))
+                .stream()
+                .map(SysUserTenant::getTenantId)
+                .collect(Collectors.toList());
     }
 
     /**

@@ -22,6 +22,11 @@ public class SysNoticeOrg {
     private Long id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 公告ID
      */
     private Long noticeId;

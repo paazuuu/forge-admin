@@ -399,8 +399,8 @@ const crudProps = computed(() => {
     editShowFeedback: options.editShowFeedback ?? cfg.editShowFeedback ?? true,
     editFormClass: options.editFormClass || cfg.editFormClass || '',
     editFormStyle: options.editFormStyle || cfg.editFormStyle,
-    editXGap: normalizeNumberOption(options.editXGap ?? cfg.editXGap, 16),
-    editYGap: normalizeNumberOption(options.editYGap ?? cfg.editYGap, 16),
+    editXGap: normalizeNumberOption(options.editXGap ?? cfg.editXGap, 12),
+    editYGap: normalizeNumberOption(options.editYGap ?? cfg.editYGap, 8),
     loadDetailOnEdit: options.loadDetailOnEdit ?? cfg.loadDetailOnEdit ?? true,
     searchGridCols: options.searchGridCols || cfg.searchGridCols || 4,
     hideAdd: !!options.hideAdd,
@@ -414,10 +414,11 @@ const crudProps = computed(() => {
     enableCustomQuery: options.enableCustomQuery !== false,
     customQueryConfigKey: cfg.configKey,
     toolbarActions: normalizeRuntimePageActions(options.toolbarActions || [], 'toolbar'),
+    businessObjectCode: resolveBusinessObjectCode(cfg),
     publicParams: treeTable ? { ...defaultSortParams, loadMode: treeLoadMode } : defaultSortParams,
     beforeRenderList: list => prepareRuntimeList(list, { treeTable, treeConfig }),
     treeConfig: treeTable ? treeConfig : {},
-    tableProps: treeTable ? buildTreeTableProps(cfg) : {},
+    tableProps: buildRuntimeTableProps(cfg),
     onSubmitSuccess: handleRuntimeSubmitSuccess,
     formOnly: formOnlyRuntime.value,
     formOnlyTitle: resolveRuntimeTitle(cfg),
@@ -456,6 +457,27 @@ function buildTreeTableProps(cfg = {}) {
     childrenKey: treeConfig.childrenField || 'children',
     defaultExpandAll: loadMode !== 'lazy',
     onLoad: loadMode === 'lazy' ? node => loadTreeTableChildren(node, cfg) : undefined,
+  }
+}
+
+function buildRuntimeTableProps(cfg = {}) {
+  const props = isTreeTableRuntime(cfg) ? buildTreeTableProps(cfg) : {}
+  const rowGap = normalizeNumberOption(cfg.options?.tableRowGap, 8)
+  const rowHeight = Math.max(34, 32 + rowGap)
+  const rawRowProps = props.rowProps
+  return {
+    ...props,
+    rowProps: (row, index) => {
+      const base = typeof rawRowProps === 'function' ? rawRowProps(row, index) : {}
+      const baseStyle = base.style && typeof base.style === 'object' && !Array.isArray(base.style) ? base.style : {}
+      return {
+        ...base,
+        style: {
+          ...baseStyle,
+          height: `${rowHeight}px`,
+        },
+      }
+    },
   }
 }
 
@@ -554,13 +576,13 @@ function resolveRuntimeRecordId(row = {}) {
 function resolveBusinessObjectCode(cfg = {}) {
   const options = cfg.options || {}
   const modelSchema = cfg.modelSchema || {}
-  return cfg.objectCode
-    || cfg.businessObjectCode
-    || options.objectCode
+  return cfg.businessObjectCode
     || options.businessObjectCode
     || modelSchema.objectCode
-    || modelSchema.modelCode
     || modelSchema.object?.code
+    || cfg.objectCode
+    || options.objectCode
+    || modelSchema.modelCode
     || ''
 }
 

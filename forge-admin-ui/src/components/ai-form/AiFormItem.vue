@@ -1538,6 +1538,19 @@ function handleUploadRemove(field, file) {
   min-width: 0;
 }
 
+.ai-form-control :deep(.n-base-selection),
+.ai-form-control :deep(.n-base-selection-label) {
+  align-items: center;
+}
+
+.ai-form-control :deep(.n-base-selection__clear),
+.ai-form-control :deep(.n-base-clear) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
 .time-range-picker {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

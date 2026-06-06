@@ -31,6 +31,11 @@ public class FlowForm {
     private String formName;
 
     /**
+     * 表单分类
+     */
+    private String formCategory;
+
+    /**
      * 表单类型：dynamic-动态表单，external-外部表单，builtin-内置表单
      */
     private String formType;
@@ -39,6 +44,11 @@ public class FlowForm {
      * 表单Schema（JSON格式）
      */
     private String formSchema;
+
+    /**
+     * 字段目录快照（JSON格式）
+     */
+    private String fieldRegistry;
 
     /**
      * 外部表单URL（formType为external时使用）
@@ -56,6 +66,11 @@ public class FlowForm {
     private String formConfig;
 
     /**
+     * 默认数据模式：PROCESS_ONLY/BUSINESS_OBJECT/HYBRID
+     */
+    private String defaultDataMode;
+
+    /**
      * 版本号
      */
     private Integer version;
@@ -64,6 +79,16 @@ public class FlowForm {
      * 状态：0-禁用，1-启用
      */
     private Integer status;
+
+    /**
+     * 发布状态：0-草稿，1-已发布
+     */
+    private Integer publishStatus;
+
+    /**
+     * 当前发布版本ID
+     */
+    private Long currentVersionId;
 
     /**
      * 描述

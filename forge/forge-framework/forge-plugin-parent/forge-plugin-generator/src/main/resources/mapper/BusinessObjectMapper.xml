@@ -167,6 +167,16 @@
         LIMIT 1
     </select>
 
+    <select id="selectByConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_object
+        WHERE tenant_id = #{tenantId}
+          AND config_key = #{configKey}
+        ORDER BY status DESC, update_time DESC, id DESC
+        LIMIT 1
+    </select>
+
     <select id="countByObjectCode" resultType="java.lang.Long">
         SELECT COUNT(1)
         FROM ai_business_object

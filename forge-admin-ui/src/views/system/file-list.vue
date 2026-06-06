@@ -998,13 +998,9 @@ async function refreshFileGrid() {
 // 获取启用的存储配置列表
 async function fetchStorageConfigs() {
   try {
-    const response = await request.get('/system/storage/config/page', {
-      pageNum: 1,
-      pageSize: 100,
-      enabled: 1,
-    })
+    const response = await request.get('/system/storage/config/options')
     if (response.code === 200) {
-      storageConfigs.value = (response.data?.records || []).map(c => ({
+      storageConfigs.value = (response.data || []).map(c => ({
         id: c.id,
         configName: c.configName,
         storageType: c.storageType,

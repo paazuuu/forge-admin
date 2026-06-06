@@ -5,7 +5,9 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.tenant.IgnoreTenant;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.flow.dto.FormFieldCatalogItemDTO;
 import com.mdframe.forge.starter.flow.entity.FlowForm;
+import com.mdframe.forge.starter.flow.entity.FlowFormVersion;
 import com.mdframe.forge.starter.flow.service.FlowFormService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -36,15 +38,18 @@ public class FlowFormController {
     public RespInfo getPage(
             @RequestParam(required = false) String formName,
             @RequestParam(required = false) Integer status,
-            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
-        
-        Page<FlowForm> pageResult = flowFormService.getPage(formName, status, page, pageSize);
+
+        Integer currentPage = page != null ? page : pageNum;
+        Page<FlowForm> pageResult = flowFormService.getPage(formName, status, currentPage, pageSize);
         
         Map<String, Object> result = new HashMap<>();
         result.put("records", pageResult.getRecords());
         result.put("total", pageResult.getTotal());
         result.put("page", pageResult.getCurrent());
+        result.put("pageNum", pageResult.getCurrent());
         result.put("pageSize", pageResult.getSize());
         
         return RespInfo.success(result);
@@ -166,5 +171,31 @@ public class FlowFormController {
     @GetMapping("/schema/{formKey}")
     public RespInfo getSchemaByKey(@PathVariable String formKey) {
         return RespInfo.success(flowFormService.getFormSchema(formKey));
+    }
+
+    /**
+     * 发布表单版本
+     */
+    @PostMapping("/{id}/publish")
+    public RespInfo<FlowFormVersion> publish(@PathVariable Long id) {
+        return RespInfo.success("发布成功", flowFormService.publishVersion(id));
+    }
+
+    /**
+     * 查询表单版本列表
+     */
+    @GetMapping("/{id}/versions")
+    public RespInfo<List<FlowFormVersion>> versions(@PathVariable Long id) {
+        return RespInfo.success(flowFormService.listVersions(id));
+    }
+
+    /**
+     * 查询表单字段目录
+     */
+    @GetMapping("/field-catalog")
+    public RespInfo<List<FormFieldCatalogItemDTO>> fieldCatalog(
+            @RequestParam(required = false) String formKey,
+            @RequestParam(required = false) Long versionId) {
+        return RespInfo.success(flowFormService.resolveFieldCatalog(formKey, versionId));
     }
 }

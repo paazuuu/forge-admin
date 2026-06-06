@@ -1,6 +1,6 @@
 <template>
   <BusinessObjectDesignerShell
-    v-model:active-panel="activePanel"
+    :active-panel="activePanel"
     :designer="designer"
     :loading="loading"
     :dirty="dirty"
@@ -17,6 +17,7 @@
     @refresh="loadDesigner"
     @open-runtime="openRuntime"
     @open-trigger="openTriggerConfig"
+    @update:active-panel="handlePanelSwitch"
   >
     <section v-if="activePanel === 'basic'" class="basic-panel">
       <div class="panel-head">
@@ -90,8 +91,8 @@
             @saved="handleLayoutSaved"
             @fields-updated="handleFieldsUpdated"
             @dirty-change="handleDirtyChange"
-            @create-field="activePanel = 'fields'"
-            @open-relations="activePanel = 'relations'"
+            @create-field="handlePanelSwitch('fields')"
+            @open-relations="handlePanelSwitch('relations')"
           />
         </n-tab-pane>
         <n-tab-pane name="detail" tab="详情设置">
@@ -106,7 +107,7 @@
             @saved="handleLayoutSaved"
             @dirty-change="handleDirtyChange"
             @open-form="formDetailTab = 'form'"
-            @open-relations="activePanel = 'relations'"
+            @open-relations="handlePanelSwitch('relations')"
           />
         </n-tab-pane>
       </n-tabs>
@@ -148,7 +149,7 @@
       :fields="draft.fields"
       :initial-config="draft.documentConfig"
       @saved="handleDocumentSaved"
-      @configure-flow="activePanel = 'automation'"
+      @configure-flow="handlePanelSwitch('automation')"
       @dirty-change="handleDirtyChange"
     />
 
@@ -229,6 +230,7 @@ import BusinessObjectDesignerShell from './components/designer/BusinessObjectDes
 import BusinessPermissionFlowPanel from './components/designer/BusinessPermissionFlowPanel.vue'
 import BusinessPublishChecklist from './components/designer/BusinessPublishChecklist.vue'
 import BusinessRelationDesigner from './components/designer/BusinessRelationDesigner.vue'
+import { sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
 
 const props = defineProps({
   embedded: {
@@ -269,6 +271,7 @@ const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
 const dirty = ref(false)
+const designerDraftDirty = ref(false)
 const ready = ref(false)
 const activePanel = ref(resolveInitialPanel())
 const formDetailTab = ref(resolveInitialDetailTab())
@@ -425,6 +428,7 @@ async function loadDesigner() {
       await loadRuntimeInfo(object.id)
     await nextTick()
     dirty.value = false
+    designerDraftDirty.value = false
     ready.value = true
   }
   finally {
@@ -476,16 +480,19 @@ async function handleSave() {
     return
   }
   if (activePanel.value === 'document') {
+    await persistPendingDesignerDraft()
     await documentPanelRef.value?.saveConfig?.()
     await loadDesigner()
     return
   }
   if (activePanel.value === 'automation') {
+    await persistPendingDesignerDraft()
     await flowBindingPanelRef.value?.saveConfig?.()
     await loadDesigner()
     return
   }
   if (activePanel.value === 'actions') {
+    await persistPendingDesignerDraft()
     await actionDesignerRef.value?.saveActions?.()
     await loadDesigner()
     return
@@ -496,16 +503,19 @@ async function handleSave() {
   await saveDesignerDraft(true)
 }
 
-async function saveDesignerDraft(showMessage = true) {
+async function saveDesignerDraft(showMessage = true, options = {}) {
   if (!objectId.value)
     return
+  const reload = options.reload !== false
   saving.value = true
   try {
     await saveBusinessObjectDesigner(objectId.value, buildDesignerPayload())
     dirty.value = false
+    designerDraftDirty.value = false
     if (showMessage)
       message.success('设计器已保存')
-    await loadDesigner()
+    if (reload)
+      await loadDesigner()
     emit('saved')
   }
   finally {
@@ -513,9 +523,34 @@ async function saveDesignerDraft(showMessage = true) {
   }
 }
 
+async function handlePanelSwitch(panel) {
+  if (!panel || panel === activePanel.value)
+    return
+  await syncActiveFormDraft()
+  activePanel.value = panel
+}
+
+async function syncActiveFormDraft() {
+  if (activePanel.value !== 'form' || formDetailTab.value !== 'form')
+    return
+  await nextTick()
+  const result = formDesignerRef.value?.syncDesignerDraft?.()
+  if (result)
+    designerDraftDirty.value = true
+  await nextTick()
+}
+
+async function persistPendingDesignerDraft() {
+  if (!designerDraftDirty.value)
+    return
+  await saveDesignerDraft(false, { reload: false })
+}
+
 async function handlePreview() {
   if (!objectId.value)
     return
+  await syncActiveFormDraft()
+  await persistPendingDesignerDraft()
   const layoutKey = resolveActiveLayoutKey()
   const res = await previewBusinessObjectLayout(objectId.value, {
     layoutKey,
@@ -535,6 +570,8 @@ async function handlePublish(options = {}) {
   const publishOptions = options && typeof options === 'object' && !('target' in options) ? options : {}
   if (!objectId.value)
     return
+  await syncActiveFormDraft()
+  await persistPendingDesignerDraft()
   if (publishCheckState.value?.publishable === false) {
     message.warning('发布检查存在阻断项，请先修复')
     activePanel.value = 'publish'
@@ -618,10 +655,18 @@ function openTriggerConfig() {
   })
 }
 
-function handleFieldsUpdated(fields) {
+function handleFieldsUpdated(fields, options = {}) {
   draft.fields = cloneSchema(fields || [])
   syncDraftModelFields(draft.fields)
-  dirty.value = false
+  draft.viewSchema = sanitizeViewSchemaFieldRefs(draft.viewSchema || {}, draft.fields)
+  if (options?.persisted === false) {
+    dirty.value = true
+    designerDraftDirty.value = true
+  }
+  else {
+    dirty.value = false
+    designerDraftDirty.value = false
+  }
 }
 
 async function handleAddFieldToForm(field) {
@@ -642,6 +687,7 @@ function hasTableSyncIssue(result) {
 function handleLayoutSaved(pageSchema) {
   draft.pageSchema = cloneSchema(pageSchema || draft.pageSchema)
   dirty.value = false
+  designerDraftDirty.value = false
   emit('saved')
 }
 
@@ -698,7 +744,7 @@ function step(key, label, panel, done, warn = false) {
   }
 }
 
-function handleFixTarget(panel) {
+async function handleFixTarget(panel) {
   const targetPanel = panel === 'flow' ? 'automation' : panel
   if (targetPanel === 'trigger') {
     openTriggerConfig()
@@ -709,11 +755,11 @@ function handleFixTarget(panel) {
     return
   }
   if (panel === 'detail') {
-    activePanel.value = 'form'
+    await handlePanelSwitch('form')
     formDetailTab.value = 'detail'
     return
   }
-  activePanel.value = targetPanel || 'form'
+  await handlePanelSwitch(targetPanel || 'form')
 }
 
 function openDeveloperPath(path) {
@@ -734,6 +780,8 @@ function handleDirtyChange(value) {
   if (!ready.value)
     return
   dirty.value = !!value
+  if (value && activePanel.value === 'form' && formDetailTab.value === 'form')
+    designerDraftDirty.value = true
 }
 
 function markDirty() {
@@ -747,6 +795,7 @@ function updateStatus(value) {
 }
 
 function buildDesignerPayload() {
+  const viewSchema = sanitizeViewSchemaFieldRefs(draft.viewSchema || {}, draft.fields)
   return {
     objectId: objectId.value,
     objectName: draft.objectName,
@@ -759,7 +808,7 @@ function buildDesignerPayload() {
     pageSchema: cloneSchema(draft.pageSchema || {}),
     fields: draft.fields.map(toFieldPayload),
     formDesignerSchema: cloneSchema(draft.formDesignerSchema || {}),
-    viewSchema: cloneSchema(draft.viewSchema || {}),
+    viewSchema: cloneSchema(viewSchema),
     linkageSchema: cloneSchema(draft.linkageSchema || {}),
     designerOptions: cloneSchema(draft.designerOptions || {}),
   }
@@ -812,8 +861,8 @@ function createDraftFromDesigner(value = {}) {
 
 function toFieldPayload(field = {}) {
   return {
-    fieldName: field.fieldName,
-    fieldCode: field.fieldCode,
+    fieldName: field.fieldName || field.label || field.fieldCode || field.field,
+    fieldCode: field.fieldCode || field.field,
     columnName: field.columnName,
     fieldType: field.fieldType,
     dataType: field.dataType,
