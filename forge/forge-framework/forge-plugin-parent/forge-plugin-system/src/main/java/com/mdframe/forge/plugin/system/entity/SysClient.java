@@ -41,6 +41,7 @@ public class SysClient extends BaseEntity {
     private Long maxUserCount;
     private Long maxOnlineCount;
     private String authTypes;
+    private String captchaType;
     
     private Integer status;
     private String description;

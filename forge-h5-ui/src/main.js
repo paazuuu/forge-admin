@@ -34,7 +34,7 @@ function patchTabBarStyleForNonTabBarPages() {
 export function createApp() {
 	const app = createSSRApp(App)
 
-	// uView Plus 会在页面初始化时同步原生 tabBar 主题；当前项目尚未配置 tabBar。
+	// uView Plus 在非 tabBar 页面同步原生 tabBar 主题时会抛错，这里做一次兼容。
 	patchTabBarStyleForNonTabBarPages()
 
 	app.use(uviewPlus, () => ({

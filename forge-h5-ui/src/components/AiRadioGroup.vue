@@ -57,7 +57,7 @@ const handleClick = (option) => {
   justify-content: center;
   
   &--checked {
-    border-color: var(--primary-color, #d12723FF);
+    border-color: var(--primary-color, #0891b2);
   }
 }
 
@@ -65,7 +65,7 @@ const handleClick = (option) => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--primary-color, #d12723FF);
+  background: var(--primary-color, #0891b2);
 }
 
 .ai-radio-label {

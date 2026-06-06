@@ -1,8 +1,5 @@
 import { defineConfig, presetAttributify, presetIcons, presetUno } from 'unocss'
 import presetRemToPx from '@unocss/preset-rem-to-px'
-import { getIcons } from './build/index.js'
-
-const icons = getIcons()
 
 export default defineConfig({
   presets: [
@@ -10,7 +7,7 @@ export default defineConfig({
     presetAttributify(),
     presetIcons({
       warn: true,
-      prefix: ['ai-icon:', 'i-'],
+      prefix: 'i-',
       extraProperties: {
         display: 'inline-block',
         width: '1em',
@@ -19,7 +16,6 @@ export default defineConfig({
     }),
     presetRemToPx({ baseFontSize: 4 }),
   ],
-  safelist: icons.map(icon => `${icon}`).flat(),
   shortcuts: [
     ['wh-full', 'w-full h-full'],
     ['f-c-c', 'flex justify-center items-center'],
@@ -28,7 +24,7 @@ export default defineConfig({
   ],
   theme: {
     colors: {
-      primary: 'var(--primary-color, #d12723FF)',
+      primary: 'var(--primary-color, #0891b2)',
     },
   },
 })
