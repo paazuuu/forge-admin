@@ -30,6 +30,26 @@ public class LoginConfigResult implements Serializable {
     private String captchaType;
 
     /**
+     * 当前解析的客户端编码
+     */
+    private String userClient;
+
+    /**
+     * 验证码类型来源：GLOBAL-全局配置，CLIENT-客户端覆盖
+     */
+    private String captchaTypeSource;
+
+    /**
+     * 全局验证码类型
+     */
+    private String globalCaptchaType;
+
+    /**
+     * 客户端覆盖验证码类型，空表示继承全局
+     */
+    private String clientCaptchaType;
+
+    /**
      * 是否启用记住我功能
      */
     private Boolean enableRememberMe;

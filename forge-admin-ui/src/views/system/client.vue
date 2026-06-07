@@ -178,7 +178,7 @@ const tableColumns = computed(() => [
   },
   {
     prop: 'captchaType',
-    label: '验证码类型',
+    label: '验证码覆盖',
     width: 120,
     render: (row) => {
       const config = captchaTypeMap[row.captchaType]
@@ -326,11 +326,11 @@ const editSchema = [
   },
   {
     field: 'captchaType',
-    label: '验证码类型',
+    label: '验证码覆盖',
     type: 'select',
     defaultValue: '',
     props: {
-      placeholder: '请选择验证码类型',
+      placeholder: '为空时继承全局登录配置',
       options: captchaTypeOptions,
     },
   },
@@ -388,9 +388,7 @@ const onlineTableColumns = [
 ]
 
 // 详情数据渲染前处理：将字符串转为数组
-function beforeRenderDetail(data: any) {
-  console.log('编辑前的数据:', data)
-
+function beforeRenderDetail(data) {
   // 将authTypes字符串转为数组，供多选select使用
   if (data.authTypes && typeof data.authTypes === 'string') {
     data.authTypes = data.authTypes.split(',').filter(Boolean)
@@ -400,9 +398,7 @@ function beforeRenderDetail(data: any) {
 }
 
 // 提交前处理：将数组转为字符串
-function beforeSubmit(formData: any) {
-  console.log('提交前的数据:', formData)
-
+function beforeSubmit(formData) {
   // 将authTypes数组转为逗号分隔的字符串
   if (Array.isArray(formData.authTypes)) {
     formData.authTypes = formData.authTypes.join(',')
@@ -412,7 +408,7 @@ function beforeSubmit(formData: any) {
 }
 
 // 查看在线用户
-async function handleViewOnline(row: any) {
+async function handleViewOnline(row) {
   try {
     const res = await request.get(`/system/client/online/${row.clientCode}`)
     if (res.data) {
@@ -420,30 +416,30 @@ async function handleViewOnline(row: any) {
       onlineModalVisible.value = true
     }
   }
-  catch (error) {
+  catch {
     message.error('获取在线用户失败')
   }
 }
 
 // 踢出用户
-async function handleKickoutUser(row: any) {
+async function handleKickoutUser(row) {
   try {
     await request.post(`/system/client/kickout/${row.userId}/pc`)
     message.success('已踢出该用户')
     handleViewOnline({ clientCode: 'pc' })
   }
-  catch (error) {
+  catch {
     message.error('踢出失败')
   }
 }
 
 // 刷新缓存
-async function handleReloadCache(row: any) {
+async function handleReloadCache(row) {
   try {
     await request.post(`/system/client/reload-cache/${row.clientCode}`)
     message.success('缓存已刷新')
   }
-  catch (error) {
+  catch {
     message.error('刷新缓存失败')
   }
 }

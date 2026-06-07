@@ -165,8 +165,8 @@ public class AuthController {
      */
     @GetMapping("/loginConfig")
     @IgnoreTenant
-    public RespInfo<LoginConfigResult> getLoginConfig() {
-        LoginConfigResult result = authService.getLoginConfig();
+    public RespInfo<LoginConfigResult> getLoginConfig(@RequestParam(required = false) String userClient) {
+        LoginConfigResult result = authService.getLoginConfig(userClient);
         return RespInfo.success(result);
     }
 

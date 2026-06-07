@@ -123,7 +123,7 @@
             </div>
 
             <!-- 验证码区域 - 根据配置显示不同类型的验证码 -->
-            <div class="form-group">
+            <div v-if="captchaEnabled" class="form-group">
               <!-- 图形验证码 -->
               <template v-if="captchaType === 'graphical'">
                 <label for="captcha" class="form-label">验证码</label>
@@ -351,6 +351,7 @@ const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
 const title = import.meta.env.VITE_TITLE
+const userClient = import.meta.env.VITE_USER_CLIENT || 'pc'
 
 const loginInfo = ref({
   username: '',
@@ -366,6 +367,7 @@ const captchaExpires = ref(0) // 验证码过期时间
 // 验证码类型：graphical(图形验证码), slider(滑块验证码), sms(短信验证码)
 const captchaType = ref('graphical')
 const loginConfig = ref(null)
+const captchaEnabled = computed(() => loginConfig.value?.enableCaptcha !== false)
 
 // 滑块验证码相关 (vue3-slide-verify)
 const slideVerifyRef = ref(null)
@@ -400,13 +402,19 @@ const isValidPhone = computed(() => {
 // 获取登录配置
 async function loadLoginConfig() {
   try {
-    const res = await api.getLoginConfig()
+    const res = await api.getLoginConfig(userClient)
     if (res.code === 200 && res.data) {
       loginConfig.value = res.data
       captchaType.value = res.data.captchaType || 'graphical'
 
       // 根据验证码类型加载对应的验证码
-      await loadCaptchaByType()
+      if (captchaEnabled.value) {
+        await loadCaptchaByType()
+      }
+      else {
+        loginInfo.value.code = ''
+        loginInfo.value.codeKey = ''
+      }
     }
   }
   catch (error) {
@@ -545,7 +553,7 @@ function closeSliderModal() {
 
 // 登录按钮点击处理
 function onLoginClick() {
-  if (captchaType.value === 'slider' && !sliderSuccess.value) {
+  if (captchaEnabled.value && captchaType.value === 'slider' && !sliderSuccess.value) {
     openSliderModal()
     return
   }
@@ -581,6 +589,9 @@ function onSlideRefresh() {
 
 // 处理登录失败
 async function handleLoginFailure() {
+  if (!captchaEnabled.value)
+    return
+
   // 根据验证码类型处理
   if (captchaType.value === 'slider') {
     // 滑块验证码需要重置组件
@@ -656,23 +667,25 @@ async function handleLogin() {
   if (!username || !password)
     return $message.warning('请输入用户名和密码')
 
-  // 根据验证码类型进行验证
-  if (captchaType.value === 'slider') {
-    if (!sliderSuccess.value) {
-      return $message.warning('请完成滑块验证')
+  if (captchaEnabled.value) {
+    // 根据验证码类型进行验证
+    if (captchaType.value === 'slider') {
+      if (!sliderSuccess.value) {
+        return $message.warning('请完成滑块验证')
+      }
+      // 滑块验证码使用组件自带的验证，这里只需要确认已通过
+      // 为了安全，可以添加一个临时的token或codeKey
     }
-    // 滑块验证码使用组件自带的验证，这里只需要确认已通过
-    // 为了安全，可以添加一个临时的token或codeKey
-  }
-  else if (captchaType.value === 'sms') {
-    if (!phone)
-      return $message.warning('请输入手机号')
-    if (!code)
-      return $message.warning('请输入短信验证码')
-  }
-  else {
-    if (!code)
-      return $message.warning('请输入验证码')
+    else if (captchaType.value === 'sms') {
+      if (!phone)
+        return $message.warning('请输入手机号')
+      if (!code)
+        return $message.warning('请输入短信验证码')
+    }
+    else {
+      if (!code)
+        return $message.warning('请输入验证码')
+    }
   }
 
   try {
@@ -689,9 +702,9 @@ async function handleLogin() {
       code,
       codeKey,
       phone, // 短信验证码时需要
-      authType: 'password_captcha', // 使用用户名密码+验证码登录方式
+      authType: captchaEnabled.value ? 'password_captcha' : 'password',
       encrypted: true, // 标记密码已加密
-      userClient: 'pc', // 客户端类型：pc端
+      userClient,
       appId: import.meta.env.VITE_APP_ID || 'forge_pc_001', // 客户端AppId
       appSecret: import.meta.env.VITE_APP_SECRET || undefined, // 客户端密钥（可选）
     }

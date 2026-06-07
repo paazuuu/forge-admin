@@ -181,6 +181,16 @@ public interface IAuthService {
     }
 
     /**
+     * 获取指定客户端最终生效的登录配置
+     *
+     * @param userClient 客户端编码
+     * @return 登录配置
+     */
+    default LoginConfigResult getLoginConfig(String userClient) {
+        return getLoginConfig();
+    }
+
+    /**
      * 从数据库刷新 LoginUser 的基本字段（用户名/手机/邮箱/头像/注册时间）
      * 用于 /auth/userInfo 每次返回最新 DB 数据，避免 Session 缓存问题
      */

@@ -9,6 +9,8 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicy;
+import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicyResolver;
 import com.mdframe.forge.plugin.system.entity.*;
 import com.mdframe.forge.plugin.system.mapper.*;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -58,6 +60,7 @@ public class SystemAuthServiceImpl implements IAuthService {
     private final ConfigManagerService configManagerService;
     private final IClientService clientService;
     private final ICacheService cacheService;
+    private final LoginCaptchaPolicyResolver captchaPolicyResolver;
 
     // ==================== 核心认证方法 ====================
 
@@ -430,12 +433,26 @@ public class SystemAuthServiceImpl implements IAuthService {
 
     @Override
     public LoginConfigResult getLoginConfig() {
-        // 从配置中心获取登录配置
+        return getLoginConfig(LoginCaptchaPolicyResolver.DEFAULT_USER_CLIENT);
+    }
+
+    @Override
+    public LoginConfigResult getLoginConfig(String userClient) {
+        // 从配置中心获取全局登录配置，并叠加客户端覆盖项
         LoginConfig config = configManagerService.getLoginConfig();
+        if (config == null) {
+            config = new LoginConfig();
+        }
+
+        LoginCaptchaPolicy captchaPolicy = captchaPolicyResolver.resolve(userClient);
 
         return LoginConfigResult.builder()
-                .enableCaptcha(config.getEnableCaptcha())
-                .captchaType(config.getCaptchaType())
+                .enableCaptcha(captchaPolicy.getEnableCaptcha())
+                .captchaType(captchaPolicy.getCaptchaType())
+                .userClient(captchaPolicy.getUserClient())
+                .captchaTypeSource(captchaPolicy.getCaptchaTypeSource())
+                .globalCaptchaType(captchaPolicy.getGlobalCaptchaType())
+                .clientCaptchaType(captchaPolicy.getClientCaptchaType())
                 .enableRememberMe(config.getEnableRememberMe())
                 .enableLoginLog(config.getEnableLoginLog())
                 .enableIpLimit(config.getEnableIpLimit())

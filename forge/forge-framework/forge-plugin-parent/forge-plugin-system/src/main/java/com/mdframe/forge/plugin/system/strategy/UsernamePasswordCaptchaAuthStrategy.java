@@ -1,12 +1,10 @@
 package com.mdframe.forge.plugin.system.strategy;
 
 import cn.hutool.core.util.StrUtil;
-import com.mdframe.forge.plugin.system.entity.SysClient;
-import com.mdframe.forge.plugin.system.service.IClientService;
+import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicy;
+import com.mdframe.forge.plugin.system.auth.LoginCaptchaPolicyResolver;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
 import com.mdframe.forge.starter.auth.service.ICaptchaService;
-import com.mdframe.forge.starter.config.config.LoginConfig;
-import com.mdframe.forge.starter.config.service.ConfigManagerService;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.auth.enums.AuthType;
@@ -18,7 +16,7 @@ import org.springframework.stereotype.Component;
 /**
  * 用户名+密码+验证码认证策略
  * 支持多种验证码类型：图形验证码、滑块验证码、短信验证码
- * 验证码类型从配置中心读取
+ * 验证码类型由全局登录配置和客户端覆盖配置统一解析
  */
 @Slf4j
 @Component
@@ -31,10 +29,7 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
     private ICaptchaService captchaService;
 
     @Autowired
-    private ConfigManagerService configManagerService;
-
-    @Autowired
-    private IClientService clientService;
+    private LoginCaptchaPolicyResolver captchaPolicyResolver;
 
     @Override
     protected void validateRequest(LoginRequest request) {
@@ -42,7 +37,12 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
         validatePassword(request.getPassword());
 
         // 根据验证码类型校验不同参数
-        String captchaType = resolveCaptchaType(request);
+        LoginCaptchaPolicy captchaPolicy = captchaPolicyResolver.resolve(request.getUserClient());
+        if (!Boolean.TRUE.equals(captchaPolicy.getEnableCaptcha())) {
+            return;
+        }
+
+        String captchaType = captchaPolicy.getCaptchaType();
 
         if ("sms".equals(captchaType)) {
             // 短信验证码需要手机号和验证码
@@ -69,12 +69,14 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
         String username = request.getUsername();
 
         // 1. 获取登录配置，确定验证码类型
-        String captchaType = resolveCaptchaType(request);
+        LoginCaptchaPolicy captchaPolicy = captchaPolicyResolver.resolve(request.getUserClient());
 
         // 2. 根据验证码类型进行验证
-        boolean captchaValid = validateCaptchaByType(request, captchaType);
-        if (!captchaValid) {
-            throw new BusinessException("验证码错误或已过期");
+        if (Boolean.TRUE.equals(captchaPolicy.getEnableCaptcha())) {
+            boolean captchaValid = validateCaptchaByType(request, captchaPolicy.getCaptchaType());
+            if (!captchaValid) {
+                throw new BusinessException("验证码错误或已过期");
+            }
         }
 
         // 3. 加载用户信息
@@ -123,19 +125,6 @@ public class UsernamePasswordCaptchaAuthStrategy extends AbstractAuthStrategy {
                 // 图形验证码
                 return userLoadService.validateCode(request.getCodeKey(), request.getCode());
         }
-    }
-
-    /**
-     * 客户端验证码类型优先；未配置时继承全局登录配置。
-     */
-    private String resolveCaptchaType(LoginRequest request) {
-        SysClient client = clientService.getByCode(request.getUserClient());
-        if (client != null && StrUtil.isNotBlank(client.getCaptchaType())) {
-            return client.getCaptchaType();
-        }
-
-        LoginConfig loginConfig = configManagerService.getLoginConfig();
-        return loginConfig.getCaptchaType();
     }
 
     @Override
