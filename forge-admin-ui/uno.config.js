@@ -12,7 +12,7 @@ export default defineConfig({
     presetWind3(),
     presetAttributify(),
     presetIcons({
-      warn: true,
+      warn: false,
       prefix: ['ai-', 'i-', 'mdi-', 'fa-'],
       extraProperties: {
         display: 'inline-block',
@@ -20,7 +20,8 @@ export default defineConfig({
         height: '1em',
       },
       collections: {
-        icon: FileSystemIconLoader('./src/assets/icons/ai-icon'),
+        'ai-icon': FileSystemIconLoader('./src/assets/icons/ai-icon'),
+        'icon': FileSystemIconLoader('./src/assets/icons/ai-icon'),
       },
     }),
     presetRemToPx({ baseFontSize: 4 }),
