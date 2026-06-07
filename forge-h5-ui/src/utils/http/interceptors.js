@@ -1,14 +1,69 @@
 import { resolveResError } from './helpers'
 import { useAuthStore } from '@/store'
 
+let refreshTokenPromise = null
+
 export function setupInterceptors(axiosInstance) {
   const SUCCESS_CODES = [0, 200]
   const AUTH_EXPIRED_CODES = ['-8', -8, 401, 11007, 11008]
 
-  function resetAuthIfExpired(code) {
-    if (AUTH_EXPIRED_CODES.includes(code)) {
-      useAuthStore().resetAuth()
+  function isAuthExpired(code) {
+    return AUTH_EXPIRED_CODES.includes(code)
+  }
+
+  function refreshAuthToken() {
+    const authStore = useAuthStore()
+    if (!authStore.accessToken) {
+      return Promise.reject(new Error('NO_TOKEN'))
     }
+
+    if (!refreshTokenPromise) {
+      refreshTokenPromise = axiosInstance({
+        url: '/auth/refreshToken',
+        method: 'post',
+        needTip: false,
+        skipAuthRefresh: true,
+      })
+        .then((res) => {
+          authStore.setToken(res?.data || {})
+          return res
+        })
+        .finally(() => {
+          refreshTokenPromise = null
+        })
+    }
+
+    return refreshTokenPromise
+  }
+
+  function retryRequest(config) {
+    return axiosInstance({
+      ...config,
+      _retry: true,
+    })
+  }
+
+  async function handleAuthExpired(errorInfo, originalConfig) {
+    const { code, message, needTip = true } = errorInfo || {}
+    if (originalConfig?.skipAuthRefresh || originalConfig?._retry) {
+      useAuthStore().resetAuth()
+      const finalMessage = resolveResError(code, message, needTip)
+      return Promise.reject({ code, message: finalMessage, error: errorInfo?.error })
+    }
+
+    try {
+      await refreshAuthToken()
+      if (originalConfig) {
+        return retryRequest(originalConfig)
+      }
+    }
+    catch (refreshError) {
+      useAuthStore().resetAuth()
+      const finalMessage = resolveResError(code, message, needTip)
+      return Promise.reject({ code, message: finalMessage, error: refreshError })
+    }
+
+    return Promise.reject(errorInfo)
   }
 
   /**
@@ -33,14 +88,20 @@ export function setupInterceptors(axiosInstance) {
       const code = data?.code ?? data?.respCode ?? status
       const message = data?.message ?? data?.msg ?? data?.respDesc ?? statusText
       const needTip = config?.needTip !== false
-
-      return Promise.reject({
+      const errorInfo = {
         code,
         message,
         error: data ?? response,
         isBusinessError: true,
         needTip,
-      })
+        config,
+      }
+
+      if (isAuthExpired(code)) {
+        return handleAuthExpired(errorInfo, config)
+      }
+
+      return Promise.reject(errorInfo)
     }
 
     // 非JSON响应直接返回
@@ -61,7 +122,9 @@ export function setupInterceptors(axiosInstance) {
       // 如果是业务错误（从 resResolve 传来的）
       if (error?.isBusinessError) {
         const { code, message, needTip = true } = error
-        resetAuthIfExpired(code)
+        if (isAuthExpired(code)) {
+          return handleAuthExpired(error, error.config)
+        }
         const finalMessage = resolveResError(code, message, needTip)
         return Promise.reject({ code, message: finalMessage, error: error.error })
       }
@@ -78,7 +141,9 @@ export function setupInterceptors(axiosInstance) {
     const code = data?.code ?? data?.respCode ?? status
     const message = data?.message ?? data?.msg ?? data?.respDesc ?? error.message
     const needTip = config?.needTip !== false
-    resetAuthIfExpired(code)
+    if (isAuthExpired(code)) {
+      return handleAuthExpired({ code, message, needTip, error: error.response?.data || error.response }, config)
+    }
     const finalMessage = resolveResError(code, message, needTip)
     return Promise.reject({
       code,

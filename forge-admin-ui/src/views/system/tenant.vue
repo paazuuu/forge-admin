@@ -8,7 +8,7 @@
         detail: 'post@/system/tenant/getById',
         add: 'post@/system/tenant/add',
         update: 'post@/system/tenant/edit',
-        delete: 'post@/system/tenant/remove',
+        delete: 'post@/system/tenant/removeBatch',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
@@ -20,24 +20,8 @@
       :hide-selection="false"
       :before-submit="handleBeforeSubmit"
       :before-render-detail="handleBeforeRenderDetail"
-      @selection-change="handleSelectionChange"
       @submit-success="handleSubmitSuccess"
     >
-      <!-- 批量删除按钮 -->
-      <template #toolbar-end>
-        <n-button
-          type="error"
-          :disabled="selectedKeys.length === 0"
-          size="small"
-          @click="handleBatchDelete"
-        >
-          <template #icon>
-            <NIcon><TrashOutline /></NIcon>
-          </template>
-          批量删除
-        </n-button>
-      </template>
-
       <!-- 系统布局选择器 -->
       <template #form-systemLayout="{ value, updateValue }">
         <div class="layout-selector">
@@ -62,8 +46,6 @@
 </template>
 
 <script setup>
-import { TrashOutline } from '@vicons/ionicons5'
-import { NIcon } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
@@ -75,7 +57,6 @@ defineOptions({ name: 'SystemTenant' })
 const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 
 const crudRef = ref(null)
-const selectedKeys = ref([])
 
 const { dict } = useDict(NORMAL_DISABLE_DICT)
 
@@ -526,39 +507,6 @@ function handleDelete(row) {
       }
     },
   })
-}
-
-// 批量删除
-function handleBatchDelete() {
-  if (selectedKeys.value.length === 0) {
-    window.$message.warning('请先选择要删除的租户')
-    return
-  }
-
-  window.$dialog.warning({
-    title: '确认删除',
-    content: `确定要删除选中的 ${selectedKeys.value.length} 个租户吗？删除后将无法恢复！`,
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        const res = await request.post('/system/tenant/removeBatch', selectedKeys.value)
-        if (res.code === 200) {
-          window.$message.success('批量删除成功')
-          selectedKeys.value = []
-          crudRef.value?.refresh()
-        }
-      }
-      catch {
-        window.$message.error('批量删除失败')
-      }
-    },
-  })
-}
-
-// 监听选中项变化
-function handleSelectionChange({ keys }) {
-  selectedKeys.value = keys
 }
 
 // 提交成功后处理 - 重新加载租户配置并应用

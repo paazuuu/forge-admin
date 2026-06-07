@@ -8,7 +8,7 @@
       <view class="home-header animate-in">
         <view class="user-block" @click="goMine">
           <view class="avatar-wrap">
-            <image class="avatar-image" :src="avatarUrl || '/static/logo.png'" mode="aspectFit" />
+            <image class="avatar-image" :src="avatarUrl" mode="aspectFit" @error="handleAvatarError" />
           </view>
           <view class="user-copy">
             <text class="hello-title">Hi, {{ authStore.displayName }}</text>
@@ -26,12 +26,27 @@
         <view class="feature-orb feature-orb-two" />
         <view class="feature-inner">
           <view class="feature-top">
-            <text class="feature-label">账户状态</text>
-            <text class="feature-chip">{{ userClientLabel }}</text>
+            <text class="feature-label">服务概览</text>
+            <text class="feature-chip">{{ syncStatusText }}</text>
           </view>
           <view class="feature-main">
-            <text class="feature-value">已登录</text>
-            <text class="feature-desc">{{ authStore.roleText }}</text>
+            <view class="feature-metrics">
+              <view class="metric-item">
+                <text class="metric-value">{{ backendMenuCount }}</text>
+                <text class="metric-label">菜单</text>
+              </view>
+              <view class="metric-divider" />
+              <view class="metric-item">
+                <text class="metric-value">{{ permissionCount }}</text>
+                <text class="metric-label">权限</text>
+              </view>
+              <view class="metric-divider" />
+              <view class="metric-item">
+                <text class="metric-value">{{ userClientLabel }}</text>
+                <text class="metric-label">客户端</text>
+              </view>
+            </view>
+            <text class="feature-desc">最近同步：{{ lastSyncText }}</text>
           </view>
           <view class="feature-actions">
             <button class="feature-primary" @click="refreshWorkspace">刷新信息</button>
@@ -88,17 +103,34 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
 import { toast } from '@/utils/notify'
+import logoUrl from '@/static/logo.png'
 
 const authStore = useAuthStore()
 
 const userClientLabel = (import.meta.env.VITE_USER_CLIENT || 'app').toUpperCase()
+const lastSyncAt = ref('')
 
-const avatarUrl = computed(() => authStore.userInfo?.avatar || '')
+const avatarLoadFailed = ref(false)
+const rawAvatarUrl = computed(() => authStore.userInfo?.avatar || '')
+const avatarUrl = computed(() => {
+  if (!rawAvatarUrl.value || avatarLoadFailed.value) {
+    return logoUrl
+  }
+  return rawAvatarUrl.value
+})
+
+watch(rawAvatarUrl, () => {
+  avatarLoadFailed.value = false
+})
+
+const handleAvatarError = () => {
+  avatarLoadFailed.value = true
+}
 
 const fallbackMenuItems = [
   {
@@ -131,9 +163,9 @@ const fallbackMenuItems = [
   },
 ]
 
-const loadingDemoItem = {
-  key: 'loading-demo',
-  label: '加载演示',
+const componentDemoItem = {
+  key: 'component-demo',
+  label: '组件演示',
   icon: '/static/icons/ai-icon/loader.svg',
   color: '#2563eb',
   bgClass: 'bg-blue',
@@ -142,8 +174,13 @@ const loadingDemoItem = {
 const menuItems = computed(() => {
   const backendItems = flattenMenus(authStore.menus)
   const sourceItems = backendItems.length ? backendItems : fallbackMenuItems
-  return [loadingDemoItem, ...sourceItems].slice(0, 8)
+  return [componentDemoItem, ...sourceItems].slice(0, 8)
 })
+
+const backendMenuCount = computed(() => flattenMenus(authStore.menus).length)
+const permissionCount = computed(() => Array.isArray(authStore.permissions) ? authStore.permissions.length : 0)
+const syncStatusText = computed(() => backendMenuCount.value ? '已接入' : '待接入')
+const lastSyncText = computed(() => lastSyncAt.value || '未同步')
 
 const messages = computed(() => [
   {
@@ -235,7 +272,7 @@ function goMine() {
 }
 
 function handleShortcut(item) {
-  if (item.key === 'loading-demo') {
+  if (item.key === 'component-demo') {
     uni.navigateTo({ url: '/pages/demo/loading/index' })
     return
   }
@@ -263,6 +300,7 @@ async function refreshWorkspace(options = {}) {
   try {
     await authStore.fetchUserInfo()
     await authStore.fetchAccessSnapshot()
+    lastSyncAt.value = formatCurrentTime()
     if (!options.silent) {
       toast('已同步', { type: 'success' })
     }
@@ -270,6 +308,13 @@ async function refreshWorkspace(options = {}) {
   catch (error) {
     console.error('刷新首页信息失败:', error)
   }
+}
+
+function formatCurrentTime() {
+  const now = new Date()
+  const hour = `${now.getHours()}`.padStart(2, '0')
+  const minute = `${now.getMinutes()}`.padStart(2, '0')
+  return `${hour}:${minute}`
 }
 </script>
 
@@ -514,17 +559,55 @@ async function refreshWorkspace(options = {}) {
   backdrop-filter: blur(16rpx);
 }
 
-.feature-value {
-  margin-top: 24rpx;
+.feature-main {
+  margin-top: 30rpx;
+}
+
+.feature-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1rpx minmax(0, 1fr) 1rpx minmax(0, 1fr);
+  align-items: center;
+  gap: 18rpx;
+}
+
+.metric-item {
+  min-width: 0;
+}
+
+.metric-value,
+.metric-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-value {
   color: #ffffff;
-  font-size: 68rpx;
+  font-size: 46rpx;
   font-weight: 950;
   line-height: 1.05;
   text-shadow: 0 4rpx 14rpx rgba(15, 23, 42, 0.12);
 }
 
-.feature-desc {
+.metric-label {
   margin-top: 12rpx;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 22rpx;
+  font-weight: 750;
+}
+
+.metric-divider {
+  width: 1rpx;
+  height: 70rpx;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.feature-desc {
+  display: block;
+  margin-top: 24rpx;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.78);
   font-size: 25rpx;

@@ -11,7 +11,7 @@
 
         <view class="avatar-frame">
           <view class="avatar-inner">
-            <image class="avatar-image" :src="avatarUrl || '/static/logo.png'" mode="aspectFit" />
+            <image class="avatar-image" :src="avatarUrl" mode="aspectFit" @error="handleAvatarError" />
           </view>
         </view>
 
@@ -74,16 +74,32 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
 import { showConfirmDialog } from '@/utils/dialog'
 import { toast } from '@/utils/notify'
+import logoUrl from '@/static/logo.png'
 
 const authStore = useAuthStore()
 const userInfo = computed(() => authStore.userInfo || {})
-const avatarUrl = computed(() => userInfo.value.avatar || '')
+const avatarLoadFailed = ref(false)
+const rawAvatarUrl = computed(() => userInfo.value.avatar || '')
+const avatarUrl = computed(() => {
+  if (!rawAvatarUrl.value || avatarLoadFailed.value) {
+    return logoUrl
+  }
+  return rawAvatarUrl.value
+})
+
+watch(rawAvatarUrl, () => {
+  avatarLoadFailed.value = false
+})
+
+const handleAvatarError = () => {
+  avatarLoadFailed.value = true
+}
 
 const menuGroups = computed(() => [
   {

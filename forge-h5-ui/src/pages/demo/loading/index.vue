@@ -1,90 +1,237 @@
 <template>
-  <view class="loading-demo-page">
-    <view class="page-glow page-glow-blue" />
-    <view class="page-glow page-glow-pink" />
-    <view class="grid-layer" />
+  <AiLayoutPage title="组件演示" subtitle="按需查看 Forge H5 基础组件">
+    <template #navRight>
+      <AiTag type="primary" round>{{ visibleComponents.length }} 个</AiTag>
+    </template>
 
-    <view class="demo-content">
-      <view class="demo-header animate-in">
-        <button class="back-button" @click="goBack">
-          <view class="icon-mask" :style="iconMask('/static/icons/ai-icon/chevron-left.svg', '#475569')" />
-        </button>
-        <view class="header-copy">
-          <text class="header-title">加载演示</text>
-          <text class="header-subtitle">Loading component preview</text>
+    <view class="demo-page">
+      <view class="summary-card">
+        <view class="summary-main">
+          <text class="summary-title">组件库预览</text>
+          <text class="summary-desc">外层只保留目录，点击组件后在弹出层查看示例。</text>
         </view>
+        <AiIcon name="layers" color="#2563eb" size="lg" tile />
       </view>
 
-      <view class="preview-card animate-in delay-1">
-        <view class="preview-panel">
-          <Loading
-            visible
-            :text="previewText"
-            :type="currentType"
-            :theme="currentTheme"
-            :size="currentSize"
-          />
+      <scroll-view class="category-nav" scroll-x :show-scrollbar="false">
+        <view class="category-track">
+          <button
+            v-for="item in categories"
+            :key="item.key"
+            class="category-button"
+            :class="{ active: activeCategory === item.key }"
+            @click="activeCategory = item.key"
+          >
+            {{ item.label }}
+          </button>
         </view>
-      </view>
+      </scroll-view>
 
-      <view class="control-card animate-in delay-2">
-        <view class="control-section">
-          <text class="control-title">动画类型</text>
-          <view class="segmented">
-            <button
-              v-for="item in typeOptions"
-              :key="item.value"
-              class="segment-button"
-              :class="{ active: currentType === item.value }"
-              @click="currentType = item.value"
-            >
-              {{ item.label }}
-            </button>
+      <view class="component-list">
+        <button
+          v-for="item in visibleComponents"
+          :key="item.key"
+          class="component-card"
+          @click="openPreview(item)"
+        >
+          <view class="component-icon" :style="{ background: item.bg }">
+            <AiIcon :name="item.icon" :color="item.color" size="md" />
           </view>
-        </view>
-
-        <view class="control-section">
-          <text class="control-title">主题</text>
-          <view class="segmented">
-            <button
-              v-for="item in themeOptions"
-              :key="item.value"
-              class="segment-button"
-              :class="{ active: currentTheme === item.value }"
-              @click="currentTheme = item.value"
-            >
-              {{ item.label }}
-            </button>
+          <view class="component-copy">
+            <view class="component-title-row">
+              <text class="component-title">{{ item.title }}</text>
+              <AiTag :type="item.tagType" variant="soft" size="sm">{{ item.categoryLabel }}</AiTag>
+            </view>
+            <text class="component-desc">{{ item.desc }}</text>
           </view>
-        </view>
-
-        <view class="control-section">
-          <text class="control-title">尺寸</text>
-          <view class="segmented">
-            <button
-              v-for="item in sizeOptions"
-              :key="item.value"
-              class="segment-button"
-              :class="{ active: currentSize === item.value }"
-              @click="currentSize = item.value"
-            >
-              {{ item.label }}
-            </button>
-          </view>
-        </view>
-      </view>
-
-      <view class="action-grid animate-in delay-3">
-        <button class="action-button primary" @click="showFullscreenLoading">
-          <view class="icon-mask button-icon" :style="iconMask('/static/icons/ai-icon/maximize.svg', '#ffffff')" />
-          <text>全屏演示</text>
-        </button>
-        <button class="action-button secondary" @click="showServiceLoading">
-          <view class="icon-mask button-icon" :style="iconMask('/static/icons/ai-icon/zap.svg', '#2563eb')" />
-          <text>服务调用</text>
+          <text class="component-arrow">›</text>
         </button>
       </view>
     </view>
+
+    <AiPopupSheet
+      v-model="previewVisible"
+      :title="activeComponent.title"
+      :description="activeComponent.desc"
+    >
+      <view v-if="activeComponent.key === 'button'" class="button-stack">
+        <AiButton block>主要按钮</AiButton>
+        <AiButton block variant="secondary">次要按钮</AiButton>
+        <AiButton block variant="outline">描边按钮</AiButton>
+        <AiButton block variant="danger">危险按钮</AiButton>
+        <AiButton block loading>提交中</AiButton>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'tag'" class="tag-cloud">
+        <AiTag type="primary">主要</AiTag>
+        <AiTag type="success">成功</AiTag>
+        <AiTag type="warning">提醒</AiTag>
+        <AiTag type="danger">失败</AiTag>
+        <AiTag type="default" variant="outline">默认</AiTag>
+        <AiTag type="primary" round closable @close="handleTagClose">可关闭</AiTag>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'field'" class="field-stack">
+        <AiField v-model="form.nickname" label="昵称" clearable placeholder="请输入昵称">
+          <template #leftIcon>
+            <view class="icon-mask field-icon" :style="iconMask('/static/icons/ai-icon/user.svg', '#94a3b8')" />
+          </template>
+        </AiField>
+        <AiField v-model="form.password" label="密码" type="password" placeholder="请输入密码">
+          <template #leftIcon>
+            <view class="icon-mask field-icon" :style="iconMask('/static/icons/ai-icon/lock.svg', '#94a3b8')" />
+          </template>
+        </AiField>
+        <AiField
+          v-model="form.code"
+          label="验证码"
+          layout="horizontal"
+          placeholder="四位验证码"
+          error="验证码错误或已过期"
+        />
+      </view>
+
+      <view v-else-if="activeComponent.key === 'search'" class="field-stack">
+        <AiSearchBar
+          v-model="searchKeyword"
+          placeholder="搜索菜单、消息、服务"
+          @search="handleSearch"
+          @clear="handleSearchClear"
+          @cancel="handleSearchCancel"
+        />
+        <AiSearchBar
+          v-model="searchKeyword"
+          placeholder="常驻取消按钮"
+          show-cancel
+          @search="handleSearch"
+          @cancel="handleSearchCancel"
+        />
+      </view>
+
+      <view v-else-if="activeComponent.key === 'result'" class="result-preview">
+        <AiResult
+          type="success"
+          title="提交成功"
+          description="结果页适合提交、异常、无权限、网络错误等完整状态反馈。"
+          primary-text="完成"
+          secondary-text="返回"
+          @primary="toast('点击了完成', { type: 'success' })"
+          @secondary="toast('点击了返回')"
+        />
+      </view>
+
+      <view v-else-if="activeComponent.key === 'skeleton'" class="skeleton-preview">
+        <AiSkeleton type="profile" />
+        <AiSkeleton class="skeleton-card" type="card" :rows="3" />
+      </view>
+
+      <view v-else-if="activeComponent.key === 'pull-list'" class="pull-list-preview">
+        <AiPullList
+          :list="demoPullItems"
+          :loading="demoPullLoading"
+          :refreshing="demoPullRefreshing"
+          :finished="demoPullFinished"
+          height="520rpx"
+          @refresh="refreshDemoList"
+          @load="loadDemoList"
+          @retry="refreshDemoList"
+        >
+          <template #default="{ item }">
+            <view class="demo-list-item">
+              <view class="demo-list-icon">
+                <AiIcon :name="item.icon" :color="item.color" size="sm" />
+              </view>
+              <view class="demo-list-copy">
+                <text class="demo-list-title">{{ item.title }}</text>
+                <text class="demo-list-desc">{{ item.desc }}</text>
+              </view>
+            </view>
+          </template>
+        </AiPullList>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'cell'" class="cell-preview">
+        <AiCellGroup>
+          <AiCell title="个人信息" label="头像、昵称、联系方式" is-link clickable icon="/static/icons/ai-icon/user.svg" />
+          <AiCell title="安全中心" label="登录密码、设备管理" is-link clickable icon="/static/icons/ai-icon/shield.svg" />
+          <AiCell title="通知设置" value="已开启" is-link clickable icon="/static/icons/ai-icon/bell.svg" />
+        </AiCellGroup>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'layout'" class="layout-preview">
+        <AiSection title="页面与分区" desc="统一背景、玻璃分区、头像、统计和空状态">
+          <view class="profile-line">
+            <AiAvatar size="lg" shape="square" />
+            <view class="profile-copy">
+              <text class="profile-title">Forge H5</text>
+              <text class="profile-desc">用户端模板统一组件体系</text>
+            </view>
+          </view>
+          <AiStats class="layout-stats" :items="statsItems" />
+        </AiSection>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'icon'" class="icon-grid">
+        <view v-for="item in iconItems" :key="item.name" class="icon-tile">
+          <AiIcon :name="item.name" :color="item.color" size="lg" />
+          <text>{{ item.label }}</text>
+        </view>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'empty'" class="empty-preview">
+        <AiEmpty title="暂无内容" description="空状态用于列表、消息、卡包等无数据场景。">
+          <AiButton size="sm" variant="secondary">刷新</AiButton>
+        </AiEmpty>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'feedback'" class="button-stack">
+        <AiButton block @click="showToast">轻提示 Toast</AiButton>
+        <AiButton block variant="secondary" @click="showNotify">消息提示 Notify</AiButton>
+        <AiButton block variant="outline" @click="showAlert">提示弹窗 Alert</AiButton>
+        <AiButton block variant="danger" @click="showConfirm">确认弹窗 Confirm</AiButton>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'loading'" class="loading-panel">
+        <view class="loading-preview">
+          <Loading visible :text="previewText" :type="currentType" theme="brand" size="md" />
+        </view>
+        <view class="segmented">
+          <button
+            v-for="item in typeOptions"
+            :key="item.value"
+            class="segment-button"
+            :class="{ active: currentType === item.value }"
+            @click="currentType = item.value"
+          >
+            {{ item.label }}
+          </button>
+        </view>
+        <view class="button-stack">
+          <AiButton block @click="showFullscreenLoading">全屏加载</AiButton>
+          <AiButton block variant="secondary" @click="showServiceLoading">服务调用</AiButton>
+        </view>
+      </view>
+
+      <view v-else-if="activeComponent.key === 'composable'" class="composable-preview">
+        <AiSection title="usePageLoading" desc="统一页面首屏、刷新、失败和空状态。">
+          <view class="state-line">
+            <text class="state-label">当前状态</text>
+            <AiTag type="primary" round>{{ pageLoading.status.value }}</AiTag>
+          </view>
+          <view class="button-stack compact">
+            <AiButton block variant="secondary" @click="runPageLoadingDemo">模拟加载</AiButton>
+            <AiButton block variant="outline" @click="pageLoading.setEmpty()">切换空状态</AiButton>
+          </view>
+        </AiSection>
+        <AiSection title="useRequest" desc="请求状态、错误、成功提示和重复点击锁。">
+          <view class="state-line">
+            <text class="state-label">请求次数</text>
+            <AiTag type="success" round>{{ requestCount }}</AiTag>
+          </view>
+          <AiButton block :loading="requestDemo.loading.value" @click="runRequestDemo">模拟请求</AiButton>
+        </AiSection>
+      </view>
+    </AiPopupSheet>
 
     <Loading
       :visible="fullscreenVisible"
@@ -96,19 +243,229 @@
       size="md"
       :z-index="12000"
     />
-  </view>
+  </AiLayoutPage>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import AiAvatar from '@/components/AiAvatar.vue'
+import AiButton from '@/components/AiButton.vue'
+import AiCell from '@/components/AiCell.vue'
+import AiCellGroup from '@/components/AiCellGroup.vue'
+import AiEmpty from '@/components/AiEmpty.vue'
+import AiField from '@/components/AiField.vue'
+import AiIcon from '@/components/AiIcon.vue'
+import AiLayoutPage from '@/components/AiLayoutPage.vue'
+import AiPopupSheet from '@/components/AiPopupSheet.vue'
+import AiPullList from '@/components/AiPullList.vue'
+import AiResult from '@/components/AiResult.vue'
+import AiSearchBar from '@/components/AiSearchBar.vue'
+import AiSection from '@/components/AiSection.vue'
+import AiSkeleton from '@/components/AiSkeleton.vue'
+import AiStats from '@/components/AiStats.vue'
+import AiTag from '@/components/AiTag.vue'
+import { usePageLoading, useRequest } from '@/composables'
 import Loading from '@/components/Loading.vue'
 import { loadingService } from '@/directives'
-import { toast } from '@/utils/notify'
+import { showAlertDialog, showConfirmDialog } from '@/utils/dialog'
+import { notify, toast } from '@/utils/notify'
 
+const activeCategory = ref('all')
 const currentType = ref('brand')
-const currentTheme = ref('brand')
-const currentSize = ref('md')
 const fullscreenVisible = ref(false)
+const previewVisible = ref(false)
+const activeKey = ref('button')
+const searchKeyword = ref('')
+const demoPullLoading = ref(false)
+const demoPullRefreshing = ref(false)
+const demoPullFinished = ref(false)
+const requestCount = ref(0)
+
+const form = reactive({
+  nickname: 'Forge 用户',
+  password: '123456',
+  code: 'vtra',
+})
+
+const categories = [
+  { label: '全部', key: 'all' },
+  { label: '基础', key: 'basic' },
+  { label: '布局', key: 'layout' },
+  { label: '表单', key: 'form' },
+  { label: '列表', key: 'list' },
+  { label: '反馈', key: 'feedback' },
+  { label: '方法', key: 'composable' },
+]
+
+const componentItems = [
+  {
+    title: 'Button 按钮',
+    key: 'button',
+    category: 'basic',
+    categoryLabel: '基础',
+    desc: '主操作、次操作、危险操作与加载态。',
+    icon: 'zap',
+    color: '#2563eb',
+    bg: 'rgba(219, 234, 254, 0.78)',
+    tagType: 'primary',
+  },
+  {
+    title: 'Tag 标签',
+    key: 'tag',
+    category: 'basic',
+    categoryLabel: '基础',
+    desc: '状态标签、描边标签、圆角标签和关闭交互。',
+    icon: 'award',
+    color: '#4f46e5',
+    bg: 'rgba(224, 231, 255, 0.78)',
+    tagType: 'primary',
+  },
+  {
+    title: 'Field 输入框',
+    key: 'field',
+    category: 'form',
+    categoryLabel: '表单',
+    desc: '普通输入、密码输入、错误态和横向表单。',
+    icon: 'edit',
+    color: '#0891b2',
+    bg: 'rgba(207, 250, 254, 0.72)',
+    tagType: 'success',
+  },
+  {
+    title: 'SearchBar 搜索栏',
+    key: 'search',
+    category: 'form',
+    categoryLabel: '表单',
+    desc: '移动端搜索、清空、取消和搜索确认。',
+    icon: 'search',
+    color: '#2563eb',
+    bg: 'rgba(219, 234, 254, 0.78)',
+    tagType: 'primary',
+  },
+  {
+    title: 'Result 结果页',
+    key: 'result',
+    category: 'layout',
+    categoryLabel: '布局',
+    desc: '提交成功、异常、无权限、404、网络错误等状态反馈。',
+    icon: 'check-circle',
+    color: '#10b981',
+    bg: 'rgba(209, 250, 229, 0.78)',
+    tagType: 'success',
+  },
+  {
+    title: 'Skeleton 骨架屏',
+    key: 'skeleton',
+    category: 'layout',
+    categoryLabel: '布局',
+    desc: '首屏、列表和卡片加载占位，减少空白等待。',
+    icon: 'loader',
+    color: '#64748b',
+    bg: 'rgba(241, 245, 249, 0.9)',
+    tagType: 'default',
+  },
+  {
+    title: 'PullList 下拉列表',
+    key: 'pull-list',
+    category: 'list',
+    categoryLabel: '列表',
+    desc: '下拉刷新、上拉加载、空状态、错误重试和底部状态。',
+    icon: 'list',
+    color: '#0891b2',
+    bg: 'rgba(207, 250, 254, 0.72)',
+    tagType: 'success',
+  },
+  {
+    title: 'Cell 单元格',
+    key: 'cell',
+    category: 'list',
+    categoryLabel: '列表',
+    desc: '适合设置项、个人信息和业务菜单入口。',
+    icon: 'list',
+    color: '#7c3aed',
+    bg: 'rgba(237, 233, 254, 0.74)',
+    tagType: 'primary',
+  },
+  {
+    title: 'Layout 布局组合',
+    key: 'layout',
+    category: 'layout',
+    categoryLabel: '布局',
+    desc: '页面背景、玻璃分区、头像和统计信息组合。',
+    icon: 'layers',
+    color: '#2563eb',
+    bg: 'rgba(219, 234, 254, 0.74)',
+    tagType: 'primary',
+  },
+  {
+    title: 'Icon 图标',
+    key: 'icon',
+    category: 'layout',
+    categoryLabel: '布局',
+    desc: '统一 SVG mask 图标颜色、尺寸和底块样式。',
+    icon: 'grid',
+    color: '#d97706',
+    bg: 'rgba(254, 243, 199, 0.78)',
+    tagType: 'warning',
+  },
+  {
+    title: 'Empty 空状态',
+    key: 'empty',
+    category: 'layout',
+    categoryLabel: '布局',
+    desc: '用于列表、消息、卡包等无数据场景。',
+    icon: 'inbox',
+    color: '#64748b',
+    bg: 'rgba(241, 245, 249, 0.9)',
+    tagType: 'default',
+  },
+  {
+    title: 'Feedback 反馈',
+    key: 'feedback',
+    category: 'feedback',
+    categoryLabel: '反馈',
+    desc: '轻提示、消息提示、Alert 和 Confirm 弹窗。',
+    icon: 'bell',
+    color: '#8b5cf6',
+    bg: 'rgba(243, 232, 255, 0.78)',
+    tagType: 'primary',
+  },
+  {
+    title: 'Loading 加载',
+    key: 'loading',
+    category: 'feedback',
+    categoryLabel: '反馈',
+    desc: '品牌、圆环、圆点和全屏加载状态。',
+    icon: 'refresh-cw',
+    color: '#059669',
+    bg: 'rgba(209, 250, 229, 0.78)',
+    tagType: 'success',
+  },
+  {
+    title: 'Composables 公共方法',
+    key: 'composable',
+    category: 'composable',
+    categoryLabel: '方法',
+    desc: 'useRequest、usePageLoading 和 route 工具方法。',
+    icon: 'code',
+    color: '#4f46e5',
+    bg: 'rgba(224, 231, 255, 0.78)',
+    tagType: 'primary',
+  },
+]
+
+const statsItems = [
+  { label: '菜单', value: 8 },
+  { label: '权限', value: 24 },
+  { label: '消息', value: 3 },
+]
+
+const iconItems = [
+  { name: 'user', label: '用户', color: '#2563eb' },
+  { name: 'shield', label: '安全', color: '#4f46e5' },
+  { name: 'bell', label: '通知', color: '#8b5cf6' },
+  { name: 'zap', label: '快捷', color: '#d97706' },
+]
 
 const typeOptions = [
   { label: '品牌', value: 'brand' },
@@ -116,22 +473,42 @@ const typeOptions = [
   { label: '圆点', value: 'dots' },
 ]
 
-const themeOptions = [
-  { label: '品牌', value: 'brand' },
-  { label: '浅色', value: 'light' },
-  { label: '深色', value: 'dark' },
-]
+const demoPullItems = ref([
+  { id: 1, title: '账户通知', desc: '展示普通列表项和菜单入口。', icon: 'bell', color: '#2563eb' },
+  { id: 2, title: '服务进度', desc: '支持下拉刷新和上拉加载。', icon: 'activity', color: '#10b981' },
+  { id: 3, title: '安全提醒', desc: '内置空状态、错误状态和骨架屏。', icon: 'shield', color: '#4f46e5' },
+])
 
-const sizeOptions = [
-  { label: '小', value: 'sm' },
-  { label: '中', value: 'md' },
-  { label: '大', value: 'lg' },
-]
+const pageLoading = usePageLoading('success')
+const requestDemo = useRequest(() => new Promise((resolve) => {
+  setTimeout(() => {
+    requestCount.value += 1
+    resolve({ ok: true, count: requestCount.value })
+  }, 700)
+}), {
+  showSuccess: true,
+  successMessage: '模拟请求完成',
+  throwOnError: false,
+})
+
+const visibleComponents = computed(() => {
+  if (activeCategory.value === 'all') return componentItems
+  return componentItems.filter(item => item.category === activeCategory.value)
+})
+
+const activeComponent = computed(() => {
+  return componentItems.find(item => item.key === activeKey.value) || componentItems[0]
+})
 
 const previewText = computed(() => {
   const typeLabel = typeOptions.find(item => item.value === currentType.value)?.label || ''
   return `${typeLabel}加载中...`
 })
+
+function openPreview(item) {
+  activeKey.value = item.key
+  previewVisible.value = true
+}
 
 function iconMask(icon, color) {
   return {
@@ -141,9 +518,88 @@ function iconMask(icon, color) {
   }
 }
 
-function goBack() {
-  uni.navigateBack({
-    fail: () => uni.switchTab({ url: '/pages/index/index' }),
+function handleTagClose() {
+  toast('标签已关闭', { type: 'success' })
+}
+
+function handleSearch(value) {
+  toast(value ? `搜索：${value}` : '请输入搜索内容')
+}
+
+function handleSearchClear() {
+  toast('已清空搜索')
+}
+
+function handleSearchCancel() {
+  toast('已取消搜索')
+}
+
+function refreshDemoList() {
+  demoPullRefreshing.value = true
+  demoPullFinished.value = false
+  setTimeout(() => {
+    demoPullItems.value = demoPullItems.value.slice(0, 3)
+    demoPullRefreshing.value = false
+    toast('列表已刷新', { type: 'success' })
+  }, 800)
+}
+
+function loadDemoList() {
+  demoPullLoading.value = true
+  setTimeout(() => {
+    const nextId = demoPullItems.value.length + 1
+    demoPullItems.value = [
+      ...demoPullItems.value,
+      {
+        id: nextId,
+        title: `扩展项 ${nextId}`,
+        desc: '这是上拉加载追加的列表项。',
+        icon: 'plus-circle',
+        color: '#d97706',
+      },
+    ]
+    demoPullLoading.value = false
+    demoPullFinished.value = demoPullItems.value.length >= 5
+  }, 800)
+}
+
+function runPageLoadingDemo() {
+  pageLoading.run(() => new Promise(resolve => setTimeout(() => resolve(['ok']), 700)))
+    .then(() => toast('页面状态已更新', { type: 'success' }))
+}
+
+function runRequestDemo() {
+  requestDemo.execute()
+}
+
+function showToast() {
+  toast('这是一条轻提示', { type: 'success' })
+}
+
+function showNotify() {
+  notify({
+    title: '消息提示',
+    description: '用于展示更完整的系统反馈信息。',
+    type: 'info',
+  })
+}
+
+function showAlert() {
+  showAlertDialog({
+    title: '提示弹窗',
+    description: '这是一个用于信息确认的 Alert 弹窗。',
+    icon: 'info',
+    buttonText: '知道了',
+  })
+}
+
+function showConfirm() {
+  showConfirmDialog({
+    title: '确认操作',
+    description: '确认继续执行当前操作？',
+    icon: 'warning',
+    confirmText: '确认',
+    cancelText: '取消',
   })
 }
 
@@ -152,7 +608,7 @@ function showFullscreenLoading() {
   setTimeout(() => {
     fullscreenVisible.value = false
     toast('全屏加载演示完成', { type: 'success' })
-  }, 1800)
+  }, 1600)
 }
 
 function showServiceLoading() {
@@ -160,263 +616,291 @@ function showServiceLoading() {
     text: '服务加载中...',
     type: currentType.value,
     theme: 'brand',
-    size: currentSize.value,
+    size: 'md',
   })
   setTimeout(() => {
     loading?.close?.()
     toast('服务调用演示完成', { type: 'success' })
-  }, 1800)
+  }, 1600)
 }
 </script>
 
 <style lang="scss" scoped>
-.loading-demo-page {
-  position: relative;
-  min-height: 100vh;
-  overflow: hidden;
-  background: #f8fafc;
-}
-
-.loading-demo-page::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 18% 10%, rgba(147, 197, 253, 0.32), transparent 34%),
-    radial-gradient(circle at 86% 28%, rgba(199, 210, 254, 0.28), transparent 34%),
-    radial-gradient(circle at 28% 82%, rgba(251, 207, 232, 0.22), transparent 32%);
-}
-
-.grid-layer {
-  position: absolute;
-  inset: 0;
-  opacity: 0.16;
-  pointer-events: none;
-  background-image:
-    linear-gradient(#e2e8f0 1rpx, transparent 1rpx),
-    linear-gradient(90deg, #e2e8f0 1rpx, transparent 1rpx);
-  background-size: 80rpx 80rpx;
-}
-
-.page-glow {
-  position: absolute;
-  width: 520rpx;
-  height: 520rpx;
-  border-radius: 999rpx;
-  filter: blur(90rpx);
-  pointer-events: none;
-}
-
-.page-glow-blue {
-  top: -180rpx;
-  left: -160rpx;
-  background: rgba(147, 197, 253, 0.42);
-}
-
-.page-glow-pink {
-  right: -180rpx;
-  bottom: 120rpx;
-  background: rgba(251, 207, 232, 0.34);
-}
-
-.demo-content {
-  position: relative;
-  z-index: 1;
+.demo-page {
   display: flex;
   flex-direction: column;
-  gap: 28rpx;
-  padding: 56rpx 28rpx 72rpx;
-  box-sizing: border-box;
+  gap: 24rpx;
 }
 
-.demo-header {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-}
-
-.back-button {
-  display: flex;
-  width: 76rpx;
-  height: 76rpx;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1rpx solid rgba(255, 255, 255, 0.86);
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(20rpx);
-}
-
-.back-button::after,
-.segment-button::after,
-.action-button::after {
+.category-button::after,
+.component-card::after,
+.segment-button::after {
   border: 0;
 }
 
-.icon-mask {
-  width: 34rpx;
-  height: 34rpx;
+.summary-card {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 28rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.86);
+  border-radius: 36rpx;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 10rpx 32rpx rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(24rpx);
 }
 
-.header-copy {
+.summary-main {
   min-width: 0;
   flex: 1;
 }
 
-.header-title,
-.header-subtitle,
-.control-title,
-.action-button text {
+.summary-title,
+.summary-desc,
+.component-title,
+.component-desc,
+.profile-title,
+.profile-desc {
   display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.header-title {
+.summary-title {
   color: #1e293b;
-  font-size: 42rpx;
+  font-size: 34rpx;
   font-weight: 950;
-  line-height: 1.15;
+  line-height: 1.18;
 }
 
-.header-subtitle {
-  margin-top: 6rpx;
+.summary-desc {
+  margin-top: 10rpx;
   color: #64748b;
   font-size: 24rpx;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: normal;
 }
 
-.preview-card,
-.control-card {
-  border: 1rpx solid rgba(255, 255, 255, 0.82);
-  border-radius: 40rpx;
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: 0 12rpx 36rpx rgba(15, 23, 42, 0.05);
-  backdrop-filter: blur(24rpx);
+.category-nav {
+  width: 100%;
+  white-space: nowrap;
 }
 
-.preview-card {
-  padding: 32rpx;
+.category-track {
+  display: inline-flex;
+  gap: 14rpx;
+  min-width: 100%;
 }
 
-.preview-panel {
+.category-button {
+  height: 68rpx;
+  padding: 0 26rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.86);
+  border-radius: 999rpx;
+  color: #475569;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 68rpx;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 6rpx 18rpx rgba(15, 23, 42, 0.04);
+  backdrop-filter: blur(18rpx);
+}
+
+.category-button.active {
+  color: #ffffff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  box-shadow: 0 12rpx 28rpx rgba(59, 130, 246, 0.22);
+}
+
+.component-list {
   display: flex;
-  min-height: 360rpx;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.component-card {
+  display: flex;
+  width: 100%;
+  min-height: 132rpx;
+  align-items: center;
+  gap: 22rpx;
+  margin: 0;
+  padding: 22rpx 24rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.86);
+  border-radius: 32rpx;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8rpx 26rpx rgba(15, 23, 42, 0.045);
+  text-align: left;
+  backdrop-filter: blur(22rpx);
+}
+
+.component-card:active {
+  transform: scale(0.99);
+}
+
+.component-icon {
+  display: flex;
+  width: 78rpx;
+  height: 78rpx;
+  flex: 0 0 78rpx;
   align-items: center;
   justify-content: center;
-  border: 1rpx solid rgba(226, 232, 240, 0.7);
-  border-radius: 32rpx;
-  background:
-    radial-gradient(circle at 50% 28%, rgba(219, 234, 254, 0.72), transparent 42%),
-    rgba(248, 250, 252, 0.72);
+  border-radius: 24rpx;
 }
 
-.control-card {
-  display: flex;
-  flex-direction: column;
-  gap: 28rpx;
-  padding: 30rpx;
+.component-copy {
+  min-width: 0;
+  flex: 1;
 }
 
-.control-section {
+.component-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.component-title {
+  flex: 1;
+  color: #1e293b;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.component-desc {
+  margin-top: 8rpx;
+  color: #64748b;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.36;
+  white-space: normal;
+}
+
+.component-arrow {
+  color: #94a3b8;
+  font-size: 52rpx;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.button-stack,
+.field-stack {
   display: flex;
   flex-direction: column;
+  gap: 18rpx;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
   gap: 16rpx;
 }
 
-.control-title {
-  color: #334155;
-  font-size: 27rpx;
-  font-weight: 900;
+.icon-mask,
+.field-icon {
+  width: 34rpx;
+  height: 34rpx;
+}
+
+.cell-preview {
+  border-radius: 32rpx;
+  overflow: hidden;
+}
+
+.profile-line {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+}
+
+.profile-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-title {
+  color: #1e293b;
+  font-size: 32rpx;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.profile-desc {
+  margin-top: 8rpx;
+  color: #64748b;
+  font-size: 24rpx;
+  font-weight: 650;
+  white-space: normal;
+}
+
+.layout-stats {
+  margin-top: 30rpx;
+  padding-top: 28rpx;
+  border-top: 1rpx solid rgba(203, 213, 225, 0.52);
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.icon-tile {
+  display: flex;
+  min-height: 132rpx;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.86);
+  border-radius: 28rpx;
+  color: #64748b;
+  font-size: 23rpx;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.empty-preview {
+  overflow: hidden;
+  border-radius: 32rpx;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.loading-preview {
+  min-height: 190rpx;
+  margin-bottom: 22rpx;
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12rpx;
-  padding: 8rpx;
-  border-radius: 24rpx;
-  background: rgba(241, 245, 249, 0.78);
+  margin-bottom: 22rpx;
 }
 
 .segment-button {
   height: 72rpx;
   padding: 0;
-  border-radius: 18rpx;
+  border: 1rpx solid rgba(226, 232, 240, 0.86);
+  border-radius: 24rpx;
   color: #64748b;
   font-size: 25rpx;
-  font-weight: 850;
+  font-weight: 800;
   line-height: 72rpx;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .segment-button.active {
   color: #2563eb;
-  background: #ffffff;
-  box-shadow: 0 6rpx 18rpx rgba(37, 99, 235, 0.12);
-}
-
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18rpx;
-}
-
-.action-button {
-  display: flex;
-  height: 92rpx;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  padding: 0 10px;
-  border-radius: 28rpx;
-  font-size: 28rpx;
-  font-weight: 900;
-  line-height: 92rpx;
-}
-
-.action-button.primary {
-  color: #ffffff;
-  background: linear-gradient(90deg, #2563eb, #4f46e5);
-  box-shadow: 0 12rpx 28rpx rgba(37, 99, 235, 0.22);
-}
-
-.action-button.secondary {
-  color: #2563eb;
-  border: 1rpx solid rgba(191, 219, 254, 0.78);
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.button-icon {
-  width: 34rpx;
-  height: 34rpx;
-}
-
-.animate-in {
-  animation: enterUp 0.58s ease both;
-}
-
-.delay-1 {
-  animation-delay: 0.08s;
-}
-
-.delay-2 {
-  animation-delay: 0.16s;
-}
-
-.delay-3 {
-  animation-delay: 0.24s;
-}
-
-@keyframes enterUp {
-  from {
-    opacity: 0;
-    transform: translateY(28rpx);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  border-color: rgba(147, 197, 253, 0.8);
+  background: rgba(219, 234, 254, 0.86);
 }
 </style>
