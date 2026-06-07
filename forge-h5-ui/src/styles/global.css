@@ -12,6 +12,20 @@ page {
   text-rendering: optimizeLegibility;
 }
 
+/* 自定义 AiTabBar 接管底部导航，H5 刷新时先隐藏 uni 原生 tabBar，避免首屏闪现。 */
+/* #ifdef H5 */
+uni-tabbar,
+uni-tabbar .uni-tabbar,
+uni-tabbar .uni-tabbar__content,
+.uni-tabbar,
+.uni-tabbar__content {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+/* #endif */
+
 button,
 input {
   touch-action: manipulation;

@@ -99,12 +99,15 @@
         </view>
       </view>
     </view>
+
+    <AiTabBar active="home" />
   </view>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import AiTabBar from '@/components/AiTabBar.vue'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
 import { toast } from '@/utils/notify'
@@ -252,6 +255,10 @@ function flattenMenus(menus = []) {
 }
 
 onShow(async () => {
+  uni.hideTabBar({
+    animation: false,
+    fail: () => {},
+  })
   const ok = await ensureLogin({ redirect: '/pages/index/index' })
   if (!ok) {
     return
@@ -378,7 +385,7 @@ function formatCurrentTime() {
   display: flex;
   flex-direction: column;
   gap: 36rpx;
-  padding: 56rpx 28rpx 132rpx;
+  padding: 56rpx 28rpx 190rpx;
   box-sizing: border-box;
 }
 
