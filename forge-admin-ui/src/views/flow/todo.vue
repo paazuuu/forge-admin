@@ -395,7 +395,8 @@
 
 <script setup>
 import { NButton, NSpace, NTreeSelect } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
 import ProcessDiagramViewer from '@/components/bpmn/ProcessDiagramViewer.vue'
 import UserSelectModal from '@/components/bpmn/UserSelectModal.vue'
@@ -409,6 +410,8 @@ import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
+const route = useRoute()
+const router = useRouter()
 const { dict, getLabel } = useDict('flow_todo_status', 'flow_priority')
 const loading = ref(false)
 const dataSource = ref([])
@@ -494,6 +497,7 @@ const delegateTargetUser = ref(null)
 const delegateForm = reactive({ comment: '', signature: '' })
 const delegateSignatureRef = ref(null)
 const delegateSignatureKey = ref(0)
+const routeTaskOpening = ref(false)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_todo_status))
 
@@ -857,6 +861,57 @@ async function loadData() {
   }
 }
 
+function getRouteTaskId() {
+  const taskId = route.query.taskId
+  if (Array.isArray(taskId))
+    return taskId[0] ? String(taskId[0]) : ''
+  return taskId ? String(taskId) : ''
+}
+
+async function openTaskFromRoute() {
+  const taskId = getRouteTaskId()
+  if (!taskId || routeTaskOpening.value)
+    return
+
+  if (showDrawer.value && currentTask.value?.taskId === taskId)
+    return
+
+  routeTaskOpening.value = true
+  try {
+    const existing = dataSource.value.find(row => row.taskId === taskId || row.id === taskId)
+    if (existing) {
+      await openDrawer(existing)
+      return
+    }
+
+    const res = await flowApi.getTaskDetail(taskId)
+    if (res.code === 200 && res.data) {
+      await openDrawer(res.data)
+    }
+    else {
+      window.$message.warning('待办任务不存在或已处理')
+      clearRouteTaskId()
+    }
+  }
+  catch {
+    window.$message.warning('待办任务不存在或已处理')
+    clearRouteTaskId()
+  }
+  finally {
+    routeTaskOpening.value = false
+  }
+}
+
+function clearRouteTaskId() {
+  if (!getRouteTaskId())
+    return
+  const query = { ...route.query }
+  delete query.taskId
+  delete query.source
+  delete query.t
+  router.replace({ path: route.path, query })
+}
+
 async function loadStats() {
   try {
     const [doneRes, startedRes, ccRes] = await Promise.all([
@@ -908,11 +963,20 @@ function handleSwitch(tab) {
     window.$router?.push(routes[tab])
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadCategories()
   loadStats()
-  loadData()
+  await loadData()
+  await openTaskFromRoute()
 })
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (route.path === '/flow/todo')
+      await openTaskFromRoute()
+  },
+)
 </script>
 
 <style scoped>
