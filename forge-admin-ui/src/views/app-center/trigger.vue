@@ -1,68 +1,105 @@
 <template>
   <div class="center-shell">
-    <header>
+    <header class="trigger-page-header">
       <div class="center-head-row">
-        <n-button text @click="router.push('/app-center/engines')">
+        <NButton text @click="router.push('/app-center/engines')">
           返回引擎中心
-        </n-button>
-        <n-space :wrap="true">
-          <n-button secondary @click="loadAll">
+        </NButton>
+        <NSpace :wrap="true">
+          <NButton secondary @click="loadAll">
             刷新
-          </n-button>
-          <n-button type="primary" @click="openEditor(null)">
+          </NButton>
+          <NButton type="primary" @click="openEditor(null)">
             新增触发器
-          </n-button>
-        </n-space>
+          </NButton>
+        </NSpace>
       </div>
-      <h1>触发器配置</h1>
-      <p>基于业务事件的自动化规则：当记录创建、修改或状态变更时自动发起主流程、推送消息或更新字段。</p>
+      <div class="trigger-title-row">
+        <div>
+          <h1>触发器配置</h1>
+          <p>基于业务事件的自动化规则：当记录创建、修改或状态变更时自动发起主流程、推送消息或更新字段。</p>
+        </div>
+        <div class="trigger-range">
+          {{ pageRangeText }}
+        </div>
+      </div>
     </header>
 
-    <section class="trigger-filters">
-      <n-space :wrap="true" align="center">
-        <n-select
-          v-model:value="filterObjectCode"
-          clearable
-          style="width: 240px"
-          placeholder="按业务对象筛选"
-          :options="objectOptions"
-          @update:value="loadTriggers"
-        />
-        <n-select
-          v-model:value="filterScenarioType"
-          clearable
-          style="width: 240px"
-          placeholder="按场景筛选"
-          :options="scenarioTemplateOptions"
-          @update:value="loadTriggers"
-        />
-        <n-tag v-if="total > 0" :bordered="false">
-          {{ total }} 条触发器 · {{ enabledCount }} 条启用
-        </n-tag>
-      </n-space>
+    <section class="trigger-stats">
+      <div class="trigger-stat">
+        <span>总触发器</span>
+        <strong>{{ total }}</strong>
+      </div>
+      <div class="trigger-stat">
+        <span>本页启用</span>
+        <strong>{{ enabledCount }}</strong>
+      </div>
+      <div class="trigger-stat">
+        <span>本页定时</span>
+        <strong>{{ scheduledCount }}</strong>
+      </div>
+      <div class="trigger-stat">
+        <span>当前对象</span>
+        <strong>{{ currentObjectLabel }}</strong>
+      </div>
     </section>
 
-    <n-spin :show="loading">
+    <section class="trigger-panel">
+      <div class="trigger-toolbar">
+        <div>
+          <h2>规则列表</h2>
+          <p>筛选、启停和查看每条触发器的执行情况。</p>
+        </div>
+        <NSpace :wrap="true" align="center">
+          <n-select
+            v-model:value="filterObjectCode"
+            clearable
+            filterable
+            class="trigger-filter-select"
+            placeholder="按业务对象筛选"
+            :options="objectOptions"
+            @update:value="handleFilterChange"
+          />
+          <n-select
+            v-model:value="filterScenarioType"
+            clearable
+            class="trigger-filter-select"
+            placeholder="按场景筛选"
+            :options="scenarioTemplateOptions"
+            @update:value="handleFilterChange"
+          />
+          <NButton :disabled="!hasActiveFilter" @click="resetFilters">
+            重置
+          </NButton>
+        </NSpace>
+      </div>
+
       <n-data-table
         :columns="columns"
         :data="triggers"
+        :loading="loading"
         :pagination="false"
         :row-key="row => row.id"
+        :row-class-name="rowClassName"
+        :scroll-x="1040"
+        size="small"
         striped
       />
-    </n-spin>
 
-    <div v-if="total > pagination.pageSize" class="trigger-pagination">
-      <n-pagination
-        v-model:page="pagination.pageNum"
-        v-model:page-size="pagination.pageSize"
-        :item-count="total"
-        :page-sizes="[10, 20, 50]"
-        show-size-picker
-        @update:page="loadTriggers"
-        @update:page-size="handlePageSizeChange"
-      />
-    </div>
+      <div class="trigger-pagination">
+        <span>{{ pageRangeText }}</span>
+        <n-pagination
+          :page="pagination.pageNum"
+          :page-size="pagination.pageSize"
+          :item-count="total"
+          :page-sizes="[10, 20, 50]"
+          show-size-picker
+          show-quick-jumper
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
+        />
+      </div>
+    </section>
 
     <!-- 触发器编辑弹窗 -->
     <n-modal v-model:show="editorVisible" preset="card" :title="editingTrigger ? '编辑触发器' : '新增触发器'" style="width: 680px">
@@ -136,7 +173,7 @@
           </div>
         </n-form-item>
         <n-form-item label="开发者模式">
-          <n-switch v-model:value="formData.developerMode" :checked-value="1" :unchecked-value="0" />
+          <NSwitch v-model:value="formData.developerMode" :checked-value="1" :unchecked-value="0" />
         </n-form-item>
         <n-form-item label="触发条件">
           <n-input
@@ -178,28 +215,45 @@
         </n-form-item>
       </n-form>
       <template #footer>
-        <n-space justify="end">
-          <n-button @click="editorVisible = false">
+        <NSpace justify="end">
+          <NButton @click="editorVisible = false">
             取消
-          </n-button>
-          <n-button type="primary" :loading="submitting" :disabled="!formData.objectCode" @click="handleSubmit">
+          </NButton>
+          <NButton type="primary" :loading="submitting" :disabled="!formData.objectCode" @click="handleSubmit">
             保存
-          </n-button>
-        </n-space>
+          </NButton>
+        </NSpace>
       </template>
     </n-modal>
 
     <!-- 执行日志抽屉 -->
     <n-drawer v-model:show="logDrawerVisible" :width="640" placement="right">
       <n-drawer-content :title="`执行日志 - ${logTriggerName}`">
-        <n-data-table :columns="logColumns" :data="logs" :pagination="false" size="small" />
+        <n-data-table
+          :columns="logColumns"
+          :data="logs"
+          :loading="logLoading"
+          :pagination="false"
+          size="small"
+        />
+        <div class="log-pagination">
+          <n-pagination
+            :page="logPagination.pageNum"
+            :page-size="logPagination.pageSize"
+            :item-count="logPagination.total"
+            :page-sizes="[10, 20, 50]"
+            show-size-picker
+            @update:page="handleLogPageChange"
+            @update:page-size="handleLogPageSizeChange"
+          />
+        </div>
       </n-drawer-content>
     </n-drawer>
   </div>
 </template>
 
 <script setup>
-import { useMessage } from 'naive-ui'
+import { NButton, NPopconfirm, NSpace, NSwitch, NTag, useMessage } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -234,9 +288,29 @@ const scenarioTemplates = ref([])
 const logDrawerVisible = ref(false)
 const logTriggerName = ref('')
 const logs = ref([])
+const logLoading = ref(false)
+const activeLogTriggerId = ref(null)
+const logPagination = ref({ pageNum: 1, pageSize: 10, total: 0 })
 const formRef = ref(null)
+const formData = ref(initFormData())
+const fieldOptions = ref([])
+const objectFieldsCache = ref({})
 
 const enabledCount = computed(() => triggers.value.filter(t => t.status === 1).length)
+const scheduledCount = computed(() => triggers.value.filter(isScheduleRow).length)
+const currentObjectLabel = computed(() => {
+  if (!filterObjectCode.value)
+    return '全部'
+  return objectOptions.value.find(item => item.value === filterObjectCode.value)?.label || filterObjectCode.value
+})
+const hasActiveFilter = computed(() => Boolean(filterObjectCode.value || filterScenarioType.value))
+const pageRangeText = computed(() => {
+  if (!total.value)
+    return '暂无数据'
+  const start = (pagination.value.pageNum - 1) * pagination.value.pageSize + 1
+  const end = Math.min(total.value, pagination.value.pageNum * pagination.value.pageSize)
+  return `${start}-${end} / ${total.value}`
+})
 const isScheduledTrigger = computed(() => {
   const triggerType = String(formData.value.triggerType || '').toUpperCase()
   return ['SCHEDULE', 'SCHEDULED'].includes(triggerType) || formData.value.eventType === 'SCHEDULED_DUE'
@@ -246,10 +320,6 @@ const scenarioTemplateOptions = computed(() => scenarioTemplates.value.map(item 
   label: item.scenarioName || item.scenarioType,
   value: item.scenarioType,
 })))
-
-const formData = ref(initFormData())
-const fieldOptions = ref([])
-const objectFieldsCache = ref({})
 
 const formRules = {
   triggerName: { required: true, message: '请输入触发器名称' },
@@ -289,36 +359,78 @@ const actionTypeOptions = [
 ]
 
 const columns = [
-  { title: '名称', key: 'triggerName', width: 180 },
-  { title: '业务对象', key: 'objectCode', width: 120 },
-  { title: '事件', key: 'eventType', width: 120, render: row => eventTypeLabel(row.eventType) },
-  { title: '动作', key: 'actionType', width: 100, render: row => actionTypeLabel(row.actionType) },
-  { title: '执行次数', key: 'executeCount', width: 80 },
+  {
+    title: '触发器',
+    key: 'triggerName',
+    minWidth: 230,
+    render: row => h('div', { class: 'trigger-name-cell' }, [
+      h('strong', row.triggerName || '-'),
+      row.triggerDesc ? h('span', row.triggerDesc) : null,
+    ]),
+  },
+  {
+    title: '业务对象',
+    key: 'objectCode',
+    width: 140,
+    render: row => h(NTag, { size: 'small', bordered: false }, { default: () => row.objectCode || '-' }),
+  },
+  {
+    title: '触发方式',
+    key: 'triggerType',
+    width: 110,
+    render: row => h(NTag, {
+      size: 'small',
+      type: isScheduleRow(row) ? 'warning' : 'info',
+      bordered: false,
+    }, { default: () => isScheduleRow(row) ? '定时触发' : '事件触发' }),
+  },
+  { title: '事件', key: 'eventType', width: 140, render: row => eventTypeLabel(row.eventType) },
+  { title: '动作', key: 'actionType', width: 120, render: row => actionTypeLabel(row.actionType) },
+  { title: '执行次数', key: 'executeCount', width: 90, render: row => row.executeCount || 0 },
   {
     title: '状态',
     key: 'status',
-    width: 80,
-    render: row => h('a', {
-      class: row.status === 1 ? 'text-success cursor-pointer' : 'text-warning cursor-pointer',
-      onClick: () => toggleStatus(row),
-    }, row.status === 1 ? '启用' : '禁用'),
+    width: 110,
+    render: row => h(NSwitch, {
+      'value': row.status === 1,
+      'size': 'small',
+      'onUpdate:value': () => toggleStatus(row),
+    }, {
+      checked: () => '启用',
+      unchecked: () => '禁用',
+    }),
   },
   {
     title: '操作',
     key: 'actions',
-    width: 180,
-    render: row => h('div', { class: 'flex gap-3' }, [
-      h('a', { class: 'text-primary cursor-pointer', onClick: () => openEditor(row) }, '编辑'),
-      h('a', { class: 'text-info cursor-pointer', onClick: () => openLogs(row) }, '日志'),
-      h('a', { class: 'text-error cursor-pointer', onClick: () => handleDelete(row) }, '删除'),
-    ]),
+    width: 190,
+    fixed: 'right',
+    render: row => h(NSpace, { size: 10 }, {
+      default: () => [
+        h(NButton, { text: true, type: 'primary', size: 'small', onClick: () => openEditor(row) }, { default: () => '编辑' }),
+        h(NButton, { text: true, type: 'info', size: 'small', onClick: () => openLogs(row) }, { default: () => '日志' }),
+        h(NPopconfirm, { onPositiveClick: () => handleDelete(row) }, {
+          trigger: () => h(NButton, { text: true, type: 'error', size: 'small' }, { default: () => '删除' }),
+          default: () => `确定删除“${row.triggerName || '该触发器'}”吗？`,
+        }),
+      ],
+    }),
   },
 ]
 
 const logColumns = [
-  { title: '事件', key: 'eventType', width: 100 },
+  { title: '事件', key: 'eventType', width: 110, render: row => eventTypeLabel(row.eventType) },
   { title: '记录ID', key: 'recordId', width: 100 },
-  { title: '状态', key: 'executeStatus', width: 80 },
+  {
+    title: '状态',
+    key: 'executeStatus',
+    width: 90,
+    render: row => h(NTag, {
+      size: 'small',
+      type: row.executeStatus === 'SUCCESS' ? 'success' : row.executeStatus === 'FAILED' ? 'error' : 'warning',
+      bordered: false,
+    }, { default: () => executeStatusLabel(row.executeStatus) }),
+  },
   { title: '耗时(ms)', key: 'durationMs', width: 80 },
   { title: '错误', key: 'errorMessage', ellipsis: { tooltip: true } },
   { title: '时间', key: 'executeTime', width: 160 },
@@ -379,9 +491,30 @@ async function loadTriggers() {
     triggers.value = res.data?.records || []
     total.value = Number(res.data?.total || 0)
   }
+  catch (e) {
+    message.error(e.message || '加载触发器失败')
+    triggers.value = []
+    total.value = 0
+  }
   finally {
     loading.value = false
   }
+}
+
+function handleFilterChange() {
+  pagination.value.pageNum = 1
+  loadTriggers()
+}
+
+function resetFilters() {
+  filterObjectCode.value = null
+  filterScenarioType.value = null
+  handleFilterChange()
+}
+
+function handlePageChange(page) {
+  pagination.value.pageNum = page
+  loadTriggers()
 }
 
 function handlePageSizeChange(size) {
@@ -426,7 +559,7 @@ async function handleSubmit() {
       message.success('触发器已创建')
     }
     editorVisible.value = false
-    loadTriggers()
+    await loadTriggers()
   }
   catch (e) {
     message.error(e.message || '操作失败')
@@ -440,20 +573,50 @@ async function toggleStatus(row) {
   const newStatus = row.status === 1 ? 0 : 1
   await updateBusinessTriggerStatus(row.id, newStatus)
   message.success(newStatus === 1 ? '已启用' : '已禁用')
-  loadTriggers()
+  await loadTriggers()
 }
 
 async function handleDelete(row) {
   await deleteBusinessTrigger(row.id)
   message.success('已删除')
-  loadTriggers()
+  await reloadAfterDelete()
 }
 
 async function openLogs(row) {
+  activeLogTriggerId.value = row.id
   logTriggerName.value = row.triggerName
   logDrawerVisible.value = true
-  const res = await businessTriggerLogs({ triggerId: row.id, pageNum: 1, pageSize: 50 })
-  logs.value = res.data?.records || []
+  logPagination.value.pageNum = 1
+  await loadLogs()
+}
+
+async function loadLogs() {
+  if (!activeLogTriggerId.value)
+    return
+  logLoading.value = true
+  try {
+    const res = await businessTriggerLogs({
+      triggerId: activeLogTriggerId.value,
+      pageNum: logPagination.value.pageNum,
+      pageSize: logPagination.value.pageSize,
+    })
+    logs.value = res.data?.records || []
+    logPagination.value.total = Number(res.data?.total || 0)
+  }
+  finally {
+    logLoading.value = false
+  }
+}
+
+function handleLogPageChange(page) {
+  logPagination.value.pageNum = page
+  loadLogs()
+}
+
+function handleLogPageSizeChange(size) {
+  logPagination.value.pageSize = size
+  logPagination.value.pageNum = 1
+  loadLogs()
 }
 
 function eventTypeLabel(type) {
@@ -462,6 +625,32 @@ function eventTypeLabel(type) {
 
 function actionTypeLabel(type) {
   return actionTypeOptions.find(o => o.value === type)?.label || type
+}
+
+function executeStatusLabel(status) {
+  const map = {
+    SUCCESS: '成功',
+    FAILED: '失败',
+    TODO: '待执行',
+  }
+  return map[status] || status || '-'
+}
+
+function isScheduleRow(row) {
+  const triggerType = normalizeTriggerType(row?.triggerType)
+  return triggerType === 'SCHEDULE' || row?.eventType === 'SCHEDULED_DUE'
+}
+
+function rowClassName(row) {
+  return row.status === 1 ? '' : 'trigger-row-disabled'
+}
+
+async function reloadAfterDelete() {
+  await loadTriggers()
+  if (triggers.value.length === 0 && pagination.value.pageNum > 1) {
+    pagination.value.pageNum -= 1
+    await loadTriggers()
+  }
 }
 
 function initFormData(defaultObjectCode = null) {
@@ -626,7 +815,7 @@ watch(() => formData.value.objectCode, (val) => {
 
 watch(() => route.query.objectCode, () => {
   applyRouteObjectContext()
-  loadTriggers()
+  handleFilterChange()
 })
 
 function resolveDefaultObjectCode() {
@@ -641,13 +830,144 @@ function normalizeQueryValue(value) {
 <style scoped>
 @import './shared-center.css';
 
-.trigger-filters {
-  margin-bottom: 16px;
+.trigger-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
+
+.trigger-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.trigger-range {
+  min-width: 118px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 30px;
+  text-align: center;
+}
+
+.trigger-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.trigger-stat {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.trigger-stat span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.trigger-stat strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.trigger-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.trigger-toolbar h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.trigger-toolbar p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.trigger-filter-select {
+  width: 220px;
+}
+
+.trigger-name-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.trigger-name-cell strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-name-cell span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+:deep(.trigger-row-disabled td) {
+  color: #94a3b8;
+}
+
+:deep(.n-data-table .n-data-table-th) {
+  font-weight: 650;
+}
+
 .trigger-pagination {
-  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #edf0f5;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.log-pagination {
   display: flex;
   justify-content: flex-end;
+  padding-top: 12px;
 }
 
 .schedule-config-grid {
@@ -658,6 +978,21 @@ function normalizeQueryValue(value) {
 }
 
 @media (max-width: 720px) {
+  .trigger-title-row,
+  .trigger-toolbar,
+  .trigger-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .trigger-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trigger-filter-select {
+    width: 100%;
+  }
+
   .schedule-config-grid {
     grid-template-columns: 1fr;
   }
