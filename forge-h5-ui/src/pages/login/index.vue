@@ -111,7 +111,15 @@
 <script>
 import { useAuthStore } from '@/store'
 import api from '@/api'
-import { toast } from '@/utils/notify'
+import { notify, toast } from '@/utils/notify'
+
+function normalizeLoginError(error) {
+  const rawMessage = error?.message || error?.error?.message || error?.error?.msg || '登录失败，请稍后重试'
+  return String(rawMessage)
+    .replace(/^com\.[\w.$]+Exception:\s*/i, '')
+    .replace(/^.*BusinessException:\s*/i, '')
+    .trim() || '登录失败，请稍后重试'
+}
 
 export default {
   data() {
@@ -209,6 +217,12 @@ export default {
       }
       catch (error) {
         console.error('登录失败:', error)
+        notify({
+          title: '登录失败',
+          description: normalizeLoginError(error),
+          type: 'error',
+          duration: 3600,
+        })
         this.loadCaptcha()
       }
       finally {

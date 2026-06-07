@@ -1,27 +1,10 @@
 import { useAuthStore } from '@/store'
+import { getCurrentRoutePath, redirectToLogin } from './route'
 
-export const LOGIN_PAGE = '/pages/login/index'
-export const HOME_PAGE = '/pages/index/index'
-
-function buildLoginUrl(redirect) {
-  if (!redirect) {
-    return LOGIN_PAGE
-  }
-  return `${LOGIN_PAGE}?redirect=${encodeURIComponent(redirect)}`
-}
-
-export function getCurrentRoutePath() {
-  const pages = getCurrentPages()
-  const current = pages[pages.length - 1]
-  if (!current?.route) {
-    return HOME_PAGE
-  }
-  return `/${current.route}`
-}
+export { HOME_PAGE, LOGIN_PAGE, getCurrentRoutePath, redirectToLogin } from './route'
 
 export function toLogin(redirect = getCurrentRoutePath()) {
-  const url = buildLoginUrl(redirect)
-  uni.reLaunch({ url })
+  redirectToLogin({ redirect })
 }
 
 export async function ensureLogin(options = {}) {

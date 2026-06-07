@@ -11,7 +11,7 @@
 
         <view class="avatar-frame">
           <view class="avatar-inner">
-            <image class="avatar-image" :src="avatarUrl || '/static/logo.png'" mode="aspectFit" />
+            <image class="avatar-image" :src="avatarUrl" mode="aspectFit" @error="handleAvatarError" />
           </view>
         </view>
 
@@ -50,6 +50,7 @@
             v-for="item in group.items"
             :key="item.key"
             class="menu-row"
+            :class="{ 'menu-row--danger': item.danger }"
             @click="handleMenu(item)"
           >
             <view class="menu-icon" :class="item.bgClass">
@@ -58,32 +59,48 @@
             <view class="menu-main">
               <text class="menu-label">{{ item.label }}</text>
             </view>
-            <view class="icon-mask chevron-icon" :style="iconMask('/static/icons/ai-icon/chevron-right.svg', '#94a3b8')" />
+            <view
+              v-if="!item.danger"
+              class="icon-mask chevron-icon"
+              :style="iconMask('/static/icons/ai-icon/chevron-right.svg', '#94a3b8')"
+            />
           </view>
         </view>
       </view>
-
-      <view class="logout-wrap animate-in delay-3">
-        <button class="logout-button" @click="handleLogout">
-          <view class="icon-mask logout-icon" :style="iconMask('/static/icons/ai-icon/log-out.svg', '#ef4444')" />
-          <text>退出登录</text>
-        </button>
-      </view>
     </view>
+
+    <AiTabBar active="mine" />
   </view>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import AiTabBar from '@/components/AiTabBar.vue'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
 import { showConfirmDialog } from '@/utils/dialog'
 import { toast } from '@/utils/notify'
+import logoUrl from '@/static/logo.png'
 
 const authStore = useAuthStore()
 const userInfo = computed(() => authStore.userInfo || {})
-const avatarUrl = computed(() => userInfo.value.avatar || '')
+const avatarLoadFailed = ref(false)
+const rawAvatarUrl = computed(() => userInfo.value.avatar || '')
+const avatarUrl = computed(() => {
+  if (!rawAvatarUrl.value || avatarLoadFailed.value) {
+    return logoUrl
+  }
+  return rawAvatarUrl.value
+})
+
+watch(rawAvatarUrl, () => {
+  avatarLoadFailed.value = false
+})
+
+const handleAvatarError = () => {
+  avatarLoadFailed.value = true
+}
 
 const menuGroups = computed(() => [
   {
@@ -127,11 +144,23 @@ const menuGroups = computed(() => [
         color: '#64748b',
         bgClass: 'bg-slate',
       },
+      {
+        key: 'logout',
+        icon: '/static/icons/ai-icon/log-out.svg',
+        label: '退出登录',
+        color: '#ef4444',
+        bgClass: 'bg-rose',
+        danger: true,
+      },
     ],
   },
 ])
 
 onShow(async () => {
+  uni.hideTabBar({
+    animation: false,
+    fail: () => {},
+  })
   const ok = await ensureLogin({ redirect: '/pages/mine/index' })
   if (!ok) {
     return
@@ -152,6 +181,10 @@ function iconMask(icon, color) {
 function handleMenu(item) {
   if (item.key === 'profile') {
     refreshUser()
+    return
+  }
+  if (item.key === 'logout') {
+    handleLogout()
     return
   }
   toast(`${item.label}待接入`, { type: 'info' })
@@ -245,7 +278,7 @@ async function handleLogout() {
   display: flex;
   flex-direction: column;
   gap: 48rpx;
-  padding: 56rpx 28rpx 132rpx;
+  padding: 56rpx 28rpx 190rpx;
   box-sizing: border-box;
 }
 
@@ -329,8 +362,7 @@ async function handleLogout() {
 .stat-value,
 .stat-label,
 .menu-label,
-.menu-desc,
-.logout-button text {
+.menu-desc {
   display: block;
 }
 
@@ -477,6 +509,10 @@ async function handleLogout() {
   background: #f1f5f9;
 }
 
+.bg-rose::before {
+  background: #fff1f2;
+}
+
 .icon-mask {
   position: relative;
   z-index: 1;
@@ -498,6 +534,10 @@ async function handleLogout() {
   white-space: nowrap;
 }
 
+.menu-row--danger .menu-label {
+  color: #ef4444;
+}
+
 .menu-desc {
   overflow: hidden;
   margin-top: 6rpx;
@@ -512,40 +552,6 @@ async function handleLogout() {
   width: 34rpx;
   height: 34rpx;
   flex: 0 0 34rpx;
-}
-
-.logout-wrap {
-  margin-top: 32rpx;
-}
-
-.logout-button {
-  display: flex;
-  height: 92rpx;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  padding: 0;
-  border: 1rpx solid rgba(254, 202, 202, 0.9);
-  border-radius: 40rpx;
-  color: #ef4444;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 8rpx 28rpx rgba(239, 68, 68, 0.06);
-  backdrop-filter: blur(18rpx);
-}
-
-.logout-button::after {
-  border: 0;
-}
-
-.logout-button text {
-  color: #ef4444;
-  font-size: 29rpx;
-  font-weight: 900;
-}
-
-.logout-icon {
-  width: 38rpx;
-  height: 38rpx;
 }
 
 .animate-in {

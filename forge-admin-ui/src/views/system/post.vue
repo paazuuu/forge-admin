@@ -8,7 +8,7 @@
         detail: 'post@/system/post/getById',
         add: 'post@/system/post/add',
         update: 'post@/system/post/edit',
-        delete: 'post@/system/post/remove',
+        delete: 'post@/system/post/removeBatch',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
@@ -18,29 +18,11 @@
       modal-width="800px"
       add-button-text="新增岗位"
       :hide-selection="false"
-      @selection-change="handleSelectionChange"
-    >
-      <!-- 批量删除按钮 -->
-      <template #toolbar-end>
-        <n-button
-          type="error"
-          :disabled="selectedKeys.length === 0"
-          size="small"
-          @click="handleBatchDelete"
-        >
-          <template #icon>
-            <NIcon><TrashOutline /></NIcon>
-          </template>
-          批量删除
-        </n-button>
-      </template>
-    </AiCrudPage>
+    />
   </div>
 </template>
 
 <script setup>
-import { TrashOutline } from '@vicons/ionicons5'
-import { NIcon } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
@@ -54,7 +36,6 @@ const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 
 const crudRef = ref(null)
 const orgOptions = ref([])
-const selectedKeys = ref([])
 
 const { dict } = useDict(POST_TYPE_DICT, NORMAL_DISABLE_DICT)
 
@@ -304,39 +285,6 @@ function handleDelete(row) {
       }
     },
   })
-}
-
-// 批量删除
-function handleBatchDelete() {
-  if (selectedKeys.value.length === 0) {
-    window.$message.warning('请先选择要删除的岗位')
-    return
-  }
-
-  window.$dialog.warning({
-    title: '确认删除',
-    content: `确定要删除选中的 ${selectedKeys.value.length} 个岗位吗？删除后将无法恢复！`,
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      try {
-        const res = await request.post('/system/post/removeBatch', selectedKeys.value)
-        if (res.code === 200) {
-          window.$message.success('批量删除成功')
-          selectedKeys.value = []
-          crudRef.value?.refresh()
-        }
-      }
-      catch {
-        window.$message.error('批量删除失败')
-      }
-    },
-  })
-}
-
-// 监听选中项变化
-function handleSelectionChange({ keys }) {
-  selectedKeys.value = keys
 }
 </script>
 

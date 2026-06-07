@@ -34,38 +34,32 @@
       <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
         <slot :name="slotName" v-bind="slotProps" />
       </template>
+
+      <template v-if="hasInlineActions" #gridAppend>
+        <!-- 表单操作区域 -->
+        <n-gi :span="actionCellSpan" class="af-action-cell">
+          <n-space align="baseline" :wrap="false">
+            <!-- 自定义操作按钮 -->
+            <slot name="formAction" :form-data="formValue" />
+
+            <!-- 折叠/展开按钮 -->
+            <n-button
+              v-if="showCollapseToggle"
+              text
+              type="primary"
+              @click="toggleCollapse"
+            >
+              {{ isCollapsed ? '展开' : '收起' }}
+              <template #icon>
+                <n-icon>
+                  <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
+                </n-icon>
+              </template>
+            </n-button>
+          </n-space>
+        </n-gi>
+      </template>
     </AiFormLayoutNodes>
-
-    <n-grid
-      v-if="$slots.formAction || (enableCollapse && visibleFieldSchema.length > maxVisibleFields)"
-      :cols="gridCols"
-      :x-gap="xGap"
-      :y-gap="yGap"
-      class="af-action-grid"
-    >
-      <!-- 表单操作区域 -->
-      <n-gi :span="gridCols" class="af-action-cell">
-        <n-space align="baseline">
-          <!-- 自定义操作按钮 -->
-          <slot name="formAction" :form-data="formValue" />
-
-          <!-- 折叠/展开按钮 -->
-          <n-button
-            v-if="enableCollapse && visibleFieldSchema.length > maxVisibleFields"
-            text
-            type="primary"
-            @click="toggleCollapse"
-          >
-            {{ isCollapsed ? '展开' : '收起' }}
-            <template #icon>
-              <n-icon>
-                <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
-              </n-icon>
-            </template>
-          </n-button>
-        </n-space>
-      </n-gi>
-    </n-grid>
 
     <!-- 表单操作按钮 -->
     <n-space v-if="showActions" justify="center" :style="{ marginTop: '24px' }">
@@ -84,7 +78,7 @@
 
 <script setup>
 import { ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useSlots, watch } from 'vue'
 import AiFormLayoutNodes from './AiFormLayoutNodes.vue'
 
 const props = defineProps({
@@ -183,6 +177,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:value', 'submit', 'reset', 'cancel'])
+const slots = useSlots()
 
 const formRef = ref(null)
 const formValue = ref({})
@@ -331,6 +326,22 @@ const itemContext = computed(() => ({
   allSchema: allFieldSchema.value,
   patchFormData,
 }))
+
+const showCollapseToggle = computed(() => props.enableCollapse && visibleFieldSchema.value.length > props.maxVisibleFields)
+const hasInlineActions = computed(() => !!slots.formAction || showCollapseToggle.value)
+const actionCellSpan = computed(() => {
+  const cols = Math.max(1, Number(props.gridCols) || 1)
+
+  if (hasLayoutNodes(visibleSchema.value))
+    return cols
+
+  const usedCols = visibleSchema.value.reduce((total, node) => {
+    const span = Math.max(1, Math.min(cols, Number(node?.span || 1)))
+    return total + span
+  }, 0)
+  const remainder = usedCols % cols
+  return remainder === 0 ? cols : cols - remainder
+})
 
 // 字段值变化
 async function handleFieldChange(field, value) {
@@ -486,14 +497,14 @@ function applyShowFeedback(nodes = []) {
 </script>
 
 <style scoped>
-.af-action-grid {
-  margin-top: 2px;
-}
-
 .af-action-cell {
   display: flex;
   align-items: baseline;
   justify-content: flex-end;
   min-width: 0;
+}
+
+.af-action-cell :deep(.n-space) {
+  flex-wrap: nowrap !important;
 }
 </style>

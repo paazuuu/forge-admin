@@ -15,7 +15,7 @@
         :context="itemContext"
         @update:value="emit('fieldChange', node.field, $event)"
       >
-        <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+        <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
         </template>
       </AiFormItem>
@@ -31,7 +31,7 @@
         :show-feedback="showFeedback"
         @field-change="(...args) => emit('fieldChange', ...args)"
       >
-        <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+        <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
         </template>
       </AiFormLayoutNodes>
@@ -47,7 +47,7 @@
         :show-feedback="showFeedback"
         @field-change="(...args) => emit('fieldChange', ...args)"
       >
-        <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+        <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
         </template>
       </AiFormLayoutNodes>
@@ -71,7 +71,7 @@
           :show-feedback="showFeedback"
           @field-change="(...args) => emit('fieldChange', ...args)"
         >
-          <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+          <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
             <slot :name="slotName" v-bind="slotProps" />
           </template>
         </AiFormLayoutNodes>
@@ -102,7 +102,7 @@
             :show-feedback="showFeedback"
             @field-change="(...args) => emit('fieldChange', ...args)"
           >
-            <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+            <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
               <slot :name="slotName" v-bind="slotProps" />
             </template>
           </AiFormLayoutNodes>
@@ -133,7 +133,7 @@
             :show-feedback="showFeedback"
             @field-change="(...args) => emit('fieldChange', ...args)"
           >
-            <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+            <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
               <slot :name="slotName" v-bind="slotProps" />
             </template>
           </AiFormLayoutNodes>
@@ -160,15 +160,18 @@
         :show-feedback="showFeedback"
         @field-change="(...args) => emit('fieldChange', ...args)"
       >
-        <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+        <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
         </template>
       </AiFormLayoutNodes>
     </n-gi>
+
+    <slot name="gridAppend" />
   </n-grid>
 </template>
 
 <script setup>
+import { computed, useSlots } from 'vue'
 import AiFormItem from './AiFormItem.vue'
 
 defineOptions({
@@ -207,6 +210,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['fieldChange'])
+const slots = useSlots()
+
+const forwardedSlotNames = computed(() => Object.keys(slots).filter(name => name !== 'gridAppend'))
 
 function isFieldNode(node = {}) {
   return !node.nodeType || node.nodeType === 'field'
