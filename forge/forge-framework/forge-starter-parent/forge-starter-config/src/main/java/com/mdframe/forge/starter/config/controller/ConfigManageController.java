@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.tenant.IgnoreTenant;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.property.event.ConfigRefreshEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
@@ -35,6 +36,7 @@ public class ConfigManageController {
      */
     @GetMapping("/login")
     public RespInfo<LoginConfig> getLoginConfig() {
+        assertPlatformAdmin();
         return RespInfo.success(configManagerService.getLoginConfig());
     }
 
@@ -43,6 +45,7 @@ public class ConfigManageController {
      */
     @PutMapping("/login")
     public RespInfo<Void> updateLoginConfig(@RequestBody LoginConfig config) {
+        assertPlatformAdmin();
         configManagerService.saveLoginConfig(config);
         return RespInfo.success();
     }
@@ -60,6 +63,7 @@ public class ConfigManageController {
      */
     @PutMapping("/watermark")
     public RespInfo<Void> updateWatermarkConfig(@RequestBody WatermarkConfig config) {
+        assertPlatformAdmin();
         configManagerService.saveWatermarkConfig(config);
         return RespInfo.success();
     }
@@ -69,6 +73,7 @@ public class ConfigManageController {
      */
     @GetMapping("/security")
     public RespInfo<SecurityConfig> getSecurityConfig() {
+        assertPlatformAdmin();
         return RespInfo.success(configManagerService.getSecurityConfig());
     }
 
@@ -77,6 +82,7 @@ public class ConfigManageController {
      */
     @PutMapping("/security")
     public RespInfo<Void> updateSecurityConfig(@RequestBody SecurityConfig config) {
+        assertPlatformAdmin();
         configManagerService.saveSecurityConfig(config);
         return RespInfo.success();
     }
@@ -86,6 +92,7 @@ public class ConfigManageController {
      */
     @GetMapping("/system")
     public RespInfo<SystemConfig> getSystemConfig() {
+        assertPlatformAdmin();
         return RespInfo.success(configManagerService.getSystemConfig());
     }
 
@@ -94,6 +101,7 @@ public class ConfigManageController {
      */
     @PutMapping("/system")
     public RespInfo<Void> updateSystemConfig(@RequestBody SystemConfig config) {
+        assertPlatformAdmin();
         configManagerService.saveSystemConfig(config);
         return RespInfo.success();
     }
@@ -103,6 +111,7 @@ public class ConfigManageController {
      */
     @GetMapping("/crypto")
     public RespInfo<CryptoProperties> getCryptoConfig() {
+        assertPlatformAdmin();
         return RespInfo.success(configManagerService.getCryptoConfig());
     }
 
@@ -111,6 +120,7 @@ public class ConfigManageController {
      */
     @PutMapping("/crypto")
     public RespInfo<Void> updateCryptoConfig(@RequestBody CryptoProperties config) {
+        assertPlatformAdmin();
         configManagerService.saveCryptoConfig(config);
         return RespInfo.success();
     }
@@ -120,6 +130,7 @@ public class ConfigManageController {
      */
     @GetMapping("/auth")
     public RespInfo<AuthProperties> getAuthConfig() {
+        assertPlatformAdmin();
         return RespInfo.success(configManagerService.getAuthConfig());
     }
 
@@ -128,6 +139,7 @@ public class ConfigManageController {
      */
     @PutMapping("/auth")
     public RespInfo<Void> updateAuthConfig(@RequestBody AuthProperties config) {
+        assertPlatformAdmin();
         configManagerService.saveAuthConfig(config);
         return RespInfo.success();
     }
@@ -137,6 +149,7 @@ public class ConfigManageController {
      */
     @GetMapping("/log")
     public RespInfo<LogProperties> getLogConfig() {
+        assertPlatformAdmin();
         return RespInfo.success(configManagerService.getLogConfig());
     }
 
@@ -145,6 +158,7 @@ public class ConfigManageController {
      */
     @PutMapping("/log")
     public RespInfo<Void> updateLogConfig(@RequestBody LogProperties config) {
+        assertPlatformAdmin();
         configManagerService.saveLogConfig(config);
         return RespInfo.success();
     }
@@ -154,9 +168,14 @@ public class ConfigManageController {
      */
     @PostMapping("/refresh")
     public RespInfo<Void> refreshConfig() {
+        assertPlatformAdmin();
         // 发布刷新事件 ConfigRefreshEvent
         ConfigRefreshEvent event = new ConfigRefreshEvent(this, null, null);
         applicationContext.publishEvent(event);
         return RespInfo.success();
+    }
+
+    private void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护系统配置");
     }
 }

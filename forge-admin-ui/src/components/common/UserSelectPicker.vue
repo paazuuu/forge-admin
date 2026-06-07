@@ -12,6 +12,7 @@
       />
       <n-button
         v-if="clearable && hasValue"
+        class="user-select-picker__button"
         :disabled="disabled"
         :size="size"
         title="清空"
@@ -21,7 +22,7 @@
           <i class="i-material-symbols:close-rounded" />
         </template>
       </n-button>
-      <n-button :disabled="disabled" :size="size" title="选择用户" @click="openModal">
+      <n-button class="user-select-picker__button" :disabled="disabled" :size="size" title="选择用户" @click="openModal">
         <template #icon>
           <i class="i-material-symbols:person-search-rounded" />
         </template>
@@ -168,10 +169,29 @@ function isFilledValue(value) {
 }
 
 .user-select-picker__group {
+  display: flex;
+  align-items: stretch;
   width: 100%;
+}
+
+.user-select-picker__input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .user-select-picker__input :deep(input) {
   cursor: pointer;
+}
+
+.user-select-picker__button {
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.user-select-picker__button :deep(.n-button__content),
+.user-select-picker__button :deep(.n-button__icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

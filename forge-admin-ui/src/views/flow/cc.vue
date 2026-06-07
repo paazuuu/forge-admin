@@ -63,6 +63,70 @@
     <div class="table-container">
       <n-data-table :columns="columns" :data="dataSource" :loading="loading" :pagination="pagination" :row-key="row => row.id" @update:checked-row-keys="handleCheck" />
     </div>
+
+    <n-modal
+      v-model:show="showDetailModal"
+      preset="card"
+      class="cc-detail-modal"
+      closable
+      :bordered="false"
+      :segmented="{ content: true, footer: true }"
+      content-style="padding: 0; overflow: hidden;"
+    >
+      <template #header>
+        <div class="cc-detail-header">
+          <div>
+            <div class="cc-detail-title">
+              {{ currentCc?.title || '抄送详情' }}
+            </div>
+            <div class="cc-detail-meta">
+              {{ activeTab === 'received' ? '抄送给我的' : '我发送的' }}
+            </div>
+          </div>
+          <span class="read-tag" :class="currentCc?.isRead === 1 ? 'read' : 'unread'">
+            {{ getLabel('flow_read_status', currentCc?.isRead) || '-' }}
+          </span>
+        </div>
+      </template>
+
+      <div v-if="currentCc" class="cc-detail-body">
+        <div class="cc-info-grid">
+          <div class="cc-info-card">
+            <div class="cc-info-label">
+              {{ activeTab === 'received' ? '发送人' : '抄送人' }}
+            </div>
+            <div class="cc-user-line">
+              <UserAvatar :name="activeTab === 'received' ? (currentCc.sendUserName || '未知') : (currentCc.ccUserName || '未知')" :size="28" />
+              <span>{{ activeTab === 'received' ? (currentCc.sendUserName || '-') : (currentCc.ccUserName || '-') }}</span>
+            </div>
+          </div>
+          <div class="cc-info-card">
+            <div class="cc-info-label">
+              抄送时间
+            </div>
+            <div class="cc-info-value">
+              {{ currentCc.ccTime || '-' }}
+            </div>
+          </div>
+        </div>
+        <div class="cc-content-panel">
+          <div class="cc-info-label">
+            内容
+          </div>
+          <div class="cc-content-text">
+            {{ currentCc.content || '暂无内容' }}
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <NButton @click="showDetailModal = false">
+            关闭
+          </NButton>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -101,11 +165,13 @@ const doneCount = ref(0)
 const startedCount = ref(0)
 const ccCount = ref(0)
 const unreadCc = ref(0)
+const showDetailModal = ref(false)
+const currentCc = ref(null)
 
 const columns = computed(() => {
   const baseColumns = [
     { type: 'selection' },
-    { title: '标题', key: 'title', minWidth: 180, ellipsis: { tooltip: true }, render: row => h('span', { class: 'cc-title' }, row.title) },
+    { title: '标题', key: 'title', minWidth: 180, ellipsis: { tooltip: true }, render: row => h('span', { class: 'cc-title', onClick: () => openCcDetail(row) }, row.title) },
     { title: '内容摘要', key: 'content', width: 200, ellipsis: { tooltip: true } },
   ]
 
@@ -129,7 +195,17 @@ const columns = computed(() => {
   baseColumns.push(
     { title: '阅读状态', key: 'isRead', width: 90, render: row => h('span', { class: ['read-tag', row.isRead === 1 ? 'read' : 'unread'] }, getLabel('flow_read_status', row.isRead)) },
     { title: '抄送时间', key: 'ccTime', width: 160 },
-    { title: '操作', key: 'actions', width: 100, render: row => activeTab.value === 'received' && row.isRead === 0 ? h(NButton, { size: 'small', type: 'primary', onClick: () => handleMarkRead(row.id) }, () => '标记已读') : null },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 150,
+      render: row => h('div', { class: 'cc-actions' }, [
+        h(NButton, { size: 'small', type: 'primary', secondary: true, onClick: () => openCcDetail(row) }, () => '查看'),
+        activeTab.value === 'received' && row.isRead === 0
+          ? h(NButton, { size: 'small', type: 'primary', onClick: () => handleMarkRead(row.id) }, () => '已读')
+          : null,
+      ]),
+    },
   )
 
   return baseColumns
@@ -204,11 +280,21 @@ function handleCheck(keys) {
   selectedRowKeys.value = keys
 }
 
-async function handleMarkRead(id) {
+async function openCcDetail(row) {
+  currentCc.value = row
+  showDetailModal.value = true
+  if (activeTab.value === 'received' && row.isRead === 0)
+    await handleMarkRead(row.id, false)
+}
+
+async function handleMarkRead(id, showToast = true) {
   try {
     const res = await flowApi.markCcRead(id)
     if (res.code === 200) {
-      window.$message.success('已标记已读')
+      if (showToast)
+        window.$message.success('已标记已读')
+      if (currentCc.value?.id === id)
+        currentCc.value.isRead = 1
       loadData()
     }
   }
@@ -353,6 +439,10 @@ onMounted(() => {
 :deep(.cc-title) {
   font-weight: 500;
   color: #0f172a;
+  cursor: pointer;
+}
+:deep(.cc-title:hover) {
+  color: #0369a1;
 }
 :deep(.table-user) {
   display: flex;
@@ -376,5 +466,108 @@ onMounted(() => {
 :deep(.read-tag.unread) {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+:deep(.cc-actions) {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cc-detail-modal {
+  width: min(820px, calc(100vw - 32px));
+}
+
+.cc-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.cc-detail-title {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.cc-detail-meta {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.cc-detail-body {
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 178px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+
+.cc-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cc-info-card,
+.cc-content-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.cc-info-label {
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.cc-info-value,
+.cc-user-line {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cc-user-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cc-content-text {
+  min-height: 120px;
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 760px) {
+  .cc-detail-modal {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+  }
+
+  .cc-detail-header,
+  .header-right {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cc-detail-body {
+    max-height: calc(100vh - 126px);
+    padding: 14px;
+  }
+
+  .cc-info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

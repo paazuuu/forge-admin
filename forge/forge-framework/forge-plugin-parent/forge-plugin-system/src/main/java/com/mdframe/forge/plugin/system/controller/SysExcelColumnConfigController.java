@@ -6,6 +6,7 @@ import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +24,11 @@ import java.util.List;
 public class SysExcelColumnConfigController {
     
     private final ISysExcelColumnConfigService columnConfigService;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护Excel列配置");
+    }
     
     /**
      * 根据配置键查询列配置

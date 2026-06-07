@@ -2,87 +2,9 @@ import api from '@/api'
 import { WHITE_LIST } from '@/config/whitelist.config.js'
 import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { getPermissions, getUserInfo } from '@/store/helper'
-import { initWebSocketClient, lStorage, request, resolveRenderableFileUrl } from '@/utils'
+import { initWebSocketClient, lStorage, request } from '@/utils'
 import { initKeyExchange } from '@/utils/crypto/key-exchange'
-
-// 应用租户配置
-function applyTenantConfig(tenantConfig, appStore) {
-  const tenantStore = useTenantStore()
-
-  // 1. 应用系统布局
-  if (tenantConfig.systemLayout) {
-    appStore.setLayout(tenantConfig.systemLayout)
-  }
-
-  // 2. 应用完整的主题配置
-  const themeConfigObj = tenantStore.themeConfig
-  if (themeConfigObj) {
-    // 导入默认配置
-    import('@/config/theme.config').then(({ defaultThemeConfig }) => {
-      // 深度合并：租户配置覆盖默认配置
-      // 优先使用 systemTheme，如果没有才使用 themeConfig.primaryColor
-      const primaryColor = tenantConfig.systemTheme || themeConfigObj.primaryColor || defaultThemeConfig.primaryColor
-
-      const mergedConfig = {
-        primaryColor,
-        header: {
-          ...defaultThemeConfig.header,
-          ...themeConfigObj.header,
-        },
-        headerDark: {
-          ...defaultThemeConfig.headerDark,
-          ...themeConfigObj.headerDark,
-        },
-        topMenu: {
-          ...defaultThemeConfig.topMenu,
-          ...themeConfigObj.topMenu,
-        },
-        topMenuDark: {
-          ...defaultThemeConfig.topMenuDark,
-          ...themeConfigObj.topMenuDark,
-        },
-        sideMenu: {
-          ...defaultThemeConfig.sideMenu,
-          ...themeConfigObj.sideMenu,
-        },
-        sideMenuDark: {
-          ...defaultThemeConfig.sideMenuDark,
-          ...themeConfigObj.sideMenuDark,
-        },
-      }
-
-      appStore.setThemeConfig(mergedConfig)
-    })
-  }
-  else if (tenantConfig.systemTheme) {
-    // 如果没有完整的主题配置，但有 systemTheme，直接应用
-    appStore.setPrimaryColor(tenantConfig.systemTheme)
-    appStore.setThemeColor(tenantConfig.systemTheme)
-  }
-
-  // 4. 应用浏览器标题
-  if (tenantConfig.browserTitle) {
-    document.title = tenantConfig.browserTitle
-  }
-
-  // 5. 应用浏览器图标
-  if (tenantConfig.browserIcon) {
-    const link = document.querySelector('link[rel*=\'icon\']') || document.createElement('link')
-    link.type = 'image/x-icon'
-    link.rel = 'shortcut icon'
-    // 浏览器图标可能只返回相对路径，先解析成可直接访问的地址再挂载到 head。
-    const iconUrl = tenantConfig.browserIcon
-    resolveRenderableFileUrl(iconUrl)
-      .then((url) => {
-        link.href = url || iconUrl
-        document.getElementsByTagName('head')[0].appendChild(link)
-      })
-      .catch(() => {
-        link.href = iconUrl
-        document.getElementsByTagName('head')[0].appendChild(link)
-      })
-  }
-}
+import { applyTenantConfig } from '@/utils/tenant-config'
 
 export function createPermissionGuard(router) {
   router.beforeEach(async (to, from, next) => {
@@ -168,7 +90,7 @@ export function createPermissionGuard(router) {
 
           // 应用租户配置
           if (tenantConfig) {
-            applyTenantConfig(tenantConfig, appStore)
+            await applyTenantConfig(tenantConfig, appStore)
           }
           permissionStore.setPermissions(permissions)
 
@@ -216,7 +138,7 @@ export function createPermissionGuard(router) {
 
           // 应用租户配置
           if (tenantConfig) {
-            applyTenantConfig(tenantConfig, appStore)
+            await applyTenantConfig(tenantConfig, appStore)
           }
           permissionStore.setPermissions(permissions)
 

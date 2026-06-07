@@ -415,29 +415,36 @@ function hydrateOptions() {
         ? [options.allowedDomains]
         : []
     form.mountTarget = normalizeMountTarget(options.mountTarget || deriveMountTarget())
-    form.adminMenuParentId = normalizeMenuParentId(
+    const suiteAsMenuParent = normalizeBoolean(props.app?.suiteAsMenuParent ?? adminMenu.suiteAsParent ?? options.suiteAsMenuParent, true)
+    const actualMenuParentId = normalizeMenuParentId(
+      adminMenu.actualParentId
+      ?? props.app?.adminMenuActualParentId
+      ?? null,
+    )
+    const suiteMenuResourceId = normalizeMenuParentId(
+      adminMenu.suiteMenuResourceId
+      ?? (suiteAsMenuParent ? adminMenu.actualParentId : null)
+      ?? props.app?.suiteMenuResourceId
+      ?? null,
+    )
+    form.adminMenuParentId = normalizeAdminMenuParentId(
       props.app?.adminMenuParentId
       ?? adminMenu.originalParentId
       ?? adminMenu.parentId
       ?? options.adminMenuParentId
       ?? options.parentId
       ?? null,
+      {
+        suiteAsMenuParent,
+        actualMenuParentId,
+        suiteMenuResourceId,
+        menuResourceId: props.app?.menuResourceId ?? adminMenu.menuResourceId ?? options.menuResourceId,
+      },
     )
-    form.actualMenuParentId = normalizeMenuParentId(
-      adminMenu.actualParentId
-      ?? props.app?.adminMenuActualParentId
-      ?? null,
-    )
-    form.suiteMenuResourceId = normalizeMenuParentId(
-      adminMenu.suiteMenuResourceId
-      ?? (normalizeBoolean(props.app?.suiteAsMenuParent ?? adminMenu.suiteAsParent ?? options.suiteAsMenuParent, true)
-        ? adminMenu.actualParentId
-        : null)
-      ?? props.app?.suiteMenuResourceId
-      ?? null,
-    )
+    form.actualMenuParentId = actualMenuParentId
+    form.suiteMenuResourceId = suiteMenuResourceId
     form.adminMenuSyncEnabled = normalizeBoolean(props.app?.adminMenuSyncEnabled ?? adminMenu.syncEnabled ?? options.adminMenuSyncEnabled, true)
-    form.suiteAsMenuParent = normalizeBoolean(props.app?.suiteAsMenuParent ?? adminMenu.suiteAsParent ?? options.suiteAsMenuParent, true)
+    form.suiteAsMenuParent = suiteAsMenuParent
     form.menuSort = Number(props.app?.menuSort ?? adminMenu.sort ?? options.menuSort ?? form.sortOrder ?? 0)
     form.runtimeOpenMode = normalizeRuntimeOpenMode(props.app?.runtimeOpenMode || options.runtimeOpenMode || inferRuntimeOpenMode())
     form.allowedDomains = allowedDomains.join('\n')
@@ -476,23 +483,31 @@ function buildOptions() {
   options.mountTarget = form.mountTarget
   if (isAdminMount.value) {
     const previousAdminMenu = options.adminMenu || {}
+    const menuResourceId = props.app?.menuResourceId || previousAdminMenu.menuResourceId || options.menuResourceId
+    const actualParentId = form.actualMenuParentId || previousAdminMenu.actualParentId || props.app?.adminMenuActualParentId
+    const suiteMenuResourceId = form.suiteMenuResourceId || previousAdminMenu.suiteMenuResourceId || props.app?.suiteMenuResourceId
+    const adminMenuParentId = normalizeAdminMenuParentId(form.adminMenuParentId, {
+      suiteAsMenuParent: Boolean(form.suiteAsMenuParent),
+      actualMenuParentId: actualParentId,
+      suiteMenuResourceId,
+      menuResourceId,
+    })
     options.adminMenu = {
-      parentId: form.adminMenuParentId || null,
-      originalParentId: form.adminMenuParentId || null,
+      parentId: adminMenuParentId || null,
+      originalParentId: adminMenuParentId || null,
       syncEnabled: Boolean(form.adminMenuSyncEnabled),
       suiteAsParent: Boolean(form.suiteAsMenuParent),
       sort: Number(form.menuSort || 0),
     }
-    const menuResourceId = props.app?.menuResourceId || previousAdminMenu.menuResourceId || options.menuResourceId
     if (menuResourceId)
       options.adminMenu.menuResourceId = String(menuResourceId)
-    const activeMenuKey = previousAdminMenu.activeMenuKey || props.app?.menuResourceId
+    const activeMenuKey = previousAdminMenu.activeMenuKey || props.app?.activeMenuKey || menuResourceId
     if (activeMenuKey)
       options.adminMenu.activeMenuKey = String(activeMenuKey)
-    if (previousAdminMenu.actualParentId)
-      options.adminMenu.actualParentId = String(previousAdminMenu.actualParentId)
-    if (previousAdminMenu.suiteMenuResourceId)
-      options.adminMenu.suiteMenuResourceId = String(previousAdminMenu.suiteMenuResourceId)
+    if (actualParentId)
+      options.adminMenu.actualParentId = String(actualParentId)
+    if (suiteMenuResourceId)
+      options.adminMenu.suiteMenuResourceId = String(suiteMenuResourceId)
   }
   else {
     delete options.adminMenu
@@ -623,6 +638,20 @@ function normalizeMenuParentId(value) {
   if (value === null || value === undefined || value === '')
     return null
   return String(value)
+}
+
+function normalizeAdminMenuParentId(value, context = {}) {
+  const parentId = normalizeMenuParentId(value)
+  if (!parentId || parentId === '0')
+    return null
+  if (!context.suiteAsMenuParent)
+    return parentId
+  const occupiedIds = [
+    context.actualMenuParentId,
+    context.suiteMenuResourceId,
+    context.menuResourceId,
+  ].map(normalizeMenuParentId).filter(Boolean)
+  return occupiedIds.includes(parentId) ? null : parentId
 }
 
 function parseOptions(options) {

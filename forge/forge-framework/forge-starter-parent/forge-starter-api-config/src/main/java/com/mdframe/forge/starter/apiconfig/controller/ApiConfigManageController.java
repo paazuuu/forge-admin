@@ -11,6 +11,7 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,6 +38,10 @@ public class ApiConfigManageController {
     @Autowired(required = false)
     private ApiConfigAutoRegistrar apiConfigAutoRegistrar;
     
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以管理API配置");
+    }
     
     
     @PostMapping("/registerApiConfigs")

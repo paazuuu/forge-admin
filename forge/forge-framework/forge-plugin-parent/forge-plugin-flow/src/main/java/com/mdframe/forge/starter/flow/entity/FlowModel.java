@@ -12,6 +12,11 @@ public class FlowModel {
     
     @TableId(type = IdType.ASSIGN_UUID)
     private String id;
+
+    /**
+     * 租户ID
+     */
+    private Long tenantId;
     
     /**
      * 模型标识（唯一）

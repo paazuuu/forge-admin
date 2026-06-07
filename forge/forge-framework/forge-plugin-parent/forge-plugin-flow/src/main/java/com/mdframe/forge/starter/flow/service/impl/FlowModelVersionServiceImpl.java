@@ -7,6 +7,7 @@ import com.mdframe.forge.starter.flow.dto.VersionCompareDTO;
 import com.mdframe.forge.starter.flow.dto.VersionRevertDTO;
 import com.mdframe.forge.starter.flow.entity.FlowModel;
 import com.mdframe.forge.starter.flow.entity.FlowModelVersion;
+import com.mdframe.forge.starter.flow.helper.BpmnXmlUtils;
 import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowModelVersionMapper;
 import com.mdframe.forge.starter.flow.service.FlowModelVersionService;
@@ -34,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -195,6 +197,7 @@ public class FlowModelVersionServiceImpl extends ServiceImpl<FlowModelVersionMap
 
         String deploymentKey = model.getModelKey() + "_v" + newVersion;
         String deployXml = replaceProcessId(targetVersion.getBpmnXml(), model.getModelKey());
+        deployXml = normalizeBpmnXml(deployXml, "版本回退部署");
         Deployment deployment = repositoryService.createDeployment()
                 .addString(model.getModelKey() + ".bpmn20.xml", deployXml)
                 .name(model.getModelName() + "_v" + newVersion)
@@ -217,7 +220,7 @@ public class FlowModelVersionServiceImpl extends ServiceImpl<FlowModelVersionMap
         newVersionRecord.setVersion(newVersion);
         newVersionRecord.setVersionName("回退自 v" + dto.getTargetVersion());
         newVersionRecord.setVersionTag("release");
-        newVersionRecord.setBpmnXml(targetVersion.getBpmnXml());
+        newVersionRecord.setBpmnXml(deployXml);
         newVersionRecord.setFormJson(targetVersion.getFormJson());
         newVersionRecord.setChangeDescription("回退自 v" + dto.getTargetVersion() + ": " + dto.getChangeDescription());
         newVersionRecord.setDeploymentId(newDeploymentId);
@@ -231,7 +234,7 @@ public class FlowModelVersionServiceImpl extends ServiceImpl<FlowModelVersionMap
         save(newVersionRecord);
 
         LocalDateTime now = LocalDateTime.now();
-        model.setBpmnXml(targetVersion.getBpmnXml());
+        model.setBpmnXml(deployXml);
         model.setFormJson(targetVersion.getFormJson());
         model.setVersion(newVersion);
         model.setDeploymentId(newDeploymentId);
@@ -451,6 +454,21 @@ public class FlowModelVersionServiceImpl extends ServiceImpl<FlowModelVersionMap
             return b == null;
         }
         return a.equals(b);
+    }
+
+    private String normalizeBpmnXml(String bpmnXml, String operation) {
+        BpmnXmlUtils.NormalizationResult result = BpmnXmlUtils.normalizeDuplicateSequenceFlows(bpmnXml);
+        if (result.hasRepairs()) {
+            String repairSummary = result.getRepairs().stream()
+                    .map(repair -> String.format("%s->%s 保留 [%s] 删除 %s",
+                            repair.getSourceRef(),
+                            repair.getTargetRef(),
+                            repair.getKeptFlowId(),
+                            repair.getRemovedFlowIds()))
+                    .collect(Collectors.joining("; "));
+            log.warn("{}：已自动清理 BPMN 重复连线，{}", operation, repairSummary);
+        }
+        return result.getBpmnXml();
     }
 
     private static class XmlNodeInfo {

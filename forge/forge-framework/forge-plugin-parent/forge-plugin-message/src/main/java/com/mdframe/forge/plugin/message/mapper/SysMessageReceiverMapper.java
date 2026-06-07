@@ -7,7 +7,6 @@ import com.mdframe.forge.plugin.message.domain.entity.SysMessageReceiver;
 import com.mdframe.forge.plugin.message.domain.vo.MessageVO;
 import com.mdframe.forge.plugin.message.domain.vo.ReceiverVO;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -21,5 +20,9 @@ public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver>
                                             @Param("userId") Long userId,
                                             @Param("readFlag") Integer readFlag,
                                             @Param("type") String type,
-                                            @Param("keyword") String keyword);
+                                            @Param("keyword") String keyword,
+                                            @Param("startTime") String startTime,
+                                            @Param("endTime") String endTime);
+
+    List<String> selectUnreadWebMessageTypes(@Param("userId") Long userId);
 }

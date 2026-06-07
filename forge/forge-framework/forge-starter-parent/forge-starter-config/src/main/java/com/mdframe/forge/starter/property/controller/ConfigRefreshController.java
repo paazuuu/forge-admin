@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.property.controller;
 
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.property.refresh.ConfigRefresher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +28,7 @@ public class ConfigRefreshController {
      */
     @PostMapping("/refresh")
     public Map<String, Object> refresh() {
+        SessionHelper.assertAdmin("只有超级管理员可以刷新系统配置");
         Map<String, Object> result = new HashMap<>();
         try {
             boolean refreshed = configRefresher.refresh();

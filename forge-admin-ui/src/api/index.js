@@ -20,5 +20,11 @@ export default {
   },
 
   // 获取租户配置
-  getTenantConfig: tenantId => request.post('/system/tenant/userTenantConfig', { id: tenantId }),
+  getTenantConfig: tenantId => request.post('/system/tenant/userTenantConfig', null, { params: { id: tenantId } }),
+
+  // 当前用户可切换租户
+  getCurrentTenantOptions: () => request.get('/system/tenant/current/options'),
+
+  // 切换租户
+  switchTenant: tenantId => request.post('/system/tenant/switch', null, { params: { tenantId } }),
 }

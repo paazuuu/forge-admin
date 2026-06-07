@@ -16,6 +16,11 @@ public class FlowBusiness {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 业务Key（唯一）
      */
     private String businessKey;

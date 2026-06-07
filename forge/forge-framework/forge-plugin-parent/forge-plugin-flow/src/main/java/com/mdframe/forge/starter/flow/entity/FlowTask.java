@@ -16,6 +16,11 @@ public class FlowTask {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * Flowable任务ID
      */
     private String taskId;

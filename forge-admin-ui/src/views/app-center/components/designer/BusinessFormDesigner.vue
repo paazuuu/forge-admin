@@ -359,6 +359,10 @@ const selectedRelationFieldRefs = computed(() => (editZone.value?.fieldRefs || [
 const selectedRelationFieldSet = computed(() => new Set(selectedRelationFieldRefs.value))
 const businessFields = computed(() => primaryDesignFields.value.filter(field => !isReadonlySystemField(field)))
 const primaryBusinessFields = computed(() => primaryDesignFields.value.filter(field => !isReadonlySystemField(field)))
+const primaryBusinessFieldAssets = computed(() => {
+  const assets = (props.fields || []).map(normalizeBusinessFieldAsset).filter(field => field.fieldCode && !isReadonlySystemField(field))
+  return assets.length ? assets : primaryBusinessFields.value.map(normalizeBusinessFieldAsset).filter(field => field.fieldCode)
+})
 const systemFields = computed(() => primaryDesignFields.value.filter(field => isReadonlySystemField(field)))
 const usedFields = computed(() => businessFields.value.filter(field => usedFieldSet.value.has(field.field)))
 const unusedFields = computed(() => businessFields.value.filter(field => !usedFieldSet.value.has(field.field)))
@@ -1099,21 +1103,7 @@ function resolveRelationToggle(relation = {}, config = {}, key, defaultValue) {
 async function saveLayout() {
   if (!props.objectId)
     return
-  const formSchema = formCreateDesignerRef.value?.flushDesigner?.() || localFormDesignerSchema.value
-  const { fields: nextFields, createdFields } = buildAutoFieldAssets(formSchema, primaryBusinessFields.value)
-  const formFieldComponents = buildFormFieldComponentMap(formSchema || {})
-  const normalizedFields = nextFields.map(field => normalizeUnconfiguredDesignerField(field, formFieldComponents))
-  const nextModelSchema = {
-    ...effectiveModelSchema.value,
-    fields: [
-      ...systemFields.value,
-      ...normalizedFields.map(toPageField),
-      ...relationFields.value,
-    ],
-  }
-  if (formSchema)
-    syncFormDesignerSchemaToPageSchema(formSchema, nextModelSchema.fields)
-  const schema = syncPageSchemaWithModel(localSchema.value, nextModelSchema)
+  const { formSchema, createdFields, normalizedFields, schema } = buildCurrentDesignerDraft()
   saving.value = true
   try {
     if (createdFields.length || formSchema) {
@@ -1134,13 +1124,63 @@ async function saveLayout() {
     })
     localSchema.value = schema
     emit('saved', cloneSchema(schema))
-    if (createdFields.length)
-      emit('fieldsUpdated', normalizedFields)
+    if (formSchema)
+      emit('fieldsUpdated', normalizedFields, { persisted: true })
     emit('dirtyChange', false)
     message.success(createdFields.length ? `表单布局已保存，已自动创建 ${createdFields.length} 个字段并同步表结构` : '表单布局已保存，表结构已检查同步')
   }
   finally {
     saving.value = false
+  }
+}
+
+function syncDesignerDraft() {
+  const { createdFields, normalizedFields, schema } = buildCurrentDesignerDraft()
+  localSchema.value = schema
+  if (createdFields.length)
+    emit('fieldsUpdated', normalizedFields, { persisted: false })
+  emit('dirtyChange', true)
+  return {
+    pageSchema: cloneSchema(schema),
+    fields: cloneSchema(normalizedFields),
+    createdFields: cloneSchema(createdFields),
+  }
+}
+
+function buildCurrentDesignerDraft() {
+  const formSchema = formCreateDesignerRef.value?.flushDesigner?.() || localFormDesignerSchema.value
+  const { fields: nextFields, createdFields } = buildAutoFieldAssets(formSchema, primaryBusinessFieldAssets.value)
+  const formFieldComponents = buildFormFieldComponentMap(formSchema || {})
+  const normalizedFields = nextFields.map(field => normalizeUnconfiguredDesignerField(field, formFieldComponents))
+  const nextModelSchema = {
+    ...effectiveModelSchema.value,
+    fields: [
+      ...systemFields.value,
+      ...normalizedFields.map(toPageField),
+      ...relationFields.value,
+    ],
+  }
+  if (formSchema)
+    syncFormDesignerSchemaToPageSchema(formSchema, nextModelSchema.fields)
+  const schema = syncPageSchemaWithModel(localSchema.value, nextModelSchema)
+  return {
+    formSchema,
+    createdFields,
+    normalizedFields,
+    nextModelSchema,
+    schema,
+  }
+}
+
+function normalizeBusinessFieldAsset(field = {}) {
+  const fieldCode = field.fieldCode || field.field || ''
+  const fieldName = field.fieldName || field.label || field.comment || fieldCode
+  return {
+    ...field,
+    field: field.field || fieldCode,
+    label: field.label || fieldName,
+    fieldCode,
+    fieldName,
   }
 }
 
@@ -1380,6 +1420,7 @@ function toBusinessFieldPayload(field = {}) {
 
 defineExpose({
   saveLayout,
+  syncDesignerDraft,
   appendFieldToForm: appendField,
 })
 </script>

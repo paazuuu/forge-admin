@@ -71,6 +71,17 @@ public interface IAuthService {
     }
 
     /**
+     * 根据用户ID和当前租户加载用户信息
+     *
+     * @param userId 用户ID
+     * @param tenantId 当前租户ID
+     * @return 登录用户信息
+     */
+    default LoginUser loadUserByUserId(Long userId, Long tenantId) {
+        throw new UnsupportedOperationException("不支持按用户ID加载用户");
+    }
+
+    /**
      * 用户注册
      *
      * @param request 注册请求

@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessDocumentConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiPageTemplate;
 import com.mdframe.forge.plugin.generator.dto.AiCrudConfigDTO;
@@ -12,6 +14,7 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRuntimeConfig;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
+import com.mdframe.forge.plugin.generator.service.businessapp.BusinessDocumentConfigService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeRuntimeConfigBuilder;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -23,6 +26,12 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,6 +40,7 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
     private final ObjectMapper objectMapper;
     private final MenuRegisterAdapter menuRegisterAdapter;
     private final LowcodeRuntimeConfigBuilder lowcodeRuntimeConfigBuilder;
+    private final BusinessDocumentConfigService documentConfigService;
     @Lazy
     private final AiPageTemplateService pageTemplateService;
 
@@ -208,6 +218,7 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             log.error("[AiCrudConfigService] JSON解析失败, configKey={}", config.getConfigKey(), e);
             throw new BusinessException("配置JSON格式错误");
         }
+        applyDocumentRuntimeHints(config, vo);
         return vo;
     }
 
@@ -298,6 +309,128 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
 
     private Object readJson(String json) throws Exception {
         return objectMapper.readValue(json, Object.class);
+    }
+
+    private void applyDocumentRuntimeHints(AiCrudConfig config, AiCrudConfigRenderVO vo) {
+        AiBusinessDocumentConfig documentConfig = documentConfigService.selectEnabledByConfigKey(
+                config.getTenantId(), config.getConfigKey());
+        if (documentConfig == null && StringUtils.isNotBlank(config.getObjectCode())) {
+            documentConfig = documentConfigService.selectEnabledByObjectCode(config.getTenantId(), config.getObjectCode());
+        }
+        if (documentConfig == null) {
+            return;
+        }
+        String documentNoField = documentConfigService.resolveDocumentNoField(documentConfig, config);
+        if (StringUtils.isBlank(documentNoField)) {
+            return;
+        }
+        vo.setOptions(mergeDocumentNoOption(vo.getOptions(), documentNoField));
+        vo.setEditSchema(markDocumentNoFieldReadonly(vo.getEditSchema(), documentNoField));
+    }
+
+    private Object mergeDocumentNoOption(Object options, String documentNoField) {
+        Map<String, Object> optionMap = toObjectMap(options);
+        optionMap.put("documentNoField", documentNoField);
+        return optionMap;
+    }
+
+    private Object markDocumentNoFieldReadonly(Object editSchema, String documentNoField) {
+        if (editSchema == null || StringUtils.isBlank(documentNoField)) {
+            return editSchema;
+        }
+        List<Map<String, Object>> fields;
+        try {
+            fields = objectMapper.convertValue(editSchema, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            return editSchema;
+        }
+        Set<String> aliases = new java.util.LinkedHashSet<>();
+        aliases.add(documentNoField);
+        aliases.add(snakeToCamel(documentNoField));
+        aliases.add(camelToSnake(documentNoField));
+        List<Map<String, Object>> result = new ArrayList<>(fields.size());
+        for (Map<String, Object> field : fields) {
+            Map<String, Object> item = new LinkedHashMap<>(field);
+            String fieldName = StringUtils.firstNonBlank(
+                    text(item.get("field")),
+                    text(item.get("prop")),
+                    text(item.get("key")),
+                    text(item.get("model"))
+            );
+            if (StringUtils.isNotBlank(fieldName)
+                    && (aliases.contains(fieldName)
+                    || aliases.contains(snakeToCamel(fieldName))
+                    || aliases.contains(camelToSnake(fieldName)))) {
+                item.put("disabled", true);
+                item.put("readonly", true);
+                item.put("required", false);
+                item.put("rules", List.of());
+                Map<String, Object> props = toObjectMap(item.get("props"));
+                props.put("disabled", true);
+                props.put("readonly", true);
+                props.put("clearable", false);
+                props.put("placeholder", "系统自动生成");
+                item.put("props", props);
+            }
+            result.add(item);
+        }
+        return result;
+    }
+
+    private Map<String, Object> toObjectMap(Object value) {
+        if (value == null) {
+            return new LinkedHashMap<>();
+        }
+        if (value instanceof Map<?, ?> source) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            source.forEach((key, itemValue) -> {
+                if (key != null) {
+                    result.put(String.valueOf(key), itemValue);
+                }
+            });
+            return result;
+        }
+        try {
+            return objectMapper.convertValue(value, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private String snakeToCamel(String value) {
+        if (StringUtils.isBlank(value) || !value.contains("_")) {
+            return value;
+        }
+        StringBuilder result = new StringBuilder();
+        boolean upperNext = false;
+        for (char ch : value.toCharArray()) {
+            if (ch == '_') {
+                upperNext = true;
+                continue;
+            }
+            result.append(upperNext ? Character.toUpperCase(ch) : ch);
+            upperNext = false;
+        }
+        return result.toString();
+    }
+
+    private String camelToSnake(String value) {
+        if (StringUtils.isBlank(value)) {
+            return value;
+        }
+        StringBuilder result = new StringBuilder();
+        for (char ch : value.toCharArray()) {
+            if (Character.isUpperCase(ch)) {
+                result.append('_').append(Character.toLowerCase(ch));
+            } else {
+                result.append(ch);
+            }
+        }
+        return result.toString();
+    }
+
+    private String text(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private void copyDtoToEntity(AiCrudConfigDTO dto, AiCrudConfig config) {

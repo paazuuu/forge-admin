@@ -81,32 +81,35 @@
       />
     </div>
 
-    <!-- 审批详情抽屉 -->
-    <n-drawer
+    <!-- 审批详情弹窗 -->
+    <n-modal
       v-model:show="showDrawer"
-      :width="720"
-      placement="right"
       :mask-closable="!approveLoading"
+      preset="card"
+      class="flow-task-detail-modal"
+      :closable="!approveLoading"
+      :bordered="false"
+      :segmented="{ content: true, footer: true }"
+      content-style="padding: 0; overflow: hidden;"
     >
-      <n-drawer-content :native-scrollbar="false" closable>
-        <template #header>
-          <div class="drawer-header">
-            <div class="drawer-title-row">
-              <div class="status-dot" :class="currentTask?.status === 0 ? 'pending' : 'claimed'" />
-              <span class="drawer-title">{{ currentTask?.title || '审批详情' }}</span>
-            </div>
-            <div class="drawer-tags">
-              <span class="status-tag" :class="currentTask?.status === 0 ? 'pending' : 'claimed'">
-                {{ getLabel('flow_todo_status', currentTask?.status) }}
-              </span>
-              <span v-if="currentTask?.priority >= 2" class="priority-tag" :class="getPriorityClass(currentTask?.priority)">
-                {{ getPriorityText(currentTask?.priority) }}
-              </span>
-            </div>
+      <template #header>
+        <div class="drawer-header">
+          <div class="drawer-title-row">
+            <div class="status-dot" :class="currentTask?.status === 0 ? 'pending' : 'claimed'" />
+            <span class="drawer-title">{{ currentTask?.title || '审批详情' }}</span>
           </div>
-        </template>
+          <div class="drawer-tags">
+            <span class="status-tag" :class="currentTask?.status === 0 ? 'pending' : 'claimed'">
+              {{ getLabel('flow_todo_status', currentTask?.status) }}
+            </span>
+            <span v-if="currentTask?.priority >= 2" class="priority-tag" :class="getPriorityClass(currentTask?.priority)">
+              {{ getPriorityText(currentTask?.priority) }}
+            </span>
+          </div>
+        </div>
+      </template>
 
-        <div v-if="currentTask" class="drawer-body">
+      <div v-if="currentTask" class="drawer-body">
           <!-- 信息 Tabs -->
           <n-tabs v-model:value="activeDrawerTab" type="line" animated class="drawer-tabs">
             <n-tab-pane name="info" tab="基本信息">
@@ -322,15 +325,14 @@
           </div>
         </div>
 
-        <template #footer>
-          <NSpace justify="end">
-            <NButton @click="showDrawer = false">
-              关闭
-            </NButton>
-          </NSpace>
-        </template>
-      </n-drawer-content>
-    </n-drawer>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showDrawer = false">
+            关闭
+          </NButton>
+        </NSpace>
+      </template>
+    </n-modal>
 
     <!-- 转办弹窗 -->
     <n-modal v-model:show="showDelegateModal" preset="card" title="转办任务" style="width: 480px" :mask-closable="false">
@@ -393,7 +395,8 @@
 
 <script setup>
 import { NButton, NSpace, NTreeSelect } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
 import ProcessDiagramViewer from '@/components/bpmn/ProcessDiagramViewer.vue'
 import UserSelectModal from '@/components/bpmn/UserSelectModal.vue'
@@ -407,6 +410,8 @@ import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
+const route = useRoute()
+const router = useRouter()
 const { dict, getLabel } = useDict('flow_todo_status', 'flow_priority')
 const loading = ref(false)
 const dataSource = ref([])
@@ -492,6 +497,7 @@ const delegateTargetUser = ref(null)
 const delegateForm = reactive({ comment: '', signature: '' })
 const delegateSignatureRef = ref(null)
 const delegateSignatureKey = ref(0)
+const routeTaskOpening = ref(false)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_todo_status))
 
@@ -855,6 +861,57 @@ async function loadData() {
   }
 }
 
+function getRouteTaskId() {
+  const taskId = route.query.taskId
+  if (Array.isArray(taskId))
+    return taskId[0] ? String(taskId[0]) : ''
+  return taskId ? String(taskId) : ''
+}
+
+async function openTaskFromRoute() {
+  const taskId = getRouteTaskId()
+  if (!taskId || routeTaskOpening.value)
+    return
+
+  if (showDrawer.value && currentTask.value?.taskId === taskId)
+    return
+
+  routeTaskOpening.value = true
+  try {
+    const existing = dataSource.value.find(row => row.taskId === taskId || row.id === taskId)
+    if (existing) {
+      await openDrawer(existing)
+      return
+    }
+
+    const res = await flowApi.getTaskDetail(taskId)
+    if (res.code === 200 && res.data) {
+      await openDrawer(res.data)
+    }
+    else {
+      window.$message.warning('待办任务不存在或已处理')
+      clearRouteTaskId()
+    }
+  }
+  catch {
+    window.$message.warning('待办任务不存在或已处理')
+    clearRouteTaskId()
+  }
+  finally {
+    routeTaskOpening.value = false
+  }
+}
+
+function clearRouteTaskId() {
+  if (!getRouteTaskId())
+    return
+  const query = { ...route.query }
+  delete query.taskId
+  delete query.source
+  delete query.t
+  router.replace({ path: route.path, query })
+}
+
 async function loadStats() {
   try {
     const [doneRes, startedRes, ccRes] = await Promise.all([
@@ -906,11 +963,20 @@ function handleSwitch(tab) {
     window.$router?.push(routes[tab])
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadCategories()
   loadStats()
-  loadData()
+  await loadData()
+  await openTaskFromRoute()
 })
+
+watch(
+  () => route.fullPath,
+  async () => {
+    if (route.path === '/flow/todo')
+      await openTaskFromRoute()
+  },
+)
 </script>
 
 <style scoped>
@@ -1141,7 +1207,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  max-height: calc(100vh - 178px);
+  overflow-y: auto;
   padding-bottom: 20px;
+  padding: 18px 20px 20px;
 }
 
 .drawer-tabs {
@@ -1328,5 +1397,38 @@ onMounted(() => {
 .delegate-placeholder {
   color: #94a3b8;
   font-size: 13px;
+}
+
+.flow-task-detail-modal {
+  width: min(1120px, calc(100vw - 32px));
+}
+
+@media (max-width: 760px) {
+  .flow-task-detail-modal {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+  }
+
+  .drawer-header,
+  .dynamic-form-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .drawer-body {
+    max-height: calc(100vh - 126px);
+    padding: 14px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-buttons,
+  .delegate-user-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

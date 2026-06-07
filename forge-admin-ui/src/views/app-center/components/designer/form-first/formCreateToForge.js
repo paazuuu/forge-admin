@@ -38,6 +38,10 @@ export function convertRuleToComponent(rule = {}, index = 0, fieldContext = crea
   const sourceLabel = resolveRuleLabel(rule, componentKey, fieldComponent, forgeBinding)
   const label = fieldComponent ? sourceLabel : normalizeDesignerComponentLabel(componentKey, sourceLabel)
   const fieldCode = fieldComponent ? resolveFieldCode(rule, label, forgeBinding, fieldContext) : ''
+  const existingField = fieldCode ? fieldContext.existingFieldMap.get(fieldCode) : null
+  const createIfMissing = fieldComponent
+    ? existingField ? false : forgeBinding.createIfMissing ?? Boolean(fieldCode)
+    : false
   return {
     id: resolveComponentId(rule, componentKey, fieldCode, fieldComponent, index),
     componentKey,
@@ -45,9 +49,9 @@ export function convertRuleToComponent(rule = {}, index = 0, fieldContext = crea
     fieldBinding: normalizeFieldBinding({
       mode: fieldComponent ? forgeBinding.mode || (fieldCode ? 'field' : 'virtual') : 'virtual',
       fieldCode,
-      columnName: forgeBinding.columnName || (fieldCode ? camelToSnake(fieldCode) : ''),
-      createIfMissing: fieldComponent ? forgeBinding.createIfMissing ?? Boolean(fieldCode) : false,
-      source: forgeBinding.source || 'designer',
+      columnName: forgeBinding.columnName || existingField?.columnName || (fieldCode ? camelToSnake(fieldCode) : ''),
+      createIfMissing,
+      source: existingField ? 'field_asset' : forgeBinding.source || 'designer',
       locked: Boolean(forgeBinding.locked),
     }, fieldCode),
     props: buildForgeProps(rule),
@@ -123,10 +127,15 @@ function normalizeOptions(options = {}) {
 }
 
 function createFieldContext(fields = []) {
-  const existingFieldCodes = new Set((Array.isArray(fields) ? fields : [])
-    .map(field => field?.fieldCode || field?.field)
+  const existingFieldMap = new Map((Array.isArray(fields) ? fields : [])
+    .map((field) => {
+      const fieldCode = field?.fieldCode || field?.field
+      return fieldCode ? [fieldCode, field] : null
+    })
     .filter(Boolean))
+  const existingFieldCodes = new Set(existingFieldMap.keys())
   return {
+    existingFieldMap,
     existingFieldCodes,
     usedFieldCodes: new Set(existingFieldCodes),
   }
@@ -135,6 +144,11 @@ function createFieldContext(fields = []) {
 function resolveFieldCode(rule = {}, label = '', forgeBinding = {}, fieldContext = createFieldContext()) {
   if (forgeBinding.mode === 'virtual')
     return forgeBinding.fieldCode || ''
+  const selectedFieldCode = resolveSelectedFieldCode(rule, forgeBinding)
+  if (selectedFieldCode) {
+    fieldContext.usedFieldCodes.add(selectedFieldCode)
+    return selectedFieldCode
+  }
   if (forgeBinding.fieldCode) {
     if (shouldRegenerateDesignerFieldCode(forgeBinding, label, fieldContext)) {
       const generated = generateFieldCode(label)
@@ -154,6 +168,25 @@ function resolveFieldCode(rule = {}, label = '', forgeBinding = {}, fieldContext
   return reserveGeneratedFieldCode(generated, fieldContext)
 }
 
+function resolveSelectedFieldCode(rule = {}, forgeBinding = {}) {
+  const propField = normalizeFieldCodeCandidate(rule.props?.fieldBinding?.fieldCode || rule.props?.fieldCode || rule.fieldBinding?.fieldCode)
+  const ruleField = normalizeFieldCodeCandidate(rule.field || rule.name)
+  const bindingField = normalizeFieldCodeCandidate(forgeBinding.fieldCode)
+  if (propField && ruleField && propField !== ruleField) {
+    if (propField === bindingField && ruleField !== bindingField)
+      return ruleField
+    if (ruleField === bindingField && propField !== bindingField)
+      return propField
+    return propField
+  }
+  return propField || ruleField
+}
+
+function normalizeFieldCodeCandidate(value) {
+  const fieldCode = String(value || '').trim()
+  return fieldCode && !isTemporaryDesignerField(fieldCode) ? fieldCode : ''
+}
+
 function reserveGeneratedFieldCode(value, fieldContext) {
   const base = value || 'field'
   if (!fieldContext.usedFieldCodes.has(base)) {
@@ -171,7 +204,11 @@ function reserveGeneratedFieldCode(value, fieldContext) {
 }
 
 function isTemporaryDesignerField(value) {
-  return /^field_\d+(?:_\d+)?$/.test(String(value || '')) || isTemporaryDesignerRef(value)
+  return /^field_\d+(?:_\d+)?$/.test(String(value || '')) || isFormCreateGeneratedField(value) || isTemporaryDesignerRef(value)
+}
+
+function isFormCreateGeneratedField(value) {
+  return /^F[a-z0-9]{10,}$/i.test(String(value || '').trim())
 }
 
 function shouldRegenerateDesignerFieldCode(forgeBinding = {}, label = '', fieldContext = createFieldContext()) {
@@ -306,6 +343,8 @@ function buildForgeProps(rule = {}) {
   const props = {
     ...(rule.props || {}),
   }
+  delete props.fieldBinding
+  delete props.fieldCode
   if (['regionTreeSelect', 'orgTreeSelect'].includes(componentKey)) {
     delete props.data
     delete props.props

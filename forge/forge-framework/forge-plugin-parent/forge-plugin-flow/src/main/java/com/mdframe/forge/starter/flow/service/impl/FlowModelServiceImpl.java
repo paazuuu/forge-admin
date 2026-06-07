@@ -9,6 +9,7 @@ import com.mdframe.forge.starter.flow.entity.FlowModel;
 import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
 import com.mdframe.forge.starter.flow.service.FlowModelService;
 import com.mdframe.forge.starter.flow.event.FlowModelPublishEvent;
+import com.mdframe.forge.starter.flow.helper.BpmnXmlUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +72,9 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         if (flowModel.getModelKey() == null || flowModel.getModelKey().isEmpty()) {
             flowModel.setModelKey("model_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         }
+        if (flowModel.getBpmnXml() != null && !flowModel.getBpmnXml().isBlank()) {
+            flowModel.setBpmnXml(normalizeBpmnXml(flowModel.getBpmnXml(), "创建流程模型"));
+        }
         
         // 检查Key是否重复
         if (checkModelKeyExists(flowModel.getModelKey(), null)) {
@@ -100,6 +104,9 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         // 已发布的模型不允许修改Key
         if (existing.getStatus() == 1 && !existing.getModelKey().equals(flowModel.getModelKey())) {
             throw new RuntimeException("已发布的模型不允许修改Key");
+        }
+        if (flowModel.getBpmnXml() != null && !flowModel.getBpmnXml().isBlank()) {
+            flowModel.setBpmnXml(normalizeBpmnXml(flowModel.getBpmnXml(), "更新流程模型"));
         }
         flowModel.setLastUpdateBy(SessionHelper.getLoginUser().getUsername());
         flowModel.setUpdateTime(LocalDateTime.now());
@@ -156,6 +163,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         // 将 BPMN XML 中的 process id 替换为 modelKey，确保启动流程时能找到正确的流程定义
         String modelKey = model.getModelKey();
         bpmnXml = replaceProcessId(bpmnXml, modelKey);
+        bpmnXml = normalizeBpmnXml(bpmnXml, "部署流程模型");
         log.info("已将流程ID替换为：{}", modelKey);
 
         validateSequenceFlowRefs(bpmnXml);
@@ -220,6 +228,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
             model.setDeploymentKey(deploymentKey);
             model.setProcessDefinitionId(processDefinition != null ? processDefinition.getId() : null);
             model.setVersion(newVersion);
+            model.setBpmnXml(bpmnXml);
             model.setStatus(1);
             model.setDeployTime(LocalDateTime.now());
             updateById(model);
@@ -432,6 +441,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         }
         
         // 从XML中提取流程Key
+        bpmnXml = normalizeBpmnXml(bpmnXml, "导入流程模型");
         String modelKey = extractProcessKey(bpmnXml);
         if (modelKey == null) {
             modelKey = "imported_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
@@ -486,7 +496,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         newModel.setFormType(source.getFormType());
         newModel.setFormId(source.getFormId());
         newModel.setFormJson(source.getFormJson());
-        newModel.setBpmnXml(source.getBpmnXml());
+        newModel.setBpmnXml(normalizeBpmnXml(source.getBpmnXml(), "复制流程模型"));
         newModel.setStatus(0);
         newModel.setVersion(1);
         newModel.setDelFlag(0);
@@ -608,5 +618,20 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
                         flowId, missing));
             }
         }
+    }
+
+    private String normalizeBpmnXml(String bpmnXml, String operation) {
+        BpmnXmlUtils.NormalizationResult result = BpmnXmlUtils.normalizeDuplicateSequenceFlows(bpmnXml);
+        if (result.hasRepairs()) {
+            String repairSummary = result.getRepairs().stream()
+                    .map(repair -> String.format("%s->%s 保留 [%s] 删除 %s",
+                            repair.getSourceRef(),
+                            repair.getTargetRef(),
+                            repair.getKeptFlowId(),
+                            repair.getRemovedFlowIds()))
+                    .collect(Collectors.joining("; "));
+            log.warn("{}：已自动清理 BPMN 重复连线，{}", operation, repairSummary);
+        }
+        return result.getBpmnXml();
     }
 }

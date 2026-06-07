@@ -19,6 +19,11 @@ public class RoleUserQuery extends PageQuery {
     private Long roleId;
 
     /**
+     * 租户编号
+     */
+    private Long tenantId;
+
+    /**
      * 用户名（模糊查询）
      */
     private String username;

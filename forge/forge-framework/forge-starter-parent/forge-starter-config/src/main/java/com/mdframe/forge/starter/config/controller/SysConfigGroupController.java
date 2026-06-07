@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.tenant.IgnoreTenant;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,6 +32,11 @@ import java.util.List;
 public class SysConfigGroupController {
 
     private final ISysConfigGroupService sysConfigGroupService;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护系统配置分组");
+    }
 
     /**
      * 分页查询配置分组列表

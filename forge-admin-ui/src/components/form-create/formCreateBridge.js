@@ -4,6 +4,39 @@ import 'element-plus/dist/index.css'
 import '@form-create/element-ui/src/style/index.css'
 
 const INSTALL_KEY = '__forgeFormCreateInstalled'
+export const DEFAULT_FORM_ITEM_GAP = '20px'
+const DEFAULT_RULE_TITLE_MAP = {
+  input: '输入框',
+  textarea: '多行输入框',
+  inputNumber: '计数器',
+  number: '计数器',
+  select: '选择器',
+  radio: '单选框',
+  checkbox: '多选框',
+  datePicker: '日期',
+  timePicker: '时间',
+  switch: '开关',
+  cascader: '级联选择器',
+  tree: '树形控件',
+  elTreeSelect: '树形选择器',
+  upload: '上传',
+}
+const GENERIC_ENGLISH_TITLES = new Set([
+  'Input',
+  'Textarea',
+  'InputNumber',
+  'Number',
+  'Select',
+  'Radio',
+  'Checkbox',
+  'DatePicker',
+  'TimePicker',
+  'Switch',
+  'Cascader',
+  'Tree',
+  'TreeSelect',
+  'Upload',
+])
 
 export function installFormCreate(app) {
   if (!app || app._context.provides[INSTALL_KEY])
@@ -111,10 +144,37 @@ function normalizeRule(rule) {
   if (next.value === undefined && rule.defaultValue !== undefined)
     next.value = rule.defaultValue
 
+  normalizeRuleTitle(next)
+  normalizeRuleWrap(next)
+
   if (Array.isArray(next.children))
     next.children = next.children.map(child => normalizeRule(child)).filter(Boolean)
 
   return next
+}
+
+function normalizeRuleWrap(rule) {
+  const wrap = rule.wrap && typeof rule.wrap === 'object' && !Array.isArray(rule.wrap)
+    ? { ...rule.wrap }
+    : {}
+  const style = wrap.style && typeof wrap.style === 'object' && !Array.isArray(wrap.style)
+    ? { ...wrap.style }
+    : {}
+  if (style.marginBottom === undefined || style.marginBottom === null || style.marginBottom === '')
+    style.marginBottom = DEFAULT_FORM_ITEM_GAP
+  else if (typeof style.marginBottom === 'number')
+    style.marginBottom = `${style.marginBottom}px`
+  wrap.style = style
+  rule.wrap = wrap
+}
+
+function normalizeRuleTitle(rule) {
+  const defaultTitle = DEFAULT_RULE_TITLE_MAP[rule.type]
+  if (!defaultTitle)
+    return
+  const title = String(rule.title || '').trim()
+  if (!title || GENERIC_ENGLISH_TITLES.has(title))
+    rule.title = defaultTitle
 }
 
 function normalizeLegacyType(type) {

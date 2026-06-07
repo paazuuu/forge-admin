@@ -8,6 +8,10 @@
           <strong>{{ form.statusField || '-' }}</strong>
         </div>
         <div>
+          <span>编号字段</span>
+          <strong>{{ form.options?.documentNoField || '-' }}</strong>
+        </div>
+        <div>
           <span>编号规则</span>
           <strong>{{ form.noRuleTemplate || form.documentNoRule || '-' }}</strong>
         </div>

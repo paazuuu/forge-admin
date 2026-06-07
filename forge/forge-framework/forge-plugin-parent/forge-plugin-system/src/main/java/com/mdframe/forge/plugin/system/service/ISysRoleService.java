@@ -133,4 +133,13 @@ public interface ISysRoleService extends IService<SysRole> {
      * @return 是否成功
      */
     boolean removeUserRole(Long roleId, Long userId);
+
+    /**
+     * 批量添加用户到角色
+     *
+     * @param roleId  角色ID
+     * @param userIds 用户ID列表
+     * @return 是否成功
+     */
+    boolean addUsersToRole(Long roleId, List<Long> userIds);
 }

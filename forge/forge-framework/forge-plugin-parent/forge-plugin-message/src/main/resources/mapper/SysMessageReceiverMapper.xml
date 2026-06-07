@@ -19,8 +19,19 @@
         WHERE r.user_id = #{userId}
         AND m.send_channel = 'WEB'
         <if test='readFlag != null'> AND r.read_flag = #{readFlag} </if>
-        <if test='type != null and type != null'> AND m.type = #{type} </if>
-        <if test='keyword != null and keyword != null'> AND (m.title LIKE CONCAT('%', #{keyword}, '%') OR m.content LIKE CONCAT('%', #{keyword}, '%')) </if>
+        <if test="type != null and type != ''"> AND m.type = #{type} </if>
+        <if test="keyword != null and keyword != ''"> AND (m.title LIKE CONCAT('%', #{keyword}, '%') OR m.content LIKE CONCAT('%', #{keyword}, '%')) </if>
+        <if test="startTime != null and startTime != ''"> AND m.create_time &gt;= #{startTime} </if>
+        <if test="endTime != null and endTime != ''"> AND m.create_time &lt;= #{endTime} </if>
         ORDER BY r.create_time DESC
+    </select>
+
+    <select id="selectUnreadWebMessageTypes" resultType="java.lang.String">
+        SELECT m.type
+        FROM sys_message_receiver r
+        INNER JOIN sys_message m ON r.message_id = m.id
+        WHERE r.user_id = #{userId}
+          AND r.read_flag = 0
+          AND m.send_channel = 'WEB'
     </select>
 </mapper>

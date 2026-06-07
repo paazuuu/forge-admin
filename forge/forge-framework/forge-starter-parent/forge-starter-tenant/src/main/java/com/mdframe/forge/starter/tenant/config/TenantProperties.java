@@ -52,11 +52,15 @@ public class TenantProperties {
     private Boolean autoDetectTenantColumn = true;
     
     public TenantProperties() {
-        // 默认忽略系统配置表
+        // 平台级表不按当前租户做 SQL 隔离，租户内授权由关联表控制。
         ignoreTables.add("sys_tenant");
+        ignoreTables.add("sys_resource");
+        ignoreTables.add("sys_client");
+        ignoreTables.add("sys_region_code");
+        ignoreTables.add("sys_api_config");
+        ignoreTables.add("sys_config_group");
         ignoreTables.add("sys_excel_column_config");
         ignoreTables.add("sys_excel_export_config");
-        ignoreTables.add("sys_file_metadata");
         ignoreTables.add("sys_file_storage_config");
         ignoreTables.add("sys_job_log");
         ignoreTables.add("sys_job_config");
@@ -65,11 +69,6 @@ public class TenantProperties {
         ignoreTables.add("gen_table_column");
         ignoreTables.add("worker_node");
         ignoreTables.add("sys_id_sequence");
-        ignoreTables.add("sys_notice_org");
-        ignoreTables.add("sys_notice_org");
-        ignoreTables.add("sys_notice_read_record");
-        ignoreTables.add("sys_api_config");
-        ignoreTables.add("sys_config_group");
-        ignoreTables.add("sys_file_group");
+        ignoreTables.add("ai_page_template");
     }
 }

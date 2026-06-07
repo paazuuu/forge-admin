@@ -11,6 +11,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +36,11 @@ public class SysCacheController {
 
     private final ICacheService cacheService;
     private final ObjectMapper objectMapper;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以管理系统缓存");
+    }
 
     /**
      * 分页查询缓存键列表

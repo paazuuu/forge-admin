@@ -2,7 +2,7 @@ import { generate } from '@arco-design/color'
 import { useDark } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { applyThemeConfig, defaultThemeConfig } from '@/config/theme.config'
-import { defaultLayout, defaultPrimaryColor, naiveThemeOverrides } from '@/settings'
+import { defaultLayout, defaultPrimaryColor, naiveThemeOverrides, normalizeLayout } from '@/settings'
 
 function cloneConfig(config) {
   return JSON.parse(JSON.stringify(config))
@@ -12,7 +12,7 @@ export const useAppStore = defineStore('app', {
   state: () => ({
     collapsed: false,
     isDark: useDark(),
-    layout: import.meta.env.VITE_DEFAULT_LAYOUT || defaultLayout,
+    layout: normalizeLayout(import.meta.env.VITE_DEFAULT_LAYOUT || defaultLayout),
     primaryColor: defaultPrimaryColor,
     naiveThemeOverrides: cloneConfig(naiveThemeOverrides),
     selectedTopMenuId: null, // 当前选中的顶部菜单ID
@@ -30,7 +30,7 @@ export const useAppStore = defineStore('app', {
       this.isDark = !this.isDark
     },
     setLayout(v) {
-      this.layout = v
+      this.layout = normalizeLayout(v)
     },
     setPrimaryColor(color) {
       this.primaryColor = color
@@ -53,13 +53,14 @@ export const useAppStore = defineStore('app', {
       this.selectedTopMenuId = id
     },
     resetAccountState() {
-      this.layout = import.meta.env.VITE_DEFAULT_LAYOUT || defaultLayout
+      this.layout = normalizeLayout(import.meta.env.VITE_DEFAULT_LAYOUT || defaultLayout)
       this.primaryColor = defaultPrimaryColor
       this.naiveThemeOverrides = cloneConfig(naiveThemeOverrides)
       this.themeConfig = cloneConfig(defaultThemeConfig)
       this.selectedTopMenuId = null
       this.setThemeColor(defaultPrimaryColor)
       applyThemeConfig(this.themeConfig, this.isDark)
+      document.title = import.meta.env.VITE_TITLE || document.title
     },
     setThemeConfig(config) {
       this.themeConfig = { ...this.themeConfig, ...config }

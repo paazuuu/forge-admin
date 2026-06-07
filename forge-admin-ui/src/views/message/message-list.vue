@@ -224,7 +224,7 @@ async function handleMarkRead(id) {
     window.$message.success('已标记为已读')
     crudRef.value?.refresh()
   }
-  catch (error) {
+  catch {
     window.$message.error('操作失败')
   }
 }
@@ -240,7 +240,7 @@ async function handleBatchMarkRead() {
     selectedRowKeys.value = []
     crudRef.value?.refresh()
   }
-  catch (error) {
+  catch {
     window.$message.error('操作失败')
   }
 }
@@ -257,7 +257,7 @@ async function handleMarkAllRead() {
         window.$message.success('已全部标记为已读')
         crudRef.value?.refresh()
       }
-      catch (error) {
+      catch {
         window.$message.error('操作失败')
       }
     },
@@ -301,12 +301,30 @@ function getBizTypeName(bizType) {
   return item ? item.bizName : bizType
 }
 
+function isFlowTodoMessage(message) {
+  return message?.bizType === 'FLOW_TODO'
+}
+
 function handleJumpToBiz(message) {
+  if (isFlowTodoMessage(message)) {
+    showDetail.value = false
+    router.push({
+      path: '/flow/todo',
+      query: {
+        taskId: message.bizKey,
+        source: 'message',
+        t: Date.now(),
+      },
+    })
+    return
+  }
+
   const bizConfig = bizTypeOptions.value.find(opt => opt.bizType === message.bizType)
   if (bizConfig && bizConfig.jumpUrl) {
     let jumpUrl = bizConfig.jumpUrl
-    jumpUrl = jumpUrl.replace('${bizKey}', message.bizKey)
-    jumpUrl = jumpUrl.replace('${messageId}', message.id)
+    jumpUrl = jumpUrl
+      .replace(/\$\{bizKey\}/g, message.bizKey)
+      .replace(/\$\{messageId\}/g, message.id)
 
     if (bizConfig.jumpTarget === '_blank') {
       window.open(jumpUrl, '_blank')

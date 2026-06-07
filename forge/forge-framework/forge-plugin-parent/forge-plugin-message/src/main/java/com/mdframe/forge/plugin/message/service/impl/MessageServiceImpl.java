@@ -93,6 +93,23 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         
         return msg;
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SysMessage sendIfAbsent(MessageSendRequestDTO req, String bizType, String bizKey) {
+        if (StrUtil.isBlank(bizType) || StrUtil.isBlank(bizKey)) {
+            return send(req);
+        }
+        SysMessage existing = messageMapper.selectByBizTypeAndBizKey(bizType, bizKey);
+        if (existing != null) {
+            log.debug("消息已存在，跳过重复发送: bizType={}, bizKey={}, messageId={}",
+                    bizType, bizKey, existing.getId());
+            return existing;
+        }
+        req.setBizType(bizType);
+        req.setBizKey(bizKey);
+        return send(req);
+    }
     
     /**
      * 渲染消息内容（处理模板）
@@ -322,13 +339,16 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     @Override
     public IPage<MessageVO> pageUserMessages(Long userId, MessageQueryDTO query, Integer pageNum, Integer pageSize) {
         Page<MessageVO> page = new Page<>(pageNum, pageSize);
+        MessageQueryDTO safeQuery = query == null ? new MessageQueryDTO() : query;
         
         IPage<MessageVO> messagePage = receiverMapper.selectUserWebMessages(
             page,
             userId,
-            query.getReadFlag(),
-            query.getType(),
-            query.getKeyword()
+            safeQuery.getReadFlag(),
+            safeQuery.getType(),
+            safeQuery.getKeyword(),
+            safeQuery.getStartTime(),
+            safeQuery.getEndTime()
         );
         
         return messagePage;
@@ -337,26 +357,14 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     @Override
     public UnreadCountVO getUnreadCount(Long userId) {
         UnreadCountVO vo = new UnreadCountVO();
-        
-        // 查询未读接收记录
-        List<SysMessageReceiver> unreadReceivers = receiverMapper.selectList(
-            new LambdaQueryWrapper<SysMessageReceiver>()
-                .eq(SysMessageReceiver::getUserId, userId)
-                .eq(SysMessageReceiver::getReadFlag, 0)
-        );
-        
-        vo.setTotalCount((long) unreadReceivers.size());
-        
-        // 统计各类型未读数
-        Map<String, Long> typeCountMap = new HashMap<>();
-        for (SysMessageReceiver receiver : unreadReceivers) {
-            SysMessage message = messageMapper.selectById(receiver.getMessageId());
-            if (message != null) {
-                typeCountMap.put(message.getType(),
-                    typeCountMap.getOrDefault(message.getType(), 0L) + 1);
-            }
-        }
-        
+
+        List<String> unreadTypes = receiverMapper.selectUnreadWebMessageTypes(userId);
+        vo.setTotalCount((long) unreadTypes.size());
+
+        Map<String, Long> typeCountMap = unreadTypes.stream()
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.groupingBy(type -> type, Collectors.counting()));
+
         vo.setSystemCount(typeCountMap.getOrDefault("SYSTEM", 0L));
         vo.setSmsCount(typeCountMap.getOrDefault("SMS", 0L));
         vo.setEmailCount(typeCountMap.getOrDefault("EMAIL", 0L));

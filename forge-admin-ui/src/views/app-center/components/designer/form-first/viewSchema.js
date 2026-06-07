@@ -89,12 +89,39 @@ export function validateViewSchema(source = {}) {
   }
 }
 
+export function sanitizeViewSchemaFieldRefs(source = {}, fields = []) {
+  const schema = normalizeViewSchema(source)
+  const fieldCodes = new Set((Array.isArray(fields) ? fields : [])
+    .map(field => field?.fieldCode || field?.field)
+    .filter(Boolean))
+  if (!fieldCodes.size)
+    return schema
+  return normalizeViewSchema({
+    ...schema,
+    search: {
+      ...schema.search,
+      fields: schema.search.fields.filter(item => fieldCodes.has(item.fieldCode)),
+    },
+    list: {
+      ...schema.list,
+      columns: schema.list.columns.filter(item => fieldCodes.has(item.fieldCode)),
+    },
+    detail: {
+      ...schema.detail,
+      sections: schema.detail.sections.map(section => ({
+        ...section,
+        fields: section.fields.filter(item => fieldCodes.has(item.fieldCode)),
+      })),
+    },
+  })
+}
+
 export function createViewSchemaFromPageSchema(pageSchema = {}, fields = [], currentSchema = {}) {
   const fieldMap = new Map((Array.isArray(fields) ? fields : [])
     .map(field => [field.fieldCode || field.field, field])
     .filter(([fieldCode]) => fieldCode))
   const base = createDefaultViewSchema({ fields })
-  const current = normalizeViewSchema(currentSchema || {})
+  const current = sanitizeViewSchemaFieldRefs(currentSchema || {}, fields)
   const searchZone = findZone(pageSchema, 'search')
   const tableZone = findZone(pageSchema, 'table')
   const detailZone = findZone(pageSchema, 'detail')
@@ -241,7 +268,7 @@ function collectDuplicateFields(items = [], path, errors) {
 function buildSearchFields(zone = {}, fieldMap, fallbackFields = []) {
   const refs = resolveZoneRefs(zone, fallbackFields.map(item => item.fieldCode))
   const settings = zone?.props?.fieldSettings || {}
-  return refs.map((fieldCode, index) => {
+  return refs.filter(fieldCode => fieldMap.has(fieldCode)).map((fieldCode, index) => {
     const field = fieldMap.get(fieldCode) || {}
     const setting = settings[fieldCode] || {}
     return {
@@ -261,7 +288,7 @@ function buildSearchFields(zone = {}, fieldMap, fallbackFields = []) {
 function buildListColumns(zone = {}, fieldMap, fallbackColumns = []) {
   const refs = resolveZoneRefs(zone, fallbackColumns.map(item => item.fieldCode))
   const settings = zone?.props?.fieldSettings || {}
-  return refs.map((fieldCode, index) => {
+  return refs.filter(fieldCode => fieldMap.has(fieldCode)).map((fieldCode, index) => {
     const field = fieldMap.get(fieldCode) || {}
     const setting = settings[fieldCode] || {}
     return {
@@ -306,7 +333,7 @@ function buildDetailSections(zone = {}, fieldMap, fallbackSections = []) {
           formatter: field.dictType ? 'dictTag' : null,
         }
       })
-      .filter(item => item.fieldCode),
+      .filter(item => item.fieldCode && fieldMap.has(item.fieldCode)),
   }))
 }
 

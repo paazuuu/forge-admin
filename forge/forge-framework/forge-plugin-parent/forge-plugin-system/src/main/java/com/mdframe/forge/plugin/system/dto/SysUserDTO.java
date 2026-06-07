@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.system.dto;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 用户新增/修改DTO
@@ -91,4 +92,9 @@ public class SysUserDTO implements Serializable {
      * 创建部门
      */
     private Long createDept;
+
+    /**
+     * 岗位ID列表（新增/编辑时同步绑定）
+     */
+    private List<Long> postIds;
 }

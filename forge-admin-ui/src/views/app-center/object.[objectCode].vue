@@ -112,7 +112,7 @@
             </n-button>
             <n-button
               secondary
-              :disabled="!canUseRuntime"
+              :disabled="!canUseImportExport"
               :loading="templateLoading"
               @click="downloadImportTemplate"
             >
@@ -121,13 +121,13 @@
               </template>
               导入模板
             </n-button>
-            <n-button secondary :disabled="!canUseRuntime" :loading="importing" @click="triggerImport">
+            <n-button secondary :disabled="!canUseImportExport" :loading="importing" @click="triggerImport">
               <template #icon>
                 <n-icon><CloudUploadOutline /></n-icon>
               </template>
               导入
             </n-button>
-            <n-button secondary :disabled="!canUseRuntime" :loading="exportLoading" @click="exportData">
+            <n-button secondary :disabled="!canUseImportExport" :loading="exportLoading" @click="exportData">
               <template #icon>
                 <n-icon><CloudDownloadOutline /></n-icon>
               </template>
@@ -225,12 +225,15 @@ const objectCode = computed(() => route.params.objectCode)
 const suiteCode = computed(() => route.query.suiteCode || object.value?.suiteCode)
 const pageTitle = computed(() => object.value?.objectName || objectCode.value || '业务对象详情')
 const canUseRuntime = computed(() => Boolean(runtimeInfo.value?.canOpen && runtimeInfo.value?.configKey))
+const canUseImportExport = computed(() => Boolean(runtimeInfo.value?.configKey))
 const runtimeStatusType = computed(() => runtimeInfo.value?.canOpen ? 'success' : 'warning')
 const runtimeHint = computed(() => {
   if (runtimeInfo.value?.canOpen)
     return '对象已发布，可以打开业务应用，也可以继续使用导入、导出等运行能力。'
+  if (canUseImportExport.value)
+    return '对象已有运行配置，导入导出可用；运行应用入口仍需完成发布检查。'
   if (runtimeInfo.value?.message)
-    return '先进入对象设计器处理提示中的缺口，再打开业务应用或使用导入导出。'
+    return '先进入对象设计器处理提示中的缺口，再打开业务应用。'
   return '请先完成对象设计和发布检查，再生成标准业务应用入口。'
 })
 const designerMountKey = computed(() => `${object.value?.objectCode || objectCode.value}_${designerPanel.value}`)
@@ -392,8 +395,8 @@ function deleteObject() {
 }
 
 async function downloadImportTemplate() {
-  if (!canUseRuntime.value) {
-    message.warning('请先完成对象设计和发布')
+  if (!canUseImportExport.value) {
+    message.warning('缺少运行配置，无法下载导入模板')
     return
   }
   templateLoading.value = true
@@ -407,8 +410,8 @@ async function downloadImportTemplate() {
 }
 
 function triggerImport() {
-  if (!canUseRuntime.value) {
-    message.warning('请先完成对象设计和发布')
+  if (!canUseImportExport.value) {
+    message.warning('缺少运行配置，无法导入')
     return
   }
   importInputRef.value?.click()
@@ -435,8 +438,8 @@ async function handleImportFile(event) {
 }
 
 async function exportData() {
-  if (!canUseRuntime.value) {
-    message.warning('请先完成对象设计和发布')
+  if (!canUseImportExport.value) {
+    message.warning('缺少运行配置，无法导出')
     return
   }
   exportLoading.value = true

@@ -270,6 +270,7 @@ public class SysNoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice
                    .and(w -> w.eq(SysNotice::getPublishScope, 0) // 全部组织
                            .or(w2 -> w2.eq(SysNotice::getPublishScope, 1)
                                    .exists("SELECT 1 FROM sys_notice_org no WHERE no.notice_id = sys_notice.notice_id "
+                                           + "AND no.tenant_id = sys_notice.tenant_id "
                                            + "AND no.org_id IN ({0})", String.join(",", userOrgIds.stream()
                                            .map(String::valueOf).collect(java.util.stream.Collectors.toList())))))
                    .orderByDesc(SysNotice::getIsTop, SysNotice::getTopSort, SysNotice::getPublishTime);
@@ -348,9 +349,11 @@ public class SysNoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice
                    .and(w -> w.eq(SysNotice::getPublishScope, 0)
                            .or(w2 -> w2.eq(SysNotice::getPublishScope, 1)
                                    .exists("SELECT 1 FROM sys_notice_org no WHERE no.notice_id = sys_notice.notice_id "
+                                           + "AND no.tenant_id = sys_notice.tenant_id "
                                            + "AND no.org_id IN ({0})", String.join(",", userOrgIds.stream()
                                            .map(String::valueOf).collect(java.util.stream.Collectors.toList())))))
                    .notExists("SELECT 1 FROM sys_notice_read_record r WHERE r.notice_id = sys_notice.notice_id "
+                           + "AND r.tenant_id = sys_notice.tenant_id "
                            + "AND r.user_id = {0}", userId);
             
             return noticeMapper.selectCount(wrapper).intValue();

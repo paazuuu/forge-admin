@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.dto.UserOrgBindDTO;
+import com.mdframe.forge.plugin.system.dto.UserPostBindDTO;
+import com.mdframe.forge.plugin.system.dto.UserTenantBindDTO;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
+import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
 import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
@@ -44,6 +47,8 @@ public class SysUserController {
     @PostMapping("/getById")
     public RespInfo<SysUser> getById(@RequestParam Long id) {
         SysUser user = userService.selectUserById(id);
+        // 填充用户岗位ID列表
+        user.setPostIds(userService.selectUserPostIds(id));
         return RespInfo.success(user);
     }
 
@@ -144,12 +149,47 @@ public class SysUserController {
     }
 
     /**
+     * 查询用户的租户绑定列表
+     */
+    @GetMapping("/{userId}/tenants")
+    public RespInfo<List<SysUserTenantVO>> getUserTenants(@PathVariable Long userId) {
+        return RespInfo.success(userService.selectUserTenants(userId));
+    }
+
+    /**
+     * 批量绑定用户租户
+     */
+    @PostMapping("/{userId}/tenants")
+    public RespInfo<Void> bindTenants(@PathVariable Long userId, @RequestBody UserTenantBindDTO dto) {
+        boolean result = userService.bindUserTenants(userId, dto);
+        return result ? RespInfo.success() : RespInfo.error("绑定租户失败");
+    }
+
+    /**
      * 批量绑定用户组织
      */
     @PostMapping("/{userId}/orgs")
     public RespInfo<Void> bindOrgs(@PathVariable Long userId, @RequestBody UserOrgBindDTO dto) {
         boolean result = userService.bindUserOrgs(userId, dto.getOrgIds(), dto.getMainOrgId());
         return result ? RespInfo.success() : RespInfo.error("绑定组织失败");
+    }
+
+    /**
+     * 查询用户的岗位ID列表
+     */
+    @GetMapping("/{userId}/posts")
+    public RespInfo<List<Long>> getUserPostIds(@PathVariable Long userId) {
+        List<Long> postIds = userService.selectUserPostIds(userId);
+        return RespInfo.success(postIds);
+    }
+
+    /**
+     * 批量绑定用户岗位
+     */
+    @PostMapping("/{userId}/posts")
+    public RespInfo<Void> bindPosts(@PathVariable Long userId, @RequestBody UserPostBindDTO dto) {
+        boolean result = userService.bindUserPosts(userId, dto.getPostIds(), dto.getMainPostId());
+        return result ? RespInfo.success() : RespInfo.error("绑定岗位失败");
     }
 
     /**

@@ -406,7 +406,8 @@ public class BusinessObjectPublishService {
         Set<String> modelFields = collectFields(context.getModelSchema());
         Map<String, Object> designerOptions = readDesignerOptions(context);
         Map<String, Object> formSchema = mapValue(designerOptions.get(FORM_DESIGNER_SCHEMA_OPTION_KEY));
-        Map<String, Object> viewSchema = mapValue(designerOptions.get(VIEW_SCHEMA_OPTION_KEY));
+        Map<String, Object> viewSchema = sanitizeViewSchemaFieldRefs(
+                mapValue(designerOptions.get(VIEW_SCHEMA_OPTION_KEY)), modelFields);
         boolean checked = false;
         if (!formSchema.isEmpty()) {
             checked = true;
@@ -496,6 +497,41 @@ public class BusinessObjectPublishService {
                         fieldCode, null, "FIX_VIEW", "修复视图", fixTarget, sortOrder);
             }
         }
+    }
+
+    private Map<String, Object> sanitizeViewSchemaFieldRefs(Map<String, Object> viewSchema, Set<String> modelFields) {
+        if (viewSchema.isEmpty() || modelFields == null || modelFields.isEmpty()) {
+            return viewSchema;
+        }
+        Map<String, Object> next = new LinkedHashMap<>(viewSchema);
+        Map<String, Object> search = new LinkedHashMap<>(mapValue(next.get("search")));
+        search.put("fields", filterViewFieldRefs(listOfMap(search.get("fields")), modelFields));
+        next.put("search", search);
+
+        Map<String, Object> list = new LinkedHashMap<>(mapValue(next.get("list")));
+        list.put("columns", filterViewFieldRefs(listOfMap(list.get("columns")), modelFields));
+        next.put("list", list);
+
+        Map<String, Object> detail = new LinkedHashMap<>(mapValue(next.get("detail")));
+        detail.put("sections", listOfMap(detail.get("sections")).stream()
+                .map(section -> {
+                    Map<String, Object> cleanSection = new LinkedHashMap<>(section);
+                    cleanSection.put("fields", filterViewFieldRefs(listOfMap(section.get("fields")), modelFields));
+                    return cleanSection;
+                })
+                .toList());
+        next.put("detail", detail);
+        return next;
+    }
+
+    private List<Map<String, Object>> filterViewFieldRefs(List<Map<String, Object>> refs, Set<String> modelFields) {
+        return refs.stream()
+                .filter(item -> modelFields.contains(viewFieldCode(item)))
+                .toList();
+    }
+
+    private String viewFieldCode(Map<String, Object> item) {
+        return StringUtils.defaultIfBlank(text(item.get("fieldCode")), text(item.get("field")));
     }
 
     private void checkRelations(BusinessObjectDesignerService.DesignerContext context,

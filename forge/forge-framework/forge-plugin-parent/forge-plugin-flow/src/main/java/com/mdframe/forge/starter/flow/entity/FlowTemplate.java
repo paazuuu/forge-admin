@@ -17,6 +17,11 @@ public class FlowTemplate {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 模板标识（唯一）
      */
     private String templateKey;

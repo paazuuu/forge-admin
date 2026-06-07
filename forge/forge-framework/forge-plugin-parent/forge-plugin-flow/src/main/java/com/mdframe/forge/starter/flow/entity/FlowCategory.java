@@ -17,6 +17,11 @@ public class FlowCategory {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 父分类ID（根节点为空）
      */
     private String parentId;

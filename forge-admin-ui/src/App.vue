@@ -45,19 +45,26 @@ import { useWatermark } from '@/composables/useWatermark'
 import { useAppStore, usePermissionStore, useTabStore, useUserStore } from '@/store'
 import { initResponsiveFont } from '@/utils/responsive-font'
 
-import { layoutSettingVisible } from './settings'
+import { defaultLayout, layoutSettingVisible, normalizeLayout } from './settings'
 
 // 使用 shallowRef 确保 Layout 引用稳定
 const LayoutComponent = shallowRef(null)
 
 const layouts = new Map()
+const layoutModules = import.meta.glob('./layouts/*/index.vue')
+function normalizeLayoutName(name) {
+  const layoutName = normalizeLayout(name)
+  return layoutModules[`./layouts/${layoutName}/index.vue`] ? layoutName : defaultLayout
+}
+
 function getLayout(name) {
+  const layoutName = normalizeLayoutName(name)
   // 利用map将加载过的layout缓存起来，防止重新加载layout导致页面闪烁
-  if (layouts.has(name)) {
-    return layouts.get(name)
+  if (layouts.has(layoutName)) {
+    return layouts.get(layoutName)
   }
-  const layout = markRaw(defineAsyncComponent(() => import(`@/layouts/${name}/index.vue`)))
-  layouts.set(name, layout)
+  const layout = markRaw(defineAsyncComponent(layoutModules[`./layouts/${layoutName}/index.vue`]))
+  layouts.set(layoutName, layout)
   return layout
 }
 
@@ -99,9 +106,6 @@ const showLoading = computed(() => {
   // 其他情况根据路由守卫状态决定
   return !appStore.routeGuardCompleted
 })
-
-if (appStore.layout === 'default')
-  appStore.setLayout('')
 
 const tabStore = useTabStore()
 // 修改缓存逻辑，根据tabStore中的cacheViews来决定是否缓存

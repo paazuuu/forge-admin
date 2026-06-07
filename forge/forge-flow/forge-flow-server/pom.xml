@@ -32,6 +32,12 @@
             </exclusions>
         </dependency>
 
+        <!-- Generator business flow services reference FlowClient; optional deps are not transitive. -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-flow-client</artifactId>
+        </dependency>
+
         <!-- Forge ORM Starter (MyBatis Plus) -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
@@ -66,6 +72,12 @@
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-ai</artifactId>
+        </dependency>
+
+        <!-- 低代码业务对象落表适配（流程入口 BUSINESS_OBJECT/HYBRID 模式） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-generator</artifactId>
         </dependency>
 
         <!-- Spring Data Redis (Pub/Sub 事件发布) -->

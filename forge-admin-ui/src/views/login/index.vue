@@ -337,15 +337,17 @@ import { useStorage } from '@vueuse/core'
 import { nextTick } from 'vue'
 import SlideVerify from 'vue3-slide-verify'
 import mainApi from '@/api'
-import { useAuthStore, usePermissionStore, useUserStore } from '@/store'
+import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
+import { applyTenantConfig } from '@/utils/tenant-config'
 import api from './api'
 import 'vue3-slide-verify/dist/style.css'
 
 const authStore = useAuthStore()
 const userStore = useUserStore()
+const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
 const title = import.meta.env.VITE_TITLE
@@ -753,6 +755,8 @@ async function onLoginSuccess(data = {}) {
       userType: loginUser.userType,
       userStatus: loginUser.userStatus,
       tenantId: loginUser.tenantId,
+      tenantName: loginUser.tenantName,
+      tenantIds: loginUser.tenantIds || [],
       roleIds: loginUser.roleIds || [],
       roleKeys: loginUser.roleKeys || [],
       permissions: loginUser.permissions || [],
@@ -843,6 +847,9 @@ onUnmounted(() => {
 async function loadAndSetMenuData() {
   try {
     const permissionStore = usePermissionStore()
+    const tenantStore = useTenantStore()
+    const tenantConfig = await tenantStore.loadTenantConfig(userStore.userInfo?.tenantId)
+    await applyTenantConfig(tenantConfig, appStore)
 
     // 获取菜单数据
     const res = await mainApi.getMenu(1)

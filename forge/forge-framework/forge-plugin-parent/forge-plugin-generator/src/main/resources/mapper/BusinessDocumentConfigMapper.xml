@@ -57,6 +57,16 @@
         LIMIT 1
     </select>
 
+    <select id="selectByConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_document_config
+        WHERE tenant_id = #{tenantId}
+          AND config_key = #{configKey}
+        ORDER BY document_enabled DESC, update_time DESC, id DESC
+        LIMIT 1
+    </select>
+
     <select id="selectByObjectId" resultMap="BaseResultMap">
         SELECT
         <include refid="Base_Columns"/>

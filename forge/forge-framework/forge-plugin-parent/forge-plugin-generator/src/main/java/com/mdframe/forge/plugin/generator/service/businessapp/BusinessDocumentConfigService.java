@@ -17,7 +17,9 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentConfigV
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentNoRulePreviewVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentNoRuleTokenVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.id.service.ISequenceService;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -55,6 +57,10 @@ public class BusinessDocumentConfigService {
     private final BusinessObjectService objectService;
     private final AiCrudConfigMapper crudConfigMapper;
     private final ObjectMapper objectMapper;
+    private final ISequenceService sequenceService;
+
+    private record DocumentNoCandidate(String fieldName, int score, int index) {
+    }
 
     public BusinessDocumentConfigVO getConfig(Long objectId) {
         AiBusinessObject object = objectService.requireEntity(objectId);
@@ -104,7 +110,7 @@ public class BusinessDocumentConfigService {
                 StringUtils.defaultIfBlank(source.getStarter(), "starter"),
                 StringUtils.defaultIfBlank(source.getDeptCode(), "DEPT"),
                 source.getSampleData(),
-                source.getSequence() == null ? 1 : source.getSequence()
+                source.getSequence() == null ? 1L : source.getSequence().longValue()
         );
     }
 
@@ -122,20 +128,30 @@ public class BusinessDocumentConfigService {
         if (StringUtils.isNotBlank(documentNoRule)) {
             validateNoRuleTemplate(documentNoRule);
         }
+        Long tenantId = resolveTenantId();
+        String documentNoField = text(readObjectMap(dto.getOptions()).get("documentNoField"));
+        if (enabled && StringUtils.isNotBlank(documentNoRule) && StringUtils.isBlank(documentNoField)) {
+            AiCrudConfig runtimeConfig = crudConfigMapper.selectByConfigKey(tenantId, object.getConfigKey());
+            documentNoField = inferDocumentNoField(runtimeConfig);
+        }
         if (enabled) {
             validateRequiredField("单据状态字段", dto.getStatusField());
             validateObjectField(object, dto.getStatusField(), "单据状态字段");
             validateOptionalObjectField(object, dto.getStarterField(), "发起人字段");
             validateOptionalObjectField(object, dto.getOwnerField(), "负责人字段");
+            if (StringUtils.isNotBlank(documentNoRule) && StringUtils.isBlank(documentNoField)) {
+                throw new BusinessException("启用编号规则时必须配置单据编号字段");
+            }
+            validateOptionalObjectField(object, documentNoField, "单据编号字段");
         }
 
-        AiBusinessDocumentConfig config = documentConfigMapper.selectByObjectId(resolveTenantId(), objectId);
+        AiBusinessDocumentConfig config = documentConfigMapper.selectByObjectId(tenantId, objectId);
         if (config == null) {
-            config = documentConfigMapper.selectByObjectCode(resolveTenantId(), object.getObjectCode());
+            config = documentConfigMapper.selectByObjectCode(tenantId, object.getObjectCode());
         }
         if (config == null) {
             config = new AiBusinessDocumentConfig();
-            config.setTenantId(resolveTenantId());
+            config.setTenantId(tenantId);
             config.setObjectId(object.getId());
             config.setSuiteCode(object.getSuiteCode());
             config.setObjectCode(object.getObjectCode());
@@ -157,7 +173,7 @@ public class BusinessDocumentConfigService {
                 : StringUtils.defaultIfBlank(resolveFlowModelKey(readBindingConfig(mainFlowBinding.getBindingConfig())),
                         mainFlowBinding.getBindingKey()));
         config.setStatusMapping(writeJson(statusMapping, "单据状态映射"));
-        config.setOptions(writeJson(buildOptions(dto, documentNoRule, statusRows), "单据扩展配置"));
+        config.setOptions(writeJson(buildOptions(dto, documentNoRule, documentNoField, statusRows), "单据扩展配置"));
 
         if (config.getId() == null) {
             documentConfigMapper.insert(config);
@@ -177,6 +193,18 @@ public class BusinessDocumentConfigService {
         }
         AiBusinessDocumentConfig config = documentConfigMapper.selectByObjectCode(
                 tenantId != null ? tenantId : resolveTenantId(), objectCode);
+        if (config == null || !Integer.valueOf(1).equals(config.getDocumentEnabled())) {
+            return null;
+        }
+        return config;
+    }
+
+    public AiBusinessDocumentConfig selectEnabledByConfigKey(Long tenantId, String configKey) {
+        if (StringUtils.isBlank(configKey)) {
+            return null;
+        }
+        AiBusinessDocumentConfig config = documentConfigMapper.selectByConfigKey(
+                tenantId != null ? tenantId : resolveTenantId(), configKey);
         if (config == null || !Integer.valueOf(1).equals(config.getDocumentEnabled())) {
             return null;
         }
@@ -213,10 +241,183 @@ public class BusinessDocumentConfigService {
         vo.setStatusMappingRows(readStatusRows(options, vo.getStatusMapping()));
         vo.setStatusActionPolicy(readObjectMap(options.get("statusActionPolicy")));
         vo.setMainFlowSummary(mainFlowSummary);
+        String documentNoField = StringUtils.defaultIfBlank(
+                text(options.get("documentNoField")),
+                resolveDocumentNoField(config, selectRuntimeConfig(tenantId, config)));
+        if (StringUtils.isNotBlank(documentNoField)) {
+            options.put("documentNoField", documentNoField);
+        }
         vo.setOptions(options);
         vo.setCreateTime(config.getCreateTime());
         vo.setUpdateTime(config.getUpdateTime());
         return vo;
+    }
+
+    public String resolveDocumentNoField(AiBusinessDocumentConfig config, AiCrudConfig runtimeConfig) {
+        if (config == null) {
+            return null;
+        }
+        Map<String, Object> options = readObjectMap(config.getOptions());
+        String configured = StringUtils.firstNonBlank(
+                text(options.get("documentNoField")),
+                text(options.get("documentNoFieldCode")),
+                text(options.get("noField")));
+        if (StringUtils.isNotBlank(configured)) {
+            return configured.trim();
+        }
+        return inferDocumentNoField(runtimeConfig);
+    }
+
+    private AiCrudConfig selectRuntimeConfig(Long tenantId, AiBusinessDocumentConfig config) {
+        if (config == null) {
+            return null;
+        }
+        Long effectiveTenantId = tenantId != null ? tenantId : resolveTenantId();
+        AiCrudConfig runtimeConfig = null;
+        if (StringUtils.isNotBlank(config.getConfigKey())) {
+            runtimeConfig = crudConfigMapper.selectByConfigKey(effectiveTenantId, config.getConfigKey());
+        }
+        if (runtimeConfig == null && StringUtils.isNotBlank(config.getObjectCode())) {
+            runtimeConfig = crudConfigMapper.selectPublishedByObjectCode(effectiveTenantId, config.getObjectCode());
+        }
+        return runtimeConfig;
+    }
+
+    private String inferDocumentNoField(AiCrudConfig runtimeConfig) {
+        if (runtimeConfig == null) {
+            return null;
+        }
+        DocumentNoCandidate best = null;
+        int index = 0;
+        if (StringUtils.isNotBlank(runtimeConfig.getModelSchema())) {
+            try {
+                LowcodeModelSchema modelSchema = objectMapper.readValue(runtimeConfig.getModelSchema(), LowcodeModelSchema.class);
+                if (modelSchema.getFields() != null) {
+                    for (LowcodeFieldSchema field : modelSchema.getFields()) {
+                        if (field == null) {
+                            continue;
+                        }
+                        best = chooseDocumentNoCandidate(best, field.getField(), field.getColumnName(), field.getLabel(), index++);
+                    }
+                }
+            } catch (Exception ignored) {
+                // Fall back to edit schema.
+            }
+        }
+        if (StringUtils.isNotBlank(runtimeConfig.getEditSchema())) {
+            try {
+                List<Map<String, Object>> fields = objectMapper.readValue(
+                        runtimeConfig.getEditSchema(), new TypeReference<List<Map<String, Object>>>() {});
+                for (Map<String, Object> field : fields) {
+                    if (field == null) {
+                        continue;
+                    }
+                    String fieldName = StringUtils.firstNonBlank(
+                            text(field.get("field")),
+                            text(field.get("prop")),
+                            text(field.get("key")),
+                            text(field.get("model"))
+                    );
+                    String columnName = StringUtils.firstNonBlank(text(field.get("columnName")), text(field.get("fieldCode")));
+                    String label = StringUtils.firstNonBlank(text(field.get("label")), text(field.get("title")));
+                    best = chooseDocumentNoCandidate(best, fieldName, columnName, label, index++);
+                }
+            } catch (Exception ignored) {
+                // No inferred document number field.
+            }
+        }
+        return best == null || best.score() < 75 ? null : best.fieldName();
+    }
+
+    private DocumentNoCandidate chooseDocumentNoCandidate(DocumentNoCandidate current,
+                                                          String fieldName,
+                                                          String columnName,
+                                                          String label,
+                                                          int index) {
+        String resolvedField = StringUtils.firstNonBlank(fieldName, columnName);
+        if (StringUtils.isBlank(resolvedField)) {
+            return current;
+        }
+        int score = scoreDocumentNoCandidate(fieldName, columnName, label);
+        if (score <= 0) {
+            return current;
+        }
+        DocumentNoCandidate next = new DocumentNoCandidate(resolvedField.trim(), score, index);
+        if (current == null || next.score() > current.score()
+                || (next.score() == current.score() && next.index() < current.index())) {
+            return next;
+        }
+        return current;
+    }
+
+    private int scoreDocumentNoCandidate(String fieldName, String columnName, String label) {
+        int score = Math.max(scoreDocumentNoCode(fieldName), scoreDocumentNoCode(columnName));
+        String labelText = StringUtils.defaultString(label);
+        if (StringUtils.containsAny(labelText, "申请单号", "单据编号", "单据号", "业务单号")) {
+            score = Math.max(score, 120);
+        } else if (StringUtils.containsAny(labelText, "单号", "编号", "流水号")) {
+            score = Math.max(score, 90);
+        }
+        return score;
+    }
+
+    private int scoreDocumentNoCode(String code) {
+        String normalized = normalizeFieldKey(code);
+        if (StringUtils.isBlank(normalized)) {
+            return 0;
+        }
+        return switch (normalized) {
+            case "documentno", "documentnumber" -> 120;
+            case "applicationno", "applicationnumber", "applyno", "applynumber" -> 115;
+            case "billno", "billnumber", "orderno", "ordernumber", "businessno", "businessnumber" -> 105;
+            case "serialno", "serialnumber" -> 95;
+            default -> normalized.endsWith("no") || normalized.endsWith("number") ? 60 : 0;
+        };
+    }
+
+    private String normalizeFieldKey(String value) {
+        if (StringUtils.isBlank(value)) {
+            return "";
+        }
+        return value.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
+    }
+
+    public String generateDocumentNo(AiBusinessDocumentConfig config, Map<String, Object> recordData) {
+        if (config == null || !Integer.valueOf(1).equals(config.getDocumentEnabled())) {
+            return null;
+        }
+        String template = normalizeNoRuleTemplate(config.getDocumentNoRule());
+        if (StringUtils.isBlank(template)) {
+            return null;
+        }
+        long sequence = sequenceService.nextId(buildNoRuleSequenceKey(config, template));
+        LoginUser loginUser = safeLoginUser();
+        String starter = loginUser == null
+                ? "starter"
+                : StringUtils.firstNonBlank(loginUser.getUsername(), loginUser.getRealName(),
+                        loginUser.getUserId() == null ? null : String.valueOf(loginUser.getUserId()), "starter");
+        String deptCode = loginUser == null
+                ? "DEPT"
+                : StringUtils.firstNonBlank(
+                        loginUser.getMainOrgId() == null ? null : String.valueOf(loginUser.getMainOrgId()),
+                        loginUser.getDeptName(),
+                        "DEPT");
+        BusinessDocumentNoRulePreviewVO rendered = renderNoRulePreview(
+                template,
+                StringUtils.defaultIfBlank(config.getSuiteCode(), "SUITE"),
+                StringUtils.defaultIfBlank(config.getObjectCode(), "OBJECT"),
+                starter,
+                deptCode,
+                recordData,
+                sequence);
+        if (!rendered.getErrors().isEmpty()) {
+            String message = rendered.getErrors().stream()
+                    .map(BusinessDocumentNoRulePreviewVO.PreviewIssueVO::getMessage)
+                    .findFirst()
+                    .orElse("单据编号规则不正确");
+            throw new BusinessException(message);
+        }
+        return rendered.getPreviewNo();
     }
 
     public void syncDefaultFlowKeyByObjectCode(Long tenantId, String objectCode, String flowModelKey) {
@@ -230,6 +431,43 @@ public class BusinessDocumentConfigService {
         }
         config.setDefaultFlowKey(StringUtils.trimToNull(flowModelKey));
         documentConfigMapper.updateById(config);
+    }
+
+    private String buildNoRuleSequenceKey(AiBusinessDocumentConfig config, String template) {
+        String tenantId = config == null || config.getTenantId() == null ? String.valueOf(resolveTenantId()) : String.valueOf(config.getTenantId());
+        String suiteCode = config == null ? "SUITE" : StringUtils.defaultIfBlank(config.getSuiteCode(), "SUITE");
+        String objectCode = config == null ? "OBJECT" : StringUtils.defaultIfBlank(config.getObjectCode(), "OBJECT");
+        String period = resolveNoRuleSequencePeriod(template);
+        String templateHash = Integer.toHexString(StringUtils.defaultString(template).hashCode());
+        return "lowcode:document-no:" + tenantId + ":" + safeSequencePart(suiteCode) + ":"
+                + safeSequencePart(objectCode) + ":" + period + ":" + templateHash;
+    }
+
+    private String resolveNoRuleSequencePeriod(String template) {
+        LocalDateTime now = LocalDateTime.now();
+        if (StringUtils.contains(template, "yyyyMMdd")) {
+            return now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        }
+        if (StringUtils.contains(template, "yyyyMM")) {
+            return now.format(DateTimeFormatter.ofPattern("yyyyMM"));
+        }
+        if (StringUtils.contains(template, "yyyy")) {
+            return now.format(DateTimeFormatter.ofPattern("yyyy"));
+        }
+        return "all";
+    }
+
+    private String safeSequencePart(String value) {
+        String result = StringUtils.defaultIfBlank(value, "NA").replaceAll("[^A-Za-z0-9_\\-]", "_");
+        return StringUtils.defaultIfBlank(result, "NA");
+    }
+
+    private LoginUser safeLoginUser() {
+        try {
+            return SessionHelper.getLoginUser();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private BusinessDocumentNoRuleTokenVO token(String insertText, String label, String groupName,
@@ -251,7 +489,7 @@ public class BusinessDocumentConfigService {
                                                                 String starter,
                                                                 String deptCode,
                                                                 Map<String, Object> sampleData,
-                                                                Integer sequence) {
+                                                                Long sequence) {
         BusinessDocumentNoRulePreviewVO vo = new BusinessDocumentNoRulePreviewVO();
         vo.setTemplate(template);
         StringBuilder result = new StringBuilder();
@@ -285,7 +523,7 @@ public class BusinessDocumentConfigService {
                                       String starter,
                                       String deptCode,
                                       Map<String, Object> sampleData,
-                                      Integer sequence,
+                                      Long sequence,
                                       LocalDateTime now,
                                       BusinessDocumentNoRulePreviewVO vo) {
         if ("yyyy".equals(token)) {
@@ -301,7 +539,7 @@ public class BusinessDocumentConfigService {
             return now.format(DateTimeFormatter.ofPattern("HHmmss"));
         }
         if ("seq".equals(token)) {
-            return String.valueOf(Math.max(sequence == null ? 1 : sequence, 1));
+            return String.valueOf(Math.max(sequence == null ? 1L : sequence, 1L));
         }
         if (token.startsWith("seq:")) {
             return renderSequenceToken(token, sequence, vo);
@@ -335,7 +573,7 @@ public class BusinessDocumentConfigService {
         return "";
     }
 
-    private String renderSequenceToken(String token, Integer sequence, BusinessDocumentNoRulePreviewVO vo) {
+    private String renderSequenceToken(String token, Long sequence, BusinessDocumentNoRulePreviewVO vo) {
         String lengthText = token.substring("seq:".length()).trim();
         int length;
         try {
@@ -348,7 +586,7 @@ public class BusinessDocumentConfigService {
             vo.getErrors().add(issue("${" + token + "}", "流水号长度建议在 1-12 之间", "例如 ${seq:4}"));
             return "";
         }
-        String seqText = String.valueOf(Math.max(sequence == null ? 1 : sequence, 1));
+        String seqText = String.valueOf(Math.max(sequence == null ? 1L : sequence, 1L));
         return StringUtils.leftPad(seqText, length, '0');
     }
 
@@ -377,7 +615,7 @@ public class BusinessDocumentConfigService {
 
     private void validateNoRuleTemplate(String template) {
         BusinessDocumentNoRulePreviewVO preview = renderNoRulePreview(normalizeNoRuleTemplate(template), "SUITE", "OBJECT", "starter", "DEPT",
-                Map.of("fieldCode", "SAMPLE"), 1);
+                Map.of("fieldCode", "SAMPLE"), 1L);
         if (!preview.getErrors().isEmpty()) {
             String message = preview.getErrors().stream()
                     .map(BusinessDocumentNoRulePreviewVO.PreviewIssueVO::getMessage)
@@ -389,12 +627,14 @@ public class BusinessDocumentConfigService {
 
     private Map<String, Object> buildOptions(BusinessDocumentConfigDTO dto,
                                              String documentNoRule,
+                                             String documentNoField,
                                              List<BusinessDocumentConfigVO.StatusMappingRowVO> statusRows) {
         Map<String, Object> options = new LinkedHashMap<>();
         if (dto.getOptions() != null) {
             options.putAll(dto.getOptions());
         }
         options.put("noRuleTemplate", StringUtils.trimToNull(documentNoRule));
+        options.put("documentNoField", StringUtils.trimToNull(documentNoField));
         options.put("statusMappingRows", statusRows);
         options.put("statusActionPolicy", dto.getStatusActionPolicy() == null
                 ? new LinkedHashMap<>()

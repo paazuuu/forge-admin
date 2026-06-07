@@ -110,10 +110,11 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
     @Override
     public void updateAppMenu(Long menuResourceId, String menuName, Long parentId, String path,
                               String component, String perms, String icon, Integer sort, boolean enabled) {
+        Long resolvedParentId = normalizeResourceParentId(menuResourceId, parentId);
         SysResource resource = new SysResource();
         resource.setId(menuResourceId);
         resource.setResourceName(menuName);
-        resource.setParentId(parentId != null ? parentId : 0L);
+        resource.setParentId(resolvedParentId);
         resource.setPath(path);
         resource.setComponent(component);
         resource.setPerms(perms);
@@ -123,7 +124,7 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         resource.setVisible(enabled ? 1 : 0);
         resourceService.updateById(resource);
         log.info("[MenuRegisterAdapter] 更新应用入口菜单成功: menuId={}, menuName={}, parentId={}",
-                menuResourceId, menuName, parentId);
+                menuResourceId, menuName, resolvedParentId);
     }
 
     @Override
@@ -191,6 +192,7 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         SysResource existing = resourceMapper.selectOneByPerms(tenantId, 1, perms);
         Long resolvedParentId = parentId != null ? parentId : 0L;
         if (existing != null && existing.getId() != null) {
+            resolvedParentId = normalizeResourceParentId(existing.getId(), resolvedParentId);
             updateBusinessSuiteParentIfNeeded(existing, resolvedParentId, suiteName, icon, sort);
             return existing.getId();
         }
@@ -259,6 +261,15 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         if (changed) {
             resourceService.updateById(resource);
         }
+    }
+
+    private Long normalizeResourceParentId(Long resourceId, Long parentId) {
+        Long resolvedParentId = parentId != null ? parentId : 0L;
+        if (resourceId != null && resourceId.equals(resolvedParentId)) {
+            log.warn("[MenuRegisterAdapter] 检测到菜单自父级配置，已自动挂载到顶级: menuId={}", resourceId);
+            return 0L;
+        }
+        return resolvedParentId;
     }
 
     private Long resolveTenantId() {

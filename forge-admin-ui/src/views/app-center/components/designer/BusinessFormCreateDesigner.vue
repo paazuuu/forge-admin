@@ -161,7 +161,7 @@ function loadDesigner() {
 }
 
 function ensureForgeBusinessComponents() {
-  installForgeBusinessComponents(designerRef.value)
+  installForgeBusinessComponents(designerRef.value, props.fields)
 }
 
 function queueFlush() {

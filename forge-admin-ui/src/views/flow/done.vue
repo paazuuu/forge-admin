@@ -45,20 +45,27 @@
       <n-data-table :columns="columns" :data="dataSource" :loading="loading" :pagination="pagination" :remote="true" :row-key="row => row.id" :row-props="getRowProps" striped />
     </div>
 
-    <!-- 详情抽屉 -->
-    <n-drawer v-model:show="showDrawer" :width="720" placement="right">
-      <n-drawer-content :native-scrollbar="false" closable>
-        <template #header>
-          <div class="drawer-header">
-            <div class="drawer-title-row">
-              <div class="status-dot" :class="getStatusDotClass(currentTask?.status)" />
-              <span class="drawer-title">{{ currentTask?.title || '审批详情' }}</span>
-            </div>
-            <span class="status-tag" :class="getStatusTagClass(currentTask?.status)">{{ getStatusText(currentTask?.status) }}</span>
+    <!-- 详情弹窗 -->
+    <n-modal
+      v-model:show="showDrawer"
+      preset="card"
+      class="flow-task-detail-modal"
+      closable
+      :bordered="false"
+      :segmented="{ content: true, footer: true }"
+      content-style="padding: 0; overflow: hidden;"
+    >
+      <template #header>
+        <div class="drawer-header">
+          <div class="drawer-title-row">
+            <div class="status-dot" :class="getStatusDotClass(currentTask?.status)" />
+            <span class="drawer-title">{{ currentTask?.title || '审批详情' }}</span>
           </div>
-        </template>
+          <span class="status-tag" :class="getStatusTagClass(currentTask?.status)">{{ getStatusText(currentTask?.status) }}</span>
+        </div>
+      </template>
 
-        <div v-if="currentTask" class="drawer-body">
+      <div v-if="currentTask" class="drawer-body">
           <div class="info-grid">
             <div class="info-card">
               <div class="info-header">
@@ -123,15 +130,14 @@
           </div>
         </div>
 
-        <template #footer>
-          <NSpace justify="end">
-            <NButton @click="showDrawer = false">
-              关闭
-            </NButton>
-          </NSpace>
-        </template>
-      </n-drawer-content>
-    </n-drawer>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showDrawer = false">
+            关闭
+          </NButton>
+        </NSpace>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -540,7 +546,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-height: calc(100vh - 178px);
+  overflow-y: auto;
   padding-bottom: 20px;
+  padding: 18px 20px 20px;
 }
 .info-grid {
   display: grid;
@@ -612,5 +621,32 @@ onMounted(() => {
   font-weight: 600;
   color: #0f172a;
   margin-bottom: 12px;
+}
+
+.flow-task-detail-modal {
+  width: min(1080px, calc(100vw - 32px));
+}
+
+@media (max-width: 760px) {
+  .flow-task-detail-modal {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+  }
+
+  .drawer-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .drawer-body {
+    max-height: calc(100vh - 126px);
+    padding: 14px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

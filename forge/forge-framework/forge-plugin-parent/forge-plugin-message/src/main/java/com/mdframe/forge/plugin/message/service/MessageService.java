@@ -17,6 +17,11 @@ public interface MessageService extends IService<SysMessage> {
      * 发送消息
      */
     SysMessage send(MessageSendRequestDTO req);
+
+    /**
+     * 按业务类型和业务键幂等发送消息。
+     */
+    SysMessage sendIfAbsent(MessageSendRequestDTO req, String bizType, String bizKey);
     
     /**
      * 标记为已读

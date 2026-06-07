@@ -9,6 +9,7 @@ import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.excel.core.DynamicExportEngine;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,11 @@ public class SysExcelExportConfigController {
     private final ISysExcelExportConfigService exportConfigService;
     private final ISysExcelColumnConfigService columnConfigService;
     private final DynamicExportEngine dynamicExportEngine;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护Excel导出配置");
+    }
     
     /**
      * 分页查询

@@ -78,6 +78,12 @@
             <artifactId>forge-starter-job</artifactId>
         </dependency>
 
+        <!-- Starter Id（单据编号规则使用业务序列） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-id</artifactId>
+        </dependency>
+
         <!-- 消息插件（触发器SEND_MESSAGE动作复用） -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>

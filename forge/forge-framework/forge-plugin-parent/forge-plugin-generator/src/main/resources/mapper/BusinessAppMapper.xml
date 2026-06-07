@@ -174,6 +174,21 @@
         LIMIT 1
     </select>
 
+    <select id="selectRuntimeAppsByObject" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_app
+        WHERE tenant_id = #{tenantId}
+          AND suite_code = #{suiteCode}
+          AND object_code = #{objectCode}
+          AND app_type = 'BUSINESS'
+          AND entry_mode = 'RUNTIME'
+        ORDER BY status DESC,
+                 sort_order ASC,
+                 update_time DESC,
+                 id DESC
+    </select>
+
     <select id="countByAppCode" resultType="java.lang.Long">
         SELECT COUNT(1)
         FROM ai_business_app

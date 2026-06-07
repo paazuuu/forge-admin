@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.plugin.job.service.ISysJobConfigService;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +26,11 @@ import org.springframework.web.bind.annotation.*;
 public class JobConfigController {
     
     private final ISysJobConfigService jobConfigService;
+
+    @ModelAttribute
+    public void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以管理定时任务");
+    }
     
     /**
      * 分页查询任务列表

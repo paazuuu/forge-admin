@@ -1,7 +1,10 @@
 package com.mdframe.forge.starter.flow.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mdframe.forge.starter.flow.dto.FormFieldCatalogItemDTO;
 import com.mdframe.forge.starter.flow.entity.FlowForm;
+import com.mdframe.forge.starter.flow.entity.FlowFormVersion;
 
 import java.util.List;
 
@@ -21,8 +24,7 @@ public interface FlowFormService extends IService<FlowForm> {
      * @param pageSize 每页大小
      * @return 分页结果
      */
-    com.baomidou.mybatisplus.extension.plugins.pagination.Page<FlowForm> getPage(
-            String formName, Integer status, Integer page, Integer pageSize);
+    Page<FlowForm> getPage(String formName, Integer status, Integer pageNum, Integer pageSize);
 
     /**
      * 获取所有启用的表单定义
@@ -113,4 +115,24 @@ public interface FlowFormService extends IService<FlowForm> {
      * @return 表单Schema
      */
     String getFormSchema(String formKey);
+
+    /**
+     * 发布表单不可变版本。
+     */
+    FlowFormVersion publishVersion(Long formId);
+
+    /**
+     * 查询表单发布版本列表。
+     */
+    List<FlowFormVersion> listVersions(Long formId);
+
+    /**
+     * 查询表单字段目录。
+     */
+    List<FormFieldCatalogItemDTO> resolveFieldCatalog(String formKey, Long versionId);
+
+    /**
+     * 解析表单 Schema 得到字段目录 JSON。
+     */
+    String buildFieldRegistryJson(String formSchema);
 }

@@ -131,4 +131,13 @@ public class SysRoleController {
         boolean result = roleService.removeUserRole(roleId, userId);
         return result ? RespInfo.success() : RespInfo.error("移除用户失败");
     }
+
+    /**
+     * 批量添加用户到角色
+     */
+    @PostMapping("/{roleId}/addUsers")
+    public RespInfo<Void> addUsersToRole(@PathVariable Long roleId, @RequestBody Long[] userIds) {
+        boolean result = roleService.addUsersToRole(roleId, java.util.Arrays.asList(userIds));
+        return result ? RespInfo.success() : RespInfo.error("添加用户失败");
+    }
 }

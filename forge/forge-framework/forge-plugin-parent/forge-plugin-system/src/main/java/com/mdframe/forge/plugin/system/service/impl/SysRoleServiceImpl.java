@@ -12,16 +12,18 @@ import com.mdframe.forge.plugin.system.dto.SysRoleQuery;
 import com.mdframe.forge.plugin.system.entity.SysResource;
 import com.mdframe.forge.plugin.system.entity.SysRole;
 import com.mdframe.forge.plugin.system.entity.SysRoleResource;
+import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.mapper.SysRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleResourceMapper;
-import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
+import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
 import com.mdframe.forge.plugin.system.service.ISysResourceService;
 import com.mdframe.forge.plugin.system.service.ISysRoleService;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.annotation.Lazy;
@@ -40,63 +42,74 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
     private final SysRoleMapper roleMapper;
     private final SysRoleResourceMapper roleResourceMapper;
-    private final SysUserMapper userMapper;
+    private final SysTenantMapper tenantMapper;
     private final SysUserRoleMapper userRoleMapper;
     @Lazy
     private final ISysResourceService resourceService;
 
     @Override
     public IPage<SysRole> selectRolePage(SysRoleQuery query) {
-        LambdaQueryWrapper<SysRole> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(query.getTenantId() != null, SysRole::getTenantId, query.getTenantId())
-                .like(StringUtils.isNotBlank(query.getRoleName()), SysRole::getRoleName, query.getRoleName())
-                .eq(StringUtils.isNotBlank(query.getRoleKey()), SysRole::getRoleKey, query.getRoleKey())
-                .eq(query.getRoleStatus() != null, SysRole::getRoleStatus, query.getRoleStatus())
-                .eq(query.getRoleType() != null, SysRole::getRoleType, query.getRoleType())
-                .orderByAsc(SysRole::getSort)
-                .orderByDesc(SysRole::getCreateTime);
-
-        // 如果不是管理员，只能查询自己拥有的角色，防止权限溢出
-        LoginUser loginUser = SessionHelper.getLoginUser();
-        if (loginUser != null && !loginUser.isAdmin()) {
-            List<Long> userRoleIds = loginUser.getRoleIds();
-            if (CollUtil.isEmpty(userRoleIds)) {
-                return new Page<>();
-            }
-            wrapper.in(SysRole::getId, userRoleIds);
-        }
-
+        query = query == null ? new SysRoleQuery() : query;
+        normalizeRoleQueryTenant(query);
         Page<SysRole> page = new Page<>(query.getPageNum(), query.getPageSize());
-        return roleMapper.selectPage(page, wrapper);
+        SysRoleQuery finalQuery = query;
+        return TenantContextHolder.executeIgnore(() -> roleMapper.selectRolePage(page, finalQuery));
     }
 
     @Override
     public SysRole selectRoleById(Long id) {
-        return roleMapper.selectById(id);
+        loadRoleForAccess(id);
+        return TenantContextHolder.executeIgnore(() -> roleMapper.selectRoleById(id));
     }
 
     @Override
     public boolean insertRole(SysRoleDTO dto) {
         SysRole role = new SysRole();
         BeanUtil.copyProperties(dto, role);
-        return roleMapper.insert(role) > 0;
+        role.setTenantId(resolveWriteTenantId(dto.getTenantId()));
+        return TenantContextHolder.executeIgnore(() -> roleMapper.insert(role) > 0);
     }
 
     @Override
     public boolean updateRole(SysRoleDTO dto) {
+        SysRole existing = loadRoleForAccess(dto.getId());
         SysRole role = new SysRole();
         BeanUtil.copyProperties(dto, role);
-        return roleMapper.updateById(role) > 0;
+        LoginUser loginUser = requireLoginUser();
+        if (loginUser.isAdmin()) {
+            Long tenantId = dto.getTenantId() != null ? dto.getTenantId() : existing.getTenantId();
+            role.setTenantId(resolveWriteTenantId(tenantId));
+        } else {
+            role.setTenantId(null);
+        }
+        return TenantContextHolder.executeIgnore(() -> roleMapper.updateById(role) > 0);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteRoleById(Long id) {
-        return roleMapper.deleteById(id) > 0;
+        SysRole role = loadRoleForAccess(id);
+        return TenantContextHolder.executeIgnore(() -> {
+            roleResourceMapper.delete(new LambdaQueryWrapper<SysRoleResource>()
+                    .eq(SysRoleResource::getRoleId, id)
+                    .eq(SysRoleResource::getTenantId, role.getTenantId()));
+            userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
+                    .eq(SysUserRole::getRoleId, id)
+                    .eq(SysUserRole::getTenantId, role.getTenantId()));
+            return roleMapper.deleteById(id) > 0;
+        });
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteRoleByIds(Long[] ids) {
-        return roleMapper.deleteBatchIds(Arrays.asList(ids)) > 0;
+        if (ids == null || ids.length == 0) {
+            return false;
+        }
+        for (Long id : ids) {
+            deleteRoleById(id);
+        }
+        return true;
     }
 
     @Override
@@ -112,11 +125,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             return false;
         }
         
-        // 获取角色信息以获取租户ID
-        SysRole role = roleMapper.selectById(roleId);
-        if (role == null) {
-            return false;
-        }
+        SysRole role = loadRoleForAccess(roleId);
 
         List<SysResource> assignableResources = resourceService.list();
         Map<Long, SysResource> resourceMap = assignableResources.stream()
@@ -194,7 +203,8 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         
         // 1. 先删除该角色的资源关联。指定客户端时仅替换当前客户端资源，避免清空其他客户端权限。
         LambdaQueryWrapper<SysRoleResource> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(SysRoleResource::getRoleId, roleId);
+        deleteWrapper.eq(SysRoleResource::getRoleId, roleId)
+                .eq(SysRoleResource::getTenantId, role.getTenantId());
         if (StringUtils.isNotBlank(clientCode)) {
             if (clientAssignableResourceIdSet.isEmpty()) {
                 return true;
@@ -239,11 +249,13 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (roleId == null || resourceIds == null || resourceIds.length == 0) {
             return false;
         }
+        SysRole role = loadRoleForAccess(roleId);
         
         LambdaQueryWrapper<SysRoleResource> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysRoleResource::getRoleId, roleId)
+                .eq(SysRoleResource::getTenantId, role.getTenantId())
                 .in(SysRoleResource::getResourceId, Arrays.asList(resourceIds));
-        return roleResourceMapper.delete(wrapper) > 0;
+        return TenantContextHolder.executeIgnore(() -> roleResourceMapper.delete(wrapper) > 0);
     }
 
     @Override
@@ -256,9 +268,11 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (roleId == null) {
             return new ArrayList<>();
         }
+        SysRole role = loadRoleForAccess(roleId);
         
         LambdaQueryWrapper<SysRoleResource> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysRoleResource::getRoleId, roleId)
+                .eq(SysRoleResource::getTenantId, role.getTenantId())
                 .select(SysRoleResource::getResourceId);
         List<Long> resourceIds = roleResourceMapper.selectList(wrapper)
                 .stream()
@@ -310,7 +324,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             return new ArrayList<>();
         }
         if (loginUser.isAdmin()) {
-            return roleMapper.selectList(new LambdaQueryWrapper<SysRole>().select(SysRole::getId))
+            return TenantContextHolder.executeIgnore(() -> roleMapper.selectList(new LambdaQueryWrapper<SysRole>().select(SysRole::getId)))
                     .stream().map(SysRole::getId).collect(Collectors.toList());
         }
         return loginUser.getRoleIds();
@@ -321,32 +335,10 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (query.getRoleId() == null) {
             return new Page<>();
         }
-        
-        // 查询该角色关联的用户ID列表
-        LambdaQueryWrapper<SysUserRole> urWrapper = new LambdaQueryWrapper<>();
-        urWrapper.eq(SysUserRole::getRoleId, query.getRoleId())
-                .select(SysUserRole::getUserId);
-        List<Long> userIds = userRoleMapper.selectList(urWrapper)
-                .stream()
-                .map(SysUserRole::getUserId)
-                .collect(Collectors.toList());
-        
-        if (CollUtil.isEmpty(userIds)) {
-            return new Page<>();
-        }
-        
-        // 构建用户查询条件
-        LambdaQueryWrapper<SysUser> userWrapper = new LambdaQueryWrapper<>();
-        userWrapper.in(SysUser::getId, userIds)
-                .like(StringUtils.isNotBlank(query.getUsername()), SysUser::getUsername, query.getUsername())
-                .like(StringUtils.isNotBlank(query.getRealName()), SysUser::getRealName, query.getRealName())
-                .like(StringUtils.isNotBlank(query.getPhone()), SysUser::getPhone, query.getPhone())
-                .eq(query.getUserStatus() != null, SysUser::getUserStatus, query.getUserStatus())
-                .orderByDesc(SysUser::getCreateTime);
-        
-        // 分页查询
+        SysRole role = loadRoleForAccess(query.getRoleId());
+        query.setTenantId(role.getTenantId());
         Page<SysUser> page = new Page<>(query.getPageNum(), query.getPageSize());
-        return userMapper.selectPage(page, userWrapper);
+        return TenantContextHolder.executeIgnore(() -> roleMapper.selectRoleUsers(page, query));
     }
 
     @Override
@@ -356,9 +348,108 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             return false;
         }
         
+        SysRole role = loadRoleForAccess(roleId);
         LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserRole::getRoleId, roleId)
+                .eq(SysUserRole::getTenantId, role.getTenantId())
                 .eq(SysUserRole::getUserId, userId);
-        return userRoleMapper.delete(wrapper) > 0;
+        return TenantContextHolder.executeIgnore(() -> userRoleMapper.delete(wrapper) > 0);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean addUsersToRole(Long roleId, List<Long> userIds) {
+        if (roleId == null || CollUtil.isEmpty(userIds)) {
+            return false;
+        }
+
+        SysRole role = loadRoleForAccess(roleId);
+        Long tenantId = role.getTenantId();
+
+        // 查询已经绑定该角色的用户ID，避免重复插入
+        List<Long> existingUserIds = TenantContextHolder.executeIgnore(() -> {
+            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(SysUserRole::getRoleId, roleId)
+                    .eq(SysUserRole::getTenantId, tenantId)
+                    .in(SysUserRole::getUserId, userIds);
+            return userRoleMapper.selectList(wrapper).stream()
+                    .map(SysUserRole::getUserId)
+                    .toList();
+        });
+
+        Set<Long> existingSet = new HashSet<>(existingUserIds);
+        List<SysUserRole> toInsert = userIds.stream()
+                .filter(uid -> !existingSet.contains(uid))
+                .map(uid -> {
+                    SysUserRole ur = new SysUserRole();
+                    ur.setRoleId(roleId);
+                    ur.setUserId(uid);
+                    ur.setTenantId(tenantId);
+                    return ur;
+                })
+                .toList();
+
+        if (CollUtil.isEmpty(toInsert)) {
+            return true;
+        }
+
+        return TenantContextHolder.executeIgnore(() -> {
+            for (SysUserRole ur : toInsert) {
+                userRoleMapper.insert(ur);
+            }
+            return true;
+        });
+    }
+
+    private void normalizeRoleQueryTenant(SysRoleQuery query) {
+        LoginUser loginUser = requireLoginUser();
+        if (!loginUser.isAdmin()) {
+            query.setTenantId(loginUser.getTenantId());
+        }
+    }
+
+    private LoginUser requireLoginUser() {
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null) {
+            throw new RuntimeException("用户未登录");
+        }
+        return loginUser;
+    }
+
+    private Long resolveWriteTenantId(Long requestedTenantId) {
+        LoginUser loginUser = requireLoginUser();
+        Long tenantId = loginUser.isAdmin()
+                ? (requestedTenantId != null ? requestedTenantId : loginUser.getTenantId())
+                : loginUser.getTenantId();
+        validateTenantEnabled(tenantId);
+        return tenantId;
+    }
+
+    private void validateTenantEnabled(Long tenantId) {
+        if (tenantId == null) {
+            throw new RuntimeException("租户不能为空");
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                tenantMapper.selectCount(new LambdaQueryWrapper<SysTenant>()
+                        .eq(SysTenant::getId, tenantId)
+                        .eq(SysTenant::getTenantStatus, 1)));
+        if (count == null || count == 0) {
+            throw new RuntimeException("租户不存在或已禁用");
+        }
+    }
+
+    private SysRole loadRoleForAccess(Long roleId) {
+        if (roleId == null) {
+            throw new RuntimeException("角色ID不能为空");
+        }
+        SysRole role = TenantContextHolder.executeIgnore(() -> roleMapper.selectById(roleId));
+        if (role == null) {
+            throw new RuntimeException("角色不存在");
+        }
+        LoginUser loginUser = requireLoginUser();
+        if (!loginUser.isAdmin() && !Objects.equals(role.getTenantId(), loginUser.getTenantId())) {
+            throw new RuntimeException("无权操作非本租户角色");
+        }
+        return role;
     }
 }

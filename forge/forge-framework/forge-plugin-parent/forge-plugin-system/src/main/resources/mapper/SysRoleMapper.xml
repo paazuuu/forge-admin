@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysRoleMapper">
+
+    <resultMap id="RoleResultMap" type="com.mdframe.forge.plugin.system.entity.SysRole">
+        <id column="id" property="id" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="tenant_name" property="tenantName" />
+        <result column="role_name" property="roleName" />
+        <result column="role_key" property="roleKey" />
+        <result column="role_type" property="roleType" />
+        <result column="data_scope" property="dataScope" />
+        <result column="sort" property="sort" />
+        <result column="role_status" property="roleStatus" />
+        <result column="is_system" property="isSystem" />
+        <result column="remark" property="remark" />
+        <result column="create_dept" property="createDept" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <resultMap id="RoleUserResultMap" type="com.mdframe.forge.plugin.system.entity.SysUser">
+        <id column="id" property="id" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="tenant_name" property="tenantName" />
+        <result column="username" property="username" />
+        <result column="real_name" property="realName" />
+        <result column="user_type" property="userType" />
+        <result column="user_client" property="userClient" />
+        <result column="email" property="email" />
+        <result column="phone" property="phone" />
+        <result column="id_card" property="idCard" />
+        <result column="gender" property="gender" />
+        <result column="user_status" property="userStatus" />
+        <result column="avatar" property="avatar" />
+        <result column="region_code" property="regionCode" />
+        <result column="last_login_time" property="lastLoginTime" />
+        <result column="last_login_ip" property="lastLoginIp" />
+        <result column="login_count" property="loginCount" />
+        <result column="remark" property="remark" />
+        <result column="create_dept" property="createDept" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <sql id="RoleColumnList">
+        r.id, r.tenant_id, t.tenant_name, r.role_name, r.role_key, r.role_type,
+        r.data_scope, r.sort, r.role_status, r.is_system, r.remark,
+        r.create_dept, r.create_by, r.create_time, r.update_by, r.update_time
+    </sql>
+
+    <sql id="RoleQueryCondition">
+        <if test="query.tenantId != null">
+            AND r.tenant_id = #{query.tenantId}
+        </if>
+        <if test="query.roleName != null and query.roleName != ''">
+            AND r.role_name LIKE CONCAT('%', #{query.roleName}, '%')
+        </if>
+        <if test="query.roleKey != null and query.roleKey != ''">
+            AND r.role_key = #{query.roleKey}
+        </if>
+        <if test="query.roleStatus != null">
+            AND r.role_status = #{query.roleStatus}
+        </if>
+        <if test="query.roleType != null">
+            AND r.role_type = #{query.roleType}
+        </if>
+    </sql>
+
+    <select id="selectRolePage" resultMap="RoleResultMap">
+        SELECT <include refid="RoleColumnList" />
+        FROM sys_role r
+        LEFT JOIN sys_tenant t ON t.id = r.tenant_id
+        <where>
+            <include refid="RoleQueryCondition" />
+        </where>
+        ORDER BY r.sort ASC, r.create_time DESC
+    </select>
+
+    <select id="selectRoleById" resultMap="RoleResultMap">
+        SELECT <include refid="RoleColumnList" />
+        FROM sys_role r
+        LEFT JOIN sys_tenant t ON t.id = r.tenant_id
+        WHERE r.id = #{id}
+    </select>
+
+    <select id="selectRoleUsers" resultMap="RoleUserResultMap">
+        SELECT u.id,
+               u.tenant_id,
+               t.tenant_name,
+               u.username,
+               u.real_name,
+               CASE WHEN u.user_type = 0 THEN 0 WHEN sut.member_type = 1 THEN 1 ELSE 2 END AS user_type,
+               u.user_client,
+               u.email,
+               u.phone,
+               u.id_card,
+               u.gender,
+               u.user_status,
+               u.avatar,
+               u.region_code,
+               u.last_login_time,
+               u.last_login_ip,
+               u.login_count,
+               u.remark,
+               u.create_dept,
+               u.create_by,
+               u.create_time,
+               u.update_by,
+               u.update_time
+        FROM sys_user_role ur
+        INNER JOIN sys_user u ON u.id = ur.user_id
+        INNER JOIN sys_user_tenant sut
+            ON sut.user_id = u.id
+           AND sut.tenant_id = ur.tenant_id
+           AND sut.status = 1
+        LEFT JOIN sys_tenant t ON t.id = ur.tenant_id
+        WHERE ur.role_id = #{query.roleId}
+          AND ur.tenant_id = #{query.tenantId}
+        <if test="query.username != null and query.username != ''">
+          AND u.username LIKE CONCAT('%', #{query.username}, '%')
+        </if>
+        <if test="query.realName != null and query.realName != ''">
+          AND u.real_name LIKE CONCAT('%', #{query.realName}, '%')
+        </if>
+        <if test="query.phone != null and query.phone != ''">
+          AND u.phone = #{query.phone}
+        </if>
+        <if test="query.userStatus != null">
+          AND u.user_status = #{query.userStatus}
+        </if>
+        ORDER BY u.create_time DESC
+    </select>
+
+</mapper>

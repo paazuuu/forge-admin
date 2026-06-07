@@ -97,7 +97,7 @@
               label-field="label"
               children-field="children"
               @update:selected-keys="handleNavigationSelect"
-              @update:expanded-keys="keys => navigationExpandedKeys = keys"
+              @update:expanded-keys="handleNavigationExpandedKeys"
             />
           </n-spin>
         </div>
@@ -286,10 +286,22 @@
 
           <div class="detail-actions">
             <NButton size="small" type="primary" @click="handleEdit(activeResource)">
+              <template #icon>
+                <i class="i-material-symbols:edit-outline" />
+              </template>
               编辑
             </NButton>
             <NButton size="small" @click="handleAdd(activeResource)">
+              <template #icon>
+                <i class="i-material-symbols:add" />
+              </template>
               新增子项
+            </NButton>
+            <NButton size="small" type="error" secondary @click="handleDelete(activeResource)">
+              <template #icon>
+                <i class="i-material-symbols:delete-outline" />
+              </template>
+              删除
             </NButton>
           </div>
 
@@ -632,13 +644,13 @@ watch(currentClientCode, async () => {
   selectedRow.value = null
   pendingParentId.value = null
   pendingClientCode.value = null
-  await loadResourceTree()
+  await loadResourceTree({ expandAll: true })
 })
 
 onMounted(async () => {
   setupMenuPageLayout()
   await loadClientList()
-  await loadResourceTree()
+  await loadResourceTree({ expandAll: true })
 })
 
 onBeforeUnmount(() => {
@@ -702,14 +714,17 @@ async function loadClientList() {
   }
 }
 
-async function loadResourceTree() {
+async function loadResourceTree(options = {}) {
   loading.value = true
   try {
     const res = await request.get('/system/resource/tree', { params: publicParams.value })
     const list = normalizeListResponse(res)
     allResources.value = Array.isArray(list) ? list : []
     syncParentResourceOptions(allResources.value)
-    expandNavigationTree()
+    if (options.expandAll)
+      expandNavigationTree()
+    else
+      reconcileNavigationExpandedKeys()
     keepSelectionAvailable()
     await nextTick()
     scheduleTableHeightUpdate()
@@ -787,20 +802,47 @@ function buildNavigationTree(list = [], keyword = '') {
 }
 
 function expandNavigationTree() {
-  const keys = [0]
+  navigationExpandedKeys.value = getExpandableNavigationKeys()
+}
+
+function collapseNavigationTree() {
+  navigationExpandedKeys.value = navigationTreeData.value[0]?.children?.length ? [0] : []
+}
+
+function handleNavigationExpandedKeys(keys) {
+  navigationExpandedKeys.value = Array.isArray(keys) ? [...keys] : []
+}
+
+function reconcileNavigationExpandedKeys() {
+  const validKeys = new Set(getAllNavigationKeys())
+  navigationExpandedKeys.value = navigationExpandedKeys.value.filter(key => validKeys.has(key))
+}
+
+function getAllNavigationKeys() {
+  const keys = []
   const walk = (items = []) => {
     items.forEach((item) => {
-      keys.push(item.id)
+      keys.push(item.key ?? item.id)
       if (item.children?.length)
         walk(item.children)
     })
   }
-  walk(allResources.value.filter(item => Number(item.resourceType) === 1 || Number(item.resourceType) === 2 || item.children?.length))
-  navigationExpandedKeys.value = keys
+  walk(navigationTreeData.value)
+  return keys
 }
 
-function collapseNavigationTree() {
-  navigationExpandedKeys.value = [0]
+function getExpandableNavigationKeys() {
+  const keys = []
+  const walk = (items = []) => {
+    items.forEach((item) => {
+      if (item.children?.length) {
+        keys.push(item.key ?? item.id)
+        walk(item.children)
+      }
+    })
+  }
+  walk(navigationTreeData.value)
+  return keys
 }
 
 function handleNavigationSelect(keys) {
@@ -1015,6 +1057,12 @@ async function loadResourceDetail(row) {
 }
 
 function handleDelete(row) {
+  const childCount = getChildResourceCount(row)
+  if (childCount > 0) {
+    window.$message?.warning(`请先删除「${row.resourceName}」下的 ${childCount} 个子资源`)
+    return
+  }
+
   window.$dialog.warning({
     title: '确认删除',
     content: `确定要删除「${row.resourceName}」吗？删除后将无法恢复。`,
@@ -1041,6 +1089,22 @@ function handleDelete(row) {
       }
     },
   })
+}
+
+function getChildResourceCount(row) {
+  if (!row?.children?.length)
+    return 0
+
+  let count = 0
+  const walk = (children = []) => {
+    children.forEach((child) => {
+      count += 1
+      if (child.children?.length)
+        walk(child.children)
+    })
+  }
+  walk(row.children)
+  return count
 }
 
 async function handleDrawerSubmit() {
@@ -1078,9 +1142,21 @@ function selectSavedResource(resource) {
     return
   const saved = flatResources.value.find(item => item.id === resource.id)
   if (saved) {
+    expandResourcePath(saved)
     selectedResourceId.value = saved.parentId || 0
     selectedRow.value = saved
   }
+}
+
+function expandResourcePath(resource) {
+  const keys = new Set(navigationExpandedKeys.value)
+  keys.add(0)
+  let current = resource?.parent
+  while (current) {
+    keys.add(current.id)
+    current = current.parent
+  }
+  navigationExpandedKeys.value = [...keys]
 }
 
 async function handleInlineUpdate(row, field, value) {

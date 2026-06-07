@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.mdframe.forge.starter.core.domain.BaseEntity;
+import com.mdframe.forge.starter.tenant.core.TenantEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -16,7 +16,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_file_group")
-public class SysFileGroup extends BaseEntity {
+public class SysFileGroup extends TenantEntity {
     
     @TableId(type = IdType.ASSIGN_ID)
     @JsonFormat(shape = JsonFormat.Shape.STRING)

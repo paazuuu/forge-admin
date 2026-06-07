@@ -377,11 +377,12 @@ async function patchField(field, patch) {
   }
 }
 
-async function saveField(payload) {
-  const fieldCode = selectedField.value?.fieldCode
+async function saveField(payload, targetFieldCode = selectedFieldCode.value) {
+  const fieldCode = targetFieldCode || selectedField.value?.fieldCode
   if (!fieldCode || !props.objectId)
     return false
-  if (selectedField.value?.systemField) {
+  const targetField = selectedField.value || visibleFields.value.find(field => field.fieldCode === fieldCode)
+  if (targetField?.systemField) {
     message.info('系统字段为只读字段，无需保存')
     return false
   }
@@ -416,9 +417,13 @@ async function saveField(payload) {
 }
 
 async function saveSelectedField() {
+  if (propertyVisible.value && propertyPanelRef.value) {
+    const targetFieldCode = selectedFieldCode.value || propertyPanelRef.value.getPayload?.()?.fieldCode
+    return saveField(propertyPanelRef.value.getPayload?.() || {}, targetFieldCode)
+  }
   if (!selectedField.value) {
-    message.warning('请先选择需要保存的字段')
-    return false
+    message.info('字段资产暂无需要保存的字段属性')
+    return true
   }
   if (!propertyVisible.value) {
     openPropertyPanel(selectedField.value.fieldCode)

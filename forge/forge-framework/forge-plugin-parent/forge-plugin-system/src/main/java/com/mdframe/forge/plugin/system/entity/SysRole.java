@@ -61,4 +61,10 @@ public class SysRole extends TenantEntity {
      * 备注
      */
     private String remark;
+
+    /**
+     * 租户名称（查询列表时填充）
+     */
+    @TableField(exist = false)
+    private String tenantName;
 }

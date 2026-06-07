@@ -8,7 +8,7 @@
         detail: 'post@/system/tenant/getById',
         add: 'post@/system/tenant/add',
         update: 'post@/system/tenant/edit',
-        delete: 'post@/system/tenant/removeBatch',
+        delete: 'post@/system/tenant/remove',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
@@ -17,11 +17,30 @@
       :edit-grid-cols="2"
       modal-width="900px"
       add-button-text="新增租户"
-      :hide-selection="false"
+      :hide-add="!userStore.isAdmin"
+      :hide-batch-delete="true"
+      :hide-selection="!userStore.isAdmin"
       :before-submit="handleBeforeSubmit"
       :before-render-detail="handleBeforeRenderDetail"
+      @selection-change="handleSelectionChange"
       @submit-success="handleSubmitSuccess"
     >
+      <!-- 批量删除按钮 -->
+      <template #toolbar-end>
+        <n-button
+          v-if="userStore.isAdmin"
+          type="error"
+          :disabled="selectedKeys.length === 0"
+          size="small"
+          @click="handleBatchDelete"
+        >
+          <template #icon>
+            <NIcon><TrashOutline /></NIcon>
+          </template>
+          批量删除
+        </n-button>
+      </template>
+
       <!-- 系统布局选择器 -->
       <template #form-systemLayout="{ value, updateValue }">
         <div class="layout-selector">
@@ -42,25 +61,150 @@
         </div>
       </template>
     </AiCrudPage>
+
+    <n-modal
+      v-model:show="usersModalVisible"
+      :title="`租户用户 - ${currentTenant.tenantName || ''}`"
+      preset="card"
+      style="width: 920px"
+      :mask-closable="false"
+    >
+      <div class="tenant-users-modal">
+        <div class="tenant-users-search">
+          <n-space>
+            <n-input
+              v-model:value="userSearchParams.username"
+              placeholder="用户名"
+              clearable
+              size="small"
+              style="width: 150px"
+              @clear="handleUserSearch"
+              @keyup.enter="handleUserSearch"
+            />
+            <n-input
+              v-model:value="userSearchParams.realName"
+              placeholder="真实姓名"
+              clearable
+              size="small"
+              style="width: 150px"
+              @clear="handleUserSearch"
+              @keyup.enter="handleUserSearch"
+            />
+            <n-input
+              v-model:value="userSearchParams.phone"
+              placeholder="手机号"
+              clearable
+              size="small"
+              style="width: 150px"
+              @clear="handleUserSearch"
+              @keyup.enter="handleUserSearch"
+            />
+            <n-select
+              v-model:value="userSearchParams.userStatus"
+              placeholder="用户状态"
+              clearable
+              size="small"
+              style="width: 120px"
+              :options="userStatusOptions"
+            />
+            <n-button size="small" type="primary" @click="handleUserSearch">
+              <template #icon>
+                <i class="i-material-symbols:search" />
+              </template>
+              查询
+            </n-button>
+            <n-button size="small" @click="handleUserSearchReset">
+              重置
+            </n-button>
+          </n-space>
+        </div>
+
+        <div class="tenant-users-toolbar">
+          <n-space justify="space-between">
+            <NTag type="info" size="small">
+              共 {{ userPagination.itemCount }} 个用户
+            </NTag>
+            <n-button size="small" @click="loadTenantUsers">
+              <template #icon>
+                <i class="i-material-symbols:refresh" />
+              </template>
+              刷新
+            </n-button>
+          </n-space>
+        </div>
+
+        <n-spin :show="usersLoading">
+          <n-data-table
+            :columns="userTableColumns"
+            :data="tenantUsers"
+            :pagination="userPaginationConfig"
+            :row-key="row => row.id"
+            remote
+            striped
+            size="small"
+            @update:page="handleUserPageChange"
+            @update:page-size="handleUserPageSizeChange"
+          />
+        </n-spin>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="usersModalVisible = false">
+            关闭
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
+import { TrashOutline } from '@vicons/ionicons5'
+import { NIcon, NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import { useUserStore } from '@/store'
 import { request, resolveRenderableFileUrl } from '@/utils'
 
 defineOptions({ name: 'SystemTenant' })
 
 const NORMAL_DISABLE_DICT = 'sys_normal_disable'
+const USER_TYPE_DICT = 'sys_user_type'
+const USER_STATUS_DICT = 'sys_user_status'
 
 const crudRef = ref(null)
+const selectedKeys = ref([])
+const userStore = useUserStore()
+const usersModalVisible = ref(false)
+const usersLoading = ref(false)
+const currentTenant = ref({})
+const tenantUsers = ref([])
+const userSearchParams = ref({
+  username: '',
+  realName: '',
+  phone: '',
+  userStatus: null,
+})
+const userPagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+})
 
-const { dict } = useDict(NORMAL_DISABLE_DICT)
+const { dict } = useDict(NORMAL_DISABLE_DICT, USER_TYPE_DICT, USER_STATUS_DICT)
 
 const tenantStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
+const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
+const userPaginationConfig = computed(() => ({
+  page: userPagination.value.page,
+  pageSize: userPagination.value.pageSize,
+  itemCount: userPagination.value.itemCount,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+}))
 
 // 系统布局选项（与布局设置保持一致）
 const systemLayoutOptions = [
@@ -197,11 +341,12 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 120,
+    width: 160,
     fixed: 'right',
     actions: [
+      { label: '用户', key: 'users', onClick: handleViewUsers },
       { label: '编辑', key: 'edit', onClick: handleEdit },
-      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
+      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete, visible: () => userStore.isAdmin },
     ],
   },
 ])
@@ -475,6 +620,50 @@ const editSchema = computed(() => [
   },
 ])
 
+const userTableColumns = [
+  {
+    title: '用户名',
+    key: 'username',
+    width: 150,
+  },
+  {
+    title: '真实姓名',
+    key: 'realName',
+    width: 120,
+  },
+  {
+    title: '用户类型',
+    key: 'userType',
+    width: 120,
+    render: (row) => {
+      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small' })
+    },
+  },
+  {
+    title: '手机号',
+    key: 'phone',
+    width: 130,
+  },
+  {
+    title: '邮箱',
+    key: 'email',
+    width: 180,
+  },
+  {
+    title: '状态',
+    key: 'userStatus',
+    width: 90,
+    render: (row) => {
+      return h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small' })
+    },
+  },
+  {
+    title: '创建时间',
+    key: 'createTime',
+    width: 170,
+  },
+]
+
 function toNumberOptions(options = []) {
   return options.map(item => ({
     ...item,
@@ -507,6 +696,109 @@ function handleDelete(row) {
       }
     },
   })
+}
+
+async function handleViewUsers(row) {
+  currentTenant.value = row
+  usersModalVisible.value = true
+  userSearchParams.value = {
+    username: '',
+    realName: '',
+    phone: '',
+    userStatus: null,
+  }
+  userPagination.value.page = 1
+  await loadTenantUsers()
+}
+
+async function loadTenantUsers() {
+  if (!currentTenant.value?.id)
+    return
+  try {
+    usersLoading.value = true
+    const params = {
+      ...userSearchParams.value,
+      pageNum: userPagination.value.page,
+      pageSize: userPagination.value.pageSize,
+    }
+    Object.keys(params).forEach((key) => {
+      if (params[key] === '' || params[key] === null || params[key] === undefined) {
+        delete params[key]
+      }
+    })
+    const res = await request.get(`/system/tenant/${currentTenant.value.id}/users`, { params })
+    if (res.code === 200) {
+      tenantUsers.value = res.data?.records || []
+      userPagination.value.itemCount = res.data?.total || 0
+    }
+  }
+  catch (error) {
+    console.error('加载租户用户失败:', error)
+    window.$message.error('加载租户用户失败')
+  }
+  finally {
+    usersLoading.value = false
+  }
+}
+
+function handleUserSearch() {
+  userPagination.value.page = 1
+  loadTenantUsers()
+}
+
+function handleUserSearchReset() {
+  userSearchParams.value = {
+    username: '',
+    realName: '',
+    phone: '',
+    userStatus: null,
+  }
+  userPagination.value.page = 1
+  loadTenantUsers()
+}
+
+function handleUserPageChange(page) {
+  userPagination.value.page = page
+  loadTenantUsers()
+}
+
+function handleUserPageSizeChange(pageSize) {
+  userPagination.value.pageSize = pageSize
+  userPagination.value.page = 1
+  loadTenantUsers()
+}
+
+// 批量删除
+function handleBatchDelete() {
+  if (selectedKeys.value.length === 0) {
+    window.$message.warning('请先选择要删除的租户')
+    return
+  }
+
+  window.$dialog.warning({
+    title: '确认删除',
+    content: `确定要删除选中的 ${selectedKeys.value.length} 个租户吗？删除后将无法恢复！`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await request.post('/system/tenant/removeBatch', selectedKeys.value)
+        if (res.code === 200) {
+          window.$message.success('批量删除成功')
+          selectedKeys.value = []
+          crudRef.value?.refresh()
+        }
+      }
+      catch {
+        window.$message.error('批量删除失败')
+      }
+    },
+  })
+}
+
+// 监听选中项变化
+function handleSelectionChange({ keys }) {
+  selectedKeys.value = keys
 }
 
 // 提交成功后处理 - 重新加载租户配置并应用
@@ -705,6 +997,24 @@ function handleBeforeRenderDetail(data) {
 <style scoped>
 .system-tenant-page {
   height: 100%;
+}
+
+.tenant-users-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 420px;
+}
+
+.tenant-users-search {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.tenant-users-toolbar {
+  padding: 0 2px;
 }
 
 .layout-selector {

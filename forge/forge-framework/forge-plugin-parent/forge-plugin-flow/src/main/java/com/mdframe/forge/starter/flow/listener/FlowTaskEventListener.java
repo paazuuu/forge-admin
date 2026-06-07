@@ -1,6 +1,8 @@
 package com.mdframe.forge.starter.flow.listener;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mdframe.forge.plugin.message.domain.dto.MessageSendRequestDTO;
+import com.mdframe.forge.plugin.message.service.MessageService;
 import com.mdframe.forge.starter.flow.entity.FlowBusiness;
 import com.mdframe.forge.starter.flow.entity.FlowErrorLog;
 import com.mdframe.forge.starter.flow.entity.FlowModel;
@@ -9,9 +11,11 @@ import com.mdframe.forge.starter.core.domain.FlowEventMessage;
 import com.mdframe.forge.starter.flow.event.FlowEventPublisher;
 import com.mdframe.forge.starter.flow.event.FlowWebhookNotifier;
 import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
+import com.mdframe.forge.starter.flow.mapper.FlowFormInstanceMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
+import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.delegate.event.FlowableEntityEvent;
 import org.flowable.common.engine.api.delegate.event.FlowableEvent;
@@ -25,7 +29,11 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -69,6 +77,18 @@ public class FlowTaskEventListener implements FlowableEventListener {
     @Autowired
     @Lazy
     private FlowErrorLogService flowErrorLogService;
+
+    @Autowired(required = false)
+    @Lazy
+    private FlowOrgIntegrationService flowOrgIntegrationService;
+
+    @Autowired(required = false)
+    @Lazy
+    private MessageService messageService;
+
+    @Autowired(required = false)
+    @Lazy
+    private FlowFormInstanceMapper flowFormInstanceMapper;
 
     @Override
     public void onEvent(FlowableEvent event) {
@@ -192,6 +212,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
             flowTaskMapper.insert(flowTask);
             log.info("创建待办任务成功：taskId={}, title={}, assignee={}, candidateUsers={}, candidateGroups={}",
                     task.getId(), flowTask.getTitle(), flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
+            sendTaskCreatedMessage(flowTask);
             log.info("==================================");
     
             // 发布 TASK_CREATED 事件，业务侧可监听并处理（如：发送待办通知、记录日志等）
@@ -207,7 +228,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         task.getId(),
                         task.getTaskDefinitionKey(),
                         task.getName(),
-                        task.getAssignee(),
+                        flowTask.getAssignee(),
                         null,   // assigneeName 在创建时暂无姓名
                         null);
                 publishEvent(msg, flowTask.getProcessDefKey());
@@ -277,7 +298,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         task.getId(),
                         task.getTaskDefinitionKey(),
                         task.getName(),
-                        task.getAssignee(),
+                        flowTask.getAssignee(),
                         null,   // assigneeName 暂无
                         comment);
                 publishEvent(msg, flowTask.getProcessDefKey());
@@ -300,29 +321,31 @@ public class FlowTaskEventListener implements FlowableEventListener {
             
             FlowTask flowTask = flowTaskMapper.selectByTaskId(task.getId());
             if (flowTask != null) {
-                flowTask.setAssignee(task.getAssignee());
-                flowTask.setOwner(task.getOwner());
+                String assignee = normalizeTaskUserId(task.getAssignee(), task.getId(), "assignee");
+                String owner = normalizeTaskUserId(task.getOwner(), task.getId(), "owner");
+                flowTask.setAssignee(assignee);
+                flowTask.setOwner(owner);
                 
-                if (task.getAssignee() != null) {
-                    if (task.getOwner() != null && !task.getOwner().equals(task.getAssignee())) {
+                if (assignee != null) {
+                    if (owner != null && !owner.equals(assignee)) {
                         log.info("转派任务（owner存在且不同于assignee），保持待办状态：taskId={}, owner={}, assignee={}", 
-                                task.getId(), task.getOwner(), task.getAssignee());
+                                task.getId(), owner, assignee);
                         flowTask.setStatus(0);
                     } else {
                         log.info("任务签收（无owner或owner=assignee），设为已签收状态：taskId={}, assignee={}", 
-                                task.getId(), task.getAssignee());
+                                task.getId(), assignee);
                         flowTask.setStatus(1);
                         flowTask.setClaimTime(LocalDateTime.now());
                     }
                 }
                 flowTaskMapper.updateById(flowTask);
                 log.info("更新任务处理人：taskId={}, assignee={}, status={}", 
-                        task.getId(), task.getAssignee(), flowTask.getStatus());
+                        task.getId(), assignee, flowTask.getStatus());
             }
 
-            if (task.getAssignee() != null) {
+            if (flowTask != null && flowTask.getAssignee() != null) {
                 FlowBusiness assignedBusiness = getFlowBusiness(task.getProcessInstanceId());
-                if (assignedBusiness != null && flowTask != null) {
+                if (assignedBusiness != null) {
                     FlowEventMessage msg = FlowEventMessage.ofTask(
                             FlowEventMessage.TASK_ASSIGNED,
                             task.getProcessInstanceId(),
@@ -334,7 +357,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                             task.getId(),
                             task.getTaskDefinitionKey(),
                             task.getName(),
-                            task.getAssignee(),
+                            flowTask.getAssignee(),
                             null,
                             null);
                     publishEvent(msg, flowTask.getProcessDefKey());
@@ -405,6 +428,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         business.setDuration(duration);
                     }
                     flowBusinessMapper.updateById(business);
+                    updateFormInstanceStatus(processInstanceId, "APPROVED");
                     log.info("更新流程业务状态为已通过：processInstanceId={}", processInstanceId);
 
                     // 发布事件（方案B: Redis Pub/Sub ＋ 方案C: HTTP Webhook）
@@ -459,6 +483,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         business.setDuration(duration);
                     }
                     flowBusinessMapper.updateById(business);
+                    updateFormInstanceStatus(processInstanceId, "CANCELED");
                     log.info("更新流程业务状态为已取消：processInstanceId={}", processInstanceId);
 
                     // 发布事件
@@ -495,8 +520,8 @@ public class FlowTaskEventListener implements FlowableEventListener {
         flowTask.setProcessInstanceId(task.getProcessInstanceId());
         flowTask.setProcessDefId(task.getProcessDefinitionId());
         flowTask.setProcessDefKey(extractProcessKey(task.getProcessDefinitionId()));
-        flowTask.setAssignee(task.getAssignee());
-        flowTask.setOwner(task.getOwner());
+        flowTask.setAssignee(normalizeTaskUserId(task.getAssignee(), task.getId(), "assignee"));
+        flowTask.setOwner(normalizeTaskUserId(task.getOwner(), task.getId(), "owner"));
         flowTask.setCreateTime(LocalDateTime.now());
         
         if (task.getDueDate() != null) {
@@ -535,6 +560,172 @@ public class FlowTaskEventListener implements FlowableEventListener {
         }
         
         return flowTask;
+    }
+
+    private void sendTaskCreatedMessage(FlowTask flowTask) {
+        if (messageService == null || flowTask == null || flowTask.getTaskId() == null) {
+            return;
+        }
+        Set<Long> receiverIds = resolveTaskMessageReceivers(flowTask);
+        if (receiverIds.isEmpty()) {
+            log.warn("待办任务没有可推送的站内信接收人: taskId={}, assignee={}, candidateUsers={}, candidateGroups={}",
+                    flowTask.getTaskId(), flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
+            return;
+        }
+
+        MessageSendRequestDTO request = new MessageSendRequestDTO();
+        request.setTitle("您有新的流程待办");
+        request.setContent("您有一个待办任务需要处理：" + safeText(flowTask.getTitle(), flowTask.getTaskName()));
+        request.setType("SYSTEM");
+        request.setChannel("WEB");
+        request.setSendScope("USERS");
+        request.setUserIds(receiverIds);
+        request.setParams(Map.of(
+                "taskId", flowTask.getTaskId(),
+                "processInstanceId", safeText(flowTask.getProcessInstanceId(), ""),
+                "jumpUrl", "/flow/todo?taskId=" + flowTask.getTaskId()
+        ));
+        try {
+            messageService.sendIfAbsent(request, "FLOW_TODO", flowTask.getTaskId());
+            log.info("待办站内信已推送: taskId={}, receivers={}", flowTask.getTaskId(), receiverIds);
+        } catch (Exception e) {
+            log.warn("待办站内信推送失败，不阻断流程: taskId={}", flowTask.getTaskId(), e);
+        }
+    }
+
+    private Set<Long> resolveTaskMessageReceivers(FlowTask flowTask) {
+        Set<Long> receiverIds = new HashSet<>();
+        addUserId(receiverIds, flowTask.getAssignee());
+        addUserIds(receiverIds, flowTask.getCandidateUsers());
+        if (receiverIds.isEmpty()) {
+            addCandidateGroupUsers(receiverIds, flowTask.getCandidateGroups());
+        }
+        return receiverIds;
+    }
+
+    private void addUserIds(Set<Long> receiverIds, String csv) {
+        if (csv == null || csv.isBlank()) {
+            return;
+        }
+        for (String item : csv.split(",")) {
+            addUserId(receiverIds, item);
+        }
+    }
+
+    private void addUserId(Set<Long> receiverIds, String raw) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        try {
+            receiverIds.add(Long.parseLong(raw.trim()));
+        } catch (NumberFormatException e) {
+            log.warn("待办站内信接收人不是数值用户ID，已跳过: raw={}", raw);
+        }
+    }
+
+    private void addCandidateGroupUsers(Set<Long> receiverIds, String candidateGroups) {
+        if (flowOrgIntegrationService == null || candidateGroups == null || candidateGroups.isBlank()) {
+            return;
+        }
+        for (String rawGroup : candidateGroups.split(",")) {
+            String group = rawGroup == null ? null : rawGroup.trim();
+            if (group == null || group.isEmpty()) {
+                continue;
+            }
+            List<String> userIds = resolveGroupUsers(group);
+            for (String userId : userIds) {
+                addUserId(receiverIds, userId);
+            }
+        }
+    }
+
+    private List<String> resolveGroupUsers(String group) {
+        try {
+            List<String> roleUsers = isNumeric(group)
+                    ? flowOrgIntegrationService.getUserIdsByRoleId(group)
+                    : flowOrgIntegrationService.getUserIdsByRoleCode(group);
+            if (roleUsers != null && !roleUsers.isEmpty()) {
+                return roleUsers;
+            }
+            if (isNumeric(group)) {
+                List<String> deptUsers = flowOrgIntegrationService.getUserIdsByDeptId(group);
+                if (deptUsers != null) {
+                    return deptUsers;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("解析候选组用户失败: group={}", group, e);
+        }
+        return List.of();
+    }
+
+    private void updateFormInstanceStatus(String processInstanceId, String status) {
+        if (flowFormInstanceMapper == null || processInstanceId == null || processInstanceId.isBlank()) {
+            return;
+        }
+        try {
+            flowFormInstanceMapper.updateStatusByProcessInstanceId(processInstanceId, status);
+        } catch (Exception e) {
+            log.warn("更新流程表单实例状态失败: processInstanceId={}, status={}", processInstanceId, status, e);
+        }
+    }
+
+    private String safeText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String normalizeTaskUserId(String value, String taskId, String fieldName) {
+        if (value == null || value.trim().isEmpty()) {
+            return value;
+        }
+        String text = value.trim();
+        if (isNumeric(text)) {
+            return text;
+        }
+        if (flowOrgIntegrationService == null) {
+            log.warn("任务{}不是用户ID且组织集成不可用：taskId={}, {}={}", fieldName, taskId, fieldName, text);
+            return text;
+        }
+        try {
+            List<Map<String, Object>> users = flowOrgIntegrationService.getUserList(text, null);
+            List<String> exactUserIds = users.stream()
+                    .filter(user -> matchesUser(text, user))
+                    .map(user -> Objects.toString(user.get("id"), null))
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (exactUserIds.size() == 1) {
+                String userId = exactUserIds.get(0);
+                log.info("任务{}已从显示值归一为用户ID：taskId={}, raw={}, userId={}", fieldName, taskId, text, userId);
+                return userId;
+            }
+            log.warn("任务{}无法唯一归一为用户ID：taskId={}, raw={}, matches={}", fieldName, taskId, text, exactUserIds.size());
+        } catch (Exception e) {
+            log.warn("任务{}归一用户ID失败：taskId={}, raw={}", fieldName, taskId, text, e);
+        }
+        return text;
+    }
+
+    private boolean matchesUser(String value, Map<String, Object> user) {
+        if (user == null) {
+            return false;
+        }
+        return value.equals(Objects.toString(user.get("id"), null))
+                || value.equals(Objects.toString(user.get("username"), null))
+                || value.equals(Objects.toString(user.get("name"), null))
+                || value.equals(Objects.toString(user.get("realName"), null));
+    }
+
+    private boolean isNumeric(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

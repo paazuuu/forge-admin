@@ -23,6 +23,10 @@ public class BusinessDocumentRuntimeVO {
 
     private String processInstanceId;
 
+    private Boolean detailFlowTimelineVisible;
+
+    private Boolean detailFlowDiagramVisible;
+
     private List<String> availableActions = new ArrayList<>();
 
     private List<RuntimeActionVO> runtimeActions = new ArrayList<>();

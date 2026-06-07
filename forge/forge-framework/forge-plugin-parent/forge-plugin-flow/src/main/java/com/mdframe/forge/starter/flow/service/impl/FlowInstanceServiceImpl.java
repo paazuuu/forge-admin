@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysRole;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.flow.entity.FlowBusiness;
 import com.mdframe.forge.starter.flow.entity.FlowErrorLog;
 import com.mdframe.forge.starter.flow.entity.FlowModel;
@@ -13,6 +14,7 @@ import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.FlowInstanceService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.RuntimeService;
@@ -21,13 +23,19 @@ import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +44,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class FlowInstanceServiceImpl implements FlowInstanceService {
+
+    private static final Long DEFAULT_TENANT_ID = 1L;
+    private static final long FLOW_START_LOCK_WAIT_SECONDS = 5L;
 
     @Autowired
     private ProcessEngine processEngine;
@@ -63,6 +74,8 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
     @Autowired
     private FlowErrorLogService flowErrorLogService;
 
+    private final Map<String, ReentrantLock> localFlowStartLocks = new ConcurrentHashMap<>();
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String startProcess(String modelKey, String businessKey, String title,
@@ -77,6 +90,29 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
     public String startProcess(String modelKey, String businessKey, String businessType,
                                 String title, Map<String, Object> variables, String userId,
                                 String userName, String deptId, String deptName) {
+        Long tenantId = resolveTenantId();
+        ReentrantLock startLock = acquireFlowStartLock(tenantId, businessKey);
+        boolean unlockInFinally = true;
+        try {
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                unlockInFinally = false;
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        unlockFlowStartLock(tenantId, businessKey, startLock);
+                    }
+                });
+            }
+            FlowBusiness existingBusiness = flowBusinessMapper.selectByBusinessKeyAndTenantId(tenantId, businessKey);
+            if (isReusableExistingBusiness(existingBusiness)) {
+                log.info("[流程启动幂等] 业务流程已存在，复用原流程实例: tenantId={}, businessKey={}, processInstanceId={}",
+                        tenantId, businessKey, existingBusiness.getProcessInstanceId());
+                return existingBusiness.getProcessInstanceId();
+            }
+            if (existingBusiness != null) {
+                throw new RuntimeException("业务流程已存在且不可重复发起：" + businessKey);
+            }
+
         // 1. 获取流程定义
         ProcessDefinition processDefinition = processEngine.getRepositoryService()
                 .createProcessDefinitionQuery()
@@ -178,6 +214,7 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
 
         // 3. 先保存业务关联（必须在启动流程之前，否则事件监听器查询不到业务信息）
         FlowBusiness business = new FlowBusiness();
+        business.setTenantId(tenantId);
         business.setBusinessKey(businessKey);
         business.setBusinessType(businessType);
         business.setProcessDefId(processDefinition.getId());
@@ -192,7 +229,11 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
         business.setCreateTime(LocalDateTime.now());
         business.setUpdateTime(LocalDateTime.now());
 
-        flowBusinessMapper.insert(business);
+        try {
+            flowBusinessMapper.insert(business);
+        } catch (DuplicateKeyException e) {
+            return handleDuplicateBusinessKey(tenantId, businessKey, e);
+        }
         log.info("保存业务信息成功：businessKey={}", businessKey);
 
         // 4. 启动流程（会触发 TASK_CREATED 事件，此时业务信息已存在）
@@ -221,13 +262,120 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
                 businessKey, processInstance.getId());
 
         return processInstance.getId();
+        } finally {
+            if (unlockInFinally) {
+                unlockFlowStartLock(tenantId, businessKey, startLock);
+            }
+        }
     }
 
     @Override
     public FlowBusiness getProcessStatus(String businessKey) {
-        LambdaQueryWrapper<FlowBusiness> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FlowBusiness::getBusinessKey, businessKey);
-        return flowBusinessMapper.selectOne(wrapper);
+        return flowBusinessMapper.selectByBusinessKeyAndTenantId(resolveTenantId(), businessKey);
+    }
+
+    private String handleDuplicateBusinessKey(Long tenantId, String businessKey, DuplicateKeyException e) {
+        FlowBusiness existingBusiness = flowBusinessMapper.selectByBusinessKeyAndTenantId(tenantId, businessKey);
+        if (isReusableExistingBusiness(existingBusiness)) {
+            log.info("[流程启动幂等] 业务流程唯一键已存在，复用原流程实例: tenantId={}, businessKey={}, processInstanceId={}",
+                    tenantId, businessKey, existingBusiness.getProcessInstanceId());
+            return existingBusiness.getProcessInstanceId();
+        }
+        if (existingBusiness == null || isBlank(existingBusiness.getProcessInstanceId())) {
+            log.warn("[流程启动幂等] 业务流程正在发起，实例ID尚未写回: tenantId={}, businessKey={}",
+                    tenantId, businessKey);
+            throw new RuntimeException("流程正在发起，请稍后重试", e);
+        }
+        log.warn("[流程启动幂等] 业务流程已存在且不可重复发起: tenantId={}, businessKey={}, status={}, processInstanceId={}",
+                tenantId, businessKey, existingBusiness.getStatus(), existingBusiness.getProcessInstanceId());
+        throw new RuntimeException("业务流程已存在且不可重复发起：" + businessKey, e);
+    }
+
+    private boolean isReusableExistingBusiness(FlowBusiness business) {
+        if (business == null || isBlank(business.getProcessInstanceId())) {
+            return false;
+        }
+        if (isEndedStatus(business.getStatus())) {
+            return false;
+        }
+        if (isRuntimeProcessActive(business.getProcessInstanceId())) {
+            return true;
+        }
+        String status = normalizeStatus(business.getStatus());
+        return "running".equals(status) || "draft".equals(status) || "suspended".equals(status);
+    }
+
+    private boolean isRuntimeProcessActive(String processInstanceId) {
+        try {
+            return runtimeService.createProcessInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult() != null;
+        } catch (Exception e) {
+            log.debug("[流程启动幂等] 查询运行中流程失败: processInstanceId={}, error={}",
+                    processInstanceId, e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isEndedStatus(String status) {
+        String normalized = normalizeStatus(status);
+        return "approved".equals(normalized)
+                || "rejected".equals(normalized)
+                || "canceled".equals(normalized)
+                || "terminated".equals(normalized)
+                || "completed".equals(normalized);
+    }
+
+    private Long resolveTenantId() {
+        Long tenantId = TenantContextHolder.getTenantId();
+        if (tenantId == null) {
+            tenantId = SessionHelper.getTenantId();
+        }
+        return tenantId == null ? DEFAULT_TENANT_ID : tenantId;
+    }
+
+    private ReentrantLock acquireFlowStartLock(Long tenantId, String businessKey) {
+        String lockKey = buildFlowStartLockKey(tenantId, businessKey);
+        ReentrantLock localLock = localFlowStartLocks.computeIfAbsent(lockKey, key -> new ReentrantLock());
+        try {
+            if (!localLock.tryLock(FLOW_START_LOCK_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                throw new RuntimeException("流程正在发起，请勿重复提交");
+            }
+            return localLock;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("流程发起锁等待被中断，请稍后重试", e);
+        }
+    }
+
+    private void unlockFlowStartLock(Long tenantId, String businessKey, ReentrantLock localLock) {
+        if (localLock == null || !localLock.isHeldByCurrentThread()) {
+            return;
+        }
+        String lockKey = buildFlowStartLockKey(tenantId, businessKey);
+        localLock.unlock();
+        if (!localLock.isLocked() && !localLock.hasQueuedThreads()) {
+            localFlowStartLocks.remove(lockKey, localLock);
+        }
+    }
+
+    private String buildFlowStartLockKey(Long tenantId, String businessKey) {
+        return "forge:flow:start:" + safeLockToken(tenantId) + ":" + safeLockToken(businessKey);
+    }
+
+    private String safeLockToken(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        return String.valueOf(value).replaceAll("[^A-Za-z0-9:_-]", "_");
+    }
+
+    private String normalizeStatus(String status) {
+        return status == null ? "" : status.trim().toLowerCase();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     @Override

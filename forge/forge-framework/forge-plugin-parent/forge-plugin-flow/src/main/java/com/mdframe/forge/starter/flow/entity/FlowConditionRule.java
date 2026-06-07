@@ -29,6 +29,11 @@ public class FlowConditionRule implements Serializable {
     private String id;
 
     /**
+     * 租户ID
+     */
+    private Long tenantId;
+
+    /**
      * 规则名称
      */
     private String ruleName;

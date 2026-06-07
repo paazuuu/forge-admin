@@ -272,7 +272,7 @@ export const aiCrudPageProps = {
    */
   editYGap: {
     type: Number,
-    default: 16,
+    default: 8,
   },
 
   /**
@@ -300,6 +300,15 @@ export const aiCrudPageProps = {
   modalWidth: {
     type: String,
     default: '800px',
+  },
+
+  /**
+   * 详情弹窗宽度。详情默认使用弹窗展示，即使编辑使用抽屉。
+   * @type {string}
+   */
+  detailModalWidth: {
+    type: String,
+    default: 'min(1080px, 92vw)',
   },
 
   /**
@@ -420,6 +429,15 @@ export const aiCrudPageProps = {
   runtimeActions: {
     type: Array,
     default: () => [],
+  },
+
+  /**
+   * 当前低代码运行页对应的业务对象编码，用于详情页加载单据流程状态。
+   * @type {string}
+   */
+  businessObjectCode: {
+    type: String,
+    default: '',
   },
 
   /**

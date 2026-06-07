@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -49,6 +50,7 @@ public class SysRegionController {
      */
     @PostMapping("/")
     public RespInfo<Void> add(@RequestBody SysRegionDTO dto) {
+        assertPlatformAdmin();
         boolean result = regionService.insertRegion(dto);
         return result ? RespInfo.success() : RespInfo.error("新增失败");
     }
@@ -58,6 +60,7 @@ public class SysRegionController {
      */
     @PutMapping("/")
     public RespInfo<Void> edit(@RequestBody SysRegionDTO dto) {
+        assertPlatformAdmin();
         boolean result = regionService.updateRegion(dto);
         return result ? RespInfo.success() : RespInfo.error("更新失败");
     }
@@ -67,6 +70,7 @@ public class SysRegionController {
      */
     @DeleteMapping("/{code}")
     public RespInfo<Void> remove(@PathVariable String code) {
+        assertPlatformAdmin();
         boolean result = regionService.deleteRegionByCode(code);
         return result ? RespInfo.success() : RespInfo.error("删除失败");
     }
@@ -118,7 +122,12 @@ public class SysRegionController {
      */
     @PostMapping("/refreshCache")
     public RespInfo<Void> refreshCache() {
+        assertPlatformAdmin();
         regionService.refreshRegionTreeCache();
         return RespInfo.success();
+    }
+
+    private void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护行政区划");
     }
 }

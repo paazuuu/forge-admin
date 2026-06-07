@@ -3,14 +3,20 @@ package com.mdframe.forge.plugin.system.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.mdframe.forge.plugin.system.dto.SysTenantDTO;
 import com.mdframe.forge.plugin.system.dto.SysTenantQuery;
+import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
+import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysTenantService;
+import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
 import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 租户管理Controller
@@ -50,6 +56,38 @@ public class SysTenantController {
     public RespInfo<SysTenant> selectUserTenantConfig(@RequestParam(required = false) Long id) {
         SysTenant tenant = tenantService.selectUserTenantConfig(id);
         return RespInfo.success(tenant);
+    }
+
+    /**
+     * 查询当前用户可切换租户
+     */
+    @GetMapping("/current/options")
+    public RespInfo<List<SysUserTenantVO>> currentTenantOptions() {
+        return RespInfo.success(tenantService.selectCurrentUserTenants());
+    }
+
+    /**
+     * 查询可分配租户选项
+     */
+    @GetMapping("/assignable/options")
+    public RespInfo<List<SysTenant>> assignableTenantOptions() {
+        return RespInfo.success(tenantService.selectAssignableTenantOptions());
+    }
+
+    /**
+     * 分页查询租户下用户列表
+     */
+    @GetMapping("/{tenantId}/users")
+    public RespInfo<IPage<SysUser>> tenantUsers(@PathVariable Long tenantId, SysUserQuery query) {
+        return RespInfo.success(tenantService.selectTenantUsers(tenantId, query));
+    }
+
+    /**
+     * 切换当前登录租户
+     */
+    @PostMapping("/switch")
+    public RespInfo<LoginUser> switchTenant(@RequestParam Long tenantId) {
+        return RespInfo.success(tenantService.switchTenant(tenantId));
     }
 
     /**

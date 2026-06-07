@@ -1,6 +1,7 @@
 package com.mdframe.forge.starter.core.session;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.mdframe.forge.starter.core.exception.BusinessException;
 
 import java.util.List;
 import java.util.Set;
@@ -96,6 +97,22 @@ public class SessionHelper {
     public static boolean isAdmin() {
         LoginUser loginUser = getLoginUser();
         return loginUser != null && loginUser.isAdmin();
+    }
+
+    /**
+     * 断言当前用户为超级管理员
+     */
+    public static void assertAdmin() {
+        assertAdmin("只有超级管理员可以操作平台配置");
+    }
+
+    /**
+     * 断言当前用户为超级管理员
+     */
+    public static void assertAdmin(String message) {
+        if (!isAdmin()) {
+            throw new BusinessException(403, message);
+        }
     }
 
     /**

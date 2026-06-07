@@ -87,3 +87,10 @@ export const layoutSettings = {
     },
   ],
 }
+
+export const validLayoutNames = layoutSettings.layouts.map(item => item.name)
+
+export function normalizeLayout(layout) {
+  const name = layout && layout !== 'default' ? layout : defaultLayout
+  return validLayoutNames.includes(name) ? name : defaultLayout
+}

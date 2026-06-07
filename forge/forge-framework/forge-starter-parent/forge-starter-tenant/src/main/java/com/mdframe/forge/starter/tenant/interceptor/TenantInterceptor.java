@@ -64,6 +64,17 @@ public class TenantInterceptor implements HandlerInterceptor {
             Class<?> sessionHelperClass = Class.forName("com.mdframe.forge.starter.core.session.SessionHelper");
             Method getTenantIdMethod = sessionHelperClass.getMethod("getTenantId");
             Long tenantId = (Long) getTenantIdMethod.invoke(null);
+            Method getLoginUserMethod = sessionHelperClass.getMethod("getLoginUser");
+            Object loginUser = getLoginUserMethod.invoke(null);
+            if (loginUser != null) {
+                Method isAdminMethod = loginUser.getClass().getMethod("isAdmin");
+                Boolean admin = (Boolean) isAdminMethod.invoke(loginUser);
+                if (Boolean.TRUE.equals(admin)) {
+                    TenantContextHolder.setIgnore(true);
+                    log.debug("超级管理员跳过租户SQL隔离，当前租户ID: {}", tenantId);
+                    return true;
+                }
+            }
             
             if (tenantId != null) {
                 TenantContextHolder.setTenantId(tenantId);

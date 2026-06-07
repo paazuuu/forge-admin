@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户表实体类
@@ -123,8 +124,20 @@ public class SysUser extends TenantEntity {
     private String orgName;
 
     /**
+     * 所属租户名称（查询列表时填充）
+     */
+    @TableField(exist = false)
+    private String tenantName;
+
+    /**
      * 所属部门名称（前端选择器兼容字段）
      */
     @TableField(exist = false)
     private String deptName;
+
+    /**
+     * 用户岗位ID列表（查询详情时填充）
+     */
+    @TableField(exist = false)
+    private List<Long> postIds;
 }

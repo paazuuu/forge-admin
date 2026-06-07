@@ -87,6 +87,16 @@
               :options="formTypeOptions"
             />
           </n-form-item>
+          <n-form-item label="表单分类" path="formCategory">
+            <n-input v-model:value="formData.formCategory" placeholder="如人事、财务、运营" />
+          </n-form-item>
+          <n-form-item label="数据模式" path="defaultDataMode">
+            <n-select
+              v-model:value="formData.defaultDataMode"
+              placeholder="请选择默认数据模式"
+              :options="dataModeOptions"
+            />
+          </n-form-item>
           <n-form-item label="描述" path="description">
             <n-input
               v-model:value="formData.description"
@@ -147,7 +157,7 @@
 </template>
 
 <script setup>
-import { NButton, NPopconfirm, NSpace, NSwitch } from 'naive-ui'
+import { NButton, NPopconfirm, NSpace, NSwitch, NTag } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import api from '@/api/flow'
 import DictTag from '@/components/DictTag.vue'
@@ -158,10 +168,11 @@ import { useDict } from '@/composables/useDict'
 // 使用全局 message 实例
 const message = window.$message
 
-const { dict } = useDict('sys_enable_disable', 'flow_form_type')
+const { dict } = useDict('sys_enable_disable', 'flow_form_type', 'sys_flow_data_mode')
 
 const statusOptions = computed(() => toNumberOptions(dict.value.sys_enable_disable))
 const formTypeOptions = computed(() => dict.value.flow_form_type || [])
+const dataModeOptions = computed(() => dict.value.sys_flow_data_mode || [])
 
 // 查询参数
 const queryParams = reactive({
@@ -199,6 +210,8 @@ const formData = reactive({
   formName: '',
   formKey: '',
   formType: 'dynamic',
+  formCategory: '',
+  defaultDataMode: 'PROCESS_ONLY',
   description: '',
 })
 
@@ -247,6 +260,22 @@ const columns = [
     render: row => h(DictTag, { dictType: 'flow_form_type', value: row.formType }),
   },
   {
+    title: '默认数据模式',
+    key: 'defaultDataMode',
+    width: 140,
+    render: row => h(DictTag, { dictType: 'sys_flow_data_mode', value: row.defaultDataMode || 'PROCESS_ONLY' }),
+  },
+  {
+    title: '发布',
+    key: 'publishStatus',
+    width: 90,
+    render: row => h(NTag, {
+      type: row.publishStatus === 1 ? 'success' : 'default',
+      size: 'small',
+      bordered: false,
+    }, { default: () => row.publishStatus === 1 ? '已发布' : '草稿' }),
+  },
+  {
     title: '状态',
     key: 'status',
     width: 100,
@@ -278,7 +307,7 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 280,
+    width: 340,
     fixed: 'right',
     render: (row) => {
       return h(NSpace, { size: 'small' }, {
@@ -295,6 +324,13 @@ const columns = [
             text: true,
             onClick: () => handlePreview(row),
           }, { default: () => '预览' }),
+          h(NButton, {
+            size: 'small',
+            type: 'success',
+            text: true,
+            disabled: !row.formSchema,
+            onClick: () => handlePublish(row),
+          }, { default: () => '发布' }),
           h(NButton, {
             size: 'small',
             type: 'warning',
@@ -335,7 +371,7 @@ async function loadData() {
   loading.value = true
   try {
     const res = await api.getFormPage({
-      page: pagination.page,
+      pageNum: pagination.page,
       pageSize: pagination.pageSize,
       ...queryParams,
     })
@@ -375,6 +411,8 @@ function handleAdd() {
     formName: '',
     formKey: '',
     formType: 'dynamic',
+    formCategory: '',
+    defaultDataMode: 'PROCESS_ONLY',
     description: '',
   })
   showModal.value = true
@@ -388,6 +426,8 @@ function handleEdit(row) {
     formName: row.formName,
     formKey: row.formKey,
     formType: row.formType,
+    formCategory: row.formCategory,
+    defaultDataMode: row.defaultDataMode || 'PROCESS_ONLY',
     description: row.description,
   })
   showModal.value = true
@@ -478,6 +518,19 @@ async function handlePreview(row) {
   }
   catch (error) {
     message.error('加载表单失败')
+    console.error(error)
+  }
+}
+
+// 发布表单版本
+async function handlePublish(row) {
+  try {
+    await api.publishForm(row.id)
+    message.success('表单版本已发布')
+    loadData()
+  }
+  catch (error) {
+    message.error('发布失败，请确认表单已完成设计')
     console.error(error)
   }
 }

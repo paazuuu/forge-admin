@@ -141,12 +141,37 @@
         </n-space>
       </div>
 
+      <div class="table-toolbar table-style-bar">
+        <n-space size="small" align="center">
+          <span class="toggle-label">批量列样式</span>
+          <NSelect
+            :value="tableZone?.props?.globalAlign || 'left'"
+            :options="alignOptions"
+            size="small"
+            style="width: 120px"
+            @update:value="applyTableGlobalAlign"
+          />
+          <span class="toggle-label">行间距</span>
+          <NInputNumber
+            :value="tableZone?.props?.rowGap ?? 8"
+            size="small"
+            :min="0"
+            :max="32"
+            :step="2"
+            :show-button="false"
+            style="width: 96px"
+            @update:value="updateTableRowGap"
+          />
+        </n-space>
+      </div>
+
       <n-data-table
         :columns="tableColumns"
         :data="sampleRows"
         :bordered="false"
         size="small"
         class="preview-table"
+        :style="{ '--preview-table-row-height': previewTableRowHeight }"
       />
 
       <FieldConfigSummary
@@ -672,6 +697,7 @@ const sortFieldOptions = computed(() => {
 })
 const searchFields = computed(() => resolveFields(searchZone.value, field => field.searchable))
 const tableFields = computed(() => resolveFields(tableZone.value, field => field.listVisible !== false))
+const previewTableRowHeight = computed(() => `${Math.max(34, 32 + Number(tableZone.value?.props?.rowGap ?? 8))}px`)
 const treeConfig = computed(() => tableZone.value?.props?.treeConfig || {})
 const activeFieldEditor = computed(() => {
   if (activeFieldZone.value === 'table') {
@@ -809,6 +835,31 @@ function updateTableProp(key, value) {
       [key]: value,
     },
   })
+}
+
+function applyTableGlobalAlign(value) {
+  const align = ['left', 'center', 'right'].includes(value) ? value : 'left'
+  const zone = tableZone.value
+  if (!zone)
+    return
+  const nextSettings = { ...(zone.props?.fieldSettings || {}) }
+  ;(zone.fieldRefs || []).forEach((fieldName) => {
+    nextSettings[fieldName] = {
+      ...(nextSettings[fieldName] || {}),
+      align,
+    }
+  })
+  patchZone('table', {
+    props: {
+      ...(zone.props || {}),
+      globalAlign: align,
+      fieldSettings: nextSettings,
+    },
+  })
+}
+
+function updateTableRowGap(value) {
+  updateTableProp('rowGap', Math.max(0, Math.min(32, Number(value ?? 8))))
 }
 
 function updateTreeConfig(key, value) {
@@ -970,6 +1021,10 @@ function resolveSampleValue(field, index = 0) {
 
 .preview-table {
   margin-bottom: 14px;
+}
+
+.preview-table :deep(.n-data-table-tr) {
+  height: var(--preview-table-row-height, 40px);
 }
 
 .tree-grid {
