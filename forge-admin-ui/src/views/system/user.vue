@@ -50,17 +50,18 @@
               <i class="i-material-symbols:groups-rounded" />
               <span>全部用户</span>
             </div>
-            <n-tree
+            <PremiumTree
               v-if="leftOrgTreeData.length > 0"
               :data="leftOrgTreeData"
               :selected-keys="selectedOrgKeys"
               :expanded-keys="leftOrgExpandedKeys"
-              :default-expand-all="leftOrgExpandAll"
-              block-line
-              selectable
               key-field="id"
               label-field="orgName"
               children-field="children"
+              :get-node-icon="getLeftOrgNodeIcon"
+              :get-node-meta="getLeftOrgNodeMeta"
+              :get-node-subtitle="getLeftOrgNodeSubtitle"
+              :get-node-tone="getLeftOrgNodeTone"
               @update:selected-keys="handleOrgNodeSelect"
               @update:expanded-keys="handleLeftOrgExpandedKeysChange"
             />
@@ -378,9 +379,9 @@
                     :value="post.id"
                   >
                     {{ post.postName }}
-                    <n-tag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
+                    <NTag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
                       {{ post.postCode }}
-                    </n-tag>
+                    </NTag>
                   </n-checkbox>
                 </n-space>
               </n-checkbox-group>
@@ -412,6 +413,7 @@
 import { NTag } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import PremiumTree from '@/components/common/PremiumTree.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
@@ -886,6 +888,38 @@ function getAllKeys(list, keys = []) {
 
 function countTreeNodes(list = []) {
   return list.reduce((total, item) => total + 1 + countTreeNodes(item.children || []), 0)
+}
+
+function getLeftOrgNodeIcon(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'i-material-symbols:account-tree-rounded'
+  if (node.children?.length)
+    return 'i-material-symbols:corporate-fare-rounded'
+  return 'i-material-symbols:groups-rounded'
+}
+
+function getLeftOrgNodeMeta(node = {}) {
+  const childCount = node.children?.length || 0
+  if (!childCount)
+    return null
+  return {
+    label: '下级',
+    value: childCount,
+  }
+}
+
+function getLeftOrgNodeSubtitle(node = {}) {
+  if (node.leaderName)
+    return `负责人 ${node.leaderName}`
+  if (node.regionName)
+    return node.regionName
+  return ''
+}
+
+function getLeftOrgNodeTone(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'folder'
+  return node.children?.length ? 'folder' : 'menu'
 }
 
 // 加载左侧组织树
@@ -1720,36 +1754,8 @@ async function handleSubmitTenant() {
   font-size: 18px;
 }
 
-.org-tree-content :deep(.n-tree) {
-  font-size: 13px;
-}
-
-.org-tree-content :deep(.n-tree-node) {
-  align-items: center;
-}
-
-.org-tree-content :deep(.n-tree-node-content) {
-  padding: 8px 10px;
-  border-radius: 10px;
-  color: #334155;
-  transition: all 0.2s ease;
-}
-
-.org-tree-content :deep(.n-tree-node-content:hover) {
-  background-color: #f8fafc;
-}
-
-.org-tree-content :deep(.n-tree-node-content--selected) {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
-  color: #2563eb;
-}
-
-.org-tree-content :deep(.n-tree-node-switcher) {
-  color: #64748b;
-}
-
-.org-tree-content :deep(.n-tree-node-indent) {
-  width: 12px;
+.org-tree-content :deep(.premium-tree) {
+  padding-top: 2px;
 }
 
 .org-tree-content::-webkit-scrollbar {
@@ -1964,19 +1970,6 @@ async function handleSubmitTenant() {
 }
 
 .dark .org-tree-all-node.is-selected {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.12) 100%) !important;
-  color: #60a5fa;
-}
-
-.dark .org-tree-content :deep(.n-tree-node-content) {
-  color: #e2e8f0;
-}
-
-.dark .org-tree-content :deep(.n-tree-node-content:hover) {
-  background-color: #162033;
-}
-
-.dark .org-tree-content :deep(.n-tree-node-content--selected) {
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.12) 100%) !important;
   color: #60a5fa;
 }
