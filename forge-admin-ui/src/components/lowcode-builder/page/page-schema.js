@@ -1050,7 +1050,8 @@ function sanitizeGridBlockProps(blockType, props = {}, ownerFieldSet = new Set()
   const next = { ...(props || {}) }
   if (blockType === 'search-form') {
     next.fieldSettings = sanitizeFieldSettings(next.fieldSettings, ownerFieldSet, queryFieldSet)
-  } else if (blockType === 'data-table') {
+  }
+  else if (blockType === 'data-table') {
     next.fieldSettings = sanitizeFieldSettings(next.fieldSettings, ownerFieldSet)
   }
   return next

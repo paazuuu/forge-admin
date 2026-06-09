@@ -378,9 +378,9 @@
                     :value="post.id"
                   >
                     {{ post.postName }}
-                    <n-tag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
+                    <NTag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
                       {{ post.postCode }}
-                    </n-tag>
+                    </NTag>
                   </n-checkbox>
                 </n-space>
               </n-checkbox-group>

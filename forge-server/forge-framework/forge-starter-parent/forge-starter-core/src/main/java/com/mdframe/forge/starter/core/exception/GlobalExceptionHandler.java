@@ -19,6 +19,9 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.nio.file.AccessDeniedException;
+import java.sql.SQLException;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -29,11 +32,68 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String SYSTEM_ERROR_MESSAGE = "系统异常，请联系管理员";
+
+    private static final String DATABASE_ERROR_MESSAGE = "数据访问异常，请联系管理员";
+
+    private static final Pattern SQL_STATEMENT_PATTERN = Pattern.compile(
+            "(?is)\\b(select|insert|update|delete|replace|merge|alter|drop|create|truncate)\\b[\\s\\S]{0,800}\\b(from|into|set|values|table|database)\\b"
+    );
+
+    private static final Pattern DATABASE_OBJECT_ERROR_PATTERN = Pattern.compile(
+            "(?is)\\b(unknown\\s+(column|table|database)|table\\s+.+?\\s+doesn't\\s+exist|column\\s+.+?\\s+cannot\\s+be\\s+null|data\\s+too\\s+long\\s+for\\s+column)\\b"
+    );
+
+    private static final String[] DATABASE_EXCEPTION_CLASS_PREFIXES = {
+            "java.sql.",
+            "com.mysql.",
+            "org.postgresql.",
+            "oracle.jdbc.",
+            "dm.jdbc.",
+            "com.microsoft.sqlserver.jdbc.",
+            "org.springframework.dao.",
+            "org.springframework.jdbc.",
+            "org.mybatis.",
+            "org.apache.ibatis.",
+            "com.baomidou.mybatisplus.core.exceptions.",
+            "net.sf.jsqlparser."
+    };
+
+    private static final String[] DATABASE_MESSAGE_MARKERS = {
+            "### sql:",
+            "### cause:",
+            "bad sql grammar",
+            "error querying database",
+            "error updating database",
+            "sqlexception",
+            "sqlsyntaxerrorexception",
+            "sqlintegrityconstraintviolationexception",
+            "sql integrity constraint violation",
+            "you have an error in your sql syntax",
+            "unknown column",
+            "unknown table",
+            "unknown database",
+            "table doesn't exist",
+            "data truncation",
+            "duplicate entry",
+            "foreign key constraint fails",
+            "communications link failure",
+            "access denied for user",
+            "public key retrieval is not allowed",
+            "lock wait timeout",
+            "deadlock found",
+            "preparedstatementcallback",
+            "statementcallback"
+    };
+
     /**
      * 处理业务异常
      */
     @ExceptionHandler(BusinessException.class)
     public RespInfo<?> handleBusinessException(BusinessException e, HttpServletRequest request) {
+        if (containsSensitiveDatabaseDetail(e)) {
+            return handleDatabaseError(e, request, "业务异常包装数据库异常");
+        }
         log.warn("业务异常: URI={}, Code={}, Message={}", request.getRequestURI(), e.getCode(), e.getMessage());
         if (e.getData() != null) {
             return RespInfo.build(e.getCode(), e.getMessage(), e.getData());
@@ -142,7 +202,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NullPointerException.class)
     public RespInfo<?> handleNullPointerException(NullPointerException e, HttpServletRequest request) {
         log.error("空指针异常: URI={}", request.getRequestURI(), e);
-        return RespInfo.error(500, "系统内部错误");
+        return RespInfo.error(500, SYSTEM_ERROR_MESSAGE);
     }
 
     /**
@@ -150,8 +210,19 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public RespInfo<?> handleIllegalArgumentException(IllegalArgumentException e, HttpServletRequest request) {
+        if (containsSensitiveDatabaseDetail(e)) {
+            return handleDatabaseError(e, request, "非法参数包装数据库异常");
+        }
         log.warn("非法参数异常: URI={}, Message={}", request.getRequestURI(), e.getMessage());
         return RespInfo.error(400, e.getMessage() != null ? e.getMessage() : "参数错误");
+    }
+
+    /**
+     * 处理数据库异常
+     */
+    @ExceptionHandler(SQLException.class)
+    public RespInfo<?> handleSQLException(SQLException e, HttpServletRequest request) {
+        return handleDatabaseError(e, request, "数据库异常");
     }
 
     /**
@@ -159,8 +230,11 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RuntimeException.class)
     public RespInfo<?> handleRuntimeException(RuntimeException e, HttpServletRequest request) {
+        if (containsSensitiveDatabaseDetail(e)) {
+            return handleDatabaseError(e, request, "系统运行时数据库异常");
+        }
         log.error("系统运行时错误: URI={}", request.getRequestURI(), e);
-        return RespInfo.error(500, e.getMessage() != null ? e.getMessage().replace("java.lang.RuntimeException: ","") : e.getMessage());
+        return RespInfo.error(500, buildRuntimeClientMessage(e));
     }
 
     /**
@@ -168,7 +242,57 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public RespInfo<?> handleException(Exception e, HttpServletRequest request) {
+        if (containsSensitiveDatabaseDetail(e)) {
+            return handleDatabaseError(e, request, "未知数据库异常");
+        }
         log.error("未知异常: URI={}", request.getRequestURI(), e);
-        return RespInfo.error(500, "系统异常，请联系管理员");
+        return RespInfo.error(500, SYSTEM_ERROR_MESSAGE);
+    }
+
+    private RespInfo<?> handleDatabaseError(Throwable e, HttpServletRequest request, String logMessage) {
+        log.error("{}: URI={}", logMessage, request.getRequestURI(), e);
+        return RespInfo.error(500, DATABASE_ERROR_MESSAGE);
+    }
+
+    private boolean containsSensitiveDatabaseDetail(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (isDatabaseExceptionClass(current) || containsSqlDetail(current.getMessage())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean isDatabaseExceptionClass(Throwable throwable) {
+        String className = throwable.getClass().getName();
+        for (String prefix : DATABASE_EXCEPTION_CLASS_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsSqlDetail(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String lowerMessage = message.toLowerCase(Locale.ROOT);
+        for (String marker : DATABASE_MESSAGE_MARKERS) {
+            if (lowerMessage.contains(marker)) {
+                return true;
+            }
+        }
+        return SQL_STATEMENT_PATTERN.matcher(message).find()
+                || DATABASE_OBJECT_ERROR_PATTERN.matcher(message).find();
+    }
+
+    private String buildRuntimeClientMessage(RuntimeException e) {
+        if (e.getMessage() == null || e.getMessage().isBlank()) {
+            return SYSTEM_ERROR_MESSAGE;
+        }
+        return e.getMessage().replace("java.lang.RuntimeException: ", "");
     }
 }

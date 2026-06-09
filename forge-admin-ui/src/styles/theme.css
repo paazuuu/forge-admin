@@ -688,11 +688,10 @@
   box-shadow: none !important;
 }
 
-.dark .n-button:not(.n-button--primary-type):not(.n-button--error-type):not(.n-button--success-type):not(
+.dark
+  .n-button:not(.n-button--primary-type):not(.n-button--error-type):not(.n-button--success-type):not(
     .n-button--warning-type
-  ):not(.n-button--info-type):not(.n-button--text-type):not(.n-button--quaternary-type):not(
-    .n-button--tertiary-type
-  ) {
+  ):not(.n-button--info-type):not(.n-button--text-type):not(.n-button--quaternary-type):not(.n-button--tertiary-type) {
   border-color: rgba(71, 85, 105, 0.9) !important;
   background: rgba(30, 41, 59, 0.72) !important;
   box-shadow:

@@ -66,69 +66,69 @@
       </template>
 
       <div v-if="currentTask" class="drawer-body">
-          <div class="info-grid">
-            <div class="info-card">
-              <div class="info-header">
-                <i class="i-material-symbols:info-outline" />任务信息
-              </div>
-              <div class="info-items">
-                <div class="info-item">
-                  <span class="info-label">任务节点</span><span class="info-value highlight">{{ currentTask.taskName }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">审批结果</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
-                </div>
-              </div>
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="info-header">
+              <i class="i-material-symbols:info-outline" />任务信息
             </div>
-            <div class="info-card">
-              <div class="info-header">
-                <i class="i-material-symbols:person-outline" />发起信息
+            <div class="info-items">
+              <div class="info-item">
+                <span class="info-label">任务节点</span><span class="info-value highlight">{{ currentTask.taskName }}</span>
               </div>
-              <div class="info-items">
-                <div class="info-item user-item">
-                  <span class="info-label">发起人</span><div class="user-display">
-                    <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" /><span class="info-value">{{ currentTask.startUserName || '-' }}</span>
-                  </div>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">发起部门</span><span class="info-value">{{ currentTask.startDeptName || '-' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">完成时间</span><span class="info-value">{{ currentTask.completeTime || '-' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">审批意见</span><span class="info-value">{{ currentTask.comment || '-' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">审批签名</span>
-                  <div class="info-value signature-value">
-                    <SignatureImage :value="currentTask.signature" />
-                  </div>
-                </div>
+              <div class="info-item">
+                <span class="info-label">审批结果</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
               </div>
             </div>
           </div>
-
-          <div class="section">
-            <div class="section-header">
-              <i class="i-material-symbols:account-tree" />流程进度
+          <div class="info-card">
+            <div class="info-header">
+              <i class="i-material-symbols:person-outline" />发起信息
             </div>
-            <n-collapse>
-              <n-collapse-item title="查看流程图" name="diagram">
-                <ProcessDiagramViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
-                <n-empty v-else description="暂无流程图" size="small" />
-              </n-collapse-item>
-            </n-collapse>
-          </div>
-
-          <div class="section">
-            <div class="section-header">
-              <i class="i-material-symbols:history" />审批进度
+            <div class="info-items">
+              <div class="info-item user-item">
+                <span class="info-label">发起人</span><div class="user-display">
+                  <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" /><span class="info-value">{{ currentTask.startUserName || '-' }}</span>
+                </div>
+              </div>
+              <div class="info-item">
+                <span class="info-label">发起部门</span><span class="info-value">{{ currentTask.startDeptName || '-' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">完成时间</span><span class="info-value">{{ currentTask.completeTime || '-' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">审批意见</span><span class="info-value">{{ currentTask.comment || '-' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">审批签名</span>
+                <div class="info-value signature-value">
+                  <SignatureImage :value="currentTask.signature" />
+                </div>
+              </div>
             </div>
-            <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
-            <n-empty v-else description="暂无审批记录" size="small" />
           </div>
         </div>
+
+        <div class="section">
+          <div class="section-header">
+            <i class="i-material-symbols:account-tree" />流程进度
+          </div>
+          <n-collapse>
+            <n-collapse-item title="查看流程图" name="diagram">
+              <ProcessDiagramViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
+              <n-empty v-else description="暂无流程图" size="small" />
+            </n-collapse-item>
+          </n-collapse>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <i class="i-material-symbols:history" />审批进度
+          </div>
+          <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
+          <n-empty v-else description="暂无审批记录" size="small" />
+        </div>
+      </div>
 
       <template #footer>
         <NSpace justify="end">

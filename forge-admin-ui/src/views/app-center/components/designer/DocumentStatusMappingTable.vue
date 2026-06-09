@@ -281,7 +281,7 @@ function normalizeTagType(value) {
 .status-header,
 .status-row {
   display: grid;
-  grid-template-columns: 92px minmax(150px, 1fr) minmax(120px, .8fr) 96px 68px 68px 68px;
+  grid-template-columns: 92px minmax(150px, 1fr) minmax(120px, 0.8fr) 96px 68px 68px 68px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;

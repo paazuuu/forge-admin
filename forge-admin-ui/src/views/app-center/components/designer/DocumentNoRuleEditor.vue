@@ -163,7 +163,7 @@ function buildSampleData() {
 }
 
 function normalizeTemplate(value) {
-  return String(value || '').replace(/(^|[^\$])\{([^{}]+)\}/g, (match, prefix, token) => {
+  return String(value || '').replace(/(^|[^$])\{([^{}]+)\}/g, (match, prefix, token) => {
     const trimmed = String(token || '').trim()
     const seqMatch = trimmed.match(/^seq(\d+)$/)
     const normalized = seqMatch ? `seq:${seqMatch[1]}` : trimmed
@@ -231,7 +231,7 @@ function fallbackTokens() {
 
 .token-list button:disabled {
   cursor: not-allowed;
-  opacity: .48;
+  opacity: 0.48;
 }
 
 .preview-strip {

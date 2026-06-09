@@ -1152,7 +1152,7 @@ function unwrapExpression(value) {
 
 function isSimpleVariableExpression(value) {
   const inner = unwrapExpression(value)
-  return /^[A-Za-z_][\w.]*$/.test(inner)
+  return /^[A-Z_][\w.]*$/i.test(inner)
 }
 
 function getCatalogField(field) {

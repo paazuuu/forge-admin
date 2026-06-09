@@ -705,7 +705,7 @@ defineExpose({
 
 .document-config-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, .9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr);
   gap: 12px;
   margin-bottom: 12px;
 }

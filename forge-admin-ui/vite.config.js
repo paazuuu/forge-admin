@@ -104,7 +104,7 @@ export default defineConfig(({ mode, command }) => {
     },
     css: {
       postcss: {
-        plugins: []
+        plugins: [],
       },
       preprocessorOptions: {
         scss: {

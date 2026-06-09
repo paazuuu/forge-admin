@@ -72,73 +72,73 @@
       </template>
 
       <div v-if="currentTask" class="drawer-body">
-          <div class="info-grid">
-            <div class="info-card">
-              <div class="info-header">
-                <i class="i-material-symbols:info-outline" />流程信息
-              </div>
-              <div class="info-items">
-                <div class="info-item">
-                  <span class="info-label">当前任务</span><span class="info-value highlight">{{ currentTask.taskName || '已结束' }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">流程状态</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
-                </div>
-              </div>
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="info-header">
+              <i class="i-material-symbols:info-outline" />流程信息
             </div>
-            <div class="info-card">
-              <div class="info-header">
-                <i class="i-material-symbols:person-outline" />处理信息
+            <div class="info-items">
+              <div class="info-item">
+                <span class="info-label">当前任务</span><span class="info-value highlight">{{ currentTask.taskName || '已结束' }}</span>
               </div>
-              <div class="info-items">
-                <div class="info-item user-item">
-                  <span class="info-label">当前处理人</span><div class="user-display">
-                    <UserAvatar v-if="currentTask.assigneeName" :name="currentTask.assigneeName" :size="24" /><span class="info-value">{{ currentTask.assigneeName || '-' }}</span>
-                  </div>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">发起时间</span><span class="info-value">{{ currentTask.createTime || '-' }}</span>
-                </div>
+              <div class="info-item">
+                <span class="info-label">流程状态</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
               </div>
             </div>
           </div>
-
-          <div class="section">
-            <div class="section-header">
-              <i class="i-material-symbols:account-tree" />流程进度
+          <div class="info-card">
+            <div class="info-header">
+              <i class="i-material-symbols:person-outline" />处理信息
             </div>
-            <n-collapse>
-              <n-collapse-item title="查看流程图" name="diagram">
-                <ProcessDiagramViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
-                <n-empty v-else description="暂无流程图" size="small" />
-              </n-collapse-item>
-            </n-collapse>
-          </div>
-
-          <div class="section">
-            <div class="section-header">
-              <i class="i-material-symbols:history" />审批进度
+            <div class="info-items">
+              <div class="info-item user-item">
+                <span class="info-label">当前处理人</span><div class="user-display">
+                  <UserAvatar v-if="currentTask.assigneeName" :name="currentTask.assigneeName" :size="24" /><span class="info-value">{{ currentTask.assigneeName || '-' }}</span>
+                </div>
+              </div>
+              <div class="info-item">
+                <span class="info-label">发起时间</span><span class="info-value">{{ currentTask.createTime || '-' }}</span>
+              </div>
             </div>
-            <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
-            <n-empty v-else description="暂无审批记录" size="small" />
-          </div>
-
-          <!-- 撤回操作 -->
-          <div v-if="canWithdraw" class="withdraw-section">
-            <div class="section-header">
-              <i class="i-material-symbols:undo" />撤回申请
-            </div>
-            <n-input v-model:value="withdrawComment" type="textarea" :rows="2" placeholder="请输入撤回原因（可选）" :maxlength="200" show-count />
-            <n-popconfirm @positive-click="submitWithdraw">
-              <template #trigger>
-                <NButton type="warning" :loading="withdrawLoading" style="margin-top: 12px">
-                  <i class="i-material-symbols:undo mr-2" />撤回流程
-                </NButton>
-              </template>
-              确认撤回该流程申请？
-            </n-popconfirm>
           </div>
         </div>
+
+        <div class="section">
+          <div class="section-header">
+            <i class="i-material-symbols:account-tree" />流程进度
+          </div>
+          <n-collapse>
+            <n-collapse-item title="查看流程图" name="diagram">
+              <ProcessDiagramViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
+              <n-empty v-else description="暂无流程图" size="small" />
+            </n-collapse-item>
+          </n-collapse>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <i class="i-material-symbols:history" />审批进度
+          </div>
+          <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
+          <n-empty v-else description="暂无审批记录" size="small" />
+        </div>
+
+        <!-- 撤回操作 -->
+        <div v-if="canWithdraw" class="withdraw-section">
+          <div class="section-header">
+            <i class="i-material-symbols:undo" />撤回申请
+          </div>
+          <n-input v-model:value="withdrawComment" type="textarea" :rows="2" placeholder="请输入撤回原因（可选）" :maxlength="200" show-count />
+          <n-popconfirm @positive-click="submitWithdraw">
+            <template #trigger>
+              <NButton type="warning" :loading="withdrawLoading" style="margin-top: 12px">
+                <i class="i-material-symbols:undo mr-2" />撤回流程
+              </NButton>
+            </template>
+            确认撤回该流程申请？
+          </n-popconfirm>
+        </div>
+      </div>
 
       <template #footer>
         <NSpace justify="end">
