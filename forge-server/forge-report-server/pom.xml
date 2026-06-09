@@ -3,15 +3,14 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <artifactId>forge</artifactId>
+        <artifactId>forge-server</artifactId>
         <groupId>com.mdframe.forge</groupId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <groupId>com.mdframe.forge</groupId>
-    <artifactId>forge-app-server</artifactId>
-    <name>forge-app-server</name>
-    <description>forge-app-server</description>
+    <artifactId>forge-report-server</artifactId>
+    <name>forge-report</name>
+    <description>forge-report 数据可视化大屏后端服务</description>
     
     <dependencies>
         
@@ -21,11 +20,7 @@
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
         
-        <dependency>
-            <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-system</artifactId>
-        </dependency>
-        
+        <!-- Forge Starters -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-web</artifactId>
@@ -38,12 +33,17 @@
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-starter-config</artifactId>
+            <artifactId>forge-starter-orm</artifactId>
         </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-starter-id</artifactId>
+            <artifactId>forge-starter-tenant</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-api-config</artifactId>
         </dependency>
         
         <dependency>
@@ -53,19 +53,33 @@
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-message</artifactId>
+            <artifactId>forge-plugin-system</artifactId>
+        </dependency>
+        
+        <!-- AI 能力插件（供应商管理、Agent 管理、对话、会话、多轮上下文） -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-ai</artifactId>
+        </dependency>
+        
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        
+        <!-- 外部接口代理转发插件 -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-external</artifactId>
         </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-starter-api-config</artifactId>
+            <artifactId>forge-plugin-data</artifactId>
         </dependency>
         
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-    
     </dependencies>
     
     <build>
@@ -99,5 +113,5 @@
             </plugin>
         </plugins>
     </build>
-
+    
 </project>

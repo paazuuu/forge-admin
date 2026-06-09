@@ -3,10 +3,10 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.mdframe.forge</groupId>
-    <artifactId>forge</artifactId>
+    <artifactId>forge-server</artifactId>
     <version>${revision}</version>
-    <name>forge</name>
-    <description>forge</description>
+    <name>forge-server</name>
+    <description>forge-server</description>
     
     
     <properties>
