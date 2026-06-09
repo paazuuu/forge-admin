@@ -141,10 +141,10 @@ const props = defineProps({
   },
 })
 
+const emit = defineEmits(['update:show', 'confirm'])
+
 // 已授权用户 ID 集合（用于快速判断）
 const assignedSet = computed(() => new Set(props.assignedUserIds))
-
-const emit = defineEmits(['update:show', 'confirm'])
 
 const visible = ref(false)
 const orgLoading = ref(false)

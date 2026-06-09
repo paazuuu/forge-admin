@@ -17,7 +17,10 @@ export default {
   }),
 
   // 获取登录配置
-  getLoginConfig: () => request.get('/auth/loginConfig', { needToken: false }),
+  getLoginConfig: userClient => request.get('/auth/loginConfig', {
+    needToken: false,
+    params: userClient ? { userClient } : {},
+  }),
 
   // 获取用户信息
   getUser: () => request.get('/auth/userInfo'),

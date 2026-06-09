@@ -99,7 +99,7 @@ const tokenMap = computed(() => {
 })
 
 const usedTokens = computed(() => {
-  const matches = String(props.modelValue || '').matchAll(/\$\{([^}]+)}/g)
+  const matches = String(props.modelValue || '').matchAll(/\$\{([^}]+)\}/g)
   return Array.from(matches).map(match => match[1]).filter(Boolean)
 })
 

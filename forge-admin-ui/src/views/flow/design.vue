@@ -553,10 +553,6 @@ import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesig
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import VersionHistory from './version.vue'
 
-const route = useRoute()
-const router = useRouter()
-const message = window.$message
-
 const props = defineProps({
   embedded: {
     type: Boolean,
@@ -567,8 +563,10 @@ const props = defineProps({
     default: '',
   },
 })
-
 const emit = defineEmits(['close', 'saved', 'deployed'])
+const route = useRoute()
+const router = useRouter()
+const message = window.$message
 
 const embedded = computed(() => props.embedded)
 
@@ -3123,5 +3121,4 @@ function getElementTitle(el) {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
-
 </style>

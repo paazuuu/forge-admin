@@ -110,201 +110,100 @@
       </template>
 
       <div v-if="currentTask" class="drawer-body">
-          <!-- 信息 Tabs -->
-          <n-tabs v-model:value="activeDrawerTab" type="line" animated class="drawer-tabs">
-            <n-tab-pane name="info" tab="基本信息">
-              <div class="info-grid">
-                <div class="info-card">
-                  <div class="info-header">
-                    <i class="i-material-symbols:info-outline" />
-                    任务信息
-                  </div>
-                  <div class="info-items">
-                    <div class="info-item">
-                      <span class="info-label">当前节点</span>
-                      <span class="info-value highlight">{{ currentTask.taskName }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">流程分类</span>
-                      <span class="info-value">{{ currentTask.businessType || '-' }}</span>
-                    </div>
-                  </div>
+        <!-- 信息 Tabs -->
+        <n-tabs v-model:value="activeDrawerTab" type="line" animated class="drawer-tabs">
+          <n-tab-pane name="info" tab="基本信息">
+            <div class="info-grid">
+              <div class="info-card">
+                <div class="info-header">
+                  <i class="i-material-symbols:info-outline" />
+                  任务信息
                 </div>
-                <div class="info-card">
-                  <div class="info-header">
-                    <i class="i-material-symbols:person-outline" />
-                    发起信息
+                <div class="info-items">
+                  <div class="info-item">
+                    <span class="info-label">当前节点</span>
+                    <span class="info-value highlight">{{ currentTask.taskName }}</span>
                   </div>
-                  <div class="info-items">
-                    <div class="info-item user-item">
-                      <span class="info-label">发起人</span>
-                      <div class="user-display">
-                        <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" />
-                        <span class="info-value">{{ currentTask.startUserName || '-' }}</span>
-                      </div>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">发起部门</span>
-                      <span class="info-value">{{ currentTask.startDeptName || '-' }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">发起时间</span>
-                      <span class="info-value">{{ currentTask.createTime || '-' }}</span>
-                    </div>
+                  <div class="info-item">
+                    <span class="info-label">流程分类</span>
+                    <span class="info-value">{{ currentTask.businessType || '-' }}</span>
                   </div>
                 </div>
               </div>
-            </n-tab-pane>
-
-            <n-tab-pane name="history" display-directive="show">
-              <template #tab>
-                <span>审批进度</span>
-                <span v-if="approvalHistory.length > 0" class="tab-badge">{{ approvalHistory.length }}</span>
-              </template>
-              <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
-              <n-empty v-else description="暂无审批记录" size="small" />
-            </n-tab-pane>
-
-            <n-tab-pane name="diagram" tab="流程图" display-directive="show:lazy">
-              <div class="diagram-pane">
-                <ProcessDiagramViewer
-                  v-if="currentTask.processInstanceId"
-                  :process-instance-id="currentTask.processInstanceId"
-                  :compact="true"
-                />
-                <n-empty v-else description="暂无流程图" size="small" />
+              <div class="info-card">
+                <div class="info-header">
+                  <i class="i-material-symbols:person-outline" />
+                  发起信息
+                </div>
+                <div class="info-items">
+                  <div class="info-item user-item">
+                    <span class="info-label">发起人</span>
+                    <div class="user-display">
+                      <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" />
+                      <span class="info-value">{{ currentTask.startUserName || '-' }}</span>
+                    </div>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">发起部门</span>
+                    <span class="info-value">{{ currentTask.startDeptName || '-' }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">发起时间</span>
+                    <span class="info-value">{{ currentTask.createTime || '-' }}</span>
+                  </div>
+                </div>
               </div>
-            </n-tab-pane>
-          </n-tabs>
-
-          <!-- 审批操作区 -->
-          <div class="approve-section">
-            <div class="approve-header">
-              <i class="i-material-symbols:rate-review" />
-              审批操作
             </div>
+          </n-tab-pane>
 
-            <div v-if="formInfoLoading" class="form-loading">
-              <n-spin size="small" />
-              <span>加载表单中...</span>
-            </div>
-
-            <template v-else-if="useExternalForm">
-              <FlowBusinessForm
-                :form-url="taskFormInfo.formUrl"
-                :task-id="taskFormInfo.taskId"
-                :business-key="taskFormInfo.businessKey"
-                :process-instance-id="taskFormInfo.processInstanceId"
-                :task-def-key="taskFormInfo.taskDefKey"
-                :process-def-key="taskFormInfo.processDefKey"
-                :variables="taskFormInfo.variables || {}"
-                :approval-policy="approvalPolicy"
-                :read-only="false"
-                @submit="handleExternalFormSubmit"
-                @cancel="showDrawer = false"
-              >
-                <template #actions>
-                  <NButton v-if="canDelegate" size="large" :disabled="approveLoading" @click="handleDelegate">
-                    <i class="i-material-symbols:person-add mr-2" />
-                    转办
-                  </NButton>
-
-                  <NButton
-                    v-if="currentTask.status === 0 && !currentTask.assignee"
-                    type="info"
-                    size="large"
-                    :disabled="approveLoading"
-                    @click="handleClaim(currentTask)"
-                  >
-                    <i class="i-material-symbols:assignment-ind mr-2" />
-                    签收
-                  </NButton>
-                </template>
-              </FlowBusinessForm>
+          <n-tab-pane name="history" display-directive="show">
+            <template #tab>
+              <span>审批进度</span>
+              <span v-if="approvalHistory.length > 0" class="tab-badge">{{ approvalHistory.length }}</span>
             </template>
+            <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
+            <n-empty v-else description="暂无审批记录" size="small" />
+          </n-tab-pane>
 
-            <template v-else>
-              <div v-if="useDynamicForm" class="dynamic-form-section">
-                <div class="dynamic-form-header">
-                  <div>
-                    <div class="dynamic-form-title">
-                      节点动态表单
-                    </div>
-                    <div class="dynamic-form-desc">
-                      审批通过时会校验表单，并将填写内容作为流程变量提交
-                    </div>
-                  </div>
-                  <span class="dynamic-form-key">{{ taskFormInfo.formKey || 'inline' }}</span>
-                </div>
-                <FlowFormCreateRenderer
-                  ref="dynamicFormRef"
-                  v-model="dynamicFormData"
-                  :schema="taskFormInfo.formJson"
-                />
-              </div>
+          <n-tab-pane name="diagram" tab="流程图" display-directive="show:lazy">
+            <div class="diagram-pane">
+              <ProcessDiagramViewer
+                v-if="currentTask.processInstanceId"
+                :process-instance-id="currentTask.processInstanceId"
+                :compact="true"
+              />
+              <n-empty v-else description="暂无流程图" size="small" />
+            </div>
+          </n-tab-pane>
+        </n-tabs>
 
-              <n-form :model="approveForm" label-placement="top">
-                <n-form-item label="审批意见" :required="requireComment">
-                  <n-input
-                    v-model:value="approveForm.comment"
-                    type="textarea"
-                    :rows="3"
-                    :placeholder="requireComment ? '请输入审批意见' : '请输入审批意见（可选）'"
-                    :maxlength="500"
-                    show-count
-                  />
-                </n-form-item>
-                <n-form-item v-if="requireSignature" label="审批签名" required>
-                  <SignaturePad
-                    :key="approveSignatureKey"
-                    ref="approveSignatureRef"
-                    v-model="approveForm.signature"
-                    :business-id="currentTask?.taskId || currentTask?.id || ''"
-                  />
-                </n-form-item>
-              </n-form>
+        <!-- 审批操作区 -->
+        <div class="approve-section">
+          <div class="approve-header">
+            <i class="i-material-symbols:rate-review" />
+            审批操作
+          </div>
 
-              <div class="action-buttons">
-                <n-popconfirm v-if="canApprove" @positive-click="() => submitApprove('approve')">
-                  <template #trigger>
-                    <NButton type="success" size="large" :loading="approveLoading && approveForm.action === 'approve'" :disabled="approveLoading">
-                      <i class="i-material-symbols:check-circle mr-2" />
-                      同意
-                    </NButton>
-                  </template>
-                  确认同意该审批？
-                </n-popconfirm>
+          <div v-if="formInfoLoading" class="form-loading">
+            <n-spin size="small" />
+            <span>加载表单中...</span>
+          </div>
 
-                <n-popconfirm v-if="canReject" @positive-click="() => submitApprove('reject')">
-                  <template #trigger>
-                    <NButton type="error" size="large" :loading="approveLoading && approveForm.action === 'reject'" :disabled="approveLoading">
-                      <i class="i-material-symbols:cancel mr-2" />
-                      驳回
-                    </NButton>
-                  </template>
-                  确认驳回该审批？
-                </n-popconfirm>
-
-                <n-popconfirm v-if="canReturn" @positive-click="() => submitApprove('return')">
-                  <template #trigger>
-                    <NButton type="warning" size="large" :loading="approveLoading && approveForm.action === 'return'" :disabled="approveLoading">
-                      <i class="i-material-symbols:keyboard-return mr-2" />
-                      退回
-                    </NButton>
-                  </template>
-                  确认退回上一审批节点？
-                </n-popconfirm>
-
-                <n-popconfirm v-if="canTerminate" @positive-click="() => submitApprove('terminate')">
-                  <template #trigger>
-                    <NButton type="error" ghost size="large" :loading="approveLoading && approveForm.action === 'terminate'" :disabled="approveLoading">
-                      <i class="i-material-symbols:stop-circle mr-2" />
-                      终结
-                    </NButton>
-                  </template>
-                  确认终结该流程？
-                </n-popconfirm>
-
+          <template v-else-if="useExternalForm">
+            <FlowBusinessForm
+              :form-url="taskFormInfo.formUrl"
+              :task-id="taskFormInfo.taskId"
+              :business-key="taskFormInfo.businessKey"
+              :process-instance-id="taskFormInfo.processInstanceId"
+              :task-def-key="taskFormInfo.taskDefKey"
+              :process-def-key="taskFormInfo.processDefKey"
+              :variables="taskFormInfo.variables || {}"
+              :approval-policy="approvalPolicy"
+              :read-only="false"
+              @submit="handleExternalFormSubmit"
+              @cancel="showDrawer = false"
+            >
+              <template #actions>
                 <NButton v-if="canDelegate" size="large" :disabled="approveLoading" @click="handleDelegate">
                   <i class="i-material-symbols:person-add mr-2" />
                   转办
@@ -320,10 +219,111 @@
                   <i class="i-material-symbols:assignment-ind mr-2" />
                   签收
                 </NButton>
+              </template>
+            </FlowBusinessForm>
+          </template>
+
+          <template v-else>
+            <div v-if="useDynamicForm" class="dynamic-form-section">
+              <div class="dynamic-form-header">
+                <div>
+                  <div class="dynamic-form-title">
+                    节点动态表单
+                  </div>
+                  <div class="dynamic-form-desc">
+                    审批通过时会校验表单，并将填写内容作为流程变量提交
+                  </div>
+                </div>
+                <span class="dynamic-form-key">{{ taskFormInfo.formKey || 'inline' }}</span>
               </div>
-            </template>
-          </div>
+              <FlowFormCreateRenderer
+                ref="dynamicFormRef"
+                v-model="dynamicFormData"
+                :schema="taskFormInfo.formJson"
+              />
+            </div>
+
+            <n-form :model="approveForm" label-placement="top">
+              <n-form-item label="审批意见" :required="requireComment">
+                <n-input
+                  v-model:value="approveForm.comment"
+                  type="textarea"
+                  :rows="3"
+                  :placeholder="requireComment ? '请输入审批意见' : '请输入审批意见（可选）'"
+                  :maxlength="500"
+                  show-count
+                />
+              </n-form-item>
+              <n-form-item v-if="requireSignature" label="审批签名" required>
+                <SignaturePad
+                  :key="approveSignatureKey"
+                  ref="approveSignatureRef"
+                  v-model="approveForm.signature"
+                  :business-id="currentTask?.taskId || currentTask?.id || ''"
+                />
+              </n-form-item>
+            </n-form>
+
+            <div class="action-buttons">
+              <n-popconfirm v-if="canApprove" @positive-click="() => submitApprove('approve')">
+                <template #trigger>
+                  <NButton type="success" size="large" :loading="approveLoading && approveForm.action === 'approve'" :disabled="approveLoading">
+                    <i class="i-material-symbols:check-circle mr-2" />
+                    同意
+                  </NButton>
+                </template>
+                确认同意该审批？
+              </n-popconfirm>
+
+              <n-popconfirm v-if="canReject" @positive-click="() => submitApprove('reject')">
+                <template #trigger>
+                  <NButton type="error" size="large" :loading="approveLoading && approveForm.action === 'reject'" :disabled="approveLoading">
+                    <i class="i-material-symbols:cancel mr-2" />
+                    驳回
+                  </NButton>
+                </template>
+                确认驳回该审批？
+              </n-popconfirm>
+
+              <n-popconfirm v-if="canReturn" @positive-click="() => submitApprove('return')">
+                <template #trigger>
+                  <NButton type="warning" size="large" :loading="approveLoading && approveForm.action === 'return'" :disabled="approveLoading">
+                    <i class="i-material-symbols:keyboard-return mr-2" />
+                    退回
+                  </NButton>
+                </template>
+                确认退回上一审批节点？
+              </n-popconfirm>
+
+              <n-popconfirm v-if="canTerminate" @positive-click="() => submitApprove('terminate')">
+                <template #trigger>
+                  <NButton type="error" ghost size="large" :loading="approveLoading && approveForm.action === 'terminate'" :disabled="approveLoading">
+                    <i class="i-material-symbols:stop-circle mr-2" />
+                    终结
+                  </NButton>
+                </template>
+                确认终结该流程？
+              </n-popconfirm>
+
+              <NButton v-if="canDelegate" size="large" :disabled="approveLoading" @click="handleDelegate">
+                <i class="i-material-symbols:person-add mr-2" />
+                转办
+              </NButton>
+
+              <NButton
+                v-if="currentTask.status === 0 && !currentTask.assignee"
+                type="info"
+                size="large"
+                :disabled="approveLoading"
+                @click="handleClaim(currentTask)"
+              >
+                <i class="i-material-symbols:assignment-ind mr-2" />
+                签收
+              </NButton>
+            </div>
+          </template>
         </div>
+      </div>
 
       <template #footer>
         <NSpace justify="end">

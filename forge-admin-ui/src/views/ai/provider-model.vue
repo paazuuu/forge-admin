@@ -3,11 +3,10 @@
     <div class="panel-card">
       <div class="panel-header">
         <div class="panel-title">
-          <i class="ai-icon:server" />
           <span>供应商管理</span>
         </div>
-        <NButton type="primary" size="small" @click="handleAddProvider">
-          <i class="ai-icon:plus" /> 新增供应商
+        <NButton type="primary" secondary size="small" @click="handleAddProvider">
+          新增供应商
         </NButton>
       </div>
       <div class="search-bar">
@@ -15,7 +14,10 @@
         <n-select v-model:value="providerSearch.type" placeholder="类型" clearable size="small" :options="providerTypeOptions" @update:value="loadProviders" />
         <n-select v-model:value="providerSearch.status" placeholder="状态" clearable size="small" :options="statusOptions" @update:value="loadProviders" />
         <NButton size="small" type="primary" @click="loadProviders">
-          <i class="ai-icon:search" /> 查询
+          查询
+        </NButton>
+        <NButton size="small" @click="handleResetProviderSearch">
+          重置
         </NButton>
       </div>
       <n-data-table
@@ -36,14 +38,13 @@
       <div class="panel-card model-panel">
         <div class="panel-header">
           <div class="panel-title">
-            <i class="ai-icon:brain" />
             <span>{{ selectedProvider?.providerName || '' }} 下的模型</span>
             <NTag size="small" round type="info">
               {{ modelList.length }}
             </NTag>
           </div>
-          <NButton type="primary" size="small" @click="handleAddModel">
-            <i class="ai-icon:plus" /> 新增模型
+          <NButton type="primary" secondary size="small" :disabled="!selectedProvider" @click="handleAddModel()">
+            新增模型
           </NButton>
         </div>
         <n-data-table
@@ -57,8 +58,7 @@
       </div>
     </n-collapse-transition>
     <div v-if="!selectedProvider" class="empty-hint">
-      <i class="ai-icon:mouse-pointer" style="font-size: 24px; opacity: 0.3" />
-      <span>点击供应商行查看其下的模型</span>
+      <span>选择供应商后查看模型</span>
     </div>
 
     <n-modal v-model:show="providerModal.show" preset="card" :title="providerModal.isEdit ? '编辑供应商' : '新增供应商'" style="width: 900px;">
@@ -202,7 +202,7 @@
 </template>
 
 <script setup>
-import { NButton, NPopconfirm, NSwitch, NTag } from 'naive-ui'
+import { NButton, NDropdown, NPopconfirm, NSwitch, NTag } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import {
   modelPage as fetchModelPage,
@@ -313,28 +313,28 @@ const providerColumns = [
   {
     title: 'Logo',
     key: 'logo',
-    width: 45,
+    width: 56,
     render(row) {
       if (row.logo) {
         return h(AuthImage, { src: row.logo, imgStyle: { width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' } })
       }
       return h('div', {
-        style: `width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#4242F7,#6366F1);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600`,
+        style: 'width:24px;height:24px;border-radius:50%;background:#475569;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600',
       }, (row.providerName || '?').charAt(0))
     },
   },
-  { title: '供应商名称', key: 'providerName', width: 120, ellipsis: { tooltip: true } },
+  { title: '供应商名称', key: 'providerName', width: 150, ellipsis: { tooltip: true } },
   {
     title: '类型',
     key: 'providerType',
-    width: 90,
+    width: 96,
     render(row) { return h(DictTag, { dictType: 'ai_provider_type', value: row.providerType, size: 'small' }) },
   },
-  { title: 'Base URL', key: 'baseUrl', ellipsis: { tooltip: true } },
+  { title: 'Base URL', key: 'baseUrl', width: 240, ellipsis: { tooltip: true } },
   {
     title: '默认',
     key: 'isDefault',
-    width: 60,
+    width: 68,
     align: 'center',
     render(row) {
       return h(NSwitch, {
@@ -348,47 +348,75 @@ const providerColumns = [
   {
     title: '状态',
     key: 'status',
-    width: 60,
+    width: 68,
     align: 'center',
     render(row) { return h(DictTag, { dictType: 'ai_status', value: row.status, size: 'small' }) },
   },
   {
     title: '操作',
     key: 'actions',
-    width: 180,
+    width: 182,
     fixed: 'right',
     render(row) {
-      return h('div', { style: 'display:flex;gap:8px' }, [
+      return h('div', { class: 'provider-actions' }, [
         h(NButton, {
-          text: true,
+          size: 'small',
           type: 'primary',
-          size: 'small',
+          secondary: true,
+          class: 'provider-actions__primary',
           onClick: (e) => {
             e.stopPropagation()
-            handleEditProvider(row)
+            handleAddModel(row)
           },
-        }, { default: () => '编辑' }),
-        h(NButton, {
-          text: true,
-          size: 'small',
-          onClick: (e) => {
-            e.stopPropagation()
-            handleTestConnection(row)
-          },
-        }, { default: () => '测试' }),
-        h(NPopconfirm, { onPositiveClick: () => handleDeleteProvider(row.id) }, {
-          trigger: () => h(NButton, {
-            text: true,
-            type: 'error',
+        }, { default: () => '添加模型' }),
+        h(NDropdown, {
+          trigger: 'click',
+          options: getProviderMoreOptions(row),
+          onSelect: key => handleProviderMoreAction(key, row),
+        }, {
+          default: () => h(NButton, {
             size: 'small',
+            quaternary: true,
             onClick: e => e.stopPropagation(),
-          }, { default: () => '删除' }),
-          default: () => '确定删除该供应商吗？',
+          }, { default: () => '更多' }),
         }),
       ])
     },
   },
 ]
+
+function getProviderMoreOptions(row) {
+  const options = [
+    { label: '编辑', key: 'edit' },
+    { label: '测试连接', key: 'test' },
+  ]
+  if (row.isDefault !== '1') {
+    options.push({ label: '设为默认', key: 'setDefault' })
+  }
+  options.push(
+    { type: 'divider', key: 'divider' },
+    { label: '删除', key: 'delete', props: { style: 'color: #d03050' } },
+  )
+  return options
+}
+
+function handleProviderMoreAction(key, row) {
+  const actionMap = {
+    edit: () => handleEditProvider(row),
+    test: () => handleTestConnection(row),
+    setDefault: () => handleSetDefault(row),
+    delete: () => {
+      window.$dialog.warning({
+        title: '确认删除',
+        content: `确定删除供应商“${row.providerName}”吗？`,
+        positiveText: '确定',
+        negativeText: '取消',
+        onPositiveClick: () => handleDeleteProvider(row.id),
+      })
+    },
+  }
+  actionMap[key]?.()
+}
 
 const modelColumns = [
   {
@@ -400,7 +428,7 @@ const modelColumns = [
         return h(AuthImage, { src: row.icon, imgStyle: { width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' } })
       }
       return h('div', {
-        style: `width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#6EE7B7,#34D399);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600`,
+        style: 'width:24px;height:24px;border-radius:50%;background:#0f766e;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600',
       }, (row.modelName || '?').charAt(0))
     },
   },
@@ -453,9 +481,17 @@ const modelColumns = [
 
 function providerRowProps(row) {
   return {
-    style: selectedProvider.value?.id === row.id ? 'background:rgba(66,66,247,0.06);cursor:pointer' : 'cursor:pointer',
+    style: selectedProvider.value?.id === row.id ? 'background:#eef4ff;cursor:pointer' : 'cursor:pointer',
     onClick: () => handleSelectProvider(row),
   }
+}
+
+function handleResetProviderSearch() {
+  providerSearch.name = ''
+  providerSearch.type = null
+  providerSearch.status = null
+  providerPagination.pageNum = 1
+  loadProviders()
 }
 
 async function loadProviders() {
@@ -610,9 +646,18 @@ async function handleSetDefault(row) {
   }
 }
 
-function handleAddModel() {
+function handleAddModel(provider = selectedProvider.value) {
+  if (!provider) {
+    window.$message.warning('请先选择供应商')
+    return
+  }
+  const providerChanged = selectedProvider.value?.id !== provider.id
+  selectedProvider.value = provider
+  if (providerChanged) {
+    loadModels()
+  }
   modelModal.isEdit = false
-  modelModal.form = { providerId: selectedProvider.value?.id || null, modelType: null, modelId: '', modelName: '', icon: '', maxTokens: null, sortOrder: 0, isDefault: '0', status: '0', description: '' }
+  modelModal.form = { providerId: provider.id || null, modelType: null, modelId: '', modelName: '', icon: '', maxTokens: null, sortOrder: 0, isDefault: '0', status: '0', description: '' }
   modelModal.show = true
 }
 
@@ -685,50 +730,46 @@ onMounted(() => {
 }
 
 .ai-provider-model-page {
-  padding: 24px;
+  padding: 16px;
   min-height: 100%;
   overflow-y: auto;
+  background: #f5f7fa;
 }
 
 .panel-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.6);
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
   overflow: hidden;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 24px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.5) 0%, transparent 100%);
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
 }
 
 .panel-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 15px;
   font-weight: 600;
   color: #0f172a;
 }
 
-.panel-title i {
-  font-size: 20px;
-  color: #4242f7;
-}
-
 .search-bar {
   display: flex;
   gap: 12px;
-  padding: 12px 24px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
   align-items: center;
+  background: #fff;
 }
 
 .search-bar .n-input {
@@ -748,18 +789,18 @@ onMounted(() => {
 
 .provider-table :deep(.n-data-table-row:hover),
 .model-table :deep(.n-data-table-row:hover) {
-  background: rgba(66, 66, 247, 0.04) !important;
+  background: #f8fafc !important;
 }
 
 .provider-table :deep(.n-data-table-row.row--selected) {
-  background: rgba(66, 66, 247, 0.06) !important;
+  background: #eef4ff !important;
 }
 
 .pagination-wrap {
-  padding: 12px 24px;
+  padding: 12px 16px;
   display: flex;
   justify-content: flex-end;
-  border-top: 1px solid rgba(226, 232, 240, 0.5);
+  border-top: 1px solid #e5e7eb;
 }
 
 .model-panel {
@@ -771,40 +812,40 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 40px;
-  color: #94a3b8;
+  padding: 32px;
+  color: #64748b;
   font-size: 14px;
+  background: #fff;
+  border: 1px dashed #dbe2ea;
+  border-radius: 8px;
 }
 
 .dark .panel-card {
-  background: rgba(30, 41, 59, 0.7);
-  border-color: rgba(51, 65, 85, 0.5);
+  background: #18212f;
+  border-color: #334155;
 }
 
 .dark .panel-title {
   color: #e2e8f0;
 }
 
-.dark .panel-title i {
-  color: #6366f1;
-}
-
 .dark .panel-header {
-  background: transparent;
-  border-bottom-color: rgba(51, 65, 85, 0.4);
+  background: #111827;
+  border-bottom-color: #334155;
 }
 
 .dark .search-bar {
-  border-bottom-color: rgba(51, 65, 85, 0.4);
+  background: #18212f;
+  border-bottom-color: #334155;
 }
 
 .dark .provider-table :deep(.n-data-table-row:hover),
 .dark .model-table :deep(.n-data-table-row:hover) {
-  background: rgba(67, 56, 202, 0.15) !important;
+  background: rgba(148, 163, 184, 0.12) !important;
 }
 
 .dark .pagination-wrap {
-  border-top-color: rgba(51, 65, 85, 0.4);
+  border-top-color: #334155;
 }
 
 .logo-preview {
@@ -833,5 +874,17 @@ onMounted(() => {
 
 .dark .test-result-content {
   background: rgba(15, 23, 42, 0.6);
+}
+
+.provider-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.provider-actions__primary {
+  font-weight: 600;
 }
 </style>

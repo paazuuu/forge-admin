@@ -42,11 +42,7 @@ import FcDesigner from '@form-create/designer'
 import designerZhCn from '@form-create/designer/locale/zh-cn.es'
 import { getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { hydrateForgeBusinessPreviewRules, installForgeBusinessComponents } from '@/views/app-center/components/designer/form-first/forgeBusinessComponents'
-import { DEFAULT_FORM_ITEM_GAP, buildDefaultFormOptions, cloneValue, installFormCreate, normalizeFormCreateRules } from './formCreateBridge'
-
-const FORM_ITEM_GAP_OPTION_KEY = 'forgeFormItemGap'
-const MIN_FORM_ITEM_GAP = 0
-const MAX_FORM_ITEM_GAP = 80
+import { buildDefaultFormOptions, cloneValue, DEFAULT_FORM_ITEM_GAP, installFormCreate, normalizeFormCreateRules } from './formCreateBridge'
 
 const props = defineProps({
   modelValue: {
@@ -58,8 +54,10 @@ const props = defineProps({
     default: '100%',
   },
 })
-
 const emit = defineEmits(['update:modelValue', 'save'])
+const FORM_ITEM_GAP_OPTION_KEY = 'forgeFormItemGap'
+const MIN_FORM_ITEM_GAP = 0
+const MAX_FORM_ITEM_GAP = 80
 
 installFormCreate(getCurrentInstance()?.appContext?.app)
 
