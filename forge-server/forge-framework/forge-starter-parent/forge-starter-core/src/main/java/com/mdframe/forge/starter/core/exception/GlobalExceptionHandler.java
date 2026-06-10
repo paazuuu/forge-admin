@@ -44,6 +44,10 @@ public class GlobalExceptionHandler {
             "(?is)\\b(unknown\\s+(column|table|database)|table\\s+.+?\\s+doesn't\\s+exist|column\\s+.+?\\s+cannot\\s+be\\s+null|data\\s+too\\s+long\\s+for\\s+column)\\b"
     );
 
+    private static final Pattern EXCEPTION_MESSAGE_PREFIX_PATTERN = Pattern.compile(
+            "^(?:(?:[\\w$]+\\.)*[\\w$]*(?:Exception|Error):\\s*)+"
+    );
+
     private static final String[] DATABASE_EXCEPTION_CLASS_PREFIXES = {
             "java.sql.",
             "com.mysql.",
@@ -233,6 +237,14 @@ public class GlobalExceptionHandler {
         if (containsSensitiveDatabaseDetail(e)) {
             return handleDatabaseError(e, request, "系统运行时数据库异常");
         }
+        BusinessException businessCause = findCause(e, BusinessException.class);
+        if (businessCause != null) {
+            log.warn("运行时异常包装业务异常: URI={}, Code={}, Message={}", request.getRequestURI(), businessCause.getCode(), businessCause.getMessage(), e);
+            if (businessCause.getData() != null) {
+                return RespInfo.build(businessCause.getCode(), sanitizeClientMessage(businessCause.getMessage()), businessCause.getData());
+            }
+            return RespInfo.error(businessCause.getCode(), sanitizeClientMessage(businessCause.getMessage()));
+        }
         log.error("系统运行时错误: URI={}", request.getRequestURI(), e);
         return RespInfo.error(500, buildRuntimeClientMessage(e));
     }
@@ -290,9 +302,33 @@ public class GlobalExceptionHandler {
     }
 
     private String buildRuntimeClientMessage(RuntimeException e) {
-        if (e.getMessage() == null || e.getMessage().isBlank()) {
-            return SYSTEM_ERROR_MESSAGE;
+        Throwable current = e;
+        while (current != null) {
+            String message = sanitizeClientMessage(current.getMessage());
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+            current = current.getCause();
         }
-        return e.getMessage().replace("java.lang.RuntimeException: ", "");
+        return SYSTEM_ERROR_MESSAGE;
+    }
+
+    private String sanitizeClientMessage(String message) {
+        if (message == null) {
+            return null;
+        }
+        String sanitized = EXCEPTION_MESSAGE_PREFIX_PATTERN.matcher(message.trim()).replaceFirst("").trim();
+        return sanitized;
+    }
+
+    private <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 }

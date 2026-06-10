@@ -36,6 +36,20 @@ function hasBusinessCode(data) {
   return data && typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'code')
 }
 
+function buildErrorDetail(config, payload = {}, fallbackError) {
+  return {
+    code: payload.code,
+    message: payload.message,
+    rawMessage: payload.rawMessage,
+    method: config?.method ? String(config.method).toUpperCase() : '',
+    url: config?.url || '',
+    traceId: config?.headers?.traceId || config?.headers?.TraceId || '',
+    status: payload.status,
+    responseData: payload.responseData,
+    error: fallbackError,
+  }
+}
+
 async function parseBlobJsonResponse(response) {
   const { data, headers } = response
   const contentType = getContentType(headers, data)
@@ -116,11 +130,18 @@ export function setupInterceptors(axiosInstance) {
     const code = data?.code ?? status
     const message = data?.message ?? statusText
     const needTip = config?.needTip !== false
-    const finalMessage = resolveResError(code, message, needTip)
+    const detail = buildErrorDetail(config, {
+      code,
+      message,
+      rawMessage: message,
+      status,
+      responseData: data,
+    }, data ?? response)
+    const finalMessage = resolveResError(code, message, needTip, detail)
     if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
       return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
     }
-    return Promise.reject({ code, message: finalMessage, error: data ?? response })
+    return Promise.reject({ code, message: finalMessage, error: data ?? response, detail })
   }
 
   /**
@@ -137,15 +158,27 @@ export function setupInterceptors(axiosInstance) {
       // 如果是业务错误（从 resResolve 传来的）
       if (error?.isBusinessError) {
         const { code, message, needTip = true } = error
-        const finalMessage = resolveResError(code, message, needTip)
-        return Promise.reject({ code, message: finalMessage, error: error.error })
+        const detail = buildErrorDetail(error?.config, {
+          code,
+          message,
+          rawMessage: error?.message,
+          responseData: error?.error,
+        }, error?.error)
+        const finalMessage = resolveResError(code, message, needTip, detail)
+        return Promise.reject({ code, message: finalMessage, error: error.error, detail })
       }
 
       // 网络错误或其他错误
       const code = error?.code || 'NETWORK_ERROR'
       const message = error?.message || '网络连接失败，请检查您的网络'
-      window.$message?.error(message)
-      return Promise.reject({ code, message, error })
+      const needTip = error?.config?.needTip !== false
+      const detail = buildErrorDetail(error?.config, {
+        code,
+        message,
+        rawMessage: error?.message,
+      }, error)
+      resolveResError(code, message, needTip, detail)
+      return Promise.reject({ code, message, error, detail })
     }
 
     // 3. 处理HTTP错误响应
@@ -154,7 +187,14 @@ export function setupInterceptors(axiosInstance) {
     const message = data?.message ?? error.message
     const needTip = config?.needTip !== false
     // 调用统一错误处理
-    const finalMessage = resolveResError(code, message, needTip)
+    const detail = buildErrorDetail(config, {
+      code,
+      message,
+      rawMessage: message,
+      status,
+      responseData: data,
+    }, error.response?.data || error.response)
+    const finalMessage = resolveResError(code, message, needTip, detail)
     if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
       return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
     }
@@ -162,6 +202,7 @@ export function setupInterceptors(axiosInstance) {
       code,
       message: finalMessage,
       error: error.response?.data || error.response,
+      detail,
     })
   }
   axiosInstance.interceptors.request.use(reqResolve, reqReject)

@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store'
+import { showRequestErrorDialog } from './error-dialog'
 
 let isConfirming = false
 
@@ -15,7 +16,40 @@ export function isSilentAuthError(error) {
   return Boolean(error?.silentAuthError || (isAuthErrorCode(error?.code) && shouldSilenceAuthError()))
 }
 
-export function resolveResError(code, message, needTip = true) {
+function resolveErrorTitle(code) {
+  switch (code) {
+    case 400:
+      return '请求参数错误'
+    case 403:
+      return '请求被拒绝'
+    case 404:
+      return '请求资源不存在'
+    case 500:
+      return '服务端异常'
+    case 'NETWORK_ERROR':
+      return '网络连接失败'
+    default:
+      return '请求失败'
+  }
+}
+
+function showCommonErrorTip(code, message, detail) {
+  if (window.$dialog?.error) {
+    showRequestErrorDialog({
+      title: resolveErrorTitle(code),
+      code,
+      message,
+      method: detail?.method,
+      url: detail?.url,
+      traceId: detail?.traceId,
+      detail,
+    })
+    return
+  }
+  window.$message?.error(message)
+}
+
+export function resolveResError(code, message, needTip = true, detail = null) {
   // 检查是否在登录页面
   const isLoginPage = window.location.pathname === '/login'
   const authStore = useAuthStore()
@@ -82,6 +116,8 @@ export function resolveResError(code, message, needTip = true) {
       message = message ?? `【${code}】: 未知异常!`
       break
   }
-  needTip && window.$message?.error(message)
+  if (needTip) {
+    showCommonErrorTip(code, message, detail)
+  }
   return message
 }

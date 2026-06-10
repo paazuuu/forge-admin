@@ -1659,3 +1659,22 @@ Detected resolved migration not applied to database: 1.0.56
 - `forge-admin-ui/src/components/ai-form/AiFormItem.vue`
 - 所有通过 `editSchema` 配置 `select/radio/checkbox/transfer` 的 CRUD 页面
 - 任何带有“按权限裁剪 options”逻辑的页面，例如 `system/user.vue`
+
+## 57. 运行时异常返回给前端前必须去掉异常类名前缀，前端错误提示不能只剩一句 message
+
+**发现日期**: 2026-06-10
+
+**问题描述**:
+登录或业务接口报错时，前端有时会直接收到 `com.mdframe.forge.starter.core.exception.BusinessException: 验证码错误或已过期` 这类字符串，既暴露了后端异常类名，也影响用户阅读。与此同时，前端全局错误提示只有一条 `message.error`，缺少请求路径、错误码、原始响应等排查信息，线上定位成本高。
+
+**根本原因**:
+部分业务代码会用 `RuntimeException` 包装 `BusinessException` 或其他异常，进入全局运行时异常处理后如果只拿 `getMessage()` 返回，就可能把 `xxxException:` 前缀一并透出。前端响应拦截器又只消费摘要 message，没有统一的“查看详情”入口，导致开发排查时只能靠控制台或后端日志。
+
+**解决方案**:
+后端 `GlobalExceptionHandler` 处理 `RuntimeException` 时，先递归解包 `BusinessException` cause，并对返回给前端的 message 做统一清洗，去掉 `com.xxx.BusinessException:`、`java.lang.RuntimeException:` 这类异常类名前缀。前端全局 HTTP 错误处理不要只弹一句 message，应该统一弹错误对话框，默认展示摘要文案，并提供“查看详情”展开区，至少包含错误码、请求方法、请求 URL、traceId 和服务端原始响应。
+
+**影响范围**:
+- `forge-server/.../GlobalExceptionHandler`
+- `forge-admin-ui/src/utils/http/interceptors.js`
+- `forge-admin-ui/src/utils/http/helpers.js`
+- 所有依赖统一 axios 拦截器的页面，包括登录页
