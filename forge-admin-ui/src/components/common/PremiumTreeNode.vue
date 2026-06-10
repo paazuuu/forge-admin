@@ -37,6 +37,17 @@
         <i v-if="hasChildren" class="i-material-symbols:chevron-right-rounded" />
       </button>
 
+      <input
+        v-if="checkable"
+        class="premium-tree-checkbox"
+        type="checkbox"
+        :checked="isChecked"
+        :indeterminate="isIndeterminate"
+        :aria-checked="isIndeterminate ? 'mixed' : isChecked"
+        @click.stop
+        @change="handleCheckChange"
+      >
+
       <span class="premium-tree-icon">
         <i :class="nodeIcon" />
       </span>
@@ -62,14 +73,20 @@
             :level="level + 1"
             :selected-key="selectedKey"
             :expanded-key-set="expandedKeySet"
+            :checked-key-set="checkedKeySet"
+            :indeterminate-key-set="indeterminateKeySet"
             :key-field="keyField"
             :label-field="labelField"
             :children-field="childrenField"
+            :checkable="checkable"
             :get-node-icon="getNodeIcon"
             :get-node-meta="getNodeMeta"
             :get-node-subtitle="getNodeSubtitle"
             :get-node-tone="getNodeTone"
+            :show-meta="showMeta"
+            :show-subtitle="showSubtitle"
             @select="$emit('select', $event)"
+            @check="(treeNode, checked) => $emit('check', treeNode, checked)"
             @toggle="(treeNode, nextExpanded) => $emit('toggle', treeNode, nextExpanded)"
           />
         </div>
@@ -100,6 +117,14 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  checkedKeySet: {
+    type: Object,
+    default: () => new Set(),
+  },
+  indeterminateKeySet: {
+    type: Object,
+    default: () => new Set(),
+  },
   keyField: {
     type: String,
     default: 'key',
@@ -111,6 +136,10 @@ const props = defineProps({
   childrenField: {
     type: String,
     default: 'children',
+  },
+  checkable: {
+    type: Boolean,
+    default: false,
   },
   getNodeIcon: {
     type: Function,
@@ -128,19 +157,37 @@ const props = defineProps({
     type: Function,
     default: null,
   },
+  showMeta: {
+    type: Boolean,
+    default: false,
+  },
+  showSubtitle: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['select', 'toggle'])
+const emit = defineEmits(['select', 'toggle', 'check'])
 
 const nodeKey = computed(() => getNodeKey(props.node))
 const nodeChildren = computed(() => props.node?.[props.childrenField] || [])
 const hasChildren = computed(() => nodeChildren.value.length > 0)
 const isExpanded = computed(() => props.expandedKeySet.has(nodeKey.value))
 const isSelected = computed(() => props.selectedKey === nodeKey.value)
+const isChecked = computed(() => props.checkedKeySet.has(nodeKey.value))
+const isIndeterminate = computed(() => props.indeterminateKeySet.has(nodeKey.value))
 const nodeLabel = computed(() => props.node?.[props.labelField] || props.node?.label || props.node?.title || '')
-const nodeSubtitle = computed(() => props.getNodeSubtitle?.(props.node) || props.node?.subtitle || props.node?.path || '')
+const nodeSubtitle = computed(() => {
+  if (!props.showSubtitle)
+    return ''
+  return props.getNodeSubtitle?.(props.node) || props.node?.subtitle || props.node?.path || ''
+})
 const nodeIcon = computed(() => props.getNodeIcon?.(props.node) || props.node?.icon || 'i-material-symbols:folder-outline-rounded')
-const nodeMeta = computed(() => props.getNodeMeta?.(props.node) || null)
+const nodeMeta = computed(() => {
+  if (!props.showMeta)
+    return null
+  return props.getNodeMeta?.(props.node) || null
+})
 const nodeTone = computed(() => props.getNodeTone?.(props.node) || 'default')
 
 const guideLeft = computed(() => `${(props.level - 1) * 20 + 14}px`)
@@ -153,9 +200,17 @@ function getNodeKey(node = {}) {
 }
 
 function handleSelect() {
+  if (props.checkable) {
+    emit('check', props.node, !isChecked.value)
+    return
+  }
   emit('select', props.node)
   if (hasChildren.value && !isExpanded.value)
     emit('toggle', props.node, true)
+}
+
+function handleCheckChange(event) {
+  emit('check', props.node, event.target.checked)
 }
 
 function handleToggle() {
@@ -272,6 +327,15 @@ function handleArrowLeft() {
 
 .premium-tree-row.is-expanded .premium-tree-switcher i {
   transform: rotate(90deg);
+}
+
+.premium-tree-checkbox {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0 8px 0 0;
+  accent-color: #2563eb;
+  cursor: pointer;
 }
 
 .premium-tree-icon {

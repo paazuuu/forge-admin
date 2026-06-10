@@ -24,20 +24,21 @@
         </div>
         <div class="panel-left-tree">
           <n-spin :show="orgLoading" size="small">
-            <n-tree
-              block-line
-              :data="orgTreeData"
-              :pattern="orgSearchText"
-              :show-irrelevant-nodes="false"
+            <PremiumTree
+              v-if="displayOrgTreeData.length > 0"
+              :data="displayOrgTreeData"
               :selected-keys="selectedOrgKeys"
-              selectable
+              :expanded-keys="displayOrgExpandedKeys"
               key-field="id"
               label-field="orgName"
               children-field="children"
-              :default-expand-all="true"
+              :get-node-icon="getOrgNodeIcon"
+              :get-node-tone="getOrgNodeTone"
               @update:selected-keys="handleOrgSelect"
+              @update:expanded-keys="handleOrgExpandedKeysChange"
             />
             <n-empty v-if="!orgLoading && orgTreeData.length === 0" description="暂无组织" size="small" />
+            <n-empty v-else-if="!orgLoading && displayOrgTreeData.length === 0" description="未匹配到组织" size="small" />
           </n-spin>
         </div>
       </div>
@@ -120,6 +121,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import PremiumTree from '@/components/common/PremiumTree.vue'
 import { request } from '@/utils'
 
 const props = defineProps({
@@ -154,6 +156,7 @@ const userLoading = ref(false)
 const orgTreeData = ref([])
 const orgSearchText = ref('')
 const selectedOrgKeys = ref([])
+const orgExpandedKeys = ref([])
 
 // 用户列表
 const searchKeyword = ref('')
@@ -167,11 +170,25 @@ const pagination = reactive({
   total: 0,
 })
 
+const displayOrgTreeData = computed(() => {
+  const keyword = orgSearchText.value.trim().toLowerCase()
+  if (!keyword)
+    return orgTreeData.value
+  return filterOrgTree(orgTreeData.value, keyword)
+})
+
+const displayOrgExpandedKeys = computed(() => {
+  if (orgSearchText.value.trim())
+    return getAllKeys(displayOrgTreeData.value)
+  return orgExpandedKeys.value
+})
+
 watch(() => props.show, async (val) => {
   visible.value = val
   if (val) {
     checkedUserIds.value = []
     selectedOrgKeys.value = []
+    orgExpandedKeys.value = []
     searchKeyword.value = ''
     pagination.page = 1
     await loadOrgTree()
@@ -189,6 +206,7 @@ async function loadOrgTree() {
     const res = await request.get('/system/org/tree')
     if (res.code === 200) {
       orgTreeData.value = res.data || []
+      orgExpandedKeys.value = getAllKeys(orgTreeData.value)
     }
   }
   catch (e) {
@@ -233,6 +251,49 @@ function handleOrgSelect(keys) {
   selectedOrgKeys.value = keys
   pagination.page = 1
   loadUserList()
+}
+
+function handleOrgExpandedKeysChange(keys) {
+  if (!orgSearchText.value.trim())
+    orgExpandedKeys.value = keys
+}
+
+function getAllKeys(list = [], keys = []) {
+  list.forEach((item) => {
+    keys.push(item.id)
+    if (item.children?.length)
+      getAllKeys(item.children, keys)
+  })
+  return keys
+}
+
+function filterOrgTree(list = [], keyword) {
+  return list
+    .map((item) => {
+      const children = filterOrgTree(item.children || [], keyword)
+      const matched = String(item.orgName || '').toLowerCase().includes(keyword)
+      if (!matched && children.length === 0)
+        return null
+      return {
+        ...item,
+        children,
+      }
+    })
+    .filter(Boolean)
+}
+
+function getOrgNodeIcon(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'i-material-symbols:account-tree-rounded'
+  if (node.children?.length)
+    return 'i-material-symbols:corporate-fare-rounded'
+  return 'i-material-symbols:groups-rounded'
+}
+
+function getOrgNodeTone(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'folder'
+  return node.children?.length ? 'folder' : 'menu'
 }
 
 function handleSearch() {
@@ -285,16 +346,8 @@ function handleClose() {
   padding: 8px;
 }
 
-.panel-left-tree :deep(.n-tree-node-content) {
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-.panel-left-tree :deep(.n-tree-node--selected .n-tree-node-content) {
-  background: #eff6ff;
-  color: #2563eb;
-  font-weight: 500;
+.panel-left-tree :deep(.premium-tree) {
+  padding-top: 2px;
 }
 
 .panel-right {

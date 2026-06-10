@@ -90,20 +90,20 @@
           <n-tab-pane name="all" tab="全部资源">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
-                <n-tree
+                <PremiumTree
                   v-if="resourceTreeData.length > 0"
-                  ref="treeRef"
                   :data="resourceTreeData"
                   checkable
                   :cascade="!checkStrictly"
-                  :check-strategy="checkStrictly ? 'all' : 'child'"
-                  :default-expand-all="treeExpandAll"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
                   label-field="resourceName"
                   children-field="children"
-                  :render-label="renderTreeLabel"
+                  :get-node-icon="getResourceNodeIcon"
+                  :get-node-meta="getResourceNodeMeta"
+                  :get-node-tone="getResourceNodeTone"
+                  show-meta
                   @update:expanded-keys="handleExpandedKeysChange"
                   @update:checked-keys="handleCheckedKeysChange"
                 />
@@ -115,19 +115,20 @@
           <n-tab-pane name="menu" tab="菜单">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
-                <n-tree
+                <PremiumTree
                   v-if="menuTreeData.length > 0"
                   :data="menuTreeData"
                   checkable
                   :cascade="!checkStrictly"
-                  :check-strategy="checkStrictly ? 'all' : 'child'"
-                  :default-expand-all="treeExpandAll"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
                   label-field="resourceName"
                   children-field="children"
-                  :render-label="renderTreeLabel"
+                  :get-node-icon="getResourceNodeIcon"
+                  :get-node-meta="getResourceNodeMeta"
+                  :get-node-tone="getResourceNodeTone"
+                  show-meta
                   @update:expanded-keys="handleExpandedKeysChange"
                   @update:checked-keys="handleCheckedKeysChange"
                 />
@@ -139,19 +140,20 @@
           <n-tab-pane name="button" tab="按钮">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
-                <n-tree
+                <PremiumTree
                   v-if="buttonTreeData.length > 0"
                   :data="buttonTreeData"
                   checkable
                   :cascade="!checkStrictly"
-                  :check-strategy="checkStrictly ? 'all' : 'child'"
-                  :default-expand-all="treeExpandAll"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
                   label-field="resourceName"
                   children-field="children"
-                  :render-label="renderTreeLabel"
+                  :get-node-icon="getResourceNodeIcon"
+                  :get-node-meta="getResourceNodeMeta"
+                  :get-node-tone="getResourceNodeTone"
+                  show-meta
                   @update:expanded-keys="handleExpandedKeysChange"
                   @update:checked-keys="handleCheckedKeysChange"
                 />
@@ -163,19 +165,20 @@
           <n-tab-pane name="api" tab="API接口">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
-                <n-tree
+                <PremiumTree
                   v-if="apiTreeData.length > 0"
                   :data="apiTreeData"
                   checkable
                   :cascade="!checkStrictly"
-                  :check-strategy="checkStrictly ? 'all' : 'child'"
-                  :default-expand-all="treeExpandAll"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
                   label-field="resourceName"
                   children-field="children"
-                  :render-label="renderTreeLabel"
+                  :get-node-icon="getResourceNodeIcon"
+                  :get-node-meta="getResourceNodeMeta"
+                  :get-node-tone="getResourceNodeTone"
+                  show-meta
                   @update:expanded-keys="handleExpandedKeysChange"
                   @update:checked-keys="handleCheckedKeysChange"
                 />
@@ -331,6 +334,7 @@
 import { NTag } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import PremiumTree from '@/components/common/PremiumTree.vue'
 import DictTag from '@/components/DictTag.vue'
 import UserSelectPanel from '@/components/UserSelectPanel.vue'
 import { useDict } from '@/composables/useDict'
@@ -347,7 +351,6 @@ const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 const YES_NO_DICT = 'sys_yes_no'
 
 const crudRef = ref(null)
-const treeRef = ref(null)
 const userStore = useUserStore()
 const tenantOptions = ref([])
 
@@ -474,37 +477,31 @@ function filterResourceByType(data, types) {
   }, [])
 }
 
-// 自定义树节点渲染
-function renderTreeLabel({ option }) {
-  const typeConfig = resourceTypeMap[option.resourceType] || { text: '未知', type: 'default', icon: '' }
+function getResourceNodeIcon(node = {}) {
+  return resourceTypeMap[Number(node.resourceType)]?.icon || 'i-material-symbols:radio-button-unchecked'
+}
 
-  return h('div', { class: 'flex items-center gap-2' }, [
-    // 图标
-    typeConfig.icon && h('i', { class: `${typeConfig.icon} text-16` }),
-    // 资源名称
-    h('span', { class: 'font-medium' }, option.resourceName),
-    // 类型标签
-    h(NTag, {
-      type: typeConfig.type,
-      size: 'small',
-      round: true,
-      class: 'ml-2',
-    }, { default: () => typeConfig.text }),
-    // 权限标识（如果有）
-    option.perms && h(NTag, {
-      type: 'default',
-      size: 'small',
-      bordered: false,
-      class: 'ml-2',
-    }, { default: () => option.perms }),
-    // API 方法和地址（如果是API类型）
-    option.resourceType === 4 && option.apiMethod && h(NTag, {
-      type: 'info',
-      size: 'small',
-      bordered: false,
-      class: 'ml-2',
-    }, { default: () => `${option.apiMethod} ${option.apiUrl || ''}` }),
-  ])
+function getResourceNodeTone(node = {}) {
+  const type = Number(node.resourceType)
+  if (type === 1)
+    return 'folder'
+  if (type === 2)
+    return 'menu'
+  if (type === 3)
+    return 'action'
+  if (type === 4)
+    return 'api'
+  return 'root'
+}
+
+function getResourceNodeMeta(node = {}) {
+  const childCount = node.children?.length || 0
+  if (!childCount)
+    return null
+  return {
+    label: '下级',
+    value: childCount,
+  }
 }
 
 // 搜索表单配置
@@ -961,7 +958,7 @@ async function loadAssignedUserIds() {
       assignedUserIds.value = (res.data.records || []).map(u => u.id)
     }
   }
-  catch (e) {
+  catch {
     assignedUserIds.value = []
   }
 }
@@ -1311,44 +1308,8 @@ onMounted(() => {
   background-color: #fff;
 }
 
-/* 优化树形组件样式 */
-.auth-tree-container :deep(.n-tree) {
-  font-size: 14px;
-}
-
-.auth-tree-container :deep(.n-tree-node) {
-  padding: 1px 0;
-}
-
-.auth-tree-container :deep(.n-tree-node-content) {
-  min-height: 34px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background-color 0.15s ease;
-}
-
-.auth-tree-container :deep(.n-tree-node-content:hover) {
-  background-color: #f8fafc;
-}
-
-.auth-tree-container :deep(.n-tree-node--selected .n-tree-node-content) {
-  background-color: #eff6ff;
-}
-
-/* 树节点标签样式增强 */
-.auth-tree-container :deep(.n-tree-node-content .flex) {
-  align-items: center;
-}
-
-.auth-tree-container :deep(.n-tag) {
-  font-size: 11px;
-  line-height: 1.5;
-  border-radius: 6px;
-}
-
-.auth-tree-container :deep(.font-medium) {
-  font-weight: 500;
-  color: #1f2937;
+.auth-tree-container :deep(.premium-tree) {
+  padding-top: 2px;
 }
 
 /* 滚动条样式 */
@@ -1506,18 +1467,6 @@ onMounted(() => {
 .dark .auth-tree-container {
   background: #0f172a;
   border-color: #334155;
-}
-
-.dark .auth-tree-container :deep(.n-tree-node-content:hover) {
-  background-color: #1e293b;
-}
-
-.dark .auth-tree-container :deep(.n-tree-node--selected .n-tree-node-content) {
-  background-color: #172554;
-}
-
-.dark .auth-tree-container :deep(.font-medium) {
-  color: #e5e7eb;
 }
 
 .dark .users-search-form {

@@ -59,8 +59,6 @@
               label-field="orgName"
               children-field="children"
               :get-node-icon="getLeftOrgNodeIcon"
-              :get-node-meta="getLeftOrgNodeMeta"
-              :get-node-subtitle="getLeftOrgNodeSubtitle"
               :get-node-tone="getLeftOrgNodeTone"
               @update:selected-keys="handleOrgNodeSelect"
               @update:expanded-keys="handleLeftOrgExpandedKeysChange"
@@ -188,19 +186,18 @@
         <!-- 树形区域 -->
         <div class="auth-tree-container">
           <n-spin :show="authLoading">
-            <n-tree
+            <PremiumTree
               v-if="roleTreeData.length > 0"
-              ref="treeRef"
               :data="roleTreeData"
               checkable
               :cascade="!checkStrictly"
-              :check-strategy="checkStrictly ? 'all' : 'child'"
-              :default-expand-all="treeExpandAll"
               :expanded-keys="treeExpandedKeys"
               :checked-keys="checkedRoleKeys"
               key-field="id"
               label-field="roleName"
               children-field="children"
+              :get-node-icon="getRoleNodeIcon"
+              :get-node-tone="getRoleNodeTone"
               @update:expanded-keys="handleExpandedKeysChange"
               @update:checked-keys="handleCheckedKeysChange"
             />
@@ -265,17 +262,17 @@
         <!-- 组织树形区域 -->
         <div class="org-tree-container">
           <n-spin :show="orgLoading">
-            <n-tree
+            <PremiumTree
               v-if="orgTreeData.length > 0"
-              ref="orgTreeRef"
               :data="orgTreeData"
               checkable
-              :default-expand-all="orgTreeExpandAll"
               :expanded-keys="orgTreeExpandedKeys"
               :checked-keys="checkedOrgKeys"
               key-field="id"
               label-field="orgName"
               children-field="children"
+              :get-node-icon="getLeftOrgNodeIcon"
+              :get-node-tone="getLeftOrgNodeTone"
               @update:expanded-keys="handleOrgExpandedKeysChange"
               @update:checked-keys="handleOrgCheckedKeysChange"
             />
@@ -426,8 +423,6 @@ const USER_STATUS_DICT = 'sys_user_status'
 const USER_SEX_DICT = 'sys_user_sex'
 
 const crudRef = ref(null)
-const treeRef = ref(null)
-const orgTreeRef = ref(null)
 const userStore = useUserStore()
 
 // 左侧组织树相关
@@ -898,27 +893,19 @@ function getLeftOrgNodeIcon(node = {}) {
   return 'i-material-symbols:groups-rounded'
 }
 
-function getLeftOrgNodeMeta(node = {}) {
-  const childCount = node.children?.length || 0
-  if (!childCount)
-    return null
-  return {
-    label: '下级',
-    value: childCount,
-  }
-}
-
-function getLeftOrgNodeSubtitle(node = {}) {
-  if (node.leaderName)
-    return `负责人 ${node.leaderName}`
-  if (node.regionName)
-    return node.regionName
-  return ''
-}
-
 function getLeftOrgNodeTone(node = {}) {
   if (!node.parentId || Number(node.parentId) === 0)
     return 'folder'
+  return node.children?.length ? 'folder' : 'menu'
+}
+
+function getRoleNodeIcon(node = {}) {
+  return node.children?.length
+    ? 'i-material-symbols:admin-panel-settings-rounded'
+    : 'i-material-symbols:verified-user-rounded'
+}
+
+function getRoleNodeTone(node = {}) {
   return node.children?.length ? 'folder' : 'menu'
 }
 
@@ -1826,12 +1813,8 @@ async function handleSubmitTenant() {
   max-height: 500px;
 }
 
-.auth-tree-container :deep(.n-tree) {
-  font-size: 14px;
-}
-
-.auth-tree-container :deep(.n-tree-node-content) {
-  padding: 4px 0;
+.auth-tree-container :deep(.premium-tree) {
+  padding-top: 2px;
 }
 
 .auth-tree-container::-webkit-scrollbar {
@@ -1888,12 +1871,8 @@ async function handleSubmitTenant() {
   max-height: 400px;
 }
 
-.org-tree-container :deep(.n-tree) {
-  font-size: 14px;
-}
-
-.org-tree-container :deep(.n-tree-node-content) {
-  padding: 4px 0;
+.org-tree-container :deep(.premium-tree) {
+  padding-top: 2px;
 }
 
 .org-tree-container::-webkit-scrollbar {
@@ -2018,16 +1997,8 @@ async function handleSubmitTenant() {
   background: #0f172a;
 }
 
-.dark .auth-tree-container .n-tree {
-  color: #e2e8f0;
-}
-
 .dark .org-tree-container {
   background: #0f172a;
-}
-
-.dark .org-tree-container .n-tree {
-  color: #e2e8f0;
 }
 
 .dark .empty-state {
