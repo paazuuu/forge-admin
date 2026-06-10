@@ -10,7 +10,7 @@
           detail: 'post@/system/role/getById',
           add: 'post@/system/role/add',
           update: 'post@/system/role/edit',
-          delete: 'post@/system/role/remove',
+          delete: 'post@/system/role/removeBatch',
         }"
         :search-schema="searchSchema"
         :columns="tableColumns"
@@ -62,25 +62,25 @@
 
         <div class="auth-toolbar">
           <n-space size="small" align="center">
-            <n-button size="small" @click="toggleExpandAll">
+            <n-button size="small" :disabled="authLoading" @click="toggleExpandAll">
               <template #icon>
                 <i :class="treeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
               </template>
               {{ treeExpandAll ? '折叠全部' : '展开全部' }}
             </n-button>
-            <n-button size="small" @click="handleCheckAll">
+            <n-button size="small" :disabled="authLoading" @click="handleCheckAll">
               <template #icon>
                 <i class="i-material-symbols:check-box-outline" />
               </template>
               全选
             </n-button>
-            <n-button size="small" @click="handleUncheckAll">
+            <n-button size="small" :disabled="authLoading" @click="handleUncheckAll">
               <template #icon>
                 <i class="i-material-symbols:check-box-outline-blank" />
               </template>
               全不选
             </n-button>
-            <n-checkbox v-model:checked="checkStrictly" @update:checked="handleCheckStrictlyChange">
+            <n-checkbox v-model:checked="treeCascade" :disabled="authLoading" @update:checked="handleTreeCascadeChange">
               父子联动
             </n-checkbox>
           </n-space>
@@ -90,11 +90,23 @@
           <n-tab-pane name="all" tab="全部资源">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
+                <div v-if="authLoading" class="auth-tree-skeleton">
+                  <div
+                    v-for="index in 10"
+                    :key="index"
+                    class="auth-tree-skeleton-row"
+                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
+                  >
+                    <n-skeleton circle size="small" />
+                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
+                  </div>
+                </div>
                 <PremiumTree
-                  v-if="resourceTreeData.length > 0"
+                  v-else-if="resourceTreeData.length > 0"
                   :data="resourceTreeData"
+                  :cascade-data="resourceTreeData"
                   checkable
-                  :cascade="!checkStrictly"
+                  :cascade="treeCascade"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
@@ -115,11 +127,23 @@
           <n-tab-pane name="menu" tab="菜单">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
+                <div v-if="authLoading" class="auth-tree-skeleton">
+                  <div
+                    v-for="index in 10"
+                    :key="index"
+                    class="auth-tree-skeleton-row"
+                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
+                  >
+                    <n-skeleton circle size="small" />
+                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
+                  </div>
+                </div>
                 <PremiumTree
-                  v-if="menuTreeData.length > 0"
+                  v-else-if="menuTreeData.length > 0"
                   :data="menuTreeData"
+                  :cascade-data="resourceTreeData"
                   checkable
-                  :cascade="!checkStrictly"
+                  :cascade="treeCascade"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
@@ -140,11 +164,23 @@
           <n-tab-pane name="button" tab="按钮">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
+                <div v-if="authLoading" class="auth-tree-skeleton">
+                  <div
+                    v-for="index in 10"
+                    :key="index"
+                    class="auth-tree-skeleton-row"
+                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
+                  >
+                    <n-skeleton circle size="small" />
+                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
+                  </div>
+                </div>
                 <PremiumTree
-                  v-if="buttonTreeData.length > 0"
+                  v-else-if="buttonTreeData.length > 0"
                   :data="buttonTreeData"
+                  :cascade-data="resourceTreeData"
                   checkable
-                  :cascade="!checkStrictly"
+                  :cascade="treeCascade"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
@@ -165,11 +201,23 @@
           <n-tab-pane name="api" tab="API接口">
             <div class="auth-tree-container">
               <n-spin :show="authLoading">
+                <div v-if="authLoading" class="auth-tree-skeleton">
+                  <div
+                    v-for="index in 10"
+                    :key="index"
+                    class="auth-tree-skeleton-row"
+                    :style="{ paddingLeft: `${(index % 4) * 18}px` }"
+                  >
+                    <n-skeleton circle size="small" />
+                    <n-skeleton text :width="`${72 - (index % 3) * 10}%`" />
+                  </div>
+                </div>
                 <PremiumTree
-                  v-if="apiTreeData.length > 0"
+                  v-else-if="apiTreeData.length > 0"
                   :data="apiTreeData"
+                  :cascade-data="resourceTreeData"
                   checkable
-                  :cascade="!checkStrictly"
+                  :cascade="treeCascade"
                   :expanded-keys="treeExpandedKeys"
                   :checked-keys="checkedResourceKeys"
                   key-field="id"
@@ -197,6 +245,7 @@
           <n-button
             type="primary"
             :loading="authSubmitLoading"
+            :disabled="authLoading"
             @click="handleSubmitAuth"
           >
             确定
@@ -362,7 +411,7 @@ const resourceTreeData = ref([])
 const checkedResourceKeys = ref([])
 const treeExpandAll = ref(true)
 const treeExpandedKeys = ref([])
-const checkStrictly = ref(false) // 父子联动开关，false表示联动
+const treeCascade = ref(true) // 父子联动开关
 const activeResourceTab = ref('all') // 当前选中的资源类型标签
 const clientList = ref([])
 const currentAuthClientCode = ref('pc')
@@ -579,7 +628,7 @@ const tableColumns = computed(() => [
     label: '角色类型',
     width: 120,
     render: (row) => {
-      return h(DictTag, { dictType: ROLE_TYPE_DICT, value: row.roleType, size: 'small' })
+      return h(DictTag, { dictType: ROLE_TYPE_DICT, value: row.roleType, size: 'small', forceTag: true })
     },
   },
   {
@@ -587,7 +636,7 @@ const tableColumns = computed(() => [
     label: '数据范围',
     width: 150,
     render: (row) => {
-      return h(DictTag, { dictType: ROLE_DATA_SCOPE_DICT, value: row.dataScope, size: 'small' })
+      return h(DictTag, { dictType: ROLE_DATA_SCOPE_DICT, value: row.dataScope, size: 'small', forceTag: true })
     },
   },
   {
@@ -600,7 +649,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.roleStatus, size: 'small' })
+      return h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.roleStatus, size: 'small', forceTag: true })
     },
   },
   {
@@ -608,7 +657,7 @@ const tableColumns = computed(() => [
     label: '系统角色',
     width: 100,
     render: (row) => {
-      return h(DictTag, { dictType: YES_NO_DICT, value: row.isSystem, size: 'small' })
+      return h(DictTag, { dictType: YES_NO_DICT, value: row.isSystem, size: 'small', forceTag: true })
     },
   },
   {
@@ -1024,7 +1073,6 @@ function getAllKeys(list, keys = []) {
 // 加载资源树
 async function loadResourceTree() {
   try {
-    authLoading.value = true
     const res = await request.get('/system/resource/assignable-tree', {
       params: { clientCode: currentAuthClientCode.value },
     })
@@ -1041,15 +1089,11 @@ async function loadResourceTree() {
     console.error('加载资源树失败:', error)
     window.$message.error('加载资源树失败')
   }
-  finally {
-    authLoading.value = false
-  }
 }
 
 // 加载角色已有的资源
 async function loadRoleResources(roleId) {
   try {
-    authLoading.value = true
     const res = await request.get(`/system/role/${roleId}/resources`, {
       params: { clientCode: currentAuthClientCode.value },
     })
@@ -1060,9 +1104,6 @@ async function loadRoleResources(roleId) {
   catch (error) {
     console.error('加载角色资源失败:', error)
     window.$message.error('加载角色资源失败')
-  }
-  finally {
-    authLoading.value = false
   }
 }
 
@@ -1079,13 +1120,19 @@ async function loadClientList() {
 }
 
 async function loadAuthClientResources() {
+  authLoading.value = true
   checkedResourceKeys.value = []
   resourceTreeData.value = []
   treeExpandedKeys.value = []
-  await Promise.all([
-    loadResourceTree(),
-    loadRoleResources(currentRole.value.id),
-  ])
+  try {
+    await Promise.all([
+      loadResourceTree(),
+      loadRoleResources(currentRole.value.id),
+    ])
+  }
+  finally {
+    authLoading.value = false
+  }
 }
 
 async function handleAuthClientChange(clientCode) {
@@ -1130,9 +1177,8 @@ function handleUncheckAll() {
 }
 
 // 父子联动开关变化
-function handleCheckStrictlyChange() {
-  // 当切换父子联动时，保持当前选中状态
-  // checkStrictly 为 false 时表示联动
+function handleTreeCascadeChange() {
+  // 切换时保留当前选中状态
 }
 
 // 提交授权
@@ -1191,6 +1237,7 @@ onMounted(() => {
   flex-direction: column;
   height: 100%;
   max-height: 640px;
+  min-height: 0;
   color: #1f2937;
 }
 
@@ -1294,22 +1341,52 @@ onMounted(() => {
 .auth-tabs :deep(.n-tabs-pane-wrapper) {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.auth-tabs :deep(.n-tab-pane) {
+  height: 100%;
+  min-height: 0;
+}
+
+.auth-tabs :deep(.n-spin-container),
+.auth-tabs :deep(.n-spin-content) {
+  height: 100%;
+  min-height: 0;
 }
 
 .auth-tree-container {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
-  min-height: 340px;
+  min-height: 0;
   max-height: 450px;
   background-color: #fff;
 }
 
 .auth-tree-container :deep(.premium-tree) {
   padding-top: 2px;
+}
+
+.auth-tree-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 4px 2px;
+}
+
+.auth-tree-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+}
+
+.auth-tree-skeleton-row :deep(.n-skeleton--circle) {
+  flex: 0 0 auto;
 }
 
 /* 滚动条样式 */

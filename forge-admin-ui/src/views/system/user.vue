@@ -87,7 +87,7 @@
             detail: 'post@/system/user/getById',
             add: 'post@/system/user/add',
             update: 'post@/system/user/edit',
-            delete: 'post@/system/user/remove?id=:id',
+            delete: 'post@/system/user/removeBatch',
           }"
           :search-schema="searchSchema"
           :columns="tableColumns"

@@ -10,7 +10,7 @@
           detail: 'post@/system/org/getById',
           add: 'post@/system/org/add',
           update: 'post@/system/org/edit',
-          delete: 'post@/system/org/remove',
+          delete: 'post@/system/org/remove?id=:id',
         }"
         :search-schema="searchSchema"
         :columns="tableColumns"
@@ -22,6 +22,7 @@
         modal-width="900px"
         :show-pagination="false"
         :lazy="false"
+        :hide-batch-delete="true"
         add-button-text="新增组织"
         :table-props="{
           expandedRowKeys: expandedKeys,

@@ -163,6 +163,8 @@ const editSchema = computed(() => [
     field: 'orgId',
     label: '所属组织',
     type: 'treeSelect',
+    required: true,
+    rules: [{ required: true, type: 'number', message: '请选择所属组织', trigger: 'change' }],
     props: {
       placeholder: '请选择所属组织',
       clearable: true,

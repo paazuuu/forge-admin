@@ -82,6 +82,12 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+
+  // 即使字典 listClass 为 default，也强制显示为标签
+  forceTag: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['close'])
@@ -133,7 +139,7 @@ const tagType = computed(() => {
 // 是否显示为普通文字（当 listClass 为 default 且没有强制指定 type 时）
 const shouldShowAsText = computed(() => {
   // 如果强制指定了 type，则显示标签
-  if (props.type) {
+  if (props.type || props.forceTag) {
     return false
   }
 

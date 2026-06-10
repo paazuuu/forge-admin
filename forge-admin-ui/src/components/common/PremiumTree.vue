@@ -37,6 +37,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  cascadeData: {
+    type: Array,
+    default: null,
+  },
   selectedKeys: {
     type: Array,
     default: () => [],
@@ -99,14 +103,28 @@ const emit = defineEmits(['update:selected-keys', 'update:expanded-keys', 'updat
 
 const selectedKey = computed(() => props.selectedKeys?.[0])
 const expandedKeySet = computed(() => new Set(props.expandedKeys || []))
-const checkedKeySet = computed(() => new Set(props.checkedKeys || []))
+const explicitCheckedKeySet = computed(() => new Set(props.checkedKeys || []))
+const cascadeSourceData = computed(() => props.cascadeData || props.data || [])
+const normalizedCheckedKeySet = computed(() => {
+  if (!props.checkable || !props.cascade)
+    return explicitCheckedKeySet.value
+  return new Set(normalizeCascadeCheckedKeys(props.checkedKeys || [], cascadeSourceData.value))
+})
+const cascadeState = computed(() => {
+  if (!props.checkable || !props.cascade) {
+    return {
+      checked: explicitCheckedKeySet.value,
+      indeterminate: new Set(),
+    }
+  }
+
+  return collectCascadeState(cascadeSourceData.value, normalizedCheckedKeySet.value)
+})
+const checkedKeySet = computed(() => cascadeState.value.checked)
 const indeterminateKeySet = computed(() => {
   if (!props.checkable || !props.cascade)
     return new Set()
-
-  const result = new Set()
-  collectIndeterminateKeys(props.data || [], checkedKeySet.value, result)
-  return result
+  return cascadeState.value.indeterminate
 })
 
 function getNodeKey(node = {}) {
@@ -121,7 +139,8 @@ function handleSelect(node) {
 
 function handleCheck(node, checked) {
   const keys = new Set(props.checkedKeys || [])
-  const targetKeys = props.cascade ? collectNodeKeys(node) : [getNodeKey(node)]
+  const cascadeNode = props.cascade ? findNodeByKey(getNodeKey(node), cascadeSourceData.value) || node : node
+  const targetKeys = props.cascade ? collectLeafNodeKeys(cascadeNode) : [getNodeKey(node)]
 
   targetKeys.forEach((key) => {
     if (key === undefined)
@@ -132,7 +151,9 @@ function handleCheck(node, checked) {
       keys.delete(key)
   })
 
-  const nextKeys = Array.from(keys)
+  const nextKeys = props.cascade
+    ? normalizeCascadeCheckedKeys(Array.from(keys), cascadeSourceData.value)
+    : Array.from(keys)
   emit('update:checked-keys', nextKeys, node)
   emit('check', nextKeys, node)
 }
@@ -152,36 +173,94 @@ function handleToggle(node, nextExpanded) {
   emit('update:expanded-keys', Array.from(keys), node)
 }
 
-function collectNodeKeys(node = {}) {
+function collectLeafNodeKeys(node = {}) {
   const keys = []
   const walk = (item) => {
     const key = getNodeKey(item)
-    if (key !== undefined)
-      keys.push(key)
     const children = item?.[props.childrenField] || []
+    if (!children.length && key !== undefined) {
+      keys.push(key)
+      return
+    }
     children.forEach(walk)
   }
   walk(node)
   return keys
 }
 
-function collectIndeterminateKeys(nodes = [], checkedSet, result) {
-  nodes.forEach((node) => {
+function normalizeCascadeCheckedKeys(keys = [], nodes = []) {
+  const explicitSet = new Set(keys)
+  const result = new Set()
+
+  const walk = (node = {}, ancestorChecked = false) => {
     const key = getNodeKey(node)
     const children = node?.[props.childrenField] || []
-    if (!children.length)
+    const currentChecked = ancestorChecked || (key !== undefined && explicitSet.has(key))
+
+    if (!children.length) {
+      if (currentChecked && key !== undefined)
+        result.add(key)
       return
+    }
 
-    collectIndeterminateKeys(children, checkedSet, result)
+    children.forEach(child => walk(child, currentChecked))
+  }
 
-    const childKeys = children.map(child => getNodeKey(child)).filter(keyValue => keyValue !== undefined)
-    const hasCheckedChild = childKeys.some(childKey => checkedSet.has(childKey))
-    const hasIndeterminateChild = childKeys.some(childKey => result.has(childKey))
-    const allChildrenChecked = childKeys.length > 0 && childKeys.every(childKey => checkedSet.has(childKey))
+  nodes.forEach(node => walk(node))
+  return Array.from(result)
+}
 
-    if (key !== undefined && !checkedSet.has(key) && !allChildrenChecked && (hasCheckedChild || hasIndeterminateChild))
-      result.add(key)
+function collectCascadeState(nodes = [], checkedSet) {
+  const checked = new Set()
+  const indeterminate = new Set()
+
+  const walk = (node = {}) => {
+    const key = getNodeKey(node)
+    const children = node?.[props.childrenField] || []
+
+    if (!children.length) {
+      const isChecked = key !== undefined && checkedSet.has(key)
+      if (isChecked)
+        checked.add(key)
+      return { checked: isChecked, partial: false }
+    }
+
+    const childStates = children.map(child => walk(child))
+    const allChildrenChecked = childStates.length > 0 && childStates.every(item => item.checked)
+    const hasCheckedOrPartialChild = childStates.some(item => item.checked || item.partial)
+
+    if (key !== undefined && allChildrenChecked)
+      checked.add(key)
+    else if (key !== undefined && hasCheckedOrPartialChild)
+      indeterminate.add(key)
+
+    return {
+      checked: allChildrenChecked,
+      partial: !allChildrenChecked && hasCheckedOrPartialChild,
+    }
+  }
+
+  nodes.forEach((node) => {
+    walk(node)
   })
+
+  return { checked, indeterminate }
+}
+
+function findNodeByKey(targetKey, nodes = []) {
+  if (targetKey === undefined)
+    return null
+
+  for (const node of nodes) {
+    if (getNodeKey(node) === targetKey)
+      return node
+
+    const match = findNodeByKey(targetKey, node?.[props.childrenField] || [])
+    if (match)
+      return match
+  }
+
+  return null
 }
 </script>
 

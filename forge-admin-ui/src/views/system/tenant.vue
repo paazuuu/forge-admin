@@ -8,7 +8,7 @@
         detail: 'post@/system/tenant/getById',
         add: 'post@/system/tenant/add',
         update: 'post@/system/tenant/edit',
-        delete: 'post@/system/tenant/remove',
+        delete: 'post@/system/tenant/removeBatch',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"

@@ -20,6 +20,7 @@
     :label-width="field.labelWidth"
     :show-label="field.showLabel !== false"
     :show-feedback="field.showFeedback !== false"
+    :required="field.required === true"
     :style="field.formItemStyle"
     :class="formItemClass"
   >
