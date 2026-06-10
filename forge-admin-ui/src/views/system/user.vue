@@ -152,7 +152,7 @@
       v-model:show="authModalVisible"
       :title="`用户授权 - ${currentUser.username || ''}`"
       preset="card"
-      style="width: 700px"
+      style="width: 860px"
       :mask-closable="false"
     >
       <div class="auth-modal-content">
@@ -164,44 +164,51 @@
             clearable
             size="small"
             placeholder="按角色名称搜索"
+            @clear="handleRoleSearch"
+            @keyup.enter="handleRoleSearch"
           >
             <template #prefix>
               <i class="i-material-symbols:search-rounded" />
             </template>
           </n-input>
           <n-space size="small" class="auth-toolbar-actions">
+            <n-button size="small" @click="handleRoleSearch">
+              <template #icon>
+                <i class="i-material-symbols:search-rounded" />
+              </template>
+              查询
+            </n-button>
             <n-button size="small" @click="handleCheckAll">
               <template #icon>
                 <i class="i-material-symbols:check-box-outline" />
               </template>
-              全选
+              全选本页
             </n-button>
             <n-button size="small" @click="handleUncheckAll">
               <template #icon>
                 <i class="i-material-symbols:check-box-outline-blank" />
               </template>
-              全不选
+              清空选择
             </n-button>
           </n-space>
         </div>
 
-        <!-- 树形区域 -->
+        <!-- 角色列表区域 -->
         <div class="auth-tree-container">
           <n-spin :show="authLoading">
-            <PremiumTree
-              v-if="filteredRoleTreeData.length > 0"
-              :data="filteredRoleTreeData"
-              checkable
-              :cascade="false"
-              :checked-keys="checkedRoleKeys"
-              key-field="id"
-              label-field="roleName"
-              children-field="children"
-              :get-node-icon="getRoleNodeIcon"
-              :get-node-tone="getRoleNodeTone"
-              @update:checked-keys="handleCheckedKeysChange"
+            <n-data-table
+              :columns="authRoleColumns"
+              :data="roleTableData"
+              :checked-row-keys="checkedRoleKeys"
+              :pagination="rolePaginationConfig"
+              :row-key="row => row.id"
+              remote
+              striped
+              size="small"
+              @update:checked-row-keys="handleCheckedKeysChange"
+              @update:page="handleRolePageChange"
+              @update:page-size="handleRolePageSizeChange"
             />
-            <n-empty v-else :description="roleSearchKeyword ? '未匹配到角色' : '暂无角色数据'" />
           </n-spin>
         </div>
       </div>
@@ -410,6 +417,9 @@ defineOptions({ name: 'SystemUser' })
 const USER_TYPE_DICT = 'sys_user_type'
 const USER_STATUS_DICT = 'sys_user_status'
 const USER_SEX_DICT = 'sys_user_sex'
+const ROLE_DATA_SCOPE_DICT = 'sys_role_data_scope'
+const ROLE_TYPE_DICT = 'sys_role_type'
+const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 
 const crudRef = ref(null)
 const userStore = useUserStore()
@@ -429,9 +439,14 @@ const authModalVisible = ref(false)
 const authLoading = ref(false)
 const authSubmitLoading = ref(false)
 const currentUser = ref({})
-const roleTreeData = ref([])
+const roleTableData = ref([])
 const roleSearchKeyword = ref('')
 const checkedRoleKeys = ref([])
+const rolePagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+})
 
 // 重置密码相关
 const resetPwdModalVisible = ref(false)
@@ -474,7 +489,7 @@ const defaultTenantId = ref(null)
 const searchRegionOptions = ref([])
 const editRegionOptions = ref([])
 
-const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, USER_SEX_DICT)
+const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, USER_SEX_DICT, ROLE_DATA_SCOPE_DICT, ROLE_TYPE_DICT, NORMAL_DISABLE_DICT)
 
 const userTypeOptions = computed(() => toNumberOptions(dict.value[USER_TYPE_DICT]))
 const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
@@ -483,17 +498,48 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
-const filteredRoleTreeData = computed(() => {
-  const keyword = roleSearchKeyword.value.trim().toLowerCase()
-  if (!keyword)
-    return roleTreeData.value
-
-  return roleTreeData.value.filter((role) => {
-    const roleName = String(role.roleName || '').toLowerCase()
-    const roleKey = String(role.roleKey || '').toLowerCase()
-    return roleName.includes(keyword) || roleKey.includes(keyword)
-  })
-})
+const rolePaginationConfig = computed(() => ({
+  page: rolePagination.value.page,
+  pageSize: rolePagination.value.pageSize,
+  itemCount: rolePagination.value.itemCount,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100],
+}))
+const authRoleColumns = computed(() => [
+  {
+    type: 'selection',
+    multiple: true,
+    width: 48,
+  },
+  {
+    title: '角色名称',
+    key: 'roleName',
+    minWidth: 150,
+  },
+  {
+    title: '权限字符',
+    key: 'roleKey',
+    minWidth: 140,
+  },
+  {
+    title: '角色类型',
+    key: 'roleType',
+    width: 110,
+    render: row => h(DictTag, { dictType: ROLE_TYPE_DICT, value: row.roleType, size: 'small', forceTag: true }),
+  },
+  {
+    title: '数据范围',
+    key: 'dataScope',
+    width: 140,
+    render: row => h(DictTag, { dictType: ROLE_DATA_SCOPE_DICT, value: row.dataScope, size: 'small', forceTag: true }),
+  },
+  {
+    title: '状态',
+    key: 'roleStatus',
+    width: 90,
+    render: row => h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.roleStatus, size: 'small', forceTag: true }),
+  },
+])
 const selectedTenantOptions = computed(() => tenantOptions.value
   .filter(item => checkedTenantKeys.value.includes(item.id))
   .map(item => ({
@@ -913,16 +959,6 @@ function getUserOrgNodeMeta(node = {}) {
   return null
 }
 
-function getRoleNodeIcon(node = {}) {
-  return node.children?.length
-    ? 'i-material-symbols:admin-panel-settings-rounded'
-    : 'i-material-symbols:verified-user-rounded'
-}
-
-function getRoleNodeTone(node = {}) {
-  return node.children?.length ? 'folder' : 'menu'
-}
-
 // 加载左侧组织树
 async function loadLeftOrgTree() {
   try {
@@ -1212,6 +1248,7 @@ async function handleAuth(row) {
   currentUser.value = row
   authModalVisible.value = true
   roleSearchKeyword.value = ''
+  rolePagination.value.page = 1
 
   await loadRoleList()
   await loadUserRoles(row.id)
@@ -1222,14 +1259,15 @@ async function loadRoleList() {
   try {
     authLoading.value = true
     const res = await request.get('/system/role/page', {
-      params: { pageNum: 1, pageSize: 1000 },
+      params: {
+        pageNum: rolePagination.value.page,
+        pageSize: rolePagination.value.pageSize,
+        roleName: roleSearchKeyword.value || undefined,
+      },
     })
     if (res.code === 200) {
-      roleTreeData.value = (res.data.list || res.data.records || []).map(role => ({
-        id: role.id,
-        roleName: role.roleName,
-        roleKey: role.roleKey,
-      }))
+      roleTableData.value = res.data.list || res.data.records || []
+      rolePagination.value.itemCount = Number(res.data.total || 0)
     }
   }
   catch (error) {
@@ -1264,10 +1302,26 @@ function handleCheckedKeysChange(keys) {
   checkedRoleKeys.value = keys
 }
 
+function handleRoleSearch() {
+  rolePagination.value.page = 1
+  loadRoleList()
+}
+
+function handleRolePageChange(page) {
+  rolePagination.value.page = page
+  loadRoleList()
+}
+
+function handleRolePageSizeChange(pageSize) {
+  rolePagination.value.pageSize = pageSize
+  rolePagination.value.page = 1
+  loadRoleList()
+}
+
 // 全选
 function handleCheckAll() {
-  const allKeys = getAllKeys(filteredRoleTreeData.value)
-  checkedRoleKeys.value = allKeys
+  const currentPageKeys = roleTableData.value.map(role => role.id)
+  checkedRoleKeys.value = Array.from(new Set([...checkedRoleKeys.value, ...currentPageKeys]))
 }
 
 // 全不选
@@ -1823,13 +1877,13 @@ async function handleSubmitTenant() {
   overflow-y: auto;
   overflow-x: hidden;
   border-radius: 4px;
-  padding: 12px;
+  padding: 0;
   min-height: 300px;
   max-height: 500px;
 }
 
-.auth-tree-container :deep(.premium-tree) {
-  padding-top: 2px;
+.auth-tree-container :deep(.n-data-table) {
+  min-width: 0;
 }
 
 .auth-tree-container::-webkit-scrollbar {

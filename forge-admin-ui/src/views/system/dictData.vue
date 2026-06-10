@@ -27,6 +27,7 @@
       row-key="dictCode"
       add-button-text="新增字典数据"
       :before-submit="handleBeforeSubmit"
+      :before-delete="handleBeforeDelete"
       :before-render-form="handleBeforeRenderForm"
       :before-render-detail="handleBeforeRenderDetail"
       :edit-grid-cols="2"
@@ -114,7 +115,7 @@ const apiConfig = computed(() => ({
   detail: 'post@/system/dict/data/getById',
   add: 'post@/system/dict/data/add',
   update: 'post@/system/dict/data/edit',
-  delete: 'post@/system/dict/data/remove',
+  delete: 'post@/system/dict/data/removeBatch',
 }))
 
 // 公共查询参数
@@ -671,6 +672,40 @@ function handleViewModeChange(value) {
   nextTick(() => {
     crudRef.value?.loadList()
   })
+}
+
+async function handleBeforeDelete(rows = []) {
+  const dictCodes = rows
+    .map(row => row?.dictCode)
+    .filter(dictCode => dictCode !== null && dictCode !== undefined && dictCode !== '')
+
+  if (dictCodes.length === 0) {
+    window.$message.warning('请选择要删除的字典数据')
+    return false
+  }
+
+  window.$dialog.warning({
+    title: '确认删除',
+    content: `确定要删除选中的 ${dictCodes.length} 条字典数据吗？删除后将无法恢复！`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await request.post('/system/dict/data/removeBatch', dictCodes)
+        if (res.code === 200) {
+          window.$message.success('删除成功')
+          crudRef.value?.clearSelection()
+          await loadParentDictOptions()
+          crudRef.value?.refresh()
+        }
+      }
+      catch {
+        window.$message.error('删除失败')
+      }
+    },
+  })
+
+  return false
 }
 
 async function handleToolbarAdd() {

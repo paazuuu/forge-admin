@@ -8,7 +8,7 @@
         detail: 'post@/system/dict/type/getById',
         add: 'post@/system/dict/type/add',
         update: 'post@/system/dict/type/edit',
-        delete: 'post@/system/dict/type/remove',
+        delete: 'post@/system/dict/type/removeBatch',
       }"
       :load-detail-on-edit="true"
       :search-schema="searchSchema"
@@ -23,13 +23,11 @@
 <script setup>
 import { NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { AiCrudPage } from '@/components/ai-form'
 import { closeAndOpen, request } from '@/utils'
 
 defineOptions({ name: 'DictType' })
 
-const router = useRouter()
 const crudRef = ref(null)
 
 // 字典状态选项
@@ -103,7 +101,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },

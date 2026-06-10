@@ -8,7 +8,7 @@
         detail: 'post@/system/config/getById',
         add: 'post@/system/config/add',
         update: 'post@/system/config/edit',
-        delete: 'post@/system/config/remove',
+        delete: 'post@/system/config/removeBatch',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
@@ -218,7 +218,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
