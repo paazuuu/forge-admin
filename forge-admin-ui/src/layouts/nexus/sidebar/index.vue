@@ -141,7 +141,7 @@ import { usePermissionStore } from '@/store'
 
 const route = useRoute()
 const permissionStore = usePermissionStore()
-const { handleMenuSelect: baseHandleMenuSelect } = useMenu()
+const { activeKey: currentActiveKey, handleMenuSelect: baseHandleMenuSelect } = useMenu()
 
 const { userName, userAvatarText, userAvatar, userDropdownOptions, dropdownVisible: userDropdownVisible, handleDropdownSelect } = useUser()
 
@@ -171,27 +171,28 @@ const menuItems = computed(() => {
   return menus.map(processItem)
 })
 
+function resolveMenuKey(item) {
+  const key = item?.key ?? item?.id
+  return key === undefined || key === null ? '' : String(key)
+}
+
 // Check if menu item is active
 function isActive(item) {
-  if (!item.path)
+  const menuKey = resolveMenuKey(item)
+  if (!menuKey)
     return false
-  const currentPath = route.path
-  if (item.path === currentPath)
-    return true
-  if (item.path !== '/' && item.path !== currentPath) {
-    const normalizedPath = item.path.endsWith('/') ? item.path : `${item.path}/`
-    const normalizedCurrent = currentPath.endsWith('/') ? currentPath : `${currentPath}/`
-    if (normalizedCurrent.startsWith(normalizedPath))
-      return true
-  }
-  return false
+  return menuKey === String(currentActiveKey.value || '')
+}
+
+function hasActiveDescendant(item) {
+  if (!item?.children?.length)
+    return false
+  return item.children.some(child => isActive(child) || hasActiveDescendant(child))
 }
 
 // Check if collapsible menu has active child
 function isCollapsibleActive(item) {
-  if (!item.children)
-    return false
-  return item.children.some(child => isActive(child))
+  return isActive(item) || hasActiveDescendant(item)
 }
 
 // Check if menu is expanded
