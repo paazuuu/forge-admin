@@ -58,7 +58,7 @@
       </span>
 
       <span v-if="nodeMeta" class="premium-tree-meta">
-        <span>{{ nodeMeta.label }}</span>
+        <span v-if="nodeMeta.label">{{ nodeMeta.label }}</span>
         <strong>{{ nodeMeta.value }}</strong>
       </span>
     </div>

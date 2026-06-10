@@ -158,13 +158,18 @@
       <div class="auth-modal-content">
         <!-- 操作按钮 -->
         <div class="auth-toolbar">
-          <n-space size="small">
-            <n-button size="small" @click="toggleExpandAll">
-              <template #icon>
-                <i :class="treeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
-              </template>
-              {{ treeExpandAll ? '折叠全部' : '展开全部' }}
-            </n-button>
+          <n-input
+            v-model:value="roleSearchKeyword"
+            class="auth-role-search"
+            clearable
+            size="small"
+            placeholder="按角色名称搜索"
+          >
+            <template #prefix>
+              <i class="i-material-symbols:search-rounded" />
+            </template>
+          </n-input>
+          <n-space size="small" class="auth-toolbar-actions">
             <n-button size="small" @click="handleCheckAll">
               <template #icon>
                 <i class="i-material-symbols:check-box-outline" />
@@ -177,9 +182,6 @@
               </template>
               全不选
             </n-button>
-            <n-checkbox v-model:checked="checkStrictly">
-              父子联动
-            </n-checkbox>
           </n-space>
         </div>
 
@@ -187,21 +189,19 @@
         <div class="auth-tree-container">
           <n-spin :show="authLoading">
             <PremiumTree
-              v-if="roleTreeData.length > 0"
-              :data="roleTreeData"
+              v-if="filteredRoleTreeData.length > 0"
+              :data="filteredRoleTreeData"
               checkable
-              :cascade="!checkStrictly"
-              :expanded-keys="treeExpandedKeys"
+              :cascade="false"
               :checked-keys="checkedRoleKeys"
               key-field="id"
               label-field="roleName"
               children-field="children"
               :get-node-icon="getRoleNodeIcon"
               :get-node-tone="getRoleNodeTone"
-              @update:expanded-keys="handleExpandedKeysChange"
               @update:checked-keys="handleCheckedKeysChange"
             />
-            <n-empty v-else description="暂无角色数据" />
+            <n-empty v-else :description="roleSearchKeyword ? '未匹配到角色' : '暂无角色数据'" />
           </n-spin>
         </div>
       </div>
@@ -234,29 +234,17 @@
         <!-- 操作按钮 -->
         <div class="org-toolbar">
           <n-space size="small">
-            <n-button size="small" @click="toggleOrgExpandAll">
+            <n-button size="small" @click="toggleUserOrgExpandAll">
               <template #icon>
                 <i :class="orgTreeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
               </template>
               {{ orgTreeExpandAll ? '折叠全部' : '展开全部' }}
             </n-button>
           </n-space>
-        </div>
-
-        <!-- 主组织选择 -->
-        <div class="org-main-section">
-          <n-form-item label="主组织">
-            <n-tree-select
-              v-model:value="mainOrgId"
-              :options="orgTreeData"
-              key-field="id"
-              label-field="orgName"
-              children-field="children"
-              placeholder="请选择主组织"
-              checkable
-              :default-expand-all="orgTreeExpandAll"
-            />
-          </n-form-item>
+          <div class="org-main-hint">
+            <span>已选组织</span>
+            <strong>{{ mainOrgName || '请选择一个组织' }}</strong>
+          </div>
         </div>
 
         <!-- 组织树形区域 -->
@@ -265,16 +253,17 @@
             <PremiumTree
               v-if="orgTreeData.length > 0"
               :data="orgTreeData"
-              checkable
+              :selected-keys="mainOrgId ? [mainOrgId] : []"
               :expanded-keys="orgTreeExpandedKeys"
-              :checked-keys="checkedOrgKeys"
               key-field="id"
               label-field="orgName"
               children-field="children"
               :get-node-icon="getLeftOrgNodeIcon"
+              :get-node-meta="getUserOrgNodeMeta"
               :get-node-tone="getLeftOrgNodeTone"
+              show-meta
               @update:expanded-keys="handleOrgExpandedKeysChange"
-              @update:checked-keys="handleOrgCheckedKeysChange"
+              @update:selected-keys="handleOrgSelectedKeysChange"
             />
             <n-empty v-else description="暂无组织数据" />
           </n-spin>
@@ -441,10 +430,8 @@ const authLoading = ref(false)
 const authSubmitLoading = ref(false)
 const currentUser = ref({})
 const roleTreeData = ref([])
+const roleSearchKeyword = ref('')
 const checkedRoleKeys = ref([])
-const treeExpandAll = ref(true)
-const treeExpandedKeys = ref([])
-const checkStrictly = ref(false)
 
 // 重置密码相关
 const resetPwdModalVisible = ref(false)
@@ -463,7 +450,6 @@ const orgModalVisible = ref(false)
 const orgLoading = ref(false)
 const orgSubmitLoading = ref(false)
 const orgTreeData = ref([])
-const checkedOrgKeys = ref([])
 const mainOrgId = ref(null)
 const orgTreeExpandAll = ref(true)
 const orgTreeExpandedKeys = ref([])
@@ -497,6 +483,17 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
+const filteredRoleTreeData = computed(() => {
+  const keyword = roleSearchKeyword.value.trim().toLowerCase()
+  if (!keyword)
+    return roleTreeData.value
+
+  return roleTreeData.value.filter((role) => {
+    const roleName = String(role.roleName || '').toLowerCase()
+    const roleKey = String(role.roleKey || '').toLowerCase()
+    return roleName.includes(keyword) || roleKey.includes(keyword)
+  })
+})
 const selectedTenantOptions = computed(() => tenantOptions.value
   .filter(item => checkedTenantKeys.value.includes(item.id))
   .map(item => ({
@@ -595,7 +592,7 @@ const tableColumns = computed(() => [
     label: '用户类型',
     width: 120,
     render: (row) => {
-      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small' })
+      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small', forceTag: true })
     },
   },
   ...(userStore.isAdmin
@@ -621,7 +618,7 @@ const tableColumns = computed(() => [
     label: '性别',
     width: 80,
     render: (row) => {
-      return h(DictTag, { dictType: USER_SEX_DICT, value: row.gender, size: 'small' })
+      return h(DictTag, { dictType: USER_SEX_DICT, value: row.gender, size: 'small', forceTag: true })
     },
   },
   {
@@ -640,7 +637,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small' })
+      return h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small', forceTag: true })
     },
   },
   {
@@ -870,6 +867,13 @@ const orgTreeSummaryText = computed(() => {
   return `${total} 个组织节点`
 })
 
+const mainOrgName = computed(() => {
+  if (!mainOrgId.value)
+    return ''
+  const node = findOrgNode(orgTreeData.value, mainOrgId.value)
+  return node?.orgName || ''
+})
+
 // 获取所有节点的 key
 function getAllKeys(list, keys = []) {
   list.forEach((item) => {
@@ -885,6 +889,10 @@ function countTreeNodes(list = []) {
   return list.reduce((total, item) => total + 1 + countTreeNodes(item.children || []), 0)
 }
 
+function isSameKey(left, right) {
+  return String(left) === String(right)
+}
+
 function getLeftOrgNodeIcon(node = {}) {
   if (!node.parentId || Number(node.parentId) === 0)
     return 'i-material-symbols:account-tree-rounded'
@@ -897,6 +905,12 @@ function getLeftOrgNodeTone(node = {}) {
   if (!node.parentId || Number(node.parentId) === 0)
     return 'folder'
   return node.children?.length ? 'folder' : 'menu'
+}
+
+function getUserOrgNodeMeta(node = {}) {
+  if (isSameKey(node.id, mainOrgId.value))
+    return { value: '主组织' }
+  return null
 }
 
 function getRoleNodeIcon(node = {}) {
@@ -1043,6 +1057,17 @@ function toggleOrgExpandAll() {
   }
 }
 
+function toggleUserOrgExpandAll() {
+  orgTreeExpandAll.value = !orgTreeExpandAll.value
+
+  if (orgTreeExpandAll.value) {
+    orgTreeExpandedKeys.value = getAllKeys(orgTreeData.value)
+  }
+  else {
+    orgTreeExpandedKeys.value = []
+  }
+}
+
 function toggleLeftOrgPanel() {
   leftOrgPanelCollapsed.value = !leftOrgPanelCollapsed.value
 }
@@ -1186,6 +1211,7 @@ function handleDelete(row) {
 async function handleAuth(row) {
   currentUser.value = row
   authModalVisible.value = true
+  roleSearchKeyword.value = ''
 
   await loadRoleList()
   await loadUserRoles(row.id)
@@ -1204,10 +1230,6 @@ async function loadRoleList() {
         roleName: role.roleName,
         roleKey: role.roleKey,
       }))
-
-      if (treeExpandAll.value) {
-        treeExpandedKeys.value = getAllKeys(roleTreeData.value)
-      }
     }
   }
   catch (error) {
@@ -1237,31 +1259,14 @@ async function loadUserRoles(userId) {
   }
 }
 
-// 展开的节点变化
-function handleExpandedKeysChange(keys) {
-  treeExpandedKeys.value = keys
-}
-
 // 选中的角色变化
 function handleCheckedKeysChange(keys) {
   checkedRoleKeys.value = keys
 }
 
-// 展开/折叠所有
-function toggleExpandAll() {
-  treeExpandAll.value = !treeExpandAll.value
-
-  if (treeExpandAll.value) {
-    treeExpandedKeys.value = getAllKeys(roleTreeData.value)
-  }
-  else {
-    treeExpandedKeys.value = []
-  }
-}
-
 // 全选
 function handleCheckAll() {
-  const allKeys = getAllKeys(roleTreeData.value)
+  const allKeys = getAllKeys(filteredRoleTreeData.value)
   checkedRoleKeys.value = allKeys
 }
 
@@ -1297,7 +1302,6 @@ async function handleOrg(row) {
   currentUser.value = row
   orgModalVisible.value = true
   mainOrgId.value = null
-  checkedOrgKeys.value = []
 
   await loadOrgTree()
   await loadUserOrgs(row.id)
@@ -1330,8 +1334,7 @@ async function loadUserOrgs(userId) {
     orgLoading.value = true
     const res = await request.get(`/system/user/${userId}/orgs`)
     if (res.code === 200) {
-      checkedOrgKeys.value = res.data || []
-      mainOrgId.value = checkedOrgKeys.value.length > 0 ? checkedOrgKeys.value[0] : null
+      mainOrgId.value = (res.data || [])[0] || null
     }
   }
   catch (error) {
@@ -1349,17 +1352,14 @@ function handleOrgExpandedKeysChange(keys) {
 }
 
 // 组织选中的变化
-function handleOrgCheckedKeysChange(keys) {
-  checkedOrgKeys.value = keys
-  if (mainOrgId.value && !keys.includes(mainOrgId.value)) {
-    mainOrgId.value = null
-  }
+function handleOrgSelectedKeysChange(keys) {
+  mainOrgId.value = keys?.[0] ?? null
 }
 
 // 提交组织绑定
 async function handleSubmitOrg() {
-  if (checkedOrgKeys.value.length === 0) {
-    window.$message.warning('请至少选择一个组织')
+  if (!mainOrgId.value) {
+    window.$message.warning('请选择一个组织')
     return
   }
 
@@ -1368,7 +1368,7 @@ async function handleSubmitOrg() {
     const res = await request.post(
       `/system/user/${currentUser.value.id}/orgs`,
       {
-        orgIds: checkedOrgKeys.value,
+        orgIds: [mainOrgId.value],
         mainOrgId: mainOrgId.value,
       },
     )
@@ -1796,10 +1796,25 @@ async function handleSubmitTenant() {
 }
 
 .auth-toolbar {
-  padding: 12px;
-  background-color: #d9d7d7;
-  border-radius: 4px;
-  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.auth-role-search {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.auth-toolbar-actions {
   flex-shrink: 0;
 }
 
@@ -1845,20 +1860,34 @@ async function handleSubmitTenant() {
 }
 
 .org-toolbar {
-  padding: 12px;
-  background-color: #d9d7d7;
-  border-radius: 4px;
-  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 12px;
   flex-shrink: 0;
 }
 
-.org-main-section {
-  margin-bottom: 16px;
-  flex-shrink: 0;
+.org-main-hint {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
 }
 
-.org-main-section :deep(.n-form-item) {
-  margin-bottom: 0;
+.org-main-hint strong {
+  max-width: 240px;
+  overflow: hidden;
+  color: #1d4ed8;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .org-tree-container {
