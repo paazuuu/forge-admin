@@ -97,4 +97,9 @@ public class SysUserDTO implements Serializable {
      * 岗位ID列表（新增/编辑时同步绑定）
      */
     private List<Long> postIds;
+
+    /**
+     * 角色ID列表（新增/编辑时同步绑定）
+     */
+    private List<Long> roleIds;
 }

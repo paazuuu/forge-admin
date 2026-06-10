@@ -53,8 +53,9 @@ public class SysOrgController {
     }
     
     @GetMapping("/children/{parentId}")
-    public RespInfo<List<SysOrgTreeVO>> children(@PathVariable Long parentId) {
-        List<SysOrgTreeVO> list = orgService.selectOrgChildrenByParentId(parentId);
+    public RespInfo<List<SysOrgTreeVO>> children(@PathVariable Long parentId,
+                                                 @RequestParam(required = false) Long tenantId) {
+        List<SysOrgTreeVO> list = orgService.selectOrgChildrenByParentId(parentId, tenantId);
         return RespInfo.success(list);
     }
 

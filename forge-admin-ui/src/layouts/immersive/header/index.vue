@@ -33,6 +33,7 @@
       <Fullscreen />
       <MessageNotification />
       <div class="header-divider" />
+      <TenantSwitcher />
       <UserAvatar />
     </div>
 
@@ -51,6 +52,7 @@ import {
   Fullscreen,
   MenuSearch,
   MessageNotification,
+  TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'
 import { useTenantStore } from '@/store'

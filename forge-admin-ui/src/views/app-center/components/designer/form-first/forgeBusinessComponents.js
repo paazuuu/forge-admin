@@ -95,7 +95,7 @@ function createForgeBusinessDragRules() {
         placeholder: '请选择行政区划',
         clearable: true,
         filterable: true,
-        rootCode: '150000',
+        rootCode: '',
         dataRight: true,
         virtualDisabled: true,
       },
@@ -217,7 +217,7 @@ function createForgeBusinessComponentRules(fields = []) {
     ],
     [DRAG_TAG_BY_COMPONENT.regionTreeSelect]: () => [
       ...fieldBindingRules(),
-      inputRule('rootCode', '根区划编码', '默认 150000'),
+      inputRule('rootCode', '根区划编码', '默认跟随当前用户权限范围'),
       switchRule('dataRight', '启用数据权限', true),
       switchRule('virtualDisabled', '编辑态禁选 ALL 节点', true),
       switchRule('filterable', '可搜索', true),
@@ -584,12 +584,12 @@ async function hydratePreviewRule(rule = {}) {
       return
     }
     if (componentKey === 'regionTreeSelect') {
-      const rootCode = rule.props?.rootCode || '150000'
+      const rootCode = rule.props?.rootCode || ''
       const dataRight = rule.props?.dataRight !== false
       const virtualDisabled = rule.props?.virtualDisabled !== false
       rule.props = {
         ...(rule.props || {}),
-        data: await cachedPreviewOptions(`system:region:${rootCode}:${dataRight}:${virtualDisabled}`, () =>
+        data: await cachedPreviewOptions(`system:region:${rootCode || 'current'}:${dataRight}:${virtualDisabled}`, () =>
           loadRegionPreviewTree(rootCode, dataRight, virtualDisabled)),
         nodeKey: 'value',
         props: { label: 'label', value: 'value', children: 'children' },
@@ -672,8 +672,12 @@ async function loadOrgPreviewTree() {
 }
 
 async function loadRegionPreviewTree(rootCode, dataRight, virtualDisabled) {
+  const params = { dataRight }
+  if (rootCode) {
+    params.rootCode = rootCode
+  }
   const res = await request.get('/system/region/treeAll', {
-    params: { rootCode, dataRight },
+    params,
   })
   return normalizeTreeOptions(res?.data || [], {
     valueFields: ['code', 'value', 'key'],

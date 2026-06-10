@@ -9,7 +9,7 @@
   <RegionTreeSelect v-model="form.regionCode" />                                  <!-- 编辑表单：虚拟节点不可选 -->
   <RegionTreeSelect v-model="query.regionCode" :virtual-disabled="false" />       <!-- 搜索筛选：虚拟节点可选 -->
 
-  <RegionTreeSelect v-model="form.regionCode" root-code="150000" :data-right="true" />
+  <RegionTreeSelect v-model="form.regionCode" :data-right="true" />
 
 -->
 <template>
@@ -36,7 +36,7 @@ const props = defineProps({
   },
   rootCode: {
     type: String,
-    default: '150000',
+    default: '',
   },
   dataRight: {
     type: Boolean,
@@ -84,8 +84,12 @@ function handleUpdate(value) {
 
 async function loadRegionOptions() {
   try {
+    const params = { dataRight: props.dataRight }
+    if (props.rootCode) {
+      params.rootCode = props.rootCode
+    }
     const res = await request.get('/system/region/treeAll', {
-      params: { rootCode: props.rootCode, dataRight: props.dataRight },
+      params,
     })
     if (res.code === 200) {
       regionOptions.value = convertToTreeSelect(res.data || [])

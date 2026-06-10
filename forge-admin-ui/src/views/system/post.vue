@@ -13,6 +13,9 @@
       :search-schema="searchSchema"
       :columns="tableColumns"
       :edit-schema="editSchema"
+      :before-submit="beforeSubmit"
+      :before-load-list="beforeLoadList"
+      :before-render-form="beforeRenderForm"
       row-key="id"
       :edit-grid-cols="2"
       modal-width="800px"
@@ -27,6 +30,7 @@ import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import { useUserStore } from '@/store'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemPost' })
@@ -35,15 +39,32 @@ const POST_TYPE_DICT = 'sys_post_type'
 const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 
 const crudRef = ref(null)
-const orgOptions = ref([])
+const userStore = useUserStore()
+const tenantOptions = ref([])
 
 const { dict } = useDict(POST_TYPE_DICT, NORMAL_DISABLE_DICT)
 
 const postTypeOptions = computed(() => toNumberOptions(dict.value[POST_TYPE_DICT]))
 const postStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
+const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
+  label: item.tenantName,
+  value: item.id,
+})))
 
 // 搜索表单配置
 const searchSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        props: {
+          placeholder: '请选择租户',
+          clearable: true,
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   {
     field: 'postName',
     label: '岗位名称',
@@ -82,6 +103,14 @@ const searchSchema = computed(() => [
 
 // 表格列配置
 const tableColumns = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        prop: 'tenantId',
+        label: '所属租户',
+        width: 160,
+        render: row => findTenantName(row.tenantId) || row.tenantId || '-',
+      }]
+    : []),
   {
     prop: 'postCode',
     label: '岗位编码',
@@ -132,6 +161,19 @@ const tableColumns = computed(() => [
 
 // 编辑表单配置
 const editSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        defaultValue: userStore.userInfo?.tenantId,
+        rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
+        props: {
+          placeholder: '请选择所属租户',
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   // 基础信息
   {
     type: 'divider',
@@ -165,13 +207,21 @@ const editSchema = computed(() => [
     type: 'treeSelect',
     required: true,
     rules: [{ required: true, type: 'number', message: '请选择所属组织', trigger: 'change' }],
+    optionSource: {
+      type: 'tree',
+      api: 'get@/system/org/tree',
+      params: { tenantId: '${tenantId}' },
+      valueField: 'id',
+      keyField: 'id',
+      labelField: 'orgName',
+      childrenField: 'children',
+    },
     props: {
       placeholder: '请选择所属组织',
       clearable: true,
       filterable: true,
       defaultExpandAll: true,
     },
-    options: () => orgOptions.value,
   },
   {
     field: 'postType',
@@ -231,39 +281,64 @@ function toNumberOptions(options = []) {
   }))
 }
 
-// 组件挂载时加载组织选项
+// 组件挂载时加载租户选项
 onMounted(() => {
-  loadOrgOptions()
+  loadTenantOptions()
 })
 
-// 加载组织选项
-async function loadOrgOptions() {
+function buildTenantParams(tenantId) {
+  const resolvedTenantId = userStore.isAdmin ? tenantId : userStore.userInfo?.tenantId
+  return resolvedTenantId ? { tenantId: resolvedTenantId } : {}
+}
+
+function resolveSelectedTenantId(row) {
+  return row?.tenantId
+    || (userStore.isAdmin ? crudRef.value?.getSearchParams?.()?.tenantId : null)
+    || userStore.userInfo?.tenantId
+}
+
+function beforeLoadList(params) {
+  Object.assign(params, buildTenantParams(params.tenantId))
+  return params
+}
+
+function beforeSubmit(formData) {
+  if (!userStore.isAdmin) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
+  else if (!formData.tenantId) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
+  return formData
+}
+
+function beforeRenderForm(row) {
+  if (row) {
+    return row
+  }
+  return {
+    tenantId: resolveSelectedTenantId(),
+  }
+}
+
+function findTenantName(tenantId) {
+  return tenantOptions.value.find(item => String(item.id) === String(tenantId))?.tenantName
+}
+
+async function loadTenantOptions() {
   try {
-    const res = await request.get('/system/org/tree')
+    const res = await request.get('/system/tenant/assignable/options')
     if (res.code === 200) {
-      const convertToTreeSelect = (list) => {
-        return list.map(item => ({
-          label: item.orgName,
-          value: item.id,
-          key: item.id,
-          children: item.children && item.children.length > 0
-            ? convertToTreeSelect(item.children)
-            : undefined,
-        }))
-      }
-      orgOptions.value = convertToTreeSelect(res.data || [])
+      tenantOptions.value = res.data || []
     }
   }
   catch (error) {
-    console.error('加载组织选项失败:', error)
+    console.error('加载租户选项失败:', error)
   }
 }
 
 // 编辑
 async function handleEdit(row) {
-  // 加载组织选项
-  await loadOrgOptions()
-
   crudRef.value?.showEdit(row)
 }
 

@@ -30,4 +30,9 @@ public interface SysRoleMapper extends BaseMapper<SysRole> {
      * 分页查询角色下的用户
      */
     IPage<SysUser> selectRoleUsers(Page<SysUser> page, @Param("query") RoleUserQuery query);
+
+    /**
+     * 查询角色绑定用户数量。
+     */
+    Long countUsersByRole(@Param("roleId") Long roleId, @Param("tenantId") Long tenantId);
 }

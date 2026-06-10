@@ -22,6 +22,8 @@
 
       <MessageNotification />
 
+      <TenantSwitcher />
+
       <UserAvatar />
     </div>
   </div>
@@ -29,7 +31,7 @@
 
 <script setup>
 import { ToggleTheme } from '@/components'
-import { BeginnerGuide, BreadCrumb, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, UserAvatar } from '@/layouts/components'
+import { BeginnerGuide, BreadCrumb, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, TenantSwitcher, UserAvatar } from '@/layouts/components'
 
 function handleLinkClick(link) {
   window.open(link)

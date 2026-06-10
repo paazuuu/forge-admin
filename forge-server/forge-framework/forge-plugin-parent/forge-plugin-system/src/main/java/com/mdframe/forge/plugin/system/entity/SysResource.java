@@ -133,6 +133,11 @@ public class SysResource extends TenantEntity {
     private String clientCode;
 
     /**
+     * 最低可访问用户类型（0-系统管理员，1-租户管理员，2-普通用户）
+     */
+    private Integer minUserType;
+
+    /**
      * 子资源列表（非数据库字段，用于树形结构）
      */
     @TableField(exist = false)

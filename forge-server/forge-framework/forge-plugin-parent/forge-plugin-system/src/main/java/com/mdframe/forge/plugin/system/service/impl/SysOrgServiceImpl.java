@@ -1,20 +1,27 @@
 package com.mdframe.forge.plugin.system.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.system.dto.SysOrgDTO;
 import com.mdframe.forge.plugin.system.dto.SysOrgQuery;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
+import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
+import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
 import com.mdframe.forge.plugin.system.service.ISysOrgService;
 import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import com.mdframe.forge.starter.trans.annotation.DictTranslate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -26,25 +33,32 @@ import java.util.stream.Collectors;
 public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> implements ISysOrgService {
 
     private final SysOrgMapper orgMapper;
+    private final SysTenantMapper tenantMapper;
 
     @Override
     @DictTranslate
     public IPage<SysOrg> selectOrgPage(SysOrgQuery query) {
+        query = normalizeOrgQueryTenant(query);
         Page<SysOrg> page = new Page<>(query.getPageNum(), query.getPageSize());
-        return orgMapper.selectOrgPage(page, query);
+        SysOrgQuery finalQuery = query;
+        return TenantContextHolder.executeIgnore(() -> orgMapper.selectOrgPage(page, finalQuery));
     }
 
     @Override
     @DictTranslate
     public List<SysOrg> selectOrgTree(SysOrgQuery query) {
-        List<SysOrg> allOrgs = orgMapper.selectOrgList(query);
+        query = normalizeOrgQueryTenant(query);
+        SysOrgQuery finalQuery = query;
+        List<SysOrg> allOrgs = TenantContextHolder.executeIgnore(() -> orgMapper.selectOrgList(finalQuery));
         return buildTree(allOrgs);
     }
     
     @Override
     @DictTranslate
     public List<SysOrgTreeVO> selectOrgLazyTree(SysOrgQuery query) {
-        List<SysOrgTreeVO> allOrgs = orgMapper.selectOrgLazyTree(query);
+        query = normalizeOrgQueryTenant(query);
+        SysOrgQuery finalQuery = query;
+        List<SysOrgTreeVO> allOrgs = TenantContextHolder.executeIgnore(() -> orgMapper.selectOrgLazyTree(finalQuery));
         if (query != null && query.getParentId() != null) {
             return allOrgs;
         }
@@ -54,7 +68,14 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
     @Override
     @DictTranslate
     public List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId) {
-        return orgMapper.selectOrgChildrenByParentId(parentId);
+        return selectOrgChildrenByParentId(parentId, null);
+    }
+
+    @Override
+    @DictTranslate
+    public List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId, Long tenantId) {
+        Long operationTenantId = resolveQueryTenantId(tenantId);
+        return TenantContextHolder.executeIgnore(() -> orgMapper.selectOrgChildrenByParentId(parentId, operationTenantId));
     }
 
     /**
@@ -126,43 +147,144 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
 
     @Override
     public SysOrg selectOrgById(Long id) {
-        return orgMapper.selectById(id);
+        SysOrg org = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(id));
+        if (org != null) {
+            assertTenantReadable(org.getTenantId());
+        }
+        return org;
     }
 
     @Override
     public boolean insertOrg(SysOrgDTO dto) {
         SysOrg org = new SysOrg();
         BeanUtil.copyProperties(dto, org);
+        Long tenantId = resolveWriteTenantId(dto.getTenantId(), null);
+        org.setTenantId(tenantId);
 
         if (org.getParentId() == null || org.getParentId() == 0) {
             org.setAncestors("0");
         } else {
-            SysOrg parentOrg = orgMapper.selectById(org.getParentId());
+            SysOrg parentOrg = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(org.getParentId()));
             if (parentOrg != null) {
+                assertSameTenant(parentOrg.getTenantId(), tenantId, "上级组织不属于当前操作租户");
                 org.setAncestors(parentOrg.getAncestors() + "," + org.getParentId());
             } else {
                 org.setAncestors("0");
             }
         }
 
-        return orgMapper.insert(org) > 0;
+        return TenantContextHolder.executeIgnore(() -> orgMapper.insert(org) > 0);
     }
 
     @Override
     public boolean updateOrg(SysOrgDTO dto) {
+        SysOrg existing = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(dto.getId()));
+        if (existing == null) {
+            return false;
+        }
+        assertTenantReadable(existing.getTenantId());
         SysOrg org = new SysOrg();
         BeanUtil.copyProperties(dto, org);
-        return orgMapper.updateById(org) > 0;
+        Long tenantId = resolveWriteTenantId(dto.getTenantId(), existing.getTenantId());
+        org.setTenantId(tenantId);
+        if (org.getParentId() != null && org.getParentId() != 0) {
+            SysOrg parentOrg = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(org.getParentId()));
+            if (parentOrg != null) {
+                assertSameTenant(parentOrg.getTenantId(), tenantId, "上级组织不属于当前操作租户");
+            }
+        }
+        return TenantContextHolder.executeIgnore(() -> orgMapper.updateById(org) > 0);
     }
 
     @Override
     public boolean deleteOrgById(Long id) {
-        return orgMapper.deleteById(id) > 0;
+        validateOrgDeletable(id);
+        return TenantContextHolder.executeIgnore(() -> orgMapper.deleteById(id) > 0);
     }
 
     @Override
     public List<Long> selectOrgAndChildrenIds(Long orgId) {
         List<Long> ids = orgMapper.selectOrgAndChildrenIds(orgId);
         return ids != null && !ids.isEmpty() ? ids : null;
+    }
+
+    private void validateOrgDeletable(Long id) {
+        if (id == null) {
+            throw new RuntimeException("组织ID不能为空");
+        }
+        SysOrg org = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(id));
+        if (org == null) {
+            throw new RuntimeException("组织不存在");
+        }
+        assertTenantReadable(org.getTenantId());
+        Long childCount = TenantContextHolder.executeIgnore(() -> orgMapper.countChildOrgs(id));
+        if (childCount != null && childCount > 0) {
+            throw new RuntimeException("当前组织下存在子组织，不能删除");
+        }
+        Long userBindingCount = TenantContextHolder.executeIgnore(() -> orgMapper.countUserOrgBindings(id));
+        if (userBindingCount != null && userBindingCount > 0) {
+            throw new RuntimeException("当前组织下已绑定用户，不能删除");
+        }
+    }
+
+    private SysOrgQuery normalizeOrgQueryTenant(SysOrgQuery query) {
+        SysOrgQuery normalizedQuery = query == null ? new SysOrgQuery() : query;
+        Long tenantId = resolveQueryTenantId(normalizedQuery.getTenantId());
+        normalizedQuery.setTenantId(tenantId);
+        return normalizedQuery;
+    }
+
+    private Long resolveQueryTenantId(Long requestedTenantId) {
+        LoginUser loginUser = requireLoginUser();
+        if (!loginUser.isAdmin()) {
+            return loginUser.getTenantId();
+        }
+        if (requestedTenantId != null) {
+            validateTenantEnabled(requestedTenantId);
+        }
+        return requestedTenantId;
+    }
+
+    private Long resolveWriteTenantId(Long requestedTenantId, Long fallbackTenantId) {
+        LoginUser loginUser = requireLoginUser();
+        Long tenantId = loginUser.isAdmin()
+                ? (requestedTenantId != null ? requestedTenantId : (fallbackTenantId != null ? fallbackTenantId : loginUser.getTenantId()))
+                : loginUser.getTenantId();
+        validateTenantEnabled(tenantId);
+        return tenantId;
+    }
+
+    private void assertTenantReadable(Long tenantId) {
+        LoginUser loginUser = requireLoginUser();
+        if (!loginUser.isAdmin() && !Objects.equals(tenantId, loginUser.getTenantId())) {
+            throw new RuntimeException("无权操作非本租户组织");
+        }
+    }
+
+    private void assertSameTenant(Long actualTenantId, Long expectedTenantId, String message) {
+        if (!Objects.equals(expectedTenantId, actualTenantId)) {
+            throw new RuntimeException(message);
+        }
+    }
+
+    private LoginUser requireLoginUser() {
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null) {
+            throw new RuntimeException("用户未登录");
+        }
+        return loginUser;
+    }
+
+    private void validateTenantEnabled(Long tenantId) {
+        if (tenantId == null) {
+            throw new RuntimeException("租户不能为空");
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                tenantMapper.selectCount(new LambdaQueryWrapper<SysTenant>()
+                        .eq(SysTenant::getId, tenantId)
+                        .eq(SysTenant::getTenantStatus, 1)));
+        if (count == null || count == 0) {
+            throw new RuntimeException("租户不存在或已禁用");
+        }
     }
 }

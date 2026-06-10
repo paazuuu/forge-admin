@@ -49,6 +49,8 @@ public class SysUserController {
         SysUser user = userService.selectUserById(id);
         // 填充用户岗位ID列表
         user.setPostIds(userService.selectUserPostIds(id));
+        // 填充用户角色ID列表，支持新增/编辑表单直接维护角色
+        user.setRoleIds(userService.selectUserRoleIds(id));
         return RespInfo.success(user);
     }
 
@@ -98,8 +100,10 @@ public class SysUserController {
      * 给用户绑定角色
      */
     @PostMapping("/{userId}/roles")
-    public RespInfo<Void> bindRoles(@PathVariable Long userId, @RequestBody Long[] roleIds) {
-        boolean result = userService.bindUserRoles(userId, roleIds);
+    public RespInfo<Void> bindRoles(@PathVariable Long userId,
+                                    @RequestBody Long[] roleIds,
+                                    @RequestParam(required = false) Long tenantId) {
+        boolean result = userService.bindUserRoles(userId, roleIds, tenantId);
         return result ? RespInfo.success() : RespInfo.error("绑定角色失败");
     }
 
@@ -134,8 +138,9 @@ public class SysUserController {
      * 查询用户的角色ID列表
      */
     @GetMapping("/{userId}/roles")
-    public RespInfo<List<Long>> getUserRoleIds(@PathVariable Long userId) {
-        List<Long> roleIds = userService.selectUserRoleIds(userId);
+    public RespInfo<List<Long>> getUserRoleIds(@PathVariable Long userId,
+                                               @RequestParam(required = false) Long tenantId) {
+        List<Long> roleIds = userService.selectUserRoleIds(userId, tenantId);
         return RespInfo.success(roleIds);
     }
 
@@ -143,8 +148,9 @@ public class SysUserController {
      * 查询用户的组织ID列表
      */
     @GetMapping("/{userId}/orgs")
-    public RespInfo<List<Long>> getUserOrgIds(@PathVariable Long userId) {
-        List<Long> orgIds = userService.selectUserOrgIds(userId);
+    public RespInfo<List<Long>> getUserOrgIds(@PathVariable Long userId,
+                                              @RequestParam(required = false) Long tenantId) {
+        List<Long> orgIds = userService.selectUserOrgIds(userId, tenantId);
         return RespInfo.success(orgIds);
     }
 
@@ -169,8 +175,10 @@ public class SysUserController {
      * 批量绑定用户组织
      */
     @PostMapping("/{userId}/orgs")
-    public RespInfo<Void> bindOrgs(@PathVariable Long userId, @RequestBody UserOrgBindDTO dto) {
-        boolean result = userService.bindUserOrgs(userId, dto.getOrgIds(), dto.getMainOrgId());
+    public RespInfo<Void> bindOrgs(@PathVariable Long userId,
+                                   @RequestBody UserOrgBindDTO dto,
+                                   @RequestParam(required = false) Long tenantId) {
+        boolean result = userService.bindUserOrgs(userId, dto.getOrgIds(), dto.getMainOrgId(), tenantId);
         return result ? RespInfo.success() : RespInfo.error("绑定组织失败");
     }
 
@@ -178,8 +186,9 @@ public class SysUserController {
      * 查询用户的岗位ID列表
      */
     @GetMapping("/{userId}/posts")
-    public RespInfo<List<Long>> getUserPostIds(@PathVariable Long userId) {
-        List<Long> postIds = userService.selectUserPostIds(userId);
+    public RespInfo<List<Long>> getUserPostIds(@PathVariable Long userId,
+                                               @RequestParam(required = false) Long tenantId) {
+        List<Long> postIds = userService.selectUserPostIds(userId, tenantId);
         return RespInfo.success(postIds);
     }
 
@@ -187,8 +196,10 @@ public class SysUserController {
      * 批量绑定用户岗位
      */
     @PostMapping("/{userId}/posts")
-    public RespInfo<Void> bindPosts(@PathVariable Long userId, @RequestBody UserPostBindDTO dto) {
-        boolean result = userService.bindUserPosts(userId, dto.getPostIds(), dto.getMainPostId());
+    public RespInfo<Void> bindPosts(@PathVariable Long userId,
+                                    @RequestBody UserPostBindDTO dto,
+                                    @RequestParam(required = false) Long tenantId) {
+        boolean result = userService.bindUserPosts(userId, dto.getPostIds(), dto.getMainPostId(), tenantId);
         return result ? RespInfo.success() : RespInfo.error("绑定岗位失败");
     }
 

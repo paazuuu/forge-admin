@@ -283,9 +283,8 @@ public class SystemAuthServiceImpl implements IAuthService {
 
     @Override
     public void logout() {
-        // 清除Session
-        SessionHelper.clearSession();
-        // 登出
+        // Sa-Token logout 会触发登出监听器并清理 token session。
+        // 不要提前清空 Session，否则登录日志监听器无法读取 LoginUser。
         StpUtil.logout();
     }
 

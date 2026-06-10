@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.system.constant.SystemConstants;
 import com.mdframe.forge.plugin.system.dto.RoleUserQuery;
 import com.mdframe.forge.plugin.system.dto.SysRoleDTO;
 import com.mdframe.forge.plugin.system.dto.SysRoleQuery;
@@ -15,10 +16,13 @@ import com.mdframe.forge.plugin.system.entity.SysRoleResource;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.entity.SysUserRole;
+import com.mdframe.forge.plugin.system.entity.SysUserTenant;
 import com.mdframe.forge.plugin.system.mapper.SysRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleResourceMapper;
 import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.plugin.system.service.ISysResourceService;
 import com.mdframe.forge.plugin.system.service.ISysRoleService;
 import com.mdframe.forge.starter.core.session.LoginUser;
@@ -44,11 +48,14 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     private final SysRoleResourceMapper roleResourceMapper;
     private final SysTenantMapper tenantMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final SysUserMapper userMapper;
+    private final SysUserTenantMapper userTenantMapper;
     @Lazy
     private final ISysResourceService resourceService;
 
     @Override
     public IPage<SysRole> selectRolePage(SysRoleQuery query) {
+        assertRoleManagementAllowed();
         query = query == null ? new SysRoleQuery() : query;
         normalizeRoleQueryTenant(query);
         Page<SysRole> page = new Page<>(query.getPageNum(), query.getPageSize());
@@ -64,15 +71,18 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
     @Override
     public boolean insertRole(SysRoleDTO dto) {
+        assertRoleManagementAllowed();
         SysRole role = new SysRole();
         BeanUtil.copyProperties(dto, role);
         role.setTenantId(resolveWriteTenantId(dto.getTenantId()));
+        validateDataScopeAllowedForCurrentUser(role.getDataScope());
         return TenantContextHolder.executeIgnore(() -> roleMapper.insert(role) > 0);
     }
 
     @Override
     public boolean updateRole(SysRoleDTO dto) {
         SysRole existing = loadRoleForAccess(dto.getId());
+        assertCanMaintainRole(existing);
         SysRole role = new SysRole();
         BeanUtil.copyProperties(dto, role);
         LoginUser loginUser = requireLoginUser();
@@ -82,6 +92,9 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         } else {
             role.setTenantId(null);
         }
+        Integer nextDataScope = dto.getDataScope() != null ? dto.getDataScope() : existing.getDataScope();
+        validateDataScopeAllowedForCurrentUser(nextDataScope);
+        validateDataScopeAllowedForBoundUsers(existing, nextDataScope);
         return TenantContextHolder.executeIgnore(() -> roleMapper.updateById(role) > 0);
     }
 
@@ -89,13 +102,12 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteRoleById(Long id) {
         SysRole role = loadRoleForAccess(id);
+        assertCanMaintainRole(role);
+        validateRoleDeletable(role);
         return TenantContextHolder.executeIgnore(() -> {
             roleResourceMapper.delete(new LambdaQueryWrapper<SysRoleResource>()
                     .eq(SysRoleResource::getRoleId, id)
                     .eq(SysRoleResource::getTenantId, role.getTenantId()));
-            userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
-                    .eq(SysUserRole::getRoleId, id)
-                    .eq(SysUserRole::getTenantId, role.getTenantId()));
             return roleMapper.deleteById(id) > 0;
         });
     }
@@ -126,6 +138,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         }
         
         SysRole role = loadRoleForAccess(roleId);
+        assertCanMaintainRole(role);
 
         List<SysResource> assignableResources = resourceService.list();
         Map<Long, SysResource> resourceMap = assignableResources.stream()
@@ -250,6 +263,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             return false;
         }
         SysRole role = loadRoleForAccess(roleId);
+        assertCanMaintainRole(role);
         
         LambdaQueryWrapper<SysRoleResource> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysRoleResource::getRoleId, roleId)
@@ -349,6 +363,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         }
         
         SysRole role = loadRoleForAccess(roleId);
+        assertCanMaintainRole(role);
         LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserRole::getRoleId, roleId)
                 .eq(SysUserRole::getTenantId, role.getTenantId())
@@ -364,7 +379,9 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         }
 
         SysRole role = loadRoleForAccess(roleId);
+        assertCanMaintainRole(role);
         Long tenantId = role.getTenantId();
+        validateRoleAssignableToUsers(role, userIds);
 
         // 查询已经绑定该角色的用户ID，避免重复插入
         List<Long> existingUserIds = TenantContextHolder.executeIgnore(() -> {
@@ -405,7 +422,14 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         LoginUser loginUser = requireLoginUser();
         if (!loginUser.isAdmin()) {
             query.setTenantId(loginUser.getTenantId());
+            query.setAccessibleRoleIds(loginUser.getRoleIds() == null
+                    ? Collections.emptyList()
+                    : loginUser.getRoleIds());
         }
+    }
+
+    private void assertRoleManagementAllowed() {
+        requireLoginUser();
     }
 
     private LoginUser requireLoginUser() {
@@ -439,6 +463,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     private SysRole loadRoleForAccess(Long roleId) {
+        assertRoleManagementAllowed();
         if (roleId == null) {
             throw new RuntimeException("角色ID不能为空");
         }
@@ -450,6 +475,123 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (!loginUser.isAdmin() && !Objects.equals(role.getTenantId(), loginUser.getTenantId())) {
             throw new RuntimeException("无权操作非本租户角色");
         }
+        if (!loginUser.isAdmin()
+                && (loginUser.getRoleIds() == null || !loginUser.getRoleIds().contains(roleId))) {
+            throw new RuntimeException("无权操作未委派给自己的角色");
+        }
         return role;
+    }
+
+    private void validateRoleDeletable(SysRole role) {
+        Long userCount = TenantContextHolder.executeIgnore(() ->
+                roleMapper.countUsersByRole(role.getId(), role.getTenantId()));
+        if (userCount != null && userCount > 0) {
+            throw new RuntimeException("当前角色已绑定用户，不能删除");
+        }
+    }
+
+    private void assertCanMaintainRole(SysRole role) {
+        LoginUser loginUser = requireLoginUser();
+        if (loginUser.isAdmin()) {
+            return;
+        }
+        if (role.getIsSystem() != null && role.getIsSystem() == 1) {
+            throw new RuntimeException("系统内置角色只能由超级管理员维护");
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                userRoleMapper.selectCount(new LambdaQueryWrapper<SysUserRole>()
+                        .eq(SysUserRole::getRoleId, role.getId())
+                        .eq(SysUserRole::getTenantId, role.getTenantId())
+                        .eq(SysUserRole::getUserId, loginUser.getUserId())));
+        if (count != null && count > 0) {
+            throw new RuntimeException("不能维护自己当前绑定的角色");
+        }
+    }
+
+    private void validateDataScopeAllowedForCurrentUser(Integer dataScope) {
+        LoginUser loginUser = requireLoginUser();
+        if (!isDataScopeAllowedForUserType(dataScope, normalizeUserType(loginUser.getUserType()))) {
+            throw new RuntimeException("不能设置超过当前用户类型上限的数据范围");
+        }
+    }
+
+    private void validateDataScopeAllowedForBoundUsers(SysRole role, Integer dataScope) {
+        List<Long> userIds = TenantContextHolder.executeIgnore(() ->
+                userRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>()
+                                .eq(SysUserRole::getRoleId, role.getId())
+                                .eq(SysUserRole::getTenantId, role.getTenantId()))
+                        .stream()
+                        .map(SysUserRole::getUserId)
+                        .collect(Collectors.toList()));
+        validateDataScopeAllowedForUsers(dataScope, userIds, role.getTenantId());
+    }
+
+    private void validateRoleAssignableToUsers(SysRole role, List<Long> userIds) {
+        if (CollUtil.isEmpty(userIds)) {
+            return;
+        }
+        LoginUser loginUser = requireLoginUser();
+        for (Long userId : userIds) {
+            int userType = resolveEffectiveUserType(userId, role.getTenantId());
+            if (!loginUser.isAdmin() && userType != SystemConstants.UserType.NORMAL_USER) {
+                throw new RuntimeException("租户管理员只能给普通用户分配角色");
+            }
+        }
+        validateDataScopeAllowedForUsers(role.getDataScope(), userIds, role.getTenantId());
+    }
+
+    private void validateDataScopeAllowedForUsers(Integer dataScope, List<Long> userIds, Long tenantId) {
+        if (dataScope == null || CollUtil.isEmpty(userIds)) {
+            return;
+        }
+        for (Long userId : userIds) {
+            int userType = resolveEffectiveUserType(userId, tenantId);
+            if (!isDataScopeAllowedForUserType(dataScope, userType)) {
+                throw new RuntimeException("角色数据范围超过目标用户类型上限");
+            }
+        }
+    }
+
+    private int resolveEffectiveUserType(Long userId, Long tenantId) {
+        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (Objects.equals(user.getUserType(), SystemConstants.UserType.SYSTEM_ADMIN)) {
+            return SystemConstants.UserType.SYSTEM_ADMIN;
+        }
+        SysUserTenant member = TenantContextHolder.executeIgnore(() ->
+                userTenantMapper.selectOne(new LambdaQueryWrapper<SysUserTenant>()
+                        .eq(SysUserTenant::getUserId, userId)
+                        .eq(SysUserTenant::getTenantId, tenantId)
+                        .eq(SysUserTenant::getStatus, 1)
+                        .last("LIMIT 1")));
+        if (member == null) {
+            throw new RuntimeException("目标用户不属于当前租户");
+        }
+        return Objects.equals(member.getMemberType(), SystemConstants.UserType.TENANT_ADMIN)
+                ? SystemConstants.UserType.TENANT_ADMIN
+                : SystemConstants.UserType.NORMAL_USER;
+    }
+
+    private boolean isDataScopeAllowedForUserType(Integer dataScope, int userType) {
+        if (dataScope == null || userType == SystemConstants.UserType.SYSTEM_ADMIN) {
+            return true;
+        }
+        if (userType == SystemConstants.UserType.TENANT_ADMIN) {
+            return dataScope != SystemConstants.RoleDataScope.ALL;
+        }
+        return dataScope != SystemConstants.RoleDataScope.ALL
+                && dataScope != SystemConstants.RoleDataScope.TENANT;
+    }
+
+    private int normalizeUserType(Integer userType) {
+        if (userType == null) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        if (userType < SystemConstants.UserType.SYSTEM_ADMIN || userType > SystemConstants.UserType.NORMAL_USER) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        return userType;
     }
 }

@@ -1637,3 +1637,25 @@ Detected resolved migration not applied to database: 1.0.56
 
 **注意**:
 不要手工插入 `forge_schema_history`，不要修改已经执行过的迁移脚本。后续新增迁移必须继续按当前最高版本顺延，不能再补低版本脚本。
+
+## 56. AiCrudPage 详情态字典字段不能依赖禁用控件回显
+
+**发现日期**: 2026-06-10
+
+**问题描述**:
+多个页面的详情弹窗或编辑弹窗里，`select/radio/checkbox/transfer` 一类字段会直接显示数字值，例如用户类型、性别、状态显示成 `1/2/0`，没有翻译成中文。表格列表通常正常，问题主要出在 `AiCrudPage` 的表单详情态。
+
+**根本原因**:
+`AiCrudPage` 的详情态不是纯文本展示，而是把 `editSchema` 转成 `readonly/disabled` 后继续渲染原表单控件。只要当前值对应的 `options` 没及时加载、被权限逻辑过滤掉，或 `number/string` 类型不一致，Naive UI 的选择类控件就会退化成原始数字值。另一个高频诱因是“为了限制可选范围直接过滤 options”，例如租户管理员只能维护普通用户时，把 `userType=1` 从当前登录用户自己的 `options` 中删掉，结果详情/编辑回显直接变成数字。
+
+**解决方案**:
+公共表单层要把详情态的字典类字段当作“文本回显”处理，优先显示 label，不要依赖禁用后的 `select/radio` 自己兜底展示。`AiFormItem.currentOptions` 对静态 `field.options`、`field.props.options`、异步 `options()`、字典和远程选项都要补齐当前值对应的 label，并对 `select/radio/checkbox/transfer` 做统一的值类型归一化，避免 `1` 和 `'1'` 对不上。做权限限制时不要把“当前值”从 options 中删掉，应该保留完整 options 并通过 `disabled`、`visible` 或提交前校验限制修改能力。
+
+**验证建议**:
+涉及公共表单、字典加载、选项过滤、租户权限裁剪的改动，必须至少验证两个层面：列表列的 `DictTag` 展示，以及 `AiCrudPage` 详情/编辑弹窗里的同字段回显。只验证列表正常不够，因为列表和弹窗走的是两条不同渲染链路。
+
+**影响范围**:
+- `forge-admin-ui/src/components/ai-form/AiCrudPage.vue`
+- `forge-admin-ui/src/components/ai-form/AiFormItem.vue`
+- 所有通过 `editSchema` 配置 `select/radio/checkbox/transfer` 的 CRUD 页面
+- 任何带有“按权限裁剪 options”逻辑的页面，例如 `system/user.vue`

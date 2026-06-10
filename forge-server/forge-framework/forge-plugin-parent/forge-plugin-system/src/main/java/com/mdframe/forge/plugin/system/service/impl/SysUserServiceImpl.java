@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.system.constant.SystemConstants;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.entity.SysUser;
@@ -13,7 +14,11 @@ import com.mdframe.forge.plugin.system.entity.SysUserOrg;
 import com.mdframe.forge.plugin.system.entity.SysUserPost;
 import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
+import com.mdframe.forge.plugin.system.entity.SysOrg;
+import com.mdframe.forge.plugin.system.entity.SysPost;
 import com.mdframe.forge.plugin.system.entity.SysRole;
+import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
+import com.mdframe.forge.plugin.system.mapper.SysPostMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserPostMapper;
@@ -54,6 +59,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private final SysUserTenantMapper userTenantMapper;
     private final SysTenantMapper tenantMapper;
     private final SysRoleMapper roleMapper;
+    private final SysOrgMapper orgMapper;
+    private final SysPostMapper postMapper;
 
     @Override
     public IPage<SysUser> selectUserPage(SysUserQuery query) {
@@ -64,13 +71,14 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
     @Override
     public SysUser selectUserById(Long id) {
-        assertCanManageUser(id);
+        assertCanReadUser(id);
         return TenantContextHolder.executeIgnore(() -> userMapper.selectById(id));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean insertUser(SysUserDTO dto) {
+        assertUserManagementAllowed();
         Long tenantId = resolveWriteTenantId(dto.getTenantId());
         validateUserTypeForWrite(dto);
         SysUser user = new SysUser();
@@ -81,9 +89,13 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         boolean inserted = userMapper.insert(user) > 0;
         if (inserted) {
             upsertUserTenant(user.getId(), tenantId, user.getUserType(), true);
+            // 同步绑定角色
+            if (dto.getRoleIds() != null) {
+                syncUserRoles(user.getId(), dto.getRoleIds(), tenantId);
+            }
             // 同步绑定岗位
             if (dto.getPostIds() != null && !dto.getPostIds().isEmpty()) {
-                bindUserPosts(user.getId(), dto.getPostIds(), dto.getPostIds().get(0));
+                bindUserPosts(user.getId(), dto.getPostIds(), dto.getPostIds().get(0), tenantId);
             }
         }
         return inserted;
@@ -92,9 +104,13 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean updateUser(SysUserDTO dto) {
-        assertCanManageUser(dto.getId());
-        validateUserTypeForWrite(dto);
         LoginUser loginUser = requireLoginUser();
+        if (!loginUser.isAdmin() && isCurrentLoginUser(dto.getId(), loginUser)) {
+            return updateCurrentUserFromManagement(dto);
+        }
+        assertCanManageUser(dto.getId());
+        assertNotSelfManagement(dto.getId());
+        validateUserTypeForWrite(dto);
         SysUser user = new SysUser();
         BeanUtil.copyProperties(dto, user);
         // 修改时不更新密码
@@ -115,9 +131,13 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (updated && loginUser.isAdmin()) {
             upsertUserTenant(user.getId(), tenantId, user.getUserType(), true);
         }
+        // 同步绑定角色。roleIds 传空数组表示清空当前可管理范围内的角色。
+        if (updated && dto.getRoleIds() != null) {
+            syncUserRoles(user.getId(), dto.getRoleIds(), tenantId);
+        }
         // 同步绑定岗位
         if (updated && dto.getPostIds() != null) {
-            bindUserPosts(user.getId(), dto.getPostIds(), !dto.getPostIds().isEmpty() ? dto.getPostIds().get(0) : null);
+            bindUserPosts(user.getId(), dto.getPostIds(), !dto.getPostIds().isEmpty() ? dto.getPostIds().get(0) : null, tenantId);
         }
         return updated;
     }
@@ -126,6 +146,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteUserById(Long id) {
         assertCanManageUser(id);
+        assertNotSelfManagement(id);
         LoginUser loginUser = requireLoginUser();
         if (!loginUser.isAdmin()) {
             return removeUserFromTenant(id, loginUser.getTenantId());
@@ -145,53 +166,16 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean bindUserRoles(Long userId, Long[] roleIds) {
-        if (userId == null || roleIds == null || roleIds.length == 0) {
+        return bindUserRoles(userId, roleIds, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean bindUserRoles(Long userId, Long[] roleIds, Long tenantId) {
+        if (userId == null || roleIds == null) {
             return false;
         }
-        
-        // 防止权限溢出校验：非管理员只能分配自己拥有的角色
-        LoginUser loginUser = SessionHelper.getLoginUser();
-        if (loginUser != null && !loginUser.isAdmin()) {
-            List<Long> currentUserRoleIds = loginUser.getRoleIds();
-            for (Long roleId : roleIds) {
-                if (!currentUserRoleIds.contains(roleId)) {
-                    throw new RuntimeException("权限溢出：不能分配自己没有的角色");
-                }
-            }
-        }
-        
-        // 获取用户信息以获取租户ID
-        assertCanManageUser(userId);
-        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
-        if (user == null) {
-            return false;
-        }
-        Long tenantId = resolveRoleBindTenantId(user);
-        validateRoleTenant(roleIds, tenantId);
-        
-        // 批量插入用户角色关联
-        List<SysUserRole> userRoles = new ArrayList<>();
-        for (Long roleId : roleIds) {
-            // 检查是否已存在
-            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SysUserRole::getUserId, userId)
-                    .eq(SysUserRole::getTenantId, tenantId)
-                    .eq(SysUserRole::getRoleId, roleId);
-            Long count = userRoleMapper.selectCount(wrapper);
-            
-            if (count == 0) {
-                SysUserRole userRole = new SysUserRole();
-                userRole.setTenantId(tenantId);
-                userRole.setUserId(userId);
-                userRole.setRoleId(roleId);
-                userRoles.add(userRole);
-            }
-        }
-        
-        if (!userRoles.isEmpty()) {
-            userRoles.forEach(userRoleMapper::insert);
-        }
-        return true;
+        return syncUserRoles(userId, Arrays.asList(roleIds), tenantId);
     }
 
     @Override
@@ -201,6 +185,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             return false;
         }
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         
         LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserRole::getUserId, userId)
@@ -218,11 +203,14 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         
         // 获取用户信息以获取租户ID
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             return false;
         }
         Long tenantId = resolveTenantScopedOperationTenantId(user);
+        ensureUserTenantBound(user.getId(), tenantId, user.getUserType(), Objects.equals(user.getTenantId(), tenantId));
+        validateOrgTenant(List.of(orgId), tenantId);
         
         // 检查是否已存在
         LambdaQueryWrapper<SysUserOrg> wrapper = new LambdaQueryWrapper<>();
@@ -261,6 +249,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             return false;
         }
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         
         LambdaQueryWrapper<SysUserOrg> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserOrg::getUserId, userId)
@@ -271,31 +260,42 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
     @Override
     public List<Long> selectUserRoleIds(Long userId) {
+        return selectUserRoleIds(userId, null);
+    }
+
+    @Override
+    public List<Long> selectUserRoleIds(Long userId, Long tenantId) {
         if (userId == null) {
             return new ArrayList<>();
         }
-        assertCanManageUser(userId);
+        assertCanReadUser(userId);
         
         LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserRole::getUserId, userId)
-                .eq(SysUserRole::getTenantId, resolveTenantScopedOperationTenantId(userId))
+                .eq(SysUserRole::getTenantId, resolveTenantScopedOperationTenantId(userId, tenantId))
                 .select(SysUserRole::getRoleId);
         return userRoleMapper.selectList(wrapper)
                 .stream()
                 .map(SysUserRole::getRoleId)
+                .filter(this::isRoleVisibleForCurrentUser)
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<Long> selectUserOrgIds(Long userId) {
+        return selectUserOrgIds(userId, null);
+    }
+
+    @Override
+    public List<Long> selectUserOrgIds(Long userId, Long tenantId) {
         if (userId == null) {
             return new ArrayList<>();
         }
-        assertCanManageUser(userId);
+        assertCanReadUser(userId);
         
         LambdaQueryWrapper<SysUserOrg> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserOrg::getUserId, userId)
-                .eq(SysUserOrg::getTenantId, resolveTenantScopedOperationTenantId(userId))
+                .eq(SysUserOrg::getTenantId, resolveTenantScopedOperationTenantId(userId, tenantId))
                 .select(SysUserOrg::getOrgId);
         return userOrgMapper.selectList(wrapper)
                 .stream()
@@ -316,6 +316,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (loginUser == null || !loginUser.isAdmin()) {
             throw new RuntimeException("只有超级管理员可以绑定用户租户");
         }
+        assertNotSelfManagement(userId);
         if (userId == null || dto == null || dto.getTenantIds() == null || dto.getTenantIds().isEmpty()) {
             return false;
         }
@@ -359,17 +360,26 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean bindUserOrgs(Long userId, List<Long> orgIds, Long mainOrgId) {
+        return bindUserOrgs(userId, orgIds, mainOrgId, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean bindUserOrgs(Long userId, List<Long> orgIds, Long mainOrgId, Long requestedTenantId) {
         if (userId == null || orgIds == null || orgIds.isEmpty()) {
             return false;
         }
         
         // 获取用户信息以获取租户ID
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             return false;
         }
-        Long tenantId = resolveTenantScopedOperationTenantId(user);
+        Long tenantId = resolveTenantScopedOperationTenantId(user, requestedTenantId);
+        ensureUserTenantBound(user.getId(), tenantId, user.getUserType(), Objects.equals(user.getTenantId(), tenantId));
+        validateOrgTenant(orgIds, tenantId);
         
         // 验证主组织是否在组织列表中
         if (mainOrgId != null && !orgIds.contains(mainOrgId)) {
@@ -435,6 +445,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     public boolean resetPassword(Long userId, String newPassword) {
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         SysUser user = new SysUser();
         user.setId(userId);
         user.setPassword(PasswordUtil.encrypt(newPassword));
@@ -444,6 +455,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     public boolean updateUserStatus(Long userId, Integer status) {
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         LoginUser loginUser = requireLoginUser();
         if (!loginUser.isAdmin()) {
             SysUserTenant member = new SysUserTenant();
@@ -478,22 +490,35 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
         // 同步更新 Session 中的 LoginUser，确保 /auth/userInfo 返回最新数据
         if (updated) {
-            com.mdframe.forge.starter.core.session.LoginUser loginUser = SessionHelper.getLoginUser();
-            if (loginUser != null) {
-                if (dto.getUsername() != null) loginUser.setUsername(dto.getUsername());
-                if (dto.getRealName() != null) loginUser.setRealName(dto.getRealName());
-                if (dto.getPhone() != null) loginUser.setPhone(dto.getPhone());
-                if (dto.getEmail() != null) loginUser.setEmail(dto.getEmail());
-                if (dto.getAvatar() != null) loginUser.setAvatar(dto.getAvatar());
-                SessionHelper.setLoginUser(loginUser);
-            }
+            syncSessionUserProfile(dto);
         }
 
         return updated;
     }
 
+    private boolean updateCurrentUserFromManagement(SysUserDTO dto) {
+        SysUser user = new SysUser();
+        user.setId(requireLoginUser().getUserId());
+        user.setUsername(dto.getUsername());
+        user.setRealName(dto.getRealName());
+        user.setPhone(dto.getPhone());
+        user.setEmail(dto.getEmail());
+        user.setIdCard(dto.getIdCard());
+        user.setGender(dto.getGender());
+        user.setAvatar(dto.getAvatar());
+        user.setRegionCode(dto.getRegionCode());
+        user.setRemark(dto.getRemark());
+
+        boolean updated = TenantContextHolder.executeIgnore(() -> userMapper.updateById(user) > 0);
+        if (updated) {
+            syncSessionUserProfile(dto);
+        }
+        return updated;
+    }
+
     private void normalizeUserQueryTenant(SysUserQuery query) {
         LoginUser loginUser = requireLoginUser();
+        assertUserManagementAllowed(loginUser);
         if (!loginUser.isAdmin()) {
             query.setTenantId(loginUser.getTenantId());
         }
@@ -525,9 +550,17 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     }
 
     private Long resolveRoleBindTenantId(SysUser user) {
+        return resolveRoleBindTenantId(user, null);
+    }
+
+    private Long resolveRoleBindTenantId(SysUser user, Long requestedTenantId) {
         LoginUser loginUser = requireLoginUser();
         if (loginUser.isAdmin()) {
-            return user.getTenantId() != null ? user.getTenantId() : loginUser.getTenantId();
+            Long tenantId = requestedTenantId != null
+                    ? requestedTenantId
+                    : (user.getTenantId() != null ? user.getTenantId() : loginUser.getTenantId());
+            validateTenantEnabled(tenantId);
+            return tenantId;
         }
         return resolveCurrentTenantIdForNonAdmin();
     }
@@ -569,6 +602,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             throw new RuntimeException("用户ID不能为空");
         }
         LoginUser loginUser = requireLoginUser();
+        assertUserManagementAllowed(loginUser);
         if (loginUser.isAdmin()) {
             return;
         }
@@ -582,20 +616,62 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (!isUserInTenant(userId, loginUser.getTenantId())) {
             throw new RuntimeException("无权操作非本租户用户");
         }
+        if (resolveEffectiveUserType(userId, loginUser.getTenantId()) != SystemConstants.UserType.NORMAL_USER) {
+            throw new RuntimeException("租户管理员只能维护普通用户");
+        }
     }
 
-    private Long resolveTenantScopedOperationTenantId(Long userId) {
+    private void assertCanReadUser(Long userId) {
+        if (userId == null) {
+            throw new RuntimeException("用户ID不能为空");
+        }
+        LoginUser loginUser = requireLoginUser();
+        assertUserManagementAllowed(loginUser);
+        if (loginUser.isAdmin()) {
+            return;
+        }
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
-        return resolveTenantScopedOperationTenantId(user);
+        if (user.getUserType() != null && user.getUserType() == 0) {
+            throw new RuntimeException("无权操作超级管理员");
+        }
+        if (!isUserInTenant(userId, loginUser.getTenantId())) {
+            throw new RuntimeException("无权操作非本租户用户");
+        }
+        if (isCurrentLoginUser(userId, loginUser)) {
+            return;
+        }
+        if (resolveEffectiveUserType(userId, loginUser.getTenantId()) != SystemConstants.UserType.NORMAL_USER) {
+            throw new RuntimeException("租户管理员只能查看普通用户");
+        }
+    }
+
+    private Long resolveTenantScopedOperationTenantId(Long userId) {
+        return resolveTenantScopedOperationTenantId(userId, null);
+    }
+
+    private Long resolveTenantScopedOperationTenantId(Long userId, Long requestedTenantId) {
+        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        return resolveTenantScopedOperationTenantId(user, requestedTenantId);
     }
 
     private Long resolveTenantScopedOperationTenantId(SysUser user) {
+        return resolveTenantScopedOperationTenantId(user, null);
+    }
+
+    private Long resolveTenantScopedOperationTenantId(SysUser user, Long requestedTenantId) {
         LoginUser loginUser = requireLoginUser();
         if (loginUser.isAdmin()) {
-            return user.getTenantId() != null ? user.getTenantId() : loginUser.getTenantId();
+            Long tenantId = requestedTenantId != null
+                    ? requestedTenantId
+                    : (user.getTenantId() != null ? user.getTenantId() : loginUser.getTenantId());
+            validateTenantEnabled(tenantId);
+            return tenantId;
         }
         return resolveCurrentTenantIdForNonAdmin();
     }
@@ -612,6 +688,72 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         return count != null && count > 0;
     }
 
+    private void assertUserManagementAllowed() {
+        assertUserManagementAllowed(requireLoginUser());
+    }
+
+    private void assertUserManagementAllowed(LoginUser loginUser) {
+        if (loginUser == null) {
+            throw new RuntimeException("用户未登录");
+        }
+    }
+
+    private void assertNotSelfManagement(Long userId) {
+        LoginUser loginUser = requireLoginUser();
+        if (userId != null && Objects.equals(userId, loginUser.getUserId())) {
+            throw new RuntimeException("不能在用户管理中维护当前登录用户");
+        }
+    }
+
+    private boolean isCurrentLoginUser(Long userId, LoginUser loginUser) {
+        return userId != null && loginUser != null && Objects.equals(userId, loginUser.getUserId());
+    }
+
+    private void syncSessionUserProfile(SysUserDTO dto) {
+        com.mdframe.forge.starter.core.session.LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null) {
+            return;
+        }
+        if (dto.getUsername() != null) loginUser.setUsername(dto.getUsername());
+        if (dto.getRealName() != null) loginUser.setRealName(dto.getRealName());
+        if (dto.getPhone() != null) loginUser.setPhone(dto.getPhone());
+        if (dto.getEmail() != null) loginUser.setEmail(dto.getEmail());
+        if (dto.getAvatar() != null) loginUser.setAvatar(dto.getAvatar());
+        SessionHelper.setLoginUser(loginUser);
+    }
+
+    private int resolveEffectiveUserType(Long userId, Long tenantId) {
+        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (Objects.equals(user.getUserType(), SystemConstants.UserType.SYSTEM_ADMIN)) {
+            return SystemConstants.UserType.SYSTEM_ADMIN;
+        }
+        SysUserTenant member = TenantContextHolder.executeIgnore(() ->
+                userTenantMapper.selectOne(new LambdaQueryWrapper<SysUserTenant>()
+                        .eq(SysUserTenant::getUserId, userId)
+                        .eq(SysUserTenant::getTenantId, tenantId)
+                        .eq(SysUserTenant::getStatus, 1)
+                        .last("LIMIT 1")));
+        if (member == null) {
+            throw new RuntimeException("目标用户不属于当前租户");
+        }
+        return Objects.equals(member.getMemberType(), SystemConstants.UserType.TENANT_ADMIN)
+                ? SystemConstants.UserType.TENANT_ADMIN
+                : SystemConstants.UserType.NORMAL_USER;
+    }
+
+    private int normalizeUserType(Integer userType) {
+        if (userType == null) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        if (userType < SystemConstants.UserType.SYSTEM_ADMIN || userType > SystemConstants.UserType.NORMAL_USER) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        return userType;
+    }
+
     private void validateRoleTenant(Long[] roleIds, Long tenantId) {
         if (roleIds == null || roleIds.length == 0) {
             return;
@@ -622,6 +764,153 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (count == null || count != roleIds.length) {
             throw new RuntimeException("角色不属于当前操作租户");
         }
+    }
+
+    private void validateOrgTenant(List<Long> orgIds, Long tenantId) {
+        List<Long> normalizedOrgIds = orgIds == null ? new ArrayList<>() : orgIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (normalizedOrgIds.isEmpty()) {
+            return;
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                orgMapper.selectCount(new LambdaQueryWrapper<SysOrg>()
+                        .in(SysOrg::getId, normalizedOrgIds)
+                        .eq(SysOrg::getTenantId, tenantId)));
+        if (count == null || count != normalizedOrgIds.size()) {
+            throw new RuntimeException("组织不属于当前操作租户");
+        }
+    }
+
+    private void validatePostTenant(List<Long> postIds, Long tenantId) {
+        List<Long> normalizedPostIds = postIds == null ? new ArrayList<>() : postIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (normalizedPostIds.isEmpty()) {
+            return;
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                postMapper.selectCount(new LambdaQueryWrapper<SysPost>()
+                        .in(SysPost::getId, normalizedPostIds)
+                        .eq(SysPost::getTenantId, tenantId)));
+        if (count == null || count != normalizedPostIds.size()) {
+            throw new RuntimeException("岗位不属于当前操作租户");
+        }
+    }
+
+    private void validateRoleDataScopeForTarget(List<Long> roleIds, Long userId, Long tenantId) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        int targetUserType = resolveEffectiveUserType(userId, tenantId);
+        List<SysRole> roles = roleMapper.selectList(new LambdaQueryWrapper<SysRole>()
+                .in(SysRole::getId, roleIds)
+                .eq(SysRole::getTenantId, tenantId));
+        for (SysRole role : roles) {
+            if (!isDataScopeAllowedForUserType(role.getDataScope(), targetUserType)) {
+                throw new RuntimeException("角色数据范围超过目标用户类型上限");
+            }
+        }
+    }
+
+    private boolean isDataScopeAllowedForUserType(Integer dataScope, int userType) {
+        if (dataScope == null || userType == SystemConstants.UserType.SYSTEM_ADMIN) {
+            return true;
+        }
+        if (userType == SystemConstants.UserType.TENANT_ADMIN) {
+            return dataScope != SystemConstants.RoleDataScope.ALL;
+        }
+        return dataScope != SystemConstants.RoleDataScope.ALL
+                && dataScope != SystemConstants.RoleDataScope.TENANT;
+    }
+
+    private boolean syncUserRoles(Long userId, List<Long> roleIds) {
+        return syncUserRoles(userId, roleIds, null);
+    }
+
+    private boolean syncUserRoles(Long userId, List<Long> roleIds, Long requestedTenantId) {
+        if (userId == null || roleIds == null) {
+            return false;
+        }
+
+        assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
+        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+        if (user == null) {
+            return false;
+        }
+
+        Long tenantId = resolveRoleBindTenantId(user, requestedTenantId);
+        ensureUserTenantBound(user.getId(), tenantId, user.getUserType(), Objects.equals(user.getTenantId(), tenantId));
+
+        List<Long> normalizedRoleIds = roleIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        LoginUser loginUser = requireLoginUser();
+        Set<Long> manageableRoleIds = resolveManageableRoleIds(loginUser);
+        if (!loginUser.isAdmin() && !manageableRoleIds.containsAll(normalizedRoleIds)) {
+            throw new RuntimeException("权限溢出：不能分配自己没有的角色");
+        }
+        validateRoleTenant(normalizedRoleIds.toArray(new Long[0]), tenantId);
+        validateRoleDataScopeForTarget(normalizedRoleIds, userId, tenantId);
+
+        LambdaQueryWrapper<SysUserRole> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(SysUserRole::getUserId, userId)
+                .eq(SysUserRole::getTenantId, tenantId);
+        if (!loginUser.isAdmin()) {
+            if (manageableRoleIds.isEmpty()) {
+                return normalizedRoleIds.isEmpty();
+            }
+            deleteWrapper.in(SysUserRole::getRoleId, manageableRoleIds);
+        }
+        if (!normalizedRoleIds.isEmpty()) {
+            deleteWrapper.notIn(SysUserRole::getRoleId, normalizedRoleIds);
+        }
+        userRoleMapper.delete(deleteWrapper);
+
+        if (normalizedRoleIds.isEmpty()) {
+            return true;
+        }
+
+        List<Long> existingRoleIds = userRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>()
+                        .eq(SysUserRole::getUserId, userId)
+                        .eq(SysUserRole::getTenantId, tenantId)
+                        .in(SysUserRole::getRoleId, normalizedRoleIds))
+                .stream()
+                .map(SysUserRole::getRoleId)
+                .collect(Collectors.toList());
+        Set<Long> existingRoleIdSet = new HashSet<>(existingRoleIds);
+
+        for (Long roleId : normalizedRoleIds) {
+            if (existingRoleIdSet.contains(roleId)) {
+                continue;
+            }
+            SysUserRole userRole = new SysUserRole();
+            userRole.setTenantId(tenantId);
+            userRole.setUserId(userId);
+            userRole.setRoleId(roleId);
+            userRoleMapper.insert(userRole);
+        }
+
+        return true;
+    }
+
+    private Set<Long> resolveManageableRoleIds(LoginUser loginUser) {
+        if (loginUser == null || loginUser.isAdmin()) {
+            return new HashSet<>();
+        }
+        List<Long> roleIds = loginUser.getRoleIds();
+        return roleIds == null ? new HashSet<>() : new HashSet<>(roleIds);
+    }
+
+    private boolean isRoleVisibleForCurrentUser(Long roleId) {
+        LoginUser loginUser = requireLoginUser();
+        return loginUser.isAdmin()
+                || (loginUser.getRoleIds() != null && loginUser.getRoleIds().contains(roleId));
     }
 
     private void upsertUserTenant(Long userId, Long tenantId, Integer memberType, boolean defaultTenant) {
@@ -655,6 +944,20 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         existing.setIsDefault(defaultTenant ? 1 : 0);
         existing.setStatus(1);
         TenantContextHolder.executeIgnore(() -> userTenantMapper.updateById(existing));
+    }
+
+    private void ensureUserTenantBound(Long userId, Long tenantId, Integer memberType, boolean defaultTenant) {
+        if (userId == null || tenantId == null) {
+            return;
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                userTenantMapper.selectCount(new LambdaQueryWrapper<SysUserTenant>()
+                        .eq(SysUserTenant::getUserId, userId)
+                        .eq(SysUserTenant::getTenantId, tenantId)
+                        .eq(SysUserTenant::getStatus, 1)));
+        if (count == null || count == 0) {
+            upsertUserTenant(userId, tenantId, memberType, defaultTenant);
+        }
     }
 
     private Integer normalizeMemberType(Integer memberType) {
@@ -696,14 +999,19 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
     @Override
     public List<Long> selectUserPostIds(Long userId) {
+        return selectUserPostIds(userId, null);
+    }
+
+    @Override
+    public List<Long> selectUserPostIds(Long userId, Long tenantId) {
         if (userId == null) {
             return new ArrayList<>();
         }
-        assertCanManageUser(userId);
+        assertCanReadUser(userId);
 
         LambdaQueryWrapper<SysUserPost> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserPost::getUserId, userId)
-                .eq(SysUserPost::getTenantId, resolveTenantScopedOperationTenantId(userId))
+                .eq(SysUserPost::getTenantId, resolveTenantScopedOperationTenantId(userId, tenantId))
                 .select(SysUserPost::getPostId);
         return userPostMapper.selectList(wrapper)
                 .stream()
@@ -714,16 +1022,25 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean bindUserPosts(Long userId, List<Long> postIds, Long mainPostId) {
+        return bindUserPosts(userId, postIds, mainPostId, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean bindUserPosts(Long userId, List<Long> postIds, Long mainPostId, Long requestedTenantId) {
         if (userId == null || postIds == null || postIds.isEmpty()) {
             return false;
         }
 
         assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             return false;
         }
-        Long tenantId = resolveTenantScopedOperationTenantId(user);
+        Long tenantId = resolveTenantScopedOperationTenantId(user, requestedTenantId);
+        ensureUserTenantBound(user.getId(), tenantId, user.getUserType(), Objects.equals(user.getTenantId(), tenantId));
+        validatePostTenant(postIds, tenantId);
 
         // 验证主岗位是否在岗位列表中
         if (mainPostId != null && !postIds.contains(mainPostId)) {

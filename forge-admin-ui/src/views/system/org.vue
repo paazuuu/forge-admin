@@ -17,6 +17,8 @@
         :edit-schema="editSchema"
         :before-render-list="beforeRenderList"
         :before-submit="beforeSubmit"
+        :before-load-list="beforeLoadList"
+        :before-render-form="beforeRenderForm"
         row-key="id"
         :edit-grid-cols="2"
         modal-width="900px"
@@ -49,6 +51,7 @@ import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import { useUserStore } from '@/store'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemOrg' })
@@ -56,14 +59,32 @@ defineOptions({ name: 'SystemOrg' })
 const { dict } = useDict('sys_org_type', 'sys_normal_disable')
 
 const crudRef = ref(null)
+const userStore = useUserStore()
 const expandLoaded = ref(false)
 const expandedKeys = ref([])
 const parentOrgOptions = ref([{ label: '顶级组织', value: 0, key: 0 }])
 const searchRegionOptions = ref([])
 const editRegionOptions = ref([])
 const defaultParentId = ref(0)
+const tenantOptions = ref([])
+const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
+  label: item.tenantName,
+  value: item.id,
+})))
 
 const searchSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        props: {
+          placeholder: '请选择租户',
+          clearable: true,
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   {
     field: 'orgName',
     label: '组织名称',
@@ -104,6 +125,14 @@ const searchSchema = computed(() => [
 ])
 
 const tableColumns = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        prop: 'tenantName',
+        label: '所属租户',
+        width: 160,
+        render: row => row.tenantName || row.tenantId || '-',
+      }]
+    : []),
   {
     prop: 'orgName',
     label: '组织名称',
@@ -175,6 +204,19 @@ const tableColumns = computed(() => [
 ])
 
 const editSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        defaultValue: userStore.userInfo?.tenantId,
+        rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
+        props: {
+          placeholder: '请选择所属租户',
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   {
     type: 'divider',
     label: '基础信息',
@@ -208,10 +250,11 @@ const editSchema = computed(() => [
   {
     field: 'orgType',
     label: '组织类型',
-    type: 'radio',
-    defaultValue: 2,
-    rules: [{ required: true, type: 'number', message: '请选择组织类型', trigger: 'change' }],
+    type: 'select',
+    defaultValue: dict.value.sys_org_type?.[0]?.value || '2',
+    rules: [{ required: true, message: '请选择组织类型', trigger: 'change' }],
     props: {
+      placeholder: '请选择组织类型',
       options: dict.value.sys_org_type || [],
     },
   },
@@ -302,12 +345,65 @@ const editSchema = computed(() => [
 ])
 
 onMounted(() => {
+  loadTenantOptions()
   loadParentOrgOptions()
 })
 
-async function loadParentOrgOptions() {
+function buildTenantParams(tenantId) {
+  const resolvedTenantId = userStore.isAdmin ? tenantId : userStore.userInfo?.tenantId
+  return resolvedTenantId ? { tenantId: resolvedTenantId } : {}
+}
+
+function resolveSelectedTenantId(row) {
+  return row?.tenantId
+    || (userStore.isAdmin ? crudRef.value?.getSearchParams?.()?.tenantId : null)
+    || userStore.userInfo?.tenantId
+}
+
+function beforeLoadList(params) {
+  Object.assign(params, buildTenantParams(params.tenantId))
+  return params
+}
+
+function beforeSubmit(formData) {
+  if (!userStore.isAdmin) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
+  else if (!formData.tenantId) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
+  return formData
+}
+
+async function beforeRenderForm(row) {
+  const tenantId = resolveSelectedTenantId(row)
+  await loadParentOrgOptions(tenantId)
+  if (row) {
+    return row
+  }
+  return {
+    tenantId,
+    parentId: 0,
+  }
+}
+
+async function loadTenantOptions() {
   try {
-    const res = await request.get('/system/org/tree')
+    const res = await request.get('/system/tenant/assignable/options')
+    if (res.code === 200) {
+      tenantOptions.value = res.data || []
+    }
+  }
+  catch (error) {
+    console.error('加载租户选项失败:', error)
+  }
+}
+
+async function loadParentOrgOptions(tenantId = resolveSelectedTenantId()) {
+  try {
+    const res = await request.get('/system/org/tree', {
+      params: buildTenantParams(tenantId),
+    })
     if (res.code === 200) {
       const convertToTreeSelect = (list) => {
         return list.map(item => ({
@@ -334,7 +430,7 @@ async function loadParentOrgOptions() {
 
 async function loadRegionOptions() {
   try {
-    const res = await request.get('/system/region/treeAll', { params: { rootCode: '150000', dataRight: true } })
+    const res = await request.get('/system/region/treeAll', { params: { dataRight: true } })
     if (res.code === 200) {
       const data = res.data || []
       searchRegionOptions.value = convertRegionToTreeSelect(data, false)
@@ -385,7 +481,9 @@ function beforeRenderList(list) {
 
 function handleLoad(node) {
   return new Promise((resolve) => {
-    request.get(`/system/org/children/${node.id}`)
+    request.get(`/system/org/children/${node.id}`, {
+      params: buildTenantParams(resolveSelectedTenantId(node)),
+    })
       .then((res) => {
         if (res.code === 200) {
           node.children = (res.data || []).map(item => ({
@@ -427,11 +525,15 @@ function getLoadedKeys(list, keys = []) {
 }
 
 async function handleAdd(row) {
-  await loadParentOrgOptions()
+  const tenantId = resolveSelectedTenantId(row)
+  await loadParentOrgOptions(tenantId)
 
   defaultParentId.value = row ? row.id : 0
 
-  crudRef.value?.showAdd()
+  crudRef.value?.showAdd({
+    tenantId,
+    parentId: defaultParentId.value,
+  })
 
   await nextTick()
   await nextTick()
@@ -440,7 +542,7 @@ async function handleAdd(row) {
 }
 
 async function handleEdit(row) {
-  await loadParentOrgOptions()
+  await loadParentOrgOptions(resolveSelectedTenantId(row))
   crudRef.value?.showEdit(row)
 }
 

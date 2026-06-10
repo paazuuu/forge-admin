@@ -12,6 +12,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +37,7 @@ public class SysConfigController {
     @GetMapping("/page")
     @OperationLog(module = "系统配置管理", type = OperationType.QUERY, desc = "分页查询配置列表")
     public RespInfo<Page<SysConfig>> page(PageQuery pageQuery, SysConfigQuery query) {
+        assertPlatformAdmin();
         Page<SysConfig> page = configService.selectConfigPage(pageQuery, query);
         return RespInfo.success(page);
     }
@@ -46,6 +48,7 @@ public class SysConfigController {
     @GetMapping("/list")
     @OperationLog(module = "系统配置管理", type = OperationType.QUERY, desc = "查询配置列表")
     public RespInfo<List<SysConfig>> list(SysConfigQuery query) {
+        assertPlatformAdmin();
         List<SysConfig> list = configService.selectConfigList(query);
         return RespInfo.success(list);
     }
@@ -55,6 +58,7 @@ public class SysConfigController {
      */
     @GetMapping("/configKey/{configKey}")
     public RespInfo<String> getConfigByKey(@PathVariable String configKey) {
+        assertPlatformAdmin();
         String configValue = configService.selectConfigByKey(configKey);
         return RespInfo.success(configValue);
     }
@@ -64,6 +68,7 @@ public class SysConfigController {
      */
     @PostMapping("/getById")
     public RespInfo<SysConfig> getById(@RequestParam Long configId) {
+        assertPlatformAdmin();
         SysConfig config = configService.selectConfigById(configId);
         return RespInfo.success(config);
     }
@@ -73,6 +78,7 @@ public class SysConfigController {
      */
     @PostMapping("/add")
     public RespInfo<Void> add(@RequestBody SysConfigDTO dto) {
+        assertPlatformAdmin();
         boolean result = configService.insertConfig(dto);
         return result ? RespInfo.success() : RespInfo.error("新增失败");
     }
@@ -82,6 +88,7 @@ public class SysConfigController {
      */
     @PostMapping("/edit")
     public RespInfo<Void> edit(@RequestBody SysConfigDTO dto) {
+        assertPlatformAdmin();
         boolean result = configService.updateConfig(dto);
         return result ? RespInfo.success() : RespInfo.error("修改失败");
     }
@@ -91,6 +98,7 @@ public class SysConfigController {
      */
     @PostMapping("/remove")
     public RespInfo<Void> remove(@RequestParam Long configId) {
+        assertPlatformAdmin();
         boolean result = configService.deleteConfigById(configId);
         return result ? RespInfo.success() : RespInfo.error("删除失败");
     }
@@ -100,7 +108,12 @@ public class SysConfigController {
      */
     @PostMapping("/removeBatch")
     public RespInfo<Void> removeBatch(@RequestBody Long[] configIds) {
+        assertPlatformAdmin();
         boolean result = configService.deleteConfigByIds(configIds);
         return result ? RespInfo.success() : RespInfo.error("批量删除失败");
+    }
+
+    private void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护系统参数配置");
     }
 }

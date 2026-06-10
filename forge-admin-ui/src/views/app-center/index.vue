@@ -115,6 +115,18 @@
               </template>
               编辑套件
             </n-button>
+            <n-button secondary type="warning" :disabled="!activeSuite" @click="toggleSuite(activeSuite)">
+              <template #icon>
+                <n-icon><PowerOutline /></n-icon>
+              </template>
+              {{ suiteStatusActionText(activeSuite) }}
+            </n-button>
+            <n-button secondary type="error" :disabled="!activeSuite" @click="deleteSuite(activeSuite)">
+              <template #icon>
+                <n-icon><TrashOutline /></n-icon>
+              </template>
+              删除套件
+            </n-button>
             <n-button secondary @click="openObjectWizard">
               <template #icon>
                 <n-icon><CubeOutline /></n-icon>
@@ -253,7 +265,9 @@ import {
   GridOutline,
   HardwareChipOutline,
   OpenOutline,
+  PowerOutline,
   RefreshOutline,
+  TrashOutline,
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -266,8 +280,10 @@ import {
   businessSuiteSummary,
   deleteBusinessApp,
   deleteBusinessObject,
+  deleteBusinessSuite,
   updateBusinessAppStatus,
   updateBusinessObjectStatus,
+  updateBusinessSuiteStatus,
 } from '@/api/business-app'
 import IconRenderer from '@/components/IconRenderer.vue'
 import AppCard from './components/AppCard.vue'
@@ -405,6 +421,10 @@ function suiteInitial(suite) {
   return text.slice(0, 2).toUpperCase()
 }
 
+function suiteStatusActionText(suite) {
+  return suite?.status === 0 ? '启用套件' : '停用套件'
+}
+
 function selectSuite(suite) {
   suiteCode.value = suite?.suiteCode || null
 }
@@ -531,6 +551,32 @@ async function toggleObject(object) {
   await updateBusinessObjectStatus(object.id, object.status === 1 ? 0 : 1)
   message.success(object.status === 1 ? '业务对象已停用' : '业务对象已启用')
   await loadObjects()
+}
+
+async function toggleSuite(suite) {
+  if (!suite?.id)
+    return
+  await updateBusinessSuiteStatus(suite.id, suite.status === 1 ? 0 : 1)
+  message.success(suite.status === 1 ? '业务套件已停用' : '业务套件已启用')
+  await loadAll()
+}
+
+function deleteSuite(suite) {
+  if (!suite?.id)
+    return
+  window.$dialog?.warning({
+    title: '删除业务套件',
+    content: `确定删除“${suite.suiteName || suite.suiteCode}”吗？已存在业务对象或应用入口的套件会被后端拦截。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await deleteBusinessSuite(suite.id)
+      message.success('业务套件已删除')
+      if (suiteCode.value === suite.suiteCode)
+        suiteCode.value = null
+      await loadAll()
+    },
+  })
 }
 
 function deleteObject(object) {

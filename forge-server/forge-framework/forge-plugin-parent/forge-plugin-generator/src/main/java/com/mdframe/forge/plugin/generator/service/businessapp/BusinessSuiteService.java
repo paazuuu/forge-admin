@@ -77,6 +77,14 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public void updateStatus(Long id, Integer status) {
+        AiBusinessSuite suite = requireEntity(id);
+        suite.setStatus(normalizeStatus(status));
+        updateById(suite);
+        syncMenuDirectory(suite);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         AiBusinessSuite suite = requireEntity(id);
         Long tenantId = resolveTenantId();

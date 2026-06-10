@@ -1,16 +1,41 @@
 <template>
   <div class="suite-detail-page">
     <header class="suite-head">
-      <n-button text @click="router.push('/app-center')">
-        返回应用中心
-      </n-button>
+      <div class="suite-head-top">
+        <n-button text @click="router.push('/app-center')">
+          返回应用中心
+        </n-button>
+        <n-space :wrap="true" size="small">
+          <n-button secondary :disabled="!suite" @click="openSuiteEditor">
+            <template #icon>
+              <n-icon><CreateOutline /></n-icon>
+            </template>
+            编辑套件
+          </n-button>
+          <n-button secondary type="warning" :disabled="!suite" @click="toggleSuite">
+            <template #icon>
+              <n-icon><PowerOutline /></n-icon>
+            </template>
+            {{ suiteStatusActionText(suite) }}
+          </n-button>
+          <n-button secondary type="error" :disabled="!suite" @click="deleteSuite">
+            <template #icon>
+              <n-icon><TrashOutline /></n-icon>
+            </template>
+            删除套件
+          </n-button>
+        </n-space>
+      </div>
       <div class="suite-title">
         <span class="suite-avatar" :class="{ 'has-icon': suite?.icon }">
           <IconRenderer v-if="suite?.icon" :icon="suite.icon" :size="28" />
           <template v-else>{{ suiteInitial }}</template>
         </span>
         <div>
-          <h1>{{ suite?.suiteName || suiteCode }}</h1>
+          <div class="suite-title-line">
+            <h1>{{ suite?.suiteName || suiteCode }}</h1>
+            <DictTag v-if="suite" dict-type="sys_enable_disable" :value="suite.status" :bordered="false" />
+          </div>
           <p>{{ suite?.description || '业务套件详情' }}</p>
         </div>
       </div>
@@ -134,6 +159,11 @@
       :default-suite-code="suiteCode"
       @saved="handleObjectSaved"
     />
+    <SuiteEditorDrawer
+      v-model:show="suiteEditorVisible"
+      :suite="suite"
+      @saved="handleSuiteSaved"
+    />
     <BusinessObjectDesignerPage
       v-if="designerVisible"
       :key="designerMountKey"
@@ -149,6 +179,7 @@
 </template>
 
 <script setup>
+import { CreateOutline, PowerOutline, TrashOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -160,9 +191,12 @@ import {
   businessSuiteList,
   deleteBusinessApp,
   deleteBusinessObject,
+  deleteBusinessSuite,
   updateBusinessAppStatus,
   updateBusinessObjectStatus,
+  updateBusinessSuiteStatus,
 } from '@/api/business-app'
+import DictTag from '@/components/DictTag.vue'
 import IconRenderer from '@/components/IconRenderer.vue'
 import { useTabStore } from '@/store'
 import AppCard from './components/AppCard.vue'
@@ -170,6 +204,7 @@ import AppEditorDrawer from './components/AppEditorDrawer.vue'
 import BusinessObjectWizardDrawer from './components/BusinessObjectWizardDrawer.vue'
 import ObjectCard from './components/ObjectCard.vue'
 import SuiteAcceptancePanel from './components/SuiteAcceptancePanel.vue'
+import SuiteEditorDrawer from './components/SuiteEditorDrawer.vue'
 import BusinessObjectDesignerPage from './object-designer.[objectCode].vue'
 
 const route = useRoute()
@@ -187,6 +222,7 @@ const loadingApps = ref(false)
 const editorVisible = ref(false)
 const editingApp = ref(null)
 const objectWizardVisible = ref(false)
+const suiteEditorVisible = ref(false)
 const designerVisible = ref(false)
 const designingObject = ref(null)
 const designerPanel = ref('form')
@@ -300,6 +336,18 @@ function openObjectWizard() {
   objectWizardVisible.value = true
 }
 
+function suiteStatusActionText(currentSuite) {
+  return currentSuite?.status === 0 ? '启用套件' : '停用套件'
+}
+
+function openSuiteEditor() {
+  suiteEditorVisible.value = true
+}
+
+async function handleSuiteSaved() {
+  await loadAll()
+}
+
 async function handleObjectSaved(data) {
   await loadAll()
   openObjectDesigner(data, data?.designerPanel || 'form')
@@ -365,6 +413,31 @@ async function toggleObject(object) {
   await updateBusinessObjectStatus(object.id, object.status === 1 ? 0 : 1)
   message.success(object.status === 1 ? '业务对象已停用' : '业务对象已启用')
   await loadObjects()
+}
+
+async function toggleSuite() {
+  if (!suite.value?.id)
+    return
+  await updateBusinessSuiteStatus(suite.value.id, suite.value.status === 1 ? 0 : 1)
+  message.success(suite.value.status === 1 ? '业务套件已停用' : '业务套件已启用')
+  await loadAll()
+}
+
+function deleteSuite() {
+  if (!suite.value?.id)
+    return
+  const currentSuite = suite.value
+  window.$dialog?.warning({
+    title: '删除业务套件',
+    content: `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？已存在业务对象或应用入口的套件会被后端拦截。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await deleteBusinessSuite(currentSuite.id)
+      message.success('业务套件已删除')
+      router.replace('/app-center')
+    },
+  })
 }
 
 function deleteObject(object) {
@@ -452,6 +525,13 @@ function handleAcceptanceAction(action, data) {
   margin-bottom: 16px;
 }
 
+.suite-head-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
 .suite-title {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
@@ -483,8 +563,19 @@ function handleAcceptanceAction(action, data) {
   letter-spacing: 0;
 }
 
+.suite-title-line {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: center;
+}
+
 .suite-title h1 {
+  min-width: 0;
+  overflow: hidden;
   font-size: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .suite-title p,
@@ -590,6 +681,11 @@ function handleAcceptanceAction(action, data) {
 @media (max-width: 680px) {
   .suite-detail-page {
     padding: 12px;
+  }
+
+  .suite-head-top {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .suite-stats {

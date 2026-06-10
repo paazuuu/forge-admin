@@ -1,16 +1,30 @@
 import { useAuthStore } from '@/store'
 
 let isConfirming = false
+
+export function isAuthErrorCode(code) {
+  return code === '-8' || code === 401 || code === '401' || code === 11007 || code === 11008
+}
+
+export function shouldSilenceAuthError() {
+  const authStore = useAuthStore()
+  return authStore.isLoggingOut || window.location.pathname === '/login'
+}
+
+export function isSilentAuthError(error) {
+  return Boolean(error?.silentAuthError || (isAuthErrorCode(error?.code) && shouldSilenceAuthError()))
+}
+
 export function resolveResError(code, message, needTip = true) {
   // 检查是否在登录页面
   const isLoginPage = window.location.pathname === '/login'
+  const authStore = useAuthStore()
 
   switch (code) {
     case '-8': // 令牌无效
     case 401:
-      // 如果在登录页面，静默清除 token，不弹对话框
-      if (isLoginPage) {
-        const authStore = useAuthStore()
+      // 退出流程或登录页上的鉴权失效属于预期状态，静默处理。
+      if (authStore.isLoggingOut || isLoginPage) {
         authStore.resetToken()
         return false
       }
@@ -23,7 +37,7 @@ export function resolveResError(code, message, needTip = true) {
         type: 'info',
         content: message || '登录已过期，是否重新登录？',
         confirm() {
-          useAuthStore().logout()
+          authStore.logout()
           window.$message?.success('已退出登录')
           isConfirming = false
         },
@@ -34,6 +48,10 @@ export function resolveResError(code, message, needTip = true) {
       return false
     case 11007:
     case 11008:
+      if (authStore.isLoggingOut || isLoginPage) {
+        authStore.resetToken()
+        return false
+      }
       if (isConfirming || !needTip)
         return
       isConfirming = true
@@ -42,7 +60,7 @@ export function resolveResError(code, message, needTip = true) {
         type: 'info',
         content: `${message}，是否重新登录？`,
         confirm() {
-          useAuthStore().logout()
+          authStore.logout()
           window.$message?.success('已退出登录')
           isConfirming = false
         },

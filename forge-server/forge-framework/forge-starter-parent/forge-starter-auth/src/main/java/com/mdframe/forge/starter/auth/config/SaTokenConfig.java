@@ -34,6 +34,10 @@ public class SaTokenConfig implements WebMvcConfigurer {
             SaRouter.match("/**")
                     // 排除登录接口（统一入口）
                     .notMatch("/auth/login")
+                    // 排除登出接口，支持前端重复/无效 token 登出时幂等返回
+                    .notMatch("/auth/logout")
+                    // 排除登录页配置接口
+                    .notMatch("/auth/loginConfig")
                     // 排除注册接口
                     .notMatch("/auth/register")
                     // 排除重置密码接口
@@ -45,6 +49,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     .notMatch("/crypto/exchange")
                     // 排除获取验证码接口
                     .notMatch("/auth/captcha")
+                    .notMatch("/auth/captcha/slider")
+                    .notMatch("/auth/captcha/sms")
                     // 排除静态资源
                     .notMatch("/static/**", "/css/**", "/js/**", "/images/**")
                     // 排除Swagger文档
@@ -61,7 +67,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
         registry.addInterceptor(apiPermissionInterceptor)
                 .addPathPatterns("/**")
                 // 排除登录相关接口
-                .excludePathPatterns("/auth/login", "/auth/register", "/auth/resetPassword", "/auth/captcha", "/auth/sso/exchange")
+                .excludePathPatterns("/auth/login", "/auth/logout", "/auth/loginConfig", "/auth/register", "/auth/resetPassword",
+                        "/auth/captcha", "/auth/captcha/slider", "/auth/captcha/sms", "/auth/sso/exchange")
                 .excludePathPatterns("/crypto/public-key", "/crypto/exchange")
                 // 排除静态资源
                 .excludePathPatterns("/static/**", "/css/**", "/js/**", "/images/**")

@@ -208,7 +208,7 @@ function buildRuleProps(component = {}, field = {}, gridColumns = 2, label = '')
     props.autoUpload = false
   }
   if (componentKey === 'regionTreeSelect') {
-    props.rootCode = props.rootCode || '150000'
+    props.rootCode = props.rootCode || ''
     props.dataRight = props.dataRight !== false
     props.virtualDisabled = props.virtualDisabled !== false
     props.data = props.data || [

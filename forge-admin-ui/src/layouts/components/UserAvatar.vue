@@ -28,14 +28,13 @@ import api from '@/api'
 import { defaultThemeConfig } from '@/config/theme.config.js'
 import { useAuthStore, useUserStore } from '@/store'
 import { resolveRenderableFileUrl } from '@/utils/file'
+import { isSilentAuthError } from '@/utils/http/helpers'
 
 const router = useRouter()
 const userStore = useUserStore()
 const authStore = useAuthStore()
 
 const avatarSrc = ref('')
-const tenantOptions = ref([])
-const switchingTenant = ref(false)
 const avatarText = computed(() => {
   const name = userStore.realName || userStore.username
   return name ? name.charAt(0) : 'U'
@@ -43,23 +42,6 @@ const avatarText = computed(() => {
 
 const dropdownOptions = computed(() => {
   const baseOptions = []
-  if (tenantOptions.value.length > 1) {
-    baseOptions.push({
-      label: '切换租户',
-      key: 'tenant-switch',
-      icon: () => h('i', { class: 'i-material-symbols:domain-rounded text-14' }),
-      children: tenantOptions.value.map(item => ({
-        label: item.tenantName || `租户 ${item.tenantId}`,
-        key: `tenant:${item.tenantId}`,
-        disabled: switchingTenant.value || item.tenantId === userStore.userInfo?.tenantId,
-        icon: () => h('i', {
-          class: item.tenantId === userStore.userInfo?.tenantId
-            ? 'i-material-symbols:check-circle-rounded text-14 text-success'
-            : 'i-material-symbols:corporate-fare-rounded text-14',
-        }),
-      })),
-    })
-  }
   baseOptions.push(
     {
       label: '个人资料',
@@ -93,25 +75,7 @@ function handleAvatarError() {
   avatarSrc.value = ''
 }
 
-async function loadTenantOptions() {
-  if (!userStore.userInfo)
-    return
-  try {
-    const res = await api.getCurrentTenantOptions()
-    if (res.code === 200) {
-      tenantOptions.value = res.data || []
-    }
-  }
-  catch (error) {
-    console.error('load tenant options error', error)
-  }
-}
-
 function handleSelect(key) {
-  if (key?.startsWith('tenant:')) {
-    handleTenantSwitch(Number(key.replace('tenant:', '')))
-    return
-  }
   switch (key) {
     case 'profile':
       router.push('/profile')
@@ -125,11 +89,13 @@ function handleSelect(key) {
           color: defaultThemeConfig.primaryColor,
         },
         async confirm() {
+          authStore.beginLogout()
           try {
             await api.logout()
           }
-          catch {
-            console.error('logout error')
+          catch (error) {
+            if (!isSilentAuthError(error))
+              console.error('logout error', error)
           }
           authStore.logout()
           $message.success('已退出登录')
@@ -139,31 +105,7 @@ function handleSelect(key) {
   }
 }
 
-async function handleTenantSwitch(tenantId) {
-  if (!tenantId || tenantId === userStore.userInfo?.tenantId)
-    return
-  try {
-    switchingTenant.value = true
-    const res = await api.switchTenant(tenantId)
-    if (res.code === 200) {
-      authStore.resetLoginState({ resetAuth: false })
-      $message.success('租户已切换')
-      await router.replace({ path: '/', query: { tenantSwitch: Date.now() } })
-    }
-  }
-  catch {
-    $message.error('切换租户失败')
-  }
-  finally {
-    switchingTenant.value = false
-  }
-}
-
 watch(() => userStore.avatar, () => {
   loadAvatar()
-}, { immediate: true })
-
-watch(() => userStore.userInfo?.tenantId, () => {
-  loadTenantOptions()
 }, { immediate: true })
 </script>

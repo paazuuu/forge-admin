@@ -26,6 +26,7 @@
           <Fullscreen class="mobile-hidden-action" />
           <!--          <ThemeSetting class="mr-16" /> -->
           <MessageNotification class="mobile-hidden-action mr-16" />
+          <TenantSwitcher class="mr-12" />
           <UserAvatar />
         </div>
       </div>
@@ -66,6 +67,7 @@ import {
   MenuCollapse,
   MenuSearch,
   MessageNotification,
+  TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'
 import { useAppStore, usePermissionStore } from '@/store'

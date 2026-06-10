@@ -373,6 +373,7 @@
       :title="`添加用户到角色 - ${currentRole.roleName || ''}`"
       :confirm-loading="addUserLoading"
       :assigned-user-ids="assignedUserIds"
+      :tenant-id="currentRole.tenantId"
       @update:show="val => addUserModalVisible = val"
       @confirm="handleConfirmAddUsers"
     />
@@ -440,6 +441,12 @@ const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, ROLE_DATA_SCOPE_DICT,
 
 const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
 const dataScopeOptions = computed(() => toNumberOptions(dict.value[ROLE_DATA_SCOPE_DICT]))
+const manageableDataScopeOptions = computed(() => {
+  if (userStore.isAdmin)
+    return dataScopeOptions.value
+  const deniedScopes = Number(userStore.userType) === 2 ? [1, 2] : [1]
+  return dataScopeOptions.value.filter(item => !deniedScopes.includes(Number(item.value)))
+})
 const roleTypeOptions = computed(() => toNumberOptions(dict.value[ROLE_TYPE_DICT]))
 const roleStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
 const yesNoOptions = computed(() => toNumberOptions(dict.value[YES_NO_DICT]))
@@ -732,7 +739,7 @@ const editSchema = computed(() => [
     rules: [{ required: true, type: 'number', message: '请选择数据范围', trigger: 'change' }],
     props: {
       placeholder: '请选择数据范围',
-      options: dataScopeOptions.value,
+      options: manageableDataScopeOptions.value,
     },
   },
   {
@@ -846,6 +853,10 @@ function toNumberOptions(options = []) {
 function beforeSubmit(formData) {
   if (!userStore.isAdmin) {
     formData.tenantId = userStore.userInfo?.tenantId
+    if (Number(userStore.userType) === 2 && [1, 2].includes(Number(formData.dataScope)))
+      formData.dataScope = 5
+    else if (Number(formData.dataScope) === 1)
+      formData.dataScope = 2
   }
   else if (!formData.tenantId) {
     formData.tenantId = userStore.userInfo?.tenantId

@@ -1,7 +1,7 @@
 import { useAuthStore } from '@/store'
 import { cryptoConfig, decryptResponse, encryptRequest, matchPath } from '@/utils/crypto'
 import { resetKeyExchange } from '@/utils/crypto/key-exchange'
-import { resolveResError } from './helpers'
+import { isAuthErrorCode, resolveResError, shouldSilenceAuthError } from './helpers'
 
 // 生成 UUID
 function generateUUID() {
@@ -117,6 +117,9 @@ export function setupInterceptors(axiosInstance) {
     const message = data?.message ?? statusText
     const needTip = config?.needTip !== false
     const finalMessage = resolveResError(code, message, needTip)
+    if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
+      return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
+    }
     return Promise.reject({ code, message: finalMessage, error: data ?? response })
   }
 
@@ -152,6 +155,9 @@ export function setupInterceptors(axiosInstance) {
     const needTip = config?.needTip !== false
     // 调用统一错误处理
     const finalMessage = resolveResError(code, message, needTip)
+    if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
+      return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
+    }
     return Promise.reject({
       code,
       message: finalMessage,

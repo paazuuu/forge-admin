@@ -6,6 +6,69 @@ import { initWebSocketClient, lStorage, request } from '@/utils'
 import { initKeyExchange } from '@/utils/crypto/key-exchange'
 import { applyTenantConfig } from '@/utils/tenant-config'
 
+const AUTH_ROUTE_ALLOWLIST = new Set([
+  '/',
+  '/home',
+  '/profile',
+  '/403',
+])
+
+function normalizeRoutePath(path) {
+  const value = String(path || '').trim()
+  if (!value)
+    return ''
+  const [pathWithoutHash] = value.split('#')
+  const [pathname] = pathWithoutHash.split('?')
+  const normalized = String(pathname || '').replace(/\/+/g, '/')
+  if (!normalized || normalized === '/')
+    return normalized
+  return normalized.startsWith('/') ? normalized : `/${normalized}`
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function isSameRoutePath(routePath, targetPath) {
+  const normalizedRoutePath = normalizeRoutePath(routePath)
+  const normalizedTargetPath = normalizeRoutePath(targetPath)
+  if (!normalizedRoutePath || !normalizedTargetPath)
+    return false
+  if (normalizedRoutePath === normalizedTargetPath)
+    return true
+  if (!normalizedRoutePath.includes(':'))
+    return false
+  const pattern = normalizedRoutePath
+    .split('/')
+    .map(segment => segment.startsWith(':') ? '[^/]+' : escapeRegExp(segment))
+    .join('/')
+  return new RegExp(`^${pattern}$`).test(normalizedTargetPath)
+}
+
+function canAccessRoute(to, permissionStore) {
+  const targetPath = normalizeRoutePath(to.path)
+  if (!targetPath)
+    return true
+  if (WHITE_LIST.includes(targetPath) || AUTH_ROUTE_ALLOWLIST.has(targetPath))
+    return true
+  return (permissionStore.accessRoutes || []).some(route => isSameRoutePath(route.path, targetPath))
+}
+
+function buildUnauthorizedRouteTarget(from) {
+  const fromPath = normalizeRoutePath(from?.path)
+  if (!fromPath || fromPath === '/login')
+    return { path: window.$homePath || '/home', replace: true }
+  const back = from?.fullPath && fromPath !== '/403' ? from.fullPath : undefined
+  return {
+    path: '/403',
+    replace: true,
+    state: {
+      from: 'permission-guard',
+      ...(back ? { back } : {}),
+    },
+  }
+}
+
 export function createPermissionGuard(router) {
   router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
@@ -154,6 +217,12 @@ export function createPermissionGuard(router) {
         catch (error) {
           console.error('重新获取用户信息或菜单数据失败:', error)
         }
+      }
+
+      if (permissionStore.menuDataLoaded && !canAccessRoute(to, permissionStore)) {
+        appStore.setRouteGuardCompleted(true)
+        next(buildUnauthorizedRouteTarget(from))
+        return
       }
 
       // unplugin-vue-router 自动处理路由，直接放行

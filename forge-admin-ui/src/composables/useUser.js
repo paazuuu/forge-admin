@@ -8,6 +8,7 @@ import api from '@/api'
 import { defaultThemeConfig } from '@/config/theme.config.js'
 import { useAuthStore, useUserStore } from '@/store'
 import { resolveRenderableFileUrl } from '@/utils/file'
+import { isSilentAuthError } from '@/utils/http/helpers'
 
 /**
  * 默认用户下拉菜单选项
@@ -114,11 +115,13 @@ export function useUser() {
         color: defaultThemeConfig.primaryColor,
       },
       async confirm() {
+        authStore.beginLogout()
         try {
           await api.logout()
         }
-        catch {
-          console.error('logout error')
+        catch (error) {
+          if (!isSilentAuthError(error))
+            console.error('logout error', error)
         }
         authStore.logout()
         $message.success('已退出登录')

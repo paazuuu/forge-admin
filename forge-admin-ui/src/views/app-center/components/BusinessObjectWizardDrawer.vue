@@ -74,6 +74,38 @@
               </span>
             </label>
           </n-radio-group>
+
+          <div v-if="form.createMode === 'DB_IMPORT'" class="db-import-panel">
+            <n-grid :cols="2" :x-gap="12">
+              <n-form-item-gi label="数据源" required>
+                <n-select
+                  v-model:value="form.importDatasourceId"
+                  filterable
+                  :options="datasourceOptions"
+                  :loading="datasourceLoading"
+                  placeholder="选择数据源"
+                  @update:value="handleDatasourceChange"
+                />
+              </n-form-item-gi>
+              <n-form-item-gi label="数据表" required>
+                <n-select
+                  v-model:value="form.importTableName"
+                  filterable
+                  clearable
+                  :disabled="!form.importDatasourceId"
+                  :options="tableOptions"
+                  :loading="tableLoading"
+                  placeholder="选择数据表"
+                  @update:value="handleTableChange"
+                />
+              </n-form-item-gi>
+            </n-grid>
+
+            <div v-if="selectedTableInfo" class="table-summary">
+              <span class="table-summary__name">{{ selectedTableInfo.tableName }}</span>
+              <span class="table-summary__comment">{{ selectedTableInfo.tableComment || '无表说明' }}</span>
+            </div>
+          </div>
         </section>
 
         <section v-if="currentStep === 3" class="wizard-step">
@@ -139,7 +171,7 @@
 <script setup>
 import { useMessage } from 'naive-ui'
 import { computed, reactive, ref, watch } from 'vue'
-import { createBusinessObject, createBusinessSuite } from '@/api/business-app'
+import { createBusinessObject, createBusinessSuite, genDatasourceEnabled, genDatasourceTables } from '@/api/business-app'
 import DictSelect from '@/components/DictSelect.vue'
 import IconSelector from '@/components/IconSelector.vue'
 import MenuParentSelect from '@/components/lowcode-builder/shared/MenuParentSelect.vue'
@@ -167,6 +199,10 @@ const saving = ref(false)
 const form = reactive(defaultForm())
 const lastSuggestedObjectCode = ref('')
 const lastSuggestedSuiteCode = ref('')
+const datasourceLoading = ref(false)
+const tableLoading = ref(false)
+const datasourceOptions = ref([])
+const tableList = ref([])
 
 const createModes = [
   {
@@ -191,6 +227,17 @@ const suiteOptions = computed(() => props.suites.map(item => ({
   value: item.suiteCode,
 })))
 
+const tableOptions = computed(() => tableList.value.map(item => ({
+  label: item.tableComment ? `${item.tableName}（${item.tableComment}）` : item.tableName,
+  value: item.tableName,
+})))
+
+const selectedTableInfo = computed(() => {
+  if (!form.importTableName)
+    return null
+  return tableList.value.find(item => item.tableName === form.importTableName) || null
+})
+
 const footerHint = computed(() => {
   if (currentStep.value === 1)
     return '业务对象必须归属到一个业务套件。'
@@ -205,6 +252,7 @@ watch(() => props.show, (visible) => {
   Object.assign(form, defaultForm())
   lastSuggestedObjectCode.value = ''
   lastSuggestedSuiteCode.value = ''
+  resetImportState()
   currentStep.value = 1
   if (props.defaultSuiteCode) {
     form.suiteMode = 'EXISTING'
@@ -243,6 +291,14 @@ watch(
   },
 )
 
+watch(
+  () => form.createMode,
+  (value) => {
+    if (value === 'DB_IMPORT')
+      loadDatasources()
+  },
+)
+
 function nextStep() {
   if (!validateStep())
     return
@@ -266,7 +322,10 @@ async function saveObject() {
       icon: trimToNull(form.icon),
       description: trimToNull(form.description),
       status: form.status,
-      options: JSON.stringify({ createMode: form.createMode }),
+      createMode: form.createMode,
+      importDatasourceId: form.createMode === 'DB_IMPORT' ? form.importDatasourceId : null,
+      importTableName: form.createMode === 'DB_IMPORT' ? form.importTableName : null,
+      options: JSON.stringify(buildObjectOptions()),
     })
     message.success('业务对象已创建，正在进入设计器')
     emit('saved', {
@@ -325,6 +384,18 @@ function buildSuiteOptions() {
   })
 }
 
+function buildObjectOptions() {
+  const options = { createMode: form.createMode }
+  if (form.createMode === 'DB_IMPORT') {
+    options.sourceTable = {
+      datasourceId: form.importDatasourceId,
+      tableName: form.importTableName,
+      tableComment: selectedTableInfo.value?.tableComment || null,
+    }
+  }
+  return options
+}
+
 function validateStep() {
   if (currentStep.value === 1) {
     if (form.suiteMode === 'EXISTING' && !form.suiteCode) {
@@ -346,6 +417,16 @@ function validateStep() {
     message.warning('请选择创建方式')
     return false
   }
+  if (currentStep.value === 2 && form.createMode === 'DB_IMPORT') {
+    if (!form.importDatasourceId) {
+      message.warning('请选择数据源')
+      return false
+    }
+    if (!form.importTableName) {
+      message.warning('请选择数据表')
+      return false
+    }
+  }
   if (currentStep.value === 3) {
     if (!form.objectName.trim()) {
       message.warning('请输入对象名称')
@@ -357,6 +438,69 @@ function validateStep() {
     }
   }
   return true
+}
+
+async function loadDatasources() {
+  if (datasourceLoading.value || datasourceOptions.value.length > 0)
+    return
+  datasourceLoading.value = true
+  try {
+    const res = await genDatasourceEnabled()
+    datasourceOptions.value = (res.data || []).map(item => ({
+      label: `${item.datasourceName} (${item.dbType})`,
+      value: item.datasourceId,
+      raw: item,
+    }))
+    const defaultDatasource = (res.data || []).find(item => item.isDefault === 1)
+    if (defaultDatasource && !form.importDatasourceId) {
+      form.importDatasourceId = defaultDatasource.datasourceId
+      await handleDatasourceChange(defaultDatasource.datasourceId)
+    }
+  }
+  catch (error) {
+    console.error('加载数据源失败:', error)
+    message.error('加载数据源失败')
+  }
+  finally {
+    datasourceLoading.value = false
+  }
+}
+
+async function handleDatasourceChange(datasourceId) {
+  form.importTableName = null
+  tableList.value = []
+  if (!datasourceId)
+    return
+  tableLoading.value = true
+  try {
+    const res = await genDatasourceTables(datasourceId)
+    tableList.value = res.data || []
+  }
+  catch (error) {
+    console.error('加载数据表失败:', error)
+    message.error('加载数据表失败')
+  }
+  finally {
+    tableLoading.value = false
+  }
+}
+
+function handleTableChange(tableName) {
+  const table = tableList.value.find(item => item.tableName === tableName)
+  if (!table)
+    return
+  const fallbackName = table.tableComment || table.tableName
+  if (!form.objectName.trim())
+    form.objectName = fallbackName
+  if (!form.objectCode.trim())
+    form.objectCode = normalizeObjectCode(table.tableName, fallbackName)
+}
+
+function resetImportState() {
+  form.importDatasourceId = null
+  form.importTableName = null
+  tableList.value = []
+  datasourceOptions.value = []
 }
 
 function normalizeCode(value, fallbackName = '') {
@@ -395,6 +539,8 @@ function defaultForm() {
     icon: '',
     description: '',
     status: 1,
+    importDatasourceId: null,
+    importTableName: null,
   }
 }
 </script>
@@ -445,6 +591,36 @@ function defaultForm() {
 .method-card strong,
 .method-card small {
   display: block;
+}
+
+.db-import-panel {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.table-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  border-top: 1px solid #eef2f7;
+  color: #475569;
+  font-size: 12px;
+}
+
+.table-summary__name {
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+}
+
+.table-summary__comment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .method-card strong {

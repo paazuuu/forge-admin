@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectQueryDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessBootstrapService;
+import com.mdframe.forge.plugin.generator.service.businessapp.BusinessObjectCreateService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessObjectReadinessService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessObjectService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectReadinessVO;
@@ -33,6 +34,7 @@ import java.util.List;
 public class BusinessObjectController {
 
     private final BusinessObjectService objectService;
+    private final BusinessObjectCreateService objectCreateService;
     private final BusinessBootstrapService bootstrapService;
     private final BusinessObjectReadinessService readinessService;
 
@@ -85,7 +87,7 @@ public class BusinessObjectController {
     @SaCheckPermission("ai:businessObject:add")
     @OperationLog(module = "业务对象", type = OperationType.ADD, desc = "新增业务对象")
     public RespInfo<Long> create(@RequestBody BusinessObjectDTO dto) {
-        return RespInfo.success(objectService.create(dto));
+        return RespInfo.success(objectCreateService.create(dto));
     }
 
     @PutMapping

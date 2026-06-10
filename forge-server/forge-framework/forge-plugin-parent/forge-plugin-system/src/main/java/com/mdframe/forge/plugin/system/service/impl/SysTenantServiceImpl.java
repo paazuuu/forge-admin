@@ -35,6 +35,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant> implements ISysTenantService {
 
+    private static final Long DEFAULT_TENANT_ID = 1L;
+
     private final SysTenantMapper tenantMapper;
     private final SysUserMapper userMapper;
     private final SysUserTenantMapper userTenantMapper;
@@ -152,13 +154,35 @@ public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant
     @Override
     public boolean deleteTenantById(Long id) {
         assertSuperAdmin();
+        validateTenantDeletable(id);
         return tenantMapper.deleteById(id) > 0;
     }
 
     @Override
     public boolean deleteTenantByIds(Long[] ids) {
         assertSuperAdmin();
+        if (ids == null || ids.length == 0) {
+            return false;
+        }
+        Arrays.stream(ids).forEach(this::validateTenantDeletable);
         return tenantMapper.deleteBatchIds(Arrays.asList(ids)) > 0;
+    }
+
+    private void validateTenantDeletable(Long id) {
+        if (id == null) {
+            throw new RuntimeException("租户ID不能为空");
+        }
+        if (DEFAULT_TENANT_ID.equals(id)) {
+            throw new RuntimeException("默认租户不能删除");
+        }
+        Long userCount = TenantContextHolder.executeIgnore(() -> tenantMapper.countUsersByTenant(id));
+        if (userCount != null && userCount > 0) {
+            throw new RuntimeException("租户下已存在用户，不能删除");
+        }
+        Long bindingCount = TenantContextHolder.executeIgnore(() -> tenantMapper.countUserTenantBindings(id));
+        if (bindingCount != null && bindingCount > 0) {
+            throw new RuntimeException("租户下已绑定用户，不能删除");
+        }
     }
 
     private LoginUser requireLoginUser() {

@@ -6,6 +6,8 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.useragent.UserAgent;
 import cn.hutool.http.useragent.UserAgentUtil;
 import com.mdframe.forge.starter.core.context.LogProperties;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.log.domain.LoginLogInfo;
 import com.mdframe.forge.starter.log.service.ILogService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -232,18 +234,13 @@ public class LoginLogListener implements SaTokenListener {
 
         // 获取当前登录用户信息以获取客户端类型
         try {
-            // 尝试从 SessionHelper 获取登录用户信息
-            Class<?> sessionHelperClazz = Class.forName("com.mdframe.forge.starter.core.session.SessionHelper");
-            Object loginUserObj = sessionHelperClazz.getMethod("getLoginUser").invoke(null);
-            if (loginUserObj != null) {
-                String userClient = (String) loginUserObj.getClass().getMethod("getUserClient").invoke(loginUserObj);
-                if (userClient != null) {
-                    logInfo.setClientCode(userClient);
-                }
+            LoginUser loginUser = SessionHelper.getLoginUser();
+            if (loginUser != null && StrUtil.isNotBlank(loginUser.getUserClient())) {
+                logInfo.setClientCode(loginUser.getUserClient());
             }
         } catch (Exception e) {
-            // 如果无法获取 SessionHelper 或登录用户信息，静默忽略
-            log.debug("无法获取当前登录用户客户端信息", e);
+            // 登出、踢下线等场景下 token session 可能已失效，不影响登录日志主体记录。
+            log.debug("无法获取当前登录用户客户端信息: {}", e.getMessage());
         }
 
         // 获取请求信息

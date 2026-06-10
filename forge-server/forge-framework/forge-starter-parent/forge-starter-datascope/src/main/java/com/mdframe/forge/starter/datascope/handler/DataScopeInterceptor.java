@@ -139,13 +139,10 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
         
         Select select = (Select) statement;
-        Select selectBody = select.getSelectBody();
-        
-        if (!(selectBody instanceof PlainSelect)) {
+        PlainSelect plainSelect = resolveDataScopeTarget(select.getSelectBody());
+        if (plainSelect == null) {
             return originalSql;
         }
-        
-        PlainSelect plainSelect = (PlainSelect) selectBody;
         Expression where = plainSelect.getWhere();
         
         // 构建数据权限条件
@@ -163,6 +160,26 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
         
         return select.toString();
+    }
+
+    /**
+     * 定位真正需要追加数据权限条件的 Select。
+     * MyBatis-Plus 分页 count 会把原始 SQL 包成:
+     * SELECT COUNT(*) FROM (原始SQL) TOTAL
+     * 此时表别名存在于子查询内部，条件必须追加到子查询而不是外层 COUNT。
+     */
+    private PlainSelect resolveDataScopeTarget(Select select) {
+        if (!(select instanceof PlainSelect plainSelect)) {
+            return null;
+        }
+        if (plainSelect.getFromItem() instanceof ParenthesedSelect parenthesedSelect
+                && (plainSelect.getJoins() == null || plainSelect.getJoins().isEmpty())) {
+            PlainSelect nestedSelect = resolveDataScopeTarget(parenthesedSelect.getSelect());
+            if (nestedSelect != null) {
+                return nestedSelect;
+            }
+        }
+        return plainSelect;
     }
     
     /**
@@ -245,7 +262,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
         // 检查是否为复杂SQL表达式（以 <sql> 开头）
         if (columnConfig.trim().startsWith("<sql>")) {
             // 去掉 <sql> 标签，提取真实SQL
-            String sqlExpression = columnConfig.trim().substring(5).trim();
+            String sqlExpression = extractCustomSql(columnConfig);
             return buildCustomSqlCondition(sqlExpression, context);
         }
         
@@ -430,7 +447,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
 
         // 检查是否为复杂 SQL 模板
         if (column.trim().startsWith("<sql>")) {
-            String sqlTemplate = column.trim().substring(5).trim();
+            String sqlTemplate = extractCustomSql(column);
             return buildCustomSqlCondition(sqlTemplate, context);
         }
 
@@ -491,5 +508,13 @@ public class DataScopeInterceptor implements InnerInterceptor {
         Parenthesis p = new Parenthesis();
         p.setExpression(expression);
         return p;
+    }
+
+    private String extractCustomSql(String columnConfig) {
+        String sqlExpression = columnConfig.trim().substring(5).trim();
+        if (sqlExpression.endsWith("</sql>")) {
+            sqlExpression = sqlExpression.substring(0, sqlExpression.length() - 6).trim();
+        }
+        return sqlExpression;
     }
 }

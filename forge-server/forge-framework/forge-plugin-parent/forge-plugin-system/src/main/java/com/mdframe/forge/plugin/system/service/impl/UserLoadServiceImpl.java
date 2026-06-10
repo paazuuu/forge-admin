@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.system.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mdframe.forge.plugin.system.constant.SystemConstants;
 import com.mdframe.forge.plugin.system.entity.*;
 import com.mdframe.forge.plugin.system.mapper.*;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -179,19 +180,25 @@ public class UserLoadServiceImpl implements IUserLoadService {
                 List<SysRole> roles = roleMapper.selectList(roleWrapper);
 
                 if (CollUtil.isNotEmpty(roles)) {
+                    List<Long> activeRoleIds = roles.stream()
+                            .map(SysRole::getId)
+                            .collect(Collectors.toList());
                     Set<String> roleKeys = roles.stream()
                             .map(SysRole::getRoleKey)
                             .filter(StrUtil::isNotBlank)
                             .collect(Collectors.toSet());
+                    loginUser.setRoleIds(activeRoleIds);
                     loginUser.setRoleKeys(roleKeys);
                     
                     log.debug("加载用户角色: userId={}, roleIds={}, roleKeys={}",
-                            loginUser.getUserId(), roleIds, roleKeys);
+                            loginUser.getUserId(), activeRoleIds, roleKeys);
                 } else {
+                    loginUser.setRoleIds(new ArrayList<>());
                     log.warn("用户没有启用的角色: userId={}", loginUser.getUserId());
                 }
             }
         } else {
+            loginUser.setRoleIds(new ArrayList<>());
             log.warn("用户没有分配角色: userId={}", loginUser.getUserId());
         }
     }
@@ -217,7 +224,9 @@ public class UserLoadServiceImpl implements IUserLoadService {
                     .ifPresent(uo -> {
                         loginUser.setMainOrgId(uo.getOrgId());
                         SysOrg sysOrg = sysOrgMapper.selectById(uo.getOrgId());
-                        loginUser.setDeptName(sysOrg.getOrgName());
+                        if (sysOrg != null) {
+                            loginUser.setDeptName(sysOrg.getOrgName());
+                        }
                     });
         }
     }
@@ -256,6 +265,7 @@ public class UserLoadServiceImpl implements IUserLoadService {
                 resourceWrapper.in(SysResource::getId, resourceIds)
                         .eq(SysResource::getVisible, 1)
                         .isNotNull(SysResource::getPerms);
+                applyUserTypeScope(resourceWrapper, loginUser);
                 List<SysResource> resources = resourceMapper.selectList(resourceWrapper);
 
                 if (CollUtil.isNotEmpty(resources)) {
@@ -315,8 +325,20 @@ public class UserLoadServiceImpl implements IUserLoadService {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // 4. 查询API类型的资源（resourceType=4）
-        List<String> apiPermissions = resourceMapper.selectApiPermissionPatternsByResourceIds(resourceIds);
+        // 4. 查询当前用户类型可访问的API资源（resourceType=4）
+        List<SysResource> apiResources = resourceMapper.selectList(new LambdaQueryWrapper<SysResource>()
+                .in(SysResource::getId, resourceIds)
+                .eq(SysResource::getVisible, 1)
+                .eq(SysResource::getResourceType, 4)
+                .isNotNull(SysResource::getApiUrl));
+        apiResources = apiResources.stream()
+                .filter(resource -> canAccessByUserType(loginUser, resource.getMinUserType()))
+                .collect(Collectors.toList());
+        List<String> apiPermissions = CollUtil.isEmpty(apiResources)
+                ? new ArrayList<>()
+                : resourceMapper.selectApiPermissionPatternsByResourceIds(apiResources.stream()
+                        .map(SysResource::getId)
+                        .collect(Collectors.toList()));
 
         if (CollUtil.isEmpty(apiPermissions)) {
             log.debug("用户没有API权限: userId={}", loginUser.getUserId());
@@ -334,6 +356,29 @@ public class UserLoadServiceImpl implements IUserLoadService {
 
         log.debug("加载用户API权限: userId={}, apiCount={}, apis={}",
                 loginUser.getUserId(), apiUrls.size(), apiUrls);
+    }
+
+    private void applyUserTypeScope(LambdaQueryWrapper<SysResource> wrapper, LoginUser loginUser) {
+        int userType = normalizeUserType(loginUser == null ? null : loginUser.getUserType());
+        wrapper.and(item -> item
+                .isNull(SysResource::getMinUserType)
+                .or()
+                .ge(SysResource::getMinUserType, userType));
+    }
+
+    private boolean canAccessByUserType(LoginUser loginUser, Integer minUserType) {
+        int userType = normalizeUserType(loginUser == null ? null : loginUser.getUserType());
+        return minUserType == null || minUserType >= userType;
+    }
+
+    private int normalizeUserType(Integer userType) {
+        if (userType == null) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        if (userType < SystemConstants.UserType.SYSTEM_ADMIN || userType > SystemConstants.UserType.NORMAL_USER) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        return userType;
     }
 
     private Long resolveEffectiveTenantId(SysUser user, Long requestedTenantId) {

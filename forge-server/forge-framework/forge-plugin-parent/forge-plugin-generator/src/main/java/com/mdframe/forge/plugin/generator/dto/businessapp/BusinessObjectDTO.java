@@ -18,6 +18,12 @@ public class BusinessObjectDTO {
 
     private String objectType;
 
+    private String createMode;
+
+    private Long importDatasourceId;
+
+    private String importTableName;
+
     private Long modelId;
 
     private String modelCode;

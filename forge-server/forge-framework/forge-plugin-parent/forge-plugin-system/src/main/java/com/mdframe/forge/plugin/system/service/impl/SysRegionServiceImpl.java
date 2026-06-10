@@ -10,6 +10,8 @@ import com.mdframe.forge.plugin.system.mapper.SysRegionMapper;
 import com.mdframe.forge.plugin.system.service.ISysRegionService;
 import com.mdframe.forge.plugin.system.vo.SysRegionTreeVO;
 import com.mdframe.forge.starter.cache.service.ICacheService;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -184,6 +186,7 @@ public class SysRegionServiceImpl extends ServiceImpl<SysRegionMapper, SysRegion
     @Override
     public List<SysRegionTreeVO> selectRegionTreeAll(String rootCode, Boolean dataRight) {
         long startTime = System.currentTimeMillis();
+        rootCode = resolveRootCode(rootCode, dataRight);
         log.debug("开始查询行政区划树, rootCode={}, dataRight={}", rootCode, dataRight);
 
         try {
@@ -192,9 +195,6 @@ public class SysRegionServiceImpl extends ServiceImpl<SysRegionMapper, SysRegion
             // ========== 数据权限场景 ==========
             if (dataRight != null && dataRight) {
                 // 有数据权限限制：通过 listSysRegion 查询，数据权限拦截器会自动追加过滤条件
-                if (StrUtil.isBlank(rootCode)) {
-                    rootCode = "150000";
-                }
                 allList = regionMapper.listSysRegion(null, null, rootCode);
                 log.debug("查询到 {} 条数据（含数据权限）", allList != null ? allList.size() : 0);
 
@@ -250,6 +250,27 @@ public class SysRegionServiceImpl extends ServiceImpl<SysRegionMapper, SysRegion
     @Override
     public void refreshRegionTreeCache() {
         cacheService.deletePattern(REGION_TREE_CACHE_PREFIX + "*");
+    }
+
+    private String resolveRootCode(String rootCode, Boolean dataRight) {
+        if (StrUtil.isNotBlank(rootCode)) {
+            return removeVirtualRegionSuffix(rootCode);
+        }
+        if (!Boolean.TRUE.equals(dataRight)) {
+            return null;
+        }
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null || StrUtil.isBlank(loginUser.getRegionCode())) {
+            return null;
+        }
+        return removeVirtualRegionSuffix(loginUser.getRegionCode());
+    }
+
+    private String removeVirtualRegionSuffix(String regionCode) {
+        if (StrUtil.isBlank(regionCode)) {
+            return regionCode;
+        }
+        return regionCode.endsWith("ALL") ? regionCode.substring(0, regionCode.length() - 3) : regionCode;
     }
 
     /**

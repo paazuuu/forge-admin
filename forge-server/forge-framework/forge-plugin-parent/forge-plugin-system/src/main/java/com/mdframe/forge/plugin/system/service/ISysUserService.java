@@ -73,6 +73,16 @@ public interface ISysUserService extends IService<SysUser> {
     boolean bindUserRoles(Long userId, Long[] roleIds);
 
     /**
+     * 给用户绑定指定租户下的角色
+     *
+     * @param userId 用户ID
+     * @param roleIds 角色ID数组
+     * @param tenantId 操作租户ID
+     * @return 是否成功
+     */
+    boolean bindUserRoles(Long userId, Long[] roleIds, Long tenantId);
+
+    /**
      * 解除用户角色
      *
      * @param userId 用户ID
@@ -109,12 +119,30 @@ public interface ISysUserService extends IService<SysUser> {
     List<Long> selectUserRoleIds(Long userId);
 
     /**
+     * 查询用户指定租户下的角色ID列表
+     *
+     * @param userId 用户ID
+     * @param tenantId 操作租户ID
+     * @return 角色ID列表
+     */
+    List<Long> selectUserRoleIds(Long userId, Long tenantId);
+
+    /**
      * 查询用户的组织ID列表
      *
      * @param userId 用户ID
      * @return 组织ID列表
      */
     List<Long> selectUserOrgIds(Long userId);
+
+    /**
+     * 查询用户指定租户下的组织ID列表
+     *
+     * @param userId 用户ID
+     * @param tenantId 操作租户ID
+     * @return 组织ID列表
+     */
+    List<Long> selectUserOrgIds(Long userId, Long tenantId);
 
     /**
      * 查询用户绑定租户
@@ -135,6 +163,17 @@ public interface ISysUserService extends IService<SysUser> {
      * @return 是否成功
      */
     boolean bindUserOrgs(Long userId, List<Long> orgIds, Long mainOrgId);
+
+    /**
+     * 批量绑定用户指定租户下的组织
+     *
+     * @param userId 用户ID
+     * @param orgIds 组织ID列表
+     * @param mainOrgId 主组织ID
+     * @param tenantId 操作租户ID
+     * @return 是否成功
+     */
+    boolean bindUserOrgs(Long userId, List<Long> orgIds, Long mainOrgId, Long tenantId);
     
     /**
      * 用户解封
@@ -178,6 +217,15 @@ public interface ISysUserService extends IService<SysUser> {
     List<Long> selectUserPostIds(Long userId);
 
     /**
+     * 查询用户指定租户下的岗位ID列表
+     *
+     * @param userId 用户ID
+     * @param tenantId 操作租户ID
+     * @return 岗位ID列表
+     */
+    List<Long> selectUserPostIds(Long userId, Long tenantId);
+
+    /**
      * 批量绑定用户岗位
      *
      * @param userId     用户ID
@@ -186,4 +234,15 @@ public interface ISysUserService extends IService<SysUser> {
      * @return 是否成功
      */
     boolean bindUserPosts(Long userId, List<Long> postIds, Long mainPostId);
+
+    /**
+     * 批量绑定用户指定租户下的岗位
+     *
+     * @param userId     用户ID
+     * @param postIds    岗位ID列表
+     * @param mainPostId 主岗位ID
+     * @param tenantId   操作租户ID
+     * @return 是否成功
+     */
+    boolean bindUserPosts(Long userId, List<Long> postIds, Long mainPostId, Long tenantId);
 }

@@ -96,6 +96,14 @@ public class BusinessSuiteController {
         return RespInfo.success();
     }
 
+    @PutMapping("/{id}/status")
+    @SaCheckPermission("ai:businessSuite:edit")
+    @OperationLog(module = "业务套件", type = OperationType.UPDATE, desc = "启停业务套件")
+    public RespInfo<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+        suiteService.updateStatus(id, status);
+        return RespInfo.success();
+    }
+
     @DeleteMapping("/{id}")
     @SaCheckPermission("ai:businessSuite:edit")
     @OperationLog(module = "业务套件", type = OperationType.DELETE, desc = "删除业务套件")

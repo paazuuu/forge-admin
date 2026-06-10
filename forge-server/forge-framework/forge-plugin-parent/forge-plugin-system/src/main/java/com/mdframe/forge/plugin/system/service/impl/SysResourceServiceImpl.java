@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.system.constant.SystemConstants;
 import com.mdframe.forge.plugin.system.dto.SysResourceDTO;
 import com.mdframe.forge.plugin.system.dto.SysResourceQuery;
 import com.mdframe.forge.plugin.system.entity.SysResource;
@@ -41,6 +42,7 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
 
     @Override
     public IPage<SysResource> selectResourcePage(SysResourceQuery query) {
+        assertSystemAdmin();
         LambdaQueryWrapper<SysResource> wrapper = buildQueryWrapper(query);
         Page<SysResource> page = new Page<>(query.getPageNum(), query.getPageSize());
         return resourceMapper.selectPage(page, wrapper);
@@ -48,6 +50,7 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
 
     @Override
     public List<SysResource> selectResourceTree(SysResourceQuery query) {
+        assertSystemAdmin();
         List<SysResource> list = list(buildQueryWrapper(query));
         return buildEntityTree(list, 0L);
     }
@@ -60,6 +63,7 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
         }
 
         LambdaQueryWrapper<SysResource> wrapper = buildQueryWrapper(query);
+        applyUserTypeScope(wrapper, loginUser);
         if (!loginUser.isAdmin()) {
             List<Long> resourceIds = selectCurrentUserResourceIds();
             if (CollUtil.isEmpty(resourceIds)) {
@@ -74,25 +78,41 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
 
     @Override
     public SysResource selectResourceById(Long id) {
+        assertSystemAdmin();
         return resourceMapper.selectById(id);
     }
 
     @Override
     public boolean insertResource(SysResourceDTO dto) {
+        assertSystemAdmin();
         SysResource resource = new SysResource();
         BeanUtil.copyProperties(dto, resource);
+        resource.setMinUserType(normalizeMinUserType(resource.getMinUserType()));
+        validateParentUserTypeBoundary(resource.getParentId(), resource.getMinUserType());
         return resourceMapper.insert(resource) > 0;
     }
 
     @Override
     public boolean updateResource(SysResourceDTO dto) {
+        assertSystemAdmin();
+        SysResource existing = resourceMapper.selectById(dto.getId());
+        if (existing == null) {
+            throw new RuntimeException("资源不存在");
+        }
         SysResource resource = new SysResource();
         BeanUtil.copyProperties(dto, resource);
+        Integer minUserType = dto.getMinUserType() != null
+                ? normalizeMinUserType(dto.getMinUserType())
+                : normalizeMinUserType(existing.getMinUserType());
+        resource.setMinUserType(dto.getMinUserType() != null ? minUserType : null);
+        Long parentId = dto.getParentId() != null ? dto.getParentId() : existing.getParentId();
+        validateParentUserTypeBoundary(parentId, minUserType);
         return resourceMapper.updateById(resource) > 0;
     }
 
     @Override
     public boolean deleteResourceById(Long id) {
+        assertSystemAdmin();
         return resourceMapper.deleteById(id) > 0;
     }
 
@@ -175,7 +195,7 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
         
         if (loginUser.isAdmin()) {
             LambdaQueryWrapper<SysResource> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SysResource::getClientCode, clientCode)
+            applyClientScope(wrapper, clientCode)
                     .orderByAsc(SysResource::getSort)
                     .orderByDesc(SysResource::getCreateTime);
             return resourceMapper.selectList(wrapper);
@@ -187,7 +207,8 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
         }
 
         LambdaQueryWrapper<SysRoleResource> roleResourceWrapper = new LambdaQueryWrapper<>();
-        roleResourceWrapper.in(SysRoleResource::getRoleId, roleIds);
+        roleResourceWrapper.in(SysRoleResource::getRoleId, roleIds)
+                .eq(SysRoleResource::getTenantId, loginUser.getTenantId());
         List<SysRoleResource> roleResources = roleResourceMapper.selectList(roleResourceWrapper);
 
         if (CollUtil.isEmpty(roleResources)) {
@@ -205,9 +226,10 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
 
         LambdaQueryWrapper<SysResource> resourceWrapper = new LambdaQueryWrapper<>();
         resourceWrapper.in(SysResource::getId, resourceIds)
-                .eq(SysResource::getClientCode, clientCode)
                 .orderByAsc(SysResource::getSort)
                 .orderByDesc(SysResource::getCreateTime);
+        applyClientScope(resourceWrapper, clientCode);
+        applyUserTypeScope(resourceWrapper, loginUser);
         return resourceMapper.selectList(resourceWrapper);
     }
 
@@ -292,9 +314,62 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
                 .eq(query.getParentId() != null, SysResource::getParentId, query.getParentId())
                 .eq(query.getResourceType() != null, SysResource::getResourceType, query.getResourceType())
                 .eq(query.getVisible() != null, SysResource::getVisible, query.getVisible())
-                .eq(StringUtils.isNotBlank(query.getClientCode()), SysResource::getClientCode, query.getClientCode())
+                .eq(query.getMinUserType() != null, SysResource::getMinUserType, query.getMinUserType())
                 .orderByAsc(SysResource::getSort)
                 .orderByDesc(SysResource::getCreateTime);
+        applyClientScope(wrapper, query.getClientCode());
         return wrapper;
+    }
+
+    private void assertSystemAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护菜单和资源配置");
+    }
+
+    private void applyUserTypeScope(LambdaQueryWrapper<SysResource> wrapper, LoginUser loginUser) {
+        int userType = normalizeUserType(loginUser == null ? null : loginUser.getUserType());
+        wrapper.and(item -> item
+                .isNull(SysResource::getMinUserType)
+                .or()
+                .ge(SysResource::getMinUserType, userType));
+    }
+
+    private int normalizeUserType(Integer userType) {
+        if (userType == null) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        if (userType < SystemConstants.UserType.SYSTEM_ADMIN || userType > SystemConstants.UserType.NORMAL_USER) {
+            return SystemConstants.UserType.NORMAL_USER;
+        }
+        return userType;
+    }
+
+    private Integer normalizeMinUserType(Integer minUserType) {
+        return normalizeUserType(minUserType);
+    }
+
+    private void validateParentUserTypeBoundary(Long parentId, Integer minUserType) {
+        if (parentId == null || parentId == 0L) {
+            return;
+        }
+        SysResource parent = resourceMapper.selectById(parentId);
+        if (parent == null) {
+            throw new RuntimeException("上级资源不存在");
+        }
+        int parentMinUserType = normalizeMinUserType(parent.getMinUserType());
+        if (minUserType > parentMinUserType) {
+            throw new RuntimeException("子资源开放范围不能高于上级资源");
+        }
+    }
+
+    private LambdaQueryWrapper<SysResource> applyClientScope(LambdaQueryWrapper<SysResource> wrapper, String clientCode) {
+        if (StringUtils.isBlank(clientCode)) {
+            return wrapper;
+        }
+        return wrapper.and(item -> item
+                .eq(SysResource::getClientCode, clientCode)
+                .or()
+                .isNull(SysResource::getClientCode)
+                .or()
+                .eq(SysResource::getClientCode, ""));
     }
 }

@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', {
     accessToken: undefined,
     userInfo: null,
     staffInfo: null,
+    isLoggingOut: false,
   }),
   getters: {
     // 获取认证header
@@ -27,6 +28,7 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     // 设置token和用户信息（适配新的返回结构）
     setToken(data) {
+      this.isLoggingOut = false
       const token = data?.accessToken || data?.token
       if (token) {
         this.accessToken = token
@@ -34,7 +36,15 @@ export const useAuthStore = defineStore('auth', {
       // 兼容旧的结
     },
     resetToken() {
+      const keepLoggingOut = this.isLoggingOut
       this.$reset()
+      this.isLoggingOut = keepLoggingOut
+    },
+    beginLogout() {
+      this.isLoggingOut = true
+    },
+    finishLogoutSilence() {
+      this.isLoggingOut = false
     },
     toLogin() {
       const { router, route } = useRouterStore()
@@ -87,8 +97,12 @@ export const useAuthStore = defineStore('auth', {
       window.$homePath = import.meta.env.VITE_HOME_PATH
     },
     async logout() {
+      this.beginLogout()
       this.resetLoginState()
       this.toLogin()
+      window.setTimeout(() => {
+        this.finishLogoutSilence()
+      }, 1200)
     },
   },
   persist: {

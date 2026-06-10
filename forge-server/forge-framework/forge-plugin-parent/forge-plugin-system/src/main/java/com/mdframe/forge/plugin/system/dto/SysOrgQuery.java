@@ -29,9 +29,9 @@ public class SysOrgQuery extends PageQuery {
     private Long parentId;
 
     /**
-     * 组织类型（1-公司，2-部门，3-小组）
+     * 组织类型（来自 sys_org_type 字典，支持数字或字符串字典值）
      */
-    private Integer orgType;
+    private String orgType;
 
     /**
      * 组织状态（0-禁用，1-正常）

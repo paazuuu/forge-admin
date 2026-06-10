@@ -15,6 +15,7 @@
       <ThemeSetting />
       <MessageNotification />
       <div class="header-divider" />
+      <TenantSwitcher />
       <UserAvatar />
     </div>
   </div>
@@ -68,7 +69,7 @@
 
 <script setup>
 import { ToggleTheme } from '@/components'
-import { AppTab, BeginnerGuide, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, UserAvatar } from '@/layouts/components'
+import { AppTab, BeginnerGuide, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, TenantSwitcher, UserAvatar } from '@/layouts/components'
 
 function handleLinkClick(link) {
   window.open(link)

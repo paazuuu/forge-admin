@@ -28,9 +28,10 @@ public class SaTokenExceptionHandler {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attributes != null) {
             HttpServletRequest request = attributes.getRequest();
-            log.error("未登录异常：{}，请求地址：{}", e.getMessage(), request.getRequestURI());
+            log.warn("未登录或登录已过期：{}，请求地址：{}", e.getMessage(), request.getRequestURI());
+        } else {
+            log.warn("未登录或登录已过期：{}", e.getMessage());
         }
-        log.error("未登录异常：", e);
         String message = "未登录或登录已过期，请重新登录";
         
         // 根据不同的场景细化提示

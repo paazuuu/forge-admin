@@ -141,6 +141,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  tenantId: {
+    type: [Number, String],
+    default: null,
+  },
 })
 
 const emit = defineEmits(['update:show', 'confirm'])
@@ -203,7 +207,9 @@ watch(visible, (val) => {
 async function loadOrgTree() {
   orgLoading.value = true
   try {
-    const res = await request.get('/system/org/tree')
+    const res = await request.get('/system/org/tree', {
+      params: buildTenantParams(),
+    })
     if (res.code === 200) {
       orgTreeData.value = res.data || []
       orgExpandedKeys.value = getAllKeys(orgTreeData.value)
@@ -223,6 +229,7 @@ async function loadUserList() {
     const params = {
       pageNum: pagination.page,
       pageSize: pagination.pageSize,
+      ...buildTenantParams(),
     }
     if (searchKeyword.value) {
       params.keyword = searchKeyword.value
@@ -245,6 +252,10 @@ async function loadUserList() {
   finally {
     userLoading.value = false
   }
+}
+
+function buildTenantParams() {
+  return props.tenantId ? { tenantId: props.tenantId } : {}
 }
 
 function handleOrgSelect(keys) {

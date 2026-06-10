@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig;
 import com.mdframe.forge.plugin.system.service.ISysDataScopeConfigService;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,6 +35,7 @@ public class SysDataScopeConfigController {
     @GetMapping("/page")
     @OperationLog(module = "数据权限配置管理", type = OperationType.QUERY, desc = "分页查询配置列表")
     public RespInfo<Page<SysDataScopeConfig>> page(PageQuery pageQuery, SysDataScopeConfig query) {
+        assertPlatformAdmin();
         Page<SysDataScopeConfig> page = dataScopeConfigService.selectConfigPage(pageQuery, query);
         return RespInfo.success(page);
     }
@@ -44,6 +46,7 @@ public class SysDataScopeConfigController {
     @GetMapping("/list")
     @OperationLog(module = "数据权限配置管理", type = OperationType.QUERY, desc = "查询配置列表")
     public RespInfo<List<SysDataScopeConfig>> list(SysDataScopeConfig query) {
+        assertPlatformAdmin();
         List<SysDataScopeConfig> list = dataScopeConfigService.selectConfigList(query);
         return RespInfo.success(list);
     }
@@ -53,6 +56,7 @@ public class SysDataScopeConfigController {
      */
     @PostMapping("/getById")
     public RespInfo<SysDataScopeConfig> getById(@RequestParam Long id) {
+        assertPlatformAdmin();
         SysDataScopeConfig config = dataScopeConfigService.selectConfigById(id);
         return RespInfo.success(config);
     }
@@ -62,6 +66,7 @@ public class SysDataScopeConfigController {
      */
     @PostMapping("/add")
     public RespInfo<Void> add(@RequestBody SysDataScopeConfig config) {
+        assertPlatformAdmin();
         boolean result = dataScopeConfigService.insertConfig(config);
         return result ? RespInfo.success() : RespInfo.error("新增失败");
     }
@@ -71,6 +76,7 @@ public class SysDataScopeConfigController {
      */
     @PostMapping("/edit")
     public RespInfo<Void> edit(@RequestBody SysDataScopeConfig config) {
+        assertPlatformAdmin();
         boolean result = dataScopeConfigService.updateConfig(config);
         return result ? RespInfo.success() : RespInfo.error("修改失败");
     }
@@ -80,6 +86,7 @@ public class SysDataScopeConfigController {
      */
     @PostMapping("/remove")
     public RespInfo<Void> remove(@RequestParam Long id) {
+        assertPlatformAdmin();
         boolean result = dataScopeConfigService.deleteConfigById(id);
         return result ? RespInfo.success() : RespInfo.error("删除失败");
     }
@@ -89,7 +96,12 @@ public class SysDataScopeConfigController {
      */
     @PostMapping("/removeBatch")
     public RespInfo<Void> removeBatch(@RequestBody Long[] ids) {
+        assertPlatformAdmin();
         boolean result = dataScopeConfigService.deleteConfigByIds(ids);
         return result ? RespInfo.success() : RespInfo.error("批量删除失败");
+    }
+
+    private void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护数据权限配置");
     }
 }

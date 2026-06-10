@@ -29,9 +29,17 @@
       :style="componentControlStyle"
       :class="componentControlClass"
     >
+      <div
+        v-if="shouldRenderReadonlySelectionText(field)"
+        class="ai-form-readonly-text"
+        :title="resolveReadonlySelectionText(field)"
+      >
+        {{ resolveReadonlySelectionText(field) }}
+      </div>
+
       <!-- 输入框 -->
       <n-input
-        v-if="field.type === 'input'"
+        v-else-if="field.type === 'input'"
         :value="value"
         :placeholder="getPlaceholder(field)"
         :disabled="disabledHandler(field)"
@@ -116,7 +124,7 @@
       <!-- 单选框 -->
       <n-radio-group
         v-else-if="field.type === 'radio'"
-        :value="value"
+        :value="resolveOptionValue(value)"
         :disabled="disabledHandler(field)"
         v-bind="field.props"
         @update:value="handleUpdate"
@@ -137,7 +145,7 @@
       <!-- 单选按钮组 -->
       <n-radio-group
         v-else-if="field.type === 'radioButton'"
-        :value="value"
+        :value="resolveOptionValue(value)"
         :disabled="disabledHandler(field)"
         v-bind="field.props"
         @update:value="handleUpdate"
@@ -156,7 +164,7 @@
       <!-- 多选框 -->
       <n-checkbox-group
         v-else-if="field.type === 'checkbox'"
-        :value="value"
+        :value="resolveOptionValue(value)"
         :disabled="disabledHandler(field)"
         v-bind="field.props"
         @update:value="handleUpdate"
@@ -534,7 +542,7 @@
       <!-- 穿梭框 -->
       <n-transfer
         v-else-if="field.type === 'transfer'"
-        :value="value"
+        :value="resolveOptionValue(value)"
         :disabled="disabledHandler(field)"
         :options="currentOptions"
         :filterable="field.filterable"
@@ -693,6 +701,18 @@ const USER_SELECT_TYPES = new Set([
   'sysUserSelect',
   'forgeUserSelect',
 ])
+const READONLY_SELECTION_TYPES = new Set([
+  'select',
+  'dictSelect',
+  'radio',
+  'radioButton',
+  'checkbox',
+  'cascader',
+  'treeSelect',
+  'orgTreeSelect',
+  'transfer',
+  'objectReference',
+])
 
 /**
  * 获取占位符文本
@@ -799,24 +819,24 @@ const currentOptions = computed(() => {
     if (result instanceof Promise) {
       // 如果有缓存的选项，使用缓存
       if (field._cachedOptions && Array.isArray(field._cachedOptions)) {
-        return field._cachedOptions
+        return withCurrentValueOption(resolveCascadedOptions(field._cachedOptions))
       }
       // 否则返回空数组，并异步加载
       cacheAsyncOptions(field, result)
       return []
     }
 
-    return resolveCascadedOptions(result)
+    return withCurrentValueOption(resolveCascadedOptions(result))
   }
 
   // 其次使用 options 数组
   if (field.options && Array.isArray(field.options) && field.options.length > 0) {
-    return resolveCascadedOptions(field.options)
+    return withCurrentValueOption(resolveCascadedOptions(field.options))
   }
 
   // 检查 props.options（兼容旧的配置方式）
   if (field.props?.options && Array.isArray(field.props.options) && field.props.options.length > 0) {
-    return resolveCascadedOptions(field.props.options)
+    return withCurrentValueOption(resolveCascadedOptions(field.props.options))
   }
 
   if (fieldDictType.value) {
@@ -1341,6 +1361,44 @@ function normalizeLabelValue(value) {
   return value === null || value === undefined ? '' : String(value).trim()
 }
 
+function shouldRenderReadonlySelectionText(field = {}) {
+  const fieldType = normalizeRuntimeFieldType(field.type || field.componentType)
+  return Boolean(field.readonly || field.props?.readonly) && READONLY_SELECTION_TYPES.has(fieldType)
+}
+
+function resolveReadonlySelectionText(field = {}) {
+  const labels = resolveSelectionDisplayLabels(field)
+  if (labels.length)
+    return labels.join(', ')
+  const labelValue = normalizeLabelValue(resolveSelectionLabelValue(field))
+  if (isFilledValue(labelValue))
+    return labelValue
+  return normalizeDisplayText(props.value)
+}
+
+function resolveSelectionDisplayLabels(field = {}) {
+  const normalizedValue = normalizeOptionValue(props.value, currentOptions.value, field?.multiple)
+  const values = Array.isArray(normalizedValue)
+    ? normalizedValue
+    : field.multiple && typeof normalizedValue === 'string'
+      ? normalizedValue.split(',').map(item => item.trim()).filter(Boolean)
+      : [normalizedValue]
+  return values
+    .map(item => flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, item))?.label)
+    .filter(Boolean)
+}
+
+function normalizeDisplayText(value) {
+  if (Array.isArray(value)) {
+    const text = value.map(item => String(item ?? '').trim()).filter(Boolean).join(', ')
+    return text || '-'
+  }
+  if (value === null || value === undefined)
+    return '-'
+  const text = String(value).trim()
+  return text || '-'
+}
+
 function resolveUserLabel(user = {}) {
   return String(user?.realName || user?.name || user?.nickname || user?.username || '').trim()
 }
@@ -1537,6 +1595,15 @@ function handleUploadRemove(field, file) {
 .ai-form-control {
   width: 100%;
   min-width: 0;
+}
+
+.ai-form-readonly-text {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  color: var(--n-text-color);
+  line-height: 1.6;
+  word-break: break-all;
 }
 
 .ai-form-control :deep(.n-base-selection),

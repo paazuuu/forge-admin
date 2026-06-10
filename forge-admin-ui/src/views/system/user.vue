@@ -94,6 +94,9 @@
           :edit-schema="editSchema"
           :before-submit="beforeSubmit"
           :before-load-list="beforeLoadList"
+          :before-search="beforeSearch"
+          :before-render-form="beforeRenderUserForm"
+          :before-render-detail="beforeRenderUserDetail"
           :load-detail-on-edit="true"
           row-key="id"
           :edit-grid-cols="2"
@@ -441,6 +444,7 @@ const authSubmitLoading = ref(false)
 const currentUser = ref({})
 const roleTableData = ref([])
 const roleSearchKeyword = ref('')
+const editingUserTenantId = ref(null)
 const checkedRoleKeys = ref([])
 const rolePagination = ref({
   page: 1,
@@ -561,12 +565,6 @@ const selectedPostOptions = computed(() => postList.value
     value: item.id,
   })))
 
-// 编辑表单中的岗位下拉选项
-const postSelectOptions = computed(() => postList.value.map(item => ({
-  label: item.postName,
-  value: item.id,
-})))
-
 watch(checkedPostKeys, (keys) => {
   if (mainPostId.value && !keys.includes(mainPostId.value)) {
     mainPostId.value = null
@@ -575,6 +573,18 @@ watch(checkedPostKeys, (keys) => {
 
 // 搜索表单配置
 const searchSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        props: {
+          placeholder: '请选择租户',
+          clearable: true,
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
   {
     field: 'username',
     label: '用户名',
@@ -644,7 +654,7 @@ const tableColumns = computed(() => [
   ...(userStore.isAdmin
     ? [{
         prop: 'tenantName',
-        label: '默认租户',
+        label: '所属租户',
         width: 150,
         render: row => row.tenantName || row.tenantId || '-',
       }]
@@ -698,22 +708,23 @@ const tableColumns = computed(() => [
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
-      { label: '授权', key: 'auth', onClick: handleAuth },
-      { label: '组织', key: 'org', onClick: handleOrg },
-      { label: '岗位', key: 'post', onClick: handlePost },
-      { label: '租户', key: 'tenant', onClick: handleTenant, visible: () => userStore.isAdmin },
+      { label: '授权', key: 'auth', onClick: handleAuth, visible: row => !isCurrentLoginUser(row.id) },
+      { label: '组织', key: 'org', onClick: handleOrg, visible: row => !isCurrentLoginUser(row.id) },
+      { label: '岗位', key: 'post', onClick: handlePost, visible: row => !isCurrentLoginUser(row.id) },
+      { label: '租户', key: 'tenant', onClick: handleTenant, visible: row => userStore.isAdmin && !isCurrentLoginUser(row.id) },
       {
         label: '重置密码',
         key: 'resetPwd',
         type: 'warning',
+        visible: row => !isCurrentLoginUser(row.id),
         onClick: (row) => {
           resetPwdForm.value = { id: row.id, password: '' }
           resetPwdModalVisible.value = true
         },
       },
-      { label: '禁用', key: 'disable', type: 'warning', onClick: row => handleUpdateStatus(row, 0), visible: row => row.id !== 1 && row.userStatus === 1 },
-      { label: '启用', key: 'enable', type: 'success', onClick: handleUntieDisable, visible: row => row.id !== 1 && row.userStatus !== 1 },
-      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete, visible: row => row.id !== 1 },
+      { label: '禁用', key: 'disable', type: 'warning', onClick: row => handleUpdateStatus(row, 0), visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus === 1 },
+      { label: '启用', key: 'enable', type: 'success', onClick: handleUntieDisable, visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus !== 1 },
+      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete, visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) },
     ],
   },
 ])
@@ -778,6 +789,27 @@ const editSchema = computed(() => [
     props: {
       placeholder: '请选择用户类型',
       options: userTypeOptions.value,
+      disabled: !userStore.isAdmin,
+    },
+  },
+  {
+    field: 'roleIds',
+    label: '角色',
+    type: 'select',
+    span: 2,
+    vIf: formData => !isCurrentLoginUser(formData.id),
+    optionSource: {
+      api: 'get@/system/role/page',
+      // eslint-disable-next-line no-template-curly-in-string
+      params: { pageNum: 1, pageSize: 1000, tenantId: '${tenantId}' },
+      valueField: 'id',
+      labelField: 'roleName',
+    },
+    props: {
+      placeholder: '请选择角色',
+      multiple: true,
+      clearable: true,
+      filterable: true,
     },
   },
   {
@@ -863,6 +895,7 @@ const editSchema = computed(() => [
     label: '用户状态',
     type: 'radio',
     defaultValue: 1,
+    vIf: formData => !isCurrentLoginUser(formData.id),
     props: {
       options: userStatusOptions.value,
     },
@@ -872,9 +905,16 @@ const editSchema = computed(() => [
     label: '岗位',
     type: 'select',
     span: 2,
+    vIf: formData => !isCurrentLoginUser(formData.id),
+    optionSource: {
+      api: 'get@/system/post/list',
+      // eslint-disable-next-line no-template-curly-in-string
+      params: { tenantId: '${tenantId}' },
+      valueField: 'id',
+      labelField: 'postName',
+    },
     props: {
       placeholder: '请选择岗位',
-      options: postSelectOptions.value,
       multiple: true,
       clearable: true,
       filterable: true,
@@ -939,6 +979,14 @@ function isSameKey(left, right) {
   return String(left) === String(right)
 }
 
+function isCurrentLoginUser(targetUserId) {
+  return targetUserId != null && isSameKey(targetUserId, userStore.userId)
+}
+
+function resolveOptionLabel(options = [], value) {
+  return options.find(option => isSameKey(option?.value, value))?.label || ''
+}
+
 function getLeftOrgNodeIcon(node = {}) {
   if (!node.parentId || Number(node.parentId) === 0)
     return 'i-material-symbols:account-tree-rounded'
@@ -959,11 +1007,24 @@ function getUserOrgNodeMeta(node = {}) {
   return null
 }
 
+function buildTenantParams(tenantId) {
+  const resolvedTenantId = userStore.isAdmin ? tenantId : userStore.userInfo?.tenantId
+  return resolvedTenantId ? { tenantId: resolvedTenantId } : {}
+}
+
+function resolveOperationTenantId(row = currentUser.value) {
+  return row?.tenantId
+    || (userStore.isAdmin ? crudRef.value?.getSearchParams?.()?.tenantId : null)
+    || userStore.userInfo?.tenantId
+}
+
 // 加载左侧组织树
-async function loadLeftOrgTree() {
+async function loadLeftOrgTree(tenantId) {
   try {
     leftOrgTreeLoading.value = true
-    const res = await request.get('/system/org/tree')
+    const res = await request.get('/system/org/tree', {
+      params: buildTenantParams(tenantId),
+    })
     if (res.code === 200) {
       leftOrgTreeData.value = res.data || []
       if (leftOrgExpandAll.value) {
@@ -983,10 +1044,10 @@ async function loadLeftOrgTree() {
   }
 }
 
-// 加载行政区划选项（一次性加载内蒙完整区划树，含虚拟组织）
+// 加载行政区划选项（按当前用户行政区划/数据权限加载完整区划树，含虚拟组织）
 async function loadRegionOptions() {
   try {
-    const res = await request.get('/system/region/treeAll', { params: { rootCode: '150000', dataRight: true } })
+    const res = await request.get('/system/region/treeAll', { params: { dataRight: true } })
     if (res.code === 200) {
       const data = res.data || []
       // 搜索场景：虚拟节点可选（代表"该区域下所有"）
@@ -1125,10 +1186,59 @@ function handleSelectAllUsers() {
 
 // 加载列表数据前的钩子（用于添加组织ID参数）
 function beforeLoadList(params) {
+  Object.assign(params, buildTenantParams(params.tenantId))
   if (selectedOrgNode.value && !isShowAllUsers.value) {
     params.orgId = selectedOrgNode.value.id
   }
   return params
+}
+
+async function beforeSearch(params) {
+  selectedOrgKeys.value = []
+  selectedOrgNode.value = null
+  isShowAllUsers.value = true
+  await loadLeftOrgTree(params?.tenantId)
+  return params
+}
+
+function beforeRenderUserForm(row) {
+  editingUserTenantId.value = row?.tenantId || null
+  return row
+}
+
+async function beforeRenderUserDetail(data) {
+  if (!data?.id) {
+    return data
+  }
+  const tenantId = editingUserTenantId.value || data.tenantId || userStore.userInfo?.tenantId
+  const next = {
+    ...data,
+    tenantId,
+    userTypeLabel: resolveOptionLabel(userTypeOptions.value, data.userType),
+    genderLabel: resolveOptionLabel(genderOptions.value, data.gender),
+    userStatusLabel: resolveOptionLabel(userStatusOptions.value, data.userStatus),
+  }
+  if (!userStore.isAdmin && isCurrentLoginUser(data.id)) {
+    return next
+  }
+  if (!tenantId) {
+    return next
+  }
+  try {
+    const params = buildTenantParams(tenantId)
+    const [roleRes, postRes] = await Promise.all([
+      request.get(`/system/user/${data.id}/roles`, { params }),
+      request.get(`/system/user/${data.id}/posts`, { params }),
+    ])
+    if (roleRes.code === 200)
+      next.roleIds = roleRes.data || []
+    if (postRes.code === 200)
+      next.postIds = postRes.data || []
+  }
+  catch (error) {
+    console.error('加载用户租户关联信息失败:', error)
+  }
+  return next
 }
 
 // 确认重置密码
@@ -1213,6 +1323,9 @@ function beforeSubmit(formData) {
     formData.tenantId = userStore.userInfo?.tenantId
     formData.userType = 2
   }
+  else if (!formData.tenantId) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
   return formData
 }
 
@@ -1258,11 +1371,13 @@ async function handleAuth(row) {
 async function loadRoleList() {
   try {
     authLoading.value = true
+    const tenantId = resolveOperationTenantId()
     const res = await request.get('/system/role/page', {
       params: {
         pageNum: rolePagination.value.page,
         pageSize: rolePagination.value.pageSize,
         roleName: roleSearchKeyword.value || undefined,
+        ...buildTenantParams(tenantId),
       },
     })
     if (res.code === 200) {
@@ -1283,7 +1398,9 @@ async function loadRoleList() {
 async function loadUserRoles(userId) {
   try {
     authLoading.value = true
-    const res = await request.get(`/system/user/${userId}/roles`)
+    const res = await request.get(`/system/user/${userId}/roles`, {
+      params: buildTenantParams(resolveOperationTenantId()),
+    })
     if (res.code === 200) {
       checkedRoleKeys.value = res.data || []
     }
@@ -1336,6 +1453,7 @@ async function handleSubmitAuth() {
     const res = await request.post(
       `/system/user/${currentUser.value.id}/roles`,
       checkedRoleKeys.value,
+      { params: buildTenantParams(resolveOperationTenantId()) },
     )
     if (res.code === 200) {
       window.$message.success('授权成功')
@@ -1357,15 +1475,17 @@ async function handleOrg(row) {
   orgModalVisible.value = true
   mainOrgId.value = null
 
-  await loadOrgTree()
+  await loadOrgTree(resolveOperationTenantId(row))
   await loadUserOrgs(row.id)
 }
 
 // 加载组织树
-async function loadOrgTree() {
+async function loadOrgTree(tenantId = resolveOperationTenantId()) {
   try {
     orgLoading.value = true
-    const res = await request.get('/system/org/tree')
+    const res = await request.get('/system/org/tree', {
+      params: buildTenantParams(tenantId),
+    })
     if (res.code === 200) {
       orgTreeData.value = res.data || []
       if (orgTreeExpandAll.value) {
@@ -1386,7 +1506,9 @@ async function loadOrgTree() {
 async function loadUserOrgs(userId) {
   try {
     orgLoading.value = true
-    const res = await request.get(`/system/user/${userId}/orgs`)
+    const res = await request.get(`/system/user/${userId}/orgs`, {
+      params: buildTenantParams(resolveOperationTenantId()),
+    })
     if (res.code === 200) {
       mainOrgId.value = (res.data || [])[0] || null
     }
@@ -1425,6 +1547,7 @@ async function handleSubmitOrg() {
         orgIds: [mainOrgId.value],
         mainOrgId: mainOrgId.value,
       },
+      { params: buildTenantParams(resolveOperationTenantId()) },
     )
     if (res.code === 200) {
       window.$message.success('组织绑定成功')
@@ -1448,15 +1571,17 @@ async function handlePost(row) {
   checkedPostKeys.value = []
   mainPostId.value = null
 
-  await loadPostList()
+  await loadPostList(resolveOperationTenantId(row))
   await loadUserPosts(row.id)
 }
 
 // 加载岗位列表
-async function loadPostList() {
+async function loadPostList(tenantId = resolveOperationTenantId()) {
   try {
     postLoading.value = true
-    const res = await request.get('/system/post/list')
+    const res = await request.get('/system/post/list', {
+      params: buildTenantParams(tenantId),
+    })
     if (res.code === 200) {
       postList.value = res.data || []
     }
@@ -1474,7 +1599,9 @@ async function loadPostList() {
 async function loadUserPosts(userId) {
   try {
     postLoading.value = true
-    const res = await request.get(`/system/user/${userId}/posts`)
+    const res = await request.get(`/system/user/${userId}/posts`, {
+      params: buildTenantParams(resolveOperationTenantId()),
+    })
     if (res.code === 200) {
       checkedPostKeys.value = res.data || []
       mainPostId.value = checkedPostKeys.value.length > 0 ? checkedPostKeys.value[0] : null
@@ -1504,6 +1631,7 @@ async function handleSubmitPost() {
         postIds: checkedPostKeys.value,
         mainPostId: mainPostId.value,
       },
+      { params: buildTenantParams(resolveOperationTenantId()) },
     )
     if (res.code === 200) {
       window.$message.success('岗位绑定成功')

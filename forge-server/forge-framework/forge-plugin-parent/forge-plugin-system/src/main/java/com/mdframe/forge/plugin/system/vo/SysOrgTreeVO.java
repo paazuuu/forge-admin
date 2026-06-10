@@ -16,6 +16,10 @@ public class SysOrgTreeVO implements Serializable {
 
     private Long id;
 
+    private Long tenantId;
+
+    private String tenantName;
+
     private String orgName;
 
     private Long parentId;
@@ -25,7 +29,7 @@ public class SysOrgTreeVO implements Serializable {
     private Integer sort;
 
     @TransField(dictType = "sys_org_type")
-    private Integer orgType;
+    private String orgType;
 
     private String orgTypeName;
 

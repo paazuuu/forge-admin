@@ -492,12 +492,16 @@ import { getMenuRouteOptions } from '@/utils/menu-route-options'
 
 defineOptions({ name: 'SystemMenu' })
 
-const { dict } = useDict('sys_resource_type', 'sys_show_hide', 'sys_req_method', 'sys_link_open_target')
+const { dict } = useDict('sys_resource_type', 'sys_show_hide', 'sys_req_method', 'sys_link_open_target', 'sys_user_type')
 
 const resourceTypeOptions = computed(() => dict.value.sys_resource_type || [])
 const visibleOptions = computed(() => dict.value.sys_show_hide || [])
 const apiMethodOptions = computed(() => dict.value.sys_req_method || [])
 const openTargetOptions = computed(() => dict.value.sys_link_open_target || [])
+const minUserTypeOptions = computed(() => (dict.value.sys_user_type || []).map(item => ({
+  ...item,
+  value: Number(item.value),
+})))
 
 const permissionStore = usePermissionStore()
 const userStore = useUserStore()
@@ -1203,13 +1207,14 @@ function beforeRenderForm(data) {
     const clientCode = pendingClientCode.value || currentClientCode.value || 'pc'
     pendingParentId.value = null
     pendingClientCode.value = null
-    return { parentId, clientCode, resourceType: 2, sort: 0, visible: 1, menuStatus: 1, ssoEnabled: 0, ssoTargetClient: '', openTarget: '_self' }
+    return { parentId, clientCode, resourceType: 2, sort: 0, visible: 1, menuStatus: 1, minUserType: 2, ssoEnabled: 0, ssoTargetClient: '', openTarget: '_self' }
   }
 
   pendingParentId.value = null
   pendingClientCode.value = null
   return {
     ...data,
+    minUserType: data.minUserType ?? 2,
     ssoEnabled: data.ssoEnabled ?? 0,
     ssoTargetClient: data.ssoTargetClient || '',
     openTarget: data.openTarget || '_self',
@@ -1238,6 +1243,7 @@ function beforeSubmit(sourceData) {
     path: normalizeRouteInput(sourceData.path),
     component: normalizeComponentValue(sourceData.component),
     resourceType,
+    minUserType: sourceData.minUserType !== undefined && sourceData.minUserType !== null ? Number(sourceData.minUserType) : 2,
     ssoEnabled,
     ssoTargetClient,
     openTarget,
@@ -1473,6 +1479,18 @@ const editSchema = computed(() => [
       },
     ],
     props: { options: clientCodeOptions.value },
+  },
+  {
+    field: 'minUserType',
+    label: '最低用户类型',
+    type: 'select',
+    span: 1,
+    defaultValue: 2,
+    rules: [{ required: true, type: 'number', message: '请选择最低用户类型', trigger: 'change' }],
+    props: {
+      placeholder: '请选择最低用户类型',
+      options: minUserTypeOptions.value,
+    },
   },
   {
     field: 'sort',

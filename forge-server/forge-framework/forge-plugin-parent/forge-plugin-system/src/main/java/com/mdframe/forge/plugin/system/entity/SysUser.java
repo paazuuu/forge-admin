@@ -140,4 +140,10 @@ public class SysUser extends TenantEntity {
      */
     @TableField(exist = false)
     private List<Long> postIds;
+
+    /**
+     * 用户角色ID列表（查询详情时填充）
+     */
+    @TableField(exist = false)
+    private List<Long> roleIds;
 }

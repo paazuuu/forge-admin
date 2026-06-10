@@ -48,7 +48,7 @@ public class SysOrg extends TenantEntity {
     private Integer sort;
     
     @TransField(dictType = "sys_org_type")
-    private Integer orgType;
+    private String orgType;
     
     @TableField(exist = false)
     private String orgTypeName;

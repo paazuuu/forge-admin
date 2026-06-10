@@ -131,4 +131,9 @@ public class SysResourceDTO implements Serializable {
      * 客户端代码（pc/app/h5）
      */
     private String clientCode;
+
+    /**
+     * 最低可访问用户类型（0-系统管理员，1-租户管理员，2-普通用户）
+     */
+    private Integer minUserType;
 }

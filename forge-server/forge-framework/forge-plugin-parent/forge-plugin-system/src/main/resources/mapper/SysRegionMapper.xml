@@ -26,11 +26,9 @@
             </if>
             <if test="rootCode != null and rootCode != ''">
                 AND (
-                <!-- 编码以根区域前缀开头 -->
-                code LIKE CONCAT(SUBSTRING(#{rootCode}, 1, 2), '%')
-                OR
-                <!-- 或者就是根区域本身 -->
-                code = #{rootCode}
+                    code = #{rootCode}
+                    OR (RIGHT(#{rootCode}, 4) = '0000' AND code LIKE CONCAT(SUBSTRING(#{rootCode}, 1, 2), '%'))
+                    OR (RIGHT(#{rootCode}, 2) = '00' AND RIGHT(#{rootCode}, 4) != '0000' AND code LIKE CONCAT(SUBSTRING(#{rootCode}, 1, 4), '%'))
                 )
             </if>
         </where>
@@ -50,11 +48,9 @@
             </if>
             <if test="rootCode != null and rootCode != ''">
                 AND (
-                <!-- 编码以根区域前缀开头 -->
-                code LIKE CONCAT(SUBSTRING(#{rootCode}, 1, 2), '%')
-                OR
-                <!-- 或者就是根区域本身 -->
-                code = #{rootCode}
+                    code = #{rootCode}
+                    OR (RIGHT(#{rootCode}, 4) = '0000' AND code LIKE CONCAT(SUBSTRING(#{rootCode}, 1, 2), '%'))
+                    OR (RIGHT(#{rootCode}, 2) = '00' AND RIGHT(#{rootCode}, 4) != '0000' AND code LIKE CONCAT(SUBSTRING(#{rootCode}, 1, 4), '%'))
                 )
             </if>
         </where>

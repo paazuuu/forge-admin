@@ -31,4 +31,16 @@
         expire_time, tenant_desc, create_by, create_time, update_by, update_time,theme_config,system_theme,system_layout,system_logo,system_name,browser_title,browser_icon
     </sql>
 
+    <select id="countUsersByTenant" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE tenant_id = #{tenantId}
+    </select>
+
+    <select id="countUserTenantBindings" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_user_tenant
+        WHERE tenant_id = #{tenantId}
+    </select>
+
 </mapper>

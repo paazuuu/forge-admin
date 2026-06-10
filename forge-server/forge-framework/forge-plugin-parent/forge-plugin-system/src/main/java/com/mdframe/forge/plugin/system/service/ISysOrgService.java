@@ -73,5 +73,7 @@ public interface ISysOrgService extends IService<SysOrg> {
     List<SysOrgTreeVO> selectOrgLazyTree(SysOrgQuery query);
     
     List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId);
+
+    List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId, Long tenantId);
     
 }

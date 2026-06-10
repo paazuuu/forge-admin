@@ -42,9 +42,19 @@ public class MessageController {
      * 分页查询当前用户消息列表
      */
     @PostMapping("/page")
-    public RespInfo<?> page(@RequestBody MessageQueryDTO query,
-                                  @RequestParam(defaultValue = "1") Integer pageNum,
-                                  @RequestParam(defaultValue = "10") Integer pageSize) {
+    public RespInfo<?> page(@RequestBody(required = false) MessageQueryDTO query,
+                            @RequestParam(defaultValue = "1") Integer pageNum,
+                            @RequestParam(defaultValue = "10") Integer pageSize) {
+        return RespInfo.success(messageService.pageUserMessages(SessionHelper.getUserId(), query, pageNum, pageSize));
+    }
+
+    /**
+     * 分页查询当前用户消息列表（兼容无请求体查询）。
+     */
+    @GetMapping("/page")
+    public RespInfo<?> pageByGet(MessageQueryDTO query,
+                                 @RequestParam(defaultValue = "1") Integer pageNum,
+                                 @RequestParam(defaultValue = "10") Integer pageSize) {
         return RespInfo.success(messageService.pageUserMessages(SessionHelper.getUserId(), query, pageNum, pageSize));
     }
 

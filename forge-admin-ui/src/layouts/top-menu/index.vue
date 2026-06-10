@@ -21,6 +21,7 @@
         <div class="header-actions-inner text-18 flex flex-shrink-0 items-center px-12">
           <Fullscreen class="mobile-hidden-action" />
           <MessageNotification class="mobile-hidden-action mr-16" />
+          <TenantSwitcher class="mr-12" />
           <UserAvatar />
         </div>
       </div>
@@ -47,6 +48,7 @@ import {
   Fullscreen,
   MenuSearch,
   MessageNotification,
+  TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'
 import TopMenu from './components/TopMenu.vue'

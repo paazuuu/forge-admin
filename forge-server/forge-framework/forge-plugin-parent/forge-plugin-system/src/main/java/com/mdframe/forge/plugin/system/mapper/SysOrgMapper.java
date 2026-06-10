@@ -31,8 +31,18 @@ public interface SysOrgMapper extends BaseMapper<SysOrg> {
      * 查询组织及其子组织ID列表
      */
     List<Long> selectOrgAndChildrenIds(@Param("orgId") Long orgId);
+
+    /**
+     * 查询直接子组织数量。
+     */
+    Long countChildOrgs(@Param("orgId") Long orgId);
+
+    /**
+     * 查询组织用户绑定数量。
+     */
+    Long countUserOrgBindings(@Param("orgId") Long orgId);
     
     List<SysOrgTreeVO> selectOrgLazyTree(@Param("query") SysOrgQuery query);
     
-    List<SysOrgTreeVO> selectOrgChildrenByParentId(@Param("parentId") Long parentId);
+    List<SysOrgTreeVO> selectOrgChildrenByParentId(@Param("parentId") Long parentId, @Param("tenantId") Long tenantId);
 }

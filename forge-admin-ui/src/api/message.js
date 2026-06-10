@@ -7,7 +7,13 @@ export default {
    * 分页查询当前用户消息列表
    */
   getMessagePage: (query, pageNum, pageSize) =>
-    request.post(`/api/message/page?pageNum=${pageNum}&pageSize=${pageSize}`, query),
+    request.get('/api/message/page', {
+      params: {
+        ...(query || {}),
+        pageNum,
+        pageSize,
+      },
+    }),
 
   /**
    * 查询消息详情

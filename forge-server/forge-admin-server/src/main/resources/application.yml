@@ -64,7 +64,7 @@ spring:
       fail_on_unknown_properties: false
   flyway:
     enabled: ${FORGE_FLYWAY_ENABLED:true}
-    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration,filesystem:../db/migration,filesystem:forge/db/migration}
+    locations: ${FORGE_FLYWAY_LOCATIONS:filesystem:./db/migration,filesystem:../db/migration,filesystem:forge-server/db/migration}
     fail-on-missing-locations: false
     baseline-on-migrate: true
     baseline-version: 1.0.0

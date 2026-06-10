@@ -24,6 +24,14 @@ export function updateBusinessSuite(data) {
   return request.put('/ai/business/suite', data)
 }
 
+export function updateBusinessSuiteStatus(id, status) {
+  return request.put(`/ai/business/suite/${id}/status`, null, { params: { status } })
+}
+
+export function deleteBusinessSuite(id) {
+  return request.delete(`/ai/business/suite/${id}`)
+}
+
 export function syncLowcodeDomains() {
   return request.post('/ai/business/suite/sync-lowcode-domains')
 }
@@ -42,6 +50,14 @@ export function businessObjectDetail(id) {
 
 export function createBusinessObject(data) {
   return request.post('/ai/business/object', data)
+}
+
+export function genDatasourceEnabled() {
+  return request.get('/generator/datasource/enabled')
+}
+
+export function genDatasourceTables(datasourceId) {
+  return request.get(`/generator/datasource/${datasourceId}/tables`)
 }
 
 export function updateBusinessObject(data) {

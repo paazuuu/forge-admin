@@ -4,6 +4,8 @@ import com.mdframe.forge.starter.core.domain.PageQuery;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.util.List;
+
 /**
  * 角色查询DTO
  */
@@ -37,4 +39,9 @@ public class SysRoleQuery extends PageQuery {
      * 角色类型（1-管理角色，2-业务角色，3-审批角色，4-数据角色）
      */
     private Integer roleType;
+
+    /**
+     * 当前用户可见的角色ID列表，非超级管理员只能查询自己已拥有的角色。
+     */
+    private List<Long> accessibleRoleIds;
 }

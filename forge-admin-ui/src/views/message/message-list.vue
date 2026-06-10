@@ -94,7 +94,7 @@ const selectedRowKeys = ref([])
 const bizTypeOptions = ref([])
 
 const apiConfig = {
-  list: 'post@/api/message/page',
+  list: 'get@/api/message/page',
 }
 
 const searchSchema = [
