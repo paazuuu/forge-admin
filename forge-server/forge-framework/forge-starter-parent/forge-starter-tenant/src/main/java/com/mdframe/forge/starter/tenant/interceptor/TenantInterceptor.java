@@ -13,6 +13,7 @@ import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 /**
@@ -59,14 +60,22 @@ public class TenantInterceptor implements HandlerInterceptor {
         }
         
         try {
-            // 从SessionHelper获取租户ID（需要引入forge-starter-auth）
-            // 这里使用反射调用，避免强依赖
+            // 先安全读取登录态，公开接口或未登录请求不应在这里打 ERROR。
             Class<?> sessionHelperClass = Class.forName("com.mdframe.forge.starter.core.session.SessionHelper");
-            Method getTenantIdMethod = sessionHelperClass.getMethod("getTenantId");
-            Long tenantId = (Long) getTenantIdMethod.invoke(null);
             Method getLoginUserMethod = sessionHelperClass.getMethod("getLoginUser");
-            Object loginUser = getLoginUserMethod.invoke(null);
+            Object loginUser;
+            try {
+                loginUser = getLoginUserMethod.invoke(null);
+            } catch (InvocationTargetException e) {
+                if (isNotLoginException(e.getTargetException())) {
+                    log.debug("当前请求未登录，跳过租户上下文设置: {} {}", request.getMethod(), request.getRequestURI());
+                    return true;
+                }
+                throw e;
+            }
             if (loginUser != null) {
+                Method getTenantIdMethod = loginUser.getClass().getMethod("getTenantId");
+                Long tenantId = (Long) getTenantIdMethod.invoke(loginUser);
                 Method isAdminMethod = loginUser.getClass().getMethod("isAdmin");
                 Boolean admin = (Boolean) isAdminMethod.invoke(loginUser);
                 if (Boolean.TRUE.equals(admin)) {
@@ -74,11 +83,10 @@ public class TenantInterceptor implements HandlerInterceptor {
                     log.debug("超级管理员跳过租户SQL隔离，当前租户ID: {}", tenantId);
                     return true;
                 }
-            }
-            
-            if (tenantId != null) {
-                TenantContextHolder.setTenantId(tenantId);
-                log.debug("设置租户上下文，租户ID: {}", tenantId);
+                if (tenantId != null) {
+                    TenantContextHolder.setTenantId(tenantId);
+                    log.debug("设置租户上下文，租户ID: {}", tenantId);
+                }
             }
         } catch (ClassNotFoundException e) {
             // 如果没有引入auth模块，尝试从请求头获取
@@ -97,6 +105,11 @@ public class TenantInterceptor implements HandlerInterceptor {
         }
         
         return true;
+    }
+
+    private boolean isNotLoginException(Throwable throwable) {
+        return throwable != null
+                && "cn.dev33.satoken.exception.NotLoginException".equals(throwable.getClass().getName());
     }
 
     @Override
