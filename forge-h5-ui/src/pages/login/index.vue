@@ -14,7 +14,7 @@
           </view>
           <view class="brand-copy">
             <text class="brand-title">FORGE H5</text>
-            <text class="brand-subtitle">USER TEMPLATE</text>
+            <text class="brand-subtitle">移动端模板</text>
           </view>
         </view>
         <text class="client-badge">{{ userClient.toUpperCase() }}</text>
@@ -30,7 +30,7 @@
             <image class="panel-logo" src="/static/logo.png" mode="aspectFit" />
           </view>
           <text class="panel-title">{{ title }}</text>
-          <text class="panel-subtitle">Secure Login Portal</text>
+          <text class="panel-subtitle">安全登录入口</text>
         </view>
 
         <view class="form-stack">
@@ -39,7 +39,7 @@
             <input
               v-model="form.username"
               class="field-input"
-              placeholder="Username"
+              placeholder="请输入用户名"
               placeholder-class="field-placeholder"
               confirm-type="next"
             />
@@ -51,7 +51,7 @@
               v-model="form.password"
               class="field-input"
               :password="!showPassword"
-              placeholder="Password"
+              placeholder="请输入密码"
               placeholder-class="field-placeholder"
               confirm-type="done"
               @confirm="handleLogin"
@@ -71,7 +71,7 @@
               <input
                 v-model="form.code"
                 class="field-input"
-                placeholder="Captcha"
+                placeholder="请输入验证码"
                 placeholder-class="field-placeholder"
                 confirm-type="done"
                 @confirm="handleLogin"
@@ -79,7 +79,7 @@
             </view>
             <view class="captcha-image" :class="{ 'captcha-refreshing': captcha.loading }" @click="loadCaptcha">
               <image v-if="captcha.image" class="captcha-img" :src="captcha.image" mode="aspectFit" />
-              <text v-else class="captcha-empty">{{ captcha.loading ? 'Loading' : 'Refresh' }}</text>
+              <text v-else class="captcha-empty">{{ captcha.loading ? '加载中' : '刷新' }}</text>
               <view class="captcha-lines" />
               <view class="captcha-hover">
                 <image class="refresh-icon" src="/static/icons/ai-icon/refresh-cw.svg" mode="aspectFit" />
@@ -89,13 +89,13 @@
         </view>
 
         <button class="login-button" :disabled="loading" @click="handleLogin">
-          <text>{{ loading ? 'Signing In...' : 'Sign In' }}</text>
+          <text>{{ loading ? '登录中...' : '登录' }}</text>
           <text class="button-arrow">→</text>
         </button>
 
         <view class="panel-links">
-          <text>Forgot password?</text>
-          <text class="link-primary">Create account</text>
+          <text>忘记密码？</text>
+          <text class="link-primary">注册账号</text>
         </view>
       </view>
 
@@ -392,7 +392,7 @@ export default {
   color: #64748b;
   font-size: 20rpx;
   font-weight: 700;
-  letter-spacing: 2rpx;
+  letter-spacing: 0;
 }
 
 .client-badge {
@@ -490,9 +490,8 @@ export default {
   color: #94a3b8;
   font-size: 22rpx;
   font-weight: 800;
-  letter-spacing: 4rpx;
+  letter-spacing: 0;
   line-height: 1.3;
-  text-transform: uppercase;
   text-align: center;
 }
 

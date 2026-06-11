@@ -71,4 +71,15 @@ export const crypto = {
   randomString
 }
 
+export { cryptoConfig, matchPath, shouldEncrypt, updateCryptoConfig } from './crypto/crypto-config'
+export { decrypt, decryptResponse, encrypt, encryptRequest } from './crypto/crypto-interceptor'
+export {
+  exchangeKey,
+  fetchPublicKey,
+  getSessionKey,
+  initKeyExchange,
+  isKeyExchanged,
+  resetKeyExchange,
+} from './crypto/key-exchange'
+
 export default crypto

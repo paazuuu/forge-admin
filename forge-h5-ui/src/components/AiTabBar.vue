@@ -87,12 +87,12 @@ function handleTabClick(tab) {
 .ai-tabbar-host {
   position: fixed;
   right: 0;
-  bottom: calc(32rpx + env(safe-area-inset-bottom));
+  bottom: calc(28rpx + env(safe-area-inset-bottom));
   left: 0;
   z-index: 80;
   display: flex;
   justify-content: center;
-  padding: 28rpx 48rpx 0;
+  padding: 20rpx 48rpx 0;
   pointer-events: none;
   animation: tabbarEnter 0.42s ease both;
 }
@@ -119,7 +119,7 @@ function handleTabClick(tab) {
   flex: 1;
   align-items: center;
   justify-content: center;
-  height: 88rpx;
+  height: 80rpx;
   margin: 0;
   padding: 0;
   border: 0;

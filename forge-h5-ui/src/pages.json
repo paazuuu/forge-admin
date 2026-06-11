@@ -23,6 +23,20 @@
 			}
 		},
 		{
+			"path": "pages/message/index",
+			"style": {
+				"navigationBarTitleText": "消息中心",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/todo",
+			"style": {
+				"navigationBarTitleText": "待办",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/mine/index",
 			"style": {
 				"navigationBarTitleText": "我的",
