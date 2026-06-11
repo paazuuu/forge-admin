@@ -1,8 +1,9 @@
 import { useAuthStore } from '@/store'
+import { resolveStaticUrl } from '@/utils/assets'
 
 const blobUrlCache = new Map()
 const fileAccessUrlCache = new Map()
-export const DEFAULT_AVATAR_URL = '/static/logo.png'
+export const DEFAULT_AVATAR_URL = resolveStaticUrl('/static/logo.png')
 
 export function getFileDownloadUrl(fileId) {
   const value = String(fileId || '').trim()

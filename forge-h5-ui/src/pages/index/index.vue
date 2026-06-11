@@ -218,6 +218,7 @@ import AiTabBar from '@/components/AiTabBar.vue'
 import api from '@/api'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
+import { resolveStaticUrl } from '@/utils/assets'
 import { DEFAULT_AVATAR_URL } from '@/utils/file'
 import { toast } from '@/utils/notify'
 
@@ -526,10 +527,7 @@ watch(filteredMenuGroups, (groups) => {
 }, { immediate: true })
 
 onShow(async () => {
-  uni.hideTabBar({
-    animation: false,
-    fail: () => {},
-  })
+  hideNativeTabBar()
   const ok = await ensureLogin({ redirect: '/pages/index/index' })
   if (!ok) {
     return
@@ -537,11 +535,22 @@ onShow(async () => {
   await refreshWorkspace({ silent: true })
 })
 
+function hideNativeTabBar() {
+  if (typeof uni === 'undefined' || typeof uni.hideTabBar !== 'function') {
+    return
+  }
+  uni.hideTabBar({
+    animation: false,
+    fail: () => {},
+  })
+}
+
 function iconMask(icon, color) {
+  const url = resolveStaticUrl(icon)
   return {
     backgroundColor: color,
-    WebkitMask: `url(${icon}) center / contain no-repeat`,
-    mask: `url(${icon}) center / contain no-repeat`,
+    WebkitMask: `url(${url}) center / contain no-repeat`,
+    mask: `url(${url}) center / contain no-repeat`,
   }
 }
 

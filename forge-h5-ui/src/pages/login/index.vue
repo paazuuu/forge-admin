@@ -10,7 +10,7 @@
       <view class="brand-bar">
         <view class="brand-main">
           <view class="brand-mark">
-            <image class="brand-logo" src="/static/logo.png" mode="aspectFit" />
+            <image class="brand-logo" :src="assetUrl('/static/logo.png')" mode="aspectFit" />
           </view>
           <view class="brand-copy">
             <text class="brand-title">FORGE H5</text>
@@ -27,7 +27,7 @@
 
         <view class="panel-head">
           <view class="panel-seal">
-            <image class="panel-logo" src="/static/logo.png" mode="aspectFit" />
+            <image class="panel-logo" :src="assetUrl('/static/logo.png')" mode="aspectFit" />
           </view>
           <text class="panel-title">{{ title }}</text>
           <text class="panel-subtitle">安全登录入口</text>
@@ -35,7 +35,7 @@
 
         <view class="form-stack">
           <view class="field">
-            <image class="field-icon" src="/static/icons/ai-icon/user.svg" mode="aspectFit" />
+            <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/user.svg')" mode="aspectFit" />
             <input
               v-model="form.username"
               class="field-input"
@@ -46,7 +46,7 @@
           </view>
 
           <view class="field">
-            <image class="field-icon" src="/static/icons/ai-icon/lock.svg" mode="aspectFit" />
+            <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/lock.svg')" mode="aspectFit" />
             <input
               v-model="form.password"
               class="field-input"
@@ -59,7 +59,7 @@
             <view class="password-toggle" @click.stop="togglePassword">
               <image
                 class="toggle-icon"
-                :src="showPassword ? '/static/icons/ai-icon/eye-off.svg' : '/static/icons/ai-icon/eye.svg'"
+                :src="assetUrl(showPassword ? '/static/icons/ai-icon/eye-off.svg' : '/static/icons/ai-icon/eye.svg')"
                 mode="aspectFit"
               />
             </view>
@@ -67,7 +67,7 @@
 
           <view class="captcha-row">
             <view class="field captcha-input-wrap">
-              <image class="field-icon" src="/static/icons/ai-icon/shield.svg" mode="aspectFit" />
+              <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/shield.svg')" mode="aspectFit" />
               <input
                 v-model="form.code"
                 class="field-input"
@@ -82,7 +82,7 @@
               <text v-else class="captcha-empty">{{ captcha.loading ? '加载中' : '刷新' }}</text>
               <view class="captcha-lines" />
               <view class="captcha-hover">
-                <image class="refresh-icon" src="/static/icons/ai-icon/refresh-cw.svg" mode="aspectFit" />
+                <image class="refresh-icon" :src="assetUrl('/static/icons/ai-icon/refresh-cw.svg')" mode="aspectFit" />
               </view>
             </view>
           </view>
@@ -111,6 +111,7 @@
 <script>
 import { useAuthStore } from '@/store'
 import api from '@/api'
+import { resolveStaticUrl } from '@/utils/assets'
 import { notify, toast } from '@/utils/notify'
 
 function normalizeLoginError(error) {
@@ -152,6 +153,9 @@ export default {
     this.loadCaptcha()
   },
   methods: {
+    assetUrl(path) {
+      return resolveStaticUrl(path)
+    },
     togglePassword() {
       this.showPassword = !this.showPassword
     },

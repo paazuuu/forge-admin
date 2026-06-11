@@ -1,3 +1,5 @@
+import { resolveStaticUrl } from '@/utils/assets'
+
 const DEFAULT_TOAST = {
   message: '',
   type: 'info',
@@ -43,10 +45,11 @@ function getNotifyContainer() {
 }
 
 function createIcon(type, className) {
+  const iconUrl = resolveStaticUrl(ICON_MAP[type] || ICON_MAP.info)
   const icon = document.createElement('span')
   icon.className = className
-  icon.style.webkitMask = `url(${ICON_MAP[type] || ICON_MAP.info}) center / contain no-repeat`
-  icon.style.mask = `url(${ICON_MAP[type] || ICON_MAP.info}) center / contain no-repeat`
+  icon.style.webkitMask = `url(${iconUrl}) center / contain no-repeat`
+  icon.style.mask = `url(${iconUrl}) center / contain no-repeat`
   return icon
 }
 

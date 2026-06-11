@@ -78,12 +78,13 @@
 | 入口     | 地址 |
 |--------|------|
 | 后台管理   | http://www.dlforgelab.com:8084/forge/login |
+| 移动端 H5  | http://www.dlforgelab.com:8084/forge-h5/ |
 | 项目文档   | http://www.dlforgelab.com:8084/forge-docs/ |
 | 大屏设计器  | http://www.dlforgelab.com:8084/forge-report/|
 | Gitee  | https://gitee.com/ForgeLab/forge-admin |
 | GitHub | https://github.com/yaomindong1996/forge-admin |
 
-默认体验账号：`admin` / `123456`
+默认体验账号：`admin` / `123456` ｜ H5 体验账号：`h5_admin` / `123456`
 
 ---
 
@@ -197,6 +198,23 @@
 ### AI 供应商
 
 支持阿里百炼（通义千问）、OpenAI（GPT）、智谱 AI（GLM）、Moonshot（Kimi）、DeepSeek、Ollama 等主流 AI 服务，也支持兼容 OpenAI API 格式的自定义服务。
+
+---
+
+## 📱 移动端 H5
+
+Forge Admin 提供独立的移动端 H5 入口，基于 **uni-app 3 + Vue 3** 跨端开发框架，一套代码同时支持 H5 网页、微信小程序、支付宝小程序等多平台发布。业务表单在手机端和 PC 端体验一致，审批流程、待办提醒、消息通知在手机上即可完成闭环。
+
+| 模块 | 说明 |
+|------|------|
+| 首页工作台 | 服务概览、菜单/未读/权限统计、快捷入口、今日工作台 |
+| 消息中心 | 站内信列表、未读/已读筛选、详情查看、标记已读 |
+| 流程待办 | 流程待办列表、审批详情、通过/驳回操作 |
+| 个人中心 | 个人信息、修改密码、切换租户、安全中心、退出登录 |
+
+> 体验账号：`h5_admin` / `123456`
+
+![H5宣传图](images/h5宣传图.png)
 
 ---
 

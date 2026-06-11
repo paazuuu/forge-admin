@@ -45,12 +45,20 @@ export function setupInterceptors(axiosInstance) {
     })
   }
 
+  function expireAuth(code, message, error) {
+    useAuthStore().resetAuth()
+    const finalMessage = resolveResError(code, message || '登录已过期，请重新登录', true)
+    return {
+      code,
+      message: finalMessage || message || '登录已过期，请重新登录',
+      error,
+    }
+  }
+
   async function handleAuthExpired(errorInfo, originalConfig) {
-    const { code, message, needTip = true } = errorInfo || {}
+    const { code, message } = errorInfo || {}
     if (originalConfig?.skipAuthRefresh || originalConfig?._retry) {
-      useAuthStore().resetAuth()
-      const finalMessage = resolveResError(code, message, needTip)
-      return Promise.reject({ code, message: finalMessage, error: errorInfo?.error })
+      return Promise.reject(expireAuth(code, message, errorInfo?.error))
     }
 
     try {
@@ -60,9 +68,7 @@ export function setupInterceptors(axiosInstance) {
       }
     }
     catch (refreshError) {
-      useAuthStore().resetAuth()
-      const finalMessage = resolveResError(code, message, needTip)
-      return Promise.reject({ code, message: finalMessage, error: refreshError })
+      return Promise.reject(expireAuth(code, message, refreshError))
     }
 
     return Promise.reject(errorInfo)

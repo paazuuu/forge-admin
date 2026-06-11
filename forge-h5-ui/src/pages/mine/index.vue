@@ -186,6 +186,64 @@
     </AiPopupSheet>
 
     <AiPopupSheet
+      v-model="tenantSheetVisible"
+      title="切换租户"
+      :description="`当前租户：${currentTenantName}`"
+      max-height="76vh"
+      body-max-height="calc(76vh - 172rpx - env(safe-area-inset-bottom))"
+    >
+      <view class="tenant-panel">
+        <view class="tenant-current-card">
+          <view class="tenant-current-icon">
+            <AiIcon icon="/static/icons/ai-icon/briefcase.svg" color="#ffffff" size="md" />
+          </view>
+          <view class="tenant-current-copy">
+            <text class="tenant-current-label">当前工作空间</text>
+            <text class="tenant-current-name">{{ currentTenantName }}</text>
+          </view>
+        </view>
+
+        <view v-if="tenantLoading" class="tenant-loading-card">
+          <view class="tenant-loading-spinner" />
+          <text>正在加载租户</text>
+        </view>
+
+        <view v-else class="tenant-list">
+          <view
+            v-for="tenant in displayTenantOptions"
+            :key="tenant.tenantId"
+            class="tenant-row"
+            :class="{
+              active: isCurrentTenant(tenant),
+              switching: switchingTenantId === tenant.tenantId,
+            }"
+            @click="handleTenantSwitch(tenant)"
+          >
+            <view class="tenant-row-icon">
+              <AiIcon icon="/static/icons/ai-icon/layers.svg" :color="isCurrentTenant(tenant) ? '#2563eb' : '#64748b'" size="sm" />
+            </view>
+            <view class="tenant-row-main">
+              <text class="tenant-row-name">{{ tenant.tenantName }}</text>
+              <text class="tenant-row-desc">{{ isCurrentTenant(tenant) ? '正在使用' : '切换到此租户' }}</text>
+            </view>
+            <view v-if="switchingTenantId === tenant.tenantId" class="tenant-row-loading" />
+            <AiIcon
+              v-else-if="isCurrentTenant(tenant)"
+              icon="/static/icons/ai-icon/check-circle.svg"
+              color="#2563eb"
+              size="sm"
+            />
+          </view>
+        </view>
+      </view>
+      <template #footer>
+        <AiButton block variant="secondary" :loading="tenantLoading" @click="loadTenantOptions">
+          刷新租户列表
+        </AiButton>
+      </template>
+    </AiPopupSheet>
+
+    <AiPopupSheet
       v-model="settingsSheetVisible"
       title="通用设置"
       description="本机偏好，不影响其他设备"
@@ -264,12 +322,16 @@ const rawAvatarUrl = computed(() => userInfo.value.avatar || '')
 const profileSheetVisible = ref(false)
 const passwordSheetVisible = ref(false)
 const securitySheetVisible = ref(false)
+const tenantSheetVisible = ref(false)
 const settingsSheetVisible = ref(false)
 const aboutSheetVisible = ref(false)
 const profileSaving = ref(false)
 const passwordSaving = ref(false)
 const avatarUploading = ref(false)
+const tenantLoading = ref(false)
+const switchingTenantId = ref(null)
 const messageQuietMode = ref(false)
+const tenantOptions = ref([])
 
 const profileForm = reactive({
   username: '',
@@ -287,6 +349,28 @@ const passwordForm = reactive({
 const permissionCount = computed(() => authStore.permissions?.length || 0)
 const maskedPhone = computed(() => maskPhone(userInfo.value.phone || userInfo.value.mobile))
 const maskedEmail = computed(() => maskEmail(userInfo.value.email))
+const currentTenantId = computed(() => userInfo.value.tenantId)
+const currentTenantName = computed(() => {
+  const current = tenantOptions.value.find(item => Number(item.tenantId) === Number(currentTenantId.value))
+  return current?.tenantName || userInfo.value.tenantName || '当前租户'
+})
+const displayTenantOptions = computed(() => {
+  if (tenantOptions.value.length) {
+    return tenantOptions.value
+  }
+  if (!currentTenantId.value) {
+    return []
+  }
+  return [{
+    tenantId: currentTenantId.value,
+    tenantName: userInfo.value.tenantName || '当前租户',
+  }]
+})
+const switchableTenantCount = computed(() => {
+  const ids = Array.isArray(userInfo.value.tenantIds) ? userInfo.value.tenantIds : []
+  return Math.max(displayTenantOptions.value.length, ids.length)
+})
+const showTenantSwitch = computed(() => switchableTenantCount.value > 1)
 const securityItems = computed(() => [
   {
     label: '登录账号',
@@ -341,6 +425,16 @@ const menuGroups = computed(() => [
         color: '#6366f1',
         bgClass: 'bg-indigo',
       },
+      ...(showTenantSwitch.value
+        ? [{
+            key: 'tenant',
+            icon: '/static/icons/ai-icon/briefcase.svg',
+            label: '切换租户',
+            desc: currentTenantName.value,
+            color: '#2563eb',
+            bgClass: 'bg-blue',
+          }]
+        : []),
       {
         key: 'messages',
         icon: '/static/icons/ai-icon/bell.svg',
@@ -383,10 +477,7 @@ const menuGroups = computed(() => [
 ])
 
 onShow(async () => {
-  uni.hideTabBar({
-    animation: false,
-    fail: () => {},
-  })
+  hideNativeTabBar()
   messageQuietMode.value = uni.getStorageSync('forge_h5_quiet_mode') === '1'
   const ok = await ensureLogin({ redirect: '/pages/mine/index' })
   if (!ok) {
@@ -395,13 +486,25 @@ onShow(async () => {
   if (!authStore.menus.length && !authStore.permissions.length) {
     await authStore.fetchAccessSnapshot()
   }
+  loadTenantOptions({ silent: true })
 })
+
+function hideNativeTabBar() {
+  if (typeof uni === 'undefined' || typeof uni.hideTabBar !== 'function') {
+    return
+  }
+  uni.hideTabBar({
+    animation: false,
+    fail: () => {},
+  })
+}
 
 function handleMenu(item) {
   const actionMap = {
     profile: openProfileSheet,
     password: openPasswordSheet,
     security: () => { securitySheetVisible.value = true },
+    tenant: openTenantSheet,
     messages: goMessages,
     help: () => { aboutSheetVisible.value = true },
     settings: () => { settingsSheetVisible.value = true },
@@ -425,6 +528,11 @@ function openPasswordSheet() {
   passwordForm.newPassword = ''
   passwordForm.confirmPassword = ''
   passwordSheetVisible.value = true
+}
+
+async function openTenantSheet() {
+  tenantSheetVisible.value = true
+  await loadTenantOptions()
 }
 
 function syncProfileForm() {
@@ -527,6 +635,77 @@ async function refreshUser() {
   catch (error) {
     console.error('刷新用户信息失败:', error)
   }
+}
+
+async function loadTenantOptions(options = {}) {
+  if (!authStore.accessToken) {
+    return
+  }
+  tenantLoading.value = true
+  try {
+    const res = await api.getCurrentTenantOptions()
+    tenantOptions.value = normalizeTenantOptions(res?.data)
+  }
+  catch (error) {
+    if (Number(error?.code) === 401 && !authStore.isLogin) {
+      return
+    }
+    if (!options.silent) {
+      toast('租户列表加载失败', { type: 'error' })
+    }
+    console.error('加载租户列表失败:', error)
+  }
+  finally {
+    tenantLoading.value = false
+  }
+}
+
+async function handleTenantSwitch(tenant) {
+  const tenantId = Number(tenant?.tenantId)
+  if (!tenantId || tenantId === Number(currentTenantId.value) || switchingTenantId.value) {
+    return
+  }
+  switchingTenantId.value = tenantId
+  try {
+    const res = await api.switchTenant(tenantId)
+    if (res?.code === 200 || res?.data !== undefined) {
+      authStore.setMenus([])
+      authStore.setPermissions([])
+      await authStore.fetchUserInfo()
+      await authStore.fetchAccessSnapshot()
+      tenantSheetVisible.value = false
+      await loadTenantOptions({ silent: true })
+      toast(`已切换到${tenant.tenantName || '新租户'}`, { type: 'success' })
+      return
+    }
+    toast('租户切换失败', { type: 'error' })
+  }
+  catch (error) {
+    toast('租户切换失败', { type: 'error' })
+    console.error('切换租户失败:', error)
+  }
+  finally {
+    switchingTenantId.value = null
+  }
+}
+
+function normalizeTenantOptions(list = []) {
+  if (!Array.isArray(list)) {
+    return []
+  }
+  return list
+    .map((item) => {
+      const tenantId = item.tenantId || item.id
+      return {
+        tenantId,
+        tenantName: item.tenantName || item.name || `租户 ${tenantId}`,
+      }
+    })
+    .filter(item => item.tenantId)
+}
+
+function isCurrentTenant(tenant) {
+  return Number(tenant?.tenantId) === Number(currentTenantId.value)
 }
 
 function toggleQuietMode(event) {
@@ -775,6 +954,11 @@ function maskEmail(value) {
 .info-value,
 .setting-title,
 .setting-desc,
+.tenant-current-label,
+.tenant-current-name,
+.tenant-row-name,
+.tenant-row-desc,
+.tenant-loading-card text,
 .support-title,
 .support-desc {
   display: block;
@@ -1022,7 +1206,8 @@ function maskEmail(value) {
 }
 
 .info-row,
-.setting-row {
+.setting-row,
+.tenant-row {
   display: flex;
   align-items: center;
   gap: 20rpx;
@@ -1075,6 +1260,152 @@ function maskEmail(value) {
 
 .setting-row-button {
   cursor: pointer;
+}
+
+.tenant-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.tenant-current-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  overflow: hidden;
+  padding: 26rpx;
+  border: 1rpx solid rgba(147, 197, 253, 0.28);
+  border-radius: 30rpx;
+  background:
+    radial-gradient(circle at 94% 12%, rgba(125, 211, 252, 0.26), transparent 34%),
+    linear-gradient(135deg, #1d4ed8, #2563eb 58%, #0f766e);
+  box-shadow: 0 14rpx 36rpx rgba(37, 99, 235, 0.18);
+}
+
+.tenant-current-icon {
+  display: flex;
+  width: 76rpx;
+  height: 76rpx;
+  flex: 0 0 76rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.2);
+}
+
+.tenant-current-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.tenant-current-label {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 22rpx;
+  font-weight: 750;
+}
+
+.tenant-current-name {
+  overflow: hidden;
+  margin-top: 8rpx;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-loading-card {
+  display: flex;
+  min-height: 132rpx;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  border: 1rpx dashed rgba(147, 197, 253, 0.72);
+  border-radius: 28rpx;
+  background: rgba(239, 246, 255, 0.74);
+}
+
+.tenant-loading-card text {
+  color: #2563eb;
+  font-size: 25rpx;
+  font-weight: 850;
+}
+
+.tenant-loading-spinner,
+.tenant-row-loading {
+  width: 34rpx;
+  height: 34rpx;
+  border: 4rpx solid rgba(37, 99, 235, 0.18);
+  border-top-color: #2563eb;
+  border-radius: 999rpx;
+  animation: avatarSpin 0.78s linear infinite;
+}
+
+.tenant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.tenant-row {
+  min-height: 112rpx;
+  border-color: rgba(226, 232, 240, 0.78);
+  background: rgba(255, 255, 255, 0.78);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.tenant-row.active {
+  border-color: rgba(37, 99, 235, 0.32);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(238, 242, 255, 0.86));
+}
+
+.tenant-row.switching {
+  opacity: 0.78;
+}
+
+.tenant-row-icon {
+  display: flex;
+  width: 64rpx;
+  height: 64rpx;
+  flex: 0 0 64rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  background: #f8fafc;
+}
+
+.tenant-row.active .tenant-row-icon {
+  background: #dbeafe;
+}
+
+.tenant-row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.tenant-row-name {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 28rpx;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-row-desc {
+  overflow: hidden;
+  margin-top: 6rpx;
+  color: #94a3b8;
+  font-size: 22rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-row.active .tenant-row-desc {
+  color: #2563eb;
 }
 
 .setting-title {

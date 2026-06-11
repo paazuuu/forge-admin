@@ -112,4 +112,13 @@ export default {
     method: 'post',
     data: { id: tenantId },
   }),
+  getCurrentTenantOptions: () => request({
+    url: '/system/tenant/current/options',
+    method: 'get',
+  }),
+  switchTenant: tenantId => request({
+    url: '/system/tenant/switch',
+    method: 'post',
+    params: { tenantId },
+  }),
 }

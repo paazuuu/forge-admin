@@ -8,6 +8,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { resolveIconUrl as resolveLocalIconUrl, resolveStaticUrl } from '@/utils/assets'
 
 const props = defineProps({
   icon: {
@@ -59,7 +60,7 @@ function resolveIconUrl(value) {
   }
 
   if (isDirectImageValue(iconValue)) {
-    return iconValue
+    return resolveStaticUrl(iconValue)
   }
 
   if (iconValue.startsWith('local:')) {
@@ -83,7 +84,7 @@ function resolveIconUrl(value) {
     return toIconifyUrl('ion', iconValue)
   }
 
-  return `/static/icons/ai-icon/${iconValue}.svg`
+  return resolveLocalIconUrl(iconValue)
 }
 
 function isDirectImageValue(value) {

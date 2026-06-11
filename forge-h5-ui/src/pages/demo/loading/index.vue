@@ -267,6 +267,7 @@ import AiTag from '@/components/AiTag.vue'
 import { usePageLoading, useRequest } from '@/composables'
 import Loading from '@/components/Loading.vue'
 import { loadingService } from '@/directives'
+import { resolveStaticUrl } from '@/utils/assets'
 import { showAlertDialog, showConfirmDialog } from '@/utils/dialog'
 import { notify, toast } from '@/utils/notify'
 
@@ -511,10 +512,11 @@ function openPreview(item) {
 }
 
 function iconMask(icon, color) {
+  const url = resolveStaticUrl(icon)
   return {
     backgroundColor: color,
-    WebkitMask: `url(${icon}) center / contain no-repeat`,
-    mask: `url(${icon}) center / contain no-repeat`,
+    WebkitMask: `url(${url}) center / contain no-repeat`,
+    mask: `url(${url}) center / contain no-repeat`,
   }
 }
 
