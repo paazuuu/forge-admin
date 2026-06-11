@@ -2,7 +2,6 @@ package com.mdframe.forge.plugin.system.service.impl;
 
 import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
-import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.useragent.UserAgent;
 import cn.hutool.http.useragent.UserAgentUtil;
@@ -13,19 +12,17 @@ import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapp
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.system.entity.SysOnlineUser;
-import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.mapper.SysOnlineUserMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.service.ISysOnlineUserService;
-import com.mdframe.forge.plugin.system.service.ISysOrgService;
-import com.mdframe.forge.plugin.system.service.ISysUserService;
 import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import com.mdframe.forge.starter.websocket.domain.WebSocketMessage;
 import com.mdframe.forge.starter.websocket.enums.MessageType;
 import com.mdframe.forge.starter.websocket.service.IMessagePushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -45,44 +42,36 @@ public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,Sy
 
     private final SysOnlineUserMapper sysOnlineUserMapper;
     private final IMessagePushService messagePushService;
-    private final ISysUserService sysUserService;
-    private final ISysOrgService sysOrgService;
+    private final SysUserMapper sysUserMapper;
 
     @Override
     public void addOnlineUser(String tokenValue, Object loginId) {
         try {
-            // 获取用户信息
-            SaSession session = StpUtil.getSessionByLoginId(loginId, false);
-            if (session == null) {
-                log.warn("无法获取用户Session, loginId: {}", loginId);
+            Long userId = parseLoginId(loginId);
+            if (userId == null) {
+                log.warn("无法解析在线用户loginId: {}", loginId);
                 return;
             }
-            
-            SysUser sysUser = sysUserService.selectUserById(Long.parseLong(String.valueOf(loginId)));
+
+            SysUser sysUser = TenantContextHolder.executeIgnore(() -> sysUserMapper.selectById(userId));
             if (sysUser == null) {
-                log.warn("Session中没有loginUser信息, loginId: {}", loginId);
+                log.warn("无法获取在线用户信息, loginId: {}", loginId);
                 return;
             }
+            LoginUser loginUser = resolveLoginUser(tokenValue);
 
             // 获取请求信息
             String ipAddress = getClientIp();
             String userAgentStr = getUserAgent();
             UserAgent userAgent = UserAgentUtil.parse(userAgentStr);
-            
-            String deptName = null;
-            List<Long> selectUserOrgIds = sysUserService.selectUserOrgIds(sysUser.getId());
-            if (CollUtil.isNotEmpty(selectUserOrgIds)) {
-                SysOrg sysOrg = sysOrgService.selectOrgById(selectUserOrgIds.get(0));
-                deptName = sysOrg.getOrgName();
-            }
-            
+
             // 构建在线用户信息
             SysOnlineUser sysOnlineUser = SysOnlineUser.builder()
                     .tokenValue(tokenValue)
                     .userId(sysUser.getId())
-                    .username(sysUser.getUsername())
-                    .realName(sysUser.getRealName())
-                    .deptName(deptName)
+                    .username(resolveUsername(loginUser, sysUser))
+                    .realName(resolveRealName(loginUser, sysUser))
+                    .deptName(loginUser != null ? loginUser.getDeptName() : null)
                     .ipAddress(ipAddress)
                     .loginLocation(getLoginLocation(ipAddress))
                     .browser(userAgent.getBrowser().getName())
@@ -91,7 +80,7 @@ public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,Sy
                     .lastActivityTime(LocalDateTime.now())
                     .expireTime(LocalDateTime.now().plusSeconds(StpUtil.getTokenTimeout(tokenValue)))
                     .status(1) // 在线状态
-                    .tenantId(sysUser.getTenantId())
+                    .tenantId(resolveTenantId(loginUser, sysUser))
                     .build();
 
             // 保存到数据库
@@ -102,6 +91,53 @@ public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,Sy
         } catch (Exception e) {
             log.error("添加在线用户失败: tokenValue={}, loginId={}", tokenValue, loginId, e);
         }
+    }
+
+    private Long parseLoginId(Object loginId) {
+        if (loginId == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            log.warn("在线用户loginId不是有效数字: {}", loginId);
+            return null;
+        }
+    }
+
+    private LoginUser resolveLoginUser(String tokenValue) {
+        if (StrUtil.isBlank(tokenValue)) {
+            return null;
+        }
+        try {
+            SaSession tokenSession = StpUtil.getTokenSessionByToken(tokenValue);
+            Object loginUserObj = tokenSession == null ? null : tokenSession.get("loginUser");
+            return loginUserObj instanceof LoginUser ? (LoginUser) loginUserObj : null;
+        } catch (Exception e) {
+            log.debug("读取token session中的loginUser失败: tokenValue={}", tokenValue, e);
+            return null;
+        }
+    }
+
+    private String resolveUsername(LoginUser loginUser, SysUser sysUser) {
+        if (loginUser != null && StrUtil.isNotBlank(loginUser.getUsername())) {
+            return loginUser.getUsername();
+        }
+        return sysUser.getUsername();
+    }
+
+    private String resolveRealName(LoginUser loginUser, SysUser sysUser) {
+        if (loginUser != null && StrUtil.isNotBlank(loginUser.getRealName())) {
+            return loginUser.getRealName();
+        }
+        return sysUser.getRealName();
+    }
+
+    private Long resolveTenantId(LoginUser loginUser, SysUser sysUser) {
+        if (loginUser != null && loginUser.getTenantId() != null) {
+            return loginUser.getTenantId();
+        }
+        return sysUser.getTenantId();
     }
 
     @Override

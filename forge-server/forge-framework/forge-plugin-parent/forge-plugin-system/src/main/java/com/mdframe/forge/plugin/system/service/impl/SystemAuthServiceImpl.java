@@ -271,6 +271,11 @@ public class SystemAuthServiceImpl implements IAuthService {
 
         StpUtil.login(loginUser.getUserId(), new SaLoginModel().setDevice(resolvedClient));
         SessionHelper.setLoginUser(loginUser);
+        try {
+            onlineUserService.addOnlineUser(StpUtil.getTokenValue(), loginUser.getUserId());
+        } catch (Exception e) {
+            log.error("记录在线用户失败: userId={}, client={}", loginUser.getUserId(), resolvedClient, e);
+        }
 
         log.info("用户登录成功: username={}, userId={}, client={}, tokenTimeout={}s",
                 loginUser.getUsername(),

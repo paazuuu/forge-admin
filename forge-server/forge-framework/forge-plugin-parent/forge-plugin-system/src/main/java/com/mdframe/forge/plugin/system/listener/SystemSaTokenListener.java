@@ -32,13 +32,6 @@ public class SystemSaTokenListener implements SaTokenListener {
     @Override
     public void doLogin(String loginType, Object loginId, String tokenValue, SaLoginModel loginModel) {
         log.info("用户登录成功 - loginType: {}, loginId: {}, tokenValue: {}", loginType, loginId, tokenValue);
-        
-        try {
-            // 记录在线用户信息
-            onlineUserService.addOnlineUser(tokenValue, loginId);
-        } catch (Exception e) {
-            log.error("记录在线用户失败", e);
-        }
     }
     
     @Override
