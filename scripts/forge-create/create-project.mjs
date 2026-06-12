@@ -60,6 +60,10 @@ const ignoredFileNames = new Set([
   '.flattened-pom.xml',
 ])
 
+const ignoredTemplatePathPrefixes = [
+  'forge-server/db/migration',
+]
+
 const projectContextNames = [
   'AGENTS.md',
   '.agents',
@@ -407,7 +411,12 @@ function shouldCopyPath(sourcePath) {
   if (ignoredNames.has(baseName) || ignoredFileNames.has(baseName)) {
     return false
   }
-  return true
+  return !isIgnoredTemplatePath(sourcePath)
+}
+
+function isIgnoredTemplatePath(sourcePath) {
+  const relativePath = path.relative(repoRoot, sourcePath).split(path.sep).join('/')
+  return ignoredTemplatePathPrefixes.some(prefix => relativePath === prefix || relativePath.startsWith(`${prefix}/`))
 }
 
 async function pruneBackend(serverRoot, catalog, selection) {

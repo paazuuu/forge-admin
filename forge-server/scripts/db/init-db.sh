@@ -113,7 +113,6 @@ run_sql_dir() {
 if [[ "$SKIP_ADMIN_INIT" != "true" ]]; then
   run_sql_file "$FORGE_DIR/forge-admin-server/sql/初始化脚本.sql"
 fi
-run_sql_dir "$FORGE_DIR/db/migration"
 run_sql_dir "$FORGE_DIR/db/seed/required"
 
 if [[ "$WITH_MODULE" == "true" ]]; then
