@@ -58,7 +58,7 @@
     "admin-server": {
       "type": "server",
       "artifactId": "forge-admin-server",
-      "path": "forge/forge-admin-server",
+      "path": "forge-server/forge-admin-server",
       "dependencies": [
         "plugin-system",
         "starter-web",
@@ -73,7 +73,7 @@
     "report-server": {
       "type": "server",
       "artifactId": "forge-report-server",
-      "path": "forge/forge-report-server",
+      "path": "forge-server/forge-report-server",
       "dependencies": [
         "starter-web",
         "starter-auth",
@@ -90,7 +90,7 @@
     "app-server": {
       "type": "server",
       "artifactId": "forge-app-server",
-      "path": "forge/forge-app-server",
+      "path": "forge-server/forge-app-server",
       "dependencies": [
         "plugin-system",
         "starter-web",
@@ -105,7 +105,7 @@
     "business-core": {
       "type": "business",
       "artifactId": "forge-business-core",
-      "path": "forge/forge-business/forge-business-core",
+      "path": "forge-server/forge-business/forge-business-core",
       "dependencies": [
         "plugin-system",
         "starter-web",
@@ -120,13 +120,13 @@
     "flow-client": {
       "type": "flow",
       "artifactId": "forge-flow-client",
-      "path": "forge/forge-flow/forge-flow-client",
+      "path": "forge-server/forge-flow/forge-flow-client",
       "dependencies": []
     },
     "flow-server": {
       "type": "flow",
       "artifactId": "forge-flow-server",
-      "path": "forge/forge-flow/forge-flow-server",
+      "path": "forge-server/forge-flow/forge-flow-server",
       "dependencies": [
         "flow-client",
         "plugin-flow",
@@ -141,7 +141,7 @@
     "plugin-system": {
       "type": "plugin",
       "artifactId": "forge-plugin-system",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-system",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system",
       "dependencies": [
         "starter-core",
         "starter-orm",
@@ -160,7 +160,7 @@
     "plugin-job": {
       "type": "plugin",
       "artifactId": "forge-plugin-job",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-job",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-job",
       "dependencies": [
         "starter-job",
         "starter-crypto"
@@ -169,7 +169,7 @@
     "plugin-message": {
       "type": "plugin",
       "artifactId": "forge-plugin-message",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-message",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-message",
       "dependencies": [
         "starter-message",
         "starter-orm",
@@ -181,7 +181,7 @@
     "plugin-flow": {
       "type": "plugin",
       "artifactId": "forge-plugin-flow",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-flow",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-flow",
       "dependencies": [
         "starter-core",
         "plugin-message"
@@ -190,7 +190,7 @@
     "plugin-generator": {
       "type": "plugin",
       "artifactId": "forge-plugin-generator",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-generator",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator",
       "dependencies": [
         "starter-core",
         "starter-web",
@@ -204,7 +204,7 @@
     "plugin-ai": {
       "type": "plugin",
       "artifactId": "forge-plugin-ai",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-ai",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-ai",
       "dependencies": [
         "starter-core",
         "starter-orm",
@@ -216,7 +216,7 @@
     "plugin-external": {
       "type": "plugin",
       "artifactId": "forge-plugin-external",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-external",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-external",
       "dependencies": [
         "starter-core",
         "starter-orm",
@@ -230,7 +230,7 @@
     "plugin-data": {
       "type": "plugin",
       "artifactId": "forge-plugin-data",
-      "path": "forge/forge-framework/forge-plugin-parent/forge-plugin-data",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-data",
       "dependencies": [
         "starter-core",
         "starter-orm",
@@ -244,13 +244,13 @@
     "starter-core": {
       "type": "starter",
       "artifactId": "forge-starter-core",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-core",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core",
       "dependencies": []
     },
     "starter-orm": {
       "type": "starter",
       "artifactId": "forge-starter-orm",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-orm",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-orm",
       "dependencies": [
         "starter-core"
       ]
@@ -258,13 +258,13 @@
     "starter-web": {
       "type": "starter",
       "artifactId": "forge-starter-web",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-web",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-web",
       "dependencies": []
     },
     "starter-cache": {
       "type": "starter",
       "artifactId": "forge-starter-cache",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-cache",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-cache",
       "dependencies": [
         "starter-core"
       ]
@@ -272,7 +272,7 @@
     "starter-auth": {
       "type": "starter",
       "artifactId": "forge-starter-auth",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-auth",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-auth",
       "dependencies": [
         "starter-core",
         "starter-cache",
@@ -286,7 +286,7 @@
     "starter-log": {
       "type": "starter",
       "artifactId": "forge-starter-log",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-log",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-log",
       "dependencies": [
         "starter-core",
         "starter-api-config"
@@ -295,7 +295,7 @@
     "starter-trans": {
       "type": "starter",
       "artifactId": "forge-starter-trans",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-trans",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-trans",
       "dependencies": [
         "starter-core"
       ]
@@ -303,7 +303,7 @@
     "starter-file": {
       "type": "starter",
       "artifactId": "forge-starter-file",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-file",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-file",
       "dependencies": [
         "starter-core"
       ]
@@ -311,7 +311,7 @@
     "starter-excel": {
       "type": "starter",
       "artifactId": "forge-starter-excel",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-excel",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-excel",
       "dependencies": [
         "starter-core",
         "starter-trans"
@@ -320,7 +320,7 @@
     "starter-config": {
       "type": "starter",
       "artifactId": "forge-starter-config",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-config",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-config",
       "dependencies": [
         "starter-core"
       ]
@@ -328,7 +328,7 @@
     "starter-job": {
       "type": "starter",
       "artifactId": "forge-starter-job",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-job",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-job",
       "dependencies": [
         "starter-core"
       ]
@@ -336,7 +336,7 @@
     "starter-id": {
       "type": "starter",
       "artifactId": "forge-starter-id",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-id",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-id",
       "dependencies": [
         "starter-core"
       ]
@@ -344,7 +344,7 @@
     "starter-datascope": {
       "type": "starter",
       "artifactId": "forge-starter-datascope",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-datascope",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-datascope",
       "dependencies": [
         "starter-core",
         "starter-auth"
@@ -353,7 +353,7 @@
     "starter-message": {
       "type": "starter",
       "artifactId": "forge-starter-message",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-message",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-message",
       "dependencies": [
         "starter-core"
       ]
@@ -361,7 +361,7 @@
     "starter-tenant": {
       "type": "starter",
       "artifactId": "forge-starter-tenant",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-tenant",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-tenant",
       "dependencies": [
         "starter-core",
         "starter-orm",
@@ -372,7 +372,7 @@
     "starter-crypto": {
       "type": "starter",
       "artifactId": "forge-starter-crypto",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-crypto",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-crypto",
       "dependencies": [
         "starter-core",
         "starter-tenant",
@@ -384,7 +384,7 @@
     "starter-websocket": {
       "type": "starter",
       "artifactId": "forge-starter-websocket",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-websocket",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-websocket",
       "dependencies": [
         "starter-core"
       ]
@@ -392,7 +392,7 @@
     "starter-api-config": {
       "type": "starter",
       "artifactId": "forge-starter-api-config",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-api-config",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-api-config",
       "dependencies": [
         "starter-core",
         "starter-trans",
@@ -403,7 +403,7 @@
     "starter-social": {
       "type": "starter",
       "artifactId": "forge-starter-social",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-social",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-social",
       "dependencies": [
         "starter-core",
         "starter-trans",
@@ -416,7 +416,7 @@
     "starter-idempotent": {
       "type": "starter",
       "artifactId": "forge-starter-idempotent",
-      "path": "forge/forge-framework/forge-starter-parent/forge-starter-idempotent",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-idempotent",
       "dependencies": [
         "starter-core",
         "starter-cache"
