@@ -1136,21 +1136,26 @@ async function saveLayout() {
 
 function syncDesignerDraft() {
   const { createdFields, normalizedFields, schema } = buildCurrentDesignerDraft()
+  const fieldsChanged = !isSameSchema(normalizedFields, primaryBusinessFieldAssets.value)
+  const pageChanged = !isSameSchema(schema, localSchema.value)
   localSchema.value = schema
-  if (createdFields.length)
+  if (fieldsChanged)
     emit('fieldsUpdated', normalizedFields, { persisted: false })
-  emit('dirtyChange', true)
+  if (fieldsChanged || pageChanged)
+    emit('dirtyChange', true)
   return {
     pageSchema: cloneSchema(schema),
     fields: cloneSchema(normalizedFields),
     createdFields: cloneSchema(createdFields),
+    dirty: fieldsChanged || pageChanged,
   }
 }
 
 function buildCurrentDesignerDraft() {
   const formSchema = formCreateDesignerRef.value?.flushDesigner?.() || localFormDesignerSchema.value
-  const { fields: nextFields, createdFields } = buildAutoFieldAssets(formSchema, primaryBusinessFieldAssets.value)
-  const formFieldComponents = buildFormFieldComponentMap(formSchema || {})
+  const normalizedFormSchema = normalizeFormDesignerSchema(formSchema || {})
+  const { fields: nextFields, createdFields } = buildAutoFieldAssets(normalizedFormSchema, primaryBusinessFieldAssets.value)
+  const formFieldComponents = buildFormFieldComponentMap(normalizedFormSchema)
   const normalizedFields = nextFields.map(field => normalizeUnconfiguredDesignerField(field, formFieldComponents))
   const nextModelSchema = {
     ...effectiveModelSchema.value,
@@ -1161,10 +1166,10 @@ function buildCurrentDesignerDraft() {
     ],
   }
   if (formSchema)
-    syncFormDesignerSchemaToPageSchema(formSchema, nextModelSchema.fields)
+    syncFormDesignerSchemaToPageSchema(normalizedFormSchema, nextModelSchema.fields)
   const schema = syncPageSchemaWithModel(localSchema.value, nextModelSchema)
   return {
-    formSchema,
+    formSchema: normalizedFormSchema,
     createdFields,
     normalizedFields,
     nextModelSchema,
@@ -1211,13 +1216,14 @@ function normalizeUnconfiguredDesignerField(field = {}, formFieldComponents = ne
   const formComponent = formFieldComponents.get(fieldCode)
   const componentType = normalizeRuntimeComponentType(formComponent?.componentKey || field.componentType)
   const mergedField = mergeFieldWithFormComponent(field, formComponent, componentType)
+  const syncedField = syncDesignerFieldWithFormComponent(mergedField, formComponent)
   if (isDictField(mergedField) && formComponent && !requiresDictConfig(formComponent))
-    return downgradeDesignerFieldToText(mergedField)
+    return downgradeDesignerFieldToText(syncedField)
   if (isReferenceField(mergedField) && formComponent && !requiresReferenceConfig(formComponent))
-    return downgradeDesignerFieldToText(mergedField)
+    return downgradeDesignerFieldToText(syncedField)
   if (!formComponent && (isUnconfiguredDictField(mergedField) || isUnconfiguredReferenceField(mergedField)))
-    return downgradeDesignerFieldToText(mergedField)
-  return mergedField
+    return downgradeDesignerFieldToText(syncedField)
+  return syncedField
 }
 
 function mergeFieldWithFormComponent(field = {}, formComponent = null, componentType = '') {
@@ -1240,6 +1246,43 @@ function mergeFieldWithFormComponent(field = {}, formComponent = null, component
       ...(props.dictType !== undefined ? { dictType: props.dictType } : {}),
     },
   }
+}
+
+function syncDesignerFieldWithFormComponent(field = {}, formComponent = null) {
+  if (!formComponent) {
+    return {
+      ...field,
+      formVisible: false,
+    }
+  }
+
+  const props = formComponent.props || {}
+  const label = formComponent.label || field.fieldName || field.label || field.fieldCode || field.field || '字段'
+  return {
+    ...field,
+    fieldName: label,
+    label,
+    required: Boolean(formComponent.validation?.required),
+    readonly: Boolean(formComponent.visibility?.readonly),
+    defaultValue: Object.prototype.hasOwnProperty.call(props, 'defaultValue') ? props.defaultValue : field.defaultValue,
+    formVisible: formComponent.visibility?.hidden !== true,
+    placeholder: props.placeholder ?? field.placeholder ?? field.basicProps?.placeholder ?? '',
+    sortOrder: resolveDesignerFieldSortOrder(formComponent, field.sortOrder),
+  }
+}
+
+function resolveDesignerFieldSortOrder(component = {}, fallback = 0) {
+  const candidates = [
+    component?.props?.sortOrder,
+    component?.layout?.order,
+    fallback,
+  ]
+  for (const candidate of candidates) {
+    const value = Number(candidate)
+    if (Number.isFinite(value) && value > 0)
+      return value
+  }
+  return fallback
 }
 
 function applyComponentFieldDefaults(field = {}, defaults = {}) {

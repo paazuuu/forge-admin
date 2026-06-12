@@ -464,14 +464,17 @@ async function handleSave() {
       await detailDesignerRef.value?.saveLayout?.()
     else
       await formDesignerRef.value?.saveLayout?.()
+    await loadDesigner()
     return
   }
   if (activePanel.value === 'list') {
     await listDesignerRef.value?.saveLayout?.()
+    await loadDesigner()
     return
   }
   if (activePanel.value === 'detail') {
     await detailDesignerRef.value?.saveLayout?.()
+    await loadDesigner()
     return
   }
   if (activePanel.value === 'relations') {
@@ -535,7 +538,7 @@ async function syncActiveFormDraft() {
     return
   await nextTick()
   const result = formDesignerRef.value?.syncDesignerDraft?.()
-  if (result)
+  if (result?.dirty)
     designerDraftDirty.value = true
   await nextTick()
 }
@@ -655,10 +658,14 @@ function openTriggerConfig() {
   })
 }
 
-function handleFieldsUpdated(fields, options = {}) {
+async function handleFieldsUpdated(fields, options = {}) {
   draft.fields = cloneSchema(fields || [])
   syncDraftModelFields(draft.fields)
   draft.viewSchema = sanitizeViewSchemaFieldRefs(draft.viewSchema || {}, draft.fields)
+  if (options?.reloadDesigner) {
+    await loadDesigner()
+    return
+  }
   if (options?.persisted === false) {
     dirty.value = true
     designerDraftDirty.value = true

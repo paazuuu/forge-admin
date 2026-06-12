@@ -56,6 +56,11 @@ public interface ISysTenantService extends IService<SysTenant> {
     IPage<SysUser> selectTenantUsers(Long tenantId, SysUserQuery query);
 
     /**
+     * 将用户移出租户。
+     */
+    boolean removeTenantUser(Long tenantId, Long userId);
+
+    /**
      * 切换当前登录租户
      */
     LoginUser switchTenant(Long tenantId);

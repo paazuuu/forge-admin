@@ -335,7 +335,7 @@ async function createField() {
     const createdCode = res.data?.fieldCode || ''
     createVisible.value = false
     message.success('字段已创建')
-    await reloadFields()
+    await reloadFields({ persisted: true, reloadDesigner: true })
     if (createdCode)
       openPropertyPanel(createdCode)
   }
@@ -358,7 +358,7 @@ async function duplicateField(field) {
   const res = await createBusinessObjectField(props.objectId, payload)
   const createdCode = res.data?.fieldCode || ''
   message.success('字段已复制')
-  await reloadFields()
+  await reloadFields({ persisted: true, reloadDesigner: true })
   if (createdCode)
     openPropertyPanel(createdCode)
 }
@@ -368,9 +368,8 @@ async function patchField(field, patch) {
     return
   saving.value = true
   try {
-    const res = await updateBusinessObjectField(props.objectId, field.fieldCode, normalizeFieldPayload({ ...field, ...patch }))
-    mergeField(res.data || { ...field, ...patch })
-    emit('updated', orderedFields.value)
+    await updateBusinessObjectField(props.objectId, field.fieldCode, normalizeFieldPayload({ ...field, ...patch }))
+    await reloadFields({ persisted: true, reloadDesigner: true })
   }
   finally {
     saving.value = false
@@ -402,13 +401,12 @@ async function saveField(payload, targetFieldCode = selectedFieldCode.value) {
   try {
     const res = await updateBusinessObjectField(props.objectId, fieldCode, normalizeFieldPayload(payload))
     const savedField = res.data || payload
-    mergeField(savedField)
     if (savedField.fieldCode && savedField.fieldCode !== selectedFieldCode.value)
       selectedFieldCode.value = savedField.fieldCode
     propertyPanelRef.value?.resetForm?.()
     emit('dirtyChange', false)
     message.success('字段已保存')
-    await reloadFields()
+    await reloadFields({ persisted: true, reloadDesigner: true })
     return true
   }
   finally {
@@ -454,7 +452,7 @@ async function deleteField(field) {
   message.success('字段已隐藏')
   if (selectedFieldCode.value === field.fieldCode)
     closePropertyPanel(true)
-  await reloadFields()
+  await reloadFields({ persisted: true, reloadDesigner: true })
 }
 
 async function moveField(from, to) {
@@ -469,7 +467,7 @@ async function moveField(from, to) {
   if (!props.objectId)
     return
   await sortBusinessObjectFields(props.objectId, localFields.value.map(field => field.fieldCode).filter(Boolean))
-  emit('updated', orderedFields.value)
+  emit('updated', orderedFields.value, { persisted: true, reloadDesigner: true })
 }
 
 function moveFilteredField(from, to) {
@@ -482,20 +480,14 @@ function moveFilteredField(from, to) {
   moveField(sourceIndex, targetIndex)
 }
 
-async function reloadFields() {
+async function reloadFields(options = {}) {
   if (!props.objectId)
     return
   const res = await businessObjectFields(props.objectId)
   localFields.value = cloneValue(res.data || [])
   if (selectedFieldCode.value && !visibleFields.value.some(field => field.fieldCode === selectedFieldCode.value))
     closePropertyPanel(true)
-  emit('updated', orderedFields.value)
-}
-
-function mergeField(field) {
-  const index = localFields.value.findIndex(item => item.fieldCode === field.fieldCode)
-  if (index >= 0)
-    localFields.value.splice(index, 1, { ...localFields.value[index], ...field })
+  emit('updated', orderedFields.value, options)
 }
 
 function createDefaultCreateForm() {

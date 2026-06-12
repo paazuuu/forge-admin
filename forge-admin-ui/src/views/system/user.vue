@@ -1018,19 +1018,60 @@ function resolveOperationTenantId(row = currentUser.value) {
     || userStore.userInfo?.tenantId
 }
 
+function normalizeOrgTreeNodes(list = []) {
+  return (list || []).map(item => ({
+    ...item,
+    children: Array.isArray(item.children) ? normalizeOrgTreeNodes(item.children) : [],
+  }))
+}
+
+async function fetchOrgRootNodes(tenantId) {
+  const res = await request.get('/system/org/lazyTree', {
+    params: {
+      parentId: 0,
+      ...buildTenantParams(tenantId),
+    },
+  })
+  if (res.code !== 200)
+    return []
+  return normalizeOrgTreeNodes(res.data || [])
+}
+
+async function fetchOrgChildrenNodes(parentId, tenantId) {
+  const res = await request.get(`/system/org/children/${parentId}`, {
+    params: buildTenantParams(tenantId),
+  })
+  if (res.code !== 200)
+    return []
+  return normalizeOrgTreeNodes(res.data || [])
+}
+
+async function hydrateOrgTreeNodes(nodes, tenantId) {
+  await Promise.all((nodes || []).map(async (node) => {
+    if (!node?.hasChildren) {
+      node.children = Array.isArray(node.children) ? node.children : []
+      return
+    }
+    const children = await fetchOrgChildrenNodes(node.id, tenantId)
+    node.children = children
+    if (children.length > 0)
+      await hydrateOrgTreeNodes(children, tenantId)
+  }))
+}
+
+async function loadCompleteOrgTree(tenantId) {
+  const roots = await fetchOrgRootNodes(tenantId)
+  await hydrateOrgTreeNodes(roots, tenantId)
+  return roots
+}
+
 // 加载左侧组织树
 async function loadLeftOrgTree(tenantId) {
   try {
     leftOrgTreeLoading.value = true
-    const res = await request.get('/system/org/tree', {
-      params: buildTenantParams(tenantId),
-    })
-    if (res.code === 200) {
-      leftOrgTreeData.value = res.data || []
-      if (leftOrgExpandAll.value) {
-        leftOrgExpandedKeys.value = getAllKeys(leftOrgTreeData.value)
-      }
-    }
+    leftOrgTreeData.value = await loadCompleteOrgTree(tenantId)
+    if (leftOrgExpandAll.value)
+      leftOrgExpandedKeys.value = getAllKeys(leftOrgTreeData.value)
 
     // 同时加载行政区划选项
     await loadRegionOptions()
@@ -1483,15 +1524,9 @@ async function handleOrg(row) {
 async function loadOrgTree(tenantId = resolveOperationTenantId()) {
   try {
     orgLoading.value = true
-    const res = await request.get('/system/org/tree', {
-      params: buildTenantParams(tenantId),
-    })
-    if (res.code === 200) {
-      orgTreeData.value = res.data || []
-      if (orgTreeExpandAll.value) {
-        orgTreeExpandedKeys.value = getAllKeys(orgTreeData.value)
-      }
-    }
+    orgTreeData.value = await loadCompleteOrgTree(tenantId)
+    if (orgTreeExpandAll.value)
+      orgTreeExpandedKeys.value = getAllKeys(orgTreeData.value)
   }
   catch (error) {
     console.error('加载组织列表失败:', error)

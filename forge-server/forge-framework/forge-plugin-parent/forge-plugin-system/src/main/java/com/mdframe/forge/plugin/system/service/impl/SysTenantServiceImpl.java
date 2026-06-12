@@ -10,9 +10,15 @@ import com.mdframe.forge.plugin.system.dto.SysTenantQuery;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.entity.SysUserOrg;
+import com.mdframe.forge.plugin.system.entity.SysUserPost;
+import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
 import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserPostMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.plugin.system.service.ISysTenantService;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -23,10 +29,12 @@ import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 租户Service实现类
@@ -40,6 +48,9 @@ public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant
     private final SysTenantMapper tenantMapper;
     private final SysUserMapper userMapper;
     private final SysUserTenantMapper userTenantMapper;
+    private final SysUserRoleMapper userRoleMapper;
+    private final SysUserOrgMapper userOrgMapper;
+    private final SysUserPostMapper userPostMapper;
     private final IUserLoadService userLoadService;
 
     @Override
@@ -117,6 +128,89 @@ public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant
         userQuery.setTenantId(tenantId);
         Page<SysUser> page = new Page<>(userQuery.getPageNum(), userQuery.getPageSize());
         return TenantContextHolder.executeIgnore(() -> userMapper.selectUserPage(page, userQuery));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean removeTenantUser(Long tenantId, Long userId) {
+        if (tenantId == null) {
+            throw new RuntimeException("租户ID不能为空");
+        }
+        if (userId == null) {
+            throw new RuntimeException("用户ID不能为空");
+        }
+        assertCanAccessTenant(tenantId);
+
+        LoginUser loginUser = requireLoginUser();
+        if (Objects.equals(loginUser.getUserId(), userId) && Objects.equals(loginUser.getTenantId(), tenantId)) {
+            throw new RuntimeException("不能将当前登录用户移出当前租户");
+        }
+
+        SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        SysUserTenant binding = TenantContextHolder.executeIgnore(() ->
+                userTenantMapper.selectOne(new LambdaQueryWrapper<SysUserTenant>()
+                        .eq(SysUserTenant::getUserId, userId)
+                        .eq(SysUserTenant::getTenantId, tenantId)
+                        .last("LIMIT 1")));
+        if (binding == null) {
+            throw new RuntimeException("用户未绑定该租户");
+        }
+        assertTenantUserRemovable(loginUser, user, binding, tenantId);
+
+        return TenantContextHolder.executeIgnore(() -> {
+            userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
+                    .eq(SysUserRole::getUserId, userId)
+                    .eq(SysUserRole::getTenantId, tenantId));
+            userOrgMapper.delete(new LambdaQueryWrapper<SysUserOrg>()
+                    .eq(SysUserOrg::getUserId, userId)
+                    .eq(SysUserOrg::getTenantId, tenantId));
+            userPostMapper.delete(new LambdaQueryWrapper<SysUserPost>()
+                    .eq(SysUserPost::getUserId, userId)
+                    .eq(SysUserPost::getTenantId, tenantId));
+
+            int deleted = userTenantMapper.delete(new LambdaQueryWrapper<SysUserTenant>()
+                    .eq(SysUserTenant::getUserId, userId)
+                    .eq(SysUserTenant::getTenantId, tenantId));
+            if (deleted <= 0) {
+                return false;
+            }
+
+            List<SysUserTenant> remainingBindings = userTenantMapper.selectList(new LambdaQueryWrapper<SysUserTenant>()
+                    .eq(SysUserTenant::getUserId, userId)
+                    .eq(SysUserTenant::getStatus, 1)
+                    .orderByDesc(SysUserTenant::getIsDefault)
+                    .orderByAsc(SysUserTenant::getTenantId));
+            if (remainingBindings.isEmpty()) {
+                userMapper.deleteById(userId);
+                return true;
+            }
+
+            SysUserTenant nextDefault = remainingBindings.stream()
+                    .filter(item -> Objects.equals(item.getIsDefault(), 1))
+                    .findFirst()
+                    .orElse(remainingBindings.get(0));
+            if (!Objects.equals(nextDefault.getIsDefault(), 1)) {
+                SysUserTenant resetDefault = new SysUserTenant();
+                resetDefault.setIsDefault(0);
+                userTenantMapper.update(resetDefault, new LambdaQueryWrapper<SysUserTenant>()
+                        .eq(SysUserTenant::getUserId, userId));
+
+                nextDefault.setIsDefault(1);
+                userTenantMapper.updateById(nextDefault);
+            }
+
+            if (Objects.equals(binding.getIsDefault(), 1) || Objects.equals(user.getTenantId(), tenantId)) {
+                SysUser updateUser = new SysUser();
+                updateUser.setId(userId);
+                updateUser.setTenantId(nextDefault.getTenantId());
+                userMapper.updateById(updateUser);
+            }
+            return true;
+        });
     }
 
     @Override
@@ -233,5 +327,20 @@ public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant
                         .eq(SysUserTenant::getTenantId, tenantId)
                         .eq(SysUserTenant::getStatus, 1)));
         return count != null && count > 0;
+    }
+
+    private void assertTenantUserRemovable(LoginUser loginUser, SysUser user, SysUserTenant binding, Long tenantId) {
+        if (loginUser == null || loginUser.isAdmin()) {
+            return;
+        }
+        if (user.getUserType() != null && user.getUserType() == 0) {
+            throw new RuntimeException("无权操作超级管理员");
+        }
+        if (!Objects.equals(loginUser.getTenantId(), tenantId)) {
+            throw new RuntimeException("无权访问该租户");
+        }
+        if (binding.getMemberType() != null && binding.getMemberType() != 2) {
+            throw new RuntimeException("租户管理员只能维护普通用户");
+        }
     }
 }
