@@ -1,3 +1,5 @@
+import { resolveStaticUrl } from '@/utils/assets'
+
 const DEFAULT_OPTIONS = {
   title: '提示',
   description: '',
@@ -34,13 +36,14 @@ function normalizeOptions(options = {}) {
 }
 
 function createIcon(icon) {
+  const iconUrl = resolveStaticUrl(ICON_MAP[icon] || ICON_MAP.info)
   const iconNode = document.createElement('div')
   iconNode.className = 'forge-dialog__icon'
 
   const mask = document.createElement('span')
   mask.className = 'forge-dialog__icon-mask'
-  mask.style.webkitMask = `url(${ICON_MAP[icon] || ICON_MAP.info}) center / contain no-repeat`
-  mask.style.mask = `url(${ICON_MAP[icon] || ICON_MAP.info}) center / contain no-repeat`
+  mask.style.webkitMask = `url(${iconUrl}) center / contain no-repeat`
+  mask.style.mask = `url(${iconUrl}) center / contain no-repeat`
   iconNode.appendChild(mask)
 
   return iconNode

@@ -39,6 +39,22 @@ export function buildLoginUrl(redirect = getCurrentRoutePath()) {
   return buildUrl(LOGIN_PAGE, redirect ? { redirect } : {})
 }
 
+function callUniRoute(method, options = {}, fallbackMethod = 'reLaunch') {
+  if (typeof uni !== 'undefined' && typeof uni?.[method] === 'function') {
+    uni[method](options)
+    return
+  }
+
+  if (fallbackMethod && fallbackMethod !== method && typeof uni !== 'undefined' && typeof uni?.[fallbackMethod] === 'function') {
+    uni[fallbackMethod](options)
+    return
+  }
+
+  if (typeof window !== 'undefined' && options.url) {
+    window.location.href = options.url
+  }
+}
+
 export function safeNavigateBack(options = {}) {
   const {
     delta = 1,
@@ -60,12 +76,12 @@ export function safeNavigateBack(options = {}) {
       ? 'redirectTo'
       : 'switchTab'
 
-  uni[method]({
+  callUniRoute(method, {
     url: fallback,
     success,
     fail: (error) => {
       if (method !== 'reLaunch') {
-        uni.reLaunch({ url: fallback, success, fail })
+        callUniRoute('reLaunch', { url: fallback, success, fail })
         return
       }
       fail?.(error)
@@ -79,7 +95,7 @@ export function redirectToLogin(options = {}) {
     method = 'reLaunch',
   } = options
   const url = buildLoginUrl(redirect)
-  uni[method]({ url })
+  callUniRoute(method, { url }, 'redirectTo')
 }
 
 export function navigateWithLogin(url, options = {}) {
@@ -95,10 +111,10 @@ export function navigateWithLogin(url, options = {}) {
     return false
   }
 
-  uni[method]({
+  callUniRoute(method, {
     url,
     fail: () => {
-      uni.navigateTo({ url })
+      callUniRoute('navigateTo', { url })
     },
   })
   return true

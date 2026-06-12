@@ -40,6 +40,12 @@ export const useAuthStore = defineStore('auth', {
     setUserInfo(userInfo) {
       this.userInfo = userInfo || null
     },
+    patchUserInfo(userInfo = {}) {
+      this.userInfo = {
+        ...(this.userInfo || {}),
+        ...userInfo,
+      }
+    },
     setMenus(menus) {
       this.menus = Array.isArray(menus) ? menus : []
     },

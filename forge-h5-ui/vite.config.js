@@ -13,9 +13,10 @@ const uni = uniPlugin.default
 
 export default defineConfig(({ mode }) => {
   const viteEnv = loadEnv(mode, process.cwd())
-  const { VITE_HTTP_PORT, VITE_REQUEST_PREFIX, VITE_PUBLIC_PATH, VITE_HTTP_PROXY_TARGET } = viteEnv
+  const { VITE_HTTP_PORT, VITE_REQUEST_PREFIX, VITE_PUBLIC_PATH, VITE_HTTP_PROXY_TARGET, VITE_FLOW_PROXY_TARGET } = viteEnv
   const requestPrefix = VITE_REQUEST_PREFIX || '/dev-api'
   const proxyTarget = VITE_HTTP_PROXY_TARGET || 'http://127.0.0.1:8581/'
+  const flowProxyTarget = VITE_FLOW_PROXY_TARGET || proxyTarget
 
   return {
     base: VITE_PUBLIC_PATH || '/',
@@ -54,6 +55,18 @@ export default defineConfig(({ mode }) => {
       open: false,
       host: '0.0.0.0',
       proxy: {
+        // Flowable 流程服务代理：待办、审批、流程历史等接口默认走独立 flow-server。
+        [`${requestPrefix}/api/flow`]: {
+          target: flowProxyTarget,
+          changeOrigin: true,
+          secure: false,
+          rewrite: path => path.replace(new RegExp(`^${requestPrefix}`), ''),
+          configure: (proxy, options) => {
+            proxy.on('proxyRes', (proxyRes, req) => {
+              proxyRes.headers['x-real-url'] = new URL(req.url || '', options.target)?.href || ''
+            })
+          },
+        },
         // Forge App 服务代理：H5 登录、用户信息、验证码等基础接口默认走 app-server。
         [requestPrefix]: {
           target: proxyTarget,

@@ -6,7 +6,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import logoUrl from '@/static/logo.png'
+import { DEFAULT_AVATAR_URL } from '@/utils/file'
 
 const props = defineProps({
   src: {
@@ -26,7 +26,7 @@ const props = defineProps({
 })
 
 const failed = ref(false)
-const currentSrc = computed(() => (!props.src || failed.value) ? logoUrl : props.src)
+const currentSrc = computed(() => (!props.src || failed.value) ? DEFAULT_AVATAR_URL : props.src)
 
 watch(() => props.src, () => {
   failed.value = false

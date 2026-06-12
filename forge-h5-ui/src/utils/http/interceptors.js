@@ -1,5 +1,7 @@
 import { resolveResError } from './helpers'
 import { useAuthStore } from '@/store'
+import { decryptResponse, encryptRequest, shouldEncrypt } from '@/utils/crypto'
+import { initKeyExchange, resetKeyExchange } from '@/utils/crypto/key-exchange'
 
 let refreshTokenPromise = null
 
@@ -43,12 +45,20 @@ export function setupInterceptors(axiosInstance) {
     })
   }
 
+  function expireAuth(code, message, error) {
+    useAuthStore().resetAuth()
+    const finalMessage = resolveResError(code, message || '登录已过期，请重新登录', true)
+    return {
+      code,
+      message: finalMessage || message || '登录已过期，请重新登录',
+      error,
+    }
+  }
+
   async function handleAuthExpired(errorInfo, originalConfig) {
-    const { code, message, needTip = true } = errorInfo || {}
+    const { code, message } = errorInfo || {}
     if (originalConfig?.skipAuthRefresh || originalConfig?._retry) {
-      useAuthStore().resetAuth()
-      const finalMessage = resolveResError(code, message, needTip)
-      return Promise.reject({ code, message: finalMessage, error: errorInfo?.error })
+      return Promise.reject(expireAuth(code, message, errorInfo?.error))
     }
 
     try {
@@ -58,9 +68,7 @@ export function setupInterceptors(axiosInstance) {
       }
     }
     catch (refreshError) {
-      useAuthStore().resetAuth()
-      const finalMessage = resolveResError(code, message, needTip)
-      return Promise.reject({ code, message: finalMessage, error: refreshError })
+      return Promise.reject(expireAuth(code, message, refreshError))
     }
 
     return Promise.reject(errorInfo)
@@ -70,6 +78,17 @@ export function setupInterceptors(axiosInstance) {
    * 响应成功拦截器
    */
   function resResolve(response) {
+    try {
+      response = decryptResponse(response)
+    }
+    catch (error) {
+      if (error.message === 'DECRYPT_ERROR') {
+        resetKeyExchange()
+        return Promise.reject({ code: 401, message: '安全会话已过期，请重新操作', error, skipErrorHandler: true })
+      }
+      return Promise.reject({ code: 500, message: '解密数据失败', error, skipErrorHandler: true })
+    }
+
     const { data, status, config, statusText, headers } = response
 
     // 处理JSON响应
@@ -152,14 +171,14 @@ export function setupInterceptors(axiosInstance) {
     })
   }
 
-  axiosInstance.interceptors.request.use(reqResolve, reqReject)
+  axiosInstance.interceptors.request.use(config => reqResolve(config, axiosInstance), reqReject)
   axiosInstance.interceptors.response.use(resResolve, resReject)
 }
 
 /**
  * 请求拦截器
  */
-function reqResolve(config) {
+async function reqResolve(config, axiosInstance) {
   const authStore = useAuthStore()
 
   // 设置默认headers
@@ -173,6 +192,15 @@ function reqResolve(config) {
   if (config.needToken !== false && authStore.accessToken) {
     config.headers.Authorization = `${authStore.tokenType || 'Bearer'} ${authStore.accessToken}`
   }
+
+  if (config.encrypt === true || shouldEncrypt(config.url)) {
+    const exchanged = await initKeyExchange(axiosInstance, authStore.accessToken || '')
+    if (!exchanged) {
+      return Promise.reject({ code: 'CRYPTO_EXCHANGE_FAILED', message: '安全通道初始化失败', config })
+    }
+  }
+
+  config = encryptRequest(config)
 
   return config
 }

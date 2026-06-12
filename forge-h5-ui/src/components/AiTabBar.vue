@@ -18,6 +18,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { resolveStaticUrl } from '@/utils/assets'
 
 const props = defineProps({
   active: {
@@ -58,7 +59,7 @@ onShow(() => {
 })
 
 function hideNativeTabBar() {
-  if (typeof uni?.hideTabBar !== 'function') {
+  if (typeof uni === 'undefined' || typeof uni.hideTabBar !== 'function') {
     return
   }
   uni.hideTabBar({
@@ -68,10 +69,11 @@ function hideNativeTabBar() {
 }
 
 function iconMask(icon, color) {
+  const url = resolveStaticUrl(icon)
   return {
     backgroundColor: color,
-    WebkitMask: `url(${icon}) center / contain no-repeat`,
-    mask: `url(${icon}) center / contain no-repeat`,
+    WebkitMask: `url(${url}) center / contain no-repeat`,
+    mask: `url(${url}) center / contain no-repeat`,
   }
 }
 
@@ -87,12 +89,12 @@ function handleTabClick(tab) {
 .ai-tabbar-host {
   position: fixed;
   right: 0;
-  bottom: calc(32rpx + env(safe-area-inset-bottom));
+  bottom: calc(28rpx + env(safe-area-inset-bottom));
   left: 0;
   z-index: 80;
   display: flex;
   justify-content: center;
-  padding: 28rpx 48rpx 0;
+  padding: 20rpx 48rpx 0;
   pointer-events: none;
   animation: tabbarEnter 0.42s ease both;
 }
@@ -119,7 +121,7 @@ function handleTabClick(tab) {
   flex: 1;
   align-items: center;
   justify-content: center;
-  height: 88rpx;
+  height: 80rpx;
   margin: 0;
   padding: 0;
   border: 0;

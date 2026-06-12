@@ -14,7 +14,7 @@
       :style="{ background: iconBg }"
     >
       <slot name="icon">
-        <image v-if="icon" class="ai-cell__icon-image" :src="icon" mode="aspectFit" />
+        <image v-if="icon" class="ai-cell__icon-image" :src="resolvedIcon" mode="aspectFit" />
       </slot>
     </view>
 
@@ -33,6 +33,9 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { resolveStaticUrl } from '@/utils/assets'
+
 const props = defineProps({
   title: {
     type: String,
@@ -67,6 +70,8 @@ const props = defineProps({
     default: false
   }
 })
+
+const resolvedIcon = computed(() => resolveStaticUrl(props.icon))
 
 const emit = defineEmits(['click'])
 
