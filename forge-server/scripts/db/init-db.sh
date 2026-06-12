@@ -111,7 +111,7 @@ run_sql_dir() {
 }
 
 if [[ "$SKIP_ADMIN_INIT" != "true" ]]; then
-  run_sql_file "$FORGE_DIR/forge-admin-server/sql/初始化脚本.sql"
+  run_sql_file "$FORGE_DIR/db/全量初始化SQL.sql"
 fi
 run_sql_dir "$FORGE_DIR/db/seed/required"
 

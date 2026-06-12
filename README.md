@@ -336,25 +336,6 @@ bash forge/scripts/db/init-db.sh \
   --with-demo
 ```
 
-也可以手动执行 SQL：
-
-```bash
-# 创建数据库
-mysql -u root -p -e "CREATE DATABASE forge DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
-
-# 后台管理基础表
-mysql -u root -p forge < forge/forge-admin-server/sql/初始化脚本.sql
-
-# 数据库迁移脚本
-find forge/db/migration -maxdepth 1 -type f -name '*.sql' | sort | while read file; do mysql -u root -p forge < "$file"; done
-
-# 必需初始化数据
-find forge/db/seed/required -maxdepth 1 -type f -name '*.sql' | sort | while read file; do mysql -u root -p forge < "$file"; done
-
-# 如果启用 AI 大屏，再导入报表服务表
-mysql -u root -p forge < forge/forge-report-server/sql/report-init.sql
-```
-
 数据库变更规范：
 
 - 表结构、字段、索引、系统资源等正式变更统一新增到 `forge/db/migration/`。
