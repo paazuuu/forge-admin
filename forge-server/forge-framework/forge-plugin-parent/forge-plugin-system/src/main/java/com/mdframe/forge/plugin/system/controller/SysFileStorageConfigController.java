@@ -9,6 +9,7 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,7 +34,11 @@ public class SysFileStorageConfigController {
     @GetMapping("/page")
     public RespInfo<Page<SysFileStorageConfig>> page(PageQuery query, SysFileStorageConfig condition) {
         assertPlatformAdmin();
-        return RespInfo.success(storageConfigService.page(query, condition));
+        Page<SysFileStorageConfig> page = storageConfigService.page(query, condition);
+        if (page.getRecords() != null) {
+            page.getRecords().forEach(this::maskCredentialFields);
+        }
+        return RespInfo.success(page);
     }
     
     /**
@@ -42,7 +47,7 @@ public class SysFileStorageConfigController {
     @PostMapping("/detail")
     public RespInfo<SysFileStorageConfig> detail(@RequestParam Long id) {
         assertPlatformAdmin();
-        return RespInfo.success(storageConfigService.getById(id));
+        return RespInfo.success(maskCredentialFields(storageConfigService.getById(id)));
     }
     
     /**
@@ -148,5 +153,14 @@ public class SysFileStorageConfigController {
         safe.setMaxFileSize(config.getMaxFileSize());
         safe.setAllowedTypes(config.getAllowedTypes());
         return safe;
+    }
+
+    private SysFileStorageConfig maskCredentialFields(SysFileStorageConfig config) {
+        if (config == null) {
+            return null;
+        }
+        config.setAccessKey(SensitiveDataUtil.maskSensitiveValue("accessKey", config.getAccessKey()));
+        config.setSecretKey(SensitiveDataUtil.maskSensitiveValue("secretKey", config.getSecretKey()));
+        return config;
     }
 }

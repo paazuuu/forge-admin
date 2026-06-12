@@ -150,7 +150,7 @@ const editSchema = computed(() => [
     type: 'input',
     rules: [{ required: true, message: '请输入参数键名', trigger: 'blur' }],
     props: {
-      placeholder: '请输入参数键名，如：sys.user.initPassword',
+      placeholder: '请输入参数键名，如：sys.login.timeout',
     },
   },
   {

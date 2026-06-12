@@ -134,6 +134,7 @@ public class UserLoadServiceImpl implements IUserLoadService {
         loginUser.setEmail(user.getEmail());
         loginUser.setAvatar(user.getAvatar());
         loginUser.setUserStatus(user.getUserStatus());
+        loginUser.setForcePasswordChange(Boolean.TRUE.equals(user.getForcePasswordChange()));
         loginUser.setCreateTime(user.getCreateTime());
         loginUser.setTenantIds(loadAvailableTenantIds(user));
 

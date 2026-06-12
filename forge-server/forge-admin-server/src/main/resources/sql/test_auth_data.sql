@@ -124,7 +124,7 @@ VALUES
 -- 11. 插入系统配置
 INSERT INTO sys_config (config_id, tenant_id, config_name, config_key, config_value, config_type, config_desc, sort, create_time, update_time)
 VALUES 
-(1, 1, '用户初始密码', 'sys.user.initPassword', '123456', 'Y', '用户注册时的默认密码', 1, NOW(), NOW()),
+(1, 1, '用户初始密码', 'sys.user.initPassword', '', 'N', '已因安全加固停用，新增/重置用户必须首次登录修改密码', 1, NOW(), NOW()),
 (2, 1, '账号自助注册', 'sys.account.registerUser', 'false', 'Y', '是否开启用户自助注册功能', 2, NOW(), NOW());
 
 -- 12. 插入字典类型

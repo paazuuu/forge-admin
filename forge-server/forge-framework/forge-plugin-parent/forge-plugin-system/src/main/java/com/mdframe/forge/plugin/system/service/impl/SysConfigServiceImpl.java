@@ -10,6 +10,7 @@ import com.mdframe.forge.plugin.system.entity.SysConfig;
 import com.mdframe.forge.plugin.system.mapper.SysConfigMapper;
 import com.mdframe.forge.plugin.system.service.ISysConfigService;
 import com.mdframe.forge.starter.core.domain.PageQuery;
+import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
 import com.mdframe.forge.starter.trans.annotation.DictTranslate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -82,6 +83,7 @@ public class SysConfigServiceImpl extends ServiceImpl<SysConfigMapper, SysConfig
     public boolean updateConfig(SysConfigDTO dto) {
         SysConfig config = new SysConfig();
         BeanUtil.copyProperties(dto, config);
+        preserveMaskedSensitiveValue(dto, config);
         return configMapper.updateById(config) > 0;
     }
 
@@ -93,5 +95,16 @@ public class SysConfigServiceImpl extends ServiceImpl<SysConfigMapper, SysConfig
     @Override
     public boolean deleteConfigByIds(Long[] configIds) {
         return configMapper.deleteBatchIds(Arrays.asList(configIds)) > 0;
+    }
+
+    private void preserveMaskedSensitiveValue(SysConfigDTO dto, SysConfig config) {
+        if (dto == null || config == null || !SensitiveDataUtil.isMaskedValue(dto.getConfigValue())) {
+            return;
+        }
+        SysConfig existing = dto.getConfigId() == null ? null : configMapper.selectById(dto.getConfigId());
+        String configKey = StringUtils.defaultIfBlank(dto.getConfigKey(), existing == null ? null : existing.getConfigKey());
+        if (existing != null && SensitiveDataUtil.isSensitiveKey(configKey)) {
+            config.setConfigValue(existing.getConfigValue());
+        }
     }
 }

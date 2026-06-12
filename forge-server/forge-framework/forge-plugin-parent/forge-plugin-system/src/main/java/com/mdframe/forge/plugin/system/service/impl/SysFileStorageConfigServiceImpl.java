@@ -8,6 +8,7 @@ import com.mdframe.forge.plugin.system.entity.SysFileStorageConfig;
 import com.mdframe.forge.plugin.system.mapper.SysFileStorageConfigMapper;
 import com.mdframe.forge.plugin.system.service.ISysFileStorageConfigService;
 import com.mdframe.forge.starter.core.domain.PageQuery;
+import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
 import com.mdframe.forge.starter.file.core.FileManager;
 import com.mdframe.forge.starter.file.model.StorageConfig;
 import com.mdframe.forge.starter.file.spi.StorageConfigProvider;
@@ -159,6 +160,7 @@ public class SysFileStorageConfigServiceImpl extends ServiceImpl<SysFileStorageC
 
     @Override
     public boolean updateById(SysFileStorageConfig entity) {
+        preserveMaskedCredentials(entity);
         boolean success = super.updateById(entity);
         configProvider.refreshConfig();
         fileManager.refreshConfiguredStorages();
@@ -193,5 +195,26 @@ public class SysFileStorageConfigServiceImpl extends ServiceImpl<SysFileStorageC
         config.setOrderNum(entity.getOrderNum());
         config.setExtraConfig(entity.getExtraConfig());
         return config;
+    }
+
+    private void preserveMaskedCredentials(SysFileStorageConfig entity) {
+        if (entity == null || entity.getId() == null) {
+            return;
+        }
+        boolean accessKeyMasked = SensitiveDataUtil.isMaskedValue(entity.getAccessKey());
+        boolean secretKeyMasked = SensitiveDataUtil.isMaskedValue(entity.getSecretKey());
+        if (!accessKeyMasked && !secretKeyMasked) {
+            return;
+        }
+        SysFileStorageConfig existing = this.getById(entity.getId());
+        if (existing == null) {
+            return;
+        }
+        if (accessKeyMasked) {
+            entity.setAccessKey(existing.getAccessKey());
+        }
+        if (secretKeyMasked) {
+            entity.setSecretKey(existing.getSecretKey());
+        }
     }
 }

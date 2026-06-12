@@ -2,12 +2,15 @@ package com.mdframe.forge.starter.auth.interceptor;
 
 import cn.dev33.satoken.annotation.SaIgnore;
 import cn.dev33.satoken.exception.NotPermissionException;
+import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.StrUtil;
 import com.mdframe.forge.starter.apiconfig.domain.dto.ApiConfigInfo;
 import com.mdframe.forge.starter.apiconfig.service.IApiConfigManager;
 import com.mdframe.forge.starter.core.context.AuthProperties;
 import com.mdframe.forge.starter.auth.service.IPermissionService;
 import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -25,24 +28,33 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @RequiredArgsConstructor
 public class ApiPermissionInterceptor implements HandlerInterceptor {
 
+    private static final java.util.Set<String> PASSWORD_CHANGE_ALLOW_PATHS = java.util.Set.of(
+            "/auth/userInfo",
+            "/auth/changePassword",
+            "/auth/logout",
+            "/crypto/public-key",
+            "/crypto/exchange"
+    );
+
     private final IPermissionService permissionService;
     private final AuthProperties authProperties;
     private final IApiConfigManager apiConfigManager;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 0. 检查是否启用API权限校验
-        if (authProperties.getEnableApiPermission() == null || !authProperties.getEnableApiPermission()) {
-            log.debug("API权限校验已禁用");
-            return true;
-        }
-
         // 1. 只拦截Controller方法
         if (!(handler instanceof HandlerMethod)) {
             return true;
         }
 
         HandlerMethod handlerMethod = (HandlerMethod) handler;
+        enforcePasswordChange(request);
+
+        // 0. 检查是否启用API权限校验
+        if (authProperties.getEnableApiPermission() == null || !authProperties.getEnableApiPermission()) {
+            log.debug("API权限校验已禁用");
+            return true;
+        }
         
         ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
         if (apiConfig != null && !apiConfig.getNeedAuth()) {
@@ -89,5 +101,31 @@ public class ApiPermissionInterceptor implements HandlerInterceptor {
 
         log.debug("接口权限校验通过: uri={}", requestUri);
         return true;
+    }
+
+    private void enforcePasswordChange(HttpServletRequest request) {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return;
+        }
+        if (!StpUtil.isLogin()) {
+            return;
+        }
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null || !Boolean.TRUE.equals(loginUser.getForcePasswordChange())) {
+            return;
+        }
+
+        String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (StrUtil.isNotBlank(contextPath)) {
+            requestUri = requestUri.substring(contextPath.length());
+        }
+
+        if (PASSWORD_CHANGE_ALLOW_PATHS.contains(requestUri)) {
+            return;
+        }
+
+        log.warn("强制改密用户访问被拦截: userId={}, uri={}", loginUser.getUserId(), requestUri);
+        throw new NotPermissionException("当前账号必须先修改初始密码");
     }
 }

@@ -758,6 +758,7 @@ async function onLoginSuccess(data = {}) {
   // 如果返回了用户信息，设置到用户存储中
   if (data.userInfo) {
     const loginUser = data.userInfo
+    loginUser.forcePasswordChange = data.forcePasswordChange === true || loginUser.forcePasswordChange === true
     userStore.setUser({
       id: loginUser.userId,
       username: loginUser.username,
@@ -767,6 +768,7 @@ async function onLoginSuccess(data = {}) {
       avatar: loginUser.avatar,
       userType: loginUser.userType,
       userStatus: loginUser.userStatus,
+      forcePasswordChange: loginUser.forcePasswordChange,
       tenantId: loginUser.tenantId,
       tenantName: loginUser.tenantName,
       tenantIds: loginUser.tenantIds || [],
@@ -782,6 +784,13 @@ async function onLoginSuccess(data = {}) {
 
     // 同时存储到localStorage用于持久化
     lStorage.set('userInfo', loginUser)
+  }
+
+  const mustChangePassword = data.forcePasswordChange === true || data.userInfo?.forcePasswordChange === true
+  if (mustChangePassword) {
+    $message.warning('当前账号必须先修改初始密码', { key: 'login' })
+    router.push('/profile')
+    return
   }
 
   $message.loading('登录中...', { key: 'login' })

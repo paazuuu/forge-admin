@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -33,6 +34,13 @@ import java.util.Map;
 @ApiEncrypt
 @ApiPermissionIgnore
 public class SysCacheController {
+
+    private static final List<String> SENSITIVE_CACHE_PREFIXES = List.of(
+            "crypto:session:",
+            "authorization:login:",
+            "satoken:",
+            "auth:sso:"
+    );
 
     private final ICacheService cacheService;
     private final ObjectMapper objectMapper;
@@ -57,11 +65,14 @@ public class SysCacheController {
             pattern = "*";
         }
         
-        // 获取总数
-        long total = cacheService.countKeysByPattern(pattern);
-        
-        // 获取当前页的键列表
-        List<String> keys = cacheService.getKeysByPattern(pattern, page, pageSize);
+        // 获取并过滤敏感键后再分页，避免泄露 key 名称和 value 预览。
+        List<String> allKeys = cacheService.keys(pattern).stream()
+                .filter(key -> !isSensitiveCacheKey(key))
+                .toList();
+        long total = allKeys.size();
+        int start = Math.max(0, (page - 1) * pageSize);
+        int end = Math.min(start + pageSize, allKeys.size());
+        List<String> keys = start >= allKeys.size() ? List.of() : allKeys.subList(start, end);
         
         // 构建CacheInfoDTO列表
         List<CacheInfoDTO> records = new ArrayList<>();
@@ -106,6 +117,9 @@ public class SysCacheController {
     @PostMapping("/getInfo")
     @OperationLog(module = "缓存管理", type = OperationType.QUERY, desc = "查询缓存详情")
     public RespInfo<CacheInfoDTO> getInfo(@RequestParam String key) {
+        if (isSensitiveCacheKey(key)) {
+            return RespInfo.error(403, "敏感缓存不允许通过管理接口读取");
+        }
         Map<String, Object> cacheInfo = cacheService.getCacheInfo(key);
         
         CacheInfoDTO dto = new CacheInfoDTO();
@@ -129,6 +143,9 @@ public class SysCacheController {
     @PostMapping("/remove")
     @OperationLog(module = "缓存管理", type = OperationType.DELETE, desc = "删除缓存")
     public RespInfo<Void> remove(@RequestParam String key) {
+        if (isSensitiveCacheKey(key)) {
+            return RespInfo.error(403, "敏感缓存不允许通过管理接口删除");
+        }
         boolean result = cacheService.delete(key);
         return result ? RespInfo.success() : RespInfo.error("删除失败");
     }
@@ -141,6 +158,9 @@ public class SysCacheController {
     public RespInfo<Void> removeBatch(@RequestBody String[] keys) {
         if (keys == null || keys.length == 0) {
             return RespInfo.error("请选择要删除的缓存");
+        }
+        if (Arrays.stream(keys).anyMatch(this::isSensitiveCacheKey)) {
+            return RespInfo.error(403, "敏感缓存不允许通过管理接口删除");
         }
         long count = cacheService.delete(Arrays.asList(keys));
         return count > 0 ? RespInfo.success() : RespInfo.error("批量删除失败");
@@ -155,7 +175,13 @@ public class SysCacheController {
         if (StrUtil.isBlank(pattern)) {
             pattern = "*";
         }
-        long count = cacheService.deletePattern(pattern);
+        if (isSensitiveCachePattern(pattern)) {
+            return RespInfo.error(403, "敏感缓存不允许通过管理接口清理");
+        }
+        List<String> keys = cacheService.keys(pattern).stream()
+                .filter(key -> !isSensitiveCacheKey(key))
+                .toList();
+        long count = keys.isEmpty() ? 0 : cacheService.delete(keys);
         return RespInfo.success("成功清除 " + count + " 个缓存", null);
     }
 
@@ -225,5 +251,27 @@ public class SysCacheController {
         } catch (Exception e) {
             return value.toString();
         }
+    }
+
+    private boolean isSensitiveCacheKey(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+        String normalized = key.toLowerCase(Locale.ROOT);
+        return SENSITIVE_CACHE_PREFIXES.stream().anyMatch(normalized::startsWith);
+    }
+
+    private boolean isSensitiveCachePattern(String pattern) {
+        if (StrUtil.isBlank(pattern)) {
+            return false;
+        }
+        String normalized = pattern.toLowerCase(Locale.ROOT)
+                .replace("*", "")
+                .replace("?", "");
+        if (StrUtil.isBlank(normalized)) {
+            return false;
+        }
+        return SENSITIVE_CACHE_PREFIXES.stream()
+                .anyMatch(prefix -> normalized.startsWith(prefix) || prefix.startsWith(normalized));
     }
 }

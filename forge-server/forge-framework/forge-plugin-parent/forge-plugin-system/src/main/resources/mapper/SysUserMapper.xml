@@ -22,6 +22,7 @@
         <result column="last_login_time" property="lastLoginTime" />
         <result column="last_login_ip" property="lastLoginIp" />
         <result column="login_count" property="loginCount" />
+        <result column="force_password_change" property="forcePasswordChange" />
         <result column="remark" property="remark" />
         <result column="create_dept" property="createDept" />
         <result column="org_name" property="orgName" />
@@ -55,7 +56,7 @@
         </choose>
         u.user_client, u.email, u.phone,
         u.id_card, u.gender, u.password, u.salt, u.user_status, u.avatar, u.region_code,
-        u.last_login_time, u.last_login_ip, u.login_count, u.remark, u.create_dept,
+        u.last_login_time, u.last_login_ip, u.login_count, u.force_password_change, u.remark, u.create_dept,
         u.create_by, u.create_time, u.update_by, u.update_time,
         <choose>
             <when test="query != null and query.tenantId != null">

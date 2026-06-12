@@ -18,7 +18,9 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -29,6 +31,47 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 @RequiredArgsConstructor
 public class FileManager {
+
+    private static final long DEFAULT_MAX_FILE_SIZE_MB = 100L;
+
+    private static final Set<String> DEFAULT_ALLOWED_TYPES = Set.of(
+            "jpg", "jpeg", "png", "gif", "webp", "pdf",
+            "doc", "docx", "xls", "xlsx", "txt", "csv",
+            "zip", "rar", "mp4", "mp3"
+    );
+
+    private static final Set<String> DANGEROUS_EXTENSIONS = Set.of(
+            "jsp", "jspx", "php", "asp", "aspx", "html", "htm",
+            "js", "mjs", "ts", "vue", "sh", "bash", "bat", "cmd",
+            "ps1", "exe", "dll", "so", "dylib", "jar", "war", "ear",
+            "sql", "svg"
+    );
+
+    private static final Set<String> DANGEROUS_MIME_TYPES = Set.of(
+            "text/html", "application/javascript", "text/javascript",
+            "application/x-javascript", "image/svg+xml",
+            "application/x-sh", "application/x-msdownload",
+            "application/x-msdos-program", "application/x-php"
+    );
+
+    private static final Map<String, Set<String>> EXTENSION_MIME_TYPES = Map.ofEntries(
+            Map.entry("jpg", Set.of("image/jpeg")),
+            Map.entry("jpeg", Set.of("image/jpeg")),
+            Map.entry("png", Set.of("image/png")),
+            Map.entry("gif", Set.of("image/gif")),
+            Map.entry("webp", Set.of("image/webp")),
+            Map.entry("pdf", Set.of("application/pdf")),
+            Map.entry("doc", Set.of("application/msword", "application/octet-stream")),
+            Map.entry("docx", Set.of("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip", "application/octet-stream")),
+            Map.entry("xls", Set.of("application/vnd.ms-excel", "application/octet-stream")),
+            Map.entry("xlsx", Set.of("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip", "application/octet-stream")),
+            Map.entry("txt", Set.of("text/plain", "application/octet-stream")),
+            Map.entry("csv", Set.of("text/csv", "application/vnd.ms-excel", "text/plain", "application/octet-stream")),
+            Map.entry("zip", Set.of("application/zip", "application/x-zip-compressed", "application/octet-stream")),
+            Map.entry("rar", Set.of("application/vnd.rar", "application/x-rar-compressed", "application/octet-stream")),
+            Map.entry("mp4", Set.of("video/mp4", "application/octet-stream")),
+            Map.entry("mp3", Set.of("audio/mpeg", "audio/mp3", "application/octet-stream"))
+    );
     
     private final Map<String, FileStorage> storageMap = new ConcurrentHashMap<>();
     
@@ -311,6 +354,7 @@ public class FileManager {
      * 分片上传初始化
      */
     public String initMultipartUpload(String fileName, String businessType, String businessId, String storageType) {
+        validateFileName(fileName, storageType, null);
         FileStorage storage = getStorage(storageType);
         if (storage == null) {
             throw new RuntimeException("不支持的存储类型: " + storageType);
@@ -420,32 +464,7 @@ public class FileManager {
         if (file == null || file.isEmpty()) {
             throw new RuntimeException("文件不能为空");
         }
-        
-        if (configProvider == null) {
-            return;
-        }
-        
-        StorageConfig config = configProvider.getConfigByType(storageType);
-        if (config == null) {
-            return;
-        }
-        
-        // 验证文件大小
-        if (config.getMaxFileSize() != null) {
-            long maxSize = config.getMaxFileSize() * 1024L * 1024L;
-            if (file.getSize() > maxSize) {
-                throw new RuntimeException("文件大小超过限制: " + config.getMaxFileSize() + "MB");
-            }
-        }
-        
-        // 验证文件类型
-        List<String> allowedTypes = config.getAllowedTypeList();
-        if (!allowedTypes.isEmpty()) {
-            String extension = FileUtil.getExtension(file.getOriginalFilename());
-            if (!allowedTypes.contains(extension.toLowerCase())) {
-                throw new RuntimeException("不支持的文件类型: " + extension);
-            }
-        }
+        validateFilePolicy(file.getOriginalFilename(), storageType, file.getSize(), file.getContentType());
     }
 
     private void validateFileName(String fileName, String storageType) {
@@ -453,28 +472,85 @@ public class FileManager {
     }
 
     private void validateFileName(String fileName, String storageType, Long fileSize) {
-        if (configProvider == null) {
-            return;
+        validateFilePolicy(fileName, storageType, fileSize, null);
+    }
+
+    private void validateFilePolicy(String fileName, String storageType, Long fileSize, String contentType) {
+        if (fileName == null || fileName.isBlank()) {
+            throw new RuntimeException("文件名不能为空");
         }
 
-        StorageConfig config = configProvider.getConfigByType(storageType);
-        if (config == null) {
-            return;
-        }
-
-        if (fileSize != null && fileSize >= 0 && config.getMaxFileSize() != null) {
-            long maxSize = config.getMaxFileSize() * 1024L * 1024L;
+        StorageConfig config = resolveValidationConfig(storageType);
+        long maxFileSizeMb = config != null && config.getMaxFileSize() != null && config.getMaxFileSize() > 0
+                ? config.getMaxFileSize()
+                : DEFAULT_MAX_FILE_SIZE_MB;
+        if (fileSize != null && fileSize >= 0) {
+            long maxSize = maxFileSizeMb * 1024L * 1024L;
             if (fileSize > maxSize) {
-                throw new RuntimeException("文件大小超过限制: " + config.getMaxFileSize() + "MB");
+                throw new RuntimeException("文件大小超过限制: " + maxFileSizeMb + "MB");
             }
         }
 
-        List<String> allowedTypes = config.getAllowedTypeList();
-        if (!allowedTypes.isEmpty()) {
-            String extension = FileUtil.getExtension(fileName);
-            if (!allowedTypes.contains(extension.toLowerCase())) {
-                throw new RuntimeException("不支持的文件类型: " + extension);
-            }
+        String extension = normalizeExtension(FileUtil.getExtension(fileName));
+        if (extension.isBlank()) {
+            throw new RuntimeException("文件必须包含扩展名");
+        }
+        if (DANGEROUS_EXTENSIONS.contains(extension)) {
+            throw new RuntimeException("不支持上传高风险文件类型: " + extension);
+        }
+
+        Set<String> allowedTypes = resolveAllowedTypes(config);
+        if (!allowedTypes.contains(extension)) {
+            throw new RuntimeException("不支持的文件类型: " + extension);
+        }
+
+        validateMimeType(extension, contentType);
+    }
+
+    private StorageConfig resolveValidationConfig(String storageType) {
+        if (configProvider == null) {
+            return null;
+        }
+        if (storageType != null && !storageType.isBlank()) {
+            return configProvider.getConfigByType(storageType);
+        }
+        return configProvider.getDefaultConfig();
+    }
+
+    private Set<String> resolveAllowedTypes(StorageConfig config) {
+        if (config == null || config.getAllowedTypes() == null || config.getAllowedTypes().isBlank()) {
+            return DEFAULT_ALLOWED_TYPES;
+        }
+        Set<String> configuredTypes = config.getAllowedTypeList().stream()
+                .map(this::normalizeExtension)
+                .filter(type -> !type.isBlank())
+                .filter(type -> !DANGEROUS_EXTENSIONS.contains(type))
+                .collect(java.util.stream.Collectors.toSet());
+        return configuredTypes.isEmpty() ? DEFAULT_ALLOWED_TYPES : configuredTypes;
+    }
+
+    private String normalizeExtension(String extension) {
+        if (extension == null) {
+            return "";
+        }
+        String normalized = extension.trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith(".") ? normalized.substring(1) : normalized;
+    }
+
+    private void validateMimeType(String extension, String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return;
+        }
+        String normalizedContentType = contentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+        if (DANGEROUS_MIME_TYPES.contains(normalizedContentType)) {
+            throw new RuntimeException("不支持上传高风险文件内容类型: " + normalizedContentType);
+        }
+        Set<String> expectedTypes = EXTENSION_MIME_TYPES.get(extension);
+        if (expectedTypes == null || expectedTypes.isEmpty() || "application/octet-stream".equals(normalizedContentType)) {
+            return;
+        }
+        if (!expectedTypes.contains(normalizedContentType)) {
+            throw new RuntimeException("文件扩展名与内容类型不匹配: " + extension + " / " + normalizedContentType);
         }
     }
 

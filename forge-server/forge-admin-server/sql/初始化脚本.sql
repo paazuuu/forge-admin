@@ -39083,7 +39083,7 @@ VALUES (6, 'pc', 'PC端', 'pc', 'forage_pc123', 2592000, 7200, 'Bearer', 'Author
         1, 2);
 INSERT INTO sys_config (config_id, tenant_id, config_name, config_key, config_value, config_type, config_desc, sort,
                         create_by, create_time, update_by, update_time, create_dept)
-VALUES (1, 1, '用户初始密码', 'sys.user.initPassword', '!forgeAdmin123', 'Y', '用户注册时的默认密码', 1, NULL,
+VALUES (1, 1, '用户初始密码', 'sys.user.initPassword', '', 'N', '已因安全加固停用，新增/重置用户必须首次登录修改密码', 1, NULL,
         '2025-11-12 17:41:18', NULL, '2026-04-01 14:16:46', NULL),
        (2, 1, '账号自助注册', 'sys.account.registerUser', 'false', 'Y', '是否开启用户自助注册功能', 2, NULL,
         '2025-11-12 17:41:18', NULL, '2025-11-12 17:41:18', NULL);
@@ -40194,14 +40194,14 @@ INSERT INTO sys_file_storage_config (id, config_name, storage_type, is_default, 
                                      secret_key, bucket_name, region, base_path, `domain`, use_https, max_file_size,
                                      allowed_types, order_num, extra_config, create_time, update_time, create_by,
                                      update_by, create_dept)
-VALUES (1, '本地存储', 'local', 0, 1, NULL, NULL, NULL, NULL, NULL, '/var/tmp/', NULL, 1, 100,
-        'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,zip,rar,md,svg', 1, NULL, '2025-11-28 16:44:18', '2026-05-13 16:55:32',
+VALUES (1, '本地存储', 'local', 1, 1, NULL, NULL, NULL, NULL, NULL, '/var/tmp/', NULL, 1, 100,
+        'jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,txt,csv,zip,rar,mp4,mp3', 1, NULL, '2025-11-28 16:44:18', '2026-05-13 16:55:32',
         NULL, 1, NULL),
-       (3, 'RustFS存储', 'rustfs', 0, 1, 'http://127.0.0.1:9000', 'rustfsadmin', 'rustfsadmin', 'forge-files', NULL,
+       (3, 'RustFS存储', 'rustfs', 0, 0, 'http://127.0.0.1:9000', NULL, NULL, 'forge-files', NULL,
         NULL, NULL, 0, 500, 'jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,zip,rar,mp4,mp3', 3, NULL, '2026-03-28 16:25:28',
         '2026-03-29 08:56:07', NULL, 1, NULL),
-       (2054477462632398849, '腾讯云COS', 'tencent', 1, 1, NULL, 'AKIDmQvELEtMcmndHo9IHFzeATaTBi3B6sTs',
-        'FJp8D6pOo286sW1QholZCcx7A2jFannb', 'forge-1310419674', 'ap-guangzhou', NULL, NULL, 0, 100, NULL, 3, NULL,
+       (2054477462632398849, '腾讯云COS', 'tencent', 0, 0, NULL, NULL,
+        NULL, 'forge-1310419674', 'ap-guangzhou', NULL, NULL, 0, 100, NULL, 3, NULL,
         '2026-05-13 16:22:52', '2026-05-13 17:05:37', 1, 1, 2);
 INSERT INTO sys_flow_business (id, business_key, business_type, process_instance_id, process_def_id, process_def_key,
                                title, status, apply_user_id, apply_user_name, apply_dept_id, apply_dept_name,

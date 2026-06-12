@@ -305,7 +305,18 @@
     </n-modal>
 
     <!-- 修改密码弹窗 -->
-    <n-modal v-model:show="showPwdModal" preset="card" title="修改登录密码" style="max-width: 420px">
+    <n-modal
+      v-model:show="showPwdModal"
+      preset="card"
+      :title="mustChangePassword ? '首次登录必须修改密码' : '修改登录密码'"
+      :closable="!mustChangePassword"
+      :mask-closable="!mustChangePassword"
+      :close-on-esc="!mustChangePassword"
+      style="max-width: 420px"
+    >
+      <n-alert v-if="mustChangePassword" type="warning" class="mb-4">
+        当前账号仍在使用初始密码或管理员重置密码，修改后才能继续访问系统功能。
+      </n-alert>
       <n-form ref="pwdFormRef" :model="pwdForm" :rules="pwdRules" label-placement="left" label-width="100">
         <n-form-item label="当前密码" path="oldPassword">
           <n-input v-model:value="pwdForm.oldPassword" type="password" show-password-on="click" placeholder="请输入当前密码" />
@@ -319,7 +330,7 @@
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showPwdModal = false">
+          <n-button v-if="!mustChangePassword" @click="showPwdModal = false">
             取消
           </n-button>
           <n-button type="primary" :loading="pwdLoading" @click="handleUpdatePwd">
@@ -363,6 +374,8 @@ const avatarText = computed(() => {
   const name = userStore.realName || userStore.username
   return name ? name.charAt(0) : 'U'
 })
+
+const mustChangePassword = computed(() => userStore.forcePasswordChange)
 
 // 基本资料表单
 const profileFormRef = ref(null)
@@ -424,8 +437,14 @@ async function loadUserInfo() {
       if (res.data) {
         userStore.setUser(res.data)
       }
-      fetchExtraInfo()
-      loadAvatar()
+      if (mustChangePassword.value) {
+        window.$message.warning('请先修改初始密码')
+        openPwdModal()
+      }
+      else {
+        fetchExtraInfo()
+        loadAvatar()
+      }
     }
   }
   catch (error) {
@@ -754,8 +773,11 @@ function formatDate(dateStr) {
 }
 
 onMounted(() => {
-  loadUserInfo()
-  loadSocialBindings()
+  loadUserInfo().then(() => {
+    if (!mustChangePassword.value) {
+      loadSocialBindings()
+    }
+  })
 })
 </script>
 

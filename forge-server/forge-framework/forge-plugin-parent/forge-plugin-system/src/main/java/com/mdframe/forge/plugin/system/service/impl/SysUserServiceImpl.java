@@ -86,6 +86,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setTenantId(tenantId);
         user.setUserType(resolveWriteUserType(dto.getUserType()));
         user.setPassword(PasswordUtil.encrypt(dto.getPassword()));
+        user.setForcePasswordChange(true);
         boolean inserted = userMapper.insert(user) > 0;
         if (inserted) {
             upsertUserTenant(user.getId(), tenantId, user.getUserType(), true);
@@ -449,6 +450,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         SysUser user = new SysUser();
         user.setId(userId);
         user.setPassword(PasswordUtil.encrypt(newPassword));
+        user.setForcePasswordChange(true);
         return TenantContextHolder.executeIgnore(() -> userMapper.updateById(user) > 0);
     }
 
