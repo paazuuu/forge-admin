@@ -1,6 +1,7 @@
 import { defaultThemeConfig } from '@/config/theme.config'
 import { useTenantStore } from '@/store'
 import { resolveRenderableFileUrl } from '@/utils/file'
+import { normalizePageTitle, setDocumentTitle } from '@/utils/page-title'
 
 export async function applyTenantConfig(tenantConfig, appStore) {
   const tenantStore = useTenantStore()
@@ -49,9 +50,9 @@ export async function applyTenantConfig(tenantConfig, appStore) {
     appStore.setThemeColor(tenantConfig.systemTheme)
   }
 
-  const pageBaseTitle = tenantConfig.browserTitle || tenantConfig.systemName
+  const pageBaseTitle = normalizePageTitle(tenantConfig.browserTitle) || normalizePageTitle(tenantConfig.systemName)
   if (pageBaseTitle) {
-    document.title = pageBaseTitle
+    setDocumentTitle(pageBaseTitle)
   }
 
   if (tenantConfig.browserIcon) {

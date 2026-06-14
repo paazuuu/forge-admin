@@ -1,8 +1,9 @@
 import { usePermissionStore, useTabStore, useTenantStore } from '@/store'
+import { getTenantPageBaseTitle } from '@/utils/page-title'
 
 function resolveBaseTitle() {
   const tenantStore = useTenantStore()
-  return tenantStore.browserTitle || tenantStore.systemName || import.meta.env.VITE_TITLE
+  return getTenantPageBaseTitle(tenantStore)
 }
 
 function findTitleFromAllMenus(allMenus, targetPath, menuKey) {

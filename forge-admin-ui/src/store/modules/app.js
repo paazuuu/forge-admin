@@ -3,6 +3,7 @@ import { useDark } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { applyThemeConfig, defaultThemeConfig } from '@/config/theme.config'
 import { defaultLayout, defaultPrimaryColor, naiveThemeOverrides, normalizeLayout } from '@/settings'
+import { getDefaultPageTitle } from '@/utils/page-title'
 
 function cloneConfig(config) {
   return JSON.parse(JSON.stringify(config))
@@ -60,7 +61,7 @@ export const useAppStore = defineStore('app', {
       this.selectedTopMenuId = null
       this.setThemeColor(defaultPrimaryColor)
       applyThemeConfig(this.themeConfig, this.isDark)
-      document.title = import.meta.env.VITE_TITLE || document.title
+      document.title = getDefaultPageTitle()
     },
     setThemeConfig(config) {
       this.themeConfig = { ...this.themeConfig, ...config }

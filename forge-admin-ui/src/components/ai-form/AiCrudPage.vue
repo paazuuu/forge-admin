@@ -3049,9 +3049,22 @@ watch(() => props.publicQuery, () => {
 }
 
 .ai-crud-edit-form :deep(.n-form-item-label) {
-  min-height: 28px;
+  min-height: 32px;
+  display: grid;
+  align-items: center;
   color: var(--text-secondary);
   font-weight: 600;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-label__asterisk) {
+  align-self: center;
+  line-height: 1;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-blank) {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
 }
 
 .ai-crud-edit-form :deep(.n-form-item-feedback-wrapper) {
@@ -3061,6 +3074,30 @@ watch(() => props.publicQuery, () => {
 
 .ai-crud-edit-form :deep(.ai-form-control) {
   min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control > *) {
+  width: 100%;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control--radio),
+.ai-crud-edit-form :deep(.ai-form-control--radioButton),
+.ai-crud-edit-form :deep(.ai-form-control--checkbox) {
+  min-height: 32px;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control--radio .n-space),
+.ai-crud-edit-form :deep(.ai-form-control--checkbox .n-space) {
+  align-items: center !important;
+}
+
+.ai-crud-edit-form :deep(.ai-form-item--textarea .n-form-item-label),
+.ai-crud-edit-form :deep(.ai-form-item--imageUpload .n-form-item-label),
+.ai-crud-edit-form :deep(.ai-form-item--fileUpload .n-form-item-label) {
+  align-items: flex-start;
+  padding-top: 5px;
 }
 
 .ai-crud-edit-form :deep(.n-input),

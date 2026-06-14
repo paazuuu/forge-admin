@@ -199,6 +199,7 @@ import {
 import DictTag from '@/components/DictTag.vue'
 import IconRenderer from '@/components/IconRenderer.vue'
 import { useTabStore } from '@/store'
+import { getDefaultPageTitle } from '@/utils/page-title'
 import AppCard from './components/AppCard.vue'
 import AppEditorDrawer from './components/AppEditorDrawer.vue'
 import BusinessObjectWizardDrawer from './components/BusinessObjectWizardDrawer.vue'
@@ -247,7 +248,7 @@ watch(pageTitle, (title) => {
   if (!title)
     return
   route.meta.title = title
-  document.title = `${title} | ${import.meta.env.VITE_TITLE}`
+  document.title = `${title} | ${getDefaultPageTitle()}`
   tabStore.updateTabTitle(route.fullPath, title)
 }, { immediate: true })
 

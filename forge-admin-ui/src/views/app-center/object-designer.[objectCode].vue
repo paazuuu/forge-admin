@@ -218,6 +218,7 @@ import {
 } from '@/api/business-app'
 import { cloneSchema } from '@/components/lowcode-builder/model/model-schema'
 import { useTabStore, useUserStore } from '@/store'
+import { getDefaultPageTitle } from '@/utils/page-title'
 import BusinessActionDesigner from './components/designer/BusinessActionDesigner.vue'
 import BusinessAdvancedConfig from './components/designer/BusinessAdvancedConfig.vue'
 import BusinessDetailDesigner from './components/designer/BusinessDetailDesigner.vue'
@@ -375,7 +376,7 @@ watch(pageTitle, (title) => {
   if (!title)
     return
   route.meta.title = title
-  document.title = `${title} | ${import.meta.env.VITE_TITLE}`
+  document.title = `${title} | ${getDefaultPageTitle()}`
   tabStore.updateTabTitle(route.fullPath, title)
 }, { immediate: true })
 

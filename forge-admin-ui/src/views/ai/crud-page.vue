@@ -37,6 +37,7 @@ import DictTag from '@/components/DictTag.vue'
 import { getDictData } from '@/composables/useDict'
 import { useTabStore } from '@/store'
 import { request } from '@/utils'
+import { getDefaultPageTitle } from '@/utils/page-title'
 
 const route = useRoute()
 const router = useRouter()
@@ -608,6 +609,27 @@ function resolveRuntimeTitle(cfg = {}) {
   return cfg.menuName || cfg.appName || cfg.objectName || cfg.tableComment || cfg.configKey
 }
 
+function normalizeConfigKey(value) {
+  const key = Array.isArray(value) ? value[0] : value
+  return String(key || '').trim()
+}
+
+function resolveRouteConfigKey() {
+  const paramKey = normalizeConfigKey(route.params?.configKey)
+  if (paramKey)
+    return paramKey
+
+  const queryKey = normalizeConfigKey(route.query?.configKey)
+  if (queryKey)
+    return queryKey
+
+  const prefix = '/ai/crud-page/'
+  if (!route.path?.startsWith(prefix))
+    return ''
+
+  return normalizeConfigKey(decodeURIComponent(route.path.slice(prefix.length)))
+}
+
 function transformChildrenConfig(children = []) {
   return (children || []).map(child => ({
     ...child,
@@ -658,9 +680,8 @@ async function loadConfig() {
   // 1. /ai/crud-page/:configKey （route.params，unplugin-vue-router 动态路由）
   // 2. /ai/crud-page/order_manage （从 route.path 解析，permission.js 静态路由）
   // 3. /ai/crud-page?configKey=xxx （旧的 query 格式）
-  const configKey = route.params?.configKey
-    || route.path.replace(/^\/ai\/crud-page\//, '') || route.query.configKey
-  if (!configKey || configKey === '/ai/crud-page' || configKey.startsWith('/')) {
+  const configKey = resolveRouteConfigKey()
+  if (!configKey || configKey.startsWith('/')) {
     errorMsg.value = '缺少 configKey 参数'
     return
   }
@@ -677,7 +698,7 @@ async function loadConfig() {
     const title = resolveRuntimeTitle(cfg)
     if (title) {
       route.meta.title = title
-      document.title = `${title} | ${import.meta.env.VITE_TITLE}`
+      document.title = `${title} | ${getDefaultPageTitle()}`
       tabStore.updateTabTitle(route.fullPath, title)
     }
     await preloadDicts(cfg)
@@ -760,7 +781,7 @@ onMounted(() => {
 
 // 监听 configKey 变化，兼容各种路由方式
 watch(
-  () => route.params?.configKey || route.path.replace(/^\/ai\/crud-page\//, '') || route.query.configKey,
+  () => resolveRouteConfigKey(),
   (newKey, oldKey) => {
     if (newKey && newKey !== oldKey) {
       loadConfig()

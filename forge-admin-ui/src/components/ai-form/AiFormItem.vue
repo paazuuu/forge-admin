@@ -593,6 +593,7 @@
       <!-- 纯文本展示 -->
       <div
         v-else-if="field.type === 'text'"
+        class="ai-form-readonly-text"
         :style="field.style"
       >
         <span v-if="field.formatter">
@@ -751,11 +752,16 @@ function disabledHandler(field) {
 const fieldAlign = computed(() => normalizeAlign(props.field?.align || props.field?.textAlign || props.field?.props?.align))
 const fieldAlignClass = computed(() => fieldAlign.value === 'left' ? '' : `ai-form-item-align-${fieldAlign.value}`)
 const formItemClass = computed(() => [
+  `ai-form-item--${props.field?.type || 'input'}`,
+  (props.field?.readonly || props.field?.props?.readonly) ? 'ai-form-item--readonly' : '',
   fieldAlignClass.value,
   props.field?.formItemClass,
 ].filter(Boolean))
 const componentControlStyle = computed(() => props.field?.componentStyle || props.field?.style || undefined)
-const componentControlClass = computed(() => props.field?.componentClass || undefined)
+const componentControlClass = computed(() => [
+  `ai-form-control--${props.field?.type || 'input'}`,
+  props.field?.componentClass,
+].filter(Boolean))
 const fieldDictType = computed(() => props.field?.dictType || props.field?.props?.dictType || '')
 const cascadeConfig = computed(() => resolveCascadeConfig(props.field))
 const dictCascadeConfig = computed(() => {

@@ -341,6 +341,7 @@ import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserS
 import { lStorage } from '@/utils'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
+import { getDefaultPageTitle } from '@/utils/page-title'
 import { applyTenantConfig } from '@/utils/tenant-config'
 import api from './api'
 import 'vue3-slide-verify/dist/style.css'
@@ -350,7 +351,7 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
-const title = import.meta.env.VITE_TITLE
+const title = getDefaultPageTitle()
 const userClient = import.meta.env.VITE_USER_CLIENT || 'pc'
 
 const loginInfo = ref({

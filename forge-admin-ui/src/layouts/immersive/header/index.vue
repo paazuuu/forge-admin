@@ -56,13 +56,14 @@ import {
   UserAvatar,
 } from '@/layouts/components'
 import { useTenantStore } from '@/store'
+import { getDefaultPageTitle } from '@/utils/page-title'
 import DrawerMenu from '../components/DrawerMenu.vue'
 
 const tenantStore = useTenantStore()
 const menuDrawerVisible = ref(false)
 
 const systemName = computed(() => {
-  return tenantStore.systemName || import.meta.env.VITE_TITLE
+  return tenantStore.systemName || getDefaultPageTitle()
 })
 </script>
 

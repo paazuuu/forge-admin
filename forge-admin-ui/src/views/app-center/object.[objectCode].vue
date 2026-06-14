@@ -201,6 +201,7 @@ import {
 } from '@/api/business-app'
 import DictTag from '@/components/DictTag.vue'
 import { useTabStore, useUserStore } from '@/store'
+import { getDefaultPageTitle } from '@/utils/page-title'
 import BusinessBindingPanel from './components/BusinessBindingPanel.vue'
 import ObjectRelationPanel from './components/ObjectRelationPanel.vue'
 import ReadinessPanel from './components/ReadinessPanel.vue'
@@ -289,7 +290,7 @@ watch(pageTitle, (title) => {
   if (!title)
     return
   route.meta.title = title
-  document.title = `${title} | ${import.meta.env.VITE_TITLE}`
+  document.title = `${title} | ${getDefaultPageTitle()}`
   tabStore.updateTabTitle(route.fullPath, title)
 }, { immediate: true })
 

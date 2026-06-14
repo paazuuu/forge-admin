@@ -15,12 +15,13 @@
 
 <script setup>
 import { useAppStore, useTenantStore } from '@/store'
+import { getDefaultPageTitle } from '@/utils/page-title'
 
 const tenantStore = useTenantStore()
 const appStore = useAppStore()
 
 const systemName = computed(() => {
-  return tenantStore.systemName || import.meta.env.VITE_TITLE
+  return tenantStore.systemName || getDefaultPageTitle()
 })
 </script>
 
