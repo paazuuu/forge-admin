@@ -56,7 +56,7 @@ Do not duplicate `createBy`, `createTime`, `createDept`, `updateBy`, `updateTime
 
 ## Controller Contract
 
-Generate standard endpoints:
+Generate Forge codegen-safe endpoints. Do not use `PUT` or `DELETE` for generated CRUD modules because project gateway and security policies expect POST for detail, update, and delete operations.
 
 ```java
 @Slf4j
@@ -73,26 +73,26 @@ public class BizExampleController {
         return RespInfo.success(exampleService.page(pageQuery, query));
     }
 
-    @GetMapping("/{id}")
+    @PostMapping("/getById")
     @OperationLog(module = "示例管理", type = OperationType.QUERY, desc = "查询示例详情")
-    public RespInfo<BizExampleVO> detail(@PathVariable Long id) {
+    public RespInfo<BizExampleVO> detail(@RequestParam Long id) {
         return RespInfo.success(exampleService.getDetail(id));
     }
 
-    @PostMapping
+    @PostMapping("/add")
     @OperationLog(module = "示例管理", type = OperationType.ADD, desc = "新增示例")
     public RespInfo<Long> create(@RequestBody BizExampleDTO dto) {
         return RespInfo.success(exampleService.create(dto));
     }
 
-    @PutMapping
+    @PostMapping("/edit")
     @OperationLog(module = "示例管理", type = OperationType.UPDATE, desc = "修改示例")
     public RespInfo<Void> update(@RequestBody BizExampleDTO dto) {
         exampleService.update(dto);
         return RespInfo.success();
     }
 
-    @DeleteMapping("/{id}")
+    @PostMapping("/remove/{id}")
     @OperationLog(module = "示例管理", type = OperationType.DELETE, desc = "删除示例")
     public RespInfo<Void> delete(@PathVariable Long id) {
         exampleService.delete(id);
@@ -146,10 +146,10 @@ Use `AiCrudPage`; do not hand-roll table, pagination, add, edit, or delete unles
   <AiCrudPage
     :api-config="{
       list: 'get@/api/biz/example/page',
-      detail: 'get@/api/biz/example/:id',
-      add: 'post@/api/biz/example',
-      update: 'put@/api/biz/example',
-      delete: 'post@/api/biz/example/removeBatch',
+      detail: 'post@/api/biz/example/getById',
+      add: 'post@/api/biz/example/add',
+      update: 'post@/api/biz/example/edit',
+      delete: 'post@/api/biz/example/remove/:id',
       export: 'post@/api/excel/export/biz_example_export',
       import: 'post@/api/excel/import/biz_example_export',
       importTemplate: 'get@/api/excel/template/biz_example_export',

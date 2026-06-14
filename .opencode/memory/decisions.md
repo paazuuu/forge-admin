@@ -51,3 +51,17 @@ form-create rule/options 只作为设计器可编辑表示，不能成为 Forge 
 登录验证码配置采用“全局默认 + 客户端覆盖”的单一解析规则。系统登录配置维护全局默认验证码开关和默认验证码类型；`sys_client.captcha_type` 只作为客户端覆盖项，空值表示继承全局配置。
 
 登录页获取 `/auth/loginConfig` 时必须传入当前 `userClient`，后端登录配置接口和登录校验策略必须共用同一个解析器返回最终生效配置，避免前端展示验证码类型和后端校验验证码类型不一致。
+
+## 7. 代码生成模板更新和删除必须使用 POST
+
+**记录日期**: 2026-06-14
+
+Forge 代码生成模板不能按通用 REST 风格生成 `PUT` 更新或 `DELETE` 删除接口。出于项目安全策略和网关兼容要求，生成 Controller、前端 API 和 `AiCrudPage.apiConfig` 必须保持既有 POST 风格：
+
+- 详情：`POST /getById`
+- 新增：`POST /add`
+- 更新：`POST /edit`
+- 删除：`POST /remove/{id}`
+- 批量删除：`POST /removeBatch`
+
+应用管理下载代码模式可以把接口前缀替换为业务专属 `businessApiBase`，但不能把更新、删除改成 `PUT` / `DELETE`。
