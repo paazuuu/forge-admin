@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.system.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.mdframe.forge.starter.core.domain.BaseEntity;
 import com.mdframe.forge.starter.tenant.core.TenantEntity;
@@ -69,11 +70,13 @@ public class SysUser extends TenantEntity {
     /**
      * 密码（加密存储）
      */
+    @JsonIgnore
     private String password;
 
     /**
      * 密码盐值
      */
+    @JsonIgnore
     private String salt;
 
     /**
@@ -106,6 +109,11 @@ public class SysUser extends TenantEntity {
      * 登录次数
      */
     private Integer loginCount;
+
+    /**
+     * 是否必须先修改密码
+     */
+    private Boolean forcePasswordChange;
 
     /**
      * 备注

@@ -1,12 +1,12 @@
 package com.mdframe.forge.plugin.system.strategy;
 
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.constant.SystemConstants;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
-import com.mdframe.forge.plugin.system.service.ISysConfigService;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
 import com.mdframe.forge.starter.auth.enums.AuthType;
@@ -34,9 +34,6 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
 
     @Autowired
     private SocialProperties socialProperties;
-
-    @Autowired
-    private ISysConfigService sysConfigService;
 
     @Autowired
     private SysUserMapper userMapper;
@@ -116,12 +113,9 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
                 newUser.setPhone(request.getPhone());
             }
             
-            // 设置默认密码
-            String initPassword = sysConfigService.selectConfigByKey("sys.user.initPassword");
-            if (StrUtil.isBlank(initPassword)) {
-                initPassword = "123456"; // 默认密码
-            }
-            newUser.setPassword(PasswordUtil.encrypt(initPassword));
+            // 三方自动注册不生成共享默认密码，避免账号可被密码登录横向利用。
+            newUser.setPassword(PasswordUtil.encrypt(IdUtil.fastSimpleUUID()));
+            newUser.setForcePasswordChange(false);
             newUser.setUserStatus(1);
             newUser.setAvatar(socialAvatar);
             

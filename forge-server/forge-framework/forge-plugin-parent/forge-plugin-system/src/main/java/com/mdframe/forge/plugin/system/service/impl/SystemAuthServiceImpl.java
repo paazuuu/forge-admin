@@ -382,6 +382,8 @@ public class SystemAuthServiceImpl implements IAuthService {
         boolean success = updateUserPassword(loginUser.getUserId(), encodedPassword);
         
         if (success) {
+            loginUser.setForcePasswordChange(false);
+            SessionHelper.setLoginUser(loginUser);
             log.info("用户修改密码成功: userId={}", loginUser.getUserId());
         }
         
@@ -555,6 +557,7 @@ public class SystemAuthServiceImpl implements IAuthService {
         LambdaUpdateWrapper<SysUser> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(SysUser::getId, userId)
                 .set(SysUser::getPassword, encodedPassword)
+                .set(SysUser::getForcePasswordChange, false)
                 .set(SysUser::getUpdateTime, LocalDateTime.now());
         return userMapper.update(null, wrapper) > 0;
     }
@@ -571,6 +574,7 @@ public class SystemAuthServiceImpl implements IAuthService {
                 .expiresIn(tokenTimeout)
                 .tokenType("Bearer")
                 .userInfo(loginUser)
+                .forcePasswordChange(Boolean.TRUE.equals(loginUser.getForcePasswordChange()))
                 .build();
     }
 

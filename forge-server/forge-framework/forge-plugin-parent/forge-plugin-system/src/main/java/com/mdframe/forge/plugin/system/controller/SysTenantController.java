@@ -83,6 +83,15 @@ public class SysTenantController {
     }
 
     /**
+     * 将用户移出租户
+     */
+    @PostMapping("/{tenantId}/users/{userId}/remove")
+    public RespInfo<Void> removeTenantUser(@PathVariable Long tenantId, @PathVariable Long userId) {
+        boolean result = tenantService.removeTenantUser(tenantId, userId);
+        return result ? RespInfo.success() : RespInfo.error("移出租户失败");
+    }
+
+    /**
      * 切换当前登录租户
      */
     @PostMapping("/switch")

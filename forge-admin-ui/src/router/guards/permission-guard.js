@@ -13,6 +13,8 @@ const AUTH_ROUTE_ALLOWLIST = new Set([
   '/403',
 ])
 
+const PASSWORD_CHANGE_ROUTE = '/profile'
+
 function normalizeRoutePath(path) {
   const value = String(path || '').trim()
   if (!value)
@@ -67,6 +69,10 @@ function buildUnauthorizedRouteTarget(from) {
       ...(back ? { back } : {}),
     },
   }
+}
+
+function shouldForcePasswordChange(userStore, to) {
+  return userStore.forcePasswordChange && normalizeRoutePath(to.path) !== PASSWORD_CHANGE_ROUTE
 }
 
 export function createPermissionGuard(router) {
@@ -148,6 +154,12 @@ export function createPermissionGuard(router) {
           lStorage.set('staffInfo', staffInfo || {})
           lStorage.set('dataPermission', dataPermission || [])
 
+          if (shouldForcePasswordChange(userStore, to)) {
+            appStore.setRouteGuardCompleted(true)
+            next({ path: PASSWORD_CHANGE_ROUTE, replace: true })
+            return
+          }
+
           // 获取租户配置（使用用户的租户ID）
           const tenantConfig = await tenantStore.loadTenantConfig(userInfo?.tenantId)
 
@@ -180,6 +192,12 @@ export function createPermissionGuard(router) {
         return
       }
 
+      if (shouldForcePasswordChange(userStore, to)) {
+        appStore.setRouteGuardCompleted(true)
+        next({ path: PASSWORD_CHANGE_ROUTE, replace: true })
+        return
+      }
+
       // 用户信息已存在，但菜单数据可能为空，需要重新获取用户信息和菜单数据
       if (!permissionStore.menuDataLoaded) {
         try {
@@ -195,6 +213,12 @@ export function createPermissionGuard(router) {
           lStorage.set('userInfo', userInfo || {})
           lStorage.set('staffInfo', staffInfo || {})
           lStorage.set('dataPermission', dataPermission || [])
+
+          if (shouldForcePasswordChange(userStore, to)) {
+            appStore.setRouteGuardCompleted(true)
+            next({ path: PASSWORD_CHANGE_ROUTE, replace: true })
+            return
+          }
 
           // 获取租户配置（使用用户的租户ID）
           const tenantConfig = await tenantStore.loadTenantConfig(userInfo?.tenantId)

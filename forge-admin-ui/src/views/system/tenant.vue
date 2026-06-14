@@ -681,6 +681,25 @@ const userTableColumns = [
     key: 'createTime',
     width: 170,
   },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 120,
+    fixed: 'right',
+    render: (row) => {
+      if (isCurrentTenantUser(row)) {
+        return h('span', { class: 'text-disabled cursor-not-allowed' }, '当前登录用户')
+      }
+      return h(
+        'a',
+        {
+          class: 'text-error cursor-pointer hover:text-error-hover',
+          onClick: () => handleRemoveTenantUser(row),
+        },
+        '移出租户',
+      )
+    },
+  },
 ]
 
 function toNumberOptions(options = []) {
@@ -712,6 +731,36 @@ function handleDelete(row) {
       }
       catch {
         window.$message.error('删除失败')
+      }
+    },
+  })
+}
+
+function isCurrentTenantUser(row) {
+  return String(row?.id) === String(userStore.userId)
+    && String(currentTenant.value?.id) === String(userStore.userInfo?.tenantId)
+}
+
+function handleRemoveTenantUser(row) {
+  if (!currentTenant.value?.id || !row?.id)
+    return
+  window.$dialog.warning({
+    title: '确认移除',
+    content: `确定将用户"${row.username}"移出租户"${currentTenant.value.tenantName}"吗？`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await request.post(`/system/tenant/${currentTenant.value.id}/users/${row.id}/remove`)
+        if (res.code === 200) {
+          window.$message.success('用户已移出租户')
+          await loadTenantUsers()
+          crudRef.value?.refresh()
+        }
+      }
+      catch (error) {
+        console.error('移出租户用户失败:', error)
+        window.$message.error(error?.message || '移出租户用户失败')
       }
     },
   })

@@ -14,6 +14,7 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -38,6 +39,7 @@ public class SysUserController {
     @GetMapping("/page")
     public RespInfo<IPage<SysUser>> page(SysUserQuery query) {
         IPage<SysUser> page = userService.selectUserPage(query);
+        sanitizeUserPage(page);
         return RespInfo.success(page);
     }
 
@@ -47,6 +49,7 @@ public class SysUserController {
     @PostMapping("/getById")
     public RespInfo<SysUser> getById(@RequestParam Long id) {
         SysUser user = userService.selectUserById(id);
+        clearAuthFields(user);
         // 填充用户岗位ID列表
         user.setPostIds(userService.selectUserPostIds(id));
         // 填充用户角色ID列表，支持新增/编辑表单直接维护角色
@@ -237,8 +240,27 @@ public class SysUserController {
     public RespInfo<SysUser> profile() {
         Long userId = SessionHelper.getUserId();
         SysUser user = userService.getById(userId);
+        clearAuthFields(user);
+        return RespInfo.success(user);
+    }
+
+    private void sanitizeUserPage(IPage<SysUser> page) {
+        if (page == null || page.getRecords() == null) {
+            return;
+        }
+        page.getRecords().forEach(user -> {
+            clearAuthFields(user);
+            user.setPhone(SensitiveDataUtil.maskPhone(user.getPhone()));
+            user.setIdCard(SensitiveDataUtil.maskIdCard(user.getIdCard()));
+            user.setEmail(SensitiveDataUtil.maskEmail(user.getEmail()));
+        });
+    }
+
+    private void clearAuthFields(SysUser user) {
+        if (user == null) {
+            return;
+        }
         user.setPassword(null);
         user.setSalt(null);
-        return RespInfo.success(user);
     }
 }

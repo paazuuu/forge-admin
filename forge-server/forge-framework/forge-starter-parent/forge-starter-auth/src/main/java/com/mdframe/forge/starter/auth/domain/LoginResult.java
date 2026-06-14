@@ -38,4 +38,9 @@ public class LoginResult implements Serializable {
      * 用户信息
      */
     private LoginUser userInfo;
+
+    /**
+     * 是否必须先修改密码
+     */
+    private Boolean forcePasswordChange;
 }

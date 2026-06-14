@@ -73,6 +73,11 @@ public class LoginUser implements Serializable {
     private Integer userStatus;
 
     /**
+     * 是否必须先修改密码
+     */
+    private Boolean forcePasswordChange;
+
+    /**
      * 角色ID列表
      */
     private List<Long> roleIds;

@@ -18,6 +18,7 @@ export async function getUserInfo() {
       phone: loginUser.phone,
       userType: loginUser.userType,
       userStatus: loginUser.userStatus,
+      forcePasswordChange: loginUser.forcePasswordChange === true,
       tenantId: loginUser.tenantId,
       tenantName: loginUser.tenantName,
       tenantIds: loginUser.tenantIds || [],

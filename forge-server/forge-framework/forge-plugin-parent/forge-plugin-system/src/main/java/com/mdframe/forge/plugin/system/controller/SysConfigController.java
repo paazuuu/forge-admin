@@ -13,6 +13,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.domain.OperationType;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,6 +40,7 @@ public class SysConfigController {
     public RespInfo<Page<SysConfig>> page(PageQuery pageQuery, SysConfigQuery query) {
         assertPlatformAdmin();
         Page<SysConfig> page = configService.selectConfigPage(pageQuery, query);
+        maskConfigPage(page);
         return RespInfo.success(page);
     }
 
@@ -50,6 +52,7 @@ public class SysConfigController {
     public RespInfo<List<SysConfig>> list(SysConfigQuery query) {
         assertPlatformAdmin();
         List<SysConfig> list = configService.selectConfigList(query);
+        list.forEach(this::maskConfigValue);
         return RespInfo.success(list);
     }
 
@@ -59,6 +62,9 @@ public class SysConfigController {
     @GetMapping("/configKey/{configKey}")
     public RespInfo<String> getConfigByKey(@PathVariable String configKey) {
         assertPlatformAdmin();
+        if (SensitiveDataUtil.isSensitiveKey(configKey)) {
+            return RespInfo.error(403, "敏感配置不允许明文查询");
+        }
         String configValue = configService.selectConfigByKey(configKey);
         return RespInfo.success(configValue);
     }
@@ -70,6 +76,7 @@ public class SysConfigController {
     public RespInfo<SysConfig> getById(@RequestParam Long configId) {
         assertPlatformAdmin();
         SysConfig config = configService.selectConfigById(configId);
+        maskConfigValue(config);
         return RespInfo.success(config);
     }
 
@@ -115,5 +122,19 @@ public class SysConfigController {
 
     private void assertPlatformAdmin() {
         SessionHelper.assertAdmin("只有超级管理员可以维护系统参数配置");
+    }
+
+    private void maskConfigPage(Page<SysConfig> page) {
+        if (page == null || page.getRecords() == null) {
+            return;
+        }
+        page.getRecords().forEach(this::maskConfigValue);
+    }
+
+    private void maskConfigValue(SysConfig config) {
+        if (config == null) {
+            return;
+        }
+        config.setConfigValue(SensitiveDataUtil.maskSensitiveValue(config.getConfigKey(), config.getConfigValue()));
     }
 }

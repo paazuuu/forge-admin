@@ -12,7 +12,7 @@ const repoRoot = path.resolve(__dirname, '../..')
 const catalogPath = path.join(__dirname, 'module-catalog.json')
 
 const backendParentArtifacts = {
-  root: 'forge',
+  root: 'forge-server',
   framework: 'forge-framework',
   dependencies: 'forge-dependencies',
   starterParent: 'forge-starter-parent',
@@ -59,6 +59,10 @@ const ignoredFileNames = new Set([
   '.env.local',
   '.flattened-pom.xml',
 ])
+
+const ignoredTemplatePathPrefixes = [
+  'forge-server/db/migration',
+]
 
 const projectContextNames = [
   'AGENTS.md',
@@ -392,7 +396,7 @@ function toPascalCase(str) {
 }
 
 async function copyBackend(serverRoot) {
-  await copyProjectDir(path.join(repoRoot, 'forge'), serverRoot)
+  await copyProjectDir(path.join(repoRoot, 'forge-server'), serverRoot)
 }
 
 async function copyProjectDir(source, target) {
@@ -407,7 +411,12 @@ function shouldCopyPath(sourcePath) {
   if (ignoredNames.has(baseName) || ignoredFileNames.has(baseName)) {
     return false
   }
-  return true
+  return !isIgnoredTemplatePath(sourcePath)
+}
+
+function isIgnoredTemplatePath(sourcePath) {
+  const relativePath = path.relative(repoRoot, sourcePath).split(path.sep).join('/')
+  return ignoredTemplatePathPrefixes.some(prefix => relativePath === prefix || relativePath.startsWith(`${prefix}/`))
 }
 
 async function pruneBackend(serverRoot, catalog, selection) {
@@ -587,8 +596,11 @@ async function rewriteRootPomArtifact(serverRoot, rootArtifactId) {
   for (const pomFile of pomFiles) {
     const content = await fs.readFile(pomFile, 'utf8')
     const nextContent = content
+      .split('<artifactId>forge-server</artifactId>').join(`<artifactId>${rootArtifactId}</artifactId>`)
       .split('<artifactId>forge</artifactId>').join(`<artifactId>${rootArtifactId}</artifactId>`)
+      .split('<name>forge-server</name>').join(`<name>${rootArtifactId}</name>`)
       .split('<name>forge</name>').join(`<name>${rootArtifactId}</name>`)
+      .split('<description>forge-server</description>').join(`<description>${rootArtifactId}</description>`)
       .split('<description>forge</description>').join(`<description>${rootArtifactId}</description>`)
     if (nextContent !== content) {
       await fs.writeFile(pomFile, nextContent)
@@ -610,18 +622,29 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
     ['Forge Admin', options.displayName],
     ['企业级中后台基础框架', options.displayName],
     ['forge-project', options.projectName],
+    ['cd forge-server &&', `cd ${serverDirName} &&`],
+    ['cd forge-server ', `cd ${serverDirName} `],
+    ['cd forge-server\n', `cd ${serverDirName}\n`],
     ['cd forge &&', `cd ${serverDirName} &&`],
     ['cd forge ', `cd ${serverDirName} `],
+    ['cd forge\n', `cd ${serverDirName}\n`],
+    ['forge-server/                    # 后端根目录', `${serverDirName}/              # 后端根目录`],
     ['forge/                          # 后端根目录', `${serverDirName}/              # 后端根目录`],
+    ['forge-server/                     # 后端根工程', `${serverDirName}/               # 后端根工程`],
     ['forge/                           # 后端根工程', `${serverDirName}/               # 后端根工程`],
+    ['forge-server/\n', `${serverDirName}/\n`],
     ['forge/\n', `${serverDirName}/\n`],
     ['CREATE DATABASE forge ', `CREATE DATABASE ${options.databaseName} `],
     ['mysql -u root -p forge ', `mysql -u root -p ${options.databaseName} `],
     ['forge-admin-ui', `${options.projectName}-admin-ui`],
+    ['forge-server/forge-admin/', `${serverDirName}/${adminServerArtifactId}/`],
     ['forge/forge-admin/', `${serverDirName}/${adminServerArtifactId}/`],
     ['forge-admin/', `${adminServerArtifactId}/`],
+    ['forge-server/db', `${serverDirName}/db`],
     ['forge/db', `${serverDirName}/db`],
+    ['forge-server/scripts', `${serverDirName}/scripts`],
     ['forge/scripts', `${serverDirName}/scripts`],
+    ['forge-server/var', `${serverDirName}/var`],
     ['forge/var', `${serverDirName}/var`],
     ['forge_admin_new', options.databaseName],
     ['forge_admin', options.databaseName],
@@ -654,6 +677,7 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
   if (hasReportUi) {
     replacements.push(
       ['forge-report-ui', `${options.projectName}-report-ui`],
+      ['forge-server/forge-report/', `${serverDirName}/${reportServerArtifactId}/`],
       ['forge/forge-report/', `${serverDirName}/${reportServerArtifactId}/`],
       ['forge-report/', `${reportServerArtifactId}/`],
       ['forge_report', `${snakeName}_report`],
@@ -676,6 +700,7 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
   }
 
   for (const [from, to] of Object.entries(artifactMap).sort((a, b) => b[0].length - a[0].length)) {
+    replacements.push([`forge-server/${from}`, `${serverDirName}/${to}`])
     replacements.push([`forge/${from}`, `${serverDirName}/${to}`])
   }
 
@@ -684,6 +709,7 @@ function buildTextReplacements(artifactMap, applicationClassMap, options, select
   }
 
   for (const targetName of Object.values(artifactMap).sort((a, b) => b.length - a.length)) {
+    replacements.push([`forge-server/${targetName}`, `${serverDirName}/${targetName}`])
     replacements.push([`forge/${targetName}`, `${serverDirName}/${targetName}`])
   }
 
@@ -960,7 +986,7 @@ async function collectSelectedSqlEntries(catalog, selection) {
     entries.push({ moduleId, path: relativePath })
   }
 
-  const requiredSeedRoot = path.join(repoRoot, 'forge/db/seed/required')
+  const requiredSeedRoot = path.join(repoRoot, 'forge-server/db/seed/required')
   const requiredSeeds = await collectFiles(requiredSeedRoot, filePath => path.extname(filePath) === '.sql')
   for (const filePath of requiredSeeds.sort()) {
     add('required-seed', path.relative(repoRoot, filePath))

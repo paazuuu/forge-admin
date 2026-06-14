@@ -51,6 +51,9 @@ export const useUserStore = defineStore('user', {
     userType() {
       return this.userInfo?.userType
     },
+    forcePasswordChange() {
+      return this.userInfo?.forcePasswordChange === true
+    },
     isAdmin() {
       return this.userInfo?.admin || this.userInfo?.isAdmin || false
     },
