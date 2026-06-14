@@ -1,12 +1,12 @@
 <template>
   <n-drawer :show="show" width="620" @update:show="value => emit('update:show', value)">
-    <n-drawer-content :title="form.id ? '编辑业务套件' : '新建业务套件'" closable>
+    <n-drawer-content :title="form.id ? '编辑业务域' : '新建业务域'" closable>
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
         <n-grid :cols="2" :x-gap="12">
-          <n-form-item-gi label="套件名称" path="suiteName">
+          <n-form-item-gi label="业务域名称" path="suiteName">
             <n-input v-model:value="form.suiteName" placeholder="例如：合同管理" />
           </n-form-item-gi>
-          <n-form-item-gi label="套件编码" path="suiteCode">
+          <n-form-item-gi label="业务域编码" path="suiteCode">
             <n-input
               v-model:value="form.suiteCode"
               :disabled="Boolean(form.id)"
@@ -16,7 +16,7 @@
           </n-form-item-gi>
         </n-grid>
 
-        <n-form-item label="套件图标">
+        <n-form-item label="业务域图标">
           <IconSelector v-model="form.icon" />
         </n-form-item>
 
@@ -34,10 +34,10 @@
 
         <template v-if="form.createMenuDirectory">
           <n-form-item label="父级菜单或模块">
-            <MenuParentSelect v-model:value="form.adminMenuParentId" placeholder="选择套件目录挂载位置，默认顶级" />
+            <MenuParentSelect v-model:value="form.adminMenuParentId" placeholder="选择业务域目录挂载位置，默认顶级" />
           </n-form-item>
           <n-form-item label="目录排序">
-            <n-input-number v-model:value="form.menuSort" :min="0" :show-button="false" placeholder="默认使用套件排序" />
+            <n-input-number v-model:value="form.menuSort" :min="0" :show-button="false" placeholder="默认使用业务域排序" />
           </n-form-item>
         </template>
 
@@ -45,7 +45,7 @@
           <n-input
             v-model:value="form.description"
             type="textarea"
-            placeholder="说明这个套件覆盖的业务范围"
+            placeholder="说明这个业务域覆盖的业务范围"
           />
         </n-form-item>
       </n-form>
@@ -89,11 +89,11 @@ const saving = ref(false)
 const form = reactive(defaultForm())
 
 const rules = {
-  suiteName: { required: true, message: '请输入套件名称', trigger: 'blur' },
+  suiteName: { required: true, message: '请输入业务域名称', trigger: 'blur' },
   suiteCode: {
     required: true,
     validator: (_, value) => isValidCode(value),
-    message: '套件编码需以字母开头，仅包含字母、数字和下划线',
+    message: '业务域编码需以字母开头，仅包含字母、数字和下划线',
     trigger: ['blur', 'input'],
   },
 }
@@ -123,7 +123,7 @@ async function save() {
       await updateBusinessSuite(payload)
     else
       await createBusinessSuite(payload)
-    message.success('业务套件已保存')
+    message.success('业务域已保存')
     emit('saved', payload)
     emit('update:show', false)
   }

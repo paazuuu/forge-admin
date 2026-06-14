@@ -5,7 +5,7 @@
         返回应用中心
       </n-button>
       <h1>引擎中心</h1>
-      <p>流程、报表、权限、消息和触发器能力统一挂接到业务对象或应用入口。</p>
+      <p>流程、报表、权限、消息和触发器能力统一挂接到业务单元或访问入口。</p>
     </header>
     <div class="capability-grid">
       <section v-for="item in engines" :key="item.name" class="capability-card">

@@ -3,7 +3,7 @@
     <div class="advanced-head">
       <div>
         <h3>高级配置</h3>
-        <p>模型编码、表名、Schema、configKey 和代码生成入口只在开发者模式展示。</p>
+        <p>运行配置、数据表和页面协议只在授权开发者模式展示。</p>
       </div>
       <n-switch
         :value="developerMode"
@@ -21,16 +21,16 @@
 
     <div class="advanced-body">
       <n-alert v-if="!canAdvanced" type="warning" :bordered="false">
-        高级配置需要 ai:businessObject:advanced 权限。普通模式不会展示表名、DDL、Schema 或 configKey。
+        高级配置需要 ai:businessObject:advanced 权限。普通模式不会展示表名、页面协议或运行配置键。
       </n-alert>
 
       <template v-else-if="!developerMode">
         <section class="advanced-safe-card">
           <h4>普通模式</h4>
-          <p>当前只展示业务语言配置。开发者入口保留在本面板内，开启后才显示技术细节。</p>
+          <p>当前只展示业务语言配置。技术细节仅授权开发者可见。</p>
           <div class="safe-summary">
             <div>
-              <span>业务对象</span>
+              <span>业务单元</span>
               <strong>{{ draft.objectName || draft.objectCode || '-' }}</strong>
             </div>
             <div>
@@ -64,24 +64,9 @@
             <code>{{ tableName || '-' }}</code>
           </div>
           <div>
-            <span>运行配置</span>
+            <span>运行配置键</span>
             <code>{{ configKey || '-' }}</code>
           </div>
-        </section>
-
-        <section class="developer-actions">
-          <button type="button" @click="$emit('openDeveloper', '/ai/lowcode-models')">
-            <strong>模型资产</strong>
-            <span>数据库导入、DDL 预览、在线建表</span>
-          </button>
-          <button type="button" @click="$emit('openDeveloper', builderPath)">
-            <strong>低代码搭建器</strong>
-            <span>Schema 调试、运行配置预览</span>
-          </button>
-          <button type="button" @click="$emit('openDeveloper', '/ai/crud-config')">
-            <strong>CRUD 配置</strong>
-            <span>代码预览、ZIP 下载、API 配置</span>
-          </button>
         </section>
 
         <n-tabs type="line" animated>
@@ -123,7 +108,7 @@
             </div>
           </n-tab-pane>
 
-          <n-tab-pane name="api" tab="API 配置">
+          <n-tab-pane name="api" tab="接口说明">
             <div class="api-list">
               <div v-for="item in apiConfig" :key="item.label">
                 <span>{{ item.label }}</span>
@@ -163,21 +148,26 @@ const zoneCount = computed(() => props.draft?.pageSchema?.zones?.length || 0)
 const modelCode = computed(() => props.draft?.modelSchema?.object?.code || props.draft?.modelSchema?.modelCode || props.draft?.objectCode || '')
 const tableName = computed(() => props.draft?.modelSchema?.tableName || '')
 const configKey = computed(() => props.draft?.configKey || props.draft?.designerOptions?.configKey || '')
-const builderPath = computed(() => props.draft?.appId ? `/ai/lowcode-builder/${props.draft.appId}` : '/ai/lowcode-builder')
+const businessApiBase = computed(() => props.draft?.designerOptions?.businessApiBase || defaultBusinessApiBase())
 const apiConfig = computed(() => {
-  const key = configKey.value || '{configKey}'
   return [
-    { label: '分页查询', value: `GET /ai/crud/${key}/page` },
-    { label: '新增数据', value: `POST /ai/crud/${key}` },
-    { label: '修改数据', value: `PUT /ai/crud/${key}` },
-    { label: '删除数据', value: `DELETE /ai/crud/${key}/:id` },
-    { label: '导入模板', value: `GET /ai/crud/${key}/import-template` },
-    { label: '动态导出', value: `POST /ai/crud/${key}/export` },
+    { label: '在线运行', value: '由平台托管接口自动承载，发布后业务页面可直接使用。' },
+    { label: '下载代码', value: `默认业务接口前缀：${businessApiBase.value}` },
   ]
 })
 
 function formatJson(value) {
   return JSON.stringify(value || {}, null, 2)
+}
+
+function defaultBusinessApiBase() {
+  const suite = String(props.draft?.suiteCode || props.draft?.domainCode || 'business')
+    .toLowerCase()
+    .replace(/_/g, '-')
+  const object = String(props.draft?.objectCode || 'object')
+    .toLowerCase()
+    .replace(/_/g, '-')
+  return `/${suite}/${object}`
 }
 </script>
 

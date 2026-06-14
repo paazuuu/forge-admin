@@ -12,7 +12,7 @@
         </div>
         <div class="object-title">
           <div class="title-row">
-            <h1>{{ designer?.objectName || designer?.objectCode || '业务对象设计' }}</h1>
+            <h1>{{ designer?.objectName || designer?.objectCode || '业务单元设计' }}</h1>
             <n-tag size="small" :type="designStatusType" :bordered="false">
               {{ designStatusLabel }}
             </n-tag>
@@ -24,7 +24,7 @@
             </n-tag>
           </div>
           <p>
-            {{ designer?.suiteName || designer?.suiteCode || '未关联业务套件' }}
+            {{ designer?.suiteName || designer?.suiteCode || '未关联业务域' }}
             <span v-if="designer?.updateTime">最近保存 {{ designer.updateTime }}</span>
             <span v-if="designer?.lastPublishTime">最后发布 {{ designer.lastPublishTime }}</span>
           </p>

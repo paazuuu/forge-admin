@@ -24,7 +24,7 @@
       <div class="panel-head">
         <div>
           <h2>基本信息</h2>
-          <p>维护业务对象的名称、说明、显示字段和启停状态。</p>
+          <p>维护业务单元的名称、说明、显示字段和启停状态。</p>
         </div>
       </div>
       <n-form label-placement="top" :show-feedback="false" class="basic-form">
@@ -303,7 +303,7 @@ const draft = reactive(createEmptyDraft())
 const objectCode = computed(() => props.embedded ? props.embeddedObjectCode : route.params.objectCode)
 const suiteCode = computed(() => (props.embedded ? props.embeddedSuiteCode : route.query.suiteCode) || draft.suiteCode)
 const objectId = computed(() => designer.value?.objectId || draft.objectId)
-const pageTitle = computed(() => `${draft.objectName || objectCode.value || '业务对象'}设计`)
+const pageTitle = computed(() => `${draft.objectName || objectCode.value || '业务单元'}设计`)
 const canAdvanced = computed(() => {
   return userStore.isAdmin
     || hasPermission(userStore.permissions, 'ai:businessObject:advanced')
@@ -427,7 +427,7 @@ async function loadDesigner() {
   try {
     const object = await resolveBusinessObject()
     if (!object?.id) {
-      message.warning('未找到业务对象')
+      message.warning('未找到业务单元')
       return
     }
     const res = await businessObjectDesigner(object.id)
@@ -607,7 +607,7 @@ async function handlePublish(options = {}) {
       pageSchema: cloneSchema(draft.pageSchema || {}),
       publishOptions: {},
     })
-    message.success(res.data ? `业务对象已发布，版本 ${res.data}` : '业务对象已发布')
+    message.success(res.data ? `业务单元已发布，版本 ${res.data}` : '业务单元已发布')
     await loadRuntimeInfo()
     await loadDesigner()
     emit('saved')
@@ -651,7 +651,7 @@ function openRuntime() {
 function openTriggerConfig() {
   const code = draft.objectCode || objectCode.value
   if (!code) {
-    message.warning('缺少业务对象编码，无法打开触发器配置')
+    message.warning('缺少业务单元编码，无法打开触发器配置')
     return
   }
   if (props.embedded) {

@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.generator.constant.BusinessAppMode;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessSuite;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessAppDTO;
@@ -26,7 +27,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * 业务应用平台应用入口服务。
+ * 业务应用平台访问入口服务。
  */
 @Service
 @RequiredArgsConstructor
@@ -64,7 +65,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     public BusinessAppVO detail(Long id) {
         BusinessAppVO vo = baseMapper.selectAppDetail(resolveTenantId(), id);
         if (vo == null) {
-            throw new BusinessException("应用入口不存在");
+            throw new BusinessException("访问入口不存在");
         }
         enrichAppVO(vo);
         return vo;
@@ -77,7 +78,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     @Transactional(rollbackFor = Exception.class)
     public Long create(BusinessAppDTO dto) {
         if (dto == null) {
-            throw new BusinessException("应用入口不能为空");
+            throw new BusinessException("访问入口不能为空");
         }
         AiBusinessApp app = new AiBusinessApp();
         copyDtoToEntity(dto, app, true);
@@ -89,7 +90,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     @Transactional(rollbackFor = Exception.class)
     public void update(BusinessAppDTO dto) {
         if (dto == null || dto.getId() == null) {
-            throw new BusinessException("应用入口ID不能为空");
+            throw new BusinessException("访问入口ID不能为空");
         }
         AiBusinessApp app = requireEntity(dto.getId());
         copyDtoToEntity(dto, app, false);
@@ -132,11 +133,11 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
 
     public AiBusinessApp requireEntity(Long id) {
         if (id == null) {
-            throw new BusinessException("应用入口ID不能为空");
+            throw new BusinessException("访问入口ID不能为空");
         }
         AiBusinessApp app = baseMapper.selectEntityById(resolveTenantId(), id);
         if (app == null) {
-            throw new BusinessException("应用入口不存在");
+            throw new BusinessException("访问入口不存在");
         }
         return app;
     }
@@ -148,6 +149,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         String suiteCode = StringUtils.trimToNull(dto.getSuiteCode());
         String objectCode = StringUtils.trimToNull(dto.getObjectCode());
         String entryMode = StringUtils.defaultIfBlank(dto.getEntryMode(), "ROUTE").toUpperCase();
+        String configKey = StringUtils.trimToNull(dto.getConfigKey());
         if (StringUtils.isBlank(appCode) || !CODE_PATTERN.matcher(appCode).matches()) {
             throw new BusinessException("应用编码格式不正确（字母开头，仅含字母、数字和下划线，2-64字符）");
         }
@@ -162,7 +164,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         }
         suiteService.requireByCode(suiteCode);
         if ("BUSINESS".equals(appType) && StringUtils.isBlank(objectCode)) {
-            throw new BusinessException("标准业务应用必须关联业务对象");
+            throw new BusinessException("标准业务应用必须关联业务单元");
         }
         if (StringUtils.isNotBlank(objectCode)) {
             objectService.requireByCode(suiteCode, objectCode);
@@ -175,8 +177,19 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         String runtimeOpenMode = resolveRuntimeOpenMode(firstNonNull(dto.getRuntimeOpenMode(), options.get("runtimeOpenMode")));
         if ("RUNTIME".equals(entryMode)) {
             options.put("runtimeOpenMode", runtimeOpenMode);
+            String appMode = BusinessAppMode.normalize(firstNonNull(dto.getAppMode(), options.get("appMode")));
+            if (BusinessAppMode.CODE_DOWNLOAD.equals(appMode)) {
+                if (StringUtils.isBlank(objectCode)) {
+                    throw new BusinessException("下载代码模式需要关联业务单元");
+                }
+                if (StringUtils.isBlank(configKey)) {
+                    throw new BusinessException("下载代码模式需要选择业务页面配置");
+                }
+            }
+            options.put("appMode", appMode);
         } else {
             options.remove("runtimeOpenMode");
+            options.remove("appMode");
         }
         String normalizedOptions = writeOptions(options);
         validateNoSensitiveEntryConfig(dto.getEntryUrl(), normalizedOptions);
@@ -188,7 +201,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         app.setObjectCode(objectCode);
         app.setEntryMode(entryMode);
         app.setEntryUrl(StringUtils.trimToNull(dto.getEntryUrl()));
-        app.setConfigKey(StringUtils.trimToNull(dto.getConfigKey()));
+        app.setConfigKey(configKey);
         app.setIcon(StringUtils.trimToNull(dto.getIcon()));
         app.setDescription(StringUtils.trimToNull(dto.getDescription()));
         app.setStatus(normalizeStatus(dto.getStatus()));
@@ -237,7 +250,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         Long actualParentId = parentId;
 
         String path = resolveManagementMenuPath(app, options);
-        String component = resolveManagementMenuComponent(app);
+        String component = resolveManagementMenuComponent(app, options);
         String perms = buildAppMenuPerms(app);
         boolean enabled = Integer.valueOf(1).equals(app.getStatus());
         if (menuResourceId == null) {
@@ -283,7 +296,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
             return;
         }
         if (menuRegisterAdapter.hasRolePermission(menuResourceId)) {
-            throw new BusinessException("该应用入口关联的菜单已被角色赋权，请先在角色管理中移除授权后再操作");
+            throw new BusinessException("该访问入口关联的菜单已被角色赋权，请先在角色管理中移除授权后再操作");
         }
         menuRegisterAdapter.deleteMenu(menuResourceId);
     }
@@ -302,6 +315,9 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     private String resolveManagementMenuPath(AiBusinessApp app, JSONObject options) {
         String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
         if ("RUNTIME".equals(entryMode) && StringUtils.isNotBlank(app.getConfigKey())) {
+            if (BusinessAppMode.isCodeDownload(options == null ? null : options.get("appMode"))) {
+                return "/app-center?codeAppId=" + app.getId();
+            }
             String runtimeOpenMode = resolveRuntimeOpenMode(options == null ? null : options.get("runtimeOpenMode"));
             StringBuilder path = new StringBuilder("/ai/crud-page/")
                     .append(app.getConfigKey())
@@ -319,9 +335,12 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         return "/app-center/app/" + app.getId();
     }
 
-    private String resolveManagementMenuComponent(AiBusinessApp app) {
+    private String resolveManagementMenuComponent(AiBusinessApp app, JSONObject options) {
         String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
         if ("RUNTIME".equals(entryMode) && StringUtils.isNotBlank(app.getConfigKey())) {
+            if (BusinessAppMode.isCodeDownload(options == null ? null : options.get("appMode"))) {
+                return "app-center/index";
+            }
             return "ai/crud-page";
         }
         return "app-center/app-entry";
@@ -362,6 +381,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         JSONObject options = readOptions(vo.getOptions());
         JSONObject adminMenu = readAdminMenu(options);
         vo.setRuntimeOpenMode(resolveRuntimeOpenMode(options.get("runtimeOpenMode")));
+        vo.setAppMode(resolveAppMode(options, vo.getEntryMode()));
         vo.setMenuResourceId(readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId"))));
         Object activeMenuKey = firstNonNull(adminMenu.get("activeMenuKey"), vo.getMenuResourceId());
         vo.setActiveMenuKey(activeMenuKey == null ? null : StringUtils.trimToNull(String.valueOf(activeMenuKey)));
@@ -449,6 +469,13 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         return RUNTIME_OPEN_MODES.contains(mode) ? mode : "LIST";
     }
 
+    private String resolveAppMode(JSONObject options, String entryMode) {
+        if (!"RUNTIME".equals(StringUtils.defaultString(entryMode).toUpperCase())) {
+            return null;
+        }
+        return BusinessAppMode.normalize(options == null ? null : options.get("appMode"));
+    }
+
     private BusinessAppQueryDTO normalizeQuery(BusinessAppQueryDTO query) {
         BusinessAppQueryDTO result = query == null ? new BusinessAppQueryDTO() : query;
         result.setKeyword(StringUtils.trimToNull(result.getKeyword()));
@@ -476,7 +503,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
             return;
         }
         if (StringUtils.isNotBlank(uri.getUserInfo())) {
-            throw new BusinessException("应用入口地址不能包含用户名或密码");
+            throw new BusinessException("访问入口地址不能包含用户名或密码");
         }
         String query = uri.getRawQuery();
         if (StringUtils.isBlank(query)) {
@@ -487,7 +514,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
                 .map(StringUtils::lowerCase)
                 .anyMatch(SENSITIVE_QUERY_KEYS::contains);
         if (containsSensitiveKey) {
-            throw new BusinessException("应用入口地址不能包含长期 Token、密码或密钥");
+            throw new BusinessException("访问入口地址不能包含长期 Token、密码或密钥");
         }
     }
 
@@ -499,7 +526,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         boolean containsSensitiveKey = SENSITIVE_OPTION_KEYS.stream()
                 .anyMatch(key -> lowerOptions.contains("\"" + key + "\"") || lowerOptions.contains(key + "="));
         if (containsSensitiveKey) {
-            throw new BusinessException("应用入口配置不能保存明文密码、Token 或 Webhook Secret");
+            throw new BusinessException("访问入口配置不能保存明文密码、Token 或 Webhook Secret");
         }
     }
 

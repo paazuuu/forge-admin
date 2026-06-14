@@ -31,7 +31,7 @@
           :options="objectOptions"
           clearable
           filterable
-          placeholder="选择目标业务对象"
+          placeholder="选择目标业务单元"
           @update:value="emitConfig"
         />
       </n-form-item>

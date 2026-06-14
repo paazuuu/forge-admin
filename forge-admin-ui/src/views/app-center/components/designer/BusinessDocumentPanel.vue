@@ -24,7 +24,7 @@
           <div :class="{ active: form.documentEnabled }">
             <span>01</span>
             <strong>单据模式</strong>
-            <em>{{ form.documentEnabled ? '运行态已启用' : '普通 CRUD' }}</em>
+            <em>{{ form.documentEnabled ? '运行态已启用' : '普通数据管理' }}</em>
           </div>
           <div :class="{ active: !!form.options.documentNoField && !!form.noRuleTemplate }">
             <span>02</span>
@@ -243,7 +243,7 @@ const statusValueOptions = ref([])
 const form = reactive(createDefaultConfig())
 let statusOptionLoadSeq = 0
 
-const defaultDocumentName = computed(() => `${props.objectName || '业务对象'}单据`)
+const defaultDocumentName = computed(() => `${props.objectName || '业务单元'}单据`)
 const effectiveSuiteCode = computed(() => props.suiteCode || form.suiteCode || '')
 const effectiveObjectCode = computed(() => props.objectCode || form.objectCode || '')
 const activeFields = computed(() => props.fields.filter(field => fieldCode(field) && !isInactiveField(field)))
@@ -499,7 +499,7 @@ function inferDocumentNoField() {
   const byLabel = candidates.find(item => /申请单号|单据编号|单号|编号/.test(item.label))
   if (byLabel)
     return byLabel.code
-  const byCode = candidates.find(item => /(^|_)(no|code)$|No$|Code$/.test(item.code))
+  const byCode = candidates.find(item => /(?:^|_)(?:no|code)$|No$|Code$/.test(item.code))
   return byCode?.code || ''
 }
 
@@ -510,7 +510,7 @@ function isDocumentNoCandidate(field = {}) {
     return false
   if (/申请单号|单据编号|单号|编号|编码/.test(label))
     return true
-  if (/(^|_)(no|code)$|No$|Code$/.test(code))
+  if (/(?:^|_)(?:no|code)$|No$|Code$/.test(code))
     return true
   const type = String(field.dataType || field.fieldType || '').toLowerCase()
   const componentType = String(field.componentType || field.type || '').toLowerCase()

@@ -1,6 +1,6 @@
 <template>
   <n-drawer :show="show" width="680" @update:show="value => emit('update:show', value)">
-    <n-drawer-content :title="form.id ? '编辑应用入口' : '新增应用入口'" closable>
+    <n-drawer-content :title="form.id ? '编辑访问入口' : '新增访问入口'" closable>
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
         <n-grid :cols="2" :x-gap="12">
           <n-form-item-gi label="入口名称" path="appName">
@@ -10,12 +10,12 @@
             <n-input v-model:value="form.appCode" placeholder="例如：CRM_CUSTOMER_MANAGE" />
           </n-form-item-gi>
         </n-grid>
-        <n-form-item label="所属套件" path="suiteCode">
+        <n-form-item label="所属业务域" path="suiteCode">
           <n-select
             v-model:value="form.suiteCode"
             filterable
             :options="suiteOptions"
-            placeholder="选择业务套件"
+            placeholder="选择业务域"
             @update:value="loadObjects"
           />
         </n-form-item>
@@ -33,17 +33,17 @@
         </n-form-item>
 
         <template v-if="isAdminMount">
-          <n-form-item :label="form.suiteAsMenuParent ? '套件目录上级' : '父级菜单或模块'">
+          <n-form-item :label="form.suiteAsMenuParent ? '业务域目录上级' : '父级菜单或模块'">
             <MenuParentSelect v-model:value="form.adminMenuParentId" placeholder="选择挂载在哪个管理端菜单下" />
           </n-form-item>
           <n-form-item v-if="form.suiteAsMenuParent && form.suiteMenuResourceId" label="实际挂载目录">
-            <MenuParentSelect :value="form.suiteMenuResourceId" placeholder="已生成套件目录" disabled />
+            <MenuParentSelect :value="form.suiteMenuResourceId" placeholder="已生成业务域目录" disabled />
           </n-form-item>
           <n-grid :cols="3" :x-gap="12">
             <n-form-item-gi label="同步为菜单">
               <n-switch v-model:value="form.adminMenuSyncEnabled" />
             </n-form-item-gi>
-            <n-form-item-gi label="套件作为父级目录">
+            <n-form-item-gi label="业务域作为父级目录">
               <n-switch v-model:value="form.suiteAsMenuParent" />
             </n-form-item-gi>
             <n-form-item-gi label="菜单排序">
@@ -56,7 +56,7 @@
           <n-form-item-gi label="打开方式" path="entryMode">
             <n-select v-model:value="form.entryMode" :options="entryModeOptions" />
           </n-form-item-gi>
-          <n-form-item-gi label="关联业务对象">
+          <n-form-item-gi label="关联业务单元">
             <n-select
               v-model:value="form.objectCode"
               clearable
@@ -73,7 +73,19 @@
           <p>{{ entryModeExplain.description }}</p>
         </div>
 
-        <n-form-item v-if="showConfigKey" label="业务对象打开方式">
+        <n-form-item v-if="showConfigKey" label="使用模式" path="appMode">
+          <n-radio-group v-model:value="form.appMode" class="app-mode-grid">
+            <label v-for="item in appModeOptions" :key="item.value" class="app-mode-card">
+              <n-radio :value="item.value" />
+              <span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.description }}</small>
+              </span>
+            </label>
+          </n-radio-group>
+        </n-form-item>
+
+        <n-form-item v-if="showConfigKey && isDynamicRenderMode" label="业务页面打开方式">
           <n-radio-group :value="form.runtimeOpenMode" class="runtime-mode-grid" @update:value="handleRuntimeOpenModeChange">
             <label v-for="item in runtimeOpenModeOptions" :key="item.value" class="runtime-mode-card">
               <n-radio :value="item.value" />
@@ -84,11 +96,14 @@
             </label>
           </n-radio-group>
         </n-form-item>
-        <n-alert v-if="showConfigKey" class="runtime-mode-tip" type="info" :bordered="false">
+        <n-alert v-if="showConfigKey && isDynamicRenderMode" class="runtime-mode-tip" type="info" :bordered="false">
           {{ runtimeModeTip }}
         </n-alert>
-        <n-form-item v-if="showConfigKey" label="发布配置">
-          <n-input v-model:value="form.configKey" placeholder="选择业务对象后通常会自动带出" />
+        <n-alert v-if="showConfigKey && !isDynamicRenderMode" class="runtime-mode-tip" type="info" :bordered="false">
+          下载代码模式不会打开在线页面，保存后可在应用总览中预览和下载完整功能代码。
+        </n-alert>
+        <n-form-item v-if="showConfigKey" label="业务页面配置">
+          <n-input v-model:value="form.configKey" placeholder="选择业务单元后通常会自动带出" />
         </n-form-item>
         <n-form-item v-if="showEntryUrl" :label="entryUrlLabel">
           <n-input v-model:value="form.entryUrl" :placeholder="entryUrlPlaceholder" />
@@ -177,17 +192,18 @@ const formRef = ref(null)
 const saving = ref(false)
 const objectOptions = ref([])
 const runtimeOpenModeTouched = ref(false)
-const { dict } = useDict('ai_business_app_entry_mode')
+const { dict } = useDict('ai_business_app_entry_mode', 'ai_business_app_mode')
 
 const form = reactive(defaultForm())
 
 const rules = {
   appName: { required: true, message: '请输入入口名称', trigger: 'blur' },
   appCode: { required: true, message: '请输入入口编码', trigger: 'blur' },
-  suiteCode: { required: true, message: '请选择业务套件', trigger: 'change' },
+  suiteCode: { required: true, message: '请选择业务域', trigger: 'change' },
   appType: { required: true, message: '请选择应用类型', trigger: 'change' },
   mountTarget: { required: true, message: '请选择挂载位置', trigger: 'change' },
   entryMode: { required: true, message: '请选择打开方式', trigger: 'change' },
+  appMode: { required: true, message: '请选择使用模式', trigger: 'change' },
 }
 
 const mountTargetOptions = [
@@ -209,10 +225,10 @@ const mountTargetOptions = [
 ]
 const entryModeMeta = {
   RUNTIME: {
-    title: '业务对象页面',
-    description: '打开当前业务对象发布后的列表或填报页，适合客户、合同、申请单等对象。',
+    title: '业务页面',
+    description: '打开当前业务单元发布后的列表或填报页，适合客户、合同、申请单等业务。',
     urlLabel: '入口地址',
-    urlPlaceholder: '业务对象页面通常由发布配置自动生成',
+    urlPlaceholder: '业务页面通常由发布配置自动生成',
   },
   ROUTE: {
     title: '系统已有页面',
@@ -256,6 +272,7 @@ const isIntegrationApp = computed(() => form.mountTarget === 'API')
 const showConfigKey = computed(() => form.entryMode === 'RUNTIME')
 const showEntryUrl = computed(() => !['RUNTIME', 'API'].includes(form.entryMode))
 const showSecurityFields = computed(() => ['IFRAME', 'EXTERNAL', 'H5'].includes(form.entryMode))
+const isDynamicRenderMode = computed(() => normalizeAppMode(form.appMode) === 'DYNAMIC_RENDER')
 const entryModeOptions = computed(() => {
   const dictMap = new Map((dict.value.ai_business_app_entry_mode || []).map(item => [item.value, item]))
   return allowedEntryModesForTarget(form.mountTarget).map((value) => {
@@ -267,16 +284,38 @@ const entryModeOptions = computed(() => {
     }
   })
 })
+const appModeMeta = {
+  DYNAMIC_RENDER: {
+    label: '在线运行',
+    description: '在线搭建并由平台托管运行，适合需要快速发布和持续调整的业务页面。',
+  },
+  CODE_DOWNLOAD: {
+    label: '下载代码',
+    description: '生成完整功能代码包，导入本地工程后进行二次开发。',
+  },
+}
+const appModeOptions = computed(() => {
+  const dictMap = new Map((dict.value.ai_business_app_mode || []).map(item => [item.value, item]))
+  return ['DYNAMIC_RENDER', 'CODE_DOWNLOAD'].map((value) => {
+    const item = dictMap.get(value)
+    const meta = appModeMeta[value]
+    return {
+      label: item?.label || meta.label,
+      value,
+      description: item?.remark || meta.description,
+    }
+  })
+})
 const entryModeExplain = computed(() => entryModeMeta[form.entryMode] || entryModeMeta.ROUTE)
 const entryUrlLabel = computed(() => entryModeExplain.value.urlLabel)
 const entryUrlPlaceholder = computed(() => entryModeExplain.value.urlPlaceholder)
 const selectedObject = computed(() => objectOptions.value.find(item => item.value === form.objectCode) || null)
 const objectPlaceholder = computed(() => {
   if (form.entryMode === 'RUNTIME')
-    return '业务对象页面必须关联已发布对象'
+    return '业务页面必须关联已发布业务单元'
   if (isIntegrationApp.value)
-    return '可选，用于标识接口服务的业务对象'
-  return '可选，关联后按业务对象归集'
+    return '可选，用于标识接口服务的业务单元'
+  return '可选，关联后按业务单元归集'
 })
 const mobileSceneOptions = [
   { label: 'H5 入口', value: 'h5' },
@@ -345,6 +384,8 @@ watch(() => form.entryMode, () => {
   form.appType = resolveAppType()
   if (form.entryMode === 'RUNTIME' && !runtimeOpenModeTouched.value)
     form.runtimeOpenMode = inferRuntimeOpenMode()
+  if (form.entryMode !== 'RUNTIME')
+    form.appMode = 'DYNAMIC_RENDER'
   if (form.entryMode === 'API' && form.entryUrl === '/app-center/integration')
     form.entryUrl = ''
 })
@@ -371,7 +412,11 @@ async function loadObjects() {
 async function save() {
   await formRef.value?.validate()
   if (form.entryMode === 'RUNTIME' && !form.objectCode) {
-    message.warning('业务对象页面需要关联业务对象')
+    message.warning('业务页面需要关联业务单元')
+    return
+  }
+  if (form.entryMode === 'RUNTIME' && normalizeAppMode(form.appMode) === 'CODE_DOWNLOAD' && !form.configKey) {
+    message.warning('下载代码模式需要选择业务页面配置')
     return
   }
   if (showEntryUrl.value && !String(form.entryUrl || '').trim()) {
@@ -396,7 +441,7 @@ async function save() {
       await updateBusinessApp(payload)
     else
       await createBusinessApp(payload)
-    message.success('应用入口已保存')
+    message.success('访问入口已保存')
     emit('saved')
     emit('update:show', false)
   }
@@ -447,6 +492,7 @@ function hydrateOptions() {
     form.suiteAsMenuParent = suiteAsMenuParent
     form.menuSort = Number(props.app?.menuSort ?? adminMenu.sort ?? options.menuSort ?? form.sortOrder ?? 0)
     form.runtimeOpenMode = normalizeRuntimeOpenMode(props.app?.runtimeOpenMode || options.runtimeOpenMode || inferRuntimeOpenMode())
+    form.appMode = normalizeAppMode(props.app?.appMode || options.appMode || 'DYNAMIC_RENDER')
     form.allowedDomains = allowedDomains.join('\n')
     form.mobileScene = options.mobileScene || defaultMobileScene(form.entryMode)
     form.visibleScope = options.visibleScope || 'all'
@@ -465,6 +511,7 @@ function hydrateOptions() {
     form.suiteAsMenuParent = true
     form.menuSort = Number(form.sortOrder || 0)
     form.runtimeOpenMode = inferRuntimeOpenMode()
+    form.appMode = 'DYNAMIC_RENDER'
     form.allowedDomains = ''
     form.mobileScene = defaultMobileScene(form.entryMode)
     form.visibleScope = 'all'
@@ -476,6 +523,8 @@ function hydrateOptions() {
   form.appType = resolveAppType()
   if (form.entryMode !== 'RUNTIME')
     form.runtimeOpenMode = 'LIST'
+  if (form.entryMode !== 'RUNTIME')
+    form.appMode = 'DYNAMIC_RENDER'
 }
 
 function buildOptions() {
@@ -518,9 +567,11 @@ function buildOptions() {
   }
   if (form.entryMode === 'RUNTIME') {
     options.runtimeOpenMode = normalizeRuntimeOpenMode(form.runtimeOpenMode)
+    options.appMode = normalizeAppMode(form.appMode)
   }
   else {
     delete options.runtimeOpenMode
+    delete options.appMode
   }
   const allowedDomains = String(form.allowedDomains || '')
     .split(/[\n,，]/)
@@ -634,6 +685,11 @@ function normalizeRuntimeOpenMode(value) {
   return ['LIST', 'CREATE_FORM', 'DETAIL'].includes(mode) ? mode : 'LIST'
 }
 
+function normalizeAppMode(value) {
+  const mode = String(value || 'DYNAMIC_RENDER').toUpperCase()
+  return ['DYNAMIC_RENDER', 'CODE_DOWNLOAD'].includes(mode) ? mode : 'DYNAMIC_RENDER'
+}
+
 function normalizeMenuParentId(value) {
   if (value === null || value === undefined || value === '')
     return null
@@ -685,6 +741,7 @@ function defaultForm() {
     suiteCode: null,
     objectCode: null,
     entryMode: 'RUNTIME',
+    appMode: 'DYNAMIC_RENDER',
     runtimeOpenMode: 'LIST',
     entryUrl: '',
     configKey: '',
@@ -717,11 +774,16 @@ function defaultForm() {
   width: 100%;
 }
 
-.runtime-mode-grid {
+.runtime-mode-grid,
+.app-mode-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   width: 100%;
+}
+
+.app-mode-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .runtime-mode-tip {
@@ -749,7 +811,8 @@ function defaultForm() {
   background: #f8fbff;
 }
 
-.runtime-mode-card {
+.runtime-mode-card,
+.app-mode-card {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
@@ -764,7 +827,8 @@ function defaultForm() {
     background 160ms ease;
 }
 
-.runtime-mode-card:hover {
+.runtime-mode-card:hover,
+.app-mode-card:hover {
   border-color: #2f6feb;
   background: #f8fbff;
 }
@@ -772,19 +836,23 @@ function defaultForm() {
 .mount-card strong,
 .mount-card small,
 .runtime-mode-card strong,
-.runtime-mode-card small {
+.runtime-mode-card small,
+.app-mode-card strong,
+.app-mode-card small {
   display: block;
 }
 
 .mount-card strong,
-.runtime-mode-card strong {
+.runtime-mode-card strong,
+.app-mode-card strong {
   color: #111827;
   font-size: 14px;
   line-height: 1.4;
 }
 
 .mount-card small,
-.runtime-mode-card small {
+.runtime-mode-card small,
+.app-mode-card small {
   margin-top: 4px;
   color: #6b7280;
   font-size: 12px;
@@ -819,7 +887,8 @@ function defaultForm() {
 
 @media (max-width: 640px) {
   .mount-target-grid,
-  .runtime-mode-grid {
+  .runtime-mode-grid,
+  .app-mode-grid {
     grid-template-columns: 1fr;
   }
 }

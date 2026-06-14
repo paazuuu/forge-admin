@@ -80,7 +80,12 @@
                 <span>{{ entryModeLabel(app) }}</span>
               </small>
             </span>
-            <DictTag dict-type="sys_enable_disable" :value="app.status" :bordered="false" />
+            <span class="entry-tags">
+              <n-tag v-if="isCodeDownload(app)" size="small" type="info" :bordered="false">
+                下载代码
+              </n-tag>
+              <DictTag dict-type="sys_enable_disable" :value="app.status" :bordered="false" />
+            </span>
           </button>
           <n-dropdown trigger="click" :options="appOptions(app)" @select="key => handleAppSelect(key, app)">
             <n-button quaternary circle size="small" aria-label="更多入口操作">
@@ -151,6 +156,7 @@ const emit = defineEmits([
   'toggleObject',
   'deleteObject',
   'openApp',
+  'codeApp',
   'configApp',
   'toggleApp',
   'deleteApp',
@@ -186,12 +192,16 @@ const objectOptions = computed(() => [
 function isOpenDisabled(app) {
   if (app.status !== 1)
     return true
+  if (isCodeDownload(app))
+    return !app.id
   if (app.entryMode === 'RUNTIME')
     return !app.configKey && !app.entryUrl
   return !app.entryUrl
 }
 
 function entryModeLabel(app) {
+  if (isCodeDownload(app))
+    return '下载代码'
   if (app.entryMode === 'RUNTIME')
     return '业务页面'
   if (app.entryMode === 'ROUTE')
@@ -208,11 +218,19 @@ function entryModeLabel(app) {
 }
 
 function appOptions(app) {
-  return [
+  const options = [
     {
       label: '配置入口',
       key: 'config',
     },
+  ]
+  if (isCodeDownload(app)) {
+    options.push({
+      label: '功能代码',
+      key: 'code',
+    })
+  }
+  options.push(
     {
       label: app.status === 1 ? '停用入口' : '启用入口',
       key: 'toggle',
@@ -225,7 +243,12 @@ function appOptions(app) {
       label: '删除入口',
       key: 'delete',
     },
-  ]
+  )
+  return options
+}
+
+function isCodeDownload(app) {
+  return app?.entryMode === 'RUNTIME' && app?.appMode === 'CODE_DOWNLOAD'
 }
 
 function handleObjectSelect(key) {
@@ -248,6 +271,10 @@ function handleObjectSelect(key) {
 function handleAppSelect(key, app) {
   if (key === 'config') {
     emit('configApp', app)
+    return
+  }
+  if (key === 'code') {
+    emit('codeApp', app)
     return
   }
   if (key === 'toggle') {
@@ -459,6 +486,12 @@ function handleAppSelect(key, app) {
 .entry-copy strong,
 .entry-copy small {
   display: block;
+}
+
+.entry-tags {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .entry-copy strong {

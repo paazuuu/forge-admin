@@ -5,7 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 应用入口视图。
+ * 访问入口视图。
  */
 @Data
 public class BusinessAppVO {
@@ -33,6 +33,8 @@ public class BusinessAppVO {
     private String configKey;
 
     private String runtimeOpenMode;
+
+    private String appMode;
 
     private Long menuResourceId;
 

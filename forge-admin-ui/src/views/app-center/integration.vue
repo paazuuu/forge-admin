@@ -53,7 +53,7 @@
             @delete="deleteApp"
           />
         </div>
-        <n-empty v-else-if="!loading" description="暂无集成应用入口" />
+        <n-empty v-else-if="!loading" description="暂无集成访问入口" />
       </n-spin>
       <div v-if="total > pagination.pageSize" class="entry-pagination">
         <n-pagination

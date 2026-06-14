@@ -1,0 +1,110 @@
+--- a/.agents/skills/forge-codegen-crud/SKILL.md
++++ b/.agents/skills/forge-codegen-crud/SKILL.md
+@@ -25,6 +25,12 @@
+ - Put query SQL in Mapper XML. Do not generate Service-layer `LambdaQueryWrapper` query chains except MyBatis-Plus built-in `selectById`, `insert`, `updateById`, and `deleteById` style operations.
+ - Use `pageNum` and `pageSize`; never generate backend `page` as the page parameter.
+ - Use AiCrudPage URL placeholders with `:id` or `:${rowKey}`. Do not generate `{id}` placeholders.
++- Generated CRUD controllers and frontend API configs must use Forge's POST-safe codegen contract for detail, create, update, and delete:
++  - detail: `POST /getById`
++  - create: `POST /add`
++  - update: `POST /edit`
++  - delete: `POST /remove/{id}` and `post@.../remove/:id`
++  Do not generate `PUT` or `DELETE` endpoints for generated CRUD modules.
+ - Use `DictSelect`, `DictTag`, and `useDict()` for dictionary fields. Do not hardcode frontend options or status label maps.
+ - Generate `sys_dict_type` and `sys_dict_data` seed SQL for new dictionaries, or explicitly reuse an existing dictionary type discovered in migrations.
+ - Generate `sys_excel_export_config` and `sys_excel_column_config` seed SQL when import/export is enabled.
+--- a/.agents/skills/forge-codegen-crud/references/single-table-crud.md
++++ b/.agents/skills/forge-codegen-crud/references/single-table-crud.md
+@@ -56,7 +56,7 @@
+ 
+ ## Controller Contract
+ 
+-Generate standard endpoints:
++Generate Forge codegen-safe endpoints. Do not use `PUT` or `DELETE` for generated CRUD modules because project gateway and security policies expect POST for detail, update, and delete operations.
+ 
+ ```java
+ @Slf4j
+@@ -73,26 +73,26 @@
+         return RespInfo.success(exampleService.page(pageQuery, query));
+     }
+ 
+-    @GetMapping("/{id}")
++    @PostMapping("/getById")
+     @OperationLog(module = "示例管理", type = OperationType.QUERY, desc = "查询示例详情")
+-    public RespInfo<BizExampleVO> detail(@PathVariable Long id) {
++    public RespInfo<BizExampleVO> detail(@RequestParam Long id) {
+         return RespInfo.success(exampleService.getDetail(id));
+     }
+ 
+-    @PostMapping
++    @PostMapping("/add")
+     @OperationLog(module = "示例管理", type = OperationType.ADD, desc = "新增示例")
+     public RespInfo<Long> create(@RequestBody BizExampleDTO dto) {
+         return RespInfo.success(exampleService.create(dto));
+     }
+ 
+-    @PutMapping
++    @PostMapping("/edit")
+     @OperationLog(module = "示例管理", type = OperationType.UPDATE, desc = "修改示例")
+     public RespInfo<Void> update(@RequestBody BizExampleDTO dto) {
+         exampleService.update(dto);
+         return RespInfo.success();
+     }
+ 
+-    @DeleteMapping("/{id}")
++    @PostMapping("/remove/{id}")
+     @OperationLog(module = "示例管理", type = OperationType.DELETE, desc = "删除示例")
+     public RespInfo<Void> delete(@PathVariable Long id) {
+         exampleService.delete(id);
+@@ -146,10 +146,10 @@
+   <AiCrudPage
+     :api-config="{
+       list: 'get@/api/biz/example/page',
+-      detail: 'get@/api/biz/example/:id',
+-      add: 'post@/api/biz/example',
+-      update: 'put@/api/biz/example',
+-      delete: 'post@/api/biz/example/removeBatch',
++      detail: 'post@/api/biz/example/getById',
++      add: 'post@/api/biz/example/add',
++      update: 'post@/api/biz/example/edit',
++      delete: 'post@/api/biz/example/remove/:id',
+       export: 'post@/api/excel/export/biz_example_export',
+       import: 'post@/api/excel/import/biz_example_export',
+       importTemplate: 'get@/api/excel/template/biz_example_export',
+--- a/.agents/skills/forge-codegen-crud/references/sql-seeds.md
++++ b/.agents/skills/forge-codegen-crud/references/sql-seeds.md
+@@ -208,3 +208,14 @@
+ ```
+ 
+ If the module uses API permission resources, also generate `resource_type = 4` rows with `api_method` and `api_url`, guarded by method + URL or `perms`.
++For generated CRUD APIs, use POST-safe codegen routes for detail, create, update, and delete permission resources:
++
++- `GET /.../page`
++- `GET /.../list`
++- `POST /.../getById`
++- `POST /.../add`
++- `POST /.../edit`
++- `POST /.../remove/{id}`
++- `POST /.../removeBatch`
++
++Do not seed `PUT` or `DELETE` API resources for generated CRUD modules.
+--- a/.agents/skills/forge-codegen-crud/references/validation-checklist.md
++++ b/.agents/skills/forge-codegen-crud/references/validation-checklist.md
+@@ -13,7 +13,8 @@
+ 
+ ## Backend
+ 
+-- [ ] Controller uses `RespInfo.success(data)` / `RespInfo.success()` and standard routes.
++- [ ] Controller uses `RespInfo.success(data)` / `RespInfo.success()` and Forge codegen-safe routes.
++- [ ] Generated detail/update/delete endpoints use POST (`/getById`, `/edit`, `/remove/{id}`); no `@PutMapping` or `@DeleteMapping` is generated.
+ - [ ] Pagination uses `PageQuery` or `pageNum` + `pageSize`, not `page`.
+ - [ ] Query SQL lives in Mapper XML.
+ - [ ] Mapper XML lists explicit columns and includes standard audit fields.
+@@ -26,6 +27,7 @@
+ 
+ - [ ] Page uses `AiCrudPage`.
+ - [ ] `api-config` uses `:id` placeholders, not `{id}`.
++- [ ] Generated `api-config` uses POST for detail/update/delete (`post@.../getById`, `post@.../edit`, `post@.../remove/:id`); no `put@` or `delete@` is generated.
+ - [ ] Dictionary fields use `useDict()`, `DictSelect`, and `DictTag`.
+ - [ ] Schemas are `computed` when they depend on dictionaries.
+ - [ ] Import/export props and API config match generated backend or common Excel endpoints.

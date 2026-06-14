@@ -1,0 +1,52 @@
+# ${tableComment} 功能代码包
+
+生成日期：${date}
+
+## 接口前缀
+
+`${apiBase}`
+
+## 后端代码
+
+将 `backend/src/main/java` 和 `backend/src/main/resources/mapper` 下的文件合并到后端工程对应模块中。
+
+核心文件：
+
+- `entity/${className}.java`
+- `dto/${className}DTO.java`
+- `dto/${className}Query.java`
+- `mapper/${className}Mapper.java`
+- `service/I${className}Service.java`
+- `service/impl/${className}ServiceImpl.java`
+- `controller/${className}Controller.java`
+- `mapper/${className}Mapper.xml`
+
+接口采用 Forge 代码生成器安全调用风格，详情、更新和删除使用 POST：
+
+- `GET ${apiBase}/page`
+- `GET ${apiBase}/list`
+- `POST ${apiBase}/getById`
+- `POST ${apiBase}/add`
+- `POST ${apiBase}/edit`
+- `POST ${apiBase}/remove/{id}`
+
+## 前端代码
+
+将 `frontend/src/api/${configKey}.js` 和 `frontend/src/views/${viewPath}/index.vue` 合并到前端工程。
+
+页面基于项目内置数据管理组件渲染，接口配置已使用上方业务接口前缀。
+
+## SQL
+
+如 zip 中包含 `sql/` 目录，请先导入菜单 SQL，再导入字典 SQL。导入前请确认：
+
+- 内置数据使用当前租户。
+- 菜单父级资源存在。
+- 字典类型未与现有类型冲突。
+
+## 二次开发建议
+
+- 后端查询扩展优先写在 Mapper XML。
+- 新增下拉、状态等枚举优先维护为系统字典。
+- 敏感字段传输按需补充 `@ApiEncrypt` / `@ApiDecrypt`。
+- 文件和图片回显使用 Forge 鉴权文件能力。

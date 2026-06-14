@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.service.businessapp;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.mdframe.forge.plugin.generator.constant.BusinessAppMode;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
@@ -24,7 +25,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 业务应用入口打开方式解析服务。
+ * 业务访问入口打开方式解析服务。
  */
 @Service
 @RequiredArgsConstructor
@@ -38,7 +39,7 @@ public class BusinessAppOpenService {
     public BusinessAppOpenInfoVO openInfo(Long id) {
         AiBusinessApp app = businessAppMapper.selectEntityById(resolveTenantId(), id);
         if (app == null) {
-            throw new BusinessException("应用入口不存在");
+            throw new BusinessException("访问入口不存在");
         }
         return buildOpenInfo(app);
     }
@@ -53,7 +54,10 @@ public class BusinessAppOpenService {
         Long menuResourceId = readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId")));
         String activeMenuKey = menuResourceId == null ? null : String.valueOf(menuResourceId);
         String runtimeOpenMode = resolveRuntimeOpenMode(options.getString("runtimeOpenMode"));
-        String targetUrl = resolveTargetUrl(app, runtimeOpenMode, menuResourceId);
+        boolean codeDownloadMode = isCodeDownloadRuntime(app, options);
+        String targetUrl = codeDownloadMode
+                ? appendQuery("/app-center", Map.of("codeAppId", String.valueOf(app.getId())))
+                : resolveTargetUrl(app, runtimeOpenMode, menuResourceId);
 
         BusinessAppOpenInfoVO vo = new BusinessAppOpenInfoVO();
         vo.setAppId(app.getId());
@@ -71,7 +75,7 @@ public class BusinessAppOpenService {
         vo.setTargetRoute(targetUrl);
 
         // RUNTIME 模式下校验 configKey 对应的运行配置是否存在
-        String runtimeMessage = validateRuntimeConfig(app);
+        String runtimeMessage = codeDownloadMode ? null : validateRuntimeConfig(app);
         vo.setRuntimeStatus(runtimeMessage == null ? "AVAILABLE" : "MISSING");
         vo.setRuntimeMessage(runtimeMessage);
 
@@ -79,21 +83,25 @@ public class BusinessAppOpenService {
         boolean hasTarget = StringUtils.isNotBlank(vo.getTargetUrl());
         boolean runtimeValid = runtimeMessage == null;
         String securityMessage = validateOpenSecurity(app, vo.getOpenType(), vo.getTargetUrl());
-        vo.setCanOpen(enabled && hasTarget && runtimeValid && Boolean.TRUE.equals(vo.getPermissionGranted()) && securityMessage == null);
+        vo.setCanOpen(!codeDownloadMode && enabled && hasTarget && runtimeValid && Boolean.TRUE.equals(vo.getPermissionGranted()) && securityMessage == null);
         if (!enabled) {
-            vo.setMessage("应用入口已停用");
+            vo.setMessage("访问入口已停用");
             vo.setNextAction("ENABLE_APP_ENTRY");
-            vo.setNextActionLabel("启用应用入口");
+            vo.setNextActionLabel("启用访问入口");
+        } else if (codeDownloadMode) {
+            vo.setMessage("该访问入口为下载代码模式，请在应用管理中预览或下载功能代码");
+            vo.setNextAction("OPEN_CODE_PANEL");
+            vo.setNextActionLabel("查看功能代码");
         } else if ("RUNTIME".equals(StringUtils.defaultIfBlank(app.getEntryMode(), "").toUpperCase()) && !runtimeValid) {
             vo.setMessage(runtimeMessage);
             vo.setNextAction("PUBLISH_APP");
             vo.setNextActionLabel("发布应用");
         } else if (!hasTarget) {
-            vo.setMessage("应用入口尚未配置打开地址");
+            vo.setMessage("访问入口尚未配置打开地址");
             vo.setNextAction("CONFIGURE_ENTRY");
             vo.setNextActionLabel("配置打开地址");
         } else if (!Boolean.TRUE.equals(vo.getPermissionGranted())) {
-            vo.setMessage("缺少应用入口打开权限");
+            vo.setMessage("缺少访问入口打开权限");
             vo.setNextAction("REQUEST_PERMISSION");
             vo.setNextActionLabel("联系管理员授权");
         } else if (securityMessage != null) {
@@ -101,11 +109,17 @@ public class BusinessAppOpenService {
             vo.setNextAction("CONFIGURE_SECURITY");
             vo.setNextActionLabel("配置域名白名单");
         } else {
-            vo.setMessage("可打开应用入口");
+            vo.setMessage("可打开访问入口");
             vo.setNextAction("OPEN_APP");
-            vo.setNextActionLabel("打开应用入口");
+            vo.setNextActionLabel("打开访问入口");
         }
         return vo;
+    }
+
+    private boolean isCodeDownloadRuntime(AiBusinessApp app, JSONObject options) {
+        String entryMode = StringUtils.defaultIfBlank(app.getEntryMode(), "").toUpperCase();
+        return "RUNTIME".equals(entryMode)
+                && BusinessAppMode.isCodeDownload(options == null ? null : options.get("appMode"));
     }
 
     private String validateRuntimeConfig(AiBusinessApp app) {
@@ -115,7 +129,7 @@ public class BusinessAppOpenService {
         }
         String configKey = StringUtils.trimToNull(app.getConfigKey());
         if (configKey == null) {
-            return "应用入口未配置运行配置，请先配置模型并发布应用";
+            return "访问入口未配置运行配置，请先配置业务单元并发布应用";
         }
         AiCrudConfig config = aiCrudConfigMapper.selectByConfigKey(resolveTenantId(), configKey);
         if (config == null) {
@@ -214,7 +228,7 @@ public class BusinessAppOpenService {
         try {
             uri = URI.create(targetUrl);
         } catch (IllegalArgumentException e) {
-            return "应用入口地址格式不正确";
+            return "访问入口地址格式不正确";
         }
         String scheme = StringUtils.lowerCase(uri.getScheme());
         if (!"http".equals(scheme) && !"https".equals(scheme)) {

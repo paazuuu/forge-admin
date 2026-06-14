@@ -3,7 +3,7 @@ package com.mdframe.forge.plugin.generator.dto.businessapp;
 import lombok.Data;
 
 /**
- * 应用入口保存参数。
+ * 访问入口保存参数。
  */
 @Data
 public class BusinessAppDTO {
@@ -27,6 +27,9 @@ public class BusinessAppDTO {
     private String configKey;
 
     private String runtimeOpenMode;
+
+    /** DYNAMIC_RENDER/CODE_DOWNLOAD，仅 RUNTIME 入口生效。 */
+    private String appMode;
 
     private String icon;
 

@@ -168,6 +168,7 @@
                 @toggle-object="toggleObject"
                 @delete-object="deleteObject"
                 @open-app="openApp"
+                @code-app="openCodePanel"
                 @config-app="openEditor"
                 @toggle-app="toggleApp"
                 @delete-app="deleteApp"
@@ -196,6 +197,10 @@
       :app="editingApp"
       :suites="suites"
       @saved="loadAll"
+    />
+    <AppCodePanel
+      v-model:show="codePanelVisible"
+      :app="codingApp"
     />
     <BusinessObjectWizardDrawer
       v-model:show="objectWizardVisible"
@@ -233,7 +238,7 @@ import {
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   businessAppDetail,
   businessAppList,
@@ -248,6 +253,7 @@ import {
   updateBusinessSuiteStatus,
 } from '@/api/business-app'
 import IconRenderer from '@/components/IconRenderer.vue'
+import AppCodePanel from './components/AppCodePanel.vue'
 import AppEditorDrawer from './components/AppEditorDrawer.vue'
 import AppFilterBar from './components/AppFilterBar.vue'
 import BusinessObjectWizardDrawer from './components/BusinessObjectWizardDrawer.vue'
@@ -256,6 +262,7 @@ import SuiteEditorDrawer from './components/SuiteEditorDrawer.vue'
 import BusinessObjectDesignerPage from './object-designer.[objectCode].vue'
 
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 
 const keyword = ref('')
@@ -270,6 +277,8 @@ const loadingObjects = ref(false)
 const loadingApps = ref(false)
 const editorVisible = ref(false)
 const editingApp = ref(null)
+const codePanelVisible = ref(false)
+const codingApp = ref(null)
 const objectWizardVisible = ref(false)
 const suiteEditorVisible = ref(false)
 const editingSuite = ref(null)
@@ -436,7 +445,14 @@ watch(businessUnitTotal, (total) => {
     unitPagination.value.page = maxPage
 })
 
-onMounted(loadAll)
+watch(() => route.query.codeAppId, () => {
+  openCodePanelFromQuery()
+})
+
+onMounted(async () => {
+  await loadAll()
+  await openCodePanelFromQuery()
+})
 
 async function loadAll() {
   await loadSuites()
@@ -642,6 +658,27 @@ async function openEditor(app, object = null) {
   editorVisible.value = true
 }
 
+async function openCodePanel(app) {
+  if (!app?.id)
+    return
+  try {
+    const res = await businessAppDetail(app.id)
+    codingApp.value = { ...app, ...(res.data || {}) }
+  }
+  catch {
+    codingApp.value = { ...app }
+  }
+  codePanelVisible.value = true
+}
+
+async function openCodePanelFromQuery() {
+  const appId = route.query.codeAppId
+  if (!appId)
+    return
+  const matched = apps.value.find(item => String(item.id) === String(appId))
+  await openCodePanel(matched || { id: appId })
+}
+
 function createAppForObject(object) {
   openEditor(null, object)
 }
@@ -667,6 +704,10 @@ async function handleSuiteSaved(payload) {
 }
 
 async function openApp(app) {
+  if (isCodeDownloadApp(app)) {
+    await openCodePanel(app)
+    return
+  }
   const res = await businessAppOpenInfo(app.id)
   const info = res.data || {}
   if (!info.canOpen) {
@@ -682,6 +723,10 @@ async function openApp(app) {
     return
   }
   router.push(info.targetUrl)
+}
+
+function isCodeDownloadApp(app) {
+  return app?.entryMode === 'RUNTIME' && app?.appMode === 'CODE_DOWNLOAD'
 }
 
 function openObjectStats(object) {

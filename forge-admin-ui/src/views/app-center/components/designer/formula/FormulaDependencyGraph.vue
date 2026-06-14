@@ -322,7 +322,7 @@ function nodeTypeLabel(node = {}) {
     FIELD: '字段',
     FORMULA: '公式字段',
     RELATION: '对象关系',
-    OBJECT: '业务对象',
+    OBJECT: '业务单元',
     FUNCTION: '函数',
   }[type] || type
 }

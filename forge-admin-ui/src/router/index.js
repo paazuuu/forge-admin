@@ -78,30 +78,30 @@ export const manualRoutes = [
     component: () => import('@/views/system/profile.vue'),
     meta: { title: '个人中心' },
   },
-  // AI 动态CRUD页面（path 参数形式，兼容菜单注册的 /ai/crud-page/:configKey 格式）
+  // AI 动态业务页面（path 参数形式，兼容菜单注册的 /ai/crud-page/:configKey 格式）
   {
     name: 'AiCrudPageDynamic',
     path: '/ai/crud-page/:configKey',
     component: () => import('@/views/ai/crud-page.vue'),
-    meta: { title: 'CRUD页面' },
+    meta: { title: '业务页面' },
   },
   {
     name: 'AiLowcodeBuilderDynamic',
     path: '/ai/lowcode-builder/:id?',
     component: () => import('@/views/ai/lowcode-builder.vue'),
-    meta: { title: '低代码搭建器' },
+    meta: { title: '业务页面设计器' },
   },
   {
     name: 'BusinessObjectDesigner',
     path: '/app-center/object/:objectCode/designer',
     component: () => import('@/views/app-center/object-designer.[objectCode].vue'),
-    meta: { title: '业务对象设计', skipTab: true },
+    meta: { title: '业务单元设计', skipTab: true },
   },
   {
     name: 'BusinessAppEntry',
     path: '/app-center/app/:appId',
     component: () => import('@/views/app-center/app-entry.vue'),
-    meta: { title: '应用入口', skipTab: true },
+    meta: { title: '访问入口', skipTab: true },
   },
   {
     name: 'BusinessTriggerConfig',

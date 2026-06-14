@@ -56,11 +56,11 @@ export function createPageTitleGuard(router) {
     let pageTitle = to.meta?.title
     if (to.path?.startsWith('/ai/crud-page/')) {
       const dynamicTitle = tabStore.tabs.find(tab => tab.path === to.fullPath || tab.key === to.fullPath)?.title
-      if (dynamicTitle && dynamicTitle !== 'CRUD页面')
+      if (dynamicTitle && dynamicTitle !== '业务页面')
         pageTitle = dynamicTitle
       else if (to.query?.title)
         pageTitle = String(to.query.title)
-      else if (!pageTitle || pageTitle === 'CRUD页面')
+      else if (!pageTitle || pageTitle === '业务页面')
         pageTitle = findTitleFromAllMenus(permissionStore.allMenus, to.path, to.query?.menuKey || to.query?.menuResourceId) || pageTitle
     }
     if (pageTitle) {

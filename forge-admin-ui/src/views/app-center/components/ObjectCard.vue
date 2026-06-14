@@ -9,7 +9,7 @@
         <h3>{{ object.objectName || object.objectCode }}</h3>
         <DictTag dict-type="sys_enable_disable" :value="object.status" :bordered="false" />
       </div>
-      <p>{{ object.description || '业务对象设计和运行入口' }}</p>
+      <p>{{ object.description || '业务单元设计和运行入口' }}</p>
       <div class="object-function-row">
         <DictTag dict-type="ai_business_object_type" :value="object.objectType" :bordered="false" />
         <span>{{ object.relationCount || 0 }} 关系</span>
@@ -24,7 +24,7 @@
         </template>
         设计对象
       </n-button>
-      <n-button quaternary circle size="small" aria-label="打开业务对象" @click.stop="emit('open', object)">
+      <n-button quaternary circle size="small" aria-label="打开业务单元" @click.stop="emit('open', object)">
         <template #icon>
           <n-icon><OpenOutline /></n-icon>
         </template>

@@ -1,5 +1,5 @@
 # 应用模式与代码下载能力收敛
-> status: proposed
+> status: implemented
 > created: 2026-06-14
 > complexity: 🔴复杂
 
@@ -38,7 +38,7 @@
 - `AiCrudCodegenService` 通过 `CodegenStrategy` 分发到 `VelocityCodegenStrategy`。
 - `VelocityCodegenStrategy` 已能生成后端 Controller、Service、Mapper、Mapper XML、DTO、Query、前端页面、前端 API、菜单 SQL、字典 SQL 和原始配置 JSON。
 - `VelocityCodegenStrategy#resolveApiBase` 已有兜底逻辑：当发现 `/ai/crud/{configKey}` 或 `/rest/` 时，会降级为 `/{configKey}`。但这只是模板层兜底，不等于应用维度的业务专属接口契约。
-- 当前模板 `templates/vm/controller.java.vm` 和 `templates/vm/ai-crud/index.vue.vm` 仍使用 `getById/add/edit/remove` 风格接口，不完全符合 Forge 标准 REST 接口规范。
+- 当前模板 `templates/vm/controller.java.vm` 和 `templates/vm/ai-crud/index.vue.vm` 使用 `getById/add/edit/remove` 风格接口，其中详情、更新、删除按既有安全约束使用 POST，不能改成 PUT/DELETE。
 
 ### 2.3 应用管理前端
 
@@ -132,14 +132,14 @@
   - 不能以 `/ai/crud/`、`/ai/crud-config`、`/ai/lowcode/`、`/rest/` 开头。
   - 不能包含 `{configKey}`、`crud` 等面向旧运行时的标识。
 - 生成的前端 API 和页面必须使用该业务接口前缀。
-- 生成的后端 Controller 必须使用 Forge 标准 REST 风格：
+- 生成的后端 Controller 必须使用 Forge 代码生成器约定的安全调用风格：
   - `GET /page`
   - `GET /list`
-  - `GET /{id}`
-  - `POST /`
-  - `PUT /`
-  - `DELETE /{id}`
-  - 批量删除可保留 `DELETE /batch` 或 `POST /removeBatch`，但首选标准化。
+  - `POST /getById`
+  - `POST /add`
+  - `POST /edit`
+  - `POST /remove/{id}`
+  - 批量删除继续使用 `POST /removeBatch`，禁止生成 PUT/DELETE。
 
 ### 4.3 应用管理代码接口
 
@@ -326,8 +326,10 @@
 - 风险：用户仍直接输入旧路由。
   - 处理：前端旧页面给出迁移提示；后端旧管理接口加权限或废弃响应。
 
-## 11. 待确认项
+## 11. 实现结论
 
-- 下载代码模式业务接口前缀默认使用 `/{suiteCode-kebab}/{objectCode-kebab}`，是否需要统一加 `/api` 前缀。
-- 旧 `/ai/crud-config/codegen/download/{configKey}` 是直接返回 410/业务错误，还是保留管理员兼容一段时间。
-- 生成 Controller 是否本次一次性改为完全 RESTful；本 spec 建议改造，以符合 Forge 标准接口规范。
+- 下载代码模式业务接口前缀默认使用 `/{suiteCode-kebab}/{objectCode-kebab}`，本次不统一加 `/api` 前缀；代码包设置允许实施人员覆盖，但后端会拦截 `/ai/crud/`、`/ai/crud-config`、`/ai/lowcode/`、`/rest/` 和包含旧配置标识的路径。
+- 旧 `/ai/crud-config/codegen/download/{configKey}` 短期保留管理员兼容能力，已增加权限校验和废弃日志；应用管理前端不再调用该入口。
+- 生成 Controller 已改为业务专属路径，并按既有生成器安全约束保持详情、更新、删除走 POST：`/getById`、`/add`、`/edit`、`/remove/{id}`；直接使用已校验的 `businessApiBase` 作为 `@RequestMapping`，确保前后端生成路径一致。
+- 应用模式首期写入 `ai_business_app.options.appMode`，历史 `RUNTIME` 访问入口默认 `DYNAMIC_RENDER`，非 `RUNTIME` 入口不保留模式配置。
+- 旧配置页前端改为迁移提示页；菜单迁移脚本只隐藏旧入口，不删除历史资源。

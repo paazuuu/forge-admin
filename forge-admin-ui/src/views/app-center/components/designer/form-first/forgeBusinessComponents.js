@@ -251,7 +251,7 @@ function createForgeBusinessComponentRules(fields = []) {
       ...fieldBindingRules(),
       inputRule('referenceObjectCode', '目标对象编码', '例如：crm_customer'),
       inputRule('referenceDisplayField', '显示字段', '例如：customerName'),
-      inputRule('optionSource>api', '远程接口', '例如：get@/ai/crud/crm_customer/page'),
+      inputRule('optionSource>api', '远程接口', '例如：get@/crm/customer/page'),
       inputRule('optionSource>recordsField', '列表路径', '默认 records'),
       inputRule('optionSource>valueField', '值字段', '默认 id'),
       inputRule('optionSource>labelField', '显示字段', '默认 name'),
@@ -694,7 +694,7 @@ async function loadObjectReferencePreviewOptions(rule = {}) {
   const props = rule.props || {}
   const optionSource = props.optionSource || {}
   const referenceObjectCode = props.referenceObjectCode || ''
-  const api = optionSource.api || (referenceObjectCode ? `get@/ai/crud/${referenceObjectCode}/page` : '')
+  const api = optionSource.api || (referenceObjectCode ? `get@/business/${String(referenceObjectCode).toLowerCase().replace(/_/g, '-')}/page` : '')
   if (!api)
     return []
   const cacheKey = `object:${api}:${optionSource.recordsField || ''}:${optionSource.labelField || props.referenceDisplayField || ''}`
