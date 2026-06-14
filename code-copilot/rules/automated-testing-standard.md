@@ -15,7 +15,7 @@
 按顺序读取：
 
 1. `AGENTS.md` 或当前会话注入的项目规则。
-2. `.opencode/memory/preferences.md`、`.opencode/memory/pitfalls.md`、`.opencode/memory/decisions.md`。
+2. `code-copilot/memory/preferences.md`、`code-copilot/memory/pitfalls.md`、`code-copilot/memory/decisions.md`。
 3. `code-copilot/rules/automated-testing-standard.md`。
 4. 当前变更的 `spec.md`、`tasks.md`。
 5. 当前变更已存在的 `test-spec.md`、`execution-log.md`。
@@ -74,9 +74,9 @@
 
 - `tasks.md` 只更新本轮相关 Task 的执行结果。
 - `spec.md` 只更新执行日志、审查结论、HARD-GATE 或风险状态。
-- 新踩坑写入 `.opencode/memory/pitfalls.md`。
-- 可复用决策写入 `.opencode/memory/decisions.md`。
-- 用户偏好写入 `.opencode/memory/preferences.md`。
+- 新踩坑写入 `code-copilot/memory/pitfalls.md`。
+- 可复用决策写入 `code-copilot/memory/decisions.md`。
+- 用户偏好写入 `code-copilot/memory/preferences.md`。
 
 ## 5. Forge 默认命令
 

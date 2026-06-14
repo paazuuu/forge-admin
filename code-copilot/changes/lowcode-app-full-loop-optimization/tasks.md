@@ -781,8 +781,8 @@ cd forge-admin-ui && source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 **涉及文件**:
 - `code-copilot/changes/lowcode-app-full-loop-optimization/spec.md` — 更新执行日志、审查结论、确认记录。
 - `code-copilot/changes/lowcode-app-full-loop-optimization/tasks.md` — 标记任务状态、实际改动文件、验证结果。
-- `.opencode/memory/pitfalls.md` — 记录新发现的坑，如流程变量协议、菜单隐藏、触发器异步失败定位。
-- `.opencode/memory/decisions.md` — 记录“审批归入流程引擎”等项目决策，如确认后尚未沉淀。
+- `code-copilot/memory/pitfalls.md` — 记录新发现的坑，如流程变量协议、菜单隐藏、触发器异步失败定位。
+- `code-copilot/memory/decisions.md` — 记录“审批归入流程引擎”等项目决策，如确认后尚未沉淀。
 
 **验收标准**:
 - 每个 Task 都有状态和实际改动文件。
@@ -792,8 +792,8 @@ cd forge-admin-ui && source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 **执行结果**:
 - 已新增 `execution-log.md` 记录 Phase 8 命令、接口、数据库和流程部署结果。
 - 已更新 `spec.md`、`tasks.md` 的 Phase 8 执行记录和 HARD-GATE 结论。
-- 已向 `.opencode/memory/pitfalls.md` 记录 Flyway 占位符和流程变量映射验证坑。
-- 已向 `.opencode/memory/decisions.md` 记录审批能力统一归入 Flowable 流程引擎的产品/架构决策。
+- 已向 `code-copilot/memory/pitfalls.md` 记录 Flyway 占位符和流程变量映射验证坑。
+- 已向 `code-copilot/memory/decisions.md` 记录审批能力统一归入 Flowable 流程引擎的产品/架构决策。
 
 ---
 

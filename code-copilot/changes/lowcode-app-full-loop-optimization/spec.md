@@ -407,7 +407,7 @@ Flyway 要求：
 | Task 19 | completed | `V1.0.51__seed_crm_opportunity_document_flow.sql`, `DynamicCrudController.java`, `DynamicCrudService.java`, `BusinessTriggerExecutor.java` | 初始化 CRM 商机单据状态字段、单据配置、流程绑定、自动发起流程触发器、审批结果站内信触发器和商机看板入口；新增记录事件改用创建后数据以携带 `recordId` |
 | Task 20 | completed | `V1.0.52__seed_leave_document_flow_demo.sql`, `BusinessTriggerExecutor.java` | 初始化 HR 离职申请与离职交接样板对象、运行配置、单据流程绑定、日期条件自动发起流程和流程通过后创建交接记录触发器 |
 | Task 21 | completed | `V1.0.53__align_flow_template_logic_delete_column.sql`, `V1.0.54__patch_opportunity_flow_dept_manager_mapping.sql`, `BusinessFlowService.java`, `BusinessTriggerExecutor.java`, `MessageTemplateEngine.java`, `execution-log.md` | 完成 Flyway 实跑、`leave_multi` 流程部署、商机手动发起流程、核心接口、后端 package、前端 build 和 `git diff --check` 验证 |
-| Task 22 | completed | `spec.md`, `tasks.md`, `execution-log.md`, `.opencode/memory/pitfalls.md`, `.opencode/memory/decisions.md` | 回填 Phase 8 执行记录、审查结论、HARD-GATE 结论，并沉淀 Flyway 占位符与 Flowable 变量映射踩坑 |
+| Task 22 | completed | `spec.md`, `tasks.md`, `execution-log.md`, `code-copilot/memory/pitfalls.md`, `code-copilot/memory/decisions.md` | 回填 Phase 8 执行记录、审查结论、HARD-GATE 结论，并沉淀 Flyway 占位符与 Flowable 变量映射踩坑 |
 
 ### Phase 7 收尾验证
 

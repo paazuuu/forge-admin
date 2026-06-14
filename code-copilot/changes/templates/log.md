@@ -15,7 +15,7 @@
 | 问题 | 原因 | 解决方案 | 沉淀？ |
 
 ## 知识发现
-> 每个 task 后实时记录，/archive 时逐条确认沉淀到 knowledge/
+> 每个 task 后实时记录，/archive 时逐条确认沉淀到 `code-copilot/memory/` 或 `knowledge/`
 - [ ] **关键词**: 描述
 
 ## Spec-Code 偏差记录

@@ -65,3 +65,15 @@ Forge 代码生成模板不能按通用 REST 风格生成 `PUT` 更新或 `DELET
 - 批量删除：`POST /removeBatch`
 
 应用管理下载代码模式可以把接口前缀替换为业务专属 `businessApiBase`，但不能把更新、删除改成 `PUT` / `DELETE`。
+
+## 8. 长期记忆统一归集到 code-copilot/memory
+
+**记录日期**: 2026-06-14
+
+项目决策、踩坑记录、用户偏好三类长期记忆从 `.opencode/memory/` 迁移到 `code-copilot/memory/`，后续只维护 code-copilot 下的权威文件：
+
+- 项目决策：`code-copilot/memory/decisions.md`
+- 踩坑记录：`code-copilot/memory/pitfalls.md`
+- 用户偏好：`code-copilot/memory/preferences.md`
+
+`AGENTS.md`、`code-copilot/AGENTS.md`、`code-copilot/agents/*.md` 和变更模板必须指向上述权威路径；`.opencode/memory/` 不再作为 Forge 项目长期记忆维护位置，`code-copilot/knowledge/` 只保留专题技术知识材料。

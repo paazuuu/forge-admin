@@ -514,9 +514,10 @@ curl -s -X DELETE http://localhost:8580/system/user/123 \
 5. **`code-copilot/rules/domain-rules.md`** — 业务领域约束
 6. **`code-copilot/rules/security.md`** — 安全红线
 7. **`code-copilot/rules/automated-testing-standard.md`** — 自动化测试与验证标准（执行 `/test` 和阶段验证时必读）
-8. **`.opencode/memory/pitfalls.md`** — 踩坑记录（每次新对话必读）
-9. **`.opencode/memory/decisions.md`** — 项目决策记录
-10. **`forge-docs/guide/conventions.md`** — 完整编码规范
+8. **`code-copilot/memory/pitfalls.md`** — 踩坑记录（每次新对话必读）
+9. **`code-copilot/memory/decisions.md`** — 项目决策记录
+10. **`code-copilot/memory/preferences.md`** — 用户偏好记录
+11. **`forge-docs/guide/conventions.md`** — 完整编码规范
 
 **优先级规则**：本文件与子文件冲突时，以本文件为准；Spec 文档与通用规则冲突时，以 Spec 为准。
 
@@ -530,13 +531,14 @@ curl -s -X DELETE http://localhost:8580/system/user/123 \
 | 编码规范 | `forge-docs/guide/conventions.md` | 完整命名、异常、日志、数据库规范 |
 | SDD 工作流 | `forge-docs/guide/sdd-workflow.md` | Spec 驱动开发全流程 |
 | 工程上下文 | `code-copilot/rules/project-context.md` | 技术栈、模块依赖、详细配置 |
+| code-copilot 目录规则 | `code-copilot/AGENTS.md` | code-copilot 记忆文件迁移与写入规则 |
 | 编码规范（规则） | `code-copilot/rules/coding-style.md` | Java/前端编码规则速查 |
 | 业务领域约束 | `code-copilot/rules/domain-rules.md` | 金额、时间、状态机规则 |
 | 安全红线 | `code-copilot/rules/security.md` | 代码安全 + 业务安全 |
 | 按钮样式规范 | `code-copilot/rules/button-style-guide.md` | UnoCSS 操作按钮颜色 |
-| 踩坑记录 | `.opencode/memory/pitfalls.md` | 常见错误 & 解决方案 |
-| 项目决策 | `.opencode/memory/decisions.md` | 架构决策记录 |
-| 用户偏好 | `.opencode/memory/preferences.md` | 编码风格偏好 |
+| 踩坑记录 | `code-copilot/memory/pitfalls.md` | 常见错误 & 解决方案 |
+| 项目决策 | `code-copilot/memory/decisions.md` | 架构决策记录 |
+| 用户偏好 | `code-copilot/memory/preferences.md` | 编码风格偏好 |
 | 代码规则 | `.opencode/instructions/code-rules.md` | Java 基础规范 |
 | 更新日志 | `CHANGELOG.md` | 版本变更记录 |
 | Nginx 部署 | `NGINX_CONFIG.md` | 生产环境 Nginx 配置 |
@@ -572,8 +574,8 @@ curl -s -X DELETE http://localhost:8580/system/user/123 \
 ## 附录 B：记忆知识图谱
 
 每次新对话开始，先读取以下文件：
-- `.opencode/memory/pitfalls.md` — 踩坑记录
-- `.opencode/memory/decisions.md` — 项目决策
-- `.opencode/memory/preferences.md` — 用户偏好
+- `code-copilot/memory/pitfalls.md` — 踩坑记录
+- `code-copilot/memory/decisions.md` — 项目决策
+- `code-copilot/memory/preferences.md` — 用户偏好
 
 发现有价值信息时主动写入对应文件。实体类型：踩坑记录、项目决策、用户偏好、环境配置、业务知识。

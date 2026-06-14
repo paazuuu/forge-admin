@@ -425,7 +425,7 @@
 - [ ] 每完成一个任务，更新任务状态。
 - [ ] 如果实现中调整接口、字段或默认路径，回填 `spec.md`。
 - [ ] 记录最终修改文件列表和验证结果。
-- [ ] 如发现有价值的踩坑或决策，按 AGENTS 写入 `.opencode/memory/pitfalls.md` 或 `.opencode/memory/decisions.md`。
+- [ ] 如发现有价值的踩坑或决策，按 AGENTS 写入 `code-copilot/memory/pitfalls.md` 或 `code-copilot/memory/decisions.md`。
 
 **验收标准**:
 - tasks 状态和实际代码一致。

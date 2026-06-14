@@ -557,7 +557,7 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 - `code-copilot/changes/visual-lowcode-crud-builder/test-spec.md` — 新增测试规格。
 - `code-copilot/changes/visual-lowcode-crud-builder/implementation-summary.md` — 新增实现总结。
 - `forge-docs/guide/lowcode-crud-builder.md` — 新增低代码搭建器使用说明。
-- `.opencode/memory/pitfalls.md` — 如发现新的踩坑，补充记录。
+- `code-copilot/memory/pitfalls.md` — 如发现新的踩坑，补充记录。
 
 **回归清单**:
 - 从零创建单表业务应用并发布。
