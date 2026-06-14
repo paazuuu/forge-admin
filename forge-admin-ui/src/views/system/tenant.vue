@@ -15,7 +15,10 @@
       :edit-schema="editSchema"
       row-key="id"
       :edit-grid-cols="2"
-      modal-width="900px"
+      :edit-x-gap="14"
+      :edit-y-gap="4"
+      edit-form-class="tenant-config-form"
+      modal-width="960px"
       add-button-text="新增租户"
       :hide-add="!userStore.isAdmin"
       :hide-batch-delete="true"
@@ -357,7 +360,7 @@ const editSchema = computed(() => [
   {
     type: 'divider',
     label: '基础信息',
-    props: { titlePlacement: 'left' },
+    props: { titlePlacement: 'left', description: '租户的联系人、容量和有效期，优先保证业务信息完整。' },
     span: 2,
   },
   {
@@ -416,7 +419,7 @@ const editSchema = computed(() => [
   {
     type: 'divider',
     label: '品牌设置',
-    props: { titlePlacement: 'left' },
+    props: { titlePlacement: 'left', description: '控制浏览器、登录页和系统左上角展示，建议先完成名称和图标。' },
     span: 2,
   },
   {
@@ -471,7 +474,7 @@ const editSchema = computed(() => [
   {
     type: 'divider',
     label: '界面风格',
-    props: { titlePlacement: 'left' },
+    props: { titlePlacement: 'left', description: '选择整体布局和主色，高级配置留空时会沿用默认主题。', badge: '推荐' },
     span: 2,
   },
   {
@@ -492,8 +495,8 @@ const editSchema = computed(() => [
   // ==================== 高级主题配置（可选） ====================
   {
     type: 'divider',
-    label: '高级主题配置（可选）',
-    props: { titlePlacement: 'left', dashed: true },
+    label: '高级主题配置',
+    props: { titlePlacement: 'left', dashed: true, description: '按 Header、侧边菜单、顶部菜单拆开配置，适合需要深度品牌化的租户。', badge: '可选' },
     span: 2,
   },
   // Header 配置
@@ -502,6 +505,7 @@ const editSchema = computed(() => [
     label: 'Header背景',
     type: 'color',
     defaultValue: '#4242F7',
+    gridClass: 'tenant-config-field tenant-config-field--header',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -509,7 +513,16 @@ const editSchema = computed(() => [
     label: 'Header文字',
     type: 'color',
     defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--header',
     props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_header_height',
+    label: 'Header高度',
+    type: 'input',
+    defaultValue: '60px',
+    gridClass: 'tenant-config-field tenant-config-field--header tenant-config-field--size',
+    props: { placeholder: '例如: 60px' },
   },
   // 侧边菜单配置
   {
@@ -517,6 +530,7 @@ const editSchema = computed(() => [
     label: '侧边栏背景',
     type: 'color',
     defaultValue: '#ffffff',
+    gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -524,6 +538,7 @@ const editSchema = computed(() => [
     label: '侧边栏文字',
     type: 'color',
     defaultValue: '#333333',
+    gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -531,6 +546,7 @@ const editSchema = computed(() => [
     label: '菜单选中色',
     type: 'color',
     defaultValue: '#316cfa',
+    gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -538,6 +554,7 @@ const editSchema = computed(() => [
     label: '菜单选中背景',
     type: 'color',
     defaultValue: '#f6eded',
+    gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -545,6 +562,7 @@ const editSchema = computed(() => [
     label: '侧边栏图标',
     type: 'color',
     defaultValue: '#666666',
+    gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -552,6 +570,7 @@ const editSchema = computed(() => [
     label: '选中图标色',
     type: 'color',
     defaultValue: '#4242F7',
+    gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -559,6 +578,7 @@ const editSchema = computed(() => [
     label: '菜单宽度',
     type: 'input',
     defaultValue: '220px',
+    gridClass: 'tenant-config-field tenant-config-field--side tenant-config-field--size',
     props: { placeholder: '例如: 220px' },
   },
   {
@@ -566,21 +586,15 @@ const editSchema = computed(() => [
     label: '折叠宽度',
     type: 'input',
     defaultValue: '64px',
+    gridClass: 'tenant-config-field tenant-config-field--side tenant-config-field--size',
     props: { placeholder: '例如: 64px' },
-  },
-  {
-    field: 'theme_header_height',
-    label: 'Header高度',
-    type: 'input',
-    defaultValue: '60px',
-    props: { placeholder: '例如: 60px' },
   },
 
   // ==================== 顶部菜单配置 ====================
   {
     type: 'divider',
     label: '顶部菜单配置',
-    props: { titlePlacement: 'left', dashed: true },
+    props: { titlePlacement: 'left', dashed: true, description: '仅影响顶部菜单布局，和左侧菜单配置分开维护。' },
     span: 2,
   },
   {
@@ -588,6 +602,7 @@ const editSchema = computed(() => [
     label: '菜单文字色',
     type: 'color',
     defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--top',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -595,6 +610,7 @@ const editSchema = computed(() => [
     label: '选中文字色',
     type: 'color',
     defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--top',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -602,6 +618,7 @@ const editSchema = computed(() => [
     label: '选中背景色',
     type: 'color',
     defaultValue: '#ffffff',
+    gridClass: 'tenant-config-field tenant-config-field--top',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -609,6 +626,7 @@ const editSchema = computed(() => [
     label: '图标颜色',
     type: 'color',
     defaultValue: '#ffffff',
+    gridClass: 'tenant-config-field tenant-config-field--top',
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
@@ -616,6 +634,7 @@ const editSchema = computed(() => [
     label: '选中图标色',
     type: 'color',
     defaultValue: '#333333',
+    gridClass: 'tenant-config-field tenant-config-field--top',
     props: { showAlpha: false, modes: ['hex'] },
   },
 ])
@@ -859,9 +878,10 @@ async function handleSubmitSuccess() {
       appStore.setThemeConfig(mergedConfig)
     }
 
-    // 应用浏览器标题
-    if (tenantConfig.browserTitle) {
-      document.title = tenantConfig.browserTitle
+    // 应用浏览器标题。未单独配置浏览器标题时，使用系统名称作为网页基础标题。
+    const pageBaseTitle = tenantConfig.browserTitle || tenantConfig.systemName
+    if (pageBaseTitle) {
+      document.title = pageBaseTitle
     }
 
     // 应用浏览器图标
@@ -1017,37 +1037,125 @@ function handleBeforeRenderDetail(data) {
   padding: 0 2px;
 }
 
+:deep(.tenant-config-form) {
+  padding: 2px 2px 0;
+}
+
+:deep(.tenant-config-form .ai-form-section-title) {
+  margin-top: 4px;
+}
+
+:deep(.tenant-config-form .tenant-config-field) {
+  position: relative;
+  padding: 10px 12px 8px;
+  border: 1px solid #e5edf8;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 92%), rgb(248 250 252 / 88%)), #f8fafc;
+}
+
+:deep(.tenant-config-form .tenant-config-field::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+}
+
+:deep(.tenant-config-form .tenant-config-field--header::before) {
+  background: linear-gradient(180deg, #60a5fa, #38bdf8);
+}
+
+:deep(.tenant-config-form .tenant-config-field--side::before) {
+  background: linear-gradient(180deg, #22c55e, #14b8a6);
+}
+
+:deep(.tenant-config-form .tenant-config-field--top::before) {
+  background: linear-gradient(180deg, #f59e0b, #fb7185);
+}
+
+:deep(.tenant-config-form .tenant-config-field .n-form-item) {
+  --n-label-padding: 0 0 4px 0 !important;
+}
+
+:deep(.tenant-config-form .tenant-config-field .n-form-item-label) {
+  min-height: 22px !important;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:deep(.tenant-config-form .tenant-config-field .n-form-item-blank) {
+  min-height: 32px;
+}
+
+:deep(.tenant-config-form .tenant-config-field .n-color-picker-trigger),
+:deep(.tenant-config-form .tenant-config-field .n-input) {
+  border-radius: 6px;
+}
+
+:deep(.tenant-config-form .tenant-config-field--size) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 94%), rgb(241 245 249 / 90%)), #f1f5f9;
+}
+
+:deep(.tenant-config-form .tenant-config-field--size .n-input .n-input__input-el) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+}
+
 .layout-selector {
+  width: 100%;
+}
+
+.layout-selector :deep(.n-radio-group) {
+  width: 100%;
+}
+
+.layout-selector :deep(.n-space) {
+  width: 100%;
+  gap: 10px !important;
+}
+
+.layout-selector :deep(.n-radio) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.layout-selector :deep(.n-radio__label) {
   width: 100%;
 }
 
 .layout-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  padding: 8px;
-  border: 2px solid #e4e7ed;
-  border-radius: 6px;
+  gap: 8px;
+  min-height: 54px;
+  padding: 7px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  background: #fafafa;
+  background: linear-gradient(180deg, #fff, #f8fafc);
 }
 
 .layout-card:hover {
-  border-color: #c0c4cc;
+  border-color: #93c5fd;
+  box-shadow: 0 6px 16px rgb(37 99 235 / 8%);
 }
 
 .layout-card.active,
 :deep(.n-radio:has(input:checked)) .layout-card {
-  border-color: var(--primary-color, #18a058);
-  background: rgba(24, 160, 88, 0.05);
+  border-color: #60a5fa;
+  background: linear-gradient(180deg, #eff6ff, #ffffff);
 }
 
 .layout-img {
-  width: 80px;
-  height: 50px;
+  width: 58px;
+  height: 36px;
   object-fit: contain;
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .layout-name {

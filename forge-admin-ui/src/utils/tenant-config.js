@@ -49,8 +49,9 @@ export async function applyTenantConfig(tenantConfig, appStore) {
     appStore.setThemeColor(tenantConfig.systemTheme)
   }
 
-  if (tenantConfig.browserTitle) {
-    document.title = tenantConfig.browserTitle
+  const pageBaseTitle = tenantConfig.browserTitle || tenantConfig.systemName
+  if (pageBaseTitle) {
+    document.title = pageBaseTitle
   }
 
   if (tenantConfig.browserIcon) {

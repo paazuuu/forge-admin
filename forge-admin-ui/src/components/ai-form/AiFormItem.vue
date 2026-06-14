@@ -3,14 +3,15 @@
 -->
 
 <template>
-  <!-- 分割线 -->
-  <n-divider
+  <!-- 分组标题 -->
+  <AiFormSectionTitle
     v-if="field.type === 'divider'"
-    :title-placement="field.props?.titlePlacement || 'left'"
-    v-bind="field.props"
-  >
-    {{ field.label }}
-  </n-divider>
+    :title="field.label"
+    :description="field.props?.description || field.description"
+    :badge="field.props?.badge || field.badge"
+    :style="field.style || field.formItemStyle"
+    :class="field.className"
+  />
 
   <!-- 普通表单项 -->
   <n-form-item
@@ -650,6 +651,7 @@ import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
 import { getDictData } from '@/composables/useDict'
 import { request } from '@/utils'
 import AiCustomSelect from './AiCustomSelect.vue'
+import AiFormSectionTitle from './AiFormSectionTitle.vue'
 
 const props = defineProps({
   field: {

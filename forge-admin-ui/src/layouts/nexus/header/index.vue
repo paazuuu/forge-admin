@@ -38,8 +38,8 @@ import BreadCrumb from '../BreadCrumb.vue'
   height: 100%;
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  gap: 16px;
+  padding: 0 16px;
+  gap: 12px;
 }
 
 /* 左侧面包屑 */
@@ -54,18 +54,75 @@ import BreadCrumb from '../BreadCrumb.vue'
 .header-left :deep(.n-breadcrumb) {
   font-size: 14px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
 }
 
-.header-left :deep(.n-breadcrumb-separator) {
+.header-left :deep(.n-breadcrumb ul) {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.header-left :deep(.n-breadcrumb-item) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.header-left :deep(.n-breadcrumb-item__separator) {
   color: var(--text-tertiary);
   font-weight: 400;
   margin: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  line-height: 24px;
 }
 
 .header-left :deep(.n-breadcrumb-item__link) {
   color: var(--text-secondary);
   font-size: 14px;
-  padding: 4px 0;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0;
+  line-height: 24px;
+}
+
+.header-left :deep(.nexus-breadcrumb-entry) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 0;
+  line-height: 1;
+}
+
+.header-left :deep(.nexus-breadcrumb-label) {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  line-height: 24px;
+}
+
+.header-left :deep(.icon-renderer) {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  line-height: 1;
+}
+
+.header-left :deep(.icon-renderer .n-icon),
+.header-left :deep(.icon-renderer i),
+.header-left :deep(.icon-renderer .icon-image) {
+  display: block;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
 }
 
 .header-left :deep(.n-breadcrumb-item:last-child .n-breadcrumb-item__link) {
@@ -92,11 +149,11 @@ import BreadCrumb from '../BreadCrumb.vue'
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: 8px;
-  padding: 8px 14px;
-  height: 36px;
+  padding: 7px 12px;
+  height: 34px;
   box-sizing: border-box;
   transition: all var(--transition-base);
-  gap: 10px;
+  gap: 8px;
 }
 
 .header-center :deep(.search-trigger:hover) {
@@ -130,7 +187,7 @@ import BreadCrumb from '../BreadCrumb.vue'
   width: 1px;
   height: 24px;
   background: var(--border-light);
-  margin: 0 8px;
+  margin: 0 6px;
 }
 
 /* 响应式 */

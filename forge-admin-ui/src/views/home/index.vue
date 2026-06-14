@@ -353,12 +353,12 @@ const userChartRef = ref(null)
 
 // 快捷入口
 const quickLinks = [
-  { title: '发起流程', icon: 'i-material-symbols:add-circle-rounded', gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', path: '/flow/template' },
-  { title: '我的待办', icon: 'i-material-symbols:pending-actions', gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', path: '/flow/todo' },
-  { title: '用户管理', icon: 'i-material-symbols:person-rounded', gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', path: '/system/user' },
-  { title: '角色管理', icon: 'i-material-symbols:admin-panel-settings-rounded', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', path: '/system/role' },
-  { title: '文件管理', icon: 'i-material-symbols:folder-open-rounded', gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)', path: '/system/file' },
-  { title: '配置中心', icon: 'i-material-symbols:settings-suggest', gradient: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)', path: '/system/config-center' },
+  { title: '发起流程', icon: 'i-material-symbols:add-circle-rounded', gradient: 'linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%)', path: '/flow/template' },
+  { title: '我的待办', icon: 'i-material-symbols:pending-actions', gradient: 'linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%)', path: '/flow/todo' },
+  { title: '用户管理', icon: 'i-material-symbols:person-rounded', gradient: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', path: '/system/user' },
+  { title: '角色管理', icon: 'i-material-symbols:admin-panel-settings-rounded', gradient: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', path: '/system/role' },
+  { title: '文件管理', icon: 'i-material-symbols:folder-open-rounded', gradient: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)', path: '/system/file' },
+  { title: '配置中心', icon: 'i-material-symbols:settings-suggest', gradient: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)', path: '/system/config-center' },
 ]
 
 // 加载用户统计
@@ -558,8 +558,8 @@ function initVisitChart() {
         itemStyle: {
           borderRadius: [8, 8, 0, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#6366f1' },
-            { offset: 1, color: '#4f46e5' },
+            { offset: 0, color: '#60a5fa' },
+            { offset: 1, color: '#93c5fd' },
           ]),
         },
       },
@@ -611,19 +611,19 @@ function initUserChart() {
         lineStyle: {
           width: 3,
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#34d399' },
-            { offset: 1, color: '#10b981' },
+            { offset: 0, color: '#2dd4bf' },
+            { offset: 1, color: '#60a5fa' },
           ]),
         },
         itemStyle: {
-          color: '#10b981',
+          color: '#2dd4bf',
           borderColor: '#fff',
           borderWidth: 2,
         },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(110, 231, 183, 0.25)' },
-            { offset: 1, color: 'rgba(52, 211, 153, 0.02)' },
+            { offset: 0, color: 'rgba(45, 212, 191, 0.16)' },
+            { offset: 1, color: 'rgba(96, 165, 250, 0.02)' },
           ]),
         },
       },
@@ -657,32 +657,27 @@ onMounted(() => {
 
 <style scoped>
 .home-page {
-  padding: 20px;
   min-height: 100%;
-  padding-bottom: 60px;
-  background:
-    radial-gradient(circle at 8% 4%, rgba(99, 102, 241, 0.08) 0%, transparent 26%),
-    radial-gradient(circle at 92% 12%, rgba(14, 165, 233, 0.08) 0%, transparent 24%), #f8fafc;
 }
 
 /* 统计卡片网格 */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .stat-card {
   background: #fff;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 8px;
+  padding: 12px 14px;
   cursor: pointer;
   transition:
     transform 0.24s ease,
     box-shadow 0.24s ease,
     border-color 0.24s ease;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e8edf5;
   position: relative;
   overflow: hidden;
   animation: cardRise 0.56s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -713,25 +708,13 @@ onMounted(() => {
 }
 
 .stat-card::before {
-  content: '';
-  position: absolute;
-  top: -36%;
-  left: -68%;
-  width: 46%;
-  height: 172%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.6), transparent);
-  transform: skewX(-20deg);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    left 0.55s ease,
-    opacity 0.28s ease;
+  content: none;
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  border-color: rgba(99, 102, 241, 0.28);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(30, 41, 59, 0.06);
+  border-color: #cbdaf5;
 }
 
 .stat-card:hover::before {
@@ -743,69 +726,75 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  color: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  font-size: 20px;
+  color: #2563eb;
+  box-shadow: none;
   transition:
     transform 0.26s ease,
     box-shadow 0.26s ease;
 }
 
 .stat-card:hover .stat-icon {
-  transform: rotate(-4deg) scale(1.06);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+  transform: translateY(-1px);
+  box-shadow: none;
 }
 
 .stat-card.online .stat-icon {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: #ecfdf5;
+  color: #059669;
 }
 .stat-card.login .stat-icon {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  background: #eff6ff;
+  color: #2563eb;
 }
 .stat-card.user .stat-icon {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  background: #eef2ff;
+  color: #4f46e5;
 }
 .stat-card.todo .stat-icon {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: #fffbeb;
+  color: #d97706;
 }
 .stat-card.done .stat-icon {
-  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  background: #f0fdf4;
+  color: #16a34a;
 }
 .stat-card.started .stat-icon {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  background: #f5f3ff;
+  color: #7c3aed;
 }
 
 .stat-trend {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: 2px 7px;
+  border-radius: 999px;
 }
 
 .stat-trend.up {
   color: #059669;
-  background: #d1fae5;
+  background: #ecfdf5;
 }
 
 .stat-badge {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: #fff;
+  background: #fff1f2;
+  color: #e11d48;
   font-size: 11px;
-  padding: 4px 12px;
-  border-radius: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
   font-weight: 600;
 }
 
@@ -826,17 +815,18 @@ onMounted(() => {
 .stat-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1e293b;
+  line-height: 30px;
 }
 
 .stat-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #334155;
 }
@@ -850,10 +840,10 @@ onMounted(() => {
 .content-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 10px;
   align-items: stretch;
-  min-height: 400px;
+  min-height: 360px;
 }
 
 .todo-panel {
@@ -867,10 +857,10 @@ onMounted(() => {
 .quick-panel,
 .chart-card {
   background: #fff;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  border: 1px solid #e8edf5;
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-shadow: none;
   animation: panelRise 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -914,23 +904,23 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid #e2e8f0;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.78));
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf1f7;
+  background: #fbfcfe;
 }
 
 .panel-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 16px;
+  gap: 8px;
+  font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: #1e293b;
 }
 
 .panel-title i {
-  font-size: 20px;
-  color: #6366f1;
+  font-size: 18px;
+  color: #3b82f6;
 }
 
 /* 空状态 */
@@ -939,7 +929,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
+  padding: 28px 16px;
   color: #94a3b8;
 }
 
@@ -948,9 +938,9 @@ onMounted(() => {
 }
 
 .empty-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  opacity: 0.3;
+  font-size: 38px;
+  margin-bottom: 8px;
+  opacity: 0.24;
 }
 
 .empty-text {
@@ -965,17 +955,18 @@ onMounted(() => {
 
 /* 待办任务列表 */
 .todo-list {
-  padding: 12px;
+  padding: 8px;
 }
 
 .todo-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-  background: #f8fafc;
-  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: #fbfcfe;
+  border: 1px solid #edf1f7;
+  border-radius: 6px;
   cursor: pointer;
   transition:
     transform 0.18s ease,
@@ -984,22 +975,22 @@ onMounted(() => {
 }
 
 .todo-item:hover {
-  background: #eef2ff;
-  transform: translateX(4px);
-  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
+  background: #f8fbff;
+  transform: translateX(2px);
+  box-shadow: none;
 }
 
 .todo-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
 }
 
 .priority-tag {
   font-size: 11px;
-  padding: 4px 10px;
+  padding: 2px 7px;
   border-radius: 6px;
   font-weight: 600;
   white-space: nowrap;
@@ -1018,13 +1009,13 @@ onMounted(() => {
 .todo-content-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
   min-width: 0;
 }
 
 .todo-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #0f172a;
   overflow: hidden;
@@ -1034,14 +1025,14 @@ onMounted(() => {
 
 .todo-meta {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   font-size: 12px;
   color: #64748b;
 }
 
 .todo-node {
-  background: #e2e8f0;
-  padding: 2px 8px;
+  background: #f1f5f9;
+  padding: 1px 6px;
   border-radius: 4px;
 }
 
@@ -1065,22 +1056,23 @@ onMounted(() => {
 .right-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 /* 通知公告列表 */
 .notice-list {
-  padding: 12px;
+  padding: 8px;
 }
 
 .notice-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-  background: #f8fafc;
-  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  background: #fbfcfe;
+  border: 1px solid #edf1f7;
+  border-radius: 6px;
   cursor: pointer;
   transition:
     transform 0.18s ease,
@@ -1089,26 +1081,27 @@ onMounted(() => {
 }
 
 .notice-item:hover {
-  background: #eef2ff;
-  transform: translateX(4px);
-  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
+  background: #f8fbff;
+  transform: translateX(2px);
+  box-shadow: none;
 }
 
 .notice-item.unread {
-  background: #fef3c7;
+  background: #fffbeb;
+  border-color: #fde68a;
 }
 
 .notice-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
 
 .unread-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #f59e0b;
 }
@@ -1116,13 +1109,13 @@ onMounted(() => {
 .notice-content {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
 
 .notice-title {
-  font-size: 14px;
+  font-size: 13px;
   color: #0f172a;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1147,18 +1140,20 @@ onMounted(() => {
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 16px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .quick-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 10px;
-  padding: 16px 12px;
-  background: #f8fafc;
-  border-radius: 10px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  background: #fbfcfe;
+  border: 1px solid #edf1f7;
+  border-radius: 6px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -1179,9 +1174,9 @@ onMounted(() => {
 }
 
 .quick-item:hover {
-  background: #eef2ff;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.1);
+  background: #f8fbff;
+  transform: translateY(-1px);
+  box-shadow: none;
 }
 
 .quick-item:hover::before {
@@ -1189,18 +1184,39 @@ onMounted(() => {
 }
 
 .quick-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  color: #fff;
+  font-size: 17px;
+  color: #2563eb;
   position: relative;
   z-index: 1;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  box-shadow: none;
   transition: transform 0.24s ease;
+}
+
+.quick-item:nth-child(2) .quick-icon {
+  color: #d97706;
+}
+
+.quick-item:nth-child(3) .quick-icon {
+  color: #2563eb;
+}
+
+.quick-item:nth-child(4) .quick-icon {
+  color: #7c3aed;
+}
+
+.quick-item:nth-child(5) .quick-icon {
+  color: #0891b2;
+}
+
+.quick-item:nth-child(6) .quick-icon {
+  color: #be185d;
 }
 
 .quick-item:hover .quick-icon {
@@ -1208,23 +1224,24 @@ onMounted(() => {
 }
 
 .quick-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: #475569;
+  color: #334155;
   position: relative;
   z-index: 1;
+  white-space: nowrap;
 }
 
 /* 图表网格 */
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 10px;
 }
 
 .chart-container {
-  height: 280px;
-  padding: 16px;
+  height: 240px;
+  padding: 10px;
 }
 
 @keyframes cardRise {

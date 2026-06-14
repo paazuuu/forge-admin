@@ -257,14 +257,14 @@ function handleUserAvatarError() {
 /* Logo */
 .nexus-logo {
   position: relative;
-  height: 56px;
+  height: 54px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-light);
+  gap: 9px;
+  padding: 0 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--nexus-border) 72%, transparent);
   flex-shrink: 0;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: hidden;
 }
 
@@ -286,8 +286,13 @@ function handleUserAvatarError() {
     transparent 100%
   );
   filter: blur(0.5px);
+  opacity: 0;
   transform: translateX(-120%) skewX(-18deg);
-  animation: nexus-logo-shine 2.6s ease-in-out infinite;
+}
+
+.nexus-logo:hover::after {
+  opacity: 1;
+  animation: nexus-logo-shine 1.1s ease-in-out;
 }
 
 @keyframes nexus-logo-shine {
@@ -303,12 +308,14 @@ function handleUserAvatarError() {
 .logo-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  background: linear-gradient(135deg, #eff6ff, #f8fafc);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nexus-border) 80%, transparent);
 }
 
 .logo-icon :deep(img) {
@@ -321,7 +328,7 @@ function handleUserAvatarError() {
   font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -331,7 +338,7 @@ function handleUserAvatarError() {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 12px 8px;
+  padding: 8px 9px 7px;
 }
 
 /* 普通菜单项 */
@@ -340,10 +347,11 @@ function handleUserAvatarError() {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: none;
+  gap: 9px;
+  min-height: 34px;
+  padding: 6px 9px 6px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   transition: all var(--transition-base);
@@ -355,30 +363,68 @@ function handleUserAvatarError() {
 }
 
 .nav-item:hover {
-  background: var(--nexus-hover-bg);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--nexus-hover-bg) 92%, white), transparent);
+  border-color: color-mix(in srgb, var(--nexus-border) 78%, transparent);
   color: var(--text-primary);
 }
 
 .nav-item.active {
   color: var(--nexus-active-text);
+  border-color: color-mix(in srgb, var(--nexus-active-text) 16%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 70%);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #60a5fa, #2dd4bf);
+  z-index: 2;
 }
 
 .nav-item-bg {
   position: absolute;
-  inset: 0;
-  background: var(--nexus-active-bg);
-  border: 1px solid rgba(22, 93, 255, 0.1);
-  border-radius: 8px;
+  inset: 1px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--nexus-active-bg) 92%, white), rgb(255 255 255 / 38%)),
+    var(--nexus-active-bg);
+  border: 1px solid color-mix(in srgb, var(--nexus-active-text) 10%, transparent);
+  border-radius: 9px;
 }
 
 .nav-item .nav-icon {
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
+}
+
+.nav-item:hover .nav-icon {
+  color: var(--text-primary);
+  background: rgb(15 23 42 / 4%);
 }
 
 .nav-item.active .nav-icon :deep(svg) {
-  color: var(--primary-500);
+  color: var(--nexus-active-text);
+}
+
+.nav-item.active .nav-icon {
+  background: #fff;
+  color: var(--nexus-active-text);
+  box-shadow: 0 1px 4px rgb(30 64 175 / 10%);
 }
 
 .nav-label {
@@ -398,7 +444,7 @@ function handleUserAvatarError() {
 
 /* 可折叠菜单 */
 .nav-collapsible {
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .nav-collapsible-btn {
@@ -407,9 +453,10 @@ function handleUserAvatarError() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: none;
+  min-height: 34px;
+  padding: 6px 9px 6px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   transition: all var(--transition-base);
@@ -419,16 +466,32 @@ function handleUserAvatarError() {
 }
 
 .nav-collapsible-btn:hover {
-  background: var(--nexus-hover-bg);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--nexus-hover-bg) 92%, white), transparent);
+  border-color: color-mix(in srgb, var(--nexus-border) 78%, transparent);
   color: var(--text-primary);
 }
 
 .nav-collapsible-btn.active {
-  color: var(--text-primary);
+  color: var(--nexus-active-text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--nexus-active-bg) 86%, white), transparent);
+  border-color: color-mix(in srgb, var(--nexus-active-text) 12%, transparent);
+}
+
+.nav-collapsible-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #60a5fa, #2dd4bf);
 }
 
 .nav-collapsible-btn.sub {
+  min-height: 30px;
   padding: 5px 8px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
 }
@@ -439,24 +502,25 @@ function handleUserAvatarError() {
 }
 
 .nav-collapsible-btn.sub:hover {
-  background: var(--nexus-hover-bg);
+  background: color-mix(in srgb, var(--nexus-hover-bg) 88%, transparent);
   color: var(--text-secondary);
 }
 
 .nav-collapsible-btn.sub.active {
-  background: var(--nexus-active-bg);
+  background: color-mix(in srgb, var(--nexus-active-bg) 74%, white);
+  border-color: color-mix(in srgb, var(--nexus-active-text) 10%, transparent);
   color: var(--nexus-active-text);
 }
 
 .nav-btn-content {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
 }
 
 .nav-chevron {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--text-tertiary);
   transition: transform var(--transition-base);
   flex-shrink: 0;
@@ -469,26 +533,34 @@ function handleUserAvatarError() {
 /* 子菜单 */
 .nav-children {
   position: relative;
-  padding: 2px 0 2px 28px;
+  margin: 2px 0 4px 16px;
+  padding: 3px 0 3px 12px;
 }
 
 .nav-children-line {
   position: absolute;
-  left: 14px;
-  top: 0;
-  bottom: 8px;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
   width: 1px;
-  background: var(--border-light);
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--nexus-active-text) 20%, var(--border-light)),
+    transparent
+  );
 }
 
 .nav-sub-btn {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
+  min-height: 29px;
   padding: 5px 8px;
-  border-radius: 6px;
-  border: none;
+  border-radius: 8px;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   transition: all var(--transition-base);
@@ -498,27 +570,32 @@ function handleUserAvatarError() {
 }
 
 .nav-sub-btn:hover {
-  background: var(--nexus-hover-bg);
+  background: color-mix(in srgb, var(--nexus-hover-bg) 88%, transparent);
   color: var(--text-secondary);
 }
 
 .nav-sub-btn.active {
-  background: var(--nexus-active-bg);
+  background: color-mix(in srgb, var(--nexus-active-bg) 76%, white);
+  border-color: color-mix(in srgb, var(--nexus-active-text) 10%, transparent);
   color: var(--nexus-active-text);
+  font-weight: 600;
 }
 
 .nav-sub-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--border-default);
+  border: 1px solid color-mix(in srgb, var(--border-default) 84%, transparent);
+  background: var(--bg-primary);
   flex-shrink: 0;
   transition: all var(--transition-base);
 }
 
 .nav-sub-dot.active {
-  background: var(--primary-500);
-  transform: scale(1.3);
+  border-color: transparent;
+  background: linear-gradient(135deg, #60a5fa, #2dd4bf);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nexus-active-text) 10%, transparent);
+  transform: scale(1.05);
 }
 
 .nav-sub-label {
@@ -551,7 +628,7 @@ function handleUserAvatarError() {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-top: 1px solid var(--border-light);
   flex-shrink: 0;
 }
@@ -559,7 +636,7 @@ function handleUserAvatarError() {
 .user-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
   padding: 4px;
   border-radius: 8px;
@@ -652,7 +729,7 @@ function handleUserAvatarError() {
 
 :global(.dark) .nav-item:hover {
   color: #f1f5f9;
-  background: var(--nexus-hover-bg);
+  background: color-mix(in srgb, var(--nexus-hover-bg) 86%, transparent);
 }
 
 :global(.dark) .nav-item.active .nav-label {
@@ -668,7 +745,9 @@ function handleUserAvatarError() {
 }
 
 :global(.dark) .nav-item.active .nav-icon {
-  color: var(--primary-500);
+  color: var(--nexus-active-text);
+  background: color-mix(in srgb, var(--nexus-active-bg) 72%, #0b1120);
+  box-shadow: none;
 }
 
 :global(.dark) .nav-collapsible-btn {
@@ -677,11 +756,13 @@ function handleUserAvatarError() {
 
 :global(.dark) .nav-collapsible-btn:hover {
   color: #f1f5f9;
-  background: var(--nexus-hover-bg);
+  background: color-mix(in srgb, var(--nexus-hover-bg) 86%, transparent);
 }
 
 :global(.dark) .nav-collapsible-btn.active {
-  color: #f1f5f9;
+  color: var(--nexus-active-text);
+  background: color-mix(in srgb, var(--nexus-active-bg) 74%, transparent);
+  border-color: color-mix(in srgb, var(--nexus-active-text) 18%, transparent);
 }
 
 :global(.dark) .nav-btn-content {
@@ -702,12 +783,13 @@ function handleUserAvatarError() {
 
 :global(.dark) .nav-sub-btn:hover {
   color: #cbd5e1;
-  background: var(--nexus-hover-bg);
+  background: color-mix(in srgb, var(--nexus-hover-bg) 86%, transparent);
 }
 
 :global(.dark) .nav-sub-btn.active {
   color: var(--nexus-active-text);
-  background: var(--nexus-active-bg);
+  background: color-mix(in srgb, var(--nexus-active-bg) 76%, transparent);
+  border-color: color-mix(in srgb, var(--nexus-active-text) 16%, transparent);
 }
 
 :global(.dark) .nav-sub-dot {

@@ -1,6 +1,9 @@
-import { usePermissionStore, useTabStore } from '@/store'
+import { usePermissionStore, useTabStore, useTenantStore } from '@/store'
 
-const baseTitle = import.meta.env.VITE_TITLE
+function resolveBaseTitle() {
+  const tenantStore = useTenantStore()
+  return tenantStore.browserTitle || tenantStore.systemName || import.meta.env.VITE_TITLE
+}
 
 function findTitleFromAllMenus(allMenus, targetPath, menuKey) {
   if (!Array.isArray(allMenus))
@@ -48,6 +51,7 @@ export function createPageTitleGuard(router) {
   router.afterEach((to) => {
     const permissionStore = usePermissionStore()
     const tabStore = useTabStore()
+    const baseTitle = resolveBaseTitle()
     let pageTitle = to.meta?.title
     if (to.path?.startsWith('/ai/crud-page/')) {
       const dynamicTitle = tabStore.tabs.find(tab => tab.path === to.fullPath || tab.key === to.fullPath)?.title

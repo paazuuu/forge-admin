@@ -50,20 +50,25 @@
     />
 
     <!-- 搜索显示/隐藏 -->
-    <n-button
-      v-if="showSearchToggle"
-      text
-      @click="handleSearchToggle"
-    >
-      <span style="font-size: var(--font-size-base); margin-right: 4px">
-        {{ searchVisible ? '隐藏搜索' : '显示搜索' }}
-      </span>
-      <template #icon>
-        <n-icon size="14">
-          <component :is="searchVisible ? ChevronUpOutline : ChevronDownOutline" />
-        </n-icon>
+    <n-tooltip v-if="showSearchToggle">
+      <template #trigger>
+        <n-button
+          text
+          circle
+          class="search-toggle-button"
+          :class="{ 'is-active': searchVisible }"
+          :aria-label="searchVisible ? '隐藏搜索' : '显示搜索'"
+          @click="handleSearchToggle"
+        >
+          <template #icon>
+            <n-icon size="18">
+              <SearchOutline />
+            </n-icon>
+          </template>
+        </n-button>
       </template>
-    </n-button>
+      {{ searchVisible ? '隐藏搜索' : '显示搜索' }}
+    </n-tooltip>
 
     <!-- 渲染模式切换 -->
     <div v-if="showRenderModeSwitch" class="render-mode-switch">
@@ -121,14 +126,13 @@
 <script setup>
 /* eslint-disable vue/custom-event-name-casing */
 import {
-  ChevronDownOutline,
-  ChevronUpOutline,
   ContractOutline,
   ExpandOutline,
   GridOutline,
   ListOutline,
   RefreshOutline,
   ResizeOutline,
+  SearchOutline,
 } from '@vicons/ionicons5'
 import { ref } from 'vue'
 import AiTableFilter from './AiTableFilter.vue'
@@ -340,6 +344,30 @@ defineExpose({
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-lg);
+}
+
+.search-toggle-button {
+  width: 30px;
+  height: 30px;
+  color: var(--text-tertiary);
+  transition:
+    color 0.16s ease,
+    background 0.16s ease;
+}
+
+.search-toggle-button:hover {
+  color: var(--text-primary);
+  background: rgb(15 23 42 / 5%);
+}
+
+.search-toggle-button.is-active {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+}
+
+.search-toggle-button.is-active:hover {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 14%, transparent);
 }
 
 .render-mode-switch {

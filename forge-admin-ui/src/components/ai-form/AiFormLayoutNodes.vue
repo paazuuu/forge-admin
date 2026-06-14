@@ -140,14 +140,14 @@
         </n-collapse-item>
       </n-collapse>
 
-      <n-divider
+      <AiFormSectionTitle
         v-else-if="node.nodeType === 'divider'"
-        :title-placement="node.props?.contentPosition || node.props?.titlePlacement || 'left'"
+        :title="node.label"
+        :description="node.props?.description || node.description"
+        :badge="node.props?.badge || node.badge"
         :style="node.style"
         :class="node.className"
-      >
-        {{ node.label }}
-      </n-divider>
+      />
 
       <AiFormLayoutNodes
         v-else
@@ -173,6 +173,7 @@
 <script setup>
 import { computed, useSlots } from 'vue'
 import AiFormItem from './AiFormItem.vue'
+import AiFormSectionTitle from './AiFormSectionTitle.vue'
 
 defineOptions({
   name: 'AiFormLayoutNodes',

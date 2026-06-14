@@ -112,6 +112,7 @@ watch(() => userStore.userInfo?.tenantId, () => {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-base);
+  margin-right: 8px;
 }
 
 .tenant-switcher:hover {

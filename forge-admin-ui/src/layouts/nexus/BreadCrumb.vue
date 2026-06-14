@@ -13,22 +13,17 @@
           :options="getDropdownOptions(item.children)"
           @select="handleDropdownSelect"
         >
-          <div class="flex items-center">
+          <div class="nexus-breadcrumb-entry">
             <IconRenderer
               v-if="item.icon"
               :icon="item.icon"
               :size="16"
             />
-            <span class="ml-4">{{ item.label }}</span>
+            <span class="nexus-breadcrumb-label">{{ item.label }}</span>
           </div>
         </n-dropdown>
-        <div v-else class="flex items-center">
-          <IconRenderer
-            v-if="item.icon"
-            :icon="item.icon"
-            :size="16"
-          />
-          <span class="ml-4">{{ item.label }}</span>
+        <div v-else class="nexus-breadcrumb-entry">
+          <span class="nexus-breadcrumb-label">{{ item.label }}</span>
         </div>
       </n-breadcrumb-item>
     </template>

@@ -93,7 +93,7 @@ function handleBarMouseUp() {
   document.removeEventListener('mouseup', handleBarMouseUp)
 }
 
-function handleBarClick(e) {
+function handleBarClick() {
   if (hasDragged.value) {
     hasDragged.value = false
     return
@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
 .nexus-sidebar-wrapper {
   width: 240px;
   flex-shrink: 0;
-  padding: 12px 6px 12px 12px;
+  padding: 10px 5px 10px 10px;
   display: flex;
   flex-direction: column;
   z-index: 20;
@@ -219,8 +219,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 12px 12px 12px 6px;
-  gap: 12px;
+  padding: 10px 10px 10px 5px;
+  gap: 10px;
 }
 
 /* 顶部 Header 浮岛 */
@@ -252,11 +252,11 @@ onBeforeUnmount(() => {
 
 /* Tab 标签栏 */
 .nexus-tab-bar {
-  height: 40px;
+  height: 38px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--nexus-border);
   background: var(--nexus-tab-bg);
-  padding: 0 8px;
+  padding: 0 6px;
   display: flex;
   align-items: flex-end;
   gap: 2px;
@@ -281,8 +281,8 @@ onBeforeUnmount(() => {
   color: var(--text-tertiary) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
-  padding: 6px 12px !important;
-  height: 32px !important;
+  padding: 5px 10px !important;
+  height: 30px !important;
   transition: all var(--transition-base) !important;
 }
 

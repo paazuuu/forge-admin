@@ -77,7 +77,7 @@
     </div>
 
     <!-- 搜索表单区域 -->
-    <div v-if="!formOnly && showSearch && searchSchema.length > 0" class="ai-crud-search">
+    <div v-if="!formOnly && hasSearchSchema && searchPanelVisible" class="ai-crud-search">
       <AiSearch
         ref="searchRef"
         v-model="searchParams"
@@ -122,12 +122,15 @@
           :render-mode="activeRenderMode"
           :card-props="cardProps"
           :show-render-mode-switch="showRenderModeSwitch"
+          :show-search-toggle="hasSearchSchema"
+          :search-visible="searchPanelVisible"
           :max-height="computedMaxHeight"
           :scroll-x="computedScrollX"
           v-bind="tableProps"
           @page-change="handlePageChange"
           @page-size-change="handlePageSizeChange"
           @refresh="handleRefresh"
+          @search-toggle="handleSearchToggle"
           @render-mode-change="handleRenderModeChange"
         >
           <template #toolbar-left>
@@ -578,6 +581,7 @@ const selectedKeys = ref([])
 const customQueryPayload = ref(null)
 const customQueryFields = ref([])
 const activeRenderMode = ref(props.renderMode || 'table')
+const searchPanelVisible = ref(props.showSearch !== false)
 
 // 分页
 const pagination = ref({
@@ -1378,6 +1382,7 @@ const visibleChildrenConfig = computed(() => {
 })
 
 const hasChildrenConfig = computed(() => visibleChildrenConfig.value.some(child => child?.fields?.length))
+const hasSearchSchema = computed(() => !props.formOnly && props.showSearch && props.searchSchema.length > 0)
 
 const modalFormSchema = computed(() => {
   if (!isDetailMode.value)
@@ -1730,6 +1735,10 @@ function handleRefresh() {
   loadList()
 }
 
+function handleSearchToggle(visible) {
+  searchPanelVisible.value = visible
+}
+
 function handleApplyCustomQuery(payload) {
   customQueryPayload.value = payload
   customQueryFields.value = payload?.fields || []
@@ -1787,6 +1796,13 @@ watch(
     if (!customQueryPayload.value) {
       activeRenderMode.value = mode || 'table'
     }
+  },
+)
+
+watch(
+  () => props.showSearch,
+  (visible) => {
+    searchPanelVisible.value = visible !== false
   },
 )
 
@@ -3024,20 +3040,41 @@ watch(() => props.publicQuery, () => {
 }
 
 .ai-crud-edit-form {
-  --ai-crud-form-item-gap: 6px;
+  --ai-crud-form-item-gap: 4px;
 }
 
 .ai-crud-edit-form :deep(.n-form-item) {
-  --n-feedback-height: 18px;
+  --n-feedback-height: 16px;
   margin-bottom: 0;
 }
 
 .ai-crud-edit-form :deep(.n-form-item-label) {
-  min-height: 30px;
+  min-height: 28px;
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .ai-crud-edit-form :deep(.n-form-item-feedback-wrapper) {
-  min-height: 18px;
+  min-height: 16px;
+  font-size: 12px;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control) {
+  min-height: 32px;
+}
+
+.ai-crud-edit-form :deep(.n-input),
+.ai-crud-edit-form :deep(.n-input-number),
+.ai-crud-edit-form :deep(.n-base-selection) {
+  --n-border-radius: 6px;
+}
+
+.ai-crud-edit-form :deep(.ai-form-section-title) {
+  margin-top: 10px;
+}
+
+.ai-crud-edit-form :deep(.af-layout-grid > .n-gi:first-child .ai-form-section-title) {
+  margin-top: 0;
 }
 
 /* 搜索区域 */
