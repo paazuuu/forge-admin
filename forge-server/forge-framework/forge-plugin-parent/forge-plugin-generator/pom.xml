@@ -103,6 +103,12 @@
             <groupId>org.apache.velocity</groupId>
             <artifactId>velocity-engine-core</artifactId>
         </dependency>
+
+        <!-- Aviator 表达式引擎（字段公式计算） -->
+        <dependency>
+            <groupId>com.googlecode.aviator</groupId>
+            <artifactId>aviator</artifactId>
+        </dependency>
         
         <!-- MySQL驱动（用于解析数据库表结构） -->
         <dependency>

@@ -175,7 +175,17 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:activePanel', 'save', 'preview', 'publish', 'back', 'refresh', 'openRuntime', 'openTrigger'])
+const emit = defineEmits([
+  'update:activePanel',
+  'save',
+  'preview',
+  'publish',
+  'back',
+  'refresh',
+  'openRuntime',
+  'openTrigger',
+  'openFunctionMarket',
+])
 
 const navItems = [
   { key: 'basic', label: '基本信息', icon: OptionsOutline },
@@ -192,6 +202,7 @@ const navItems = [
 ]
 
 const moreOptions = [
+  { label: '函数市场', key: 'openFunctionMarket' },
   { label: '刷新设计器', key: 'refresh' },
   { label: '打开运行应用', key: 'openRuntime' },
   { label: '配置触发器', key: 'openTrigger' },

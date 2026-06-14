@@ -5,6 +5,7 @@ import {
   FORM_DESIGNER_SCHEMA_VERSION,
   generateFieldCode,
   isFieldComponent,
+  isGenericDesignerComponentId,
   isTemporaryDesignerRef,
   normalizeDesignerComponentLabel,
   normalizeFieldBinding,
@@ -36,9 +37,11 @@ export function convertRuleToComponent(rule = {}, index = 0, fieldContext = crea
   const fieldComponent = isFieldComponent({ componentKey })
   const forgeBinding = rule._forge?.fieldBinding || {}
   const sourceLabel = resolveRuleLabel(rule, componentKey, fieldComponent, forgeBinding)
-  const label = fieldComponent ? sourceLabel : normalizeDesignerComponentLabel(componentKey, sourceLabel)
-  const fieldCode = fieldComponent ? resolveFieldCode(rule, label, forgeBinding, fieldContext) : ''
+  const fieldCode = fieldComponent ? resolveFieldCode(rule, sourceLabel, forgeBinding, fieldContext, index, componentKey) : ''
   const existingField = fieldCode ? fieldContext.existingFieldMap.get(fieldCode) : null
+  const label = fieldComponent
+    ? resolveFieldComponentLabel(sourceLabel, existingField, fieldCode)
+    : normalizeDesignerComponentLabel(componentKey, sourceLabel)
   const createIfMissing = fieldComponent
     ? existingField ? false : forgeBinding.createIfMissing ?? Boolean(fieldCode)
     : false
@@ -81,10 +84,24 @@ function resolveRuleLabel(rule = {}, componentKey = '', fieldComponent = false, 
 
 function resolveComponentId(rule = {}, componentKey = '', fieldCode = '', fieldComponent = false, index = 0) {
   const candidates = [rule._forge?.id, rule.id, rule.name].filter(value => value !== undefined && value !== null && String(value).trim())
-  const reusable = candidates.find(value => !isTemporaryDesignerRef(value))
+  const reusable = candidates.find(value => !isTemporaryDesignerRef(value)
+    && !isGenericDesignerComponentId(value, componentKey)
+    && !(fieldComponent && isGenericDesignerFieldCode(value)))
   if (reusable)
     return reusable
   return fieldComponent ? `cmp_${fieldCode || index}` : `cmp_${componentKey || 'layout'}_${index}`
+}
+
+function resolveFieldComponentLabel(sourceLabel = '', existingField = null, fieldCode = '') {
+  if (existingField) {
+    return existingField.fieldName
+      || existingField.label
+      || existingField.comment
+      || fieldCode
+      || sourceLabel
+      || '字段'
+  }
+  return sourceLabel || fieldCode || '字段'
 }
 
 export function extractFormCreateFieldRefs(rules = []) {
@@ -141,17 +158,21 @@ function createFieldContext(fields = []) {
   }
 }
 
-function resolveFieldCode(rule = {}, label = '', forgeBinding = {}, fieldContext = createFieldContext()) {
+function resolveFieldCode(rule = {}, label = '', forgeBinding = {}, fieldContext = createFieldContext(), index = 0, componentKey = '') {
   if (forgeBinding.mode === 'virtual')
     return forgeBinding.fieldCode || ''
   const selectedFieldCode = resolveSelectedFieldCode(rule, forgeBinding)
   if (selectedFieldCode) {
+    if (shouldRegenerateSelectedFieldCode(selectedFieldCode, forgeBinding, fieldContext)) {
+      const generated = generateDesignerFieldCode(label, index, componentKey)
+      return reserveGeneratedFieldCode(generated, fieldContext)
+    }
     fieldContext.usedFieldCodes.add(selectedFieldCode)
     return selectedFieldCode
   }
   if (forgeBinding.fieldCode) {
-    if (shouldRegenerateDesignerFieldCode(forgeBinding, label, fieldContext)) {
-      const generated = generateFieldCode(label)
+    if (shouldRegenerateDesignerFieldCode(forgeBinding, fieldContext)) {
+      const generated = generateDesignerFieldCode(label, index, componentKey)
       return reserveGeneratedFieldCode(generated, fieldContext)
     }
     fieldContext.usedFieldCodes.add(forgeBinding.fieldCode)
@@ -159,18 +180,18 @@ function resolveFieldCode(rule = {}, label = '', forgeBinding = {}, fieldContext
   }
 
   const ruleField = rule.field || rule.name || ''
-  if (ruleField && !isTemporaryDesignerField(ruleField)) {
+  if (ruleField && !isTemporaryDesignerField(ruleField) && !isGenericDesignerFieldCode(ruleField)) {
     fieldContext.usedFieldCodes.add(ruleField)
     return ruleField
   }
 
-  const generated = generateFieldCode(label)
+  const generated = generateDesignerFieldCode(label, index, componentKey)
   return reserveGeneratedFieldCode(generated, fieldContext)
 }
 
 function resolveSelectedFieldCode(rule = {}, forgeBinding = {}) {
   const propField = normalizeFieldCodeCandidate(rule.props?.fieldBinding?.fieldCode || rule.props?.fieldCode || rule.fieldBinding?.fieldCode)
-  const ruleField = normalizeFieldCodeCandidate(rule.field || rule.name)
+  const ruleField = normalizeFieldCodeCandidate(rule.field || rule.name, { allowGeneric: false })
   const bindingField = normalizeFieldCodeCandidate(forgeBinding.fieldCode)
   if (propField && ruleField && propField !== ruleField) {
     if (propField === bindingField && ruleField !== bindingField)
@@ -182,9 +203,22 @@ function resolveSelectedFieldCode(rule = {}, forgeBinding = {}) {
   return propField || ruleField
 }
 
-function normalizeFieldCodeCandidate(value) {
+function normalizeFieldCodeCandidate(value, options = {}) {
+  const { allowGeneric = true } = options
   const fieldCode = String(value || '').trim()
-  return fieldCode && !isTemporaryDesignerField(fieldCode) ? fieldCode : ''
+  if (!fieldCode || isTemporaryDesignerField(fieldCode))
+    return ''
+  if (!allowGeneric && isGenericDesignerFieldCode(fieldCode))
+    return ''
+  return fieldCode
+}
+
+function generateDesignerFieldCode(label = '', index = 0, componentKey = '') {
+  const generated = generateFieldCode(label)
+  if (!isGenericDesignerFieldCode(generated))
+    return generated
+  const key = String(componentKey || '').replace(/[^a-z0-9]/gi, '')
+  return `field${key ? `${key[0].toUpperCase()}${key.slice(1)}` : ''}${Number(index) + 1}`
 }
 
 function reserveGeneratedFieldCode(value, fieldContext) {
@@ -211,19 +245,28 @@ function isFormCreateGeneratedField(value) {
   return /^F[a-z0-9]{10,}$/i.test(String(value || '').trim())
 }
 
-function shouldRegenerateDesignerFieldCode(forgeBinding = {}, label = '', fieldContext = createFieldContext()) {
+function shouldRegenerateDesignerFieldCode(forgeBinding = {}, fieldContext = createFieldContext()) {
   const fieldCode = forgeBinding.fieldCode || ''
   if (!fieldCode || fieldContext.existingFieldCodes.has(fieldCode))
     return false
   if (forgeBinding.source !== 'designer' || forgeBinding.createIfMissing === false)
     return false
-  if (isGenericDesignerFieldLabel(label))
-    return false
   return isGenericDesignerFieldCode(fieldCode)
+}
+
+function shouldRegenerateSelectedFieldCode(fieldCode = '', forgeBinding = {}, fieldContext = createFieldContext()) {
+  if (!isGenericDesignerFieldCode(fieldCode))
+    return false
+  if (!fieldContext.existingFieldCodes.has(fieldCode))
+    return true
+  return forgeBinding.source === 'designer'
+    && forgeBinding.createIfMissing !== false
+    && forgeBinding.fieldCode === fieldCode
 }
 
 function isGenericDesignerFieldCode(value = '') {
   const text = String(value || '').trim()
+  const normalized = text.toLowerCase()
   if (/^field[0-9a-z]{4,}$/i.test(text))
     return true
   return [
@@ -240,25 +283,10 @@ function isGenericDesignerFieldCode(value = '') {
     'selector',
     'radio',
     'checkbox',
-    'dictSelect',
+    'dictselect',
     'cascader',
     'field',
-  ].includes(text)
-}
-
-function isGenericDesignerFieldLabel(value = '') {
-  return [
-    '字段',
-    '输入框',
-    '多行输入',
-    '数字输入框',
-    '选择器',
-    '单选框',
-    '多选框',
-    '日期选择器',
-    '时间选择器',
-    '开关',
-  ].includes(String(value || '').trim())
+  ].includes(normalized)
 }
 
 function buildLayoutFromOptions(options = {}) {

@@ -295,7 +295,9 @@ function installForgeBusinessBaseRules(designer, fields = []) {
     selectRule('field', t?.('form.field') || '组件字段ID', buildFieldOptions(fields), undefined, {
       filterable: true,
       clearable: true,
-      placeholder: '从已有字段选择',
+      allowCreate: true,
+      defaultFirstOption: false,
+      placeholder: '选择已有字段或输入新字段ID',
     }),
     {
       type: 'LanguageInput',
@@ -341,7 +343,9 @@ function createFieldBindingRules(fields = []) {
     selectRule('fieldBinding>fieldCode', '组件字段ID', buildFieldOptions(fields), undefined, {
       filterable: true,
       clearable: true,
-      placeholder: '从已有字段选择',
+      allowCreate: true,
+      defaultFirstOption: false,
+      placeholder: '选择已有字段或输入新字段ID',
     }),
   ]
 }

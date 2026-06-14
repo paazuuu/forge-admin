@@ -920,10 +920,12 @@ function selectedRelationRefsByModel(modelCode) {
 function replaceZone(zone) {
   if (!zone)
     return
-  localSchema.value = {
+  const nextSchema = {
     ...localSchema.value,
     zones: (localSchema.value.zones || []).map(item => item.zoneKey === zone.zoneKey ? zone : item),
   }
+  if (!isSameSchema(nextSchema, localSchema.value))
+    localSchema.value = nextSchema
 }
 
 function normalizeEditZoneFieldRefs(zone, relationRefs = Array.from(selectedRelationFieldSet.value), relationSelectionTouched = false) {
@@ -1135,19 +1137,24 @@ async function saveLayout() {
 }
 
 function syncDesignerDraft() {
-  const { createdFields, normalizedFields, schema } = buildCurrentDesignerDraft()
+  const { formSchema, createdFields, normalizedFields, schema } = buildCurrentDesignerDraft()
+  const formChanged = formSchema && !isSameSchema(formSchema, localFormDesignerSchema.value)
   const fieldsChanged = !isSameSchema(normalizedFields, primaryBusinessFieldAssets.value)
   const pageChanged = !isSameSchema(schema, localSchema.value)
-  localSchema.value = schema
+  if (formChanged)
+    localFormDesignerSchema.value = cloneSchema(formSchema)
+  if (pageChanged)
+    localSchema.value = schema
   if (fieldsChanged)
     emit('fieldsUpdated', normalizedFields, { persisted: false })
-  if (fieldsChanged || pageChanged)
+  if (formChanged || fieldsChanged || pageChanged)
     emit('dirtyChange', true)
   return {
     pageSchema: cloneSchema(schema),
+    formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
     fields: cloneSchema(normalizedFields),
     createdFields: cloneSchema(createdFields),
-    dirty: fieldsChanged || pageChanged,
+    dirty: formChanged || fieldsChanged || pageChanged,
   }
 }
 

@@ -35,41 +35,98 @@
       </n-button>
     </section>
 
-    <BusinessFieldList
-      :fields="filteredFields"
-      :total-count="visibleFields.length"
-      :selected-field-code="selectedFieldCode"
-      :used-field-codes="usedFieldCodes"
-      :show-head="false"
-      @select="selectField"
-      @create="openCreateModal"
-      @patch="patchField"
-      @duplicate="duplicateField"
-      @delete="confirmDeleteField"
-      @move="moveFilteredField"
-      @add-to-form="$emit('addToForm', $event)"
-    />
-
-    <n-drawer
-      :show="propertyVisible"
-      :width="430"
-      placement="right"
-      :mask-closable="false"
-      @update:show="handlePropertyVisibleChange"
-    >
-      <n-drawer-content :native-scrollbar="false" closable body-content-style="padding: 0;">
-        <BusinessFieldPropertyPanel
-          ref="propertyPanelRef"
-          class="field-property-drawer-panel"
-          :field="selectedField"
-          :all-fields="visibleFields"
-          :developer-mode="developerMode"
-          :saving="saving"
-          @save="saveField"
-          @dirty-change="$emit('dirtyChange', $event)"
+    <section class="field-asset-workbench">
+      <div class="field-list-pane">
+        <BusinessFieldList
+          :fields="filteredFields"
+          :total-count="visibleFields.length"
+          :selected-field-code="selectedFieldCode"
+          :used-field-codes="usedFieldCodes"
+          :show-head="false"
+          @select="selectField"
+          @create="openCreateModal"
+          @patch="patchField"
+          @duplicate="duplicateField"
+          @delete="confirmDeleteField"
+          @move="moveFilteredField"
+          @add-to-form="$emit('addToForm', $event)"
         />
-      </n-drawer-content>
-    </n-drawer>
+      </div>
+
+      <aside class="field-inspector-pane">
+        <n-empty v-if="!selectedField" size="small" description="选择字段后查看摘要" />
+        <template v-else>
+          <div class="field-inspector-head">
+            <div>
+              <span>当前字段</span>
+              <strong>{{ selectedField.fieldName || selectedField.fieldCode }}</strong>
+              <code>{{ selectedField.fieldCode }}</code>
+            </div>
+            <n-tag
+              size="small"
+              :type="selectedField.systemField ? 'info' : 'success'"
+              :bordered="false"
+            >
+              {{ selectedField.systemField ? '系统字段' : '业务字段' }}
+            </n-tag>
+          </div>
+          <dl class="field-inspector-grid">
+            <div>
+              <dt>字段类型</dt>
+              <dd>{{ selectedField.fieldType || '-' }}</dd>
+            </div>
+            <div>
+              <dt>数据库列</dt>
+              <dd>{{ selectedField.columnName || '-' }}</dd>
+            </div>
+            <div>
+              <dt>表单</dt>
+              <dd>{{ selectedField.formVisible === false ? '隐藏' : '显示' }}</dd>
+            </div>
+            <div>
+              <dt>列表</dt>
+              <dd>{{ selectedField.listVisible === false ? '隐藏' : '显示' }}</dd>
+            </div>
+          </dl>
+          <div class="field-inspector-flags">
+            <n-tag v-if="selectedField.required" size="small" type="error" :bordered="false">
+              必填
+            </n-tag>
+            <n-tag v-if="selectedField.searchable" size="small" type="info" :bordered="false">
+              查询条件
+            </n-tag>
+            <n-tag v-if="selectedField.formulaConfig?.type" size="small" type="warning" :bordered="false">
+              {{ selectedField.formulaConfig.type }} 公式
+            </n-tag>
+          </div>
+          <n-button type="primary" block @click="openPropertyPanel(selectedField.fieldCode)">
+            编辑字段属性
+          </n-button>
+        </template>
+      </aside>
+    </section>
+
+    <n-modal
+      :show="propertyVisible"
+      preset="card"
+      class="field-property-modal"
+      :bordered="false"
+      :mask-closable="false"
+      @update:show="handlePropertyModalUpdate"
+    >
+      <BusinessFieldPropertyPanel
+        ref="propertyPanelRef"
+        class="field-property-modal-panel"
+        :field="selectedField"
+        :all-fields="visibleFields"
+        :relations="relations"
+        :object-code="objectCode"
+        :developer-mode="developerMode"
+        :saving="saving"
+        @save="saveField"
+        @dirty-change="$emit('dirtyChange', $event)"
+      />
+    </n-modal>
 
     <n-modal
       v-model:show="createVisible"
@@ -153,7 +210,15 @@ const props = defineProps({
     type: [Number, String],
     default: null,
   },
+  objectCode: {
+    type: String,
+    default: '',
+  },
   fields: {
+    type: Array,
+    default: () => [],
+  },
+  relations: {
     type: Array,
     default: () => [],
   },
@@ -239,7 +304,7 @@ watch(
   (value) => {
     localFields.value = cloneValue(value || [])
     if (selectedFieldCode.value && !visibleFields.value.some(field => field.fieldCode === selectedFieldCode.value))
-      closePropertyPanel(true)
+      closePropertyPanel(true, true)
   },
   { immediate: true, deep: true },
 )
@@ -262,7 +327,7 @@ function selectField(field) {
   const nextCode = field?.fieldCode || ''
   if (!nextCode)
     return
-  if (nextCode === selectedFieldCode.value && propertyVisible.value)
+  if (nextCode === selectedFieldCode.value)
     return
   if (propertyPanelRef.value?.hasChanges?.()) {
     window.$dialog.warning({
@@ -274,7 +339,7 @@ function selectField(field) {
     })
     return
   }
-  openPropertyPanel(nextCode)
+  selectedFieldCode.value = nextCode
 }
 
 function openPropertyPanel(fieldCode) {
@@ -282,34 +347,31 @@ function openPropertyPanel(fieldCode) {
   propertyVisible.value = true
 }
 
-function handlePropertyVisibleChange(show) {
+function closePropertyPanel(discardChanges = false, clearSelection = false) {
+  if (discardChanges)
+    propertyPanelRef.value?.resetForm?.()
+  propertyVisible.value = false
+  if (clearSelection)
+    selectedFieldCode.value = ''
+  emit('dirtyChange', false)
+}
+
+function handlePropertyModalUpdate(show) {
   if (show) {
     propertyVisible.value = true
     return
   }
-  requestClosePropertyPanel()
-}
-
-function requestClosePropertyPanel() {
   if (propertyPanelRef.value?.hasChanges?.()) {
     window.$dialog.warning({
       title: '未保存字段变更',
-      content: '关闭属性面板会放弃当前字段尚未保存的修改。',
-      positiveText: '放弃修改',
+      content: '关闭属性窗口会放弃当前字段尚未保存的修改。',
+      positiveText: '放弃并关闭',
       negativeText: '继续编辑',
       onPositiveClick: () => closePropertyPanel(true),
     })
     return
   }
   closePropertyPanel(false)
-}
-
-function closePropertyPanel(discardChanges = false) {
-  if (discardChanges)
-    propertyPanelRef.value?.resetForm?.()
-  propertyVisible.value = false
-  selectedFieldCode.value = ''
-  emit('dirtyChange', false)
 }
 
 function openCreateModal() {
@@ -397,16 +459,21 @@ async function saveField(payload, targetFieldCode = selectedFieldCode.value) {
     message.warning('字段英文名不能为空')
     return false
   }
+  const normalizedPayload = normalizeFieldPayload(payload)
   saving.value = true
   try {
-    const res = await updateBusinessObjectField(props.objectId, fieldCode, normalizeFieldPayload(payload))
-    const savedField = res.data || payload
+    const res = await updateBusinessObjectField(props.objectId, fieldCode, normalizedPayload)
+    const savedField = res.data || normalizedPayload
     if (savedField.fieldCode && savedField.fieldCode !== selectedFieldCode.value)
       selectedFieldCode.value = savedField.fieldCode
     propertyPanelRef.value?.resetForm?.()
     emit('dirtyChange', false)
     message.success('字段已保存')
-    await reloadFields({ persisted: true, reloadDesigner: true })
+    await reloadFields({
+      persisted: true,
+      reloadDesigner: true,
+      fieldRename: buildFieldRenameMeta(fieldCode, targetField, normalizedPayload, savedField),
+    })
     return true
   }
   finally {
@@ -451,7 +518,7 @@ async function deleteField(field) {
   await deleteBusinessObjectField(props.objectId, field.fieldCode)
   message.success('字段已隐藏')
   if (selectedFieldCode.value === field.fieldCode)
-    closePropertyPanel(true)
+    closePropertyPanel(true, true)
   await reloadFields({ persisted: true, reloadDesigner: true })
 }
 
@@ -486,7 +553,7 @@ async function reloadFields(options = {}) {
   const res = await businessObjectFields(props.objectId)
   localFields.value = cloneValue(res.data || [])
   if (selectedFieldCode.value && !visibleFields.value.some(field => field.fieldCode === selectedFieldCode.value))
-    closePropertyPanel(true)
+    closePropertyPanel(true, true)
   emit('updated', orderedFields.value, options)
 }
 
@@ -575,6 +642,21 @@ function normalizeFieldPayload(source) {
       placeholder: source.placeholder || source.basicProps?.placeholder || '',
     },
     advancedProps: { ...(source.advancedProps || {}) },
+    formulaConfig: source.formulaConfig ?? null,
+  }
+}
+
+function buildFieldRenameMeta(oldFieldCode, oldField = {}, payload = {}, savedField = {}) {
+  const newFieldCode = savedField.fieldCode || payload.fieldCode || oldFieldCode
+  if (!oldFieldCode || !newFieldCode || oldFieldCode === newFieldCode)
+    return null
+  return {
+    oldFieldCode,
+    newFieldCode,
+    oldColumnName: oldField?.columnName || payload.columnName || '',
+    newColumnName: savedField.columnName || payload.columnName || '',
+    oldFieldName: oldField?.fieldName || oldField?.label || oldFieldCode,
+    newFieldName: savedField.fieldName || payload.fieldName || newFieldCode,
   }
 }
 
@@ -656,8 +738,114 @@ defineExpose({
   width: 132px;
 }
 
-.field-property-drawer-panel {
-  min-height: calc(100vh - 64px);
+.field-asset-workbench {
+  display: grid;
+  grid-template-columns: minmax(520px, 1fr) 280px;
+  gap: 0;
+  min-height: 0;
+}
+
+.field-list-pane {
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid #e5e7eb;
+  background: #fbfcfe;
+}
+
+.field-inspector-pane {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+  padding: 16px;
+}
+
+.field-inspector-pane :deep(.n-empty) {
+  margin-top: 72px;
+}
+
+.field-inspector-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 14px;
+}
+
+.field-inspector-head div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field-inspector-head span,
+.field-inspector-grid dt {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.field-inspector-head strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-inspector-head code,
+.field-inspector-grid dd {
+  overflow: hidden;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-inspector-grid {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.field-inspector-grid div {
+  min-width: 0;
+  border: 1px solid #edf1f6;
+  border-radius: 7px;
+  background: #f8fafc;
+  padding: 9px 10px;
+}
+
+.field-inspector-grid dd {
+  margin: 4px 0 0;
+}
+
+.field-inspector-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.field-property-modal-panel {
+  width: 100%;
+  min-width: 0;
+  height: min(880px, calc(100vh - 48px));
+  overflow: hidden;
+}
+
+:global(.field-property-modal) {
+  width: min(1600px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+}
+
+:global(.field-property-modal .n-card__content) {
+  min-width: 0;
+  padding: 0;
 }
 
 @media (max-width: 980px) {
@@ -679,6 +867,20 @@ defineExpose({
   .field-filter {
     width: 100%;
     max-width: none;
+  }
+
+  .field-asset-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(360px, 1fr) auto;
+  }
+
+  .field-list-pane {
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .field-inspector-pane {
+    border-top: 1px solid #e5e7eb;
   }
 }
 </style>

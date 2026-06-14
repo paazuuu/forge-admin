@@ -1746,6 +1746,8 @@ public class LowcodeRuntimeConfigBuilder {
         if (lookupMeta != null) {
             componentType = "select";
         }
+        Map<String, Object> formulaConfig = field.getFormulaConfig();
+        boolean formulaField = formulaConfig != null && !formulaConfig.isEmpty();
         item.put("field", field.getField());
         item.put("label", label);
         item.put("type", componentType);
@@ -1761,6 +1763,11 @@ public class LowcodeRuntimeConfigBuilder {
         boolean readonly = pageSetting.containsKey("readonly")
                 ? booleanWithDefault(pageSetting.get("readonly"), false)
                 : Boolean.TRUE.equals(field.getReadonly());
+        if (formulaField) {
+            readonly = true;
+            required = false;
+            validationRules.removeIf(rule -> booleanWithDefault(rule.get("required"), false));
+        }
         if (!required) {
             validationRules.removeIf(rule -> booleanWithDefault(rule.get("required"), false));
         }
@@ -1779,6 +1786,9 @@ public class LowcodeRuntimeConfigBuilder {
         if (isSystemField(field) || readonly) {
             item.put("disabled", true);
             item.put("readonly", true);
+        }
+        if (formulaField) {
+            item.put("formulaConfig", new LinkedHashMap<>(formulaConfig));
         }
         String dictType = StringUtils.defaultIfBlank(text(pageSetting.get("dictType")), field.getDictType());
         if (StringUtils.isNotBlank(dictType)) {
@@ -1815,6 +1825,7 @@ public class LowcodeRuntimeConfigBuilder {
         props.put("placeholder", buildPlaceholder(componentType, label));
         if (isSystemField(field) || readonly) {
             props.put("disabled", true);
+            props.put("readonly", true);
         }
         if (field.getLength() != null && field.getLength() > 0 && isTextComponent(componentType)) {
             props.put("maxlength", field.getLength());
@@ -1837,6 +1848,7 @@ public class LowcodeRuntimeConfigBuilder {
         applySelectionLabelProps(props, field.getField(), componentType);
         if (isSystemField(field) || readonly) {
             props.put("disabled", true);
+            props.put("readonly", true);
         }
         item.put("props", props);
         if (lookupMeta != null) {

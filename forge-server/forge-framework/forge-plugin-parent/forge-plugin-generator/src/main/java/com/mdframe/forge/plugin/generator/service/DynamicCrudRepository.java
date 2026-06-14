@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 /**
  * 动态CRUD数据访问层
  * 使用NamedParameterJdbcTemplate防止SQL注入，支持多种数据库
- * 
+ *
  * @author forge
  */
 @Slf4j
@@ -44,13 +44,13 @@ public class DynamicCrudRepository {
 
     public record SqlCondition(String sql, Map<String, Object> params) {
     }
-    
+
     // 缓存：表名 -> 是否有del_flag列
     private final ConcurrentHashMap<String, Boolean> delFlagCache = new ConcurrentHashMap<>();
-    
+
     // 缓存：表名 -> 列名集合
     private final ConcurrentHashMap<String, Set<String>> tableColumnsCache = new ConcurrentHashMap<>();
-    
+
     // 缓存：表名 -> {camelCase -> snake_case} 映射
     private final ConcurrentHashMap<String, Map<String, String>> columnMappingCache = new ConcurrentHashMap<>();
 
@@ -88,9 +88,9 @@ public class DynamicCrudRepository {
 
         String dataSql = buildPageDataSql(tableName, whereClause, orderBy);
         appendPageParams(params, pageNum, pageSize);
-        
+
         List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
-        
+
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
         return page;
@@ -417,7 +417,7 @@ public class DynamicCrudRepository {
     private void addSearchCondition(StringBuilder whereClause, MapSqlParameterSource params,
                                      String columnName, String searchType, Object value) {
         String paramName = "param_" + columnName.replace(".", "_");
-        
+
         switch (searchType.toLowerCase()) {
             case "like":
                 addLikeCondition(whereClause, params, columnName, paramName, "%" + value + "%");
@@ -822,6 +822,33 @@ public class DynamicCrudRepository {
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("value", value);
+        String orderColumn = getTableColumns(tableName).contains("id") ? "id" : columnName;
+        String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
+        return namedJdbcTemplate.queryForList(sql, params);
+    }
+
+    public List<Map<String, Object>> selectListByColumnIn(String tableName,
+                                                          String columnName,
+                                                          Collection<?> values) {
+        validateTableName(tableName);
+        validateIdentifier(columnName);
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+
+        List<Object> nonNullValues = values.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .map(Object.class::cast)
+                .toList();
+        if (nonNullValues.isEmpty()) {
+            return List.of();
+        }
+
+        StringBuilder whereClause = new StringBuilder(columnName + " IN (:values)");
+        appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
+        MapSqlParameterSource params = buildBaseQueryParams();
+        params.addValue("values", nonNullValues);
         String orderColumn = getTableColumns(tableName).contains("id") ? "id" : columnName;
         String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
         return namedJdbcTemplate.queryForList(sql, params);

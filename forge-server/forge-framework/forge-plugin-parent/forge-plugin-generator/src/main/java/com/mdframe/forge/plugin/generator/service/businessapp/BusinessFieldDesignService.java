@@ -96,7 +96,7 @@ public class BusinessFieldDesignService {
         LowcodeFieldSchema updated = fieldSchemaService.buildFieldSchema(merged);
         updated.setPrimaryKey(false);
         updated.setSystemField(false);
-        updated.setReadonly(Boolean.TRUE.equals(merged.getReadonly()));
+        updated.setReadonly(Boolean.TRUE.equals(merged.getReadonly()) || updated.getFormulaConfig() != null);
         replaceField(context.getModelSchema(), existing.getField(), updated);
         if (identityChanged) {
             replaceModelFieldReferences(context.getModelSchema(), existing.getField(), updated.getField(),
@@ -191,6 +191,7 @@ public class BusinessFieldDesignService {
         merged.setSortOrder(dto != null && dto.getSortOrder() != null ? dto.getSortOrder() : existing.getSortOrder());
         merged.setBasicProps(mergeProps(existing.getBasicProps(), dto == null ? null : dto.getBasicProps()));
         merged.setAdvancedProps(mergeProps(existing.getAdvancedProps(), dto == null ? null : dto.getAdvancedProps()));
+        merged.setFormulaConfig(dto != null ? dto.getFormulaConfig() : existing.getFormulaConfig());
         return merged;
     }
 

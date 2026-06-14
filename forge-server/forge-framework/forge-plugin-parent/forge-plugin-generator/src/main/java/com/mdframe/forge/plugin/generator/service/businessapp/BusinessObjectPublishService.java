@@ -22,6 +22,10 @@ import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodePublishService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeRuntimeConfigBuilder;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeSchemaValidator;
+import com.mdframe.forge.plugin.generator.service.formula.CrossObjectRecomputeTaskService;
+import com.mdframe.forge.plugin.generator.service.formula.FormulaObjectDependencyAnalyzer;
+import com.mdframe.forge.plugin.generator.service.formula.FormulaPublishValidator;
+import com.mdframe.forge.plugin.generator.service.formula.FormulaValidationResult;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectDesignVersionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentConfigVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectRelationVO;
@@ -57,12 +61,24 @@ public class BusinessObjectPublishService {
     private static final String LINKAGE_SCHEMA_OPTION_KEY = "linkageSchema";
     private static final String DESIGNER_ACTIONS_KEY = "actions";
     private static final Set<String> RUNTIME_OPEN_MODES = Set.of("LIST", "CREATE_FORM", "DETAIL");
+    private static final Set<String> GENERIC_FORM_COMPONENT_ID_SUFFIXES = Set.of(
+            "input", "textarea", "number", "inputnumber", "integer", "money", "date", "datetime", "time",
+            "switch", "select", "radio", "checkbox", "dictselect", "cascader", "regiontreeselect",
+            "orgtreeselect", "orgselect", "departmentselect", "departmenttreeselect", "deptselect",
+            "depttreeselect", "eltreeselect", "orgname", "deptname", "userselect", "userpicker",
+            "username", "fileupload", "imageupload", "upload", "objectreference", "fcrow", "row",
+            "col", "elcard", "card", "eltabs", "tabs", "eltabpane", "tabpane", "elcollapse",
+            "collapse", "elcollapseitem", "collapseitem", "fctable", "table", "fctablegrid",
+            "tablegrid", "eldivider", "divider", "fctitle", "title", "text", "html", "space",
+            "elalert", "alert", "elbutton", "button", "eltag", "tag", "elimage", "image");
 
     private final BusinessObjectDesignerService designerService;
     private final BusinessObjectDesignVersionService designVersionService;
     private final LowcodePublishService lowcodePublishService;
     private final LowcodeRuntimeConfigBuilder runtimeConfigBuilder;
     private final LowcodeSchemaValidator schemaValidator;
+    private final FormulaPublishValidator formulaPublishValidator;
+    private final CrossObjectRecomputeTaskService crossObjectRecomputeTaskService;
     private final LowcodeDdlService ddlService;
     private final AiCrudConfigMapper crudConfigMapper;
     private final BusinessAppMapper businessAppMapper;
@@ -87,6 +103,7 @@ public class BusinessObjectPublishService {
         checkDocumentConfig(context, items);
         checkPermissionSummary(context, items);
         checkTable(context.getModelSchema(), items);
+        checkFormula(context, items);
         return buildResult(items);
     }
 
@@ -136,7 +153,9 @@ public class BusinessObjectPublishService {
         versionDTO.setPublishStatus("PUBLISHED");
         versionDTO.setPublishVersion(publishedConfig.getPublishedVersion());
         versionDTO.setRemark(dto == null ? null : dto.getRemark());
-        return designVersionService.createVersion(versionDTO);
+        Long versionId = designVersionService.createVersion(versionDTO);
+        enqueueCrossObjectRecompute(context);
+        return versionId;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -443,7 +462,9 @@ public class BusinessObjectPublishService {
         for (int index = 0; index < components.size(); index++) {
             Map<String, Object> component = components.get(index);
             String componentId = text(component.get("id"));
-            if (StringUtils.isNotBlank(componentId) && !componentIds.add(componentId)) {
+            String componentKey = text(component.get("componentKey"));
+            if (StringUtils.isNotBlank(componentId) && !isGenericFormComponentId(componentId, componentKey)
+                    && !componentIds.add(componentId)) {
                 add(items, "FORM_COMPONENT_DUPLICATE", "FORM", BusinessPublishCheckLevel.BLOCK,
                         "表单组件重复", "组件 ID 重复: " + componentId, null, null,
                         "FIX_FORM", "修复表单", "form", 132);
@@ -471,6 +492,19 @@ public class BusinessObjectPublishService {
                     "表单缺少业务字段", "表单中没有绑定业务字段的组件", null, null,
                     "CONFIG_FORM", "设计表单", "form", 135);
         }
+    }
+
+    private boolean isGenericFormComponentId(String componentId, String componentKey) {
+        String id = StringUtils.trimToEmpty(componentId);
+        if (!StringUtils.startsWithIgnoreCase(id, "cmp_")) {
+            return false;
+        }
+        String suffix = id.substring(4).trim().toLowerCase();
+        if (StringUtils.isBlank(suffix)) {
+            return true;
+        }
+        String key = StringUtils.trimToEmpty(componentKey).toLowerCase();
+        return suffix.equals(key) || GENERIC_FORM_COMPONENT_ID_SUFFIXES.contains(suffix);
     }
 
     private void checkViewSchema(Map<String, Object> viewSchema, Set<String> modelFields,
@@ -1365,6 +1399,116 @@ public class BusinessObjectPublishService {
         }
         return StringUtils.defaultString(context.getObject().getSuiteCode())
                 + "_" + StringUtils.defaultString(context.getObject().getObjectCode());
+    }
+
+    private void checkFormula(BusinessObjectDesignerService.DesignerContext context,
+                              List<BusinessPublishCheckItemVO> items) {
+        if (context == null || context.getModelSchema() == null) {
+            return;
+        }
+        FormulaValidationResult result = formulaPublishValidator.validate(
+                context.getModelSchema(), buildFormulaObjectContexts(context));
+        if (result == null) {
+            return;
+        }
+        if (result.isValid() && !result.hasWarnings()) {
+            add(items, "FORMULA_PASS", "FORMULA", BusinessPublishCheckLevel.PASS,
+                    "Formula check passed", "All formula configurations passed validation",
+                    null, null, null, null, null, 410);
+            return;
+        }
+        if (result.hasErrors()) {
+            for (FormulaValidationResult.FormulaError error : result.getErrors()) {
+                add(items, "FORMULA_ERROR", "FORMULA", BusinessPublishCheckLevel.BLOCK,
+                        "Formula configuration error",
+                        "[" + error.getCategory() + "] " + error.getFieldName() + ": " + error.getMessage(),
+                        error.getFieldName(), null,
+                        "EDIT_FIELD", "Edit field formula",
+                        "fields", 420);
+            }
+        }
+        if (result.hasWarnings()) {
+            for (String warning : result.getWarnings()) {
+                add(items, "FORMULA_WARN", "FORMULA", BusinessPublishCheckLevel.WARN,
+                        "Formula warning", warning,
+                        null, null, null, null, null, 430);
+            }
+        }
+        if (!result.hasErrors() && result.hasWarnings()) {
+            add(items, "FORMULA_PASS", "FORMULA", BusinessPublishCheckLevel.PASS,
+                    "Formula check passed (with warnings)", "Formula validation passed with warnings",
+                    null, null, null, null, null, 440);
+        }
+    }
+
+    private List<FormulaObjectDependencyAnalyzer.ObjectContext> buildFormulaObjectContexts(
+            BusinessObjectDesignerService.DesignerContext context) {
+        List<FormulaObjectDependencyAnalyzer.ObjectContext> contexts = new ArrayList<>();
+        addFormulaObjectContext(contexts, context);
+        if (context == null || context.getObject() == null || StringUtils.isBlank(context.getObject().getSuiteCode())) {
+            return contexts;
+        }
+
+        List<AiBusinessObject> suiteObjects = businessObjectMapper.selectBySuiteCode(
+                resolveTenantId(context), context.getObject().getSuiteCode());
+        if (suiteObjects == null || suiteObjects.isEmpty()) {
+            return contexts;
+        }
+
+        Long currentObjectId = context.getObject().getId();
+        for (AiBusinessObject object : suiteObjects) {
+            if (object == null || object.getId() == null || object.getId().equals(currentObjectId)) {
+                continue;
+            }
+            try {
+                addFormulaObjectContext(contexts, designerService.loadContext(object.getId()));
+            } catch (Exception ignored) {
+                // Missing unrelated design context should not hide current object's own formula errors.
+            }
+        }
+        return contexts;
+    }
+
+    private void addFormulaObjectContext(List<FormulaObjectDependencyAnalyzer.ObjectContext> contexts,
+                                         BusinessObjectDesignerService.DesignerContext context) {
+        if (context == null || context.getObject() == null || StringUtils.isBlank(context.getObject().getObjectCode())) {
+            return;
+        }
+        contexts.add(formulaPublishValidator.buildObjectContext(
+                context.getObject().getObjectCode(),
+                context.getModelSchema(),
+                toFormulaObjectRelations(context.getRelations())));
+    }
+
+    private List<FormulaObjectDependencyAnalyzer.ObjectRelation> toFormulaObjectRelations(
+            List<BusinessObjectRelationVO> relations) {
+        if (relations == null || relations.isEmpty()) {
+            return List.of();
+        }
+        List<FormulaObjectDependencyAnalyzer.ObjectRelation> result = new ArrayList<>();
+        for (BusinessObjectRelationVO relation : relations) {
+            if (relation == null) {
+                continue;
+            }
+            result.add(new FormulaObjectDependencyAnalyzer.ObjectRelation(
+                    relation.getId() == null ? null : String.valueOf(relation.getId()),
+                    relation.getRelationName(),
+                    relation.getSourceObjectCode(),
+                    relation.getTargetObjectCode(),
+                    relation.getSourceFieldCode(),
+                    relation.getTargetFieldCode()));
+        }
+        return result;
+    }
+
+    private void enqueueCrossObjectRecompute(BusinessObjectDesignerService.DesignerContext context) {
+        if (context == null || context.getObject() == null || context.getModelSchema() == null) {
+            return;
+        }
+        crossObjectRecomputeTaskService.enqueueForPublish(formulaPublishValidator.buildObjectContext(
+                context.getObject().getObjectCode(),
+                context.getModelSchema(),
+                toFormulaObjectRelations(context.getRelations())));
     }
 
     private Long resolveTenantId(BusinessObjectDesignerService.DesignerContext context) {

@@ -1,5 +1,5 @@
 import { extractFormCreateFieldRefs } from './formCreateToForge'
-import { normalizeFormDesignerSchema } from './formDesignerSchema'
+import { camelToSnake, normalizeFormDesignerSchema } from './formDesignerSchema'
 
 export function extractDesignerFieldRefs(source = {}) {
   const refs = extractRawDesignerFieldRefs(source)
@@ -51,6 +51,25 @@ export function repairFormDesignerFieldRefs(schema = {}, fields = [], strategy =
   normalized.components = normalized.components
     .map(component => repairComponent(component, fieldCodes, seen, strategy))
     .filter(Boolean)
+  return normalized
+}
+
+export function renameFormDesignerFieldRefs(schema = {}, options = {}) {
+  const oldFieldCode = String(options.oldFieldCode || '').trim()
+  const newFieldCode = String(options.newFieldCode || '').trim()
+  const normalized = normalizeFormDesignerSchema(schema)
+  if (!oldFieldCode || !newFieldCode || oldFieldCode === newFieldCode)
+    return normalized
+  const oldColumnName = options.oldColumnName || camelToSnake(oldFieldCode)
+  const newColumnName = options.newColumnName || camelToSnake(newFieldCode)
+  normalized.components = normalized.components.map(component => renameComponentFieldRefs(component, {
+    oldFieldCode,
+    newFieldCode,
+    oldColumnName,
+    newColumnName,
+    oldFieldName: options.oldFieldName || '',
+    newFieldName: options.newFieldName || '',
+  }))
   return normalized
 }
 
@@ -119,6 +138,51 @@ function collectRepairActions(component = {}, fieldCodes, seen, actions) {
   if (Array.isArray(component.children)) {
     component.children.forEach(child => collectRepairActions(child, fieldCodes, seen, actions))
   }
+}
+
+function renameComponentFieldRefs(component = {}, context = {}) {
+  const next = {
+    ...component,
+    fieldBinding: renameFieldBinding(component.fieldBinding || {}, context),
+    props: renameComponentProps(component.props || {}, context),
+  }
+  if (next.fieldBinding?.fieldCode === context.newFieldCode && shouldSyncComponentLabel(next.label, context))
+    next.label = context.newFieldName
+  if (next.id === `cmp_${context.oldFieldCode}`)
+    next.id = `cmp_${context.newFieldCode}`
+  if (Array.isArray(component.children))
+    next.children = component.children.map(child => renameComponentFieldRefs(child, context))
+  return next
+}
+
+function renameFieldBinding(binding = {}, context = {}) {
+  const next = { ...binding }
+  if (next.fieldCode === context.oldFieldCode)
+    next.fieldCode = context.newFieldCode
+  if (context.oldColumnName && next.columnName === context.oldColumnName)
+    next.columnName = context.newColumnName
+  return next
+}
+
+function renameComponentProps(props = {}, context = {}) {
+  const next = { ...props }
+  if (next.fieldCode === context.oldFieldCode)
+    next.fieldCode = context.newFieldCode
+  if (context.oldColumnName && next.columnName === context.oldColumnName)
+    next.columnName = context.newColumnName
+  if (next.fieldBinding && typeof next.fieldBinding === 'object')
+    next.fieldBinding = renameFieldBinding(next.fieldBinding, context)
+  return next
+}
+
+function shouldSyncComponentLabel(label = '', context = {}) {
+  if (!context.newFieldName)
+    return false
+  const current = String(label || '').trim()
+  return !current
+    || current === context.oldFieldName
+    || current === context.oldFieldCode
+    || current === context.oldColumnName
 }
 
 function uniqueRefs(refs = []) {

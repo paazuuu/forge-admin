@@ -55,6 +55,9 @@ public class GenTableColumn implements Serializable {
     private String desensitizeType;
     
     private String validateRule;
+
+    /** 公式配置JSON */
+    private String formulaConfig;
     
     private Integer aiRecommended;
     

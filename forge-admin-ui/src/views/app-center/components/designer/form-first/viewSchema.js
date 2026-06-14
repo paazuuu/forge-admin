@@ -116,6 +116,38 @@ export function sanitizeViewSchemaFieldRefs(source = {}, fields = []) {
   })
 }
 
+export function renameViewSchemaFieldRefs(source = {}, options = {}) {
+  const oldFieldCode = String(options.oldFieldCode || '').trim()
+  const newFieldCode = String(options.newFieldCode || '').trim()
+  const schema = normalizeViewSchema(source)
+  if (!oldFieldCode || !newFieldCode || oldFieldCode === newFieldCode)
+    return schema
+  const context = {
+    oldFieldCode,
+    newFieldCode,
+    oldFieldName: options.oldFieldName || '',
+    newFieldName: options.newFieldName || '',
+  }
+  return normalizeViewSchema({
+    ...schema,
+    search: {
+      ...schema.search,
+      fields: schema.search.fields.map(item => renameViewFieldItem(item, context)),
+    },
+    list: {
+      ...schema.list,
+      columns: schema.list.columns.map(item => renameViewFieldItem(item, context)),
+    },
+    detail: {
+      ...schema.detail,
+      sections: schema.detail.sections.map(section => ({
+        ...section,
+        fields: section.fields.map(item => renameViewFieldItem(item, context)),
+      })),
+    },
+  })
+}
+
 export function createViewSchemaFromPageSchema(pageSchema = {}, fields = [], currentSchema = {}) {
   const fieldMap = new Map((Array.isArray(fields) ? fields : [])
     .map(field => [field.fieldCode || field.field, field])
@@ -141,6 +173,20 @@ export function createViewSchemaFromPageSchema(pageSchema = {}, fields = [], cur
       sections: buildDetailSections(detailZone, fieldMap, base.detail.sections),
     },
   })
+}
+
+function renameViewFieldItem(item = {}, context = {}) {
+  const next = { ...item }
+  if (next.fieldCode === context.oldFieldCode)
+    next.fieldCode = context.newFieldCode
+  if (context.newFieldName && shouldSyncViewLabel(next.label, context))
+    next.label = context.newFieldName
+  return next
+}
+
+function shouldSyncViewLabel(label = '', context = {}) {
+  const current = String(label || '').trim()
+  return !current || current === context.oldFieldName || current === context.oldFieldCode
 }
 
 function createSearchField(field = {}, index = 0) {

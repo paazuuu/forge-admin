@@ -239,6 +239,18 @@ Vite dev server 的 `node_modules/.vite` 预构建缓存与浏览器中已加载
 
 ---
 
+## 8. form-create 默认字段名不能沉淀为低代码业务字段编码
+
+**发现日期**: 2026-06-13
+
+**问题描述**:
+低代码表单设计器拖入默认输入组件后，form-create 可能给 rule 写入 `field: 'input'`、`select` 等组件类型默认值。如果转换 Forge 表单 Schema 时直接把这些值当成业务字段编码，会在字段资产或表结构同步时生成 `columnName = input`，重复拖入组件后容易报“数据库列名重复: input”。
+
+**解决方案**:
+`formCreateToForge` 转换时必须识别并忽略 `input`、`textarea`、`select`、`dictSelect` 等设计器内部默认字段名；对通用标题“输入框”等生成 `fieldInput1` 这类稳定业务字段编码。绑定已有字段资产时，组件标题应优先使用字段资产 `fieldName` / `label`，不要保留默认标题。
+
+---
+
 ## 8. 顶部菜单目录不应直接按自身 path 跳转
 
 **发现日期**: 2026-05-31

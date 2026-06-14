@@ -17,6 +17,7 @@
     @refresh="loadDesigner"
     @open-runtime="openRuntime"
     @open-trigger="openTriggerConfig"
+    @open-function-market="functionMarketVisible = true"
     @update:active-panel="handlePanelSwitch"
   >
     <section v-if="activePanel === 'basic'" class="basic-panel">
@@ -67,7 +68,9 @@
       v-else-if="activePanel === 'fields'"
       ref="fieldManagerRef"
       :object-id="objectId"
+      :object-code="draft.objectCode || objectCode"
       :fields="draft.fields"
+      :relations="draft.relations"
       :form-designer-schema="draft.formDesignerSchema"
       :developer-mode="developerMode"
       @updated="handleFieldsUpdated"
@@ -202,6 +205,8 @@
       @open-developer="openDeveloperPath"
     />
   </BusinessObjectDesignerShell>
+
+  <FormulaFunctionMarket v-model:show="functionMarketVisible" />
 </template>
 
 <script setup>
@@ -231,7 +236,9 @@ import BusinessObjectDesignerShell from './components/designer/BusinessObjectDes
 import BusinessPermissionFlowPanel from './components/designer/BusinessPermissionFlowPanel.vue'
 import BusinessPublishChecklist from './components/designer/BusinessPublishChecklist.vue'
 import BusinessRelationDesigner from './components/designer/BusinessRelationDesigner.vue'
-import { sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
+import { renameFormDesignerFieldRefs } from './components/designer/form-first/fieldReferenceUtils'
+import { renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
+import FormulaFunctionMarket from './components/designer/formula/FormulaFunctionMarket.vue'
 
 const props = defineProps({
   embedded: {
@@ -280,6 +287,7 @@ const developerMode = ref(false)
 const designer = ref(null)
 const runtimeInfo = ref(null)
 const publishCheckState = ref(null)
+const functionMarketVisible = ref(false)
 const fieldManagerRef = ref(null)
 const formDesignerRef = ref(null)
 const listDesignerRef = ref(null)
@@ -662,6 +670,8 @@ function openTriggerConfig() {
 async function handleFieldsUpdated(fields, options = {}) {
   draft.fields = cloneSchema(fields || [])
   syncDraftModelFields(draft.fields)
+  if (options?.fieldRename)
+    applyFieldRename(options.fieldRename)
   draft.viewSchema = sanitizeViewSchemaFieldRefs(draft.viewSchema || {}, draft.fields)
   if (options?.reloadDesigner) {
     await loadDesigner()
@@ -697,6 +707,23 @@ function handleLayoutSaved(pageSchema) {
   dirty.value = false
   designerDraftDirty.value = false
   emit('saved')
+}
+
+function applyFieldRename(rename = {}) {
+  const oldFieldCode = String(rename.oldFieldCode || '').trim()
+  const newFieldCode = String(rename.newFieldCode || '').trim()
+  if (!oldFieldCode || !newFieldCode || oldFieldCode === newFieldCode)
+    return
+  const normalizedRename = {
+    ...rename,
+    oldFieldCode,
+    newFieldCode,
+  }
+  draft.formDesignerSchema = renameFormDesignerFieldRefs(draft.formDesignerSchema || {}, normalizedRename)
+  draft.viewSchema = renameViewSchemaFieldRefs(draft.viewSchema || {}, normalizedRename)
+  draft.pageSchema = renameFieldRefsInValue(draft.pageSchema || {}, normalizedRename)
+  if (draft.displayField === oldFieldCode)
+    draft.displayField = newFieldCode
 }
 
 function handleRelationsUpdated(relations) {
@@ -971,6 +998,54 @@ function syncDraftModelFields(fields = []) {
       }
     }),
   }
+}
+
+const FIELD_REF_KEYS = new Set([
+  'field',
+  'fieldCode',
+  'fieldRef',
+  'queryField',
+  'sourceField',
+  'targetField',
+  'displayField',
+])
+
+function renameFieldRefsInValue(value, rename = {}) {
+  return renameFieldRefsInClonedValue(cloneSchema(value || {}), rename)
+}
+
+function renameFieldRefsInClonedValue(value, rename = {}) {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (item === rename.oldFieldCode)
+        return rename.newFieldCode
+      if (rename.oldColumnName && item === rename.oldColumnName)
+        return rename.newColumnName || item
+      return renameFieldRefsInClonedValue(item, rename)
+    })
+  }
+  if (!value || typeof value !== 'object')
+    return value
+  if (value.fieldSettings && typeof value.fieldSettings === 'object' && !Array.isArray(value.fieldSettings)) {
+    if (Object.prototype.hasOwnProperty.call(value.fieldSettings, rename.oldFieldCode)) {
+      const oldSetting = value.fieldSettings[rename.oldFieldCode]
+      delete value.fieldSettings[rename.oldFieldCode]
+      value.fieldSettings[rename.newFieldCode] = oldSetting
+    }
+  }
+  Object.keys(value).forEach((key) => {
+    const item = value[key]
+    if (FIELD_REF_KEYS.has(key) && item === rename.oldFieldCode) {
+      value[key] = rename.newFieldCode
+      return
+    }
+    if (key === 'columnName' && rename.oldColumnName && item === rename.oldColumnName) {
+      value[key] = rename.newColumnName || item
+      return
+    }
+    value[key] = renameFieldRefsInClonedValue(item, rename)
+  })
+  return value
 }
 
 function handleBeforeUnload(event) {

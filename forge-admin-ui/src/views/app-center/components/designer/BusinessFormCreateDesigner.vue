@@ -191,8 +191,10 @@ function flushDesigner() {
     fields: props.fields,
   })
   localSnapshot.value = JSON.stringify({ rules, options })
-  emit('update:modelValue', schema)
-  emit('dirtyChange', true)
+  if (!isSameDesignerSchema(schema, props.modelValue || normalizedSchema.value)) {
+    emit('update:modelValue', schema)
+    emit('dirtyChange', true)
+  }
   return schema
 }
 
@@ -256,6 +258,10 @@ function appendField(field = {}) {
   emit('update:modelValue', applyGridColumnsToFormDesignerSchema(schema, schema.layout?.gridColumns || 2))
   emit('dirtyChange', true)
   nextTick(loadDesigner)
+}
+
+function isSameDesignerSchema(left, right) {
+  return JSON.stringify(normalizeFormDesignerSchema(left || {})) === JSON.stringify(normalizeFormDesignerSchema(right || {}))
 }
 
 defineExpose({
