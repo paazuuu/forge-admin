@@ -1690,3 +1690,25 @@ Detected resolved migration not applied to database: 1.0.56
 - `forge-admin-ui/src/utils/http/interceptors.js`
 - `forge-admin-ui/src/utils/http/helpers.js`
 - 所有依赖统一 axios 拦截器的页面，包括登录页
+
+## 58. 手写/隐藏业务路由必须同步 sys_resource 和角色授权
+
+**发现日期**: 2026-06-15
+
+**问题描述**:
+从应用中心跳转到 `/app-center/stats`、`/app-center/trigger`、`/message/template`、`/app-center/object/:objectCode` 或 `/ai/crud-page/:configKey` 这类手写/隐藏路由时，页面可能直接跳到 403，即使前端 `router/index.js` 已经注册了路由组件。
+
+**根本原因**:
+前端权限守卫不只看 Vue Router 是否存在目标路由，还会用 `/auth/current/menu` 返回的 `sys_resource` 菜单资源生成 `permissionStore.accessRoutes` 作为路由 allowlist。手写路由、动态参数路由和隐藏运行态路由如果没有对应 `sys_resource` 菜单记录，或没有授予当前角色，就会被前端守卫拦截为 403。隐藏路由应依赖 `visible=0/menu_status=1` 进入授权树，再由前端过滤侧边栏展示。
+
+**解决方案**:
+新增或恢复手写/隐藏业务路由时，必须同步补齐：
+- `sys_resource.resource_type=2` 菜单资源，`path` 使用前端实际路由，动态参数使用 `:param` 格式。
+- `component` 使用真实页面组件路径，例如 `app-center/object.[objectCode]`。
+- `visible=0`、`menu_status=1`，让路由可授权但不显示在菜单。
+- `sys_role_resource` 授权给已经拥有对应业务入口的角色，并对已有资源做 `NOT EXISTS` 防重复保护。
+
+**影响范围**:
+- 应用中心运行态、对象详情、对象设计器、引擎中心入口。
+- 所有 `src/router/index.js` 手写路由和 `unplugin-vue-router` 动态参数路由。
+- `forge-server/db/migration/` 中系统菜单和权限资源脚本。
