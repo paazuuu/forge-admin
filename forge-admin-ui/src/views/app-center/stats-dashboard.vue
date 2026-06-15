@@ -156,8 +156,14 @@ async function loadSelectedFields() {
     fields.value = []
     return
   }
-  const res = await businessObjectFields(selectedObject.value.id)
-  fields.value = res.data || []
+  try {
+    const res = await businessObjectFields(selectedObject.value.id)
+    fields.value = res.data || []
+  }
+  catch (error) {
+    console.warn('[stats-dashboard] 加载业务字段失败，使用默认指标', error)
+    fields.value = []
+  }
 }
 
 function buildMetricQuery() {
