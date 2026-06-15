@@ -669,8 +669,8 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 **涉及文件**:
 - `code-copilot/changes/lowcode-business-app-platform/spec.md` — 如实现边界变化，回填技术决策。
 - `code-copilot/changes/lowcode-business-app-platform/tasks.md` — 更新任务状态和验证结果。
-- `.opencode/memory/decisions.md` — 如形成长期产品/架构决策，追加记录。
-- `.opencode/memory/pitfalls.md` — 如遇到可复用踩坑，追加记录。
+- `code-copilot/memory/decisions.md` — 如形成长期产品/架构决策，追加记录。
+- `code-copilot/memory/pitfalls.md` — 如遇到可复用踩坑，追加记录。
 
 **验收标准**:
 - 已完成任务标记为 `completed`。
@@ -1089,8 +1089,8 @@ source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 **涉及文件**:
 - `code-copilot/changes/lowcode-business-app-platform/spec.md` — 必要时同步实现边界和延期项。
 - `code-copilot/changes/lowcode-business-app-platform/tasks.md` — 更新 Task 22-35 状态和验证结果。
-- `.opencode/memory/pitfalls.md` — 记录启动、菜单、动态路由、Flyway 等可复用踩坑。
-- `.opencode/memory/decisions.md` — 如确认新长期架构决策，追加记录。
+- `code-copilot/memory/pitfalls.md` — 记录启动、菜单、动态路由、Flyway 等可复用踩坑。
+- `code-copilot/memory/decisions.md` — 如确认新长期架构决策，追加记录。
 
 **验证命令**:
 ```bash

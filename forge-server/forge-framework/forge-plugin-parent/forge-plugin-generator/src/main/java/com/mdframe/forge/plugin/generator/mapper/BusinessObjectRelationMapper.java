@@ -19,6 +19,10 @@ public interface BusinessObjectRelationMapper extends BaseMapper<AiBusinessObjec
                                                                    @Param("suiteCode") String suiteCode,
                                                                    @Param("sourceObjectCode") String sourceObjectCode);
 
+    List<AiBusinessObjectRelation> selectRuntimeRelationsByTarget(@Param("tenantId") Long tenantId,
+                                                                   @Param("suiteCode") String suiteCode,
+                                                                   @Param("targetObjectCode") String targetObjectCode);
+
     AiBusinessObjectRelation selectRelationById(@Param("tenantId") Long tenantId,
                                                 @Param("id") Long id);
 

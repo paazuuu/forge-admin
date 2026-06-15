@@ -91,7 +91,7 @@
               selectable
               :data="navigationTreeData"
               :expanded-keys="navigationExpandedKeys"
-              :selected-keys="[selectedResourceId]"
+              :selected-keys="navigationSelectedKeys"
               :render-label="renderNavigationLabel"
               key-field="key"
               label-field="label"
@@ -576,6 +576,14 @@ const visibleFilterOptions = computed(() => {
 })
 
 const flatResources = computed(() => flattenResourceTree(allResources.value))
+
+const navigationSelectedKeys = computed(() => {
+  // 确保选中的 key 在当前树数据中存在，避免引用已删除节点导致树组件异常
+  if (!selectedResourceId.value)
+    return []
+  const exists = flatResources.value.some(item => item.id === selectedResourceId.value)
+  return exists ? [selectedResourceId.value] : []
+})
 
 const currentNode = computed(() => {
   if (!selectedResourceId.value)
@@ -1078,10 +1086,20 @@ function handleDelete(row) {
         const res = await request.post('/system/resource/remove', null, { params: { id: row.id } })
         if (res.code === 200) {
           window.$message.success('删除成功')
-          if (selectedRow.value?.id === row.id)
+          // 删除成功后，立即清空选中状态，避免树组件引用已删除的节点
+          if (selectedRow.value?.id === row.id) {
             selectedRow.value = null
+          }
+          if (selectedResourceId.value === row.id) {
+            selectedResourceId.value = 0
+          }
+          // 从展开状态中移除已删除节点的键
+          navigationExpandedKeys.value = navigationExpandedKeys.value.filter(key => key !== row.id)
           await refreshSystemMenu()
-          await loadResourceTree()
+          await loadResourceTree({ expandAll: false })
+        }
+        else {
+          window.$message.error(res.msg || '删除失败')
         }
       }
       catch (error) {

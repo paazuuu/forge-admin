@@ -208,3 +208,14 @@ WHERE @example_menu_id IS NOT NULL
 ```
 
 If the module uses API permission resources, also generate `resource_type = 4` rows with `api_method` and `api_url`, guarded by method + URL or `perms`.
+For generated CRUD APIs, use POST-safe codegen routes for detail, create, update, and delete permission resources:
+
+- `GET /.../page`
+- `GET /.../list`
+- `POST /.../getById`
+- `POST /.../add`
+- `POST /.../edit`
+- `POST /.../remove/{id}`
+- `POST /.../removeBatch`
+
+Do not seed `PUT` or `DELETE` API resources for generated CRUD modules.

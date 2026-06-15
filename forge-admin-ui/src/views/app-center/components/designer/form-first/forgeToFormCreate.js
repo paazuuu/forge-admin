@@ -18,7 +18,7 @@ export function convertComponentToRule(component = {}, fieldMap = new Map(), gri
   const fieldComponent = isFieldComponent(component)
   const field = fieldMap.get(fieldCode) || {}
   const label = fieldComponent
-    ? component.label || field.fieldName || field.label || fieldCode || '字段'
+    ? resolveFieldRuleLabel(component, field, fieldCode)
     : normalizeDesignerComponentLabel(component.componentKey, component.label)
   const rule = {
     type: resolveFormCreateType(component, field),
@@ -66,6 +66,29 @@ export function convertComponentToRule(component = {}, fieldMap = new Map(), gri
 
 export function extractForgeSchemaFieldRefs(schema = {}) {
   return normalizeFormDesignerSchema(schema).components.flatMap(component => collectComponentFieldRefs(component)).filter((field, index, all) => field && all.indexOf(field) === index)
+}
+
+function resolveFieldRuleLabel(component = {}, field = {}, fieldCode = '') {
+  const componentLabel = String(component.label || '').trim()
+  const fieldLabel = field.fieldName || field.label || field.comment || ''
+  if (fieldLabel && (!componentLabel || componentLabel === fieldCode || isGenericFieldComponentLabel(componentLabel)))
+    return fieldLabel
+  return componentLabel || fieldLabel || fieldCode || '字段'
+}
+
+function isGenericFieldComponentLabel(value = '') {
+  return [
+    '字段',
+    '输入框',
+    '多行输入',
+    '数字输入框',
+    '选择器',
+    '单选框',
+    '多选框',
+    '日期选择器',
+    '时间选择器',
+    '开关',
+  ].includes(String(value || '').trim())
 }
 
 function buildFormCreateOptions(schema = {}) {

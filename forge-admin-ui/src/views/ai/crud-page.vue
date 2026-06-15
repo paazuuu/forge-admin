@@ -264,9 +264,10 @@ function resolveRuntimeButtonType(action = {}, actionType = '') {
 /**
  * 转换表单字段配置：为 dictType 字段注入字典选项，为日期字段配置格式化
  */
-function transformFields(fields) {
+function transformFields(fields, fieldMetaMap = new Map()) {
   return (fields || []).map((field) => {
     const newField = { ...field }
+    applyRuntimeFieldMeta(newField, fieldMetaMap.get(field.field || field.fieldCode))
 
     if (field.dictType && ['select', 'radio', 'checkbox'].includes(field.type)) {
       const options = dictCache.value[field.dictType] || []
@@ -303,8 +304,8 @@ function transformFields(fields) {
   })
 }
 
-function transformEditFields(fields = [], layout = []) {
-  const transformedFields = transformFields(fields)
+function transformEditFields(fields = [], layout = [], fieldMetaMap = new Map()) {
+  const transformedFields = transformFields(fields, fieldMetaMap)
   if (!Array.isArray(layout) || !layout.length)
     return transformedFields
 
@@ -385,7 +386,7 @@ const crudProps = computed(() => {
       includeDetailAction: true,
       rowActions: options.rowActions,
     }),
-    editSchema: transformEditFields(cfg.editSchema, options.editFormLayout),
+    editSchema: transformEditFields(cfg.editSchema, options.editFormLayout, buildRuntimeFieldMetaMap(cfg.modelSchema)),
     childrenConfig: transformChildrenConfig(masterDetailConfig.children || []),
     apiConfig,
     options,
@@ -436,6 +437,50 @@ function resolveDefaultSortParams(defaultSort = {}) {
     orderByColumn,
     isAsc,
   }
+}
+
+function buildRuntimeFieldMetaMap(modelSchema = {}) {
+  const result = new Map()
+  const fields = Array.isArray(modelSchema?.fields) ? modelSchema.fields : []
+  fields.forEach((field) => {
+    const fieldCode = field?.field || field?.fieldCode
+    if (fieldCode)
+      result.set(fieldCode, field)
+  })
+  return result
+}
+
+function applyRuntimeFieldMeta(field, meta = {}) {
+  if (!field || !meta)
+    return
+  if (!field.dataType && meta.dataType)
+    field.dataType = meta.dataType
+  if (!field.fieldDataType && meta.dataType)
+    field.fieldDataType = meta.dataType
+  if (!field.componentType && meta.componentType)
+    field.componentType = meta.componentType
+  const formulaConfig = field.formulaConfig || meta.formulaConfig
+  if (!hasRuntimeFormulaConfig(formulaConfig))
+    return
+  field.formulaConfig = formulaConfig
+  field.required = false
+  field.disabled = true
+  field.readonly = true
+  if (Array.isArray(field.rules))
+    field.rules = field.rules.filter(rule => !rule?.required)
+  field.props = {
+    ...(field.props || {}),
+    disabled: true,
+    readonly: true,
+  }
+}
+
+function hasRuntimeFormulaConfig(formulaConfig) {
+  if (!formulaConfig)
+    return false
+  if (typeof formulaConfig === 'string')
+    return formulaConfig.trim().length > 0
+  return typeof formulaConfig === 'object' && Object.keys(formulaConfig).length > 0
 }
 
 function normalizeNumberOption(value, fallback) {

@@ -32,4 +32,7 @@ public class LowcodeCodegenRequest {
     private Boolean includeDictSql;
 
     private String frontendBasePath;
+
+    /** 下载代码模式业务接口前缀，例如 /crm/customer。 */
+    private String businessApiBase;
 }

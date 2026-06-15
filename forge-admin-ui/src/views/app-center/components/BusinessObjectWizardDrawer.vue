@@ -1,9 +1,9 @@
 <template>
   <n-drawer :show="show" width="640" @update:show="value => emit('update:show', value)">
-    <n-drawer-content title="新建业务对象" closable>
+    <n-drawer-content title="新建业务单元" closable>
       <div class="wizard-shell">
         <n-steps :current="currentStep" size="small">
-          <n-step title="业务套件" />
+          <n-step title="业务域" />
           <n-step title="创建方式" />
           <n-step title="对象信息" />
         </n-steps>
@@ -11,36 +11,36 @@
         <section v-if="currentStep === 1" class="wizard-step">
           <n-radio-group v-model:value="form.suiteMode" class="choice-row">
             <n-radio-button value="EXISTING">
-              选择已有套件
+              选择已有业务域
             </n-radio-button>
             <n-radio-button value="NEW">
-              新建业务套件
+              新建业务域
             </n-radio-button>
           </n-radio-group>
 
           <template v-if="form.suiteMode === 'EXISTING'">
-            <n-form-item label="业务套件" required>
+            <n-form-item label="业务域" required>
               <n-select
                 v-model:value="form.suiteCode"
                 filterable
                 :options="suiteOptions"
-                placeholder="选择业务对象所属套件"
+                placeholder="选择业务单元所属业务域"
               />
             </n-form-item>
           </template>
 
           <template v-else>
-            <n-form-item label="套件名称" required>
+            <n-form-item label="业务域名称" required>
               <n-input v-model:value="form.newSuiteName" placeholder="例如：合同管理" />
             </n-form-item>
-            <n-form-item label="套件编码" required>
+            <n-form-item label="业务域编码" required>
               <n-input
                 v-model:value="form.newSuiteCode"
                 placeholder="例如：CONTRACT_MANAGEMENT"
                 @blur="form.newSuiteCode = normalizeCode(form.newSuiteCode, form.newSuiteName)"
               />
             </n-form-item>
-            <n-form-item label="套件图标">
+            <n-form-item label="业务域图标">
               <IconSelector v-model="form.newSuiteIcon" />
             </n-form-item>
             <n-grid :cols="2" :x-gap="12">
@@ -52,13 +52,13 @@
               </n-form-item-gi>
             </n-grid>
             <n-form-item v-if="form.createSuiteMenu" label="父级菜单或模块">
-              <MenuParentSelect v-model:value="form.suiteMenuParentId" placeholder="选择套件目录挂载位置，默认顶级" />
+              <MenuParentSelect v-model:value="form.suiteMenuParentId" placeholder="选择业务域目录挂载位置，默认顶级" />
             </n-form-item>
             <n-form-item label="业务说明">
               <n-input
                 v-model:value="form.newSuiteDescription"
                 type="textarea"
-                placeholder="说明这个套件覆盖的业务范围"
+                placeholder="说明这个业务域覆盖的业务范围"
               />
             </n-form-item>
           </template>
@@ -240,9 +240,9 @@ const selectedTableInfo = computed(() => {
 
 const footerHint = computed(() => {
   if (currentStep.value === 1)
-    return '业务对象必须归属到一个业务套件。'
+    return '业务单元必须归属到一个业务域。'
   if (currentStep.value === 2)
-    return '三种创建方式都会进入同一个业务对象设计器。'
+    return '三种创建方式都会进入同一个业务单元设计器。'
   return '保存后进入设计器继续维护字段、页面和发布检查。'
 })
 
@@ -327,7 +327,7 @@ async function saveObject() {
       importTableName: form.createMode === 'DB_IMPORT' ? form.importTableName : null,
       options: JSON.stringify(buildObjectOptions()),
     })
-    message.success('业务对象已创建，正在进入设计器')
+    message.success('业务单元已创建，正在进入设计器')
     emit('saved', {
       id: res.data,
       suiteCode,
@@ -399,16 +399,16 @@ function buildObjectOptions() {
 function validateStep() {
   if (currentStep.value === 1) {
     if (form.suiteMode === 'EXISTING' && !form.suiteCode) {
-      message.warning('请选择业务套件')
+      message.warning('请选择业务域')
       return false
     }
     if (form.suiteMode === 'NEW') {
       if (!form.newSuiteName.trim()) {
-        message.warning('请输入套件名称')
+        message.warning('请输入业务域名称')
         return false
       }
       if (!isValidCode(form.newSuiteCode, form.newSuiteName)) {
-        message.warning('套件编码需以字母开头，仅包含字母、数字和下划线')
+        message.warning('业务域编码需以字母开头，仅包含字母、数字和下划线')
         return false
       }
     }

@@ -13,7 +13,8 @@
 
 ## Backend
 
-- [ ] Controller uses `RespInfo.success(data)` / `RespInfo.success()` and standard routes.
+- [ ] Controller uses `RespInfo.success(data)` / `RespInfo.success()` and Forge codegen-safe routes.
+- [ ] Generated detail/update/delete endpoints use POST (`/getById`, `/edit`, `/remove/{id}`); no `@PutMapping` or `@DeleteMapping` is generated.
 - [ ] Pagination uses `PageQuery` or `pageNum` + `pageSize`, not `page`.
 - [ ] Query SQL lives in Mapper XML.
 - [ ] Mapper XML lists explicit columns and includes standard audit fields.
@@ -26,6 +27,7 @@
 
 - [ ] Page uses `AiCrudPage`.
 - [ ] `api-config` uses `:id` placeholders, not `{id}`.
+- [ ] Generated `api-config` uses POST for detail/update/delete (`post@.../getById`, `post@.../edit`, `post@.../remove/:id`); no `put@` or `delete@` is generated.
 - [ ] Dictionary fields use `useDict()`, `DictSelect`, and `DictTag`.
 - [ ] Schemas are `computed` when they depend on dictionaries.
 - [ ] Import/export props and API config match generated backend or common Excel endpoints.

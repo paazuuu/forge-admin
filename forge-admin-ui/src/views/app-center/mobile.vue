@@ -15,7 +15,7 @@
         </n-space>
       </div>
       <h1>移动端中心</h1>
-      <p>登记 H5、移动待办、移动审批和移动业务入口，统一纳入业务套件和打开校验。</p>
+      <p>登记 H5、移动待办、移动审批和移动业务入口，统一纳入业务域和打开校验。</p>
     </header>
 
     <section class="mobile-summary">
@@ -29,7 +29,7 @@
     <section class="entry-panel">
       <div class="panel-head">
         <div>
-          <strong>移动应用入口</strong>
+          <strong>移动访问入口</strong>
           <p>{{ total }} 个入口 · {{ enabledCount }} 个启用</p>
         </div>
         <n-select
@@ -53,7 +53,7 @@
             @delete="deleteApp"
           />
         </div>
-        <n-empty v-else-if="!loading" description="暂无移动应用入口" />
+        <n-empty v-else-if="!loading" description="暂无移动访问入口" />
       </n-spin>
       <div v-if="total > pagination.pageSize" class="entry-pagination">
         <n-pagination

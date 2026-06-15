@@ -71,6 +71,28 @@ public class LowcodeCodegenService {
         return codegenService.generateZip(configKey);
     }
 
+    /**
+     * 将运行配置补齐为可用于代码生成的配置副本。
+     */
+    public AiCrudConfig prepareConfigForCodegen(AiCrudConfig config, LowcodeCodegenRequest request) {
+        if (config == null) {
+            throw new BusinessException("配置不存在");
+        }
+        String sourceType = resolveSourceType(request);
+        AiCrudConfig source = switch (sourceType) {
+            case SOURCE_VERSION -> fromVersion(config, request == null ? null : request.getVersionId());
+            case SOURCE_PUBLISHED -> {
+                if (!"PUBLISHED".equals(config.getPublishStatus())) {
+                    throw new BusinessException("应用尚未发布，不能按发布版本生成代码");
+                }
+                yield copyConfig(config);
+            }
+            case SOURCE_DRAFT -> copyConfig(config);
+            default -> throw new BusinessException("代码生成来源不正确: " + sourceType);
+        };
+        return prepareRuntimeConfig(source, request);
+    }
+
     public Map<String, Object> getOptions(Long appId) {
         AiCrudConfig config = appService.requireConfig(appId);
         return readCodegenOptions(config);

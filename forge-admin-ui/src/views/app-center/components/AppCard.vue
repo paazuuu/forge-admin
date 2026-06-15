@@ -11,10 +11,13 @@
         <h3>{{ app.appName || app.appCode }}</h3>
         <DictTag dict-type="sys_enable_disable" :value="app.status" :bordered="false" />
       </div>
-      <p>{{ app.description || '业务应用入口' }}</p>
+      <p>{{ app.description || '业务访问入口' }}</p>
       <div class="app-tags">
         <DictTag dict-type="ai_business_app_type" :value="app.appType" :bordered="false" />
         <DictTag dict-type="ai_business_app_entry_mode" :value="app.entryMode" :bordered="false" />
+        <n-tag v-if="isCodeDownload(app)" size="small" type="info" :bordered="false">
+          下载代码
+        </n-tag>
         <span v-if="app.objectName" class="object-chip">{{ app.objectName }}</span>
         <span class="binding-chip">{{ app.bindingCount || 0 }} 能力</span>
       </div>
@@ -26,7 +29,7 @@
             <template #icon>
               <n-icon><OpenOutline /></n-icon>
             </template>
-            打开
+            {{ isCodeDownload(app) ? '代码' : '打开' }}
           </n-button>
         </template>
         {{ openTip(app) }}
@@ -54,11 +57,13 @@ defineProps({
   },
 })
 
-const emit = defineEmits(['open', 'config', 'toggle', 'delete'])
+const emit = defineEmits(['open', 'code', 'config', 'toggle', 'delete'])
 
 function isOpenDisabled(app) {
   if (app.status !== 1)
     return true
+  if (isCodeDownload(app))
+    return !app.id
   if (app.entryMode === 'RUNTIME')
     return !app.configKey && !app.entryUrl
   return !app.entryUrl
@@ -69,15 +74,25 @@ function openTip(app) {
     return '入口已停用'
   if (isOpenDisabled(app))
     return '未配置打开地址'
+  if (isCodeDownload(app))
+    return '查看功能代码'
   return '打开'
 }
 
 function moreOptions(app) {
-  return [
+  const options = [
     {
       label: '配置入口',
       key: 'config',
     },
+  ]
+  if (isCodeDownload(app)) {
+    options.push({
+      label: '功能代码',
+      key: 'code',
+    })
+  }
+  options.push(
     {
       label: app.status === 1 ? '停用入口' : '启用入口',
       key: 'toggle',
@@ -90,12 +105,21 @@ function moreOptions(app) {
       label: '删除入口',
       key: 'delete',
     },
-  ]
+  )
+  return options
+}
+
+function isCodeDownload(app) {
+  return app?.entryMode === 'RUNTIME' && app?.appMode === 'CODE_DOWNLOAD'
 }
 
 function handleMoreSelect(key, app) {
   if (key === 'config') {
     emit('config', app)
+    return
+  }
+  if (key === 'code') {
+    emit('code', app)
     return
   }
   if (key === 'toggle') {

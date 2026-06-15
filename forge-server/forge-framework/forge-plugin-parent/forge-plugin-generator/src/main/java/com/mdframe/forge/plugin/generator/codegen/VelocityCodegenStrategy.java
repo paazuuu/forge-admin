@@ -93,6 +93,7 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
 
         // 注入业务路由前缀（前端模板使用）
         ctx.put("apiBase", apiBase);
+        ctx.put("businessApiBase", apiBase);
         ctx.put("date", LocalDate.now().toString());
 
         // 前端 configKey → 组件名/变量名
@@ -159,12 +160,14 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
 
         // ── 8. 渲染前端代码 ───────────────────────────────────────────────────
         String viewPath = configKey.replace("_", "/");
+        ctx.put("viewPath", viewPath);
         String frontendBasePath = normalizeOutputBasePath(readOption(config, "frontendBasePath", "frontend/src/views"));
         renderTo(files, "templates/vm/ai-crud/index.vue.vm", ctx, frontendBasePath + "/" + viewPath + "/index.vue");
         renderTo(files, "templates/vm/ai-crud/api.js.vm",    ctx, "frontend/src/api/" + configKey + ".js");
 
         // ── 9. 附带原始配置 JSON ──────────────────────────────────────────────
         files.put("config/" + configKey + "-config.json", buildConfigJson(config));
+        renderTo(files, "templates/vm/README.md.vm", ctx, "README.md");
 
         return files;
     }
@@ -182,6 +185,10 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
      */
     private String resolveApiBase(AiCrudConfig config) {
         try {
+            String businessApiBase = readOption(config, "businessApiBase", null);
+            if (StringUtils.isNotBlank(businessApiBase)) {
+                return normalizeApiBase(businessApiBase);
+            }
             Map<String, Object> apiConf = parseJsonObject(config.getApiConfig());
             String listUrl = (String) apiConf.get("list");
             if (StringUtils.isBlank(listUrl)) return "/" + config.getConfigKey();
@@ -196,10 +203,21 @@ public class VelocityCodegenStrategy implements CodegenStrategy {
             if (url.startsWith("/ai/crud/") || url.startsWith("/rest/")) {
                 return "/" + config.getConfigKey().replace("_", "/");
             }
-            return url;
+            return normalizeApiBase(url);
         } catch (Exception e) {
             return "/" + config.getConfigKey().replace("_", "/");
         }
+    }
+
+    private String normalizeApiBase(String apiBase) {
+        String normalized = StringUtils.defaultIfBlank(apiBase, "")
+                .replace("\\", "/")
+                .replaceAll("/{2,}", "/")
+                .replaceAll("/+$", "");
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 
     /**

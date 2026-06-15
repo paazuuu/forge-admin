@@ -73,4 +73,7 @@ public class BusinessFieldDTO {
     private Map<String, Object> basicProps = new LinkedHashMap<>();
 
     private Map<String, Object> advancedProps = new LinkedHashMap<>();
+
+    /** 公式配置：CALC / AGGREGATE / CONDITIONAL / LOOKUP，保持 JSON 透传。 */
+    private Map<String, Object> formulaConfig;
 }

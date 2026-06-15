@@ -1,4 +1,8 @@
+import { useAuthStore } from '@/store/modules/auth'
 import { request } from '@/utils'
+import { generateUUID } from '@/utils/common'
+
+const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
 
 export function businessSuitePage(params) {
   return request.get('/ai/business/suite/page', { params })
@@ -121,7 +125,44 @@ export function businessAppOpenInfo(id) {
 }
 
 export function syncPublishedCrudConfigs() {
-  return request.post('/ai/business/app/sync-published-crud-configs')
+  return syncPublishedApps()
+}
+
+export function syncPublishedApps() {
+  return request.post('/ai/business/app/sync-published-apps')
+}
+
+export function businessAppCodePreview(id, params) {
+  return request.get(`/ai/business/app/${id}/code/preview`, { params })
+}
+
+export function businessAppCodeOptions(id) {
+  return request.get(`/ai/business/app/${id}/code/options`)
+}
+
+export function businessSaveAppCodeOptions(id, data) {
+  return request.put(`/ai/business/app/${id}/code/options`, data)
+}
+
+export async function businessDownloadAppCode(id, params = {}) {
+  const authStore = useAuthStore()
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '')
+      search.append(key, value)
+  })
+  const query = search.toString()
+  const resp = await fetch(`${BASE_URL}/ai/business/app/${id}/code/download${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
+      'X-Timestamp': Date.now().toString(),
+      'X-Nonce': generateUUID(),
+    },
+  })
+  if (!resp.ok)
+    throw new Error(await resp.text() || resp.statusText)
+  return resp.blob()
 }
 
 export function businessBindingList(params) {

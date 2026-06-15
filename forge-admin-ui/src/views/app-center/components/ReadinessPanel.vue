@@ -185,7 +185,7 @@ const statusMessage = computed(() => {
     case 'ERROR':
       return '配置链路存在异常，优先处理错误项再继续交付验收。'
     default:
-      return '正在检查业务对象是否具备运行条件。'
+      return '正在检查业务单元是否具备运行条件。'
   }
 })
 

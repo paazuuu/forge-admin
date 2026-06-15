@@ -25,6 +25,12 @@ Generate Forge-compliant CRUD artifacts from business requirements without re-di
 - Put query SQL in Mapper XML. Do not generate Service-layer `LambdaQueryWrapper` query chains except MyBatis-Plus built-in `selectById`, `insert`, `updateById`, and `deleteById` style operations.
 - Use `pageNum` and `pageSize`; never generate backend `page` as the page parameter.
 - Use AiCrudPage URL placeholders with `:id` or `:${rowKey}`. Do not generate `{id}` placeholders.
+- Generated CRUD controllers and frontend API configs must use Forge's POST-safe codegen contract for detail, create, update, and delete:
+  - detail: `POST /getById`
+  - create: `POST /add`
+  - update: `POST /edit`
+  - delete: `POST /remove/{id}` and `post@.../remove/:id`
+  Do not generate `PUT` or `DELETE` endpoints for generated CRUD modules.
 - Use `DictSelect`, `DictTag`, and `useDict()` for dictionary fields. Do not hardcode frontend options or status label maps.
 - Generate `sys_dict_type` and `sys_dict_data` seed SQL for new dictionaries, or explicitly reuse an existing dictionary type discovered in migrations.
 - Generate `sys_excel_export_config` and `sys_excel_column_config` seed SQL when import/export is enabled.

@@ -10,7 +10,7 @@
             <template #icon>
               <n-icon><CreateOutline /></n-icon>
             </template>
-            编辑套件
+            编辑业务域
           </n-button>
           <n-button secondary type="warning" :disabled="!suite" @click="toggleSuite">
             <template #icon>
@@ -22,7 +22,7 @@
             <template #icon>
               <n-icon><TrashOutline /></n-icon>
             </template>
-            删除套件
+            删除业务域
           </n-button>
         </n-space>
       </div>
@@ -36,12 +36,12 @@
             <h1>{{ suite?.suiteName || suiteCode }}</h1>
             <DictTag v-if="suite" dict-type="sys_enable_disable" :value="suite.status" :bordered="false" />
           </div>
-          <p>{{ suite?.description || '业务套件详情' }}</p>
+          <p>{{ suite?.description || '业务域详情' }}</p>
         </div>
       </div>
       <div class="suite-stats">
-        <div><strong>{{ objectTotal }}</strong><span>业务对象</span></div>
-        <div><strong>{{ appTotal }}</strong><span>应用入口</span></div>
+        <div><strong>{{ objectTotal }}</strong><span>业务单元</span></div>
+        <div><strong>{{ appTotal }}</strong><span>访问入口</span></div>
         <div><strong>{{ enabledAppCount }}</strong><span>本页启用</span></div>
       </div>
     </header>
@@ -51,12 +51,12 @@
         <section class="suite-section">
           <div class="section-head">
             <div>
-              <h2>业务对象</h2>
+              <h2>业务单元</h2>
               <p>优先从对象进入关系、能力和标准业务入口。</p>
             </div>
             <n-space size="small">
               <n-button secondary @click="openSuiteStats">
-                套件看板
+                业务域看板
               </n-button>
               <n-button type="primary" @click="openObjectWizard">
                 新建对象
@@ -76,7 +76,7 @@
                 @delete="deleteObject"
               />
             </div>
-            <n-empty v-else-if="!loadingObjects" description="当前套件暂无业务对象" />
+            <n-empty v-else-if="!loadingObjects" description="当前业务域暂无业务单元" />
           </n-spin>
           <div v-if="objectTotal > objectPagination.pageSize" class="card-pagination">
             <n-pagination
@@ -108,12 +108,13 @@
                 :key="app.id"
                 :app="app"
                 @open="openApp"
+                @code="openCodePanel"
                 @config="openEditor"
                 @toggle="toggleApp"
                 @delete="deleteApp"
               />
             </div>
-            <n-empty v-else-if="!loadingApps" description="当前套件暂无应用入口" />
+            <n-empty v-else-if="!loadingApps" description="当前业务域暂无访问入口" />
           </n-spin>
           <div v-if="appTotal > appPagination.pageSize" class="card-pagination">
             <n-pagination
@@ -134,7 +135,7 @@
           <div class="section-head compact">
             <div>
               <h2>交付验收</h2>
-              <p>检查业务套件是否达到最小交付标准。</p>
+              <p>检查业务域是否达到最小交付标准。</p>
             </div>
           </div>
           <SuiteAcceptancePanel
@@ -152,6 +153,10 @@
       :app="editingApp"
       :suites="suite ? [suite] : []"
       @saved="loadAll"
+    />
+    <AppCodePanel
+      v-model:show="codePanelVisible"
+      :app="codingApp"
     />
     <BusinessObjectWizardDrawer
       v-model:show="objectWizardVisible"
@@ -201,6 +206,7 @@ import IconRenderer from '@/components/IconRenderer.vue'
 import { useTabStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
 import AppCard from './components/AppCard.vue'
+import AppCodePanel from './components/AppCodePanel.vue'
 import AppEditorDrawer from './components/AppEditorDrawer.vue'
 import BusinessObjectWizardDrawer from './components/BusinessObjectWizardDrawer.vue'
 import ObjectCard from './components/ObjectCard.vue'
@@ -222,6 +228,8 @@ const loadingObjects = ref(false)
 const loadingApps = ref(false)
 const editorVisible = ref(false)
 const editingApp = ref(null)
+const codePanelVisible = ref(false)
+const codingApp = ref(null)
 const objectWizardVisible = ref(false)
 const suiteEditorVisible = ref(false)
 const designerVisible = ref(false)
@@ -239,7 +247,7 @@ const appPagination = ref({
 
 const suiteInitial = computed(() => String(suite.value?.suiteName || suiteCode.value || 'A').slice(0, 2).toUpperCase())
 const enabledAppCount = computed(() => apps.value.filter(item => item.status === 1).length)
-const pageTitle = computed(() => suite.value?.suiteName || suiteCode.value || '业务套件详情')
+const pageTitle = computed(() => suite.value?.suiteName || suiteCode.value || '业务域详情')
 const designerMountKey = computed(() => `${designingObject.value?.objectCode || 'object'}_${designerPanel.value}`)
 
 onMounted(loadAll)
@@ -338,7 +346,7 @@ function openObjectWizard() {
 }
 
 function suiteStatusActionText(currentSuite) {
-  return currentSuite?.status === 0 ? '启用套件' : '停用套件'
+  return currentSuite?.status === 0 ? '启用业务域' : '停用业务域'
 }
 
 function openSuiteEditor() {
@@ -367,10 +375,14 @@ function handleAppPageSizeChange(pageSize) {
 }
 
 async function openApp(app) {
+  if (isCodeDownloadApp(app)) {
+    await openCodePanel(app)
+    return
+  }
   const res = await businessAppOpenInfo(app.id)
   const info = res.data || {}
   if (!info.canOpen) {
-    message.warning(info.message || '应用入口暂不可打开')
+    message.warning(info.message || '访问入口暂不可打开')
     return
   }
   if (info.openType === 'EXTERNAL' || info.openType === 'H5') {
@@ -382,6 +394,23 @@ async function openApp(app) {
     return
   }
   router.push(info.targetUrl)
+}
+
+async function openCodePanel(app) {
+  if (!app?.id)
+    return
+  try {
+    const res = await businessAppDetail(app.id)
+    codingApp.value = { ...app, ...(res.data || {}) }
+  }
+  catch {
+    codingApp.value = { ...app }
+  }
+  codePanelVisible.value = true
+}
+
+function isCodeDownloadApp(app) {
+  return app?.entryMode === 'RUNTIME' && app?.appMode === 'CODE_DOWNLOAD'
 }
 
 function openObjectStats(object) {
@@ -406,13 +435,13 @@ function openSuiteStats() {
 
 async function toggleApp(app) {
   await updateBusinessAppStatus(app.id, app.status === 1 ? 0 : 1)
-  message.success(app.status === 1 ? '应用入口已停用' : '应用入口已启用')
+  message.success(app.status === 1 ? '访问入口已停用' : '访问入口已启用')
   loadApps()
 }
 
 async function toggleObject(object) {
   await updateBusinessObjectStatus(object.id, object.status === 1 ? 0 : 1)
-  message.success(object.status === 1 ? '业务对象已停用' : '业务对象已启用')
+  message.success(object.status === 1 ? '业务单元已停用' : '业务单元已启用')
   await loadObjects()
 }
 
@@ -420,7 +449,7 @@ async function toggleSuite() {
   if (!suite.value?.id)
     return
   await updateBusinessSuiteStatus(suite.value.id, suite.value.status === 1 ? 0 : 1)
-  message.success(suite.value.status === 1 ? '业务套件已停用' : '业务套件已启用')
+  message.success(suite.value.status === 1 ? '业务域已停用' : '业务域已启用')
   await loadAll()
 }
 
@@ -429,13 +458,13 @@ function deleteSuite() {
     return
   const currentSuite = suite.value
   window.$dialog?.warning({
-    title: '删除业务套件',
-    content: `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？已存在业务对象或应用入口的套件会被后端拦截。`,
+    title: '删除业务域',
+    content: `确定删除“${currentSuite.suiteName || currentSuite.suiteCode}”吗？已存在业务单元或访问入口的业务域会被后端拦截。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       await deleteBusinessSuite(currentSuite.id)
-      message.success('业务套件已删除')
+      message.success('业务域已删除')
       router.replace('/app-center')
     },
   })
@@ -443,13 +472,13 @@ function deleteSuite() {
 
 function deleteObject(object) {
   window.$dialog?.warning({
-    title: '删除业务对象',
-    content: `确定删除“${object.objectName || object.objectCode}”吗？已关联关系或应用入口的对象会被后端拦截。`,
+    title: '删除业务单元',
+    content: `确定删除“${object.objectName || object.objectCode}”吗？已关联关系或访问入口的对象会被后端拦截。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       await deleteBusinessObject(object.id)
-      message.success('业务对象已删除')
+      message.success('业务单元已删除')
       await loadAll()
     },
   })
@@ -457,13 +486,13 @@ function deleteObject(object) {
 
 function deleteApp(app) {
   window.$dialog?.warning({
-    title: '删除应用入口',
-    content: `确定删除“${app.appName || app.appCode}”吗？删除后不会删除关联业务对象或运行配置。`,
+    title: '删除访问入口',
+    content: `确定删除“${app.appName || app.appCode}”吗？删除后不会删除关联业务单元或运行配置。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       await deleteBusinessApp(app.id)
-      message.success('应用入口已删除')
+      message.success('访问入口已删除')
       await loadAll()
     },
   })

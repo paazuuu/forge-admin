@@ -56,7 +56,7 @@
             clearable
             filterable
             class="trigger-filter-select"
-            placeholder="按业务对象筛选"
+            placeholder="按业务单元筛选"
             :options="objectOptions"
             @update:value="handleFilterChange"
           />
@@ -107,13 +107,13 @@
         <n-form-item label="触发器名称" path="triggerName">
           <n-input v-model:value="formData.triggerName" placeholder="例：商机创建时发起主流程" />
         </n-form-item>
-        <n-form-item label="业务对象" path="objectCode">
+        <n-form-item label="业务单元" path="objectCode">
           <n-select
             v-model:value="formData.objectCode"
             :options="objectOptions"
             clearable
             filterable
-            placeholder="选择业务对象"
+            placeholder="选择业务单元"
             @update:value="handleObjectCodeChange"
           />
         </n-form-item>
@@ -323,7 +323,7 @@ const scenarioTemplateOptions = computed(() => scenarioTemplates.value.map(item 
 
 const formRules = {
   triggerName: { required: true, message: '请输入触发器名称' },
-  objectCode: { required: true, message: '请选择业务对象' },
+  objectCode: { required: true, message: '请选择业务单元' },
   triggerType: { required: true, message: '请选择触发类型' },
   eventType: { required: true, message: '请选择事件类型' },
   actionType: { required: true, message: '请选择动作类型' },
@@ -369,7 +369,7 @@ const columns = [
     ]),
   },
   {
-    title: '业务对象',
+    title: '业务单元',
     key: 'objectCode',
     width: 140,
     render: row => h(NTag, { size: 'small', bordered: false }, { default: () => row.objectCode || '-' }),
@@ -540,7 +540,7 @@ function openEditor(trigger) {
 async function handleSubmit() {
   await formRef.value?.validate()
   if (!formData.value.objectCode) {
-    message.warning('请先选择业务对象')
+    message.warning('请先选择业务单元')
     return
   }
   if (isScheduledTrigger.value && !scheduleConfig.value.dueField) {

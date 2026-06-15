@@ -118,6 +118,13 @@ public class BusinessFieldSchemaService {
         schema.setSortOrder(dto.getSortOrder());
         schema.setBasicProps(copyProps(dto.getBasicProps()));
         schema.setAdvancedProps(copyProps(dto.getAdvancedProps()));
+        Map<String, Object> formulaConfig = copyProps(dto.getFormulaConfig());
+        if (!formulaConfig.isEmpty()) {
+            schema.setFormulaConfig(formulaConfig);
+            schema.setReadonly(true);
+        } else {
+            schema.setFormulaConfig(null);
+        }
         schema.getBasicProps().put("fieldBinding", normalizeFieldBinding(dtoFieldBinding, schema, "designer"));
         if (StringUtils.isNotBlank(dto.getPlaceholder())) {
             schema.getBasicProps().put("placeholder", dto.getPlaceholder());
@@ -185,6 +192,7 @@ public class BusinessFieldSchemaService {
         vo.setCanDelete(!Boolean.TRUE.equals(schema.getSystemField()) && !SYSTEM_FIELDS.contains(schema.getField()));
         vo.setReferenceStatus("NORMAL");
         vo.setFieldBinding(resolveFieldBinding(schema));
+        vo.setFormulaConfig(schema.getFormulaConfig());
         fillProps(vo, schema);
         return vo;
     }

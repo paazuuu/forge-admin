@@ -234,7 +234,7 @@ const statusMessage = computed(() => {
     case 'FAILED':
       return '最小交付链路仍有阻塞项，请先从第一个待处理对象进入配置。'
     default:
-      return '正在检查业务套件是否达到最小交付标准。'
+      return '正在检查业务域是否达到最小交付标准。'
   }
 })
 

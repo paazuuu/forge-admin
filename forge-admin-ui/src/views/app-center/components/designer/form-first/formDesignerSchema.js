@@ -85,6 +85,73 @@ export const VIRTUAL_COMPONENT_KEYS = new Set([
   'image',
 ])
 
+const GENERIC_COMPONENT_ID_SUFFIXES = new Set([
+  'input',
+  'textarea',
+  'number',
+  'inputnumber',
+  'integer',
+  'money',
+  'date',
+  'datetime',
+  'time',
+  'switch',
+  'select',
+  'radio',
+  'checkbox',
+  'dictselect',
+  'cascader',
+  'regiontreeselect',
+  'orgtreeselect',
+  'orgselect',
+  'departmentselect',
+  'departmenttreeselect',
+  'deptselect',
+  'depttreeselect',
+  'eltreeselect',
+  'orgname',
+  'deptname',
+  'userselect',
+  'userpicker',
+  'username',
+  'fileupload',
+  'imageupload',
+  'upload',
+  'objectreference',
+  'fcrow',
+  'row',
+  'col',
+  'elcard',
+  'card',
+  'eltabs',
+  'tabs',
+  'eltabpane',
+  'tabpane',
+  'elcollapse',
+  'collapse',
+  'elcollapseitem',
+  'collapseitem',
+  'fctable',
+  'table',
+  'fctablegrid',
+  'tablegrid',
+  'eldivider',
+  'divider',
+  'fctitle',
+  'title',
+  'text',
+  'html',
+  'space',
+  'elalert',
+  'alert',
+  'elbutton',
+  'button',
+  'eltag',
+  'tag',
+  'elimage',
+  'image',
+])
+
 const FULL_ROW_COMPONENT_KEYS = new Set([
   'textarea',
   'fileUpload',
@@ -220,13 +287,14 @@ export function createDefaultFormDesignerSchema(options = {}) {
 export function normalizeFormDesignerSchema(source = {}) {
   const schema = isPlainObject(source) ? cloneValue(source) : {}
   const components = Array.isArray(schema.components) ? schema.components : []
+  const usedIds = collectReservedComponentIds(components)
   return {
     schemaVersion: schema.schemaVersion || FORM_DESIGNER_SCHEMA_VERSION,
     formKey: schema.formKey || buildFormKey(schema.objectCode),
     formName: schema.formName || '业务表单',
     layout: normalizeLayout(schema.layout),
     components: components
-      .map((component, index) => normalizeComponent(component, index))
+      .map((component, index) => normalizeComponent(component, index, usedIds))
       .filter(Boolean),
     settings: isPlainObject(schema.settings) ? schema.settings : {},
   }
@@ -328,6 +396,22 @@ export function isTemporaryDesignerRef(value = '') {
   return /^ref_[A-Z0-9]+$/i.test(String(value || '').trim())
 }
 
+export function isGenericDesignerComponentId(value = '', componentKey = '') {
+  const id = String(value || '').trim()
+  if (!id.toLowerCase().startsWith('cmp_'))
+    return false
+  const suffix = id.slice(4).trim()
+  if (!suffix)
+    return true
+  const normalizedSuffix = suffix.toLowerCase()
+  const normalizedKey = String(componentKey || '').trim().toLowerCase()
+  return normalizedSuffix === normalizedKey
+    || FIELD_COMPONENT_KEYS.has(suffix)
+    || LAYOUT_COMPONENT_KEYS.has(suffix)
+    || VIRTUAL_COMPONENT_KEYS.has(suffix)
+    || GENERIC_COMPONENT_ID_SUFFIXES.has(normalizedSuffix)
+}
+
 export function createFieldBindingFromLabel(label, options = {}) {
   const fieldCode = options.fieldCode || generateFieldCode(label)
   return {
@@ -388,7 +472,7 @@ function normalizeLayout(layout = {}) {
   return normalized
 }
 
-function normalizeComponent(component, index) {
+function normalizeComponent(component, index, usedIds = new Set()) {
   if (!isPlainObject(component))
     return null
   const componentKey = component.componentKey || component.type || 'input'
@@ -396,21 +480,63 @@ function normalizeComponent(component, index) {
   const sourceLabel = component.label || component.title || component.props?.header || component.props?.label || component.props?.title || component.fieldBinding?.fieldCode || (fieldComponent ? '字段' : '布局')
   const label = normalizeDesignerComponentLabel(componentKey, sourceLabel)
   const sourceId = String(component.id || '').trim()
+  const fieldBinding = fieldComponent
+    ? normalizeFieldBinding(component.fieldBinding, component.field || component.name)
+    : normalizeFieldBinding({ ...(component.fieldBinding || {}), mode: 'virtual', fieldCode: '' })
   return {
-    id: sourceId && !isTemporaryDesignerRef(sourceId) ? sourceId : `cmp_${fieldComponent ? component.fieldBinding?.fieldCode || index : `${componentKey}_${index}`}`,
+    id: resolveNormalizedComponentId(sourceId, componentKey, fieldBinding, fieldComponent, index, usedIds),
     componentKey,
     label,
-    fieldBinding: fieldComponent
-      ? normalizeFieldBinding(component.fieldBinding, component.field || component.name)
-      : normalizeFieldBinding({ ...(component.fieldBinding || {}), mode: 'virtual', fieldCode: '' }),
+    fieldBinding,
     props: isPlainObject(component.props) ? component.props : {},
     layout: normalizeComponentLayout(component.layout),
     validation: normalizeValidation(component.validation),
     visibility: normalizeVisibility(component.visibility),
     children: Array.isArray(component.children)
-      ? component.children.map((child, childIndex) => normalizeComponent(child, childIndex)).filter(Boolean)
+      ? component.children.map((child, childIndex) => normalizeComponent(child, childIndex, usedIds)).filter(Boolean)
       : [],
   }
+}
+
+function collectReservedComponentIds(components = [], ids = new Set()) {
+  ;(Array.isArray(components) ? components : []).forEach((component) => {
+    if (!isPlainObject(component))
+      return
+    const componentKey = component.componentKey || component.type || 'input'
+    const sourceId = String(component.id || '').trim()
+    if (sourceId && !isTemporaryDesignerRef(sourceId) && !isGenericDesignerComponentId(sourceId, componentKey))
+      ids.add(sourceId)
+    if (Array.isArray(component.children))
+      collectReservedComponentIds(component.children, ids)
+  })
+  return ids
+}
+
+function resolveNormalizedComponentId(sourceId, componentKey, fieldBinding, fieldComponent, index, usedIds = new Set()) {
+  if (sourceId && !isTemporaryDesignerRef(sourceId) && !isGenericDesignerComponentId(sourceId, componentKey))
+    return sourceId
+  const base = fieldComponent
+    ? `cmp_${fieldBinding?.fieldCode || index}`
+    : `cmp_${componentKey || 'layout'}_${index}`
+  return reserveComponentId(base, usedIds)
+}
+
+function reserveComponentId(baseId, usedIds = new Set()) {
+  const base = String(baseId || 'cmp_component').trim() || 'cmp_component'
+  if (!usedIds.has(base)) {
+    usedIds.add(base)
+    return base
+  }
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${base}_${index}`
+    if (!usedIds.has(candidate)) {
+      usedIds.add(candidate)
+      return candidate
+    }
+  }
+  const candidate = `${base}_${Date.now()}`
+  usedIds.add(candidate)
+  return candidate
 }
 
 function stripTemporaryDesignerRef(value = '') {

@@ -711,7 +711,7 @@ Flow 服务现在不会把同一租户同一 `businessKey` 的重复启动直接
 
 ## 5. 收尾验证补充
 
-- `rg -n "^## 50|form-create 随机字段|页面区域引用了不存在的字段" .opencode/memory/pitfalls.md`：确认本轮踩坑记录已追加到第 50 条。
+- `rg -n "^## 50|form-create 随机字段|页面区域引用了不存在的字段" code-copilot/memory/pitfalls.md`：确认本轮踩坑记录已追加到第 50 条。
 - `git diff --check`：通过。
 - `curl -I 'http://[::1]:3001'`：已有 `forge-admin-ui` Vite dev server 返回 `HTTP/1.1 200 OK`。
 - `curl -I 'http://localhost:3001/src/views/app-center/components/designer/BusinessDocumentPanel.vue'`：返回 `HTTP/1.1 200 OK`，用户反馈的 `BusinessDocumentPanel.vue` HMR 404 在当前服务上未复现。

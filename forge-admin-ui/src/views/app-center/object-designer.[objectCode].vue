@@ -17,13 +17,14 @@
     @refresh="loadDesigner"
     @open-runtime="openRuntime"
     @open-trigger="openTriggerConfig"
+    @open-function-market="functionMarketVisible = true"
     @update:active-panel="handlePanelSwitch"
   >
     <section v-if="activePanel === 'basic'" class="basic-panel">
       <div class="panel-head">
         <div>
           <h2>基本信息</h2>
-          <p>维护业务对象的名称、说明、显示字段和启停状态。</p>
+          <p>维护业务单元的名称、说明、显示字段和启停状态。</p>
         </div>
       </div>
       <n-form label-placement="top" :show-feedback="false" class="basic-form">
@@ -67,7 +68,9 @@
       v-else-if="activePanel === 'fields'"
       ref="fieldManagerRef"
       :object-id="objectId"
+      :object-code="draft.objectCode || objectCode"
       :fields="draft.fields"
+      :relations="draft.relations"
       :form-designer-schema="draft.formDesignerSchema"
       :developer-mode="developerMode"
       @updated="handleFieldsUpdated"
@@ -202,6 +205,8 @@
       @open-developer="openDeveloperPath"
     />
   </BusinessObjectDesignerShell>
+
+  <FormulaFunctionMarket v-model:show="functionMarketVisible" />
 </template>
 
 <script setup>
@@ -231,7 +236,9 @@ import BusinessObjectDesignerShell from './components/designer/BusinessObjectDes
 import BusinessPermissionFlowPanel from './components/designer/BusinessPermissionFlowPanel.vue'
 import BusinessPublishChecklist from './components/designer/BusinessPublishChecklist.vue'
 import BusinessRelationDesigner from './components/designer/BusinessRelationDesigner.vue'
-import { sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
+import { renameFormDesignerFieldRefs } from './components/designer/form-first/fieldReferenceUtils'
+import { renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
+import FormulaFunctionMarket from './components/designer/formula/FormulaFunctionMarket.vue'
 
 const props = defineProps({
   embedded: {
@@ -280,6 +287,7 @@ const developerMode = ref(false)
 const designer = ref(null)
 const runtimeInfo = ref(null)
 const publishCheckState = ref(null)
+const functionMarketVisible = ref(false)
 const fieldManagerRef = ref(null)
 const formDesignerRef = ref(null)
 const listDesignerRef = ref(null)
@@ -295,7 +303,7 @@ const draft = reactive(createEmptyDraft())
 const objectCode = computed(() => props.embedded ? props.embeddedObjectCode : route.params.objectCode)
 const suiteCode = computed(() => (props.embedded ? props.embeddedSuiteCode : route.query.suiteCode) || draft.suiteCode)
 const objectId = computed(() => designer.value?.objectId || draft.objectId)
-const pageTitle = computed(() => `${draft.objectName || objectCode.value || '业务对象'}设计`)
+const pageTitle = computed(() => `${draft.objectName || objectCode.value || '业务单元'}设计`)
 const canAdvanced = computed(() => {
   return userStore.isAdmin
     || hasPermission(userStore.permissions, 'ai:businessObject:advanced')
@@ -419,7 +427,7 @@ async function loadDesigner() {
   try {
     const object = await resolveBusinessObject()
     if (!object?.id) {
-      message.warning('未找到业务对象')
+      message.warning('未找到业务单元')
       return
     }
     const res = await businessObjectDesigner(object.id)
@@ -599,7 +607,7 @@ async function handlePublish(options = {}) {
       pageSchema: cloneSchema(draft.pageSchema || {}),
       publishOptions: {},
     })
-    message.success(res.data ? `业务对象已发布，版本 ${res.data}` : '业务对象已发布')
+    message.success(res.data ? `业务单元已发布，版本 ${res.data}` : '业务单元已发布')
     await loadRuntimeInfo()
     await loadDesigner()
     emit('saved')
@@ -643,7 +651,7 @@ function openRuntime() {
 function openTriggerConfig() {
   const code = draft.objectCode || objectCode.value
   if (!code) {
-    message.warning('缺少业务对象编码，无法打开触发器配置')
+    message.warning('缺少业务单元编码，无法打开触发器配置')
     return
   }
   if (props.embedded) {
@@ -662,6 +670,8 @@ function openTriggerConfig() {
 async function handleFieldsUpdated(fields, options = {}) {
   draft.fields = cloneSchema(fields || [])
   syncDraftModelFields(draft.fields)
+  if (options?.fieldRename)
+    applyFieldRename(options.fieldRename)
   draft.viewSchema = sanitizeViewSchemaFieldRefs(draft.viewSchema || {}, draft.fields)
   if (options?.reloadDesigner) {
     await loadDesigner()
@@ -697,6 +707,23 @@ function handleLayoutSaved(pageSchema) {
   dirty.value = false
   designerDraftDirty.value = false
   emit('saved')
+}
+
+function applyFieldRename(rename = {}) {
+  const oldFieldCode = String(rename.oldFieldCode || '').trim()
+  const newFieldCode = String(rename.newFieldCode || '').trim()
+  if (!oldFieldCode || !newFieldCode || oldFieldCode === newFieldCode)
+    return
+  const normalizedRename = {
+    ...rename,
+    oldFieldCode,
+    newFieldCode,
+  }
+  draft.formDesignerSchema = renameFormDesignerFieldRefs(draft.formDesignerSchema || {}, normalizedRename)
+  draft.viewSchema = renameViewSchemaFieldRefs(draft.viewSchema || {}, normalizedRename)
+  draft.pageSchema = renameFieldRefsInValue(draft.pageSchema || {}, normalizedRename)
+  if (draft.displayField === oldFieldCode)
+    draft.displayField = newFieldCode
 }
 
 function handleRelationsUpdated(relations) {
@@ -971,6 +998,54 @@ function syncDraftModelFields(fields = []) {
       }
     }),
   }
+}
+
+const FIELD_REF_KEYS = new Set([
+  'field',
+  'fieldCode',
+  'fieldRef',
+  'queryField',
+  'sourceField',
+  'targetField',
+  'displayField',
+])
+
+function renameFieldRefsInValue(value, rename = {}) {
+  return renameFieldRefsInClonedValue(cloneSchema(value || {}), rename)
+}
+
+function renameFieldRefsInClonedValue(value, rename = {}) {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (item === rename.oldFieldCode)
+        return rename.newFieldCode
+      if (rename.oldColumnName && item === rename.oldColumnName)
+        return rename.newColumnName || item
+      return renameFieldRefsInClonedValue(item, rename)
+    })
+  }
+  if (!value || typeof value !== 'object')
+    return value
+  if (value.fieldSettings && typeof value.fieldSettings === 'object' && !Array.isArray(value.fieldSettings)) {
+    if (Object.prototype.hasOwnProperty.call(value.fieldSettings, rename.oldFieldCode)) {
+      const oldSetting = value.fieldSettings[rename.oldFieldCode]
+      delete value.fieldSettings[rename.oldFieldCode]
+      value.fieldSettings[rename.newFieldCode] = oldSetting
+    }
+  }
+  Object.keys(value).forEach((key) => {
+    const item = value[key]
+    if (FIELD_REF_KEYS.has(key) && item === rename.oldFieldCode) {
+      value[key] = rename.newFieldCode
+      return
+    }
+    if (key === 'columnName' && rename.oldColumnName && item === rename.oldColumnName) {
+      value[key] = rename.newColumnName || item
+      return
+    }
+    value[key] = renameFieldRefsInClonedValue(item, rename)
+  })
+  return value
 }
 
 function handleBeforeUnload(event) {

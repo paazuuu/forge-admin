@@ -230,4 +230,4 @@
 
 - [x] 实现完成后补 `implementation-summary.md`。
 - [x] 如果旧入口退场策略明确，补充 `deprecation-plan.md`。
-- [x] 如果发现可复用迁移经验，写入 `.opencode/memory/decisions.md` 或 `.opencode/memory/pitfalls.md`。
+- [x] 如果发现可复用迁移经验，写入 `code-copilot/memory/decisions.md` 或 `code-copilot/memory/pitfalls.md`。

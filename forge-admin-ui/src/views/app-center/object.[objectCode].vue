@@ -2,7 +2,7 @@
   <div class="object-detail-page">
     <header class="object-head">
       <n-button text @click="backToSuite">
-        返回套件
+        返回业务域
       </n-button>
       <div class="object-title">
         <span>
@@ -10,7 +10,7 @@
         </span>
         <div>
           <h1>{{ object?.objectName || objectCode }}</h1>
-          <p>{{ object?.description || '业务对象详情' }}</p>
+          <p>{{ object?.description || '业务单元详情' }}</p>
         </div>
         <DictTag v-if="object" dict-type="sys_enable_disable" :value="object.status" :bordered="false" />
       </div>
@@ -224,7 +224,7 @@ const designerVisible = ref(false)
 const designerPanel = ref('form')
 const objectCode = computed(() => route.params.objectCode)
 const suiteCode = computed(() => route.query.suiteCode || object.value?.suiteCode)
-const pageTitle = computed(() => object.value?.objectName || objectCode.value || '业务对象详情')
+const pageTitle = computed(() => object.value?.objectName || objectCode.value || '业务单元详情')
 const canUseRuntime = computed(() => Boolean(runtimeInfo.value?.canOpen && runtimeInfo.value?.configKey))
 const canUseImportExport = computed(() => Boolean(runtimeInfo.value?.configKey))
 const runtimeStatusType = computed(() => runtimeInfo.value?.canOpen ? 'success' : 'warning')
@@ -232,10 +232,10 @@ const runtimeHint = computed(() => {
   if (runtimeInfo.value?.canOpen)
     return '对象已发布，可以打开业务应用，也可以继续使用导入、导出等运行能力。'
   if (canUseImportExport.value)
-    return '对象已有运行配置，导入导出可用；运行应用入口仍需完成发布检查。'
+    return '对象已有运行配置，导入导出可用；运行访问入口仍需完成发布检查。'
   if (runtimeInfo.value?.message)
     return '先进入对象设计器处理提示中的缺口，再打开业务应用。'
-  return '请先完成对象设计和发布检查，再生成标准业务应用入口。'
+  return '请先完成对象设计和发布检查，再生成标准业务访问入口。'
 })
 const designerMountKey = computed(() => `${object.value?.objectCode || objectCode.value}_${designerPanel.value}`)
 const canAdvanced = computed(() => {
@@ -268,7 +268,7 @@ const operationSteps = computed(() => [
     key: 'publish',
     index: '03',
     title: '发布对象',
-    desc: '执行发布检查并生成可运行应用入口。',
+    desc: '执行发布检查并生成可运行访问入口。',
     state: runtimeInfo.value?.canOpen ? 'done' : 'todo',
     stateLabel: runtimeInfo.value?.canOpen ? '已发布' : '去发布',
     action: () => openDesigner('publish'),
@@ -375,7 +375,7 @@ async function toggleObject() {
   if (!object.value)
     return
   await updateBusinessObjectStatus(object.value.id, object.value.status === 1 ? 0 : 1)
-  message.success(object.value.status === 1 ? '业务对象已停用' : '业务对象已启用')
+  message.success(object.value.status === 1 ? '业务单元已停用' : '业务单元已启用')
   await loadObject()
 }
 
@@ -383,13 +383,13 @@ function deleteObject() {
   if (!object.value)
     return
   window.$dialog?.warning({
-    title: '删除业务对象',
-    content: `确定删除“${object.value.objectName || object.value.objectCode}”吗？已关联关系或应用入口的对象会被后端拦截。`,
+    title: '删除业务单元',
+    content: `确定删除“${object.value.objectName || object.value.objectCode}”吗？已关联关系或访问入口的对象会被后端拦截。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
       await deleteBusinessObject(object.value.id)
-      message.success('业务对象已删除')
+      message.success('业务单元已删除')
       backToSuite()
     },
   })

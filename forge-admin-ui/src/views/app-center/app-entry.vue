@@ -23,11 +23,11 @@ import { businessAppOpenInfo } from '@/api/business-app'
 const route = useRoute()
 const router = useRouter()
 const loading = ref(true)
-const message = ref('正在解析应用入口')
+const message = ref('正在解析访问入口')
 const externalUrl = ref('')
 
 const resultStatus = computed(() => loading.value ? 'info' : externalUrl.value ? 'success' : 'warning')
-const resultTitle = computed(() => loading.value ? '正在打开应用入口' : externalUrl.value ? '应用入口已在新窗口打开' : '应用入口暂不可打开')
+const resultTitle = computed(() => loading.value ? '正在打开访问入口' : externalUrl.value ? '访问入口已在新窗口打开' : '访问入口暂不可打开')
 const resultDescription = computed(() => message.value)
 
 onMounted(openAppEntry)
@@ -36,14 +36,14 @@ async function openAppEntry() {
   const appId = resolveAppId()
   if (!appId) {
     loading.value = false
-    message.value = '缺少应用入口 ID'
+    message.value = '缺少访问入口 ID'
     return
   }
   const res = await businessAppOpenInfo(appId)
   const info = res.data || {}
   if (!info.canOpen) {
     loading.value = false
-    message.value = info.message || '应用入口暂不可打开'
+    message.value = info.message || '访问入口暂不可打开'
     return
   }
   if (info.openType === 'EXTERNAL' || info.openType === 'H5') {

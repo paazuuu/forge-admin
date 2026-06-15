@@ -91,6 +91,15 @@ public class LowcodeFieldSchema {
     /** 面向开发者模式的扩展属性。 */
     private Map<String, Object> advancedProps = new LinkedHashMap<>();
 
+    /**
+     * 公式配置（JSON对象），包含 type / mode / expression / dependsOn / aggregate / condition。
+     *
+     * 当此字段非空时，表示该字段值由公式计算得出。
+     * 发布时由 FormulaPublishValidator 校验；
+     * 运行时由 StoredFormulaRuntime / VirtualFormulaRuntime 执行。
+     */
+    private Map<String, Object> formulaConfig;
+
     @JsonProperty("fieldCode")
     public void setLegacyFieldCode(String fieldCode) {
         this.columnName = fieldCode;

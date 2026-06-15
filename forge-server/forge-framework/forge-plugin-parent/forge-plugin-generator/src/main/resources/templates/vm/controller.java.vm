@@ -34,7 +34,7 @@ import java.util.Map;
  * @date ${datetime}
  */
 @RestController
-@RequestMapping("/${moduleName}/${businessName}")
+@RequestMapping("${businessApiBase}")
 @RequiredArgsConstructor
 @ApiDecrypt
 @ApiEncrypt

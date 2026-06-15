@@ -533,10 +533,11 @@ function buildRuntimeCrudProps(cfg) {
   if (!cfg)
     return {}
   const options = cfg.options || {}
+  const fieldMetaMap = buildRuntimeFieldMetaMap(cfg.modelSchema)
   return {
     searchSchema: transformFields(cfg.searchSchema),
     columns: transformColumns(cfg.columnsSchema, cfg.transConfig),
-    editSchema: transformEditFields(cfg.editSchema, options.editFormLayout),
+    editSchema: transformEditFields(cfg.editSchema, options.editFormLayout, fieldMetaMap),
     childrenConfig: transformChildrenConfig(options.masterDetailConfig?.children || []),
     apiConfig: cfg.apiConfig || {},
     options,
@@ -637,9 +638,10 @@ function ensureDetailRowAction(actions = []) {
   return next
 }
 
-function transformFields(fields) {
+function transformFields(fields, fieldMetaMap = new Map()) {
   return (fields || []).map((field) => {
     const nextField = { ...field }
+    applyRuntimeFieldMeta(nextField, fieldMetaMap.get(field.field || field.fieldCode))
     if (field.dictType && ['select', 'radio', 'checkbox'].includes(field.type)) {
       nextField.props = {
         ...(nextField.props || {}),
@@ -657,8 +659,8 @@ function transformFields(fields) {
   })
 }
 
-function transformEditFields(fields = [], layout = []) {
-  const transformedFields = transformFields(fields)
+function transformEditFields(fields = [], layout = [], fieldMetaMap = new Map()) {
+  const transformedFields = transformFields(fields, fieldMetaMap)
   if (!Array.isArray(layout) || !layout.length)
     return transformedFields
 
@@ -673,6 +675,50 @@ function transformEditFields(fields = [], layout = []) {
       nodes.push(field)
   })
   return nodes
+}
+
+function buildRuntimeFieldMetaMap(modelSchema = {}) {
+  const result = new Map()
+  const fields = Array.isArray(modelSchema?.fields) ? modelSchema.fields : []
+  fields.forEach((field) => {
+    const fieldCode = field?.field || field?.fieldCode
+    if (fieldCode)
+      result.set(fieldCode, field)
+  })
+  return result
+}
+
+function applyRuntimeFieldMeta(field, meta = {}) {
+  if (!field || !meta)
+    return
+  if (!field.dataType && meta.dataType)
+    field.dataType = meta.dataType
+  if (!field.fieldDataType && meta.dataType)
+    field.fieldDataType = meta.dataType
+  if (!field.componentType && meta.componentType)
+    field.componentType = meta.componentType
+  const formulaConfig = field.formulaConfig || meta.formulaConfig
+  if (!hasRuntimeFormulaConfig(formulaConfig))
+    return
+  field.formulaConfig = formulaConfig
+  field.required = false
+  field.disabled = true
+  field.readonly = true
+  if (Array.isArray(field.rules))
+    field.rules = field.rules.filter(rule => !rule?.required)
+  field.props = {
+    ...(field.props || {}),
+    disabled: true,
+    readonly: true,
+  }
+}
+
+function hasRuntimeFormulaConfig(formulaConfig) {
+  if (!formulaConfig)
+    return false
+  if (typeof formulaConfig === 'string')
+    return formulaConfig.trim().length > 0
+  return typeof formulaConfig === 'object' && Object.keys(formulaConfig).length > 0
 }
 
 function hydrateRuntimeLayoutNode(node = {}, fieldMap, usedFields) {

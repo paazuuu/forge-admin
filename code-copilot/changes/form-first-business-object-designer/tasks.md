@@ -93,7 +93,7 @@
 **涉及文件**:
 - `code-copilot/changes/form-first-business-object-designer/spec.md`
 - `code-copilot/changes/form-first-business-object-designer/tasks.md`
-- `.opencode/memory/decisions.md`
+- `code-copilot/memory/decisions.md`
 
 **执行要点**:
 - 确认 `fcDesigner` 是首期表单画布基础。
@@ -106,7 +106,7 @@
 **验收标准**:
 - `spec.md` 第 24 章待确认问题中与首期路线相关的问题已给出结论。
 - `tasks.md` 前置条件全部有明确确认。
-- `.opencode/memory/decisions.md` 记录“fcDesigner 优先，不自研完整画布”的项目决策。
+- `code-copilot/memory/decisions.md` 记录“fcDesigner 优先，不自研完整画布”的项目决策。
 
 ### Task 1: 现有 fcDesigner 集成能力盘点
 
@@ -1126,8 +1126,8 @@ cd forge && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jd
 - `code-copilot/changes/form-first-business-object-designer/spec.md`
 - `code-copilot/changes/form-first-business-object-designer/tasks.md`
 - 新增 `code-copilot/changes/form-first-business-object-designer/execution-log.md`
-- `.opencode/memory/pitfalls.md`
-- `.opencode/memory/decisions.md`
+- `code-copilot/memory/pitfalls.md`
+- `code-copilot/memory/decisions.md`
 
 **执行要点**:
 - 回填实际完成范围。
@@ -1143,7 +1143,7 @@ cd forge && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jd
 **执行状态**: completed
 - 已新增 `execution-log.md`，记录实现范围、验证命令、截图路径和剩余风险。
 - 已回填 Task 36-40 状态，其中真实 CRM 端到端验收继续保持 pending。
-- 已补充 `fcDesigner` 窄屏布局踩坑到 `.opencode/memory/pitfalls.md`。
+- 已补充 `fcDesigner` 窄屏布局踩坑到 `code-copilot/memory/pitfalls.md`。
 
 ### Task 41: 设计器交互回归修复
 

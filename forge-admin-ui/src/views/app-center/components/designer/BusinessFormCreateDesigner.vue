@@ -3,7 +3,7 @@
     <div class="form-create-toolbar">
       <div>
         <h3>表单设计</h3>
-        <p>使用组件画布设计最终表单，字段绑定会同步到业务对象字段资产。</p>
+        <p>使用组件画布设计最终表单，字段绑定会同步到业务单元字段资产。</p>
       </div>
       <n-space size="small">
         <n-button size="small" secondary @click="resetFromFields">
@@ -191,8 +191,10 @@ function flushDesigner() {
     fields: props.fields,
   })
   localSnapshot.value = JSON.stringify({ rules, options })
-  emit('update:modelValue', schema)
-  emit('dirtyChange', true)
+  if (!isSameDesignerSchema(schema, props.modelValue || normalizedSchema.value)) {
+    emit('update:modelValue', schema)
+    emit('dirtyChange', true)
+  }
   return schema
 }
 
@@ -256,6 +258,10 @@ function appendField(field = {}) {
   emit('update:modelValue', applyGridColumnsToFormDesignerSchema(schema, schema.layout?.gridColumns || 2))
   emit('dirtyChange', true)
   nextTick(loadDesigner)
+}
+
+function isSameDesignerSchema(left, right) {
+  return JSON.stringify(normalizeFormDesignerSchema(left || {})) === JSON.stringify(normalizeFormDesignerSchema(right || {}))
 }
 
 defineExpose({

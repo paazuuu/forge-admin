@@ -24,6 +24,7 @@
         <therapi-javadoc.version>0.15.0</therapi-javadoc.version>
         <easyexcel.version>4.0.2</easyexcel.version>
         <velocity.version>2.3</velocity.version>
+        <aviator.version>5.4.3</aviator.version>
         <satoken.version>1.38.0</satoken.version>
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <transmittable.version>2.14.5</transmittable.version>
@@ -124,6 +125,11 @@
                 <groupId>org.apache.velocity</groupId>
                 <artifactId>velocity-engine-core</artifactId>
                 <version>${velocity.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.googlecode.aviator</groupId>
+                <artifactId>aviator</artifactId>
+                <version>${aviator.version}</version>
             </dependency>
             
             <!-- Sa-Token 权限认证, 在线文档：http://sa-token.dev33.cn/ -->
