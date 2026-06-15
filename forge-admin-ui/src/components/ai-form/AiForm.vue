@@ -12,54 +12,73 @@
 
 <template>
   <n-form
-    ref="formRef"
-    :model="formValue"
-    :rules="formRules"
-    :label-placement="labelPlacement"
-    :label-width="labelWidth"
-    :label-align="labelAlign"
-    :size="size"
+      ref="formRef"
+      class="ai-form"
+      :model="formValue"
+      :rules="formRules"
+      :label-placement="labelPlacement"
+      :label-width="labelWidth"
+      :label-align="labelAlign"
+      :size="size"
   >
-    <AiFormLayoutNodes
-      :nodes="visibleSchema"
-      :form-value="formValue"
-      :item-context="itemContext"
-      :grid-cols="gridCols"
-      :x-gap="xGap"
-      :y-gap="yGap"
-      :show-feedback="showFeedback"
-      @field-change="handleFieldChange"
-    >
-      <!-- 支持自定义插槽 -->
-      <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
-        <slot :name="slotName" v-bind="slotProps" />
-      </template>
+    <div class="ai-form-body" :class="{ 'ai-form-body--with-nav': showSectionNav }">
+      <nav v-if="showSectionNav" class="ai-form-section-nav" aria-label="表单分组导航">
+        <button
+            v-for="item in sectionNavItems"
+            :key="item.id"
+            type="button"
+            class="ai-form-section-nav__item"
+            :class="{ 'is-active': activeSectionId === item.id }"
+            @click="scrollToSection(item.id)"
+        >
+          <span class="ai-form-section-nav__dot" aria-hidden="true" />
+          <span class="ai-form-section-nav__text">{{ item.label }}</span>
+        </button>
+      </nav>
 
-      <template v-if="hasInlineActions" #gridAppend>
-        <!-- 表单操作区域 -->
-        <n-gi :span="actionCellSpan" class="af-action-cell">
-          <n-space align="baseline" :wrap="false">
-            <!-- 自定义操作按钮 -->
-            <slot name="formAction" :form-data="formValue" />
+      <div class="ai-form-content">
+        <AiFormLayoutNodes
+            :nodes="visibleSchema"
+            :form-value="formValue"
+            :item-context="itemContext"
+            :grid-cols="gridCols"
+            :x-gap="xGap"
+            :y-gap="yGap"
+            :show-feedback="showFeedback"
+            @field-change="handleFieldChange"
+        >
+          <!-- 支持自定义插槽 -->
+          <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
+            <slot :name="slotName" v-bind="slotProps" />
+          </template>
 
-            <!-- 折叠/展开按钮 -->
-            <n-button
-              v-if="showCollapseToggle"
-              text
-              type="primary"
-              @click="toggleCollapse"
-            >
-              {{ isCollapsed ? '展开' : '收起' }}
-              <template #icon>
-                <n-icon>
-                  <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
-                </n-icon>
-              </template>
-            </n-button>
-          </n-space>
-        </n-gi>
-      </template>
-    </AiFormLayoutNodes>
+          <template v-if="hasInlineActions" #gridAppend>
+            <!-- 表单操作区域 -->
+            <n-gi :span="actionCellSpan" class="af-action-cell">
+              <n-space align="baseline" :wrap="false">
+                <!-- 自定义操作按钮 -->
+                <slot name="formAction" :form-data="formValue" />
+
+                <!-- 折叠/展开按钮 -->
+                <n-button
+                    v-if="showCollapseToggle"
+                    text
+                    type="primary"
+                    @click="toggleCollapse"
+                >
+                  {{ isCollapsed ? '展开' : '收起' }}
+                  <template #icon>
+                    <n-icon>
+                      <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </n-space>
+            </n-gi>
+          </template>
+        </AiFormLayoutNodes>
+      </div>
+    </div>
 
     <!-- 表单操作按钮 -->
     <n-space v-if="showActions" justify="center" :style="{ marginTop: '24px' }">
@@ -78,7 +97,7 @@
 
 <script setup>
 import { ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5'
-import { computed, ref, useSlots, watch } from 'vue'
+import { computed, nextTick, ref, useSlots, watch } from 'vue'
 import AiFormLayoutNodes from './AiFormLayoutNodes.vue'
 
 const props = defineProps({
@@ -182,6 +201,7 @@ const slots = useSlots()
 const formRef = ref(null)
 const formValue = ref({})
 const isCollapsed = ref(true)
+const activeSectionId = ref('')
 
 // 初始化表单数据
 watch(() => props.value, (newVal) => {
@@ -194,7 +214,7 @@ function isFieldVisible(field) {
   }
 
   if (typeof field.vIf === 'function') {
-    return field.vIf(formValue.value)
+    return field.vIf(formValue.value, props.context)
   }
 
   if (typeof field.vIf === 'boolean') {
@@ -224,6 +244,7 @@ const formRules = computed(() => {
       const isDateType = isDateLikeType(field.type)
       const isSelectionType = isSelectionLikeType(field.type)
       const rule = {
+        key: field.field,
         required: true,
         message: field.requiredMessage || `请${inputTypes.includes(field.type) ? '输入' : '选择'}${field.label}`,
         trigger: field.trigger || (isNumericType || isDateType || isSelectionType ? 'change' : ['blur', 'change']),
@@ -284,13 +305,13 @@ function hasFormValue(value) {
 
 function normalizeFieldRules(field, fieldRules) {
   const rules = Array.isArray(fieldRules) ? fieldRules : [fieldRules]
-  if (!isDateLikeType(field.type) && !isSelectionLikeType(field.type) && field.type !== 'number' && field.type !== 'inputNumber')
-    return fieldRules
+  const needsCustomEmptyValidator = isDateLikeType(field.type) || isSelectionLikeType(field.type) || field.type === 'number' || field.type === 'inputNumber'
 
-  return rules.map((sourceRule) => {
-    if (!sourceRule?.required || sourceRule.validator)
-      return sourceRule
-    const rule = { ...sourceRule }
+  const normalizedRules = rules.map((sourceRule) => {
+    const withKeyRule = { ...(sourceRule || {}), key: sourceRule?.key || field.field }
+    if (!needsCustomEmptyValidator || !sourceRule?.required || sourceRule.validator)
+      return withKeyRule
+    const rule = withKeyRule
     rule.validator = (_rule, value) => {
       if (!hasFormValue(value))
         return new Error(rule.message || field.requiredMessage || `请选择${field.label}`)
@@ -300,6 +321,8 @@ function normalizeFieldRules(field, fieldRules) {
     delete rule.required
     return rule
   })
+
+  return Array.isArray(fieldRules) ? normalizedRules : normalizedRules[0]
 }
 
 // 可见的表单字段
@@ -312,12 +335,11 @@ const visibleSchema = computed(() => {
   // 应用折叠逻辑
   if (props.enableCollapse && !hasLayoutNodes(fields) && fields.length > props.maxVisibleFields) {
     fields = isCollapsed.value
-      ? fields.slice(0, props.maxVisibleFields)
-      : fields
+        ? fields.slice(0, props.maxVisibleFields)
+        : fields
   }
 
-  // 合并 showFeedback 到每个字段
-  return applyShowFeedback(fields)
+  return applySectionNavMarkers(applyShowFeedback(fields))
 })
 
 const itemContext = computed(() => ({
@@ -328,6 +350,8 @@ const itemContext = computed(() => ({
 }))
 
 const showCollapseToggle = computed(() => props.enableCollapse && visibleFieldSchema.value.length > props.maxVisibleFields)
+const sectionNavItems = computed(() => collectSectionNavItems(visibleSchema.value))
+const showSectionNav = computed(() => sectionNavItems.value.length >= 3)
 const hasInlineActions = computed(() => !!slots.formAction || showCollapseToggle.value)
 const actionCellSpan = computed(() => {
   const cols = Math.max(1, Number(props.gridCols) || 1)
@@ -342,6 +366,15 @@ const actionCellSpan = computed(() => {
   const remainder = usedCols % cols
   return remainder === 0 ? cols : cols - remainder
 })
+
+watch(sectionNavItems, (items) => {
+  if (!items.length) {
+    activeSectionId.value = ''
+    return
+  }
+  if (!items.some(item => item.id === activeSectionId.value))
+    activeSectionId.value = items[0].id
+}, { immediate: true })
 
 // 字段值变化
 async function handleFieldChange(field, value) {
@@ -363,6 +396,20 @@ async function handleFieldChange(field, value) {
     formValue.value = { ...formValue.value }
     emit('update:value', { ...formValue.value })
   }
+
+  await validateChangedField(field)
+}
+
+async function validateChangedField(field) {
+  if (!field || !formRules.value[field])
+    return
+  await nextTick()
+  try {
+    await formRef.value?.validate(undefined, rule => rule?.key === field)
+  }
+  catch {
+    // 单字段重验只用于同步清理或刷新提示，不阻断用户继续填写。
+  }
 }
 
 function patchFormData(patch = {}) {
@@ -382,12 +429,112 @@ function patchFormData(patch = {}) {
 // 提交表单
 async function handleSubmit() {
   try {
-    await formRef.value?.validate()
+    await validateForm()
     emit('submit', { ...formValue.value })
   }
   catch (error) {
     console.warn('表单验证失败:', error)
   }
+}
+
+async function validateForm() {
+  try {
+    return await formRef.value?.validate()
+  }
+  catch (error) {
+    await revealFirstValidationError(error)
+    throw error
+  }
+}
+
+async function revealFirstValidationError(error) {
+  const field = resolveFirstValidationField(error)
+  if (props.enableCollapse && isCollapsed.value && field && !findFieldElement(field)) {
+    isCollapsed.value = false
+    await nextTick()
+  }
+
+  await nextTick()
+
+  const target = field ? findFieldElement(field) : findFirstErrorElement()
+  if (!target)
+    return
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  target.classList.remove('ai-form-field-flash')
+  void target.offsetWidth
+  target.classList.add('ai-form-field-flash')
+
+  window.setTimeout(() => {
+    focusFirstControl(target)
+  }, 260)
+  window.setTimeout(() => {
+    target.classList.remove('ai-form-field-flash')
+  }, 3200)
+}
+
+function resolveFirstValidationField(error) {
+  const errors = flattenValidationErrors(error)
+  const first = errors.find(item => item && typeof item === 'object')
+  const field = first?.field || first?.path || first?.key || first?.fullField
+  return Array.isArray(field) ? field.join('.') : field ? String(field) : ''
+}
+
+function scrollToSection(sectionId) {
+  const target = findSectionElement(sectionId)
+  if (!target)
+    return
+  activeSectionId.value = sectionId
+  target.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+}
+
+function flattenValidationErrors(source, result = []) {
+  if (Array.isArray(source)) {
+    source.forEach(item => flattenValidationErrors(item, result))
+    return result
+  }
+  if (source && typeof source === 'object') {
+    result.push(source)
+    if (Array.isArray(source.errors))
+      flattenValidationErrors(source.errors, result)
+    if (Array.isArray(source.inner))
+      flattenValidationErrors(source.inner, result)
+    if (Array.isArray(source.children))
+      flattenValidationErrors(source.children, result)
+  }
+  return result
+}
+
+function getFormElement() {
+  return formRef.value?.$el || null
+}
+
+function findFieldElement(field) {
+  const root = getFormElement()
+  if (!root || !field)
+    return null
+  return Array.from(root.querySelectorAll('[data-ai-field]'))
+      .find(element => element.getAttribute('data-ai-field') === String(field)) || null
+}
+
+function findSectionElement(sectionId) {
+  const root = getFormElement()
+  if (!root || !sectionId)
+    return null
+  return root.querySelector(`[data-ai-section="${sectionId}"]`)
+}
+
+function findFirstErrorElement() {
+  const root = getFormElement()
+  if (!root)
+    return null
+  const errorElement = root.querySelector('.n-form-item--error, .n-form-item--error-status, .n-form-item-feedback__line:not(:empty)')
+  return errorElement?.closest?.('[data-ai-field]') || errorElement || null
+}
+
+function focusFirstControl(target) {
+  const control = target.querySelector('input, textarea, button, [tabindex]:not([tabindex="-1"])')
+  control?.focus?.({ preventScroll: true })
 }
 
 // 重置表单
@@ -414,7 +561,7 @@ function toggleCollapse() {
 
 // 暴露方法给父组件
 defineExpose({
-  validate: () => formRef.value?.validate(),
+  validate: validateForm,
   restoreValidation: () => formRef.value?.restoreValidation(),
   reset: handleReset,
   getFormData: () => ({ ...formValue.value }),
@@ -422,21 +569,21 @@ defineExpose({
 
 function filterVisibleNodes(nodes = []) {
   return (Array.isArray(nodes) ? nodes : [])
-    .map((node) => {
-      if (!node || typeof node !== 'object')
-        return null
-      if (isRuntimeLayoutNode(node)) {
-        const children = filterVisibleNodes(node.children || [])
-        if (!children.length && !['divider'].includes(node.nodeType))
+      .map((node) => {
+        if (!node || typeof node !== 'object')
           return null
-        return {
-          ...node,
-          children,
+        if (isRuntimeLayoutNode(node)) {
+          const children = filterVisibleNodes(node.children || [])
+          if (!children.length && !['divider'].includes(node.nodeType))
+            return null
+          return {
+            ...node,
+            children,
+          }
         }
-      }
-      return isFieldVisible(node) ? node : null
-    })
-    .filter(Boolean)
+        return isFieldVisible(node) ? node : null
+      })
+      .filter(Boolean)
 }
 
 function flattenFieldNodes(nodes = []) {
@@ -494,9 +641,131 @@ function applyShowFeedback(nodes = []) {
     }
   })
 }
+
+function applySectionNavMarkers(nodes = []) {
+  let sectionIndex = 0
+  const walk = (items = []) => (Array.isArray(items) ? items : []).map((node) => {
+    if (!node || typeof node !== 'object')
+      return node
+    if (isDividerNode(node)) {
+      sectionIndex += 1
+      return {
+        ...node,
+        __sectionId: node.__sectionId || `ai-form-section-${sectionIndex}`,
+      }
+    }
+    if (isRuntimeLayoutNode(node)) {
+      return {
+        ...node,
+        children: walk(node.children || []),
+      }
+    }
+    return node
+  })
+  return walk(nodes)
+}
+
+function collectSectionNavItems(nodes = []) {
+  const items = []
+  const walk = (list = []) => {
+    ;(Array.isArray(list) ? list : []).forEach((node) => {
+      if (!node || typeof node !== 'object')
+        return
+      if (isDividerNode(node) && node.__sectionId) {
+        items.push({
+          id: node.__sectionId,
+          label: node.label || node.props?.title || '分组信息',
+        })
+        return
+      }
+      if (isRuntimeLayoutNode(node))
+        walk(node.children || [])
+    })
+  }
+  walk(nodes)
+  return items
+}
+
+function isDividerNode(node = {}) {
+  return node.type === 'divider' || node.nodeType === 'divider'
+}
 </script>
 
 <style scoped>
+.ai-form {
+  min-width: 0;
+}
+
+.ai-form-body {
+  min-width: 0;
+}
+
+.ai-form-body--with-nav {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.ai-form-content {
+  min-width: 0;
+}
+
+.ai-form-section-nav {
+  position: sticky;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  padding: 4px 0 4px 6px;
+  border-left: 1px solid rgba(22, 93, 255, 0.12);
+}
+
+.ai-form-section-nav__item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px 4px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+
+.ai-form-section-nav__item:hover,
+.ai-form-section-nav__item.is-active {
+  background: rgba(22, 93, 255, 0.06);
+  color: #165dff;
+}
+
+.ai-form-section-nav__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.ai-form-section-nav__item.is-active .ai-form-section-nav__dot {
+  opacity: 1;
+}
+
+.ai-form-section-nav__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .af-action-cell {
   display: flex;
   align-items: baseline;
@@ -506,5 +775,29 @@ function applyShowFeedback(nodes = []) {
 
 .af-action-cell :deep(.n-space) {
   flex-wrap: nowrap !important;
+}
+
+:global(.dark) .ai-form-section-nav {
+  border-left-color: rgba(64, 128, 255, 0.22);
+}
+
+:global(.dark) .ai-form-section-nav__item {
+  color: #94a3b8;
+}
+
+:global(.dark) .ai-form-section-nav__item:hover,
+:global(.dark) .ai-form-section-nav__item.is-active {
+  background: rgba(64, 128, 255, 0.14);
+  color: #94bfff;
+}
+
+@media (max-width: 760px) {
+  .ai-form-body--with-nav {
+    display: block;
+  }
+
+  .ai-form-section-nav {
+    display: none;
+  }
 }
 </style>

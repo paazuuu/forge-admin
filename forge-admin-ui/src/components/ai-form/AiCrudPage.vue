@@ -38,6 +38,7 @@
       </header>
       <div class="form-only-body">
         <AiForm
+          v-if="showDefaultDetailContent"
           ref="formRef"
           v-model:value="formData"
           :class="resolvedEditFormClass"
@@ -268,6 +269,7 @@
       >
         <n-tab-pane name="business" tab="业务数据">
           <AiForm
+           v-if="showDefaultDetailContent"
             ref="formRef"
             v-model:value="formData"
             :class="resolvedEditFormClass"
@@ -289,7 +291,7 @@
             </template>
           </AiForm>
           <ChildTableEditor
-            v-if="hasChildrenConfig"
+            v-if="showDefaultDetailChildren"
             ref="childFormRef"
             v-model:value="childFormData"
             :children-config="visibleChildrenConfig"
@@ -329,7 +331,7 @@
           </template>
         </AiForm>
         <ChildTableEditor
-          v-if="hasChildrenConfig"
+          v-if="showDefaultDetailChildren"
           ref="childFormRef"
           v-model:value="childFormData"
           :children-config="visibleChildrenConfig"
@@ -1382,6 +1384,13 @@ const visibleChildrenConfig = computed(() => {
 })
 
 const hasChildrenConfig = computed(() => visibleChildrenConfig.value.some(child => child?.fields?.length))
+const showDefaultDetailContent = computed(() => {
+  return !isDetailMode.value || !props.hideDefaultDetailContent
+})
+
+const showDefaultDetailChildren = computed(() => {
+  return hasChildrenConfig.value && showDefaultDetailContent.value
+})
 const hasSearchSchema = computed(() => !props.formOnly && props.showSearch && props.searchSchema.length > 0)
 
 const modalFormSchema = computed(() => {
@@ -2317,7 +2326,10 @@ async function handleModalConfirm() {
       return
     }
     data = buildMasterDetailSubmitData(data)
-
+    data = await callHook('afterBuildSubmitData', data, data => data)
+    if (data === false) {
+      return
+    }
     // 统一处理时间戳，转换为标准日期格式
     data = JSON.parse(JSON.stringify(data), (key, value) => {
       // 判断是否是时间戳（数字且长度在10位（秒）到13位（毫秒）之间）
@@ -2401,11 +2413,8 @@ async function handleModalConfirm() {
   catch (error) {
     console.error('提交失败:', error)
 
-    // 如果是验证错误数组，显示第一个错误信息
+    // 前端表单校验失败时 AiForm 已完成滚动和高亮定位，这里不再弹出重复提示
     if (Array.isArray(error) && error.length > 0) {
-      const firstError = error[0]
-      const errorMsg = firstError?.message || '表单验证失败'
-      window.$message.error(errorMsg)
       console.error('验证错误详情:', error)
     }
     else {

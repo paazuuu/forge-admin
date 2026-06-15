@@ -310,7 +310,14 @@ export const aiCrudPageProps = {
     type: String,
     default: 'min(1080px, 92vw)',
   },
-
+  /**
+   * 详情模式是否隐藏组件默认只读表单和子表，仅保留详情插槽。
+   * @type {boolean}
+   */
+  hideDefaultDetailContent: {
+    type: Boolean,
+    default: false,
+  },
   /**
    * 是否隐藏弹窗底部按钮
    * @type {boolean}
@@ -698,6 +705,17 @@ export const aiCrudPageProps = {
    * @returns {object | Promise<object> | false} 处理后的数据，返回 false 则中断提交
    */
   beforeSubmit: {
+    type: Function,
+    default: null,
+  },
+
+  /**
+   * 表单提交数据构建后钩子
+   * @type {Function}
+   * @param {object} submitData - 已合并主从表后的最终提交数据
+   * @returns {object | Promise<object> | false} 处理后的数据，返回 false 则中断提交
+   */
+  afterBuildSubmitData: {
     type: Function,
     default: null,
   },
