@@ -269,7 +269,7 @@
       >
         <n-tab-pane name="business" tab="业务数据">
           <AiForm
-           v-if="showDefaultDetailContent"
+            v-if="showDefaultDetailContent"
             ref="formRef"
             v-model:value="formData"
             :class="resolvedEditFormClass"

@@ -12,24 +12,24 @@
 
 <template>
   <n-form
-      ref="formRef"
-      class="ai-form"
-      :model="formValue"
-      :rules="formRules"
-      :label-placement="labelPlacement"
-      :label-width="labelWidth"
-      :label-align="labelAlign"
-      :size="size"
+    ref="formRef"
+    class="ai-form"
+    :model="formValue"
+    :rules="formRules"
+    :label-placement="labelPlacement"
+    :label-width="labelWidth"
+    :label-align="labelAlign"
+    :size="size"
   >
     <div class="ai-form-body" :class="{ 'ai-form-body--with-nav': showSectionNav }">
       <nav v-if="showSectionNav" class="ai-form-section-nav" aria-label="表单分组导航">
         <button
-            v-for="item in sectionNavItems"
-            :key="item.id"
-            type="button"
-            class="ai-form-section-nav__item"
-            :class="{ 'is-active': activeSectionId === item.id }"
-            @click="scrollToSection(item.id)"
+          v-for="item in sectionNavItems"
+          :key="item.id"
+          type="button"
+          class="ai-form-section-nav__item"
+          :class="{ 'is-active': activeSectionId === item.id }"
+          @click="scrollToSection(item.id)"
         >
           <span class="ai-form-section-nav__dot" aria-hidden="true" />
           <span class="ai-form-section-nav__text">{{ item.label }}</span>
@@ -38,14 +38,14 @@
 
       <div class="ai-form-content">
         <AiFormLayoutNodes
-            :nodes="visibleSchema"
-            :form-value="formValue"
-            :item-context="itemContext"
-            :grid-cols="gridCols"
-            :x-gap="xGap"
-            :y-gap="yGap"
-            :show-feedback="showFeedback"
-            @field-change="handleFieldChange"
+          :nodes="visibleSchema"
+          :form-value="formValue"
+          :item-context="itemContext"
+          :grid-cols="gridCols"
+          :x-gap="xGap"
+          :y-gap="yGap"
+          :show-feedback="showFeedback"
+          @field-change="handleFieldChange"
         >
           <!-- 支持自定义插槽 -->
           <template v-for="slotName in Object.keys($slots)" #[slotName]="slotProps">
@@ -61,10 +61,10 @@
 
                 <!-- 折叠/展开按钮 -->
                 <n-button
-                    v-if="showCollapseToggle"
-                    text
-                    type="primary"
-                    @click="toggleCollapse"
+                  v-if="showCollapseToggle"
+                  text
+                  type="primary"
+                  @click="toggleCollapse"
                 >
                   {{ isCollapsed ? '展开' : '收起' }}
                   <template #icon>
@@ -335,8 +335,8 @@ const visibleSchema = computed(() => {
   // 应用折叠逻辑
   if (props.enableCollapse && !hasLayoutNodes(fields) && fields.length > props.maxVisibleFields) {
     fields = isCollapsed.value
-        ? fields.slice(0, props.maxVisibleFields)
-        : fields
+      ? fields.slice(0, props.maxVisibleFields)
+      : fields
   }
 
   return applySectionNavMarkers(applyShowFeedback(fields))
@@ -514,7 +514,7 @@ function findFieldElement(field) {
   if (!root || !field)
     return null
   return Array.from(root.querySelectorAll('[data-ai-field]'))
-      .find(element => element.getAttribute('data-ai-field') === String(field)) || null
+    .find(element => element.getAttribute('data-ai-field') === String(field)) || null
 }
 
 function findSectionElement(sectionId) {
@@ -569,21 +569,21 @@ defineExpose({
 
 function filterVisibleNodes(nodes = []) {
   return (Array.isArray(nodes) ? nodes : [])
-      .map((node) => {
-        if (!node || typeof node !== 'object')
+    .map((node) => {
+      if (!node || typeof node !== 'object')
+        return null
+      if (isRuntimeLayoutNode(node)) {
+        const children = filterVisibleNodes(node.children || [])
+        if (!children.length && !['divider'].includes(node.nodeType))
           return null
-        if (isRuntimeLayoutNode(node)) {
-          const children = filterVisibleNodes(node.children || [])
-          if (!children.length && !['divider'].includes(node.nodeType))
-            return null
-          return {
-            ...node,
-            children,
-          }
+        return {
+          ...node,
+          children,
         }
-        return isFieldVisible(node) ? node : null
-      })
-      .filter(Boolean)
+      }
+      return isFieldVisible(node) ? node : null
+    })
+    .filter(Boolean)
 }
 
 function flattenFieldNodes(nodes = []) {
@@ -739,7 +739,9 @@ function isDividerNode(node = {}) {
   line-height: 18px;
   text-align: left;
   cursor: pointer;
-  transition: color 0.16s ease, background-color 0.16s ease;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .ai-form-section-nav__item:hover,

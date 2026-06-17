@@ -1,19 +1,19 @@
 <template>
   <n-grid :cols="gridCols" :x-gap="xGap" :y-gap="yGap" class="af-layout-grid">
     <n-gi
-        v-for="node in nodes"
-        :key="resolveNodeKey(node)"
-        :span="resolveNodeSpan(node)"
-        :style="node.gridStyle"
-        :class="node.gridClass"
+      v-for="node in nodes"
+      :key="resolveNodeKey(node)"
+      :span="resolveNodeSpan(node)"
+      :style="node.gridStyle"
+      :class="node.gridClass"
     >
       <AiFormItem
-          v-if="isFieldNode(node)"
-          :field="{ ...node, showFeedback: node.showFeedback ?? showFeedback }"
-          :value="formValue[node.field]"
-          :form-data="formValue"
-          :context="itemContext"
-          @update:value="emit('fieldChange', node.field, $event)"
+        v-if="isFieldNode(node)"
+        :field="{ ...node, showFeedback: node.showFeedback ?? showFeedback }"
+        :value="formValue[node.field]"
+        :form-data="formValue"
+        :context="itemContext"
+        @update:value="emit('fieldChange', node.field, $event)"
       >
         <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
@@ -21,15 +21,15 @@
       </AiFormItem>
 
       <AiFormLayoutNodes
-          v-else-if="node.nodeType === 'row'"
-          :nodes="node.children || []"
-          :form-value="formValue"
-          :item-context="itemContext"
-          :grid-cols="gridCols"
-          :x-gap="resolveGap(node.props?.gutter, xGap)"
-          :y-gap="yGap"
-          :show-feedback="showFeedback"
-          @field-change="(...args) => emit('fieldChange', ...args)"
+        v-else-if="node.nodeType === 'row'"
+        :nodes="node.children || []"
+        :form-value="formValue"
+        :item-context="itemContext"
+        :grid-cols="gridCols"
+        :x-gap="resolveGap(node.props?.gutter, xGap)"
+        :y-gap="yGap"
+        :show-feedback="showFeedback"
+        @field-change="(...args) => emit('fieldChange', ...args)"
       >
         <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
@@ -37,15 +37,15 @@
       </AiFormLayoutNodes>
 
       <AiFormLayoutNodes
-          v-else-if="node.nodeType === 'col'"
-          :nodes="node.children || []"
-          :form-value="formValue"
-          :item-context="itemContext"
-          :grid-cols="1"
-          :x-gap="xGap"
-          :y-gap="yGap"
-          :show-feedback="showFeedback"
-          @field-change="(...args) => emit('fieldChange', ...args)"
+        v-else-if="node.nodeType === 'col'"
+        :nodes="node.children || []"
+        :form-value="formValue"
+        :item-context="itemContext"
+        :grid-cols="1"
+        :x-gap="xGap"
+        :y-gap="yGap"
+        :show-feedback="showFeedback"
+        @field-change="(...args) => emit('fieldChange', ...args)"
       >
         <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
@@ -53,23 +53,23 @@
       </AiFormLayoutNodes>
 
       <n-card
-          v-else-if="node.nodeType === 'card'"
-          size="small"
-          :title="node.label || node.props?.header || undefined"
-          :bordered="true"
-          :style="node.style"
-          :class="node.className"
-          class="af-layout-card"
+        v-else-if="node.nodeType === 'card'"
+        size="small"
+        :title="node.label || node.props?.header || undefined"
+        :bordered="true"
+        :style="node.style"
+        :class="node.className"
+        class="af-layout-card"
       >
         <AiFormLayoutNodes
-            :nodes="node.children || []"
-            :form-value="formValue"
-            :item-context="itemContext"
-            :grid-cols="gridCols"
-            :x-gap="xGap"
-            :y-gap="yGap"
-            :show-feedback="showFeedback"
-            @field-change="(...args) => emit('fieldChange', ...args)"
+          :nodes="node.children || []"
+          :form-value="formValue"
+          :item-context="itemContext"
+          :grid-cols="gridCols"
+          :x-gap="xGap"
+          :y-gap="yGap"
+          :show-feedback="showFeedback"
+          @field-change="(...args) => emit('fieldChange', ...args)"
         >
           <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
             <slot :name="slotName" v-bind="slotProps" />
@@ -78,29 +78,29 @@
       </n-card>
 
       <n-tabs
-          v-else-if="node.nodeType === 'tabs'"
-          :type="resolveTabsType(node.props?.type)"
-          :placement="resolveTabsPlacement(node.props?.tabPosition)"
-          :style="node.style"
-          :class="node.className"
-          class="af-layout-tabs"
+        v-else-if="node.nodeType === 'tabs'"
+        :type="resolveTabsType(node.props?.type)"
+        :placement="resolveTabsPlacement(node.props?.tabPosition)"
+        :style="node.style"
+        :class="node.className"
+        class="af-layout-tabs"
       >
         <n-tab-pane
-            v-for="pane in resolvePaneChildren(node, 'tabPane')"
-            :key="resolveNodeKey(pane)"
-            :name="resolveNodeKey(pane)"
-            :tab="pane.label || pane.props?.label || '标签页'"
-            :disabled="!!pane.props?.disabled"
+          v-for="pane in resolvePaneChildren(node, 'tabPane')"
+          :key="resolveNodeKey(pane)"
+          :name="resolveNodeKey(pane)"
+          :tab="pane.label || pane.props?.label || '标签页'"
+          :disabled="!!pane.props?.disabled"
         >
           <AiFormLayoutNodes
-              :nodes="pane.children || []"
-              :form-value="formValue"
-              :item-context="itemContext"
-              :grid-cols="gridCols"
-              :x-gap="xGap"
-              :y-gap="yGap"
-              :show-feedback="showFeedback"
-              @field-change="(...args) => emit('fieldChange', ...args)"
+            :nodes="pane.children || []"
+            :form-value="formValue"
+            :item-context="itemContext"
+            :grid-cols="gridCols"
+            :x-gap="xGap"
+            :y-gap="yGap"
+            :show-feedback="showFeedback"
+            @field-change="(...args) => emit('fieldChange', ...args)"
           >
             <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
               <slot :name="slotName" v-bind="slotProps" />
@@ -110,28 +110,28 @@
       </n-tabs>
 
       <n-collapse
-          v-else-if="node.nodeType === 'collapse'"
-          :accordion="!!node.props?.accordion"
-          :style="node.style"
-          :class="node.className"
-          class="af-layout-collapse"
+        v-else-if="node.nodeType === 'collapse'"
+        :accordion="!!node.props?.accordion"
+        :style="node.style"
+        :class="node.className"
+        class="af-layout-collapse"
       >
         <n-collapse-item
-            v-for="item in resolvePaneChildren(node, 'collapseItem')"
-            :key="resolveNodeKey(item)"
-            :name="resolveNodeKey(item)"
-            :title="item.label || item.props?.title || '分组'"
-            :disabled="!!item.props?.disabled"
+          v-for="item in resolvePaneChildren(node, 'collapseItem')"
+          :key="resolveNodeKey(item)"
+          :name="resolveNodeKey(item)"
+          :title="item.label || item.props?.title || '分组'"
+          :disabled="!!item.props?.disabled"
         >
           <AiFormLayoutNodes
-              :nodes="item.children || []"
-              :form-value="formValue"
-              :item-context="itemContext"
-              :grid-cols="gridCols"
-              :x-gap="xGap"
-              :y-gap="yGap"
-              :show-feedback="showFeedback"
-              @field-change="(...args) => emit('fieldChange', ...args)"
+            :nodes="item.children || []"
+            :form-value="formValue"
+            :item-context="itemContext"
+            :grid-cols="gridCols"
+            :x-gap="xGap"
+            :y-gap="yGap"
+            :show-feedback="showFeedback"
+            @field-change="(...args) => emit('fieldChange', ...args)"
           >
             <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
               <slot :name="slotName" v-bind="slotProps" />
@@ -141,25 +141,25 @@
       </n-collapse>
 
       <AiFormSectionTitle
-          v-else-if="node.nodeType === 'divider'"
-          :title="node.label"
-          :anchor-id="node.__sectionId"
-          :description="node.props?.description || node.description"
-          :badge="node.props?.badge || node.badge"
-          :style="node.style"
-          :class="node.className"
+        v-else-if="node.nodeType === 'divider'"
+        :title="node.label"
+        :anchor-id="node.__sectionId"
+        :description="node.props?.description || node.description"
+        :badge="node.props?.badge || node.badge"
+        :style="node.style"
+        :class="node.className"
       />
 
       <AiFormLayoutNodes
-          v-else
-          :nodes="node.children || []"
-          :form-value="formValue"
-          :item-context="itemContext"
-          :grid-cols="gridCols"
-          :x-gap="xGap"
-          :y-gap="yGap"
-          :show-feedback="showFeedback"
-          @field-change="(...args) => emit('fieldChange', ...args)"
+        v-else
+        :nodes="node.children || []"
+        :form-value="formValue"
+        :item-context="itemContext"
+        :grid-cols="gridCols"
+        :x-gap="xGap"
+        :y-gap="yGap"
+        :show-feedback="showFeedback"
+        @field-change="(...args) => emit('fieldChange', ...args)"
       >
         <template v-for="slotName in forwardedSlotNames" #[slotName]="slotProps">
           <slot :name="slotName" v-bind="slotProps" />
