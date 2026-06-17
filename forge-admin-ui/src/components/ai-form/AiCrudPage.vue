@@ -54,6 +54,7 @@
           :show-feedback="editShowFeedback"
           :show-actions="false"
           :context="formContext"
+          :form-assets="formAssets"
         >
           <template v-for="slotName in formSlots" #[slotName]="slotProps">
             <slot :name="`form-${slotName}`" v-bind="slotProps" />
@@ -285,6 +286,7 @@
             :show-feedback="editShowFeedback"
             :show-actions="false"
             :context="formContext"
+            :form-assets="formAssets"
           >
             <template v-for="slotName in formSlots" #[slotName]="slotProps">
               <slot :name="`form-${slotName}`" v-bind="slotProps" />
@@ -324,6 +326,7 @@
           :show-feedback="editShowFeedback"
           :show-actions="false"
           :context="formContext"
+          :form-assets="formAssets"
         >
           <!-- 透传表单插槽 -->
           <template v-for="slotName in formSlots" #[slotName]="slotProps">
@@ -382,6 +385,7 @@
           :show-feedback="editShowFeedback"
           :show-actions="false"
           :context="formContext"
+          :form-assets="formAssets"
         >
           <!-- 透传表单插槽 -->
           <template v-for="slotName in formSlots" #[slotName]="slotProps">
@@ -1440,6 +1444,12 @@ const runtimeFormulaSignature = computed(() => {
 function toReadonlyField(field) {
   if (!field || field.type === 'divider')
     return field
+  if (field.nodeType && field.nodeType !== 'field') {
+    return {
+      ...field,
+      children: Array.isArray(field.children) ? field.children.map(toReadonlyField) : field.children,
+    }
+  }
   return {
     ...field,
     disabled: true,
@@ -1792,6 +1802,7 @@ const formContext = computed(() => {
     isAdd: modalStatus.value === 'add',
     isDetail: modalStatus.value === 'detail',
     currentRow: currentRow.value,
+    formAssets: props.formAssets,
   }
 })
 
