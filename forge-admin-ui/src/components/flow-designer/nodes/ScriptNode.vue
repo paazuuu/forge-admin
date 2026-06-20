@@ -13,7 +13,7 @@ const props = defineProps({
 })
 defineEmits(['click', 'delete', 'context-menu'])
 
-const summary = computed(() => {
+const subtitle = computed(() => {
   const c = props.node?.config || {}
   const fmt = c.scriptFormat || 'javascript'
   if (!c.script)
@@ -26,9 +26,7 @@ const summary = computed(() => {
 <template>
   <NodeCard
     :node="node" :selected="selected" :status="status" :readonly="readonly"
-    icon="i-mdi-code-tags" color-var="info"
+    icon="i-mdi-code-tags" color-var="info" :subtitle="subtitle"
     @click="$emit('click', $event)" @delete="$emit('delete', $event)" @context-menu="$emit('context-menu', $event)"
-  >
-    {{ summary }}
-  </NodeCard>
+  />
 </template>

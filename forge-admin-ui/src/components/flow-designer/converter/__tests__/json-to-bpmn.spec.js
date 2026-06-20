@@ -49,6 +49,23 @@ describe('convertJsonToBpmn - 主结构', () => {
     expect(findElementsByLocalName(doc, 'sequenceFlow').length).toBe(2)
   })
 
+  it('startEvent 固定发起人变量且不写入节点表单配置', () => {
+    const json = baseJson()
+    json.nodes[0].config = {
+      initiator: 'customInitiator',
+      formKey: 'legacyStartForm',
+      formJson: '[]',
+      formUrl: '/legacy/start',
+    }
+    const xml = convertJsonToBpmn(json)
+    const doc = parseBpmnXml(xml)
+    const start = findElementsByLocalName(doc, 'startEvent')[0]
+    expect(getFlowableAttr(start, 'initiator')).toBe('initiator')
+    expect(getFlowableAttr(start, 'formKey')).toBe(null)
+    expect(getFlowableAttr(start, 'formJson')).toBe(null)
+    expect(getFlowableAttr(start, 'formUrl')).toBe(null)
+  })
+
   it('userTask 写入 flowable:assignee + 非默认权限', () => {
     const xml = convertJsonToBpmn(baseJson())
     const doc = parseBpmnXml(xml)

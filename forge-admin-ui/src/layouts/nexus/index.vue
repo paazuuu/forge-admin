@@ -38,7 +38,7 @@
         </div>
 
         <!-- 页面内容 -->
-        <div class="nexus-page cus-scroll">
+        <div class="nexus-page cus-scroll" :class="{ 'nexus-page-flush': isFlowTaskListPage }">
           <slot />
         </div>
       </main>
@@ -47,14 +47,18 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppTab } from '@/layouts/components'
 import { useAppStore } from '@/store'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import Header from './header/index.vue'
 import Sidebar from './sidebar/index.vue'
 
 const appStore = useAppStore()
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 const expandBarRef = ref(null)
 const expandBarTop = ref(400)
 const isDragging = ref(false)
@@ -405,6 +409,10 @@ onBeforeUnmount(() => {
   padding: 10px;
   background: var(--bg-primary);
   min-height: 0;
+}
+
+.nexus-page-flush {
+  padding: 0;
 }
 
 /* 滚动条样式 */

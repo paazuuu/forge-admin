@@ -4,7 +4,7 @@
  *
  * 对外接口与原 FlowModeler.vue 1:1 兼容：
  *   Props: xml / readonly
- *   Events: change(xml) / ready / import-start / import-end(success, error)
+ *   Events: change(xml) / ready / importStart(@import-start) / importEnd(@import-end)
  *   Methods: setXML / getXML / reset / undo / redo
  *
  * pitfalls #7 防回环：v-model 风格父组件回写 props.xml 时，比对 lastEmittedXml 跳过。
@@ -30,7 +30,7 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['change', 'ready', 'import-start', 'import-end'])
+const emit = defineEmits(['change', 'ready', 'importStart', 'importEnd'])
 
 const designer = useFlowDesigner()
 const history = useFlowHistory(designer.flowJson, { maxStack: 50 })
@@ -41,23 +41,13 @@ const lastEmittedXml = ref('')
 const drawerVisible = ref(false)
 const drawerNodeId = ref(null)
 const drawerNode = computed(() => designer.getNode(drawerNodeId.value))
-const drawerOutgoingEdges = computed(() =>
-  drawerNodeId.value ? designer.getOutgoingEdges(drawerNodeId.value) : [],
-)
+const drawerOutgoingEdges = computed(() => drawerNodeId.value ? designer.getOutgoingEdges(drawerNodeId.value) : [])
 
 const contextMenu = ref({ visible: false, position: { x: 0, y: 0 }, node: null })
 
-const layoutResult = ref({
-  nodePositions: new Map(),
-  edgePaths: new Map(),
-  canvasBounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
-})
-
-function recomputeLayout() {
-  layoutResult.value = layoutFlow(designer.flowJson.value)
-}
-
-watch(designer.flowJson, recomputeLayout, { immediate: true })
+// layoutResult 用 computed 同步求值，避免 ref+watch 异步时序导致新增节点
+// 先用旧位置渲染（position=undefined → 节点堆叠在左上角）的问题
+const layoutResult = computed(() => layoutFlow(designer.flowJson.value))
 
 watch(
   () => props.xml,
@@ -74,17 +64,18 @@ watch(
 
 async function importXml(xml) {
   isImporting.value = true
-  emit('import-start')
+  emit('importStart')
   try {
     const json = convertBpmnToJson(xml)
     designer.loadJson(json)
     history.clear()
     await nextTick()
-    emit('import-end', true, null)
+    autoFitToScreen()
+    emit('importEnd', true, null)
   }
   catch (err) {
     console.error('[DingFlowDesigner] importXml failed', err)
-    emit('import-end', false, err)
+    emit('importEnd', false, err)
   }
   finally {
     isImporting.value = false
@@ -120,8 +111,12 @@ function handleNodeDelete(node) {
   if (props.readonly)
     return
   history.snapshot()
-  try { designer.deleteNode(node.id) }
-  catch (e) { console.warn(e) }
+  try {
+    designer.deleteNode(node.id)
+  }
+  catch (e) {
+    console.warn(e)
+  }
 }
 
 function handleContextMenu({ event, node }) {
@@ -142,18 +137,30 @@ function handleContextAction(actionId, node) {
       break
     case 'copy':
       history.snapshot()
-      try { designer.copyNode(node.id) }
-      catch (e) { console.warn(e) }
+      try {
+        designer.copyNode(node.id)
+      }
+      catch (e) {
+        console.warn(e)
+      }
       break
     case 'move-up':
       history.snapshot()
-      try { designer.moveNodeUp(node.id) }
-      catch (e) { console.warn(e) }
+      try {
+        designer.moveNodeUp(node.id)
+      }
+      catch (e) {
+        console.warn(e)
+      }
       break
     case 'move-down':
       history.snapshot()
-      try { designer.moveNodeDown(node.id) }
-      catch (e) { console.warn(e) }
+      try {
+        designer.moveNodeDown(node.id)
+      }
+      catch (e) {
+        console.warn(e)
+      }
       break
     case 'delete':
       handleNodeDelete(node)
@@ -171,25 +178,34 @@ function handleAddAfter(afterNodeId, type) {
     drawerNodeId.value = newId
     drawerVisible.value = true
   }
-  catch (e) { console.warn(e) }
+  catch (e) {
+    console.warn(e)
+  }
 }
 
 function handleDrawerSave(patch, nodeId) {
   history.snapshot()
-  try { designer.updateNode(nodeId, patch) }
-  catch (e) { console.warn(e) }
+  try {
+    designer.updateNode(nodeId, patch)
+  }
+  catch (e) {
+    console.warn(e)
+  }
 }
 
-function handleEdgeUpdate(edgeId, patch) {
-  history.snapshot()
-  try { designer.updateEdge(edgeId, patch) }
-  catch (e) { console.warn(e) }
+function handleDrawerEdgeUpdate(edgeId, patch) {
+  try {
+    designer.updateEdge(edgeId, patch)
+  }
+  catch (e) {
+    console.warn(e)
+  }
 }
 
 const addButtonPositions = computed(() => {
   const list = []
   for (const node of designer.flowJson.value.nodes) {
-    if (node.nodeType === 'end')
+    if (['condition', 'parallel', 'inclusive', 'end'].includes(node.nodeType))
       continue
     const pos = layoutResult.value.nodePositions.get(node.id)
     if (!pos)
@@ -239,11 +255,26 @@ const mergeMarkers = computed(() => {
   return out
 })
 
-async function setXML(xml) { await importXml(xml) }
-function getXML(_formatted = false) { return convertJsonToBpmn(designer.flowJson.value) }
-function reset() { designer.reset(); history.clear() }
-function undo() { history.undo() }
-function redo() { history.redo() }
+async function setXML(xml) {
+  await importXml(xml)
+}
+
+function getXML(_formatted = false) {
+  return convertJsonToBpmn(designer.flowJson.value)
+}
+
+function reset() {
+  designer.reset()
+  history.clear()
+}
+
+function undo() {
+  history.undo()
+}
+
+function redo() {
+  history.redo()
+}
 
 defineExpose({
   setXML,
@@ -255,8 +286,23 @@ defineExpose({
   history,
 })
 
+/** 自动居中：把画布内容 fit 到视口中央 */
+function autoFitToScreen() {
+  const canvas = canvasRef.value
+  if (!canvas?.containerRef)
+    return
+  const container = canvas.containerRef
+  const b = layoutResult.value.canvasBounds
+  if (!b || b.maxX <= b.minX || b.maxY <= b.minY)
+    return
+  const contentW = b.maxX - b.minX
+  const contentH = b.maxY - b.minY
+  canvas.fitToScreen(contentW, contentH, container.clientWidth, container.clientHeight, 72, b.minX, b.minY)
+}
+
 onMounted(async () => {
   await nextTick()
+  autoFitToScreen()
   emit('ready')
 })
 
@@ -325,8 +371,11 @@ onBeforeUnmount(() => {
     <NodeConfigDrawer
       v-model:visible="drawerVisible"
       :node="drawerNode"
+      :outgoing-edges="drawerOutgoingEdges"
+      :nodes="designer.flowJson.value.nodes"
       :readonly="readonly"
       @save="handleDrawerSave"
+      @update:edge="handleDrawerEdgeUpdate"
     />
   </div>
 </template>

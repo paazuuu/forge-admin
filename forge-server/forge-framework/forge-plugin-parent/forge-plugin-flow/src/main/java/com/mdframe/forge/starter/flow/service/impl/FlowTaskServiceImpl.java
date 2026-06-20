@@ -440,7 +440,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Override
     public FlowTask getTaskDetail(String taskId) {
-        return lambdaQuery().eq(FlowTask::getTaskId, taskId).one();
+        return getBaseMapper().selectByTaskId(taskId);
     }
 
     @Override

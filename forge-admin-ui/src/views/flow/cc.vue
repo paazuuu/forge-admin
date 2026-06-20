@@ -1,45 +1,5 @@
 <template>
   <div class="flow-page">
-    <!-- 统计卡片 -->
-    <FlowStats
-      :todo-count="todoCount"
-      :done-count="doneCount"
-      :started-count="startedCount"
-      :cc-count="ccCount"
-      :unread-cc="unreadCc"
-      active-tab="cc"
-      @switch="handleSwitch"
-    />
-
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <div class="title-row">
-          <div class="title-icon cc">
-            <i class="i-material-symbols:content-copy" />
-          </div>
-          <h2 class="page-title">
-            我的抄送
-          </h2>
-        </div>
-      </div>
-      <div class="header-right">
-        <n-select v-model:value="queryParams.isRead" placeholder="阅读状态" clearable class="read-select" :options="readOptions" />
-        <NButton type="primary" class="search-btn" @click="handleSearch">
-          <i class="i-material-symbols:search mr-2" />搜索
-        </NButton>
-        <NButton class="reset-btn" @click="handleReset">
-          <i class="i-material-symbols:refresh mr-2" />重置
-        </NButton>
-        <NButton v-if="selectedRowKeys.length > 0" class="batch-btn" @click="handleBatchMarkRead">
-          <i class="i-material-symbols:mark-email-read-outline mr-2" />批量已读
-        </NButton>
-        <NButton class="all-read-btn" @click="handleMarkAllRead">
-          <i class="i-material-symbols:done-all mr-2" />全部已读
-        </NButton>
-      </div>
-    </div>
-
     <!-- 数据标签页 -->
     <div class="tabs-container">
       <n-tabs v-model:value="activeTab" type="line" @update:value="handleTabChange">
@@ -60,9 +20,73 @@
     </div>
 
     <!-- 抄送列表 -->
-    <div class="table-container">
-      <n-data-table :columns="columns" :data="dataSource" :loading="loading" :pagination="pagination" :row-key="row => row.id" @update:checked-row-keys="handleCheck" />
-    </div>
+    <FlowTaskCardList
+      v-model:selected-keys="selectedRowKeys"
+      v-model:search-value="queryParams.title"
+      :title="activeTab === 'received' ? '抄送给我的' : '我发送的'"
+      :items="dataSource"
+      :loading="loading"
+      :pagination="pagination"
+      :selectable="activeTab === 'received'"
+      row-key="id"
+      unread-key="isRead"
+      search-placeholder="通过名称搜索"
+      empty-text="暂无抄送记录"
+      @search="handleSearch"
+      @refresh="loadData"
+      @row-click="openCcDetail"
+      @update:page="pagination.onChange"
+      @update:page-size="pagination.onUpdatePageSize"
+    >
+      <template #filters>
+        <n-select
+          v-if="activeTab === 'received'"
+          v-model:value="queryParams.isRead"
+          placeholder="阅读状态"
+          clearable
+          class="read-select"
+          :options="readOptions"
+          @update:value="handleSearch"
+        />
+        <NButton secondary @click="handleReset">
+          重置
+        </NButton>
+      </template>
+      <template #batch-actions>
+        <NButton v-if="activeTab === 'received' && selectedRowKeys.length > 0" size="small" secondary @click="handleBatchMarkRead">
+          批量已读
+        </NButton>
+        <NButton v-if="activeTab === 'received'" size="small" secondary @click="handleMarkAllRead">
+          全部已读
+        </NButton>
+      </template>
+      <template #status="{ row }">
+        <span class="task-status-pill" :class="row.isRead === 1 ? 'read' : 'unread'">
+          {{ getLabel('flow_read_status', row.isRead) }}
+        </span>
+      </template>
+      <template #title="{ row }">
+        {{ row.title || '-' }}
+      </template>
+      <template #meta="{ row }">
+        <span>
+          <span class="task-meta-label">{{ activeTab === 'received' ? '发送人' : '抄送人' }}</span>
+          <span class="task-meta-value">{{ activeTab === 'received' ? (row.sendUserName || '-') : (row.ccUserName || '-') }}</span>
+        </span>
+        <span><span class="task-meta-label">抄送时间</span> <span class="task-meta-value">{{ row.ccTime || '-' }}</span></span>
+      </template>
+      <template #summary="{ row }">
+        {{ row.content || '暂无内容' }}
+      </template>
+      <template #actions="{ row }">
+        <NButton size="small" type="primary" secondary @click="openCcDetail(row)">
+          查看
+        </NButton>
+        <NButton v-if="activeTab === 'received' && row.isRead === 0" size="small" type="primary" @click="handleMarkRead(row.id)">
+          已读
+        </NButton>
+      </template>
+    </FlowTaskCardList>
 
     <n-modal
       v-model:show="showDetailModal"
@@ -132,10 +156,10 @@
 
 <script setup>
 import { NButton } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import flowApi from '@/api/flow'
 import UserAvatar from '@/components/common/UserAvatar.vue'
-import FlowStats from '@/components/flow/FlowStats.vue'
+import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
@@ -154,62 +178,20 @@ const pagination = reactive({
     pagination.page = page
     loadData()
   },
+  onUpdatePageSize: (size) => {
+    pagination.pageSize = size
+    pagination.page = 1
+    loadData()
+  },
 })
 
-const queryParams = reactive({ isRead: null })
+const queryParams = reactive({ title: '', isRead: null })
 
 const readOptions = computed(() => toNumberOptions(dict.value.flow_read_status))
 
-const todoCount = ref(0)
-const doneCount = ref(0)
-const startedCount = ref(0)
-const ccCount = ref(0)
 const unreadCc = ref(0)
 const showDetailModal = ref(false)
 const currentCc = ref(null)
-
-const columns = computed(() => {
-  const baseColumns = [
-    { type: 'selection' },
-    { title: '标题', key: 'title', minWidth: 180, ellipsis: { tooltip: true }, render: row => h('span', { class: 'cc-title', onClick: () => openCcDetail(row) }, row.title) },
-    { title: '内容摘要', key: 'content', width: 200, ellipsis: { tooltip: true } },
-  ]
-
-  if (activeTab.value === 'received') {
-    baseColumns.push({
-      title: '发送人',
-      key: 'sendUserName',
-      width: 120,
-      render: row => h('div', { class: 'table-user' }, [h(UserAvatar, { name: row.sendUserName || '未知', size: 24 }), h('span', { class: 'user-name-text' }, row.sendUserName || '-')]),
-    })
-  }
-  else {
-    baseColumns.push({
-      title: '抄送人',
-      key: 'ccUserName',
-      width: 120,
-      render: row => h('div', { class: 'table-user' }, [h(UserAvatar, { name: row.ccUserName || '未知', size: 24 }), h('span', { class: 'user-name-text' }, row.ccUserName || '-')]),
-    })
-  }
-
-  baseColumns.push(
-    { title: '阅读状态', key: 'isRead', width: 90, render: row => h('span', { class: ['read-tag', row.isRead === 1 ? 'read' : 'unread'] }, getLabel('flow_read_status', row.isRead)) },
-    { title: '抄送时间', key: 'ccTime', width: 160 },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 150,
-      render: row => h('div', { class: 'cc-actions' }, [
-        h(NButton, { size: 'small', type: 'primary', secondary: true, onClick: () => openCcDetail(row) }, () => '查看'),
-        activeTab.value === 'received' && row.isRead === 0
-          ? h(NButton, { size: 'small', type: 'primary', onClick: () => handleMarkRead(row.id) }, () => '已读')
-          : null,
-      ]),
-    },
-  )
-
-  return baseColumns
-})
 
 function toNumberOptions(options = []) {
   return options.map(item => ({
@@ -221,7 +203,7 @@ function toNumberOptions(options = []) {
 async function loadData() {
   loading.value = true
   try {
-    const params = { pageNum: pagination.page, pageSize: pagination.pageSize, userId: userStore.userId }
+    const params = { pageNum: pagination.page, pageSize: pagination.pageSize, userId: userStore.userId, title: queryParams.title || undefined }
     let res
     if (activeTab.value === 'received') {
       if (queryParams.isRead !== null)
@@ -234,7 +216,6 @@ async function loadData() {
     if (res.code === 200 && res.data) {
       dataSource.value = res.data.records || []
       pagination.itemCount = res.data.total || 0
-      ccCount.value = res.data.total || 0
       if (activeTab.value === 'received')
         unreadCc.value = dataSource.value.filter(r => r.isRead === 0).length
     }
@@ -243,28 +224,13 @@ async function loadData() {
   finally { loading.value = false }
 }
 
-async function loadStats() {
-  try {
-    const [todoRes, doneRes, startedRes] = await Promise.all([
-      flowApi.getTodoTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getDoneTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getStartedTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-    ])
-    todoCount.value = todoRes.code === 200 ? todoRes.data?.total || 0 : 0
-    doneCount.value = doneRes.code === 200 ? doneRes.data?.total || 0 : 0
-    startedCount.value = startedRes.code === 200 ? startedRes.data?.total || 0 : 0
-  }
-  catch (e) {
-    console.error('加载统计数据失败', e)
-  }
-}
-
 function handleSearch() {
   pagination.page = 1
   loadData()
 }
 
 function handleReset() {
+  queryParams.title = ''
   queryParams.isRead = null
   pagination.page = 1
   loadData()
@@ -274,10 +240,6 @@ function handleTabChange() {
   pagination.page = 1
   selectedRowKeys.value = []
   loadData()
-}
-
-function handleCheck(keys) {
-  selectedRowKeys.value = keys
 }
 
 async function openCcDetail(row) {
@@ -342,21 +304,16 @@ function handleMarkAllRead() {
   })
 }
 
-function handleSwitch(tab) {
-  const routes = { todo: '/flow/todo', done: '/flow/done', started: '/flow/started', cc: '/flow/cc' }
-  if (routes[tab])
-    window.$router?.push(routes[tab])
-}
-
 onMounted(() => {
-  loadStats()
   loadData()
 })
 </script>
 
 <style scoped>
 .flow-page {
-  padding: 20px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px 14px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -407,23 +364,25 @@ onMounted(() => {
   gap: 10px;
 }
 .read-select {
-  width: 120px;
+  width: 116px;
 }
 .tabs-container {
   background: #fff;
-  border-radius: 12px;
-  padding: 12px 20px 0;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
-  margin-bottom: 16px;
+  padding: 0;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5eeee;
 }
 .tab-content {
   display: flex;
   align-items: center;
   gap: 6px;
+  color: #374151;
+  font-weight: 600;
 }
 .tab-badge {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: #fff;
+  border: 1px solid #f3b6b6;
+  background: #fff7f7;
+  color: #c24141;
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 10px;

@@ -46,24 +46,36 @@ const isRatio = computed(() => completionCondition.value === 'ratio')
 </script>
 
 <template>
-  <div class="space-y-3">
-    <n-form-item label="会签类型" label-placement="left">
-      <n-select
-        v-model:value="multiInstanceType"
-        :options="MI_OPTIONS"
-        :disabled="readonly"
-      />
+  <div class="multi-instance-config">
+    <n-form-item label="审批方式" label-placement="top" :show-feedback="false">
+      <n-radio-group v-model:value="multiInstanceType" :disabled="readonly">
+        <n-space vertical :size="10">
+          <n-radio
+            v-for="opt in MI_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
+          >
+            {{ opt.label }}
+          </n-radio>
+        </n-space>
+      </n-radio-group>
     </n-form-item>
 
     <template v-if="isMulti">
-      <n-form-item label="完成条件" label-placement="left">
-        <n-select
-          v-model:value="completionCondition"
-          :options="COND_OPTIONS"
-          :disabled="readonly"
-        />
+      <n-form-item label="完成条件" label-placement="top" :show-feedback="false">
+        <n-radio-group v-model:value="completionCondition" :disabled="readonly">
+          <n-space vertical :size="10">
+            <n-radio
+              v-for="opt in COND_OPTIONS"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </n-radio>
+          </n-space>
+        </n-radio-group>
       </n-form-item>
-      <n-form-item v-if="isRatio" label="通过比例 (%)" label-placement="left">
+      <n-form-item v-if="isRatio" label="通过比例 (%)" label-placement="top" :show-feedback="false">
         <n-input-number
           v-model:value="passRate"
           :min="1"
@@ -73,7 +85,7 @@ const isRatio = computed(() => completionCondition.value === 'ratio')
       </n-form-item>
     </template>
 
-    <div class="text-xs rounded bg-gray-50 px-3 py-2 text-gray-500">
+    <div class="config-hint">
       <p>· 全部通过：所有候选人都需审批通过</p>
       <p>· 任一通过：任一候选人通过即视为通过</p>
       <p>· 通过比例：达到指定通过率即视为通过</p>

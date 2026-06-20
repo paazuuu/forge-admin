@@ -29,10 +29,10 @@ const async = field('async', false)
 
 <template>
   <div class="space-y-3">
-    <n-form-item label="脚本语言" label-placement="left">
+    <n-form-item label="脚本语言" label-placement="top" :show-feedback="false">
       <n-select v-model:value="scriptFormat" :options="FORMAT_OPTIONS" :disabled="readonly" />
     </n-form-item>
-    <n-form-item label="脚本内容" label-placement="left">
+    <n-form-item label="脚本内容" label-placement="top" :show-feedback="false">
       <n-input
         v-model:value="script"
         type="textarea"
@@ -41,7 +41,7 @@ const async = field('async', false)
         placeholder="// 在此编写脚本"
       />
     </n-form-item>
-    <n-form-item label="异步执行" label-placement="left">
+    <n-form-item label="异步执行" label-placement="top" :show-feedback="false">
       <n-switch v-model:value="async" :disabled="readonly" />
     </n-form-item>
   </div>

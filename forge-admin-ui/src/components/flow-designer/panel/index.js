@@ -3,8 +3,8 @@
  *
  * Phase 5 完成（Task 18-25）：
  *   - NodeConfigDrawer.vue：抽屉容器
- *   - BasicConfig.vue：节点 ID/name/documentation
- *   - 节点专属配置：StartConfig / EndConfig / ApproverConfig（含 5 Tab）/ CarbonCopyConfig
+ *   - BasicConfig.vue：节点 name/documentation
+ *   - 节点专属配置：StartConfig / EndConfig / ApproverConfig（含 3 Tab）/ CarbonCopyConfig
  *     / ConditionConfig / ServiceConfig / ScriptConfig / SubProcessConfig / CallActivityConfig
  *     / AdvancedConfig（rawXml 只读 / 编辑）
  *   - 子表单：ApproverAssigneeForm / MultiInstanceConfig / PermissionConfig

@@ -2,32 +2,17 @@
 /**
  * NodeCard — 节点卡片基类
  *
- * 提供：
- * - 卡片外层（圆角、阴影、悬停高亮、选中高亮）
- * - 顶部色条（按节点类型映射颜色）
- * - 标题行（图标 + 名称 + 操作图标）
- * - 默认槽：节点正文内容
- * - 状态徽章（completed / running / rejected / pending）
- *
- * 子组件（StartNode / ApproverNode 等）只需传入 nodeType / name / icon / color，并填默认槽即可。
+ * 统一布局：标题行图标 + 节点名称，下面展示摘要面板。
+ * 视觉参考钉钉审批流卡片：轻阴影、浅边框、摘要灰底、选中态青绿色描边。
  *
  * Props:
- *   - node           flowJson 节点对象
- *   - selected       是否选中（外层高亮）
- *   - status         节点运行状态 completed / running / rejected / pending / skipped / null
- *   - readonly       禁用编辑（只读模式 / 查看器）
- *   - icon           顶部图标（i-mdi-xxx）
- *   - colorVar       UnoCSS 颜色变量名：'primary' / 'success' / 'warning' / 'info' / 'error'
- *   - showActions    顶部右上角是否显示操作图标（默认 true，readonly 自动隐藏）
- *
- * Events:
- *   - click（卡片本体）
- *   - delete（顶部 X 按钮，readonly 时不渲染）
- *   - context-menu（右键）
- *
- * Slots:
- *   - default        卡片正文（必填）
- *   - title-extra    标题行右侧附加（如徽章）
+ *   - node / selected / status / readonly
+ *   - icon        顶部图标（i-mdi-xxx）
+ *   - colorVar    配色变量：primary / success / warning / info / error / gray
+ *   - subtitle    副标题（节点说明，浅灰小字）
+ *   - width / height
+ *   - showActions 是否显示删除按钮
+ *   - deletable   是否可删除（start/end 不可）
  */
 import { computed } from 'vue'
 
@@ -38,99 +23,202 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
   icon: { type: String, default: 'i-mdi-checkbox-blank-circle' },
   colorVar: { type: String, default: 'primary' },
+  subtitle: { type: String, default: '' },
   showActions: { type: Boolean, default: true },
-  width: { type: Number, default: 220 },
-  height: { type: Number, default: 80 },
+  deletable: { type: Boolean, default: true },
+  width: { type: Number, default: 300 },
+  height: { type: Number, default: 104 },
 })
 
-const emit = defineEmits(['click', 'delete', 'context-menu'])
+const emit = defineEmits(['click', 'delete', 'contextMenu'])
 
-const COLOR_MAP = {
-  primary: { bar: 'bg-primary', text: 'text-primary' },
-  success: { bar: 'bg-success', text: 'text-success' },
-  warning: { bar: 'bg-warning', text: 'text-warning' },
-  info: { bar: 'bg-info', text: 'text-info' },
-  error: { bar: 'bg-error', text: 'text-error' },
-  gray: { bar: 'bg-gray-400', text: 'text-gray-500' },
+const COLOR_META = {
+  primary: { color: '#356dff', soft: 'rgba(53, 109, 255, 0.1)', shadow: 'rgba(53, 109, 255, 0.22)' },
+  success: { color: '#1aa6a6', soft: 'rgba(26, 166, 166, 0.1)', shadow: 'rgba(26, 166, 166, 0.22)' },
+  warning: { color: '#f59e0b', soft: 'rgba(245, 158, 11, 0.12)', shadow: 'rgba(245, 158, 11, 0.2)' },
+  info: { color: '#3b82f6', soft: 'rgba(59, 130, 246, 0.1)', shadow: 'rgba(59, 130, 246, 0.2)' },
+  error: { color: '#ef4444', soft: 'rgba(239, 68, 68, 0.1)', shadow: 'rgba(239, 68, 68, 0.2)' },
+  gray: { color: '#a3aab4', soft: 'rgba(148, 163, 184, 0.14)', shadow: 'rgba(148, 163, 184, 0.18)' },
 }
 
-const colorClasses = computed(() => COLOR_MAP[props.colorVar] || COLOR_MAP.primary)
-
 const STATUS_BADGE = {
-  completed: { label: '已完成', class: 'bg-success/10 text-success' },
-  running: { label: '审批中', class: 'bg-info/10 text-info' },
+  completed: { label: '已完成', class: 'bg-green-100 text-green-700' },
+  running: { label: '审批中', class: 'bg-blue-100 text-blue-700' },
   pending: { label: '待办', class: 'bg-gray-100 text-gray-500' },
-  rejected: { label: '已驳回', class: 'bg-error/10 text-error' },
+  rejected: { label: '已驳回', class: 'bg-red-100 text-red-700' },
   skipped: { label: '已跳过', class: 'bg-gray-100 text-gray-400' },
 }
 
+const colorMeta = computed(() => COLOR_META[props.colorVar] || COLOR_META.primary)
+const cardStyle = computed(() => ({
+  'width': `${props.width}px`,
+  'minHeight': `${props.height}px`,
+  '--flow-node-color': colorMeta.value.color,
+  '--flow-node-soft': colorMeta.value.soft,
+  '--flow-node-shadow': colorMeta.value.shadow,
+}))
 const statusBadge = computed(() => STATUS_BADGE[props.status] || null)
-
-const showDelete = computed(() => props.showActions && !props.readonly)
-const isDeletable = computed(() => {
-  // start / end 不允许删除
-  return !['start', 'end'].includes(props.node?.nodeType)
-})
+const canDelete = computed(() => props.deletable && props.showActions && !props.readonly)
 
 function handleClick() {
   emit('click', props.node)
 }
 
-function handleDelete(event) {
-  event.stopPropagation()
-  if (isDeletable.value)
+function handleDelete(e) {
+  e.stopPropagation()
+  if (canDelete.value)
     emit('delete', props.node)
 }
 
-function handleContextMenu(event) {
-  event.preventDefault()
-  emit('context-menu', { event, node: props.node })
+function handleContextMenu(e) {
+  e.preventDefault()
+  emit('contextMenu', { event: e, node: props.node })
 }
 </script>
 
 <template>
   <div
-    class="flow-node-card relative cursor-pointer border rounded-lg bg-white shadow-sm transition hover:shadow-md"
+    class="flow-node-card flex flex-col cursor-pointer gap-2.5 bg-white px-3.5 py-3 transition-all duration-200"
     :class="[
-      selected ? 'border-primary ring-2 ring-primary/30' : 'border-gray-200',
-      readonly ? '!cursor-default' : '',
+      selected ? 'is-selected' : '',
+      readonly ? 'is-readonly' : '',
     ]"
-    :style="{ width: `${width}px`, minHeight: `${height}px` }"
+    :style="cardStyle"
     :data-node-id="node?.id"
     :data-node-type="node?.nodeType"
     @click="handleClick"
     @contextmenu="handleContextMenu"
   >
-    <!-- 顶部色条 -->
-    <div :class="[colorClasses.bar]" class="h-1 rounded-t-lg" />
-
-    <!-- 标题行 -->
-    <div class="flex items-center gap-2 px-3 pt-2">
-      <i :class="[icon, colorClasses.text]" class="text-base" />
-      <span class="text-sm flex-1 truncate text-gray-800 font-medium">
-        {{ node?.name || '未命名节点' }}
-      </span>
-      <slot name="title-extra" />
+    <div class="flow-node-title w-full flex items-center gap-2">
       <span
-        v-if="statusBadge"
-        class="text-xs rounded px-1.5 py-0.5"
-        :class="statusBadge.class"
+        class="flow-node-icon h-11 w-11 flex shrink-0 items-center justify-center text-white"
       >
-        {{ statusBadge.label }}
+        <i :class="icon" class="text-2xl" />
       </span>
+      <div class="flow-node-main min-w-0 flex flex-col flex-1 gap-1">
+        <div class="flow-node-heading min-w-0 flex items-center gap-1.5">
+          <span class="flow-node-name text-sm truncate text-gray-800 font-semibold">
+            {{ node?.name || '未命名节点' }}
+          </span>
+          <slot v-if="!readonly" name="title-extra" />
+        </div>
+        <div v-if="statusBadge" class="flow-node-meta flex items-center">
+          <span
+            class="flow-node-status shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+            :class="statusBadge.class"
+          >{{ statusBadge.label }}</span>
+        </div>
+      </div>
+
       <button
-        v-if="showDelete && isDeletable"
-        class="text-gray-400 hover:text-error"
+        v-if="canDelete"
+        class="shrink-0 rounded p-1 text-gray-300 transition-colors hover:bg-red-100 hover:text-red-500"
         aria-label="删除节点"
         @click.stop="handleDelete"
       >
-        <i class="i-mdi-close text-sm" />
+        <i class="i-mdi-close text-base" />
       </button>
     </div>
 
-    <!-- 正文 -->
-    <div class="text-xs px-3 pb-2 pt-1 text-gray-600">
+    <div v-if="subtitle && !readonly" class="flow-node-summary text-xs w-full truncate text-gray-500">
+      {{ subtitle }}
+    </div>
+    <div v-if="$slots.default && !readonly" class="flow-node-extra text-xs w-full truncate text-gray-500">
       <slot />
     </div>
   </div>
 </template>
+
+<style scoped>
+.flow-node-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.flow-node-card:not(.is-readonly):hover {
+  border-color: rgba(53, 109, 255, 0.2);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.flow-node-card.is-selected {
+  border-color: #38b8b2;
+  box-shadow:
+    0 0 0 2px rgba(56, 184, 178, 0.18),
+    0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+.flow-node-card.is-readonly {
+  cursor: default;
+}
+
+.flow-node-icon {
+  background: var(--flow-node-color);
+  border-radius: 7px;
+  box-shadow: 0 8px 18px var(--flow-node-shadow);
+}
+
+.flow-node-title {
+  min-height: 46px;
+}
+
+.flow-node-summary {
+  display: block;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.03);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #fafbfc 0%, #f6f8fa 100%);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.flow-node-extra {
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.flow-node-card.is-readonly {
+  gap: 10px;
+  padding: 13px 15px;
+  justify-content: center;
+}
+
+.flow-node-card.is-readonly .flow-node-title {
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+}
+
+.flow-node-card.is-readonly .flow-node-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  box-shadow: 0 10px 22px var(--flow-node-shadow);
+}
+
+.flow-node-card.is-readonly .flow-node-icon i {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.flow-node-card.is-readonly .flow-node-name {
+  line-height: 1.35;
+}
+
+.flow-node-card.is-readonly .flow-node-summary {
+  color: #475569;
+  background: #f8fafc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-node-card {
+    transition: none;
+  }
+
+  .flow-node-card:not(.is-readonly):hover {
+    transform: none;
+  }
+}
+</style>

@@ -1,154 +1,140 @@
 <template>
   <div class="flow-page">
-    <!-- 统计卡片 -->
-    <FlowStats
-      :todo-count="todoCount"
-      :done-count="doneCount"
-      :started-count="startedCount"
-      :cc-count="ccCount"
-      :unread-cc="unreadCc"
-      active-tab="done"
-      @switch="handleSwitch"
-    />
-
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <div class="title-row">
-          <div class="title-icon done">
-            <i class="i-material-symbols:task-alt" />
-          </div>
-          <h2 class="page-title">
-            我的已办
-          </h2>
-        </div>
-      </div>
-      <div class="header-right">
-        <n-input v-model:value="queryParams.title" placeholder="搜索任务标题" clearable class="search-input" @keydown.enter="handleSearch">
-          <template #prefix>
-            <i class="i-material-symbols:search" />
-          </template>
-        </n-input>
-        <NTreeSelect v-model:value="queryParams.category" placeholder="流程分类" clearable class="category-select" :options="categoryTreeOptions" :default-expand-all="true" />
-        <n-select v-model:value="queryParams.status" placeholder="审批结果" clearable class="category-select" :options="statusOptions" />
-        <NButton type="primary" class="search-btn" @click="handleSearch">
-          <i class="i-material-symbols:search mr-2" />查询
-        </NButton>
-        <NButton class="reset-btn" @click="handleReset">
-          <i class="i-material-symbols:refresh mr-2" />重置
-        </NButton>
-      </div>
-    </div>
-
     <!-- 任务列表 -->
-    <div class="table-container">
-      <n-data-table :columns="columns" :data="dataSource" :loading="loading" :pagination="pagination" :remote="true" :row-key="row => row.id" :row-props="getRowProps" striped />
-    </div>
+    <FlowTaskCardList
+      v-model:search-value="queryParams.title"
+      title="已办"
+      :items="dataSource"
+      :loading="loading"
+      :pagination="pagination"
+      :selectable="false"
+      row-key="id"
+      search-placeholder="通过名称搜索"
+      empty-text="暂无已办任务"
+      @search="handleSearch"
+      @refresh="loadData"
+      @row-click="openDrawer"
+      @update:page="pagination.onChange"
+      @update:page-size="pagination.onUpdatePageSize"
+    >
+      <template #filters>
+        <NTreeSelect v-model:value="queryParams.category" placeholder="流程分类" clearable class="category-select" :options="categoryTreeOptions" :default-expand-all="true" @update:value="handleSearch" />
+        <n-select v-model:value="queryParams.status" placeholder="审批结果" clearable class="category-select" :options="statusOptions" @update:value="handleSearch" />
+        <NButton secondary @click="handleReset">
+          重置
+        </NButton>
+      </template>
+      <template #status="{ row }">
+        <span class="task-status-pill" :class="getStatusTagClass(row.status)">
+          {{ getStatusText(row.status) }}
+        </span>
+      </template>
+      <template #title="{ row }">
+        {{ row.title || row.taskName }}
+      </template>
+      <template #meta="{ row }">
+        <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
+        <span><span class="task-meta-label">完成时间</span> <span class="task-meta-value">{{ row.completeTime || '-' }}</span></span>
+        <span><span class="task-meta-label">处理节点</span> <span class="task-meta-value">{{ row.taskName || '-' }}</span></span>
+      </template>
+      <template #summary="{ row }">
+        <span v-if="row.comment">审批意见：{{ row.comment }}</span>
+      </template>
+      <template #actions="{ row }">
+        <button type="button" class="task-row-link-action" aria-label="查看详情" @click="openDrawer(row)">
+          <span>详情</span>
+          <i class="i-material-symbols:chevron-right" />
+        </button>
+      </template>
+    </FlowTaskCardList>
 
     <!-- 详情弹窗 -->
-    <n-modal
+    <FlowTaskDetailShell
       v-model:show="showDrawer"
-      preset="card"
-      class="flow-task-detail-modal"
-      closable
-      :bordered="false"
-      :segmented="{ content: true, footer: true }"
-      content-style="padding: 0; overflow: hidden;"
+      :title="currentTask?.title || '审批详情'"
+      :subtitle="currentTask?.taskName ? `处理节点：${currentTask.taskName}` : ''"
+      :status-text="getStatusText(currentTask?.status)"
+      :status-class="getStatusTagClass(currentTask?.status)"
+      :status-icon="getStatusIcon(currentTask?.status)"
+      :records="approvalHistory"
+      record-title="审批记录"
+      fullscreen
     >
-      <template #header>
-        <div class="drawer-header">
-          <div class="drawer-title-row">
-            <div class="status-dot" :class="getStatusDotClass(currentTask?.status)" />
-            <span class="drawer-title">{{ currentTask?.title || '审批详情' }}</span>
+      <template v-if="currentTask">
+        <section class="approval-detail-section">
+          <div class="approval-section-header">
+            <i class="i-material-symbols:info-outline" />
+            基本信息
           </div>
-          <span class="status-tag" :class="getStatusTagClass(currentTask?.status)">{{ getStatusText(currentTask?.status) }}</span>
-        </div>
-      </template>
+          <div class="approval-field-grid">
+            <div class="approval-field">
+              <span class="approval-label">任务节点</span>
+              <span class="approval-value">{{ currentTask.taskName || '-' }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">审批结果</span>
+              <span class="approval-value">{{ getStatusText(currentTask.status) }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">发起人</span>
+              <span class="approval-value approval-user-inline">
+                <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" />
+                {{ currentTask.startUserName || '-' }}
+              </span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">发起部门</span>
+              <span class="approval-value">{{ currentTask.startDeptName || '-' }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">完成时间</span>
+              <span class="approval-value">{{ currentTask.completeTime || '-' }}</span>
+            </div>
+          </div>
+        </section>
 
-      <div v-if="currentTask" class="drawer-body">
-        <div class="info-grid">
-          <div class="info-card">
-            <div class="info-header">
-              <i class="i-material-symbols:info-outline" />任务信息
+        <section class="approval-detail-section">
+          <div class="approval-section-header">
+            <i class="i-material-symbols:rate-review" />
+            处理结果
+          </div>
+          <div class="approval-field-grid">
+            <div class="approval-field full">
+              <span class="approval-label">审批意见</span>
+              <span class="approval-value approval-note">{{ currentTask.comment || '-' }}</span>
             </div>
-            <div class="info-items">
-              <div class="info-item">
-                <span class="info-label">任务节点</span><span class="info-value highlight">{{ currentTask.taskName }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">审批结果</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
-              </div>
+            <div class="approval-field full">
+              <span class="approval-label">审批签名</span>
+              <span class="approval-value">
+                <SignatureImage :value="currentTask.signature" />
+              </span>
             </div>
           </div>
-          <div class="info-card">
-            <div class="info-header">
-              <i class="i-material-symbols:person-outline" />发起信息
-            </div>
-            <div class="info-items">
-              <div class="info-item user-item">
-                <span class="info-label">发起人</span><div class="user-display">
-                  <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" /><span class="info-value">{{ currentTask.startUserName || '-' }}</span>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">发起部门</span><span class="info-value">{{ currentTask.startDeptName || '-' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">完成时间</span><span class="info-value">{{ currentTask.completeTime || '-' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">审批意见</span><span class="info-value">{{ currentTask.comment || '-' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">审批签名</span>
-                <div class="info-value signature-value">
-                  <SignatureImage :value="currentTask.signature" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        </section>
 
-        <div class="section">
-          <div class="section-header">
-            <i class="i-material-symbols:account-tree" />流程进度
-          </div>
-          <n-collapse>
+        <section class="approval-detail-section">
+          <n-collapse arrow-placement="right">
             <n-collapse-item title="查看流程图" name="diagram">
-              <ProcessDiagramViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
-              <n-empty v-else description="暂无流程图" size="small" />
+              <div class="approval-diagram">
+                <DingFlowViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
+                <n-empty v-else description="暂无流程图" size="small" />
+              </div>
             </n-collapse-item>
           </n-collapse>
-        </div>
-
-        <div class="section">
-          <div class="section-header">
-            <i class="i-material-symbols:history" />审批进度
-          </div>
-          <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
-          <n-empty v-else description="暂无审批记录" size="small" />
-        </div>
-      </div>
-
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showDrawer = false">
-            关闭
-          </NButton>
-        </NSpace>
+        </section>
       </template>
-    </n-modal>
+    </FlowTaskDetailShell>
   </div>
 </template>
 
 <script setup>
-import { NButton, NSpace, NTreeSelect } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { NButton, NTreeSelect } from 'naive-ui'
+import { computed, onMounted, reactive, ref } from 'vue'
 import flowApi from '@/api/flow'
 import UserAvatar from '@/components/common/UserAvatar.vue'
-import ProcessDiagramViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
-import FlowStats from '@/components/flow/FlowStats.vue'
-import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
+import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
+import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignatureImage from '@/components/flow/SignatureImage.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
@@ -187,90 +173,38 @@ function buildTreeSelectOptions(treeData) {
   }))
 }
 
-const todoCount = ref(0)
-const doneCount = ref(0)
-const startedCount = ref(0)
-const ccCount = ref(0)
-const unreadCc = ref(0)
-
 const showDrawer = ref(false)
 const currentTask = ref(null)
 const approvalHistory = ref([])
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_done_status).filter(item => item.value !== 6))
 
-function getStatusDotClass(status) {
+function getStatusTagClass(status) {
   const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default', 7: 'warning', 8: 'error' }
   return cls[status] || 'default'
 }
 
-function getStatusTagClass(status) {
-  const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default', 7: 'warning', 8: 'error' }
-  return cls[status] || 'default'
+function getStatusIcon(status) {
+  const icons = {
+    2: 'i-material-symbols:check-circle',
+    3: 'i-material-symbols:cancel',
+    4: 'i-material-symbols:keyboard-return',
+    5: 'i-material-symbols:person-add',
+    7: 'i-material-symbols:undo',
+    8: 'i-material-symbols:stop-circle',
+  }
+  return icons[status] || 'i-material-symbols:task-alt'
 }
 
 function getStatusText(status) {
   return getLabel('flow_done_status', status) || '未知'
 }
 
-const columns = [
-  {
-    title: '任务标题',
-    key: 'title',
-    width: 180,
-    ellipsis: { tooltip: true },
-    render: row => h('span', { class: 'task-title-link', onClick: () => openDrawer(row) }, row.title || row.taskName),
-  },
-  { title: '任务名称', key: 'taskName', width: 100, ellipsis: { tooltip: true } },
-  {
-    title: '发起人',
-    key: 'startUserName',
-    width: 100,
-    render: row => h('div', { class: 'table-user' }, [
-      h(UserAvatar, { name: row.startUserName || '未知', size: 24 }),
-      h('span', { class: 'user-name-text' }, row.startUserName || '-'),
-    ]),
-  },
-  { title: '发起部门', key: 'startDeptName', width: 100, ellipsis: { tooltip: true } },
-  {
-    title: '审批结果',
-    key: 'status',
-    width: 80,
-    render: row => h('span', { class: ['status-tag-mini', getStatusTagClass(row.status)] }, getStatusText(row.status)),
-  },
-  { title: '审批意见', key: 'comment', width: 140, ellipsis: { tooltip: true } },
-  {
-    title: '审批签名',
-    key: 'signature',
-    width: 120,
-    render: row => h(SignatureImage, { value: row.signature, compact: true }),
-  },
-  { title: '完成时间', key: 'completeTime', width: 150 },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 100,
-    fixed: 'right',
-    render: row => h(NButton, {
-      size: 'small',
-      type: 'primary',
-      onClick: (e) => {
-        e.stopPropagation()
-        openDrawer(row)
-      },
-    }, () => '查看详情'),
-  },
-]
-
 function toNumberOptions(options = []) {
   return options.map(item => ({
     ...item,
     value: Number(item.value),
   }))
-}
-
-function getRowProps(row) {
-  return { style: 'cursor:pointer', onClick: () => openDrawer(row) }
 }
 
 async function openDrawer(row) {
@@ -301,7 +235,6 @@ async function loadData() {
     if (res.code === 200 && res.data) {
       dataSource.value = res.data.records || []
       pagination.itemCount = res.data.total || 0
-      doneCount.value = res.data.total || 0
     }
   }
   catch (e) {
@@ -310,22 +243,6 @@ async function loadData() {
   finally {
     loading.value = false
   }
-}
-
-async function loadStats() {
-  try {
-    const [todoRes, startedRes, ccRes] = await Promise.all([
-      flowApi.getTodoTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getStartedTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getMyCc({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-    ])
-    todoCount.value = todoRes.code === 200 ? todoRes.data?.total || 0 : 0
-    startedCount.value = startedRes.code === 200 ? startedRes.data?.total || 0 : 0
-    ccCount.value = ccRes.code === 200 ? ccRes.data?.total || 0 : 0
-    if (ccRes.code === 200 && ccRes.data?.records)
-      unreadCc.value = ccRes.data.records.filter(r => r.isRead === 0).length
-  }
-  catch (e) { console.error('加载统计数据失败', e) }
 }
 
 async function loadCategories() {
@@ -354,15 +271,8 @@ function handleReset() {
   loadData()
 }
 
-function handleSwitch(tab) {
-  const routes = { todo: '/flow/todo', done: '/flow/done', started: '/flow/started', cc: '/flow/cc' }
-  if (routes[tab])
-    window.$router?.push(routes[tab])
-}
-
 onMounted(() => {
   loadCategories()
-  loadStats()
   loadData()
 })
 </script>
@@ -374,7 +284,9 @@ onMounted(() => {
 }
 
 .flow-page {
-  padding: 20px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px 14px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -428,7 +340,7 @@ onMounted(() => {
   width: 220px;
 }
 .category-select {
-  width: 140px;
+  width: 132px;
 }
 .table-container {
   background: #fff;

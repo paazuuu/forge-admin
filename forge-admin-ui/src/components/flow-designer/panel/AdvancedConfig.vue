@@ -37,7 +37,7 @@ function toggleEdit() {
       该节点类型（{{ node.bpmnElementType }}）暂不被钉钉样式编辑器支持。
       <br>原始 BPMN XML 已保留，保存时原样回写；如需修改请使用高级模式编辑。
     </div>
-    <n-form-item label="原始 BPMN XML" label-placement="top">
+    <n-form-item label="原始 BPMN XML" label-placement="top" :show-feedback="false">
       <n-input
         :value="rawXml"
         type="textarea"

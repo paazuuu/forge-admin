@@ -54,7 +54,7 @@ const NON_NODE_TAGS = new Set([
  * 解析 BPMN XML 字符串为 flowJson。
  *
  * @param {string} xmlString
- * @returns {{ processId: string, processName: string, nodes: any[], edges: any[] }}
+ * @returns {{ processId: string, processName: string, nodes: any[], edges: any[] }} 流程设计器 JSON。
  */
 export function convertBpmnToJson(xmlString) {
   const doc = parseBpmnXml(xmlString)
@@ -167,11 +167,8 @@ function parseBaseConfig(element, nodeType) {
 
   switch (nodeType) {
     case NODE_TYPE.START: {
-      // 发起人节点：initiator + formKey 等基础信息（StartConfig 后续在 Task 24 完善）
-      config.initiator = getFlowableAttr(element, 'initiator') || 'initiator'
-      config.formKey = getFlowableAttr(element, 'formKey') || ''
-      config.formJson = getFlowableAttr(element, 'formJson') || ''
-      config.formUrl = getFlowableAttr(element, 'formUrl') || ''
+      // 发起人变量是系统内置变量，固定为 initiator；表单配置走流程模型全局配置。
+      config.initiator = 'initiator'
       break
     }
     case NODE_TYPE.END: {

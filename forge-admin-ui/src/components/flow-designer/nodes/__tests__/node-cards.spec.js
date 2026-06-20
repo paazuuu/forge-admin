@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { defineComponent } from 'vue'
 import AdvancedNode from '../AdvancedNode.vue'
 import ApproverNode from '../ApproverNode.vue'
 import BranchNode from '../BranchNode.vue'
@@ -9,12 +10,12 @@ import NodeCard from '../NodeCard.vue'
 import StartNode from '../StartNode.vue'
 
 describe('nodeCard - 基础渲染', () => {
-  it('选中状态高亮 ring', () => {
+  it('选中状态渲染高亮 class', () => {
     const w = mount(NodeCard, {
       props: { node: { id: 'A', name: 'X', nodeType: 'approver' }, selected: true },
       slots: { default: 'body' },
     })
-    expect(w.classes().some(c => c.includes('ring-primary'))).toBe(true)
+    expect(w.find('.flow-node-card').classes()).toContain('is-selected')
   })
 
   it('readonly 模式不显示删除按钮', () => {
@@ -24,9 +25,27 @@ describe('nodeCard - 基础渲染', () => {
     expect(w.find('button[aria-label="删除节点"]').exists()).toBe(false)
   })
 
+  it('readonly 模式隐藏流程配置摘要和标题附加徽章', () => {
+    const w = mount(NodeCard, {
+      props: {
+        node: { id: 'A', name: '部门经理审批', nodeType: 'approver' },
+        readonly: true,
+        subtitle: 'SPEL：$' + '{deptManager}',
+      },
+      slots: {
+        'title-extra': '<span class="config-badge">会签</span>',
+      },
+    })
+    expect(w.text()).toContain('部门经理审批')
+    expect(w.text()).not.toContain('SPEL')
+    expect(w.text()).not.toContain('会签')
+    expect(w.find('.flow-node-summary').exists()).toBe(false)
+    expect(w.find('.config-badge').exists()).toBe(false)
+  })
+
   it('start / end 节点不显示删除按钮（即使非 readonly）', () => {
     const w = mount(NodeCard, {
-      props: { node: { id: 'S', name: '发起', nodeType: 'start' } },
+      props: { node: { id: 'S', name: '发起', nodeType: 'start' }, deletable: false },
     })
     expect(w.find('button[aria-label="删除节点"]').exists()).toBe(false)
   })
@@ -43,46 +62,62 @@ describe('nodeCard - 基础渲染', () => {
       props: { node: { id: 'A', name: 'X', nodeType: 'approver' }, status: 'completed' },
     })
     expect(w.text()).toContain('已完成')
+    expect(w.find('.flow-node-meta').exists()).toBe(true)
+  })
+
+  it('右键事件可通过模板 @context-menu 监听', async () => {
+    const Parent = defineComponent({
+      components: { NodeCard },
+      data: () => ({
+        node: { id: 'A', name: 'X', nodeType: 'approver' },
+        received: null,
+      }),
+      template: '<NodeCard :node="node" @context-menu="received = $event" />',
+    })
+    const w = mount(Parent)
+    await w.find('.flow-node-card').trigger('contextmenu')
+    expect(w.vm.received?.node?.id).toBe('A')
   })
 })
 
 describe('startNode', () => {
-  it('显示 initiator + 表单', () => {
+  it('渲染节点名和固定发起人摘要', () => {
     const w = mount(StartNode, {
-      props: { node: { id: 'S', name: '发起', nodeType: 'start', config: { initiator: 'initiator', formKey: 'leaveForm' } } },
+      props: { node: { id: 'S', name: '发起人', nodeType: 'start', config: { initiator: 'initiator', formKey: 'leaveForm' } } },
     })
-    expect(w.text()).toContain('initiator')
-    expect(w.text()).toContain('leaveForm')
+    expect(w.text()).toContain('发起人')
+    expect(w.text()).toContain('系统自动记录发起人')
+    expect(w.text()).not.toContain('leaveForm')
   })
 
-  it('未配置时占位', () => {
+  it('未配置 config 也能渲染', () => {
     const w = mount(StartNode, {
       props: { node: { id: 'S', name: '发起', nodeType: 'start', config: {} } },
     })
-    expect(w.text()).toContain('点击配置发起人')
+    expect(w.text()).toContain('发起')
   })
 })
 
 describe('endNode', () => {
-  it('endType=normal 显示 "正常结束"', () => {
+  it('pill 变体渲染节点名', () => {
     const w = mount(EndNode, {
-      props: { node: { id: 'E', name: '结束', nodeType: 'end', config: { endType: 'normal' } } },
+      props: { node: { id: 'E', name: '流程结束', nodeType: 'end', config: { endType: 'normal' } } },
     })
-    expect(w.text()).toContain('正常结束')
+    expect(w.text()).toContain('流程结束')
   })
 
-  it('endType=terminate 显示 "强制终止"', () => {
+  it('terminate endType 也能渲染', () => {
     const w = mount(EndNode, {
-      props: { node: { id: 'E', name: '结束', nodeType: 'end', config: { endType: 'terminate' } } },
+      props: { node: { id: 'E', name: '终止', nodeType: 'end', config: { endType: 'terminate' } } },
     })
-    expect(w.text()).toContain('强制终止流程')
+    expect(w.text()).toContain('终止')
   })
 })
 
 describe('approverNode', () => {
   it('static 变量直接显示中文', () => {
     const w = mount(ApproverNode, {
-      props: { node: { id: 'A', name: '审批', nodeType: 'approver', config: { taskType: 'assignee', assignee: '${deptManager}' } } },
+      props: { node: { id: 'A', name: '审批', nodeType: 'approver', config: { taskType: 'assignee', assignee: '$' + '{deptManager}' } } },
     })
     expect(w.text()).toContain('部门主管')
   })
@@ -91,7 +126,7 @@ describe('approverNode', () => {
     const w = mount(ApproverNode, {
       props: { node: { id: 'A', name: '审批', nodeType: 'approver', config: {
         taskType: 'assignee',
-        assignee: '${deptManager}',
+        assignee: '$' + '{deptManager}',
         multiInstanceType: 'parallel',
         completionCondition: 'all',
       } } },
@@ -119,7 +154,7 @@ describe('branchNode', () => {
       props: { node: { id: 'GW', name: '分支', nodeType: 'condition', config: {} }, outgoingCount: 2 },
     })
     expect(w.text()).toContain('条件分支')
-    expect(w.text()).toContain('2 条分支')
+    expect(w.text()).toContain('2 条条件分支')
   })
 
   it('parallel 显示并行', () => {
@@ -127,7 +162,7 @@ describe('branchNode', () => {
       props: { node: { id: 'GW', name: 'p', nodeType: 'parallel', config: {} }, outgoingCount: 3 },
     })
     expect(w.text()).toContain('并行分支')
-    expect(w.text()).toContain('3 条并行')
+    expect(w.text()).toContain('3 条并行分支')
   })
 
   it('inclusive 显示包容', () => {

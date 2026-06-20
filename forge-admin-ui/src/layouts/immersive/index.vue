@@ -7,7 +7,7 @@
     <ImmersiveHeader />
 
     <!-- 主内容区 -->
-    <div class="immersive-content">
+    <div class="immersive-content" :class="{ 'immersive-content-flush': isFlowTaskListPage }">
       <slot />
     </div>
 
@@ -19,10 +19,16 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { AppCard } from '@/components/common'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppTab } from '@/layouts/components'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import ImmersiveHeader from './header/index.vue'
+
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 </script>
 
 <style scoped>
@@ -57,6 +63,10 @@ import ImmersiveHeader from './header/index.vue'
   background: var(--gray-100);
   padding: 10px;
   min-height: 0;
+}
+
+.immersive-content-flush {
+  padding: 0;
 }
 
 /* 滚动条 */

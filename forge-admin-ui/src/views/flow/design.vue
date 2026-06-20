@@ -10,21 +10,26 @@
           {{ embedded ? '关闭' : '返回' }}
         </n-button>
         <n-divider vertical />
-        <n-input
-          v-model:value="modelInfo.modelName"
-          placeholder="流程名称"
-          style="width: 200px"
-          :disabled="isReadonly"
-        />
-        <n-input
-          v-model:value="modelInfo.modelKey"
-          placeholder="流程Key"
-          style="width: 150px"
-          disabled
-        />
-        <NTag :type="statusTag.type" size="small">
-          {{ statusTag.label }}
-        </NTag>
+        <div class="workspace-tabs">
+          <button
+            type="button"
+            class="workspace-tab"
+            :class="{ active: workspaceMode === 'design' }"
+            @click="setWorkspaceMode('design')"
+          >
+            <i class="i-material-symbols:account-tree-outline" />
+            <span>流程设计</span>
+          </button>
+          <button
+            type="button"
+            class="workspace-tab"
+            :class="{ active: workspaceMode === 'settings' }"
+            @click="setWorkspaceMode('settings')"
+          >
+            <i class="i-material-symbols:tune" />
+            <span>更多设置</span>
+          </button>
+        </div>
       </div>
       <div class="top-bar-right">
         <n-button @click="handleOpenVersionHistory">
@@ -33,7 +38,7 @@
           </template>
           更改记录
         </n-button>
-        <n-button :type="aiPanelVisible ? 'primary' : 'default'" @click="toggleAiPanel">
+        <n-button :type="isAiPanelActive ? 'primary' : 'default'" @click="toggleAiPanel">
           <template #icon>
             <i class="i-material-symbols:auto-awesome" />
           </template>
@@ -55,93 +60,9 @@
     </div>
 
     <!-- 主体内容 -->
-    <div class="main-content">
-      <!-- 中间区域（画布 + 顶部配置栏） -->
-      <div class="center-area">
-        <!-- 顶部配置工作区 -->
-        <div class="config-workspace">
-          <div class="config-section model-config-section">
-            <div class="config-section-head">
-              <i class="i-material-symbols:tune" />
-              <span>流程属性</span>
-            </div>
-            <div class="config-section-body">
-              <label class="config-field">
-                <span class="config-field-label">分类</span>
-                <NTreeSelect
-                  v-model:value="modelInfo.category"
-                  :options="categoryTreeOptions"
-                  placeholder="选择分类"
-                  size="small"
-                  :default-expand-all="true"
-                />
-              </label>
-              <label class="config-field compact">
-                <span class="config-field-label">类型</span>
-                <n-input v-model:value="modelInfo.flowType" placeholder="approval" size="small" />
-              </label>
-            </div>
-          </div>
-
-          <div class="config-section form-config-section">
-            <div class="config-section-head">
-              <i class="i-material-symbols:dynamic-form" />
-              <span>表单配置</span>
-              <NTag size="small" :type="formConfigStatus.type" :bordered="false">
-                {{ formConfigStatus.label }}
-              </NTag>
-            </div>
-            <div class="config-section-body">
-              <label class="config-field compact">
-                <span class="config-field-label">表单类型</span>
-                <n-select
-                  v-model:value="modelInfo.formType"
-                  :options="formTypeOptions"
-                  size="small"
-                  @update:value="handleFormTypeChange"
-                />
-              </label>
-              <label v-if="modelInfo.formType === 'dynamic'" class="config-field">
-                <span class="config-field-label">已有表单</span>
-                <n-select
-                  v-model:value="modelInfo.formId"
-                  :options="formOptions"
-                  placeholder="不选择则使用模型内表单"
-                  clearable
-                  size="small"
-                  @update:value="handleFormSelect"
-                />
-              </label>
-              <label v-if="modelInfo.formType === 'external'" class="config-field wide">
-                <span class="config-field-label">外置表单</span>
-                <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
-              </label>
-              <div v-if="modelInfo.formType === 'dynamic'" class="form-config-actions">
-                <n-button size="small" type="primary" @click="handleOpenFormDesigner">
-                  <template #icon>
-                    <i class="i-material-symbols:edit-document" />
-                  </template>
-                  {{ modelInfo.formJson ? '编辑表单' : '设计表单' }}
-                </n-button>
-                <n-button size="small" :disabled="!formSchema.length" @click="showFormPreview = true">
-                  <template #icon>
-                    <i class="i-material-symbols:visibility-outline" />
-                  </template>
-                  预览
-                </n-button>
-              </div>
-            </div>
-          </div>
-
-          <div class="config-section description-config-section">
-            <div class="config-section-head">
-              <i class="i-material-symbols:notes" />
-              <span>说明</span>
-            </div>
-            <n-input v-model:value="modelInfo.description" placeholder="描述流程用途" size="small" />
-          </div>
-        </div>
-
+    <div class="main-content" :class="{ 'is-settings': workspaceMode === 'settings' }">
+      <!-- 中间区域（画布） -->
+      <div v-if="workspaceMode === 'design'" class="center-area">
         <!-- 流程设计器 -->
         <div class="designer-container">
           <DingFlowDesigner
@@ -195,50 +116,149 @@
         </div>
       </div>
 
-      <!-- 右侧面板区域（抽屉覆盖式） -->
-      <Transition name="drawer">
-        <div v-if="dockedElement || aiPanelVisible" class="right-panels">
-          <!-- 右侧面板 Tab 切换栏 -->
-          <div class="right-panel-tabs">
-            <button
-              type="button"
-              class="panel-tab" :class="{ active: rightActiveTab === 'properties' }"
-              :disabled="!dockedElement"
-              @click="rightActiveTab = 'properties'"
-            >
-              <i class="i-material-symbols:tune" />
-              <span>属性</span>
-            </button>
-            <button
-              type="button"
-              class="panel-tab" :class="{ active: rightActiveTab === 'ai' }"
-              @click="rightActiveTab = 'ai'; aiPanelVisible = true"
-            >
-              <i class="i-material-symbols:auto-awesome" />
-              <span>AI助手</span>
-              <span v-if="aiSending" class="panel-tab-dot" />
-            </button>
-            <button
-              type="button"
-              class="panel-tab-close"
-              @click="handleCloseRightPanel"
-            >
-              <i class="i-material-symbols:close" />
-            </button>
+      <div v-else class="settings-workspace">
+        <div class="settings-detail-pane">
+          <div v-if="rightActiveTab === 'flow'" class="settings-section-pane">
+            <div class="settings-pane-header">
+              <div>
+                <div class="settings-pane-title">
+                  流程属性
+                </div>
+                <div class="settings-pane-desc">
+                  设置流程归属、业务类型和可读说明。
+                </div>
+              </div>
+              <NTag :type="statusTag.type" size="small">
+                {{ statusTag.label }}
+              </NTag>
+            </div>
+
+            <label class="settings-field">
+              <span class="settings-field-label">流程名称</span>
+              <n-input
+                v-model:value="modelInfo.modelName"
+                placeholder="请输入流程名称"
+                size="small"
+                :disabled="isReadonly"
+              />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field-label">流程编码</span>
+              <n-input
+                v-model:value="modelInfo.modelKey"
+                placeholder="流程编码"
+                size="small"
+                disabled
+              />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field-label">流程分类</span>
+              <NTreeSelect
+                v-model:value="modelInfo.category"
+                :options="categoryTreeOptions"
+                placeholder="选择分类"
+                size="small"
+                :default-expand-all="true"
+              />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field-label">流程类型</span>
+              <n-input v-model:value="modelInfo.flowType" placeholder="approval" size="small" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field-label">流程说明</span>
+              <n-input
+                v-model:value="modelInfo.description"
+                type="textarea"
+                :autosize="{ minRows: 3, maxRows: 5 }"
+                placeholder="描述流程用途"
+                size="small"
+              />
+            </label>
           </div>
 
-          <!-- 属性面板（已由 DingFlowDesigner 内部 NodeConfigDrawer 接管，此面板仅在 dockedElement 存在时显示提示） -->
-          <div v-if="dockedElement && rightActiveTab === 'properties'" class="docked-properties-panel">
-            <div class="docked-panel-header">
-              <span class="docked-panel-title">{{ getElementTitle(dockedElement) }}</span>
+          <div v-else-if="rightActiveTab === 'form'" class="settings-section-pane">
+            <div class="settings-pane-header">
+              <div>
+                <div class="settings-pane-title">
+                  表单配置
+                </div>
+                <div class="settings-pane-desc">
+                  配置流程发起时填写的全局表单。
+                </div>
+              </div>
+              <NTag size="small" :type="formConfigStatus.type" :bordered="false">
+                {{ formConfigStatus.label }}
+              </NTag>
             </div>
-            <div class="docked-panel-body">
-              <n-empty description="节点配置已迁移到画布上的抽屉，点击画布节点即可编辑" size="small" />
+
+            <label class="settings-field">
+              <span class="settings-field-label">表单类型</span>
+              <n-select
+                v-model:value="modelInfo.formType"
+                :options="formTypeOptions"
+                size="small"
+                @update:value="handleFormTypeChange"
+              />
+            </label>
+            <label v-if="modelInfo.formType === 'dynamic'" class="settings-field">
+              <span class="settings-field-label">已有表单</span>
+              <n-select
+                v-model:value="modelInfo.formId"
+                :options="formOptions"
+                placeholder="不选择则使用模型内表单"
+                clearable
+                size="small"
+                @update:value="handleFormSelect"
+              />
+            </label>
+            <label v-if="modelInfo.formType === 'external'" class="settings-field">
+              <span class="settings-field-label">外置表单</span>
+              <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
+            </label>
+            <div v-if="modelInfo.formType === 'dynamic'" class="settings-form-actions">
+              <n-button size="small" type="primary" @click="handleOpenFormDesigner">
+                <template #icon>
+                  <i class="i-material-symbols:edit-document" />
+                </template>
+                {{ modelInfo.formJson ? '编辑表单' : '设计表单' }}
+              </n-button>
+              <n-button size="small" :disabled="!formSchema.length" @click="showFormPreview = true">
+                <template #icon>
+                  <i class="i-material-symbols:visibility-outline" />
+                </template>
+                预览
+              </n-button>
             </div>
+            <div class="settings-tip">
+              发起节点不再单独配置表单；这里的表单会作为流程全局发起表单使用。
+            </div>
+          </div>
+
+          <div v-else-if="rightActiveTab === 'description'" class="settings-section-pane">
+            <div class="settings-pane-header">
+              <div>
+                <div class="settings-pane-title">
+                  说明
+                </div>
+                <div class="settings-pane-desc">
+                  给后续维护者留下流程用途、范围和特殊规则。
+                </div>
+              </div>
+            </div>
+            <label class="settings-field">
+              <span class="settings-field-label">流程说明</span>
+              <n-input
+                v-model:value="modelInfo.description"
+                type="textarea"
+                :autosize="{ minRows: 8, maxRows: 12 }"
+                placeholder="例如：适用于正式员工请假，超过 3 天需 HR 复核。"
+              />
+            </label>
           </div>
 
           <!-- AI流程助手面板 -->
-          <div v-if="aiPanelVisible && rightActiveTab === 'ai'" class="ai-flow-panel">
+          <div v-else-if="rightActiveTab === 'ai'" class="ai-flow-panel">
             <div class="ai-flow-header">
               <div class="ai-flow-header-info">
                 <div class="ai-flow-title">
@@ -465,7 +485,40 @@
             </div>
           </div>
         </div>
-      </Transition>
+
+        <aside class="settings-tree-nav">
+          <div
+            v-for="group in settingsTreeGroups"
+            :key="group.label"
+            class="settings-tree-group"
+          >
+            <div class="settings-tree-group-title">
+              {{ group.label }}
+            </div>
+            <button
+              v-for="item in group.children"
+              :key="item.key"
+              type="button"
+              class="settings-tree-item"
+              :class="{ active: rightActiveTab === item.key }"
+              @click="openSettingsPanel(item.key)"
+            >
+              <i :class="item.icon" />
+              <span class="settings-tree-item-main">
+                <span class="settings-tree-item-title">{{ item.label }}</span>
+                <span class="settings-tree-item-desc">{{ item.desc }}</span>
+              </span>
+              <span
+                v-if="getSettingsBadge(item.key)"
+                class="settings-tree-badge"
+                :class="getSettingsBadgeClass(item.key)"
+              >
+                {{ getSettingsBadge(item.key) }}
+              </span>
+            </button>
+          </div>
+        </aside>
+      </div>
     </div>
 
     <!-- 表单设计器弹窗 -->
@@ -570,7 +623,6 @@ const diagramLoadingCount = ref(0)
 const modelerRef = ref(null)
 const bpmnXml = ref('')
 const hasChanges = ref(false)
-const aiPanelVisible = ref(false)
 const aiSending = ref(false)
 const aiPrompt = ref('')
 const aiSessionId = ref('')
@@ -596,10 +648,8 @@ const aiModelId = ref(null)
 const providerOptions = ref([])
 const modelOptions = ref([])
 
-const rightActiveTab = ref('ai')
-
-const dockedElement = ref(null)
-const modelerInstance = ref(null)
+const workspaceMode = ref('design')
+const rightActiveTab = ref('flow')
 
 const modelInfo = reactive({
   id: '',
@@ -704,6 +754,70 @@ const formConfigStatus = computed(() => {
     return { label: '已配置', type: 'success' }
   return { label: '未配置', type: 'warning' }
 })
+
+const isAiPanelActive = computed(() => workspaceMode.value === 'settings' && rightActiveTab.value === 'ai')
+
+const settingsTreeGroups = computed(() => [
+  {
+    label: '基础设置',
+    children: [
+      {
+        key: 'flow',
+        label: '流程属性',
+        desc: '分类 / 类型 / 说明',
+        icon: 'i-material-symbols:tune',
+      },
+      {
+        key: 'form',
+        label: '表单配置',
+        desc: '发起表单',
+        icon: 'i-material-symbols:dynamic-form',
+      },
+      {
+        key: 'description',
+        label: '说明',
+        desc: '业务备注',
+        icon: 'i-material-symbols:notes',
+      },
+    ],
+  },
+  {
+    label: '增强能力',
+    children: [
+      {
+        key: 'ai',
+        label: 'AI助手',
+        desc: '生成 / 修改流程',
+        icon: 'i-material-symbols:auto-awesome',
+      },
+    ],
+  },
+])
+
+function setWorkspaceMode(mode) {
+  workspaceMode.value = mode
+}
+
+function openSettingsPanel(key) {
+  workspaceMode.value = 'settings'
+  rightActiveTab.value = key
+}
+
+function getSettingsBadge(key) {
+  if (key === 'form')
+    return formConfigStatus.value.label
+  if (key === 'ai' && aiSending.value)
+    return '生成中'
+  return ''
+}
+
+function getSettingsBadgeClass(key) {
+  if (key === 'form')
+    return `is-${formConfigStatus.value.type}`
+  if (key === 'ai')
+    return 'is-info'
+  return ''
+}
 
 watch(aiProviderId, async (val, old) => {
   if (val && val !== old) {
@@ -1006,20 +1120,11 @@ function handleSaveFormSchema(schema) {
 }
 
 function toggleAiPanel() {
-  aiPanelVisible.value = !aiPanelVisible.value
-  if (aiPanelVisible.value) {
-    rightActiveTab.value = 'ai'
+  if (isAiPanelActive.value) {
+    workspaceMode.value = 'design'
+    return
   }
-}
-
-function handleCloseRightPanel() {
-  aiPanelVisible.value = false
-  dockedElement.value = null
-  if (modelerInstance.value) {
-    const selection = modelerInstance.value.get('selection')
-    if (selection)
-      selection.select(null)
-  }
+  openSettingsPanel('ai')
 }
 
 async function handleAiSend() {
@@ -1791,10 +1896,6 @@ async function handleBpmnChange(xml) {
   }
 }
 
-function handlePropertiesUpdate() {
-  hasChanges.value = true
-}
-
 function handleDiagramImportStart() {
   diagramLoadingCount.value += 1
 }
@@ -1917,27 +2018,6 @@ function handleModelerReady() {
   // DingFlowDesigner 不再暴露 modeler() / selectedElement，节点编辑改由画布内 NodeConfigDrawer 接管
   // 此处保留空实现以兼容 @ready 事件回调签名
 }
-
-function getElementTitle(el) {
-  if (!el)
-    return '属性设置'
-  const typeNames = {
-    'bpmn:StartEvent': '开始节点',
-    'bpmn:EndEvent': '结束节点',
-    'bpmn:UserTask': '用户任务',
-    'bpmn:ServiceTask': '服务任务',
-    'bpmn:ScriptTask': '脚本任务',
-    'bpmn:BusinessRuleTask': '业务规则任务',
-    'bpmn:ManualTask': '手工任务',
-    'bpmn:ExclusiveGateway': '排他网关',
-    'bpmn:ParallelGateway': '并行网关',
-    'bpmn:InclusiveGateway': '包容网关',
-    'bpmn:SequenceFlow': '序列流',
-    'bpmn:SubProcess': '子流程',
-    'bpmn:CallActivity': '调用活动',
-  }
-  return el.businessObject?.name || typeNames[el.type] || '属性设置'
-}
 </script>
 
 <style scoped>
@@ -1974,11 +2054,64 @@ function getElementTitle(el) {
   min-width: 0;
 }
 
+.workspace-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.workspace-tab {
+  height: 28px;
+  min-width: 96px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.workspace-tab i {
+  font-size: 17px;
+}
+
+.workspace-tab:hover {
+  color: #0f172a;
+  background: #eef2f7;
+}
+
+.workspace-tab.active {
+  color: #2563eb;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    inset 0 0 0 1px #bfdbfe;
+}
+
 .main-content {
   flex: 1;
   display: flex;
   overflow: hidden;
   position: relative;
+}
+
+.main-content.is-settings {
+  background: #f3f6fb;
 }
 
 .center-area {
@@ -1989,92 +2122,9 @@ function getElementTitle(el) {
   min-width: 0;
 }
 
-.config-workspace {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.85fr) minmax(420px, 1.45fr) minmax(260px, 1fr);
-  gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #dbe3ee;
-  background: #eef3f9;
-  flex-shrink: 0;
-}
-
-.config-section {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.form-config-section {
-  border-color: #bfdbfe;
-  background: #fbfdff;
-}
-
-.config-section-head {
-  min-height: 22px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.config-section-head i {
-  color: #2563eb;
-  font-size: 15px;
-  flex-shrink: 0;
-}
-
-.config-section-body {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  min-width: 0;
-}
-
-.config-field {
-  min-width: 0;
-  width: 180px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.config-field.compact {
-  width: 128px;
-}
-
-.config-field.wide {
-  width: 260px;
-}
-
-.config-field-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748b;
-  white-space: nowrap;
-}
-
-.form-config-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.description-config-section :deep(.n-input) {
-  width: 100%;
-}
-
 .designer-container {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: #f8fafc;
   position: relative;
@@ -2229,81 +2279,6 @@ function getElementTitle(el) {
   opacity: 0;
 }
 
-.right-panels {
-  position: absolute;
-  right: 0;
-  top: 12px;
-  bottom: 12px;
-  height: auto;
-  max-height: calc(100% - 24px);
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #e2e8f0;
-  border-right: none;
-  border-radius: 8px 0 0 8px;
-  background: #fff;
-  width: 380px;
-  flex-shrink: 0;
-  overflow: hidden;
-  z-index: 50;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
-}
-
-.drawer-enter-active {
-  transition: transform 250ms ease-out;
-}
-
-.drawer-leave-active {
-  transition: transform 200ms ease-in;
-}
-
-.drawer-enter-from,
-.drawer-leave-to {
-  transform: translateX(100%);
-}
-
-.right-panel-tabs {
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
-  flex-shrink: 0;
-  height: 40px;
-  padding: 0 4px;
-}
-
-.panel-tab {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 13px;
-  color: #64748b;
-  border-radius: 6px;
-  transition: all 150ms ease;
-  position: relative;
-}
-
-.panel-tab:hover:not(:disabled) {
-  color: #1e1b4b;
-  background: #f1f5f9;
-}
-
-.panel-tab.active {
-  color: #6366f1;
-  background: #eef2ff;
-  font-weight: 600;
-}
-
-.panel-tab:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .panel-tab-dot {
   width: 6px;
   height: 6px;
@@ -2322,67 +2297,237 @@ function getElementTitle(el) {
   }
 }
 
-.panel-tab-close {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: #94a3b8;
-  border-radius: 4px;
-  transition: all 150ms ease;
+.settings-workspace::-webkit-scrollbar,
+.settings-tree-nav::-webkit-scrollbar,
+.settings-section-pane::-webkit-scrollbar,
+.ai-flow-body::-webkit-scrollbar,
+.model-list::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
 }
 
-.panel-tab-close:hover {
-  color: #ef4444;
-  background: #fef2f2;
+.settings-workspace::-webkit-scrollbar-track,
+.settings-tree-nav::-webkit-scrollbar-track,
+.settings-section-pane::-webkit-scrollbar-track,
+.ai-flow-body::-webkit-scrollbar-track,
+.model-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.docked-properties-panel {
+.settings-workspace::-webkit-scrollbar-thumb,
+.settings-tree-nav::-webkit-scrollbar-thumb,
+.settings-section-pane::-webkit-scrollbar-thumb,
+.ai-flow-body::-webkit-scrollbar-thumb,
+.model-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.settings-tip {
+  border-left: 3px solid #2563eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-workspace {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: #f3f6fb;
+}
+
+.settings-tree-nav {
+  width: 236px;
+  flex: 0 0 236px;
+  min-height: 0;
+  padding: 14px 12px;
+  border-left: 1px solid #dbe3ee;
+  background: #f8fafc;
+  overflow-y: auto;
+}
+
+.settings-tree-group + .settings-tree-group {
+  margin-top: 14px;
+}
+
+.settings-tree-group-title {
+  padding: 0 6px 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-tree-item {
+  position: relative;
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.settings-tree-item + .settings-tree-item {
+  margin-top: 6px;
+}
+
+.settings-tree-item:hover {
+  border-color: #dbe3ee;
+  background: #fff;
+}
+
+.settings-tree-item.active {
+  border-color: #bfdbfe;
+  background: #fff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.settings-tree-item i {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 18px;
+}
+
+.settings-tree-item.active i,
+.settings-tree-item.active .settings-tree-item-title {
+  color: #2563eb;
+}
+
+.settings-tree-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-tree-item-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-tree-item-desc {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.settings-tree-badge {
+  max-width: 52px;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px;
+  line-height: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-tree-badge.is-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.settings-tree-badge.is-warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.settings-tree-badge.is-default {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.settings-tree-badge.is-info {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.settings-detail-pane {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #fff;
 }
 
-.docked-panel-header {
+.settings-section-pane {
+  flex: 1;
+  min-height: 0;
+  width: min(760px, 100%);
+  align-self: center;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: #6366f1;
-  color: white;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 28px;
+  overflow-y: auto;
 }
 
-.docked-panel-title {
-  font-size: 13px;
+.settings-pane-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.settings-pane-title {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-pane-desc {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-field-label {
+  color: #475569;
+  font-size: 12px;
   font-weight: 600;
 }
 
-.docked-panel-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px;
-}
-
-.docked-panel-body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.docked-panel-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.docked-panel-body::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 2px;
+.settings-form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .ai-flow-panel {
@@ -3002,21 +3147,14 @@ function getElementTitle(el) {
   overflow: hidden;
 }
 
-@media (max-width: 1024px) {
-  .right-panels {
-    width: 340px;
-  }
-
-  .config-workspace {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .description-config-section {
-    grid-column: 1 / -1;
+@media (max-width: 1280px) {
+  .settings-tree-nav {
+    width: 212px;
+    flex-basis: 212px;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .top-bar {
     padding: 0 12px;
     height: 48px;
@@ -3026,50 +3164,77 @@ function getElementTitle(el) {
     gap: 6px;
   }
 
-  .right-panels {
-    position: absolute;
-    right: 0;
-    top: 8px;
-    bottom: 8px;
-    max-height: calc(100% - 16px);
-    z-index: 120;
-    width: 92%;
-    max-width: 400px;
-    border-radius: 8px 0 0 8px;
-    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+  .center-area {
+    min-height: 0;
   }
 
-  .config-workspace {
-    grid-template-columns: 1fr;
-    padding: 8px;
+  .workspace-tab {
+    min-width: 86px;
+    padding: 0 10px;
   }
 
-  .description-config-section {
-    grid-column: auto;
+  .settings-tree-nav {
+    width: 196px;
+    flex-basis: 196px;
+    padding: 12px 10px;
   }
 
-  .config-section-body {
+  .settings-section-pane {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .top-bar {
+    align-items: stretch;
+    height: auto;
+    min-height: 52px;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .top-bar-left,
+  .top-bar-right {
     flex-wrap: wrap;
+    gap: 6px;
   }
 
-  .config-field {
-    flex: 1 1 160px;
-    width: auto;
+  .workspace-tabs {
+    order: 3;
+    width: 100%;
   }
 
-  .config-field :deep(.n-select),
-  .config-field :deep(.n-input) {
-    width: 100% !important;
+  .workspace-tab {
+    flex: 1;
+  }
+
+  .settings-workspace {
+    flex-direction: column-reverse;
+  }
+
+  .settings-tree-nav {
+    width: 100%;
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-left: none;
+    border-bottom: 1px solid #e2e8f0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .settings-tree-group {
+    min-width: 220px;
+  }
+
+  .settings-tree-group + .settings-tree-group {
+    margin-top: 0;
   }
 }
 
 @media (max-height: 760px) {
-  .right-panel-tabs {
-    height: 34px;
-  }
-
-  .ai-flow-header,
-  .docked-panel-header {
+  .ai-flow-header {
     padding: 7px 10px;
   }
 

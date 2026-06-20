@@ -58,6 +58,15 @@ describe('flowCanvas - 基础渲染', () => {
       expect(b.attributes('disabled')).toBeDefined()
   })
 
+  it('readonly + allowNavigation 时仍可缩放浏览', () => {
+    const wrapper = mount(FlowCanvas, { props: { readonly: true, allowNavigation: true } })
+    const buttons = wrapper.findAll('button')
+    for (const b of buttons)
+      expect(b.attributes('disabled')).toBeUndefined()
+    wrapper.vm.zoomOut()
+    expect(wrapper.vm.viewport.scale.value).toBeCloseTo(0.9, 5)
+  })
+
   it('zoomOut 后 scale 减少', () => {
     const wrapper = mount(FlowCanvas)
     const exposed = wrapper.vm

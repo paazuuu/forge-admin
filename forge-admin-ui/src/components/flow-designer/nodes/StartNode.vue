@@ -1,32 +1,21 @@
 <script setup>
 /**
  * StartNode — 发起人节点卡片
- *
- * 显示：发起人变量（默认 ${initiator}）+ 表单类型 / 表单 key（如有）
+ * 配色：青绿色（teal）代表流程启动
+ * 副标题：发起人来源
  */
-import { computed } from 'vue'
 import NodeCard from './NodeCard.vue'
 
-const props = defineProps({
+defineProps({
   node: { type: Object, required: true },
   selected: Boolean,
   status: { type: String, default: null },
   readonly: Boolean,
 })
 
-defineEmits(['click', 'delete', 'context-menu'])
+defineEmits(['click', 'delete', 'contextMenu'])
 
-const summary = computed(() => {
-  const c = props.node?.config || {}
-  const parts = []
-  if (c.initiator)
-    parts.push(`发起人：\${${c.initiator}}`)
-  if (c.formKey)
-    parts.push(`表单：${c.formKey}`)
-  else if (c.formUrl)
-    parts.push(`表单 URL：${c.formUrl}`)
-  return parts.join(' · ') || '点击配置发起人'
-})
+const subtitle = '系统自动记录发起人'
 </script>
 
 <template>
@@ -35,12 +24,11 @@ const summary = computed(() => {
     :selected="selected"
     :status="status"
     :readonly="readonly"
-    icon="i-mdi-flag-variant-outline"
+    icon="i-mdi-play"
     color-var="success"
+    :subtitle="subtitle"
+    :deletable="false"
     @click="$emit('click', $event)"
-    @delete="$emit('delete', $event)"
-    @context-menu="$emit('context-menu', $event)"
-  >
-    {{ summary }}
-  </NodeCard>
+    @context-menu="$emit('contextMenu', $event)"
+  />
 </template>

@@ -20,7 +20,7 @@
  * - nodes  → HTML 节点层（建议 absolute）
  * - toolbar → 不受 transform 影响的覆盖工具栏（自定义）
  */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useCanvasViewport } from '../composables/useCanvasViewport.js'
 
 const props = defineProps({
@@ -28,14 +28,16 @@ const props = defineProps({
   maxScale: { type: Number, default: 2.0 },
   initialScale: { type: Number, default: 1 },
   readonly: { type: Boolean, default: false },
+  allowNavigation: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['canvas-click', 'canvas-dblclick'])
+const emit = defineEmits(['canvasClick', 'canvasDblclick'])
 
 const containerRef = ref(null)
 const isPanning = ref(false)
 const isSpaceDown = ref(false)
 const lastPan = ref({ x: 0, y: 0 })
+const navigationEnabled = computed(() => !props.readonly || props.allowNavigation)
 
 const viewport = useCanvasViewport({
   minScale: props.minScale,
@@ -44,9 +46,6 @@ const viewport = useCanvasViewport({
 })
 
 const {
-  scale,
-  translateX,
-  translateY,
   transformStyle,
   scalePercent,
   zoomIn,
@@ -62,7 +61,7 @@ const {
 /* ---- 滚轮缩放 / 滚动 ---- */
 
 function handleWheel(event) {
-  if (props.readonly)
+  if (!navigationEnabled.value)
     return
   // Ctrl/Cmd + 滚轮 → 以鼠标位置为锚点缩放
   if (event.ctrlKey || event.metaKey) {
@@ -84,10 +83,14 @@ function handleWheel(event) {
 /* ---- 拖拽平移 ---- */
 
 function handleMouseDown(event) {
-  if (props.readonly)
+  if (!navigationEnabled.value)
     return
-  // 中键 或 空格 + 左键 → 平移
-  const isPanTrigger = event.button === 1 || (event.button === 0 && isSpaceDown.value)
+  // 中键 → 平移；空格 + 左键 → 平移；左键点击空白处 → 平移
+  // 左键点击节点/按钮时不拦截（让子组件处理 click）
+  const isBackground = event.target === containerRef.value
+    || event.target?.classList?.contains('canvas-transform')
+  const isPanTrigger = event.button === 1
+    || (event.button === 0 && (isSpaceDown.value || isBackground))
   if (!isPanTrigger)
     return
   event.preventDefault()
@@ -140,11 +143,11 @@ onUnmounted(() => {
 /* ---- 双击空白重置 ---- */
 
 function handleDblClick(event) {
-  emit('canvas-dblclick', event)
+  emit('canvasDblclick', event)
 }
 
 function handleClick(event) {
-  emit('canvas-click', event)
+  emit('canvasClick', event)
 }
 
 defineExpose({
@@ -163,8 +166,8 @@ defineExpose({
 <template>
   <div
     ref="containerRef"
-    class="flow-canvas relative h-full w-full select-none overflow-hidden bg-gray-50"
-    :class="{ 'cursor-grab': isSpaceDown && !isPanning, 'cursor-grabbing': isPanning }"
+    class="flow-canvas relative h-full w-full select-none overflow-hidden"
+    :class="{ 'cursor-grab': navigationEnabled && isSpaceDown && !isPanning, 'cursor-grabbing': isPanning }"
     @wheel="handleWheel"
     @mousedown="handleMouseDown"
     @click="handleClick"
@@ -175,15 +178,16 @@ defineExpose({
       <slot name="edges" />
       <slot name="nodes" />
     </div>
-    <div class="canvas-toolbar absolute right-4 top-4 z-10 flex items-center gap-2 rounded-lg bg-white px-2 py-1 shadow-md">
-      <button class="px-2 py-1 hover:text-primary" :disabled="readonly" @click="zoomOut()">
+    <div class="canvas-toolbar absolute bottom-4 left-4 z-10 flex items-center gap-1 bg-white/95 p-1 shadow-md">
+      <button class="canvas-tool-btn" aria-label="缩小" :disabled="!navigationEnabled" @click="zoomOut()">
         <i class="i-mdi-minus" />
       </button>
-      <span class="text-sm min-w-12 text-center">{{ scalePercent }}%</span>
-      <button class="px-2 py-1 hover:text-primary" :disabled="readonly" @click="zoomIn()">
+      <span class="canvas-zoom-text text-sm min-w-12 text-center">{{ scalePercent }}%</span>
+      <button class="canvas-tool-btn" aria-label="放大" :disabled="!navigationEnabled" @click="zoomIn()">
         <i class="i-mdi-plus" />
       </button>
-      <button class="px-2 py-1 hover:text-primary" :disabled="readonly" @click="resetView()">
+      <span class="canvas-toolbar-divider" />
+      <button class="canvas-tool-btn" aria-label="适应画布" :disabled="!navigationEnabled" @click="resetView()">
         <i class="i-mdi-fit-to-page-outline" />
       </button>
       <slot name="toolbar" />
@@ -194,5 +198,63 @@ defineExpose({
 <style scoped>
 .flow-canvas {
   outline: none;
+  background-color: #f7f9fa;
+  background-image:
+    radial-gradient(circle, rgba(148, 163, 184, 0.32) 1px, transparent 1.2px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 248, 250, 0.9));
+  background-position:
+    0 0,
+    0 0;
+  background-size:
+    18px 18px,
+    auto;
+}
+
+.canvas-toolbar {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.canvas-tool-btn {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748b;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.canvas-tool-btn:hover:not(:disabled) {
+  background: rgba(22, 93, 255, 0.08);
+  color: var(--primary-600, #165dff);
+}
+
+.canvas-tool-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.canvas-zoom-text {
+  color: #475569;
+  font-weight: 500;
+}
+
+.canvas-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-tool-btn {
+    transition: none;
+  }
 }
 </style>

@@ -15,7 +15,7 @@
 
     <!-- 主内容区 -->
     <article class="main-content-simple">
-      <div class="content-simple">
+      <div class="content-simple" :class="{ 'content-simple-flush': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -23,11 +23,16 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { useAppStore } from '@/store'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import SideBar from './sidebar/index.vue'
 
 const appStore = useAppStore()
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 </script>
 
 <style scoped>
@@ -73,6 +78,10 @@ const appStore = useAppStore()
   flex: 1;
   overflow: auto;
   padding: 16px;
+}
+
+.content-simple-flush {
+  padding: 0;
 }
 
 /* 滚动条 */

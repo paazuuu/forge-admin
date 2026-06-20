@@ -20,6 +20,7 @@
  */
 import { computed, ref } from 'vue'
 import ApproverAssigneeForm from './ApproverAssigneeForm.vue'
+import BasicConfig from './BasicConfig.vue'
 import FormPermissionConfig from './FormPermissionConfig.vue'
 import ListenerConfig from './ListenerConfig.vue'
 import MultiInstanceConfig from './MultiInstanceConfig.vue'
@@ -30,7 +31,7 @@ const props = defineProps({
   readonly: Boolean,
 })
 
-const emit = defineEmits(['update:config'])
+const emit = defineEmits(['update:config', 'update:node'])
 
 const tab = ref('basic')
 
@@ -39,31 +40,36 @@ const config = computed(() => props.node?.config || {})
 function patch(part) {
   emit('update:config', part)
 }
+
+function updateNode(node) {
+  emit('update:node', node)
+}
 </script>
 
 <template>
   <div class="approver-config">
-    <n-tabs v-model:value="tab" type="line" size="small">
-      <n-tab-pane name="basic" tab="审批设置">
+    <n-tabs v-model:value="tab" type="line" size="large" animated>
+      <n-tab-pane name="basic" tab="审批人设置">
+        <BasicConfig
+          :node="node"
+          :readonly="readonly"
+          @update:node="updateNode"
+        />
         <ApproverAssigneeForm
           :config="config"
           :readonly="readonly"
           @update:config="patch"
         />
-      </n-tab-pane>
-      <n-tab-pane name="multi" tab="会签设置">
-        <MultiInstanceConfig
-          :config="config"
-          :readonly="readonly"
-          @update:config="patch"
-        />
-      </n-tab-pane>
-      <n-tab-pane name="permissions" tab="操作权限">
-        <PermissionConfig
-          :config="config"
-          :readonly="readonly"
-          @update:config="patch"
-        />
+        <div class="config-section-block">
+          <div class="config-section-title">
+            多人审批方式
+          </div>
+          <MultiInstanceConfig
+            :config="config"
+            :readonly="readonly"
+            @update:config="patch"
+          />
+        </div>
       </n-tab-pane>
       <n-tab-pane name="form" tab="表单权限">
         <FormPermissionConfig
@@ -72,12 +78,27 @@ function patch(part) {
           @update:config="patch"
         />
       </n-tab-pane>
-      <n-tab-pane name="listeners" tab="监听器">
-        <ListenerConfig
-          :config="config"
-          :readonly="readonly"
-          @update:config="patch"
-        />
+      <n-tab-pane name="actions" tab="审批后操作">
+        <div class="config-section-block">
+          <div class="config-section-title">
+            操作权限
+          </div>
+          <PermissionConfig
+            :config="config"
+            :readonly="readonly"
+            @update:config="patch"
+          />
+        </div>
+        <div class="config-section-block">
+          <div class="config-section-title">
+            监听器
+          </div>
+          <ListenerConfig
+            :config="config"
+            :readonly="readonly"
+            @update:config="patch"
+          />
+        </div>
       </n-tab-pane>
     </n-tabs>
   </div>

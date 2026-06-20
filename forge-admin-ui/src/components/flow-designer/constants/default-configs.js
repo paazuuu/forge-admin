@@ -12,9 +12,6 @@ export const DEFAULT_CONFIGS = Object.freeze({
   start: () => ({
     documentation: '',
     initiator: 'initiator',
-    formKey: '',
-    formJson: '',
-    formUrl: '',
   }),
   end: () => ({
     documentation: '',

@@ -1,36 +1,32 @@
 <script setup>
 /**
- * StartConfig — 开始节点配置（initiator + 表单引用）
+ * StartConfig — 开始节点配置
+ *
+ * 发起人变量由后端在流程启动时固定注入为 initiator，表单配置走流程模型全局配置。
  */
-import { computed } from 'vue'
-
-const props = defineProps({
+defineProps({
   node: { type: Object, required: true },
   readonly: Boolean,
 })
-const emit = defineEmits(['update:config'])
-
-function field(name, fallback = '') {
-  return computed({
-    get: () => props.node.config?.[name] ?? fallback,
-    set: v => emit('update:config', { [name]: v }),
-  })
-}
-const initiator = field('initiator', 'initiator')
-const formKey = field('formKey')
-const formUrl = field('formUrl')
+defineEmits(['update:config'])
 </script>
 
 <template>
   <div class="space-y-3">
-    <n-form-item label="发起人变量" label-placement="left">
-      <n-input v-model:value="initiator" :disabled="readonly" placeholder="initiator" />
-    </n-form-item>
-    <n-form-item label="表单 Key" label-placement="left">
-      <n-input v-model:value="formKey" :disabled="readonly" placeholder="可选" />
-    </n-form-item>
-    <n-form-item label="表单 URL" label-placement="left">
-      <n-input v-model:value="formUrl" :disabled="readonly" placeholder="可选：外部表单地址" />
-    </n-form-item>
+    <div class="border border-gray-100 rounded bg-gray-50 px-3 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-sm text-gray-600">发起人</span>
+        <n-tag size="small" type="success" :bordered="false">
+          当前登录用户
+        </n-tag>
+      </div>
+      <div class="mt-2 flex items-center justify-between gap-3">
+        <span class="text-sm text-gray-600">变量名</span>
+        <code class="text-xs rounded bg-white px-2 py-0.5 text-gray-700">initiator</code>
+      </div>
+    </div>
+    <div class="text-xs rounded bg-blue-50 px-3 py-2 text-blue-600">
+      发起人由系统自动记录，流程表单请在右侧流程信息的“表单配置”中维护。
+    </div>
   </div>
 </template>

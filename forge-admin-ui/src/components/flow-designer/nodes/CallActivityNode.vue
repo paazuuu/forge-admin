@@ -13,7 +13,7 @@ const props = defineProps({
 })
 defineEmits(['click', 'delete', 'context-menu'])
 
-const summary = computed(() => {
+const subtitle = computed(() => {
   const c = props.node?.config?.calledElement
   return c ? `调用流程：${c}` : '点击配置被调用流程 ID'
 })
@@ -22,9 +22,7 @@ const summary = computed(() => {
 <template>
   <NodeCard
     :node="node" :selected="selected" :status="status" :readonly="readonly"
-    icon="i-mdi-phone-forward-outline" color-var="info"
+    icon="i-mdi-phone-forward-outline" color-var="info" :subtitle="subtitle"
     @click="$emit('click', $event)" @delete="$emit('delete', $event)" @context-menu="$emit('context-menu', $event)"
-  >
-    {{ summary }}
-  </NodeCard>
+  />
 </template>

@@ -68,15 +68,7 @@ function writeNode(node) {
 
   switch (node.nodeType) {
     case NODE_TYPE.START: {
-      const c = node.config || {}
-      if (c.initiator)
-        attrs.push(`flowable:initiator="${escapeXmlAttr(c.initiator)}"`)
-      if (c.formKey)
-        attrs.push(`flowable:formKey="${escapeXmlAttr(c.formKey)}"`)
-      if (c.formJson)
-        attrs.push(`flowable:formJson="${escapeXmlAttr(c.formJson)}"`)
-      if (c.formUrl)
-        attrs.push(`flowable:formUrl="${escapeXmlAttr(c.formUrl)}"`)
+      attrs.push('flowable:initiator="initiator"')
       break
     }
     case NODE_TYPE.END: {

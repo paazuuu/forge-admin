@@ -36,11 +36,12 @@ describe('addNodePopover', () => {
 describe('addNodeButton', () => {
   it('按 position 绝对定位', () => {
     const wrapper = mount(AddNodeButton, {
-      props: { position: { x: 100, y: 50 }, size: 24 },
+      props: { position: { x: 100, y: 50 } },
     })
     const div = wrapper.find('.add-node-button-wrap')
-    expect(div.attributes('style')).toContain('left: 88px')
-    expect(div.attributes('style')).toContain('top: 38px')
+    // 新样式用 translate(-50%, 0) 居中，left 直接等于 position.x
+    expect(div.attributes('style')).toContain('left: 100px')
+    expect(div.attributes('style')).toContain('top: 50px')
   })
 
   it('点击按钮后 popover 显示', async () => {

@@ -14,13 +14,13 @@
  */
 
 const COLORS = Object.freeze({
-  default: '#94a3b8',
+  default: '#c7d0d9',
   completed: '#10b981',
   running: '#3b82f6',
   pending: '#cbd5e1',
   rejected: '#ef4444',
   skipped: '#94a3b8',
-  defaultBranch: '#f59e0b',
+  defaultBranch: '#20b2aa',
 })
 
 /**

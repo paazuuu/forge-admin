@@ -14,7 +14,7 @@
       </AppCard>
 
       <!-- 页面内容 -->
-      <div class="bento-page">
+      <div class="bento-page" :class="{ 'bento-page-flush': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -22,10 +22,16 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { AppCard } from '@/components/common'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppTab } from '@/layouts/components'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import BentoRail from './components/BentoRail.vue'
+
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 </script>
 
 <style scoped>
@@ -70,6 +76,10 @@ import BentoRail from './components/BentoRail.vue'
   overflow: auto;
   padding: 16px;
   background: var(--bg-page);
+}
+
+.bento-page-flush {
+  padding: 0;
 }
 
 /* 滚动条 */

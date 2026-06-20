@@ -14,12 +14,12 @@ const props = defineProps({
 })
 defineEmits(['click', 'delete', 'context-menu'])
 
-const summary = computed(() => {
+const subtitle = computed(() => {
   const c = props.node?.config || {}
   if (!c.implementation)
     return '点击配置服务实现'
-  const labels = { class: '类', expression: '表达式', delegateExpression: '代理' }
-  const label = labels[c.implementationType] || '类'
+  const labels = { class: 'Java 类', expression: '表达式', delegateExpression: '代理' }
+  const label = labels[c.implementationType] || 'Java 类'
   return `${label}：${c.implementation}`
 })
 </script>
@@ -27,9 +27,7 @@ const summary = computed(() => {
 <template>
   <NodeCard
     :node="node" :selected="selected" :status="status" :readonly="readonly"
-    icon="i-mdi-cog-outline" color-var="info"
+    icon="i-mdi-cog-outline" color-var="info" :subtitle="subtitle"
     @click="$emit('click', $event)" @delete="$emit('delete', $event)" @context-menu="$emit('context-menu', $event)"
-  >
-    {{ summary }}
-  </NodeCard>
+  />
 </template>

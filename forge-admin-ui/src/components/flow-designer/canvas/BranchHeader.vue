@@ -32,16 +32,16 @@ const labelText = computed(() => {
 
 const colorClass = computed(() => {
   if (props.edge?.isDefault)
-    return 'border-warning text-warning bg-warning/5'
+    return 'is-default'
   if (props.edge?.condition)
-    return 'border-primary text-primary bg-primary/5'
-  return 'border-dashed border-gray-300 text-gray-400 bg-white'
+    return 'is-configured'
+  return 'is-empty'
 })
 </script>
 
 <template>
   <div
-    class="branch-header text-xs absolute z-10 flex cursor-pointer items-center border rounded-full px-2 py-0.5 hover:shadow-sm"
+    class="branch-header text-xs absolute z-10 flex cursor-pointer items-center px-2.5 py-1"
     :class="colorClass"
     :style="{
       left: `${position.x}px`,
@@ -53,3 +53,48 @@ const colorClass = computed(() => {
     {{ labelText }}
   </div>
 </template>
+
+<style scoped>
+.branch-header {
+  max-width: 160px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: box-shadow 160ms ease;
+}
+
+.branch-header:hover {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.branch-header.is-default {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: #fff8ed;
+  color: #b45309;
+}
+
+.branch-header.is-configured {
+  border-color: rgba(53, 109, 255, 0.24);
+  background: #f2f6ff;
+  color: #245bdb;
+}
+
+.branch-header.is-empty {
+  border-style: dashed;
+  color: #94a3b8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branch-header {
+    transition: none;
+  }
+
+  .branch-header:hover {
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  }
+}
+</style>

@@ -2,12 +2,13 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import DingFlowDesigner from '../DingFlowDesigner.vue'
 
+const DOLLAR = '$'
 const SIMPLE_XML = [
   '<?xml version="1.0" encoding="UTF-8"?>',
   '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">',
   '  <bpmn:process id="Process_T1" name="测试" isExecutable="true">',
   '    <bpmn:startEvent id="S"/>',
-  '    <bpmn:userTask id="T1" name="审批" flowable:assignee="${initiator}"/>',
+  `    <bpmn:userTask id="T1" name="审批" flowable:assignee="${DOLLAR}{initiator}"/>`,
   '    <bpmn:endEvent id="E"/>',
   '    <bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T1"/>',
   '    <bpmn:sequenceFlow id="F2" sourceRef="T1" targetRef="E"/>',
@@ -27,7 +28,11 @@ const STUBS = {
   'n-select': { template: '<select class="n-select"></select>' },
   'n-switch': { template: '<input type="checkbox" class="n-switch" />' },
   'n-button': { template: '<button class="n-button"><slot /></button>' },
-  'n-radio': { template: '<input type="radio" class="n-radio"><slot /></input>' },
+  'n-radio': {
+    props: ['checked', 'disabled'],
+    emits: ['click'],
+    template: '<label class="n-radio" @click="$emit(\'click\', $event)"><input type="radio" :checked="checked" :disabled="disabled"><slot /></label>',
+  },
   'n-radio-group': { template: '<div class="n-radio-group"><slot /></div>' },
   'n-space': { template: '<div class="n-space"><slot /></div>' },
   'n-checkbox': { template: '<input type="checkbox" class="n-checkbox" /><slot />' },
@@ -70,7 +75,7 @@ describe('dingFlowDesigner - props.xml 输入加载', () => {
     const json = w.vm.designer.flowJson.value
     expect(json.nodes.map(n => n.id)).toEqual(['S', 'T1', 'E'])
     expect(json.edges).toHaveLength(2)
-    expect(json.nodes.find(n => n.id === 'T1').config.assignee).toBe('${initiator}')
+    expect(json.nodes.find(n => n.id === 'T1').config.assignee).toBe(`${DOLLAR}{initiator}`)
     w.unmount()
   })
 
@@ -80,7 +85,7 @@ describe('dingFlowDesigner - props.xml 输入加载', () => {
     const xml = w.vm.getXML()
     expect(xml).toContain('Process_T1')
     expect(xml).toContain('userTask')
-    expect(xml).toContain('${initiator}')
+    expect(xml).toContain(`${DOLLAR}{initiator}`)
     w.unmount()
   })
 
@@ -123,6 +128,49 @@ describe('dingFlowDesigner - readonly', () => {
     const w = mountDesigner({ xml: SIMPLE_XML, readonly: true })
     await new Promise(r => setTimeout(r, 50))
     expect(w.vm.designer.flowJson.value.nodes.length).toBe(3)
+    w.unmount()
+  })
+})
+
+describe('dingFlowDesigner - 发起节点配置', () => {
+  it('发起人变量固定展示，且不再展示节点表单配置', async () => {
+    const w = mountDesigner()
+    await w.find('[data-node-type="start"]').trigger('click')
+    await w.vm.$nextTick()
+
+    const text = w.text()
+    expect(text).toContain('当前登录用户')
+    expect(text).toContain('initiator')
+    expect(text).toContain('流程表单请在右侧流程信息')
+    expect(text).not.toContain('发起人变量')
+    expect(text).not.toContain('表单 Key')
+    expect(text).not.toContain('表单 URL')
+    w.unmount()
+  })
+})
+
+describe('dingFlowDesigner - 网关分支配置', () => {
+  it('新增条件网关后打开抽屉能看到两条可读分支', async () => {
+    const w = mountDesigner()
+    w.vm.designer.addNode('StartEvent_1', 'condition')
+    await w.vm.$nextTick()
+
+    await w.find('[data-node-type="condition"]').trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.text()).toContain('该网关共 2 条分支')
+    expect(w.text()).toContain('分支 1')
+    expect(w.text()).toContain('下游节点：分支1审批')
+    expect(w.text()).not.toContain('→ Node_')
+    w.unmount()
+  })
+
+  it('网关本身不显示普通添加按钮，分支节点可继续添加', async () => {
+    const w = mountDesigner()
+    w.vm.designer.addNode('StartEvent_1', 'condition')
+    await w.vm.$nextTick()
+
+    expect(w.findAll('.add-node-button-wrap')).toHaveLength(3)
     w.unmount()
   })
 })

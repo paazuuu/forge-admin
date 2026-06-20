@@ -20,6 +20,18 @@ const SAMPLE_LINEAR = [
   '</bpmn:definitions>',
 ].join('\n')
 
+const SAMPLE_LEGACY_START_FORM = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"',
+  '                  xmlns:flowable="http://flowable.org/bpmn">',
+  '  <bpmn:process id="Process_Legacy" isExecutable="true">',
+  '    <bpmn:startEvent id="Start_1" name="发起" flowable:initiator="customInitiator" flowable:formKey="legacyStartForm" flowable:formUrl="/legacy/start"/>',
+  '    <bpmn:endEvent id="End_1" name="结束"/>',
+  '    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="End_1"/>',
+  '  </bpmn:process>',
+  '</bpmn:definitions>',
+].join('\n')
+
 describe('bpmn-to-json - 线性流程', () => {
   it('processId / processName / nodes / edges 正确', () => {
     const json = convertBpmnToJson(SAMPLE_LINEAR)
@@ -44,6 +56,15 @@ describe('bpmn-to-json - 线性流程', () => {
     const start = json.nodes.find(n => n.id === 'Start_1')
     expect(start.config.documentation).toBe('流程开始')
     expect(start.config.initiator).toBe('initiator')
+  })
+
+  it('start 节点忽略旧的自定义 initiator 和表单属性', () => {
+    const json = convertBpmnToJson(SAMPLE_LEGACY_START_FORM)
+    const start = json.nodes.find(n => n.id === 'Start_1')
+    expect(start.config.initiator).toBe('initiator')
+    expect(start.config.formKey).toBeUndefined()
+    expect(start.config.formJson).toBeUndefined()
+    expect(start.config.formUrl).toBeUndefined()
   })
 
   it('serviceTask 提取 implementation / async', () => {

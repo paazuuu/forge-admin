@@ -19,22 +19,22 @@ const props = defineProps({
 defineEmits(['click', 'delete', 'context-menu'])
 
 const META = {
-  condition: { icon: 'i-mdi-source-branch', color: 'warning', label: '条件分支' },
-  parallel: { icon: 'i-mdi-call-split', color: 'success', label: '并行分支' },
-  inclusive: { icon: 'i-mdi-set-merge', color: 'success', label: '包容分支' },
+  condition: { icon: 'i-mdi-source-branch', color: 'primary', label: '条件分支' },
+  parallel: { icon: 'i-mdi-call-split', color: 'info', label: '并行分支' },
+  inclusive: { icon: 'i-mdi-set-merge', color: 'info', label: '包容分支' },
 }
 
 const meta = computed(() => META[props.node?.nodeType] || META.condition)
 
-const summary = computed(() => {
+const subtitle = computed(() => {
   const t = props.node?.nodeType
   const n = props.outgoingCount || 0
   if (t === 'condition')
-    return n > 0 ? `${n} 条分支（按条件路由）` : '点击配置分支条件'
+    return n > 0 ? `${n} 条条件分支` : '点击配置分支条件'
   if (t === 'parallel')
     return n > 0 ? `${n} 条并行分支（同时执行）` : '点击配置并行分支'
   if (t === 'inclusive')
-    return n > 0 ? `${n} 条包容分支（条件 OR）` : '点击配置包容分支'
+    return n > 0 ? `${n} 条包容分支` : '点击配置包容分支'
   return ''
 })
 </script>
@@ -47,15 +47,15 @@ const summary = computed(() => {
     :readonly="readonly"
     :icon="meta.icon"
     :color-var="meta.color"
+    :subtitle="subtitle"
     @click="$emit('click', $event)"
     @delete="$emit('delete', $event)"
     @context-menu="$emit('context-menu', $event)"
   >
     <template #title-extra>
-      <span class="text-xs rounded bg-gray-100 px-1.5 py-0.5 text-gray-500">
+      <span class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
         {{ meta.label }}
       </span>
     </template>
-    {{ summary }}
   </NodeCard>
 </template>

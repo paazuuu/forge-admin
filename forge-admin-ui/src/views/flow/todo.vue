@@ -1,46 +1,23 @@
 <template>
   <div class="flow-page">
-    <!-- 统计卡片 -->
-    <FlowStats
-      :todo-count="todoCount"
-      :done-count="doneCount"
-      :started-count="startedCount"
-      :cc-count="ccCount"
-      :unread-cc="unreadCc"
-      active-tab="todo"
-      @switch="handleSwitch"
-    />
-
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <div class="title-row">
-          <div class="title-icon">
-            <i class="i-material-symbols:pending-actions" />
-          </div>
-          <h2 class="page-title">
-            我的待办
-          </h2>
-        </div>
-        <div class="quick-stats">
-          <span v-if="urgentCount > 0" class="stat-item urgent">
-            <i class="i-material-symbols:warning" />
-            {{ urgentCount }}紧急
-          </span>
-        </div>
-      </div>
-      <div class="header-right">
-        <n-input
-          v-model:value="queryParams.title"
-          placeholder="搜索任务标题"
-          clearable
-          class="search-input"
-          @keydown.enter="handleSearch"
-        >
-          <template #prefix>
-            <i class="i-material-symbols:search" />
-          </template>
-        </n-input>
+    <!-- 任务列表 -->
+    <FlowTaskCardList
+      v-model:selected-keys="selectedTaskKeys"
+      v-model:search-value="queryParams.title"
+      title="待办"
+      :items="dataSource"
+      :loading="loading"
+      :pagination="pagination"
+      row-key="id"
+      search-placeholder="通过名称搜索"
+      empty-text="暂无待办任务"
+      @search="handleSearch"
+      @refresh="loadData"
+      @row-click="openDrawer"
+      @update:page="pagination.onChange"
+      @update:page-size="pagination.onUpdatePageSize"
+    >
+      <template #filters>
         <NTreeSelect
           v-model:value="queryParams.category"
           placeholder="流程分类"
@@ -48,6 +25,7 @@
           class="category-select"
           :options="categoryTreeOptions"
           :default-expand-all="true"
+          @update:value="handleSearch"
         />
         <n-select
           v-model:value="queryParams.status"
@@ -55,133 +33,169 @@
           clearable
           class="category-select"
           :options="statusOptions"
+          @update:value="handleSearch"
         />
-        <NButton type="primary" class="search-btn" @click="handleSearch">
-          <i class="i-material-symbols:search mr-2" />
-          查询
-        </NButton>
-        <NButton class="reset-btn" @click="handleReset">
-          <i class="i-material-symbols:refresh mr-2" />
+        <NButton secondary @click="handleReset">
           重置
         </NButton>
-      </div>
-    </div>
+      </template>
+      <template #batch-actions>
+        <NButton
+          v-if="selectedTaskKeys.length > 0"
+          size="small"
+          type="error"
+          secondary
+          @click="openQuickAction('reject', selectedTaskKeys)"
+        >
+          驳回
+        </NButton>
+        <NButton
+          v-if="selectedTaskKeys.length > 0"
+          size="small"
+          type="primary"
+          @click="openQuickAction('approve', selectedTaskKeys)"
+        >
+          同意
+        </NButton>
+        <span v-if="urgentCount > 0" class="task-list-hint urgent">
+          <i class="i-material-symbols:warning" />
+          {{ urgentCount }} 紧急
+        </span>
+      </template>
+      <template #status="{ row }">
+        <span class="task-status-pill" :class="row.status === 0 ? 'todo-status-pending' : 'todo-status-active'">
+          {{ getLabel('flow_todo_status', row.status) }}
+        </span>
+      </template>
+      <template #title="{ row }">
+        {{ row.title || row.taskName }}
+      </template>
+      <template #meta="{ row }">
+        <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
+        <span><span class="task-meta-label">提交时间</span> <span class="task-meta-value">{{ row.createTime || '-' }}</span></span>
+        <span><span class="task-meta-label">当前节点</span> <span class="task-meta-value">{{ row.taskName || '-' }}</span></span>
+      </template>
+      <template #actions="{ row }">
+        <button v-if="row.status === 0 && !row.assignee" type="button" class="task-row-link-action info" aria-label="签收任务" @click="handleClaim(row)">
+          签收
+        </button>
+        <button type="button" class="task-row-link-action danger" aria-label="驳回任务" @click="openQuickAction('reject', [row])">
+          驳回
+        </button>
+        <button type="button" class="task-row-link-action success" aria-label="同意任务" @click="openQuickAction('approve', [row])">
+          同意
+        </button>
+        <button type="button" class="task-row-link-action primary" aria-label="去审批" @click="openDrawer(row)">
+          <span>审批</span>
+          <i class="i-material-symbols:chevron-right" />
+        </button>
+      </template>
+    </FlowTaskCardList>
 
-    <!-- 任务列表 -->
-    <div class="table-container">
-      <n-data-table
-        :columns="columns"
-        :data="dataSource"
-        :loading="loading"
-        :pagination="pagination"
-        :remote="true"
-        :row-key="row => row.id"
-        :row-props="getRowProps"
-        striped
-      />
-    </div>
-
-    <!-- 审批详情弹窗 -->
     <n-modal
-      v-model:show="showDrawer"
-      :mask-closable="!approveLoading"
+      v-model:show="quickActionVisible"
       preset="card"
-      class="flow-task-detail-modal"
-      :closable="!approveLoading"
+      class="quick-action-modal"
+      :title="quickActionTitle"
       :bordered="false"
       :segmented="{ content: true, footer: true }"
-      content-style="padding: 0; overflow: hidden;"
+      content-style="padding: 18px;"
     >
-      <template #header>
-        <div class="drawer-header">
-          <div class="drawer-title-row">
-            <div class="status-dot" :class="currentTask?.status === 0 ? 'pending' : 'claimed'" />
-            <span class="drawer-title">{{ currentTask?.title || '审批详情' }}</span>
-          </div>
-          <div class="drawer-tags">
-            <span class="status-tag" :class="currentTask?.status === 0 ? 'pending' : 'claimed'">
-              {{ getLabel('flow_todo_status', currentTask?.status) }}
-            </span>
-            <span v-if="currentTask?.priority >= 2" class="priority-tag" :class="getPriorityClass(currentTask?.priority)">
-              {{ getPriorityText(currentTask?.priority) }}
-            </span>
-          </div>
+      <div class="quick-action-body">
+        <div class="quick-action-summary">
+          已选择 <strong>{{ quickActionTargets.length }}</strong> 条待办，提交后会按顺序处理。
+        </div>
+        <n-input
+          v-model:value="quickActionForm.comment"
+          type="textarea"
+          :rows="4"
+          :maxlength="500"
+          show-count
+          :placeholder="quickActionType === 'approve' ? '请输入同意意见' : '请输入驳回原因'"
+        />
+        <div class="quick-action-tip">
+          需要填写动态表单或手写签名的任务会自动跳过，请进入详情处理。
+        </div>
+      </div>
+      <template #footer>
+        <div class="quick-action-footer">
+          <NButton :disabled="quickActionLoading" @click="quickActionVisible = false">
+            取消
+          </NButton>
+          <NButton :type="quickActionType === 'approve' ? 'primary' : 'error'" :loading="quickActionLoading" @click="submitQuickAction">
+            {{ quickActionType === 'approve' ? '同意' : '驳回' }}
+          </NButton>
         </div>
       </template>
+    </n-modal>
 
-      <div v-if="currentTask" class="drawer-body">
-        <!-- 信息 Tabs -->
-        <n-tabs v-model:value="activeDrawerTab" type="line" animated class="drawer-tabs">
-          <n-tab-pane name="info" tab="基本信息">
-            <div class="info-grid">
-              <div class="info-card">
-                <div class="info-header">
-                  <i class="i-material-symbols:info-outline" />
-                  任务信息
-                </div>
-                <div class="info-items">
-                  <div class="info-item">
-                    <span class="info-label">当前节点</span>
-                    <span class="info-value highlight">{{ currentTask.taskName }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">流程分类</span>
-                    <span class="info-value">{{ currentTask.businessType || '-' }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="info-card">
-                <div class="info-header">
-                  <i class="i-material-symbols:person-outline" />
-                  发起信息
-                </div>
-                <div class="info-items">
-                  <div class="info-item user-item">
-                    <span class="info-label">发起人</span>
-                    <div class="user-display">
-                      <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" />
-                      <span class="info-value">{{ currentTask.startUserName || '-' }}</span>
-                    </div>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">发起部门</span>
-                    <span class="info-value">{{ currentTask.startDeptName || '-' }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">发起时间</span>
-                    <span class="info-value">{{ currentTask.createTime || '-' }}</span>
-                  </div>
-                </div>
-              </div>
+    <!-- 审批详情弹窗 -->
+    <FlowTaskDetailShell
+      v-model:show="showDrawer"
+      :busy="approveLoading"
+      :title="currentTask?.title || '审批详情'"
+      :subtitle="currentTask?.taskName ? `当前节点：${currentTask.taskName}` : ''"
+      :status-text="getLabel('flow_todo_status', currentTask?.status)"
+      :status-class="currentTask?.status === 0 ? 'todo-status-pending' : 'todo-status-active'"
+      :status-icon="currentTask?.status === 0 ? 'i-material-symbols:schedule' : 'i-material-symbols:assignment-ind'"
+      :priority-text="currentTask?.priority >= 2 ? getPriorityText(currentTask?.priority) : ''"
+      :priority-class="getPriorityClass(currentTask?.priority)"
+      :records="approvalHistory"
+      record-title="审批记录"
+      fullscreen
+    >
+      <template v-if="currentTask">
+        <section class="approval-detail-section">
+          <div class="approval-section-header">
+            <i class="i-material-symbols:info-outline" />
+            基本信息
+          </div>
+          <div class="approval-field-grid">
+            <div class="approval-field">
+              <span class="approval-label">当前节点</span>
+              <span class="approval-value">{{ currentTask.taskName || '-' }}</span>
             </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="history" display-directive="show">
-            <template #tab>
-              <span>审批进度</span>
-              <span v-if="approvalHistory.length > 0" class="tab-badge">{{ approvalHistory.length }}</span>
-            </template>
-            <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
-            <n-empty v-else description="暂无审批记录" size="small" />
-          </n-tab-pane>
-
-          <n-tab-pane name="diagram" tab="流程图" display-directive="show:lazy">
-            <div class="diagram-pane">
-              <ProcessDiagramViewer
-                v-if="currentTask.processInstanceId"
-                :process-instance-id="currentTask.processInstanceId"
-                :compact="true"
-              />
-              <n-empty v-else description="暂无流程图" size="small" />
+            <div class="approval-field">
+              <span class="approval-label">流程名称</span>
+              <span class="approval-value">{{ getProcessDisplayName(currentTask) }}</span>
             </div>
-          </n-tab-pane>
-        </n-tabs>
+            <div class="approval-field">
+              <span class="approval-label">发起人</span>
+              <span class="approval-value approval-user-inline">
+                <UserAvatar :name="currentTask.startUserName || '未知'" :size="24" />
+                {{ currentTask.startUserName || '-' }}
+              </span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">发起部门</span>
+              <span class="approval-value">{{ currentTask.startDeptName || '-' }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">发起时间</span>
+              <span class="approval-value">{{ currentTask.createTime || '-' }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">任务状态</span>
+              <span class="approval-value">{{ getLabel('flow_todo_status', currentTask.status) || '-' }}</span>
+            </div>
+          </div>
+        </section>
 
-        <!-- 审批操作区 -->
-        <div class="approve-section">
-          <div class="approve-header">
+        <section class="approval-detail-section">
+          <n-collapse arrow-placement="right">
+            <n-collapse-item title="查看流程图" name="diagram">
+              <div class="approval-diagram">
+                <DingFlowViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
+                <n-empty v-else description="暂无流程图" size="small" />
+              </div>
+            </n-collapse-item>
+          </n-collapse>
+        </section>
+
+        <section class="approval-detail-section">
+          <div class="approval-section-header">
             <i class="i-material-symbols:rate-review" />
-            审批操作
+            审批处理
           </div>
 
           <div v-if="formInfoLoading" class="form-loading">
@@ -225,16 +239,8 @@
 
           <template v-else>
             <div v-if="useDynamicForm" class="dynamic-form-section">
-              <div class="dynamic-form-header">
-                <div>
-                  <div class="dynamic-form-title">
-                    节点动态表单
-                  </div>
-                  <div class="dynamic-form-desc">
-                    审批通过时会校验表单，并将填写内容作为流程变量提交
-                  </div>
-                </div>
-                <span class="dynamic-form-key">{{ taskFormInfo.formKey || 'inline' }}</span>
+              <div class="approval-form-title">
+                节点动态表单
               </div>
               <FlowFormCreateRenderer
                 ref="dynamicFormRef"
@@ -322,17 +328,9 @@
               </NButton>
             </div>
           </template>
-        </div>
-      </div>
-
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showDrawer = false">
-            关闭
-          </NButton>
-        </NSpace>
+        </section>
       </template>
-    </n-modal>
+    </FlowTaskDetailShell>
 
     <!-- 转办弹窗 -->
     <n-modal v-model:show="showDelegateModal" preset="card" title="转办任务" style="width: 480px" :mask-closable="false">
@@ -395,15 +393,15 @@
 
 <script setup>
 import { NButton, NSpace, NTreeSelect } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
-import UserSelectModal from '@/components/common/UserSelectModal.vue'
 import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
-import ProcessDiagramViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
-import FlowStats from '@/components/flow/FlowStats.vue'
-import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import UserSelectModal from '@/components/common/UserSelectModal.vue'
+import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
+import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
+import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignaturePad from '@/components/flow/SignaturePad.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
@@ -445,19 +443,13 @@ function buildTreeSelectOptions(treeData) {
   }))
 }
 
-// 统计数据
-const todoCount = ref(0)
-const doneCount = ref(0)
-const startedCount = ref(0)
-const ccCount = ref(0)
-const unreadCc = ref(0)
 const urgentCount = ref(0)
+const selectedTaskKeys = ref([])
 
 // 抽屉状态
 const showDrawer = ref(false)
 const currentTask = ref(null)
 const approvalHistory = ref([])
-const activeDrawerTab = ref('info')
 
 // 业务自定义表单
 const taskFormInfo = ref(null)
@@ -488,6 +480,12 @@ const approveLoading = ref(false)
 const approveForm = reactive({ action: '', comment: '', signature: '' })
 const approveSignatureRef = ref(null)
 const approveSignatureKey = ref(0)
+const quickActionVisible = ref(false)
+const quickActionLoading = ref(false)
+const quickActionType = ref('approve')
+const quickActionTargets = ref([])
+const quickActionForm = reactive({ comment: '' })
+const quickActionTitle = computed(() => quickActionType.value === 'approve' ? '同意审批' : '驳回审批')
 
 // 转办
 const showDelegateModal = ref(false)
@@ -513,69 +511,15 @@ function getPriorityText(p) {
   return getLabel('flow_priority', p) || '普通'
 }
 
-// 表格列
-const columns = [
-  {
-    title: '任务标题',
-    key: 'title',
-    width: 180,
-    ellipsis: { tooltip: true },
-    render: row => h('span', { class: 'task-title-link', onClick: () => openDrawer(row) }, row.title || row.taskName),
-  },
-  { title: '当前节点', key: 'taskName', width: 100, ellipsis: { tooltip: true } },
-  {
-    title: '发起人',
-    key: 'startUserName',
-    width: 100,
-    render: row => h('div', { class: 'table-user' }, [
-      h(UserAvatar, { name: row.startUserName || '未知', size: 24 }),
-      h('span', { class: 'user-name-text' }, row.startUserName || '-'),
-    ]),
-  },
-  { title: '发起部门', key: 'startDeptName', width: 100, ellipsis: { tooltip: true } },
-  {
-    title: '状态',
-    key: 'status',
-    width: 70,
-    render: row => h('span', { class: ['status-tag-mini', row.status === 0 ? 'pending' : 'claimed'] }, getLabel('flow_todo_status', row.status)),
-  },
-  {
-    title: '优先级',
-    key: 'priority',
-    width: 70,
-    render: row => h('span', { class: ['priority-tag-mini', getPriorityClass(row.priority)] }, getPriorityText(row.priority)),
-  },
-  { title: '发起时间', key: 'createTime', width: 150 },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 140,
-    fixed: 'right',
-    render: row => h(NSpace, { size: 4 }, () => [
-      h(NButton, { size: 'small', type: 'primary', onClick: () => openDrawer(row) }, () => '去审批'),
-      row.status === 0 && !row.assignee
-        ? h(NButton, {
-            size: 'small',
-            type: 'info',
-            onClick: (e) => {
-              e.stopPropagation()
-              handleClaim(row)
-            },
-          }, () => '签收')
-        : null,
-    ]),
-  },
-]
+function getProcessDisplayName(task) {
+  return task?.processName || task?.processTitle || task?.modelName || task?.businessType || '-'
+}
 
 function toNumberOptions(options = []) {
   return options.map(item => ({
     ...item,
     value: Number(item.value),
   }))
-}
-
-function getRowProps(row) {
-  return { style: 'cursor:pointer', onClick: () => openDrawer(row) }
 }
 
 async function openDrawer(row) {
@@ -587,7 +531,6 @@ async function openDrawer(row) {
   approvalHistory.value = []
   taskFormInfo.value = null
   dynamicFormData.value = {}
-  activeDrawerTab.value = 'info'
   showDrawer.value = true
 
   const promises = []
@@ -756,6 +699,129 @@ async function submitApprove(action) {
   }
 }
 
+function resolveQuickActionTargets(targets = []) {
+  return targets
+    .map((target) => {
+      if (target && typeof target === 'object')
+        return target
+      return dataSource.value.find(row => String(row.id) === String(target) || String(row.taskId) === String(target))
+    })
+    .filter(Boolean)
+}
+
+function openQuickAction(action, targets) {
+  const resolvedTargets = resolveQuickActionTargets(targets)
+  if (resolvedTargets.length === 0) {
+    window.$message.warning('请选择待办任务')
+    return
+  }
+  quickActionType.value = action
+  quickActionTargets.value = resolvedTargets
+  quickActionForm.comment = action === 'approve' ? '同意' : '驳回'
+  quickActionVisible.value = true
+}
+
+function isCandidateTask(row) {
+  return row?.status === 0 && !row?.assignee
+}
+
+async function claimTaskBeforeQuickAction(row, taskId) {
+  if (!isCandidateTask(row))
+    return
+  const res = await flowApi.claimTask(taskId, userStore.userId)
+  if (res.code !== 200)
+    throw new Error(res.message || '签收失败')
+}
+
+function assertQuickActionAllowed(action, formInfo) {
+  if (action === 'approve' && formInfo?.allowApprove === false)
+    throw new Error('当前节点不允许同意')
+  if (action === 'reject' && formInfo?.allowReject === false)
+    throw new Error('当前节点不允许驳回')
+  if (formInfo?.requireSignature === true)
+    throw new Error('需要手写签名，请进入详情处理')
+  if (action === 'approve' && formInfo?.formType === 'dynamic' && formInfo?.formJson)
+    throw new Error('需要填写节点表单，请进入详情处理')
+  if (action === 'approve' && formInfo?.formType === 'external' && formInfo?.formUrl)
+    throw new Error('需要填写业务表单，请进入详情处理')
+}
+
+async function executeQuickAction(action, row, comment) {
+  const taskId = row.taskId || row.id
+  if (!taskId)
+    throw new Error('缺少任务ID')
+
+  await claimTaskBeforeQuickAction(row, taskId)
+
+  const formRes = await flowApi.getTaskFormInfo(taskId)
+  if (formRes.code !== 200)
+    throw new Error(formRes.message || '审批策略加载失败')
+
+  const formInfo = formRes.data || {}
+  assertQuickActionAllowed(action, formInfo)
+
+  const api = action === 'approve' ? flowApi.approveTask : flowApi.rejectTask
+  const res = await api({
+    taskId,
+    userId: userStore.userId,
+    comment,
+    variables: formInfo.variables || undefined,
+  })
+  if (res.code !== 200)
+    throw new Error(res.message || '操作失败')
+}
+
+async function submitQuickAction() {
+  const comment = quickActionForm.comment.trim()
+  if (!comment) {
+    window.$message.warning(quickActionType.value === 'approve' ? '请输入同意意见' : '请输入驳回原因')
+    return
+  }
+
+  quickActionLoading.value = true
+  const action = quickActionType.value
+  const targets = [...quickActionTargets.value]
+  const errors = []
+  let successCount = 0
+
+  try {
+    for (const row of targets) {
+      try {
+        await executeQuickAction(action, row, comment)
+        successCount += 1
+      }
+      catch (error) {
+        const taskName = row.title || row.taskName || row.taskId || row.id || '未知任务'
+        errors.push(`${taskName}：${error?.message || '操作失败'}`)
+      }
+    }
+
+    if (successCount > 0) {
+      window.$message.success(`${getActionSuccessText(action)} ${successCount} 条`)
+      selectedTaskKeys.value = []
+      quickActionVisible.value = false
+      await loadData()
+    }
+
+    if (errors.length > 0) {
+      const content = errors.slice(0, 6).join('\n')
+      if (window.$dialog?.warning) {
+        window.$dialog.warning({
+          title: successCount > 0 ? '部分任务未处理' : '任务未处理',
+          content,
+          positiveText: '知道了',
+        })
+      }
+      else {
+        window.$message.warning(errors[0])
+      }
+    }
+  }
+  finally {
+    quickActionLoading.value = false
+  }
+}
+
 async function collectDynamicFormVariables(action) {
   if (!useDynamicForm.value || !dynamicFormRef.value)
     return undefined
@@ -849,7 +915,6 @@ async function loadData() {
     if (res.code === 200 && res.data) {
       dataSource.value = res.data.records || []
       pagination.itemCount = res.data.total || 0
-      todoCount.value = res.data.total || 0
       urgentCount.value = dataSource.value.filter(r => r.priority >= 3).length
     }
   }
@@ -912,25 +977,6 @@ function clearRouteTaskId() {
   router.replace({ path: route.path, query })
 }
 
-async function loadStats() {
-  try {
-    const [doneRes, startedRes, ccRes] = await Promise.all([
-      flowApi.getDoneTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getStartedTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getMyCc({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-    ])
-    doneCount.value = doneRes.code === 200 ? doneRes.data?.total || 0 : 0
-    startedCount.value = startedRes.code === 200 ? startedRes.data?.total || 0 : 0
-    ccCount.value = ccRes.code === 200 ? ccRes.data?.total || 0 : 0
-    if (ccRes.code === 200 && ccRes.data?.records) {
-      unreadCc.value = ccRes.data.records.filter(r => r.isRead === 0).length
-    }
-  }
-  catch {
-    console.error('加载统计数据失败')
-  }
-}
-
 async function loadCategories() {
   try {
     const res = await flowApi.getCategoryTreeSelect(false)
@@ -957,15 +1003,8 @@ function handleReset() {
   loadData()
 }
 
-function handleSwitch(tab) {
-  const routes = { todo: '/flow/todo', done: '/flow/done', started: '/flow/started', cc: '/flow/cc' }
-  if (routes[tab])
-    window.$router?.push(routes[tab])
-}
-
 onMounted(async () => {
   loadCategories()
-  loadStats()
   await loadData()
   await openTaskFromRoute()
 })
@@ -986,7 +1025,9 @@ watch(
 }
 
 .flow-page {
-  padding: 20px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px 14px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1068,7 +1109,39 @@ watch(
 }
 
 .category-select {
-  width: 140px;
+  width: 132px;
+}
+
+.quick-action-modal {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.quick-action-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quick-action-summary {
+  color: #334155;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.quick-action-summary strong {
+  color: #0f766e;
+}
+
+.quick-action-tip {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.quick-action-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .search-btn,
@@ -1102,6 +1175,26 @@ watch(
 :deep(.user-name-text) {
   font-weight: 500;
   color: #0f172a;
+}
+
+:deep(.task-status-pill.todo-status-pending) {
+  background: #fff7ed;
+  color: #c2410c;
+  box-shadow: inset 0 0 0 1px #fed7aa;
+}
+
+:deep(.task-status-pill.todo-status-active) {
+  background: #ecfdf5;
+  color: #047857;
+  box-shadow: inset 0 0 0 1px #bbf7d0;
+}
+
+:deep(.approval-status-mark.todo-status-pending) {
+  background: #f97316;
+}
+
+:deep(.approval-status-mark.todo-status-active) {
+  background: #0f766e;
 }
 
 :deep(.status-tag-mini) {

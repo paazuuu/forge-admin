@@ -34,23 +34,123 @@ function handleClick(type) {
 </script>
 
 <template>
-  <div class="add-node-popover w-60">
-    <div v-for="group in groups" :key="group.label" class="mb-2 last:mb-0">
-      <div class="text-xs px-2 py-1 text-gray-500">
+  <div class="add-node-popover">
+    <div v-for="group in groups" :key="group.label" class="add-node-group">
+      <div class="add-node-group-title">
         {{ group.label }}
       </div>
-      <div class="grid grid-cols-2 gap-1">
+      <div class="add-node-menu-grid">
         <button
           v-for="item in group.items"
           :key="item.type"
-          class="text-sm flex items-center gap-2 rounded px-2 py-2 hover:bg-gray-100"
+          class="add-node-menu-item"
           :data-type="item.type"
           @click.stop="handleClick(item.type)"
         >
-          <i :class="[item.icon, item.color]" class="text-base" />
-          <span>{{ item.label }}</span>
+          <span class="add-node-menu-icon">
+            <i :class="[item.icon, item.color]" />
+          </span>
+          <span class="add-node-menu-label">
+            {{ item.label }}
+          </span>
         </button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.add-node-popover {
+  width: 360px;
+  color: #1f2937;
+}
+
+.add-node-group {
+  margin-bottom: 14px;
+}
+
+.add-node-group:last-child {
+  margin-bottom: 0;
+}
+
+.add-node-group-title {
+  padding: 0 2px 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.add-node-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.add-node-menu-item {
+  display: flex;
+  min-width: 0;
+  min-height: 46px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  appearance: none;
+  background: #fff;
+  color: #1f2937;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.add-node-menu-item:hover {
+  border-color: rgba(22, 93, 255, 0.12);
+  background: #f7faff;
+}
+
+.add-node-menu-item:focus-visible {
+  outline: 2px solid rgba(22, 93, 255, 0.24);
+  outline-offset: 2px;
+}
+
+.add-node-menu-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: #f2f5f8;
+}
+
+.add-node-menu-icon :deep(i) {
+  width: 15px;
+  height: 15px;
+  font-size: 15px;
+}
+
+.add-node-menu-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .add-node-menu-item {
+    transition: none;
+  }
+}
+</style>

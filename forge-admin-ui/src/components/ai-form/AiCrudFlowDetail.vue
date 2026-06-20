@@ -19,7 +19,7 @@
             <n-empty v-else description="暂无审批记录" size="small" />
           </n-tab-pane>
           <n-tab-pane name="diagram" tab="流程图" display-directive="show:lazy">
-            <ProcessDiagramViewer :process-instance-id="processInstanceId" :compact="true" />
+            <DingFlowViewer :process-instance-id="processInstanceId" :compact="true" />
           </n-tab-pane>
         </n-tabs>
 
@@ -31,7 +31,7 @@
           </section>
           <section v-if="showDiagram" class="flow-section">
             <h4>流程图</h4>
-            <ProcessDiagramViewer :process-instance-id="processInstanceId" :compact="true" />
+            <DingFlowViewer :process-instance-id="processInstanceId" :compact="true" />
           </section>
         </template>
       </div>
@@ -43,7 +43,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import flowApi from '@/api/flow'
-import ProcessDiagramViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
+import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
 import FlowTimeline from '@/components/flow/FlowTimeline.vue'
 
 const props = defineProps({

@@ -20,12 +20,12 @@
 import { calculateLayout as baseLayout } from '../converter/layout-algorithm.js'
 
 const DEFAULT_OPTS = {
-  NODE_WIDTH: 220,
-  NODE_HEIGHT: 80,
-  V_GAP: 50,
-  H_GAP: 40,
-  MARGIN_TOP: 40,
-  MARGIN_LEFT: 200,
+  NODE_WIDTH: 300,
+  NODE_HEIGHT: 104,
+  V_GAP: 66,
+  H_GAP: 80,
+  MARGIN_TOP: 56,
+  MARGIN_LEFT: 240,
 }
 
 export function layoutFlow(flowJson, opts = {}) {

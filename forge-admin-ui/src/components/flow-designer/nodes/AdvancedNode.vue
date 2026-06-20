@@ -15,7 +15,7 @@ const props = defineProps({
 })
 defineEmits(['click', 'delete', 'context-menu'])
 
-const summary = computed(() => {
+const subtitle = computed(() => {
   const t = props.node?.bpmnElementType || 'bpmn:Activity'
   return `${t}（仅查看 XML）`
 })
@@ -24,14 +24,13 @@ const summary = computed(() => {
 <template>
   <NodeCard
     :node="node" :selected="selected" :status="status" :readonly="readonly"
-    icon="i-mdi-shield-alert-outline" color-var="warning"
+    icon="i-mdi-shield-alert-outline" color-var="warning" :subtitle="subtitle"
     @click="$emit('click', $event)" @delete="$emit('delete', $event)" @context-menu="$emit('context-menu', $event)"
   >
     <template #title-extra>
-      <span class="text-xs rounded bg-warning/10 px-1.5 py-0.5 text-warning">
+      <span class="shrink-0 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-600">
         高级
       </span>
     </template>
-    {{ summary }}
   </NodeCard>
 </template>

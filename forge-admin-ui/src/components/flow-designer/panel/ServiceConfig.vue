@@ -29,17 +29,17 @@ const async = field('async', false)
 
 <template>
   <div class="space-y-3">
-    <n-form-item label="实现类型" label-placement="left">
+    <n-form-item label="实现类型" label-placement="top" :show-feedback="false">
       <n-select v-model:value="implementationType" :options="TYPE_OPTIONS" :disabled="readonly" />
     </n-form-item>
-    <n-form-item label="实现值" label-placement="left">
+    <n-form-item label="实现值" label-placement="top" :show-feedback="false">
       <n-input
         v-model:value="implementation"
         :disabled="readonly"
         :placeholder="implementationType === 'class' ? 'com.example.MyDelegate' : '${myExpression}'"
       />
     </n-form-item>
-    <n-form-item label="异步执行" label-placement="left">
+    <n-form-item label="异步执行" label-placement="top" :show-feedback="false">
       <n-switch v-model:value="async" :disabled="readonly" />
     </n-form-item>
   </div>

@@ -2,7 +2,7 @@
 /**
  * BasicConfig — 节点基础属性（id 只读 / name / documentation）
  *
- * 与 NodePropertiesPanel.vue:109-128 字段对齐：节点ID（只读）/ 节点名称 / 节点描述
+ * 与 NodePropertiesPanel.vue:109-128 字段对齐：节点名称 / 节点描述
  * 通过 v-model:node 双向绑定到 NodeConfigDrawer 的 draftNode。
  */
 import { computed } from 'vue'
@@ -33,14 +33,11 @@ const documentation = computed({
 </script>
 
 <template>
-  <div class="basic-config space-y-3">
-    <n-form-item label="节点 ID" label-placement="left">
-      <n-input :value="node.id" readonly />
-    </n-form-item>
-    <n-form-item label="节点名称" label-placement="left">
+  <div class="basic-config">
+    <n-form-item label="节点名称" label-placement="top" required :show-feedback="false">
       <n-input v-model:value="name" :disabled="readonly" placeholder="请输入节点名称" />
     </n-form-item>
-    <n-form-item label="节点描述" label-placement="left">
+    <n-form-item label="节点描述" label-placement="top" :show-feedback="false">
       <n-input
         v-model:value="documentation"
         type="textarea"

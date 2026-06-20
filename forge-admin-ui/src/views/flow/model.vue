@@ -23,10 +23,6 @@
         </div>
       </div>
       <div class="header-right">
-        <n-button type="primary" @click="handleAdd">
-          <i class="i-material-symbols:add mr-2" />
-          新增模型
-        </n-button>
         <n-input
           v-model:value="queryParams.modelName"
           placeholder="搜索模型名称或 Key"
@@ -53,14 +49,20 @@
           class="status-select"
           :options="statusOptions"
         />
-        <n-button @click="handleSearch">
-          <i class="i-material-symbols:search mr-2" />
-          搜索
-        </n-button>
-        <n-button @click="handleReset">
-          <i class="i-material-symbols:refresh mr-2" />
-          重置
-        </n-button>
+        <div class="toolbar-actions">
+          <button type="button" class="model-toolbar-button query" @click="handleSearch">
+            <i class="i-material-symbols:search" />
+            查询
+          </button>
+          <button type="button" class="model-toolbar-button subtle" @click="handleReset">
+            <i class="i-material-symbols:restart-alt" />
+            清空
+          </button>
+          <button type="button" class="model-create-button" @click="handleAdd">
+            <i class="i-material-symbols:add" />
+            新增模型
+          </button>
+        </div>
       </div>
     </div>
 
@@ -104,40 +106,40 @@
               </div>
             </div>
             <div class="card-actions">
-              <n-button
-                size="small"
-                type="primary"
-                secondary
+              <button
+                type="button"
+                class="model-card-action primary"
                 @click.stop="handleDesign(item)"
               >
-                <i class="i-material-symbols:edit-outline mr-1" />
+                <i class="i-material-symbols:edit-outline" />
                 设计
-              </n-button>
-              <n-button
+              </button>
+              <button
                 v-if="item.status === 0"
-                size="small"
-                type="primary"
+                type="button"
+                class="model-card-action success"
                 @click.stop="handleDeploy(item)"
               >
+                <i class="i-material-symbols:rocket-launch-outline" />
                 部署
-              </n-button>
-              <n-button
+              </button>
+              <button
                 v-if="item.status === 1"
-                size="small"
+                type="button"
+                class="model-card-action neutral"
                 @click.stop="handleViewInstances(item)"
               >
-                查看实例
-              </n-button>
+                <i class="i-material-symbols:list-alt-outline" />
+                实例
+              </button>
               <n-dropdown
                 trigger="click"
                 :options="getActionOptions(item)"
                 @select="key => handleActionSelect(key, item)"
               >
-                <n-button size="small" @click.stop>
-                  <template #icon>
-                    <NIcon><EllipsisVertical /></NIcon>
-                  </template>
-                </n-button>
+                <button type="button" class="model-card-more" aria-label="更多操作" @click.stop>
+                  <i class="i-material-symbols:more-vert" />
+                </button>
               </n-dropdown>
             </div>
           </div>
@@ -151,10 +153,10 @@
         class="empty-state"
       >
         <template #extra>
-          <n-button type="primary" @click="handleAdd">
-            <i class="i-material-symbols:add mr-2" />
+          <button type="button" class="model-create-button" @click="handleAdd">
+            <i class="i-material-symbols:add" />
             新增模型
-          </n-button>
+          </button>
         </template>
       </n-empty>
     </n-spin>
@@ -362,7 +364,7 @@
 </template>
 
 <script setup>
-import { CopyOutline, CreateOutline, EllipsisVertical, PauseCircleOutline, PlayCircleOutline, TimeOutline, TrashOutline } from '@vicons/ionicons5'
+import { CopyOutline, CreateOutline, PauseCircleOutline, PlayCircleOutline, TimeOutline, TrashOutline } from '@vicons/ionicons5'
 import { NIcon, NTreeSelect } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -911,6 +913,92 @@ onMounted(() => {
   max-width: 100%;
 }
 
+.toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.model-toolbar-button,
+.model-create-button,
+.model-card-action,
+.model-card-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.model-toolbar-button:focus-visible,
+.model-create-button:focus-visible,
+.model-card-action:focus-visible,
+.model-card-more:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.model-toolbar-button {
+  height: 34px;
+  gap: 5px;
+  padding: 0 11px;
+  border-color: #dbe3ee;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.model-toolbar-button:hover {
+  border-color: #b9c5d4;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.model-toolbar-button.query {
+  border-color: #c9d3e3;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+.model-toolbar-button.subtle {
+  color: #64748b;
+}
+
+.model-create-button {
+  height: 34px;
+  gap: 5px;
+  padding: 0 12px;
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.model-create-button:hover {
+  border-color: #1e293b;
+  background: #1e293b;
+}
+
+.model-toolbar-button i,
+.model-create-button i {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .model-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1110,15 +1198,61 @@ onMounted(() => {
 .card-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   flex-shrink: 0;
 }
 
-.card-actions .n-button {
-  font-size: 12px;
-  padding: 0 10px;
+.model-card-action {
   height: 28px;
+  gap: 4px;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.model-card-action:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.model-card-action.primary {
+  color: #1d4ed8;
+}
+
+.model-card-action.primary:hover {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.model-card-action.success {
+  color: #047857;
+}
+
+.model-card-action.success:hover {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.model-card-action.neutral {
+  color: #475569;
+}
+
+.model-card-action i,
+.model-card-more i {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.model-card-more {
+  width: 28px;
+  height: 28px;
+  color: #64748b;
+}
+
+.model-card-more:hover {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .empty-state {
@@ -1308,12 +1442,17 @@ onMounted(() => {
     align-items: stretch;
   }
 
-  .header-right > :deep(.n-button),
   .search-input,
   .category-select,
   .status-select {
     width: 100%;
     min-width: 0;
+  }
+
+  .toolbar-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    width: 100%;
   }
 
   .model-grid {
@@ -1337,14 +1476,23 @@ onMounted(() => {
     flex-wrap: wrap;
   }
 
-  .card-actions .n-button {
-    padding: 0 8px;
+  .model-card-action {
+    padding: 0 6px;
   }
 }
 
 @media (max-width: 480px) {
   .header-right {
     grid-template-columns: 1fr;
+  }
+
+  .toolbar-actions {
+    justify-content: stretch;
+  }
+
+  .model-toolbar-button,
+  .model-create-button {
+    flex: 1;
   }
 }
 </style>

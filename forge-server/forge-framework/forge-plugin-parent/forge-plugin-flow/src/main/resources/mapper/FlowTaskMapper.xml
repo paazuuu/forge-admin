@@ -2,9 +2,17 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowTaskMapper">
 
+    <!-- 根据任务ID查询任务（带流程名称） -->
+    <select id="selectByTaskId" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
+        SELECT t.*, m.model_name AS process_name
+        FROM sys_flow_task t
+        LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        WHERE t.task_id = #{taskId}
+    </select>
+
     <!-- 待办任务列表（带分类关联查询） -->
     <select id="selectTodoTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*
+        SELECT t.*, m.model_name AS process_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
         <where>
@@ -31,7 +39,7 @@
 
     <!-- 已办任务列表（带分类关联查询） -->
     <select id="selectDoneTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*
+        SELECT t.*, m.model_name AS process_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
         <where>
@@ -52,7 +60,7 @@
 
     <!-- 我发起的任务列表（带分类关联查询） -->
     <select id="selectStartedTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*
+        SELECT t.*, m.model_name AS process_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
         <where>

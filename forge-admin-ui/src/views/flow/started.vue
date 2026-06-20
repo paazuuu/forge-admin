@@ -1,164 +1,142 @@
 <template>
   <div class="flow-page">
-    <!-- 统计卡片 -->
-    <FlowStats
-      :todo-count="todoCount"
-      :done-count="doneCount"
-      :started-count="startedCount"
-      :cc-count="ccCount"
-      :unread-cc="unreadCc"
-      active-tab="started"
-      @switch="handleSwitch"
-    />
-
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <div class="title-row">
-          <div class="title-icon started">
-            <i class="i-material-symbols:send" />
-          </div>
-          <h2 class="page-title">
-            我发起的
-          </h2>
-        </div>
-        <div class="quick-stats">
-          <span v-if="pendingCount > 0" class="stat-item pending">
-            <i class="i-material-symbols:schedule" />
-            {{ pendingCount }}审批中
-          </span>
-        </div>
-      </div>
-      <div class="header-right">
-        <n-input v-model:value="queryParams.title" placeholder="搜索流程标题" clearable class="search-input" @keydown.enter="handleSearch">
-          <template #prefix>
-            <i class="i-material-symbols:search" />
-          </template>
-        </n-input>
-        <NTreeSelect v-model:value="queryParams.category" placeholder="流程分类" clearable class="category-select" :options="categoryTreeOptions" :default-expand-all="true" />
-        <n-select v-model:value="queryParams.status" placeholder="流程状态" clearable class="category-select" :options="statusOptions" />
-        <NButton type="primary" class="search-btn" @click="handleSearch">
-          <i class="i-material-symbols:search mr-2" />查询
-        </NButton>
-        <NButton class="reset-btn" @click="handleReset">
-          <i class="i-material-symbols:refresh mr-2" />重置
-        </NButton>
-      </div>
-    </div>
-
     <!-- 任务列表 -->
-    <div class="table-container">
-      <n-data-table :columns="columns" :data="dataSource" :loading="loading" :pagination="pagination" :remote="true" :row-key="row => row.id" :row-props="getRowProps" striped />
-    </div>
+    <FlowTaskCardList
+      v-model:search-value="queryParams.title"
+      title="我发起的"
+      :items="dataSource"
+      :loading="loading"
+      :pagination="pagination"
+      :selectable="false"
+      row-key="id"
+      search-placeholder="通过名称搜索"
+      empty-text="暂无发起的流程"
+      @search="handleSearch"
+      @refresh="loadData"
+      @row-click="openDrawer"
+      @update:page="pagination.onChange"
+      @update:page-size="pagination.onUpdatePageSize"
+    >
+      <template #filters>
+        <NTreeSelect v-model:value="queryParams.category" placeholder="流程分类" clearable class="category-select" :options="categoryTreeOptions" :default-expand-all="true" @update:value="handleSearch" />
+        <n-select v-model:value="queryParams.status" placeholder="流程状态" clearable class="category-select" :options="statusOptions" @update:value="handleSearch" />
+        <NButton secondary @click="handleReset">
+          重置
+        </NButton>
+      </template>
+      <template #batch-actions>
+        <span v-if="pendingCount > 0" class="task-list-hint pending">
+          <i class="i-material-symbols:schedule" />
+          {{ pendingCount }} 审批中
+        </span>
+      </template>
+      <template #status="{ row }">
+        <span class="task-status-pill" :class="getStatusTagClass(row.status)">
+          {{ getStatusText(row.status) }}
+        </span>
+      </template>
+      <template #title="{ row }">
+        {{ row.title || row.taskName }}
+      </template>
+      <template #meta="{ row }">
+        <span><span class="task-meta-label">当前任务</span> <span class="task-meta-value">{{ row.taskName || '已结束' }}</span></span>
+        <span><span class="task-meta-label">处理人</span> <span class="task-meta-value">{{ row.assigneeName || '-' }}</span></span>
+        <span><span class="task-meta-label">发起时间</span> <span class="task-meta-value">{{ row.createTime || '-' }}</span></span>
+      </template>
+      <template #actions="{ row }">
+        <button type="button" class="task-row-link-action" aria-label="查看进度" @click="openDrawer(row)">
+          <span>进度</span>
+          <i class="i-material-symbols:chevron-right" />
+        </button>
+      </template>
+    </FlowTaskCardList>
 
     <!-- 流程进度弹窗 -->
-    <n-modal
+    <FlowTaskDetailShell
       v-model:show="showDrawer"
-      preset="card"
-      class="flow-task-detail-modal"
-      closable
-      :bordered="false"
-      :segmented="{ content: true, footer: true }"
-      content-style="padding: 0; overflow: hidden;"
+      :busy="withdrawLoading"
+      :title="currentTask?.title || '流程详情'"
+      :subtitle="currentTask?.taskName ? `当前任务：${currentTask.taskName}` : '流程已结束'"
+      :status-text="getStatusText(currentTask?.status)"
+      :status-class="getStatusTagClass(currentTask?.status)"
+      :status-icon="getStatusIcon(currentTask?.status)"
+      :records="approvalHistory"
+      record-title="审批记录"
+      fullscreen
     >
-      <template #header>
-        <div class="drawer-header">
-          <div class="drawer-title-row">
-            <div class="status-dot" :class="getStatusDotClass(currentTask?.status)" />
-            <span class="drawer-title">{{ currentTask?.title || '流程详情' }}</span>
+      <template v-if="currentTask">
+        <section class="approval-detail-section">
+          <div class="approval-section-header">
+            <i class="i-material-symbols:info-outline" />
+            基本信息
           </div>
-          <span class="status-tag" :class="getStatusTagClass(currentTask?.status)">{{ getStatusText(currentTask?.status) }}</span>
-        </div>
-      </template>
+          <div class="approval-field-grid">
+            <div class="approval-field">
+              <span class="approval-label">当前任务</span>
+              <span class="approval-value">{{ currentTask.taskName || '已结束' }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">流程状态</span>
+              <span class="approval-value">{{ getStatusText(currentTask.status) }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">当前处理人</span>
+              <span class="approval-value approval-user-inline">
+                <UserAvatar v-if="currentTask.assigneeName" :name="currentTask.assigneeName" :size="24" />
+                {{ currentTask.assigneeName || '-' }}
+              </span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">发起时间</span>
+              <span class="approval-value">{{ currentTask.createTime || '-' }}</span>
+            </div>
+          </div>
+        </section>
 
-      <div v-if="currentTask" class="drawer-body">
-        <div class="info-grid">
-          <div class="info-card">
-            <div class="info-header">
-              <i class="i-material-symbols:info-outline" />流程信息
-            </div>
-            <div class="info-items">
-              <div class="info-item">
-                <span class="info-label">当前任务</span><span class="info-value highlight">{{ currentTask.taskName || '已结束' }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">流程状态</span><span class="status-tag-mini" :class="getStatusTagClass(currentTask.status)">{{ getStatusText(currentTask.status) }}</span>
-              </div>
-            </div>
-          </div>
-          <div class="info-card">
-            <div class="info-header">
-              <i class="i-material-symbols:person-outline" />处理信息
-            </div>
-            <div class="info-items">
-              <div class="info-item user-item">
-                <span class="info-label">当前处理人</span><div class="user-display">
-                  <UserAvatar v-if="currentTask.assigneeName" :name="currentTask.assigneeName" :size="24" /><span class="info-value">{{ currentTask.assigneeName || '-' }}</span>
-                </div>
-              </div>
-              <div class="info-item">
-                <span class="info-label">发起时间</span><span class="info-value">{{ currentTask.createTime || '-' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-header">
-            <i class="i-material-symbols:account-tree" />流程进度
-          </div>
-          <n-collapse>
+        <section class="approval-detail-section">
+          <n-collapse arrow-placement="right">
             <n-collapse-item title="查看流程图" name="diagram">
-              <ProcessDiagramViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
-              <n-empty v-else description="暂无流程图" size="small" />
+              <div class="approval-diagram">
+                <DingFlowViewer v-if="currentTask.processInstanceId" :process-instance-id="currentTask.processInstanceId" :compact="true" />
+                <n-empty v-else description="暂无流程图" size="small" />
+              </div>
             </n-collapse-item>
           </n-collapse>
-        </div>
+        </section>
 
-        <div class="section">
-          <div class="section-header">
-            <i class="i-material-symbols:history" />审批进度
+        <section v-if="canWithdraw" class="approval-detail-section">
+          <div class="approval-warning-section">
+            <div class="approval-section-header">
+              <i class="i-material-symbols:undo" />
+              撤回申请
+            </div>
+            <n-input v-model:value="withdrawComment" type="textarea" :rows="3" placeholder="请输入撤回原因（可选）" :maxlength="200" show-count />
+            <div class="approval-action-buttons">
+              <n-popconfirm @positive-click="submitWithdraw">
+                <template #trigger>
+                  <NButton type="warning" :loading="withdrawLoading">
+                    <i class="i-material-symbols:undo mr-2" />
+                    撤回流程
+                  </NButton>
+                </template>
+                确认撤回该流程申请？
+              </n-popconfirm>
+            </div>
           </div>
-          <FlowTimeline v-if="approvalHistory.length > 0" :items="approvalHistory" />
-          <n-empty v-else description="暂无审批记录" size="small" />
-        </div>
-
-        <!-- 撤回操作 -->
-        <div v-if="canWithdraw" class="withdraw-section">
-          <div class="section-header">
-            <i class="i-material-symbols:undo" />撤回申请
-          </div>
-          <n-input v-model:value="withdrawComment" type="textarea" :rows="2" placeholder="请输入撤回原因（可选）" :maxlength="200" show-count />
-          <n-popconfirm @positive-click="submitWithdraw">
-            <template #trigger>
-              <NButton type="warning" :loading="withdrawLoading" style="margin-top: 12px">
-                <i class="i-material-symbols:undo mr-2" />撤回流程
-              </NButton>
-            </template>
-            确认撤回该流程申请？
-          </n-popconfirm>
-        </div>
-      </div>
-
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showDrawer = false">
-            关闭
-          </NButton>
-        </NSpace>
+        </section>
       </template>
-    </n-modal>
+    </FlowTaskDetailShell>
   </div>
 </template>
 
 <script setup>
-import { NButton, NSpace, NTreeSelect } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { NButton, NTreeSelect } from 'naive-ui'
+import { computed, onMounted, reactive, ref } from 'vue'
 import flowApi from '@/api/flow'
 import UserAvatar from '@/components/common/UserAvatar.vue'
-import ProcessDiagramViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
-import FlowStats from '@/components/flow/FlowStats.vue'
-import FlowTimeline from '@/components/flow/FlowTimeline.vue'
+import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
+import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
+import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
@@ -196,11 +174,6 @@ function buildTreeSelectOptions(treeData) {
   }))
 }
 
-const todoCount = ref(0)
-const doneCount = ref(0)
-const startedCount = ref(0)
-const ccCount = ref(0)
-const unreadCc = ref(0)
 const pendingCount = ref(0)
 
 const showDrawer = ref(false)
@@ -213,72 +186,33 @@ const canWithdraw = computed(() => currentTask.value && [0, 1].includes(currentT
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_started_status).filter(item => [0, 1, 2, 3, 6].includes(item.value)))
 
-function getStatusDotClass(status) {
+function getStatusTagClass(status) {
   const cls = { 0: 'warning', 1: 'info', 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default' }
   return cls[status] || 'default'
 }
 
-function getStatusTagClass(status) {
-  const cls = { 0: 'warning', 1: 'info', 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default' }
-  return cls[status] || 'default'
+function getStatusIcon(status) {
+  const icons = {
+    0: 'i-material-symbols:schedule',
+    1: 'i-material-symbols:pending-actions',
+    2: 'i-material-symbols:check-circle',
+    3: 'i-material-symbols:cancel',
+    4: 'i-material-symbols:keyboard-return',
+    5: 'i-material-symbols:person-add',
+    6: 'i-material-symbols:task-alt',
+  }
+  return icons[status] || 'i-material-symbols:send'
 }
 
 function getStatusText(status) {
   return getLabel('flow_started_status', status) || '未知'
 }
 
-const columns = [
-  {
-    title: '流程标题',
-    key: 'title',
-    width: 180,
-    ellipsis: { tooltip: true },
-    render: row => h('span', { class: 'task-title-link', onClick: () => openDrawer(row) }, row.title || row.taskName),
-  },
-  { title: '当前任务', key: 'taskName', width: 100, ellipsis: { tooltip: true } },
-  {
-    title: '处理人',
-    key: 'assigneeName',
-    width: 100,
-    render: row => row.assigneeName
-      ? h('div', { class: 'table-user' }, [
-          h(UserAvatar, { name: row.assigneeName, size: 24 }),
-          h('span', { class: 'user-name-text' }, row.assigneeName),
-        ])
-      : '-',
-  },
-  {
-    title: '状态',
-    key: 'status',
-    width: 80,
-    render: row => h('span', { class: ['status-tag-mini', getStatusTagClass(row.status)] }, getStatusText(row.status)),
-  },
-  { title: '发起时间', key: 'createTime', width: 150 },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 110,
-    fixed: 'right',
-    render: row => h(NButton, {
-      size: 'small',
-      type: 'primary',
-      onClick: (e) => {
-        e.stopPropagation()
-        openDrawer(row)
-      },
-    }, () => '查看进度'),
-  },
-]
-
 function toNumberOptions(options = []) {
   return options.map(item => ({
     ...item,
     value: Number(item.value),
   }))
-}
-
-function getRowProps(row) {
-  return { style: 'cursor:pointer', onClick: () => openDrawer(row) }
 }
 
 async function openDrawer(row) {
@@ -331,7 +265,6 @@ async function loadData() {
     if (res.code === 200 && res.data) {
       dataSource.value = res.data.records || []
       pagination.itemCount = res.data.total || 0
-      startedCount.value = res.data.total || 0
       pendingCount.value = dataSource.value.filter(r => [0, 1].includes(r.status)).length
     }
   }
@@ -340,24 +273,6 @@ async function loadData() {
   }
   finally {
     loading.value = false
-  }
-}
-
-async function loadStats() {
-  try {
-    const [todoRes, doneRes, ccRes] = await Promise.all([
-      flowApi.getTodoTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getDoneTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-      flowApi.getMyCc({ pageNum: 1, pageSize: 1, userId: userStore.userId }),
-    ])
-    todoCount.value = todoRes.code === 200 ? todoRes.data?.total || 0 : 0
-    doneCount.value = doneRes.code === 200 ? doneRes.data?.total || 0 : 0
-    ccCount.value = ccRes.code === 200 ? ccRes.data?.total || 0 : 0
-    if (ccRes.code === 200 && ccRes.data?.records)
-      unreadCc.value = ccRes.data.records.filter(r => r.isRead === 0).length
-  }
-  catch {
-    console.error('加载统计数据失败')
   }
 }
 
@@ -386,15 +301,8 @@ function handleReset() {
   pagination.page = 1
   loadData()
 }
-function handleSwitch(tab) {
-  const routes = { todo: '/flow/todo', done: '/flow/done', started: '/flow/started', cc: '/flow/cc' }
-  if (routes[tab])
-    window.$router?.push(routes[tab])
-}
-
 onMounted(() => {
   loadCategories()
-  loadStats()
   loadData()
 })
 </script>
@@ -406,7 +314,9 @@ onMounted(() => {
 }
 
 .flow-page {
-  padding: 20px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px 14px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -477,7 +387,7 @@ onMounted(() => {
   width: 220px;
 }
 .category-select {
-  width: 140px;
+  width: 132px;
 }
 .table-container {
   background: #fff;

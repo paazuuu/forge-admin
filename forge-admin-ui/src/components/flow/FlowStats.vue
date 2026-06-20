@@ -9,7 +9,7 @@
           <span class="stat-label">待办任务</span>
           <span class="stat-value">{{ todoCount }}</span>
         </div>
-        <div v-if="todoCount > 0" class="stat-badge pulse">
+        <div v-if="todoCount > 0" class="stat-badge">
           {{ todoCount > 99 ? '99+' : todoCount }}
         </div>
       </div>
@@ -65,111 +65,107 @@ defineEmits(['switch'])
 
 <style scoped>
 .flow-stats {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #dce8e8;
+  background: #fff;
 }
 
 .stats-row {
   display: flex;
-  gap: 12px;
+  gap: 2px;
   flex-wrap: wrap;
 }
 
 .stat-card {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: #fff;
-  border-radius: 10px;
-  padding: 12px 16px;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 18px 12px;
+  border: 0;
+  background: transparent;
+  color: #4b5563;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid #e2e8f0;
-  flex: 1;
-  min-width: 140px;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  color: #0f766e;
+  background: #f6fbfb;
 }
 
 .stat-card.active {
-  border-color: #0369a1;
-  box-shadow: 0 2px 8px rgba(3, 105, 161, 0.15);
+  color: #0f766e;
+  background: transparent;
+}
+
+.stat-card.active::after {
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: #2e9998;
+  content: '';
 }
 
 .stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-}
-
-.stat-icon.todo {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: #fff;
-}
-
-.stat-icon.done {
-  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
-  color: #fff;
-}
-
-.stat-icon.started {
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-  color: #fff;
-}
-
-.stat-icon.cc {
-  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-  color: #fff;
+  color: currentcolor;
+  font-size: 18px;
 }
 
 .stat-content {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .stat-label {
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 500;
+  color: currentcolor;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .stat-value {
-  font-size: 20px;
+  color: #111827;
+  font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
 }
 
 .stat-badge {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: #fff;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 12px;
+  padding: 1px 7px;
+  border: 1px solid #f3b6b6;
+  border-radius: 999px;
+  background: #fff7f7;
+  color: #c24141;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.stat-badge.pulse {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
+@media (max-width: 720px) {
+  .flow-stats {
+    overflow-x: auto;
   }
-  50% {
-    opacity: 0.7;
+
+  .stats-row {
+    width: max-content;
+    flex-wrap: nowrap;
+  }
+
+  .stat-card {
+    padding-right: 14px;
+    padding-left: 14px;
   }
 }
 </style>

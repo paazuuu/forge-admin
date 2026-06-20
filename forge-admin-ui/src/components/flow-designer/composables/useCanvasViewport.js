@@ -84,15 +84,15 @@ export function useCanvasViewport(options = {}) {
     translateY.value = opts.initialY
   }
 
-  function fitToScreen(contentW, contentH, viewportW, viewportH, padding = 40) {
+  function fitToScreen(contentW, contentH, viewportW, viewportH, padding = 40, minX = 0, minY = 0) {
     if (!contentW || !contentH || !viewportW || !viewportH)
       return
     const availW = Math.max(viewportW - padding * 2, 1)
     const availH = Math.max(viewportH - padding * 2, 1)
     const ns = clamp(Math.min(availW / contentW, availH / contentH, 1))
     scale.value = ns
-    translateX.value = (viewportW - contentW * ns) / 2
-    translateY.value = (viewportH - contentH * ns) / 2
+    translateX.value = (viewportW - contentW * ns) / 2 - (Number(minX) || 0) * ns
+    translateY.value = (viewportH - contentH * ns) / 2 - (Number(minY) || 0) * ns
   }
 
   function screenToCanvas(x, y) {

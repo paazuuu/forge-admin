@@ -258,6 +258,27 @@ Vite dev server 的 `node_modules/.vite` 预构建缓存与浏览器中已加载
 **问题描述**:
 布局设置为“顶部菜单”时点击“流程管理”，会从目录路径 `/flow` 落到无匹配路由，再进入报表 SSO 桥，最终打开 `/report/design`。
 
+---
+
+## 9. 移除前端依赖后必须同步清理 Vite optimizeDeps
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+流程设计器从 `bpmn-js` 迁移到自研 DingFlow 组件后，`package.json` 已移除 `bpmn-js`、`dagre`、`diagram-js`、`inherits-browser`、`tiny-svg` 等依赖，但 `forge-admin-ui/vite.config.js` 的 `optimizeDeps.include` 仍保留这些包。`pnpm build` 可以成功，但 `pnpm dev` 会在预构建阶段报错：
+
+```text
+Failed to resolve dependency: bpmn-js/lib/Modeler, present in client 'optimizeDeps.include'
+Failed to resolve dependency: dagre, present in client 'optimizeDeps.include'
+```
+
+**解决方案**:
+删除依赖时必须同时全局搜索 `vite.config.js` / `optimizeDeps.include` / `pnpm-lock.yaml` 中的残留引用。尤其是 Vite dev server 失败而 build 正常时，优先检查 `optimizeDeps.include` 是否还包含已移除依赖。
+
+**影响范围**:
+- 前端依赖清理、组件替换、移除大型运行时依赖后的本地开发启动。
+- 流程设计器、低代码设计器等历史上加入过 `optimizeDeps.include` 的重依赖模块。
+
 **根本原因**:
 目录型菜单本身只是分组，不一定存在可渲染页面；如果直接用目录 path 跳转，会触发无匹配路由兜底逻辑。
 

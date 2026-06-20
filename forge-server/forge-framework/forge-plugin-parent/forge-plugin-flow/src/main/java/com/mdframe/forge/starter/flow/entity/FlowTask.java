@@ -66,6 +66,12 @@ public class FlowTask {
     private String businessType;
 
     /**
+     * 流程名称（来自流程模型，仅用于展示）
+     */
+    @TableField(exist = false)
+    private String processName;
+
+    /**
      * 任务标题
      */
     private String title;

@@ -23,7 +23,7 @@ const endType = computed({
 
 <template>
   <div class="space-y-3">
-    <n-form-item label="结束类型" label-placement="left">
+    <n-form-item label="结束类型" label-placement="top" :show-feedback="false">
       <n-radio-group v-model:value="endType" :disabled="readonly">
         <n-space>
           <n-radio v-for="opt in END_OPTIONS" :key="opt.value" :value="opt.value">
@@ -32,7 +32,7 @@ const endType = computed({
         </n-space>
       </n-radio-group>
     </n-form-item>
-    <div class="text-xs rounded bg-gray-50 px-3 py-2 text-gray-500">
+    <div class="config-hint">
       <p>· 正常结束：当前路径完成</p>
       <p>· 强制终止：直接结束整个流程实例（不等待其他并行分支）</p>
     </div>

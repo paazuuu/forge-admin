@@ -59,6 +59,38 @@ describe('useFlowDesigner - addNode', () => {
     expect(downstream.condition).toBe('')
     expect(downstream.branchId).toBe(null)
   })
+
+  it('新增条件网关时默认生成两条分支并汇回原后续节点', () => {
+    const designer = useFlowDesigner()
+    const gatewayId = designer.addNode('StartEvent_1', 'condition')
+    const json = designer.flowJson.value
+    const gateway = designer.getNode(gatewayId)
+    const outgoing = designer.getOutgoingEdges(gatewayId)
+
+    expect(gateway.nodeType).toBe('condition')
+    expect(outgoing).toHaveLength(2)
+    expect(outgoing.map(e => e.branchId).filter(Boolean)).toHaveLength(2)
+    expect(outgoing.filter(e => e.isDefault)).toHaveLength(1)
+    expect(gateway.config.defaultFlowId).toBe(outgoing.find(e => e.isDefault).id)
+
+    const branchTargets = outgoing.map(e => designer.getNode(e.target))
+    expect(branchTargets.map(n => n.nodeType)).toEqual(['approver', 'approver'])
+    for (const branch of branchTargets)
+      expect(json.edges.find(e => e.source === branch.id && e.target === 'EndEvent_1')).toBeTruthy()
+    expect(designer.getNode('EndEvent_1').config.mergeNode).toBe(true)
+  })
+
+  it('新增并行网关时默认生成两条非默认分支', () => {
+    const designer = useFlowDesigner()
+    const gatewayId = designer.addNode('StartEvent_1', 'parallel')
+    const gateway = designer.getNode(gatewayId)
+    const outgoing = designer.getOutgoingEdges(gatewayId)
+
+    expect(gateway.nodeType).toBe('parallel')
+    expect(outgoing).toHaveLength(2)
+    expect(outgoing.some(e => e.isDefault)).toBe(false)
+    expect(gateway.config.defaultFlowId).toBeUndefined()
+  })
 })
 
 describe('useFlowDesigner - deleteNode 普通节点', () => {

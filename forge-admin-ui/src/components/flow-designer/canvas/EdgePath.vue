@@ -47,6 +47,8 @@ const labelText = computed(() => {
   return text.length > 20 ? `${text.slice(0, 20)}…` : text
 })
 
+const labelWidth = computed(() => Math.min(Math.max(labelText.value.length * 8 + 22, 58), 176))
+
 // 选取与状态一致的 marker
 const markerId = computed(() => {
   switch (props.status) {
@@ -63,15 +65,15 @@ const markerId = computed(() => {
     <path
       :d="pathD"
       :stroke="strokeColor"
-      stroke-width="1.5"
+      stroke-width="1.7"
       fill="none"
       :stroke-dasharray="dashArray || undefined"
       :marker-end="`url(#${markerId})`"
     />
     <g v-if="labelVisible && labelText" :transform="`translate(${midpoint.x}, ${midpoint.y})`">
       <rect
-        x="-30" y="-9" width="60" height="18"
-        rx="4" ry="4"
+        :x="`${-labelWidth / 2}`" y="-10" :width="labelWidth" height="20"
+        rx="6" ry="6"
         fill="#fff"
         :stroke="strokeColor"
         stroke-width="1"

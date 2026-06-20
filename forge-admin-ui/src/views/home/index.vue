@@ -145,8 +145,9 @@
             <span>待办任务</span>
             <n-badge v-if="todoCount > 0" :value="todoCount" :max="99" type="warning" />
           </div>
-          <n-button text type="primary" @click="goTo('/flow/todo')">
-            查看全部 <i class="i-material-symbols:arrow-right ml-4" />
+          <n-button text class="panel-link" @click="goTo('/flow/todo')">
+            全部
+            <i class="i-material-symbols:chevron-right" />
           </n-button>
         </div>
         <n-spin :show="todoLoading">
@@ -161,33 +162,36 @@
           </div>
           <n-scrollbar v-else style="max-height: 320px">
             <div class="todo-list">
-              <div
+              <article
                 v-for="task in todoList"
-                :key="task.id"
+                :key="task.taskId || task.id"
                 class="todo-item"
-                @click="goTo(`/flow/todo?id=${task.id}`)"
+                @click="openTodoTask(task)"
               >
-                <div class="todo-left">
-                  <span v-if="task.priority >= 2" class="priority-tag" :class="getPriorityClass(task.priority)">
-                    {{ getPriorityText(task.priority) }}
-                  </span>
-                  <div class="todo-content-item">
-                    <div class="todo-title">
-                      {{ task.title || task.processTitle }}
-                    </div>
-                    <div class="todo-meta">
-                      <span class="todo-node">{{ task.taskName }}</span>
-                      <span class="todo-starter">{{ task.startUserName }}发起</span>
-                    </div>
+                <div class="todo-status" :class="task.status === 0 && !task.assignee ? 'candidate' : 'active'">
+                  {{ task.status === 0 && !task.assignee ? '待签收' : '待处理' }}
+                </div>
+                <div class="todo-main">
+                  <div class="todo-title-row">
+                    <span class="todo-title">{{ task.title || task.processTitle || task.taskName || '-' }}</span>
+                    <span v-if="task.priority >= 2" class="priority-tag" :class="getPriorityClass(task.priority)">
+                      {{ getPriorityText(task.priority) }}
+                    </span>
+                  </div>
+                  <div class="todo-meta">
+                    <span><span class="todo-meta-label">节点</span>{{ task.taskName || '-' }}</span>
+                    <span><span class="todo-meta-label">发起人</span>{{ task.startUserName || '-' }}</span>
+                    <span v-if="task.startDeptName"><span class="todo-meta-label">部门</span>{{ task.startDeptName }}</span>
                   </div>
                 </div>
-                <div class="todo-right">
-                  <div class="todo-time">
-                    {{ formatTime(task.createTime) }}
-                  </div>
-                  <i class="i-material-symbols:chevron-right todo-arrow" />
+                <div class="todo-side">
+                  <span class="todo-time">{{ formatTime(task.createTime) }}</span>
+                  <button type="button" class="todo-action" @click.stop="openTodoTask(task)">
+                    <span>处理</span>
+                    <i class="i-material-symbols:chevron-right" />
+                  </button>
                 </div>
-              </div>
+              </article>
             </div>
           </n-scrollbar>
         </n-spin>
@@ -450,6 +454,22 @@ async function loadNoticeList() {
 // 跳转
 function goTo(path) {
   router.push(path)
+}
+
+function openTodoTask(task) {
+  const taskId = task.taskId || task.id
+  if (!taskId) {
+    goTo('/flow/todo')
+    return
+  }
+  router.push({
+    path: '/flow/todo',
+    query: {
+      taskId,
+      source: 'home',
+      t: Date.now(),
+    },
+  })
 }
 
 // 打开通知
@@ -923,6 +943,18 @@ onMounted(() => {
   color: #3b82f6;
 }
 
+.panel-link {
+  color: #177c7d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.panel-link :deep(.n-button__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* 空状态 */
 .empty-state {
   display: flex;
@@ -955,101 +987,174 @@ onMounted(() => {
 
 /* 待办任务列表 */
 .todo-list {
-  padding: 8px;
+  padding: 4px 8px 8px;
 }
 
 .todo-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  padding: 10px 12px;
-  margin-bottom: 6px;
-  background: #fbfcfe;
-  border: 1px solid #edf1f7;
-  border-radius: 6px;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf2f7;
+  background: #fff;
   cursor: pointer;
   transition:
-    transform 0.18s ease,
     background 0.18s ease,
-    box-shadow 0.18s ease;
+    border-color 0.18s ease;
+}
+
+.todo-item:last-child {
+  border-bottom: 0;
 }
 
 .todo-item:hover {
-  background: #f8fbff;
-  transform: translateX(2px);
-  box-shadow: none;
+  background: #f7fbfb;
 }
 
-.todo-left {
-  display: flex;
+.todo-status {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
+  justify-content: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d7eeee;
+  border-radius: 4px;
+  background: #f5fbfb;
+  color: #177c7d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.todo-status.candidate {
+  border-color: #dbeafe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.todo-status.active {
+  border-color: #d7eeee;
+  background: #f5fbfb;
+  color: #177c7d;
 }
 
 .priority-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
   font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 6px;
-  font-weight: 600;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .priority-tag.urgent {
-  background: #fee2e2;
-  color: #dc2626;
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .priority-tag.high {
-  background: #fef3c7;
-  color: #d97706;
+  background: #fff7ed;
+  color: #c2410c;
 }
 
-.todo-content-item {
+.todo-main {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  flex: 1;
+  gap: 5px;
   min-width: 0;
 }
 
+.todo-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .todo-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #0f172a;
+  min-width: 0;
   overflow: hidden;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .todo-meta {
   display: flex;
-  gap: 8px;
-  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-width: 0;
+  overflow: hidden;
   color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.todo-node {
-  background: #f1f5f9;
-  padding: 1px 6px;
-  border-radius: 4px;
+.todo-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.todo-right {
+.todo-meta-label {
+  margin-right: 4px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.todo-side {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 112px;
 }
 
 .todo-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: #64748b;
+  white-space: nowrap;
 }
 
-.todo-arrow {
-  font-size: 16px;
-  color: #cbd5e1;
+.todo-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 3px 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #177c7d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.todo-action:hover {
+  background: #effafa;
+  color: #0f5f63;
+}
+
+.todo-action i {
+  font-size: 18px;
+  line-height: 1;
 }
 
 /* 右侧面板 */
@@ -1349,6 +1454,17 @@ onMounted(() => {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .todo-item {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .todo-side {
+    grid-column: 1 / -1;
+    min-width: 0;
+    justify-content: space-between;
+  }
+
   .chart-container {
     height: 220px;
   }
@@ -1413,6 +1529,27 @@ onMounted(() => {
   background: #475569;
 }
 
+.dark .todo-status.active {
+  border-color: #155e63;
+  background: #123b40;
+  color: #67e8f9;
+}
+
+.dark .todo-status.candidate {
+  border-color: #1d4ed8;
+  background: #172554;
+  color: #bfdbfe;
+}
+
+.dark .todo-action {
+  color: #5eead4;
+}
+
+.dark .todo-action:hover {
+  background: #134e4a;
+  color: #99f6e4;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1425,10 +1562,6 @@ onMounted(() => {
 
 .dark .notice-item.unread {
   background: #422006;
-}
-
-.dark .todo-node {
-  background: #475569;
 }
 
 .dark .priority-tag.urgent {

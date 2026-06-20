@@ -8,16 +8,18 @@
  *     - compact             紧凑模式（顶部信息条 + 图例可隐藏）
  *     - bpmnXml             直接传入 BPMN XML（跳过自动 fetch）
  *     - nodeInstanceList    直接传入节点实例信息（跳过自动 fetch）
+ *     - nodes               兼容后端 ProcessDiagramInfo.nodes
+ *     - nodeStatuses        兼容旧版 nodeStatuses 映射/数组
  *
  * 内部行为：
- *   - 当 processInstanceId 变化时，调用 flowApi.getProcessDiagramInfo 获取 bpmnXml + nodeInstanceList
- *   - 把 nodeInstanceList 转换为 nodeStatusMap = { [bpmnElementId]: { status, ... } }
+ *   - 当 processInstanceId 变化时，调用 flowApi.getProcessDiagramInfo 获取 bpmnXml + nodes
+ *   - 把 nodes/nodeInstanceList/nodeStatuses 转换为 nodeStatusMap = { [bpmnElementId]: { status, ... } }
  *   - 用 DingFlowDesigner readonly 模式渲染（status 通过 NodeRenderer 透传到 NodeCard）
  *   - 节点点击 → 弹出 NodeDetailPopover 展示该节点的运行实例信息
  *
  * 因为 NodeRenderer 已支持 status props，本组件主要负责数据获取与状态映射。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import flowApi from '@/api/flow'
 import {
   EdgeLayer,
@@ -34,6 +36,8 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
   bpmnXml: { type: String, default: '' },
   nodeInstanceList: { type: Array, default: null },
+  nodes: { type: Array, default: null },
+  nodeStatuses: { type: [Array, Object], default: null },
 })
 
 const emit = defineEmits(['ready', 'error'])
@@ -41,6 +45,7 @@ const emit = defineEmits(['ready', 'error'])
 const designer = useFlowDesigner()
 const loading = ref(false)
 const renderError = ref(null)
+const canvasRef = ref(null)
 
 const diagramInfo = ref({
   bpmnXml: '',
@@ -54,8 +59,13 @@ const diagramInfo = ref({
 const nodeStatusMap = computed(() => {
   const m = {}
   for (const inst of diagramInfo.value.nodeInstanceList || []) {
-    if (inst?.nodeId)
-      m[inst.nodeId] = inst
+    const nodeId = resolveNodeId(inst)
+    if (!nodeId)
+      continue
+    const normalized = normalizeNodeInstance(inst, nodeId)
+    const existing = m[nodeId]
+    if (!existing || timeValue(normalized.endTime || normalized.startTime) >= timeValue(existing.endTime || existing.startTime))
+      m[nodeId] = normalized
   }
   return m
 })
@@ -68,7 +78,45 @@ const layoutResult = ref({
 
 watch(designer.flowJson, () => {
   layoutResult.value = layoutFlow(designer.flowJson.value)
+  scheduleFitView()
 }, { immediate: true })
+
+function scheduleFitView() {
+  nextTick(() => {
+    const run = () => fitViewerToScreen()
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+      window.requestAnimationFrame(run)
+    else
+      run()
+  })
+}
+
+function fitViewerToScreen() {
+  const canvas = canvasRef.value
+  const containerRef = canvas?.containerRef
+  const container = containerRef?.value || containerRef
+  if (!canvas || !container)
+    return
+
+  const rect = container.getBoundingClientRect?.()
+  const viewportW = rect?.width || container.clientWidth || 0
+  const viewportH = rect?.height || container.clientHeight || 0
+  const bounds = layoutResult.value.canvasBounds
+  const contentW = Math.max((bounds?.maxX || 0) - (bounds?.minX || 0), 1)
+  const contentH = Math.max((bounds?.maxY || 0) - (bounds?.minY || 0), 1)
+  if (!viewportW || !viewportH || !contentW || !contentH)
+    return
+
+  canvas.fitToScreen(
+    contentW,
+    contentH,
+    viewportW,
+    viewportH,
+    props.compact ? 28 : 44,
+    bounds.minX || 0,
+    bounds.minY || 0,
+  )
+}
 
 /* ---------- 数据加载 ---------- */
 
@@ -81,14 +129,7 @@ async function loadFromApi(processInstanceId) {
     const res = await flowApi.getProcessDiagramInfo(processInstanceId)
     if (res?.code === 200 || res?.code === 0 || res?.data) {
       const data = res.data || res
-      diagramInfo.value = {
-        bpmnXml: data.bpmnXml || '',
-        status: data.status || null,
-        startUserName: data.startUserName || '',
-        startTime: data.startTime || null,
-        endTime: data.endTime || null,
-        nodeInstanceList: data.nodeInstanceList || [],
-      }
+      diagramInfo.value = normalizeDiagramInfo(data)
       applyXml(diagramInfo.value.bpmnXml)
       emit('ready', diagramInfo.value)
     }
@@ -104,6 +145,154 @@ async function loadFromApi(processInstanceId) {
   finally {
     loading.value = false
   }
+}
+
+function normalizeDiagramInfo(data = {}) {
+  return {
+    bpmnXml: data.bpmnXml || data.xml || data.processXml || '',
+    status: normalizeProcessStatus(data.status),
+    startUserName: data.startUserName || data.initiatorName || '',
+    startTime: data.startTime || null,
+    endTime: data.endTime || null,
+    nodeInstanceList: normalizeNodeList(extractNodeInstances(data)),
+  }
+}
+
+function extractNodeInstances(data = {}) {
+  if (Array.isArray(data.nodeInstanceList) && data.nodeInstanceList.length > 0)
+    return data.nodeInstanceList
+  if (Array.isArray(data.nodes) && data.nodes.length > 0)
+    return data.nodes
+  if (Array.isArray(data.nodeList) && data.nodeList.length > 0)
+    return data.nodeList
+  if (Array.isArray(data.activities) && data.activities.length > 0)
+    return data.activities
+  if (Array.isArray(data.nodeStatuses) && data.nodeStatuses.length > 0)
+    return data.nodeStatuses
+  if (data.nodeStatuses && typeof data.nodeStatuses === 'object')
+    return objectStatusMapToList(data.nodeStatuses)
+  if (Array.isArray(data.nodeInstanceList))
+    return data.nodeInstanceList
+  if (Array.isArray(data.nodes))
+    return data.nodes
+  if (Array.isArray(data.nodeList))
+    return data.nodeList
+  if (Array.isArray(data.activities))
+    return data.activities
+  if (Array.isArray(data.nodeStatuses))
+    return data.nodeStatuses
+  return []
+}
+
+function objectStatusMapToList(statusMap) {
+  return Object.entries(statusMap).map(([nodeId, info]) => ({
+    ...(info && typeof info === 'object' ? info : { status: info }),
+    nodeId: info?.nodeId || info?.activityId || nodeId,
+  }))
+}
+
+function normalizeNodeList(list) {
+  if (Array.isArray(list))
+    return list.map(item => normalizeNodeInstance(item)).filter(item => item.nodeId)
+  if (list && typeof list === 'object')
+    return normalizeNodeList(objectStatusMapToList(list))
+  return []
+}
+
+function normalizeNodeInstance(inst = {}, fallbackNodeId = '') {
+  const nodeId = fallbackNodeId || resolveNodeId(inst)
+  const assigneeName = resolveAssigneeName(inst)
+  return {
+    ...inst,
+    nodeId,
+    status: normalizeNodeStatus(inst.status),
+    assigneeName,
+    startTime: inst.startTime || inst.createTime || inst.beginTime || null,
+    endTime: inst.endTime || inst.completeTime || inst.finishTime || null,
+    result: normalizeResult(inst.result || inst.approveResult),
+    comment: inst.comment || inst.message || '',
+  }
+}
+
+function resolveNodeId(inst = {}) {
+  return inst.nodeId
+    || inst.activityId
+    || inst.taskDefinitionKey
+    || inst.bpmnElementId
+    || inst.elementId
+    || inst.id
+    || ''
+}
+
+function resolveAssigneeName(inst = {}) {
+  if (inst.assigneeName)
+    return inst.assigneeName
+  if (Array.isArray(inst.assigneeNames) && inst.assigneeNames.length > 0)
+    return inst.assigneeNames.filter(Boolean).join('、')
+  if (Array.isArray(inst.candidateUserNames) && inst.candidateUserNames.length > 0)
+    return inst.candidateUserNames.filter(Boolean).join('、')
+  return inst.assignee || inst.userName || ''
+}
+
+function normalizeNodeStatus(status) {
+  const value = String(status || '').trim().toLowerCase()
+  if (!value)
+    return null
+  const statusMap = {
+    active: 'running',
+    processing: 'running',
+    in_progress: 'running',
+    inprogress: 'running',
+    wait: 'pending',
+    waiting: 'pending',
+    todo: 'pending',
+    finished: 'completed',
+    complete: 'completed',
+    approved: 'completed',
+    approve: 'completed',
+    reject: 'rejected',
+    denied: 'rejected',
+    terminated: 'skipped',
+    canceled: 'skipped',
+    cancelled: 'skipped',
+    withdrawn: 'skipped',
+  }
+  return statusMap[value] || value
+}
+
+function normalizeProcessStatus(status) {
+  const value = String(status || '').trim().toLowerCase()
+  if (!value)
+    return null
+  const statusMap = {
+    active: 'running',
+    started: 'running',
+    finished: 'completed',
+    complete: 'completed',
+    approved: 'completed',
+    canceled: 'terminated',
+    cancelled: 'terminated',
+    withdrawn: 'terminated',
+  }
+  return statusMap[value] || value
+}
+
+function normalizeResult(result) {
+  const value = String(result || '').trim().toLowerCase()
+  if (!value)
+    return ''
+  if (['reject', 'rejected', 'denied'].includes(value))
+    return 'rejected'
+  if (['approve', 'approved', 'pass', 'passed', 'completed'].includes(value))
+    return 'approved'
+  return value
+}
+
+function timeValue(value) {
+  if (!value)
+    return 0
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? 0 : time
 }
 
 function applyXml(xml) {
@@ -124,18 +313,20 @@ function applyXml(xml) {
 /* ---------- 数据来源切换 ---------- */
 
 watch(
-  () => [props.processInstanceId, props.bpmnXml, props.nodeInstanceList],
-  ([pid, xml, list]) => {
+  () => [props.processInstanceId, props.bpmnXml, props.nodeInstanceList, props.nodes, props.nodeStatuses],
+  ([pid, xml, list, nodes, statuses]) => {
     if (xml) {
       // 直接给入 XML 模式
-      diagramInfo.value = {
+      diagramInfo.value = normalizeDiagramInfo({
         bpmnXml: xml,
         status: null,
         startUserName: '',
         startTime: null,
         endTime: null,
         nodeInstanceList: list || [],
-      }
+        nodes: nodes || [],
+        nodeStatuses: statuses,
+      })
       applyXml(xml)
     }
     else if (pid) {
@@ -168,7 +359,7 @@ function handleNodeClick(node) {
 }
 
 function popoverTaskInfo(node) {
-  const inst = nodeStatusMap.value[node?.id]
+  const inst = getNodeStatus(node)
   if (!inst)
     return null
   return {
@@ -183,13 +374,21 @@ function popoverTaskInfo(node) {
 
 const popoverTaskInfoComputed = computed(() => popoverTaskInfo(popover.value.node))
 
+function getNodeStatus(node) {
+  if (!node)
+    return null
+  return nodeStatusMap.value[node.id] || nodeStatusMap.value[node.bpmnElementId] || null
+}
+
 /* ---------- 流程总状态文案 ---------- */
 
 const STATUS_TEXT = {
-  RUNNING: { label: '审批中', type: 'info' },
-  COMPLETED: { label: '已完成', type: 'success' },
-  CANCELED: { label: '已取消', type: 'default' },
-  REJECTED: { label: '已驳回', type: 'error' },
+  running: { label: '审批中', type: 'info' },
+  completed: { label: '已完成', type: 'success' },
+  terminated: { label: '已终止', type: 'default' },
+  canceled: { label: '已取消', type: 'default' },
+  cancelled: { label: '已取消', type: 'default' },
+  rejected: { label: '已驳回', type: 'error' },
 }
 
 const overallStatus = computed(() => {
@@ -208,6 +407,7 @@ defineExpose({
   /** 给单测 / 外部 ref 用，便于手动切换 BPMN XML */
   applyXml,
   loadFromApi,
+  fitViewerToScreen,
 })
 </script>
 
@@ -242,7 +442,14 @@ defineExpose({
     </div>
 
     <!-- 钉钉风格画布（readonly） -->
-    <FlowCanvas v-if="!renderError" readonly>
+    <FlowCanvas
+      v-if="!renderError"
+      ref="canvasRef"
+      readonly
+      allow-navigation
+      :min-scale="0.2"
+      :initial-scale="compact ? 0.9 : 1"
+    >
       <template #edges>
         <EdgeLayer
           :edges="designer.flowJson.value.edges"
@@ -258,7 +465,7 @@ defineExpose({
           :node="node"
           :position="layoutResult.nodePositions.get(node.id)"
           :selected="designer.selectedNodeId.value === node.id"
-          :status="nodeStatusMap[node.id]?.status"
+          :status="getNodeStatus(node)?.status"
           :readonly="true"
           :outgoing-count="designer.getOutgoingEdges(node.id).length"
           @click="handleNodeClick"
@@ -276,3 +483,21 @@ defineExpose({
     />
   </div>
 </template>
+
+<style scoped>
+.ding-flow-viewer {
+  min-height: 420px;
+}
+
+.ding-flow-viewer.compact {
+  min-height: 360px;
+}
+
+.ding-flow-viewer :deep(.flow-canvas) {
+  min-height: 420px;
+}
+
+.ding-flow-viewer.compact :deep(.flow-canvas) {
+  min-height: 360px;
+}
+</style>

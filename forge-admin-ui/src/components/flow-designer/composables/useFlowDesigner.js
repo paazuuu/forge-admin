@@ -57,6 +57,9 @@ export function useFlowDesigner(initialJson) {
   const findEndNode = () => flowJson.value.nodes.find(n => n.nodeType === NODE_TYPE.END) || null
 
   function addNode(afterId, nodeType, override = {}) {
+    if (GATEWAY_TYPES.has(nodeType))
+      return addGatewayNode(afterId, nodeType, override)
+
     const next = cloneJson(flowJson.value)
     const after = next.nodes.find(n => n.id === afterId)
     if (!after)
@@ -86,6 +89,68 @@ export function useFlowDesigner(initialJson) {
 
     commit(next)
     return newNode.id
+  }
+
+  function addGatewayNode(afterId, nodeType, override = {}) {
+    const next = cloneJson(flowJson.value)
+    const after = next.nodes.find(n => n.id === afterId)
+    if (!after)
+      throw new Error(`addNode: afterId=${afterId} 不存在`)
+
+    const outgoing = next.edges.filter(e => e.source === afterId)
+    if (outgoing.length > 1)
+      throw new Error('addNode: 网关后不能直接插入新的网关，请在具体分支内添加')
+
+    const anchor = outgoing[0] || null
+    const mergeTargetId = anchor?.target || null
+
+    const gateway = buildNode(nodeType, override)
+    gateway.id = idGen.nextNodeId()
+    gateway.bpmnElementId = gateway.id
+    next.nodes.push(gateway)
+
+    if (anchor)
+      next.edges = next.edges.filter(e => e.id !== anchor.id)
+
+    next.edges.push(makeEdge(idGen.nextEdgeId(), afterId, gateway.id, {
+      condition: anchor?.condition || '',
+      conditionType: anchor?.conditionType || null,
+      isDefault: anchor?.isDefault || false,
+      branchId: anchor?.branchId || null,
+    }))
+
+    const defaultBranchIndex = nodeType === NODE_TYPE.PARALLEL ? -1 : 1
+    for (let i = 0; i < 2; i += 1) {
+      const branchNode = buildNode(NODE_TYPE.APPROVER, {
+        name: `分支${i + 1}审批`,
+      })
+      branchNode.id = idGen.nextNodeId()
+      branchNode.bpmnElementId = branchNode.id
+      next.nodes.push(branchNode)
+
+      const branchEdgeId = idGen.nextEdgeId()
+      const isDefault = i === defaultBranchIndex
+      next.edges.push(makeEdge(branchEdgeId, gateway.id, branchNode.id, {
+        branchId: idGen.nextBranchId(),
+        isDefault,
+        condition: '',
+        conditionType: null,
+      }))
+      if (isDefault)
+        gateway.config.defaultFlowId = branchEdgeId
+
+      if (mergeTargetId)
+        next.edges.push(makeEdge(idGen.nextEdgeId(), branchNode.id, mergeTargetId))
+    }
+
+    if (mergeTargetId) {
+      const mergeTarget = next.nodes.find(n => n.id === mergeTargetId)
+      if (mergeTarget)
+        mergeTarget.config = { ...(mergeTarget.config || {}), mergeNode: true }
+    }
+
+    commit(next)
+    return gateway.id
   }
 
   function deleteNode(nodeId) {
@@ -122,8 +187,13 @@ export function useFlowDesigner(initialJson) {
     commit(next)
   }
 
-  function moveNodeUp(id) { swapNeighbor(id, 'up') }
-  function moveNodeDown(id) { swapNeighbor(id, 'down') }
+  function moveNodeUp(id) {
+    swapNeighbor(id, 'up')
+  }
+
+  function moveNodeDown(id) {
+    swapNeighbor(id, 'down')
+  }
 
   function swapNeighbor(nodeId, direction) {
     const next = cloneJson(flowJson.value)

@@ -32,7 +32,7 @@
       <AppCard :bordered="false" :padding="false" class="px-10 py-0" shadow="none" radius="none">
         <AppTab class="w-0 flex-1" />
       </AppCard>
-      <div class="flex-1 overflow-auto bg-[#f2f3f5] p-12">
+      <div class="flex-1 overflow-auto bg-[#f2f3f5] p-12" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -40,6 +40,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { AppCard } from '@/components/common'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { TheTitle } from '@/components/index.js'
@@ -51,7 +53,11 @@ import {
   TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import TopMenu from './components/TopMenu.vue'
+
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 </script>
 
 <style scoped>
@@ -60,6 +66,10 @@ import TopMenu from './components/TopMenu.vue'
 .header-search,
 .header-actions {
   min-width: 0;
+}
+
+.flow-task-layout-content {
+  padding: 0 !important;
 }
 
 @media (max-width: 640px) {

@@ -259,7 +259,7 @@
 
     <!-- 流程图弹窗 -->
     <n-modal v-model:show="diagramModalVisible" preset="card" title="流程图" style="width: 90%; max-width: 1200px;">
-      <ProcessDiagramViewer
+      <DingFlowViewer
         v-if="diagramModalVisible && currentDiagramInstanceId"
         :process-instance-id="currentDiagramInstanceId"
       />
@@ -440,7 +440,7 @@ import { useRoute } from 'vue-router'
 
 import UserSelectModal from '@/components/common/UserSelectModal.vue'
 import DictTag from '@/components/DictTag.vue'
-import ProcessDiagramViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
+import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
 import { useDict } from '@/composables/useDict'
 import { request } from '@/utils'
 
@@ -549,33 +549,45 @@ const columns = [
         key: 'delete',
         disabled: isDeletingProcess.value,
       })
-      return h(NSpace, { size: 'small' }, {
-        default: () => [
-          h(NButton, {
-            text: true,
-            type: 'primary',
-            size: 'small',
-            disabled: isDeletingProcess.value,
-            onClick: () => showDetail(row),
-          }, { default: () => '详情' }),
-          h(NDropdown, {
-            options,
-            disabled: isDeletingProcess.value,
-            onSelect: (key) => {
-              const map = {
-                diagram: () => showDiagram(row),
-                variables: () => showVariables(row),
-                errors: () => showInstanceErrorLogs(row),
-                admin: () => showAdminActions(row),
-                delete: () => handleDeleteInstance(row),
-              }
-              map[key]?.()
-            },
-          }, {
-            default: () => h(NButton, { text: true, type: 'primary', size: 'small' }, { default: () => '更多' }),
-          }),
-        ],
-      })
+      return h('div', { class: 'monitor-row-actions' }, [
+        h('button', {
+          type: 'button',
+          class: 'monitor-row-link-action',
+          disabled: isDeletingProcess.value,
+          onClick: (event) => {
+            event?.stopPropagation?.()
+            showDetail(row)
+          },
+        }, [
+          h('span', '详情'),
+          h('i', { class: 'i-material-symbols:chevron-right' }),
+        ]),
+        h(NDropdown, {
+          options,
+          disabled: isDeletingProcess.value,
+          onSelect: (key) => {
+            const map = {
+              diagram: () => showDiagram(row),
+              variables: () => showVariables(row),
+              errors: () => showInstanceErrorLogs(row),
+              admin: () => showAdminActions(row),
+              delete: () => handleDeleteInstance(row),
+            }
+            map[key]?.()
+          },
+        }, {
+          default: () => h('button', {
+            'type': 'button',
+            'class': 'monitor-row-link-action',
+            'disabled': isDeletingProcess.value,
+            'aria-label': '更多操作',
+            'onClick': event => event?.stopPropagation?.(),
+          }, [
+            h('span', '更多'),
+            h('i', { class: 'i-material-symbols:expand-more' }),
+          ]),
+        }),
+      ])
     },
   },
 ]
@@ -1674,6 +1686,58 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+.flow-monitor-page :deep(.monitor-row-actions) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+
+.flow-monitor-page :deep(.monitor-row-link-action) {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 3px 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #177c7d !important;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.flow-monitor-page :deep(.monitor-row-link-action:hover) {
+  background: #effafa;
+  color: #0f5f63 !important;
+}
+
+.flow-monitor-page :deep(.monitor-row-link-action:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.flow-monitor-page :deep(.monitor-row-link-action span),
+.flow-monitor-page :deep(.monitor-row-link-action i) {
+  color: currentColor !important;
+}
+
+.flow-monitor-page :deep(.monitor-row-link-action i) {
+  font-size: 18px;
+  line-height: 1;
 }
 
 :deep(.n-data-table .n-data-table-th),

@@ -19,7 +19,7 @@
       <AppCard class="tab-bar-full">
         <AppTab class="tab-content" />
       </AppCard>
-      <div class="content-full">
+      <div class="content-full" :class="{ 'content-full-flush': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -27,14 +27,19 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { AppCard } from '@/components/index.js'
 import { AppTab } from '@/layouts/components'
 import { useAppStore } from '@/store'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import AppHeader from './header/index.vue'
 import SideBar from './sidebar/index.vue'
 
 const appStore = useAppStore()
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 </script>
 
 <style scoped>
@@ -103,6 +108,10 @@ const appStore = useAppStore()
   overflow: auto;
   padding: 16px;
   background: #f8fafc;
+}
+
+.content-full-flush {
+  padding: 0;
 }
 
 /* 滚动条 */

@@ -48,7 +48,7 @@
         <AppCard :bordered="false" :padding="false" class="px-10 py-3" shadow="none" radius="none">
           <AppTab class="w-0 flex-1" />
         </AppCard>
-        <div class="flex-1 overflow-auto bg-[#f2f3f5] p-12">
+        <div class="flex-1 overflow-auto bg-[#f2f3f5] p-12" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
           <slot />
         </div>
       </article>
@@ -57,6 +57,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { AppCard } from '@/components/common'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { TheTitle } from '@/components/index.js'
@@ -71,12 +73,14 @@ import {
   UserAvatar,
 } from '@/layouts/components'
 import { useAppStore, usePermissionStore } from '@/store'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import SideMenu from './components/SideMenu.vue'
 import TopMenu from './components/TopMenu.vue'
 
 const appStore = useAppStore()
 const permissionStore = usePermissionStore()
 const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 
 // Determine whether sidebar should be shown
 const showSidebar = computed(() => {
@@ -109,6 +113,10 @@ const showSidebar = computed(() => {
 .header-search,
 .header-actions {
   min-width: 0;
+}
+
+.flow-task-layout-content {
+  padding: 0 !important;
 }
 
 @media (max-width: 640px) {
