@@ -7,6 +7,8 @@ import com.mdframe.forge.starter.flow.entity.FlowTask;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
+
 /**
  * 流程任务 Mapper
  */
@@ -38,4 +40,9 @@ public interface FlowTaskMapper extends BaseMapper<FlowTask> {
     IPage<FlowTask> selectStartedTasks(Page<FlowTask> page, @Param("userId") String userId,
                                          @Param("title") String title, @Param("category") String category,
                                          @Param("status") Integer status);
+
+    /**
+     * 分页查询已逾期但仍未完成的任务。
+     */
+    IPage<FlowTask> selectOverduePendingTasks(Page<FlowTask> page, @Param("now") LocalDateTime now);
 }

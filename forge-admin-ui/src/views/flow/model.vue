@@ -90,6 +90,11 @@
             <div class="card-key">
               {{ item.modelKey }}
             </div>
+            <div class="card-tags">
+              <span class="designer-type-badge" :class="designerTypeClass(item.designerType)">
+                {{ designerTypeLabel(item.designerType) }}
+              </span>
+            </div>
             <div class="card-desc">
               {{ item.description || '暂无描述' }}
             </div>
@@ -191,6 +196,27 @@
           label-width="100"
         >
           <n-grid :cols="2" :x-gap="16">
+            <n-form-item-gi label="流程模式" path="designerType" :span="2">
+              <div class="designer-type-chooser" :class="{ disabled: isEdit }">
+                <button
+                  v-for="option in designerTypeOptions"
+                  :key="option.value"
+                  type="button"
+                  class="designer-type-option"
+                  :class="{ active: formData.designerType === option.value }"
+                  :disabled="isEdit"
+                  @click="formData.designerType = option.value"
+                >
+                  <span class="designer-type-icon">
+                    <i :class="option.icon" />
+                  </span>
+                  <span class="designer-type-main">
+                    <span class="designer-type-title">{{ option.label }}</span>
+                    <span class="designer-type-desc">{{ option.desc }}</span>
+                  </span>
+                </button>
+              </div>
+            </n-form-item-gi>
             <n-form-item-gi label="模型名称" path="modelName" :span="2">
               <n-input v-model:value="formData.modelName" placeholder="请输入模型名称" />
             </n-form-item-gi>
@@ -383,6 +409,20 @@ const statusOptions = computed(() => toNumberOptions(dict.value.flow_model_statu
 const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])
 const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
+const designerTypeOptions = [
+  {
+    label: '审批流程',
+    value: 'approval',
+    icon: 'i-material-symbols:approval-delegation-outline',
+    desc: '适合人员审批、条件分支、抄送和表单权限配置。',
+  },
+  {
+    label: '业务流程',
+    value: 'business',
+    icon: 'i-material-symbols:account-tree-outline',
+    desc: '适合完整 BPMN 工作流、服务任务、事件和复杂业务编排。',
+  },
+]
 
 function buildTreeSelectOptions(treeData) {
   return treeData.map(item => ({
@@ -438,6 +478,18 @@ function formatDate(d) {
   if (!d)
     return ''
   return d.slice(0, 10)
+}
+
+function normalizeDesignerType(value) {
+  return value === 'business' ? 'business' : 'approval'
+}
+
+function designerTypeLabel(value) {
+  return designerTypeOptions.find(item => item.value === normalizeDesignerType(value))?.label || '审批流程'
+}
+
+function designerTypeClass(value) {
+  return normalizeDesignerType(value) === 'business' ? 'business' : 'approval'
 }
 
 function getActionOptions(row) {
@@ -584,6 +636,7 @@ const formData = reactive({
   modelKey: '',
   category: '',
   flowType: '',
+  designerType: 'approval',
   formType: 'dynamic',
   description: '',
   notifyType: 'none',
@@ -593,19 +646,20 @@ const rules = {
   modelName: { required: true, message: '请输入模型名称', trigger: 'blur' },
   modelKey: { required: true, message: '请输入模型Key', trigger: 'blur' },
   category: { required: true, message: '请选择分类', trigger: 'change' },
+  designerType: { required: true, message: '请选择流程模式', trigger: 'change' },
 }
 
 function handleAdd() {
   isEdit.value = false
   modalTitle.value = '新增模型'
-  Object.assign(formData, { id: '', modelName: '', modelKey: '', category: '', flowType: '', formType: 'dynamic', description: '', notifyType: 'none', webhookUrl: '' })
+  Object.assign(formData, { id: '', modelName: '', modelKey: '', category: '', flowType: '', designerType: 'approval', formType: 'dynamic', description: '', notifyType: 'none', webhookUrl: '' })
   showModal.value = true
 }
 
 function handleEdit(row) {
   isEdit.value = true
   modalTitle.value = '编辑模型'
-  Object.assign(formData, row)
+  Object.assign(formData, row, { designerType: normalizeDesignerType(row.designerType) })
   showModal.value = true
 }
 
@@ -1152,6 +1206,37 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.designer-type-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.designer-type-badge.approval {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.designer-type-badge.business {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
 .card-desc {
   font-size: 12px;
   color: #6b7280;
@@ -1278,6 +1363,85 @@ onMounted(() => {
 
 .notify-section {
   width: 100%;
+}
+
+.designer-type-chooser {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.designer-type-chooser.disabled {
+  opacity: 0.72;
+}
+
+.designer-type-option {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.designer-type-option:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.designer-type-option.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.designer-type-option:disabled {
+  cursor: not-allowed;
+}
+
+.designer-type-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.designer-type-icon i {
+  font-size: 20px;
+}
+
+.designer-type-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.designer-type-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.designer-type-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
 }
 
 .start-test-modal {

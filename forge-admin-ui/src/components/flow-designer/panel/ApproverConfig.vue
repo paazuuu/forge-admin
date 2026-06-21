@@ -7,7 +7,7 @@
  *   - multi        会签设置（multiInstance + completionCondition）
  *   - form         表单字段权限（formFieldPermissions 列表）
  *   - permissions  审批操作权限（7 个布尔开关）
- *   - extensions   任务监听器 / 执行监听器
+ *   - extensions   逾期提醒 / 任务监听器 / 执行监听器
  *
  * 字段 1:1 迁移自 NodePropertiesPanel.vue:1562-2200，但用更扁平的 emit('update:config') 通信。
  *
@@ -24,6 +24,7 @@ import BasicConfig from './BasicConfig.vue'
 import FormPermissionConfig from './FormPermissionConfig.vue'
 import ListenerConfig from './ListenerConfig.vue'
 import MultiInstanceConfig from './MultiInstanceConfig.vue'
+import OverdueReminderConfig from './OverdueReminderConfig.vue'
 import PermissionConfig from './PermissionConfig.vue'
 
 const props = defineProps({
@@ -93,6 +94,11 @@ function updateNode(node) {
         </div>
       </n-tab-pane>
       <n-tab-pane name="extensions" tab="扩展配置">
+        <OverdueReminderConfig
+          :config="config"
+          :readonly="readonly"
+          @update:config="patch"
+        />
         <div class="config-section-block">
           <div class="config-section-title">
             监听器

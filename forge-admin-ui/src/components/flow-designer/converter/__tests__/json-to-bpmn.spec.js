@@ -106,6 +106,31 @@ describe('convertJsonToBpmn - 主结构', () => {
     ])
   })
 
+  it('userTask 写入处理时限和逾期提醒扩展属性', () => {
+    const json = baseJson()
+    Object.assign(json.nodes[1].config, {
+      dueDateDays: 1,
+      dueDateHours: 2,
+      overdueReminderEnabled: true,
+      overdueReminderTemplateCode: 'FLOW_TASK_OVERDUE',
+      overdueReminderChannels: ['WEB', 'EMAIL'],
+      overdueReminderRepeatMode: 'interval',
+      overdueReminderIntervalMinutes: 60,
+      overdueReminderMaxTimes: 3,
+    })
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const t = findElementsByLocalName(doc, 'userTask')[0]
+
+    expect(getFlowableAttr(t, 'dueDate')).toBe('P1DT2H')
+    expect(getFlowableAttr(t, 'overdueReminderEnabled')).toBe('true')
+    expect(getFlowableAttr(t, 'overdueReminderTemplateCode')).toBe('FLOW_TASK_OVERDUE')
+    expect(getFlowableAttr(t, 'overdueReminderChannels')).toBe('WEB,EMAIL')
+    expect(getFlowableAttr(t, 'overdueReminderRepeatMode')).toBe('interval')
+    expect(getFlowableAttr(t, 'overdueReminderIntervalMinutes')).toBe('60')
+    expect(getFlowableAttr(t, 'overdueReminderMaxTimes')).toBe('3')
+  })
+
   it('每个 BPMNShape 都有真实 bpmnElement 引用', () => {
     const xml = convertJsonToBpmn(baseJson())
     const doc = parseBpmnXml(xml)

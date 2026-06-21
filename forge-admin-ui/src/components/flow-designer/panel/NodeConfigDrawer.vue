@@ -29,6 +29,7 @@
  * - 节点 name 编辑通过 BasicConfig 组件；审批人节点为了贴近配置页签体验，基础属性内嵌到“审批人设置”
  */
 import { computed, ref, watch } from 'vue'
+import FlowPropertyPanelShell from '@/components/flow/FlowPropertyPanelShell.vue'
 import BasicConfig from '../panel/BasicConfig.vue'
 import { CONFIG_RENDERER_MAP } from '../panel/config-renderer-map.js'
 
@@ -147,27 +148,22 @@ function cloneDeep(v) {
       :native-scrollbar="false"
       :closable="false"
     >
-      <div v-if="draftNode" class="node-config-shell">
-        <div class="node-config-header">
-          <div class="node-config-title">
-            <span class="node-config-icon">
-              <i :class="headerIcon" />
-            </span>
-            <span>{{ draftNode.name || (readonly ? '查看节点' : '配置节点') }}</span>
-          </div>
-          <button type="button" class="node-config-close" @click="handleClose">
-            <i class="i-material-symbols:close" />
-          </button>
-        </div>
-
+      <FlowPropertyPanelShell
+        :title="draftNode?.name || (readonly ? '查看节点' : '配置节点')"
+        description="节点属性配置"
+        :icon="headerIcon"
+        :empty="!draftNode"
+        empty-text="请先选择一个节点。"
+        @close="handleClose"
+      >
         <BasicConfig
-          v-if="!useIntegratedBasicConfig"
+          v-if="draftNode && !useIntegratedBasicConfig"
           v-model:node="draftNode"
           :readonly="readonly"
         />
         <component
           :is="ConfigComponent"
-          v-if="ConfigComponent"
+          v-if="draftNode && ConfigComponent"
           :node="draftNode"
           v-bind="configExtraProps"
           :readonly="readonly"
@@ -175,95 +171,29 @@ function cloneDeep(v) {
           @update:node="updateNode"
           @update:edge="updateEdge"
         />
-        <div v-else class="node-config-empty">
+        <div v-else-if="draftNode" class="node-config-empty">
           该节点类型暂无可配置项。
         </div>
-      </div>
-      <div v-else class="node-config-empty">
-        请先选择一个节点。
-      </div>
 
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <n-button @click="handleClose">
-            {{ readonly ? '关闭' : '取消' }}
-          </n-button>
-          <n-button v-if="!readonly" type="primary" @click="handleSave">
-            保存
-          </n-button>
-        </div>
-      </template>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <n-button @click="handleClose">
+              {{ readonly ? '关闭' : '取消' }}
+            </n-button>
+            <n-button v-if="!readonly" type="primary" @click="handleSave">
+              保存
+            </n-button>
+          </div>
+        </template>
+      </FlowPropertyPanelShell>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <style scoped>
 :deep(.node-config-drawer .n-drawer-body-content-wrapper) {
+  height: 100%;
   padding: 0;
-}
-
-:deep(.node-config-drawer .n-drawer-footer) {
-  padding: 12px 18px;
-  border-top: 1px solid #eef2f7;
-  background: #fff;
-}
-
-.node-config-shell {
-  min-height: 100%;
-  background: #fff;
-}
-
-.node-config-header {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border-bottom: 1px solid #eef2f7;
-  background: #fff;
-}
-
-.node-config-title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #0f172a;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.node-config-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #e6fffb;
-  color: #14b8a6;
-  font-size: 17px;
-}
-
-.node-config-close {
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: #94a3b8;
-  cursor: pointer;
-  transition:
-    background 150ms ease,
-    color 150ms ease;
-}
-
-.node-config-close:hover {
-  background: #f1f5f9;
-  color: #0f172a;
 }
 
 .node-config-empty {
@@ -273,93 +203,5 @@ function cloneDeep(v) {
   background: #f8fafc;
   color: #94a3b8;
   font-size: 13px;
-}
-
-:deep(.n-tabs .n-tabs-nav) {
-  padding: 0 18px;
-  border-bottom: 1px solid #eef2f7;
-}
-
-:deep(.n-tabs .n-tabs-tab) {
-  min-height: 46px;
-  padding: 0 14px;
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-:deep(.n-tabs .n-tabs-tab.n-tabs-tab--active) {
-  color: #14b8a6;
-}
-
-:deep(.n-tabs .n-tabs-bar) {
-  background-color: #14b8a6;
-}
-
-:deep(.n-tabs .n-tab-pane) {
-  padding: 18px 26px 24px;
-}
-
-:deep(.n-form-item) {
-  margin-bottom: 18px;
-}
-
-:deep(.n-form-item .n-form-item-label) {
-  min-height: 24px;
-  padding: 0 0 7px;
-  color: #111827;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-:deep(.n-form-item .n-form-item-label__asterisk) {
-  color: #ef4444;
-}
-
-:deep(.n-input),
-:deep(.n-base-selection),
-:deep(.n-input-number) {
-  width: 100%;
-}
-
-:deep(.n-input .n-input-wrapper),
-:deep(.n-base-selection .n-base-selection-label) {
-  min-height: 42px;
-}
-
-:deep(.n-input__input-el),
-:deep(.n-base-selection-input),
-:deep(.n-base-selection-placeholder) {
-  font-size: 14px;
-}
-
-:deep(.config-section-block) {
-  margin-top: 18px;
-}
-
-:deep(.config-section-title) {
-  margin-bottom: 10px;
-  color: #111827;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-:deep(.config-hint) {
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-@media (max-width: 640px) {
-  :deep(.n-tabs .n-tabs-nav) {
-    padding: 0 12px;
-  }
-
-  :deep(.n-tabs .n-tab-pane) {
-    padding: 14px 16px 18px;
-  }
 }
 </style>

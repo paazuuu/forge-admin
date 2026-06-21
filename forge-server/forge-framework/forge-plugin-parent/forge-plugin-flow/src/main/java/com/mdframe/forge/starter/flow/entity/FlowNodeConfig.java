@@ -122,6 +122,36 @@ public class FlowNodeConfig implements Serializable {
      */
     private String timeoutNotifyUsers;
 
+    /**
+     * 是否启用逾期提醒
+     */
+    private Boolean overdueReminderEnabled;
+
+    /**
+     * 逾期提醒消息模板编码
+     */
+    private String overdueReminderTemplateCode;
+
+    /**
+     * 逾期提醒推送渠道，逗号分隔
+     */
+    private String overdueReminderChannels;
+
+    /**
+     * 逾期提醒重复策略：once/interval
+     */
+    private String overdueReminderRepeatMode;
+
+    /**
+     * 重复提醒间隔分钟
+     */
+    private Integer overdueReminderIntervalMinutes;
+
+    /**
+     * 最大提醒次数
+     */
+    private Integer overdueReminderMaxTimes;
+
     // ==================== 审批操作权限 ====================
 
     /**

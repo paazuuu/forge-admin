@@ -82,6 +82,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FlowModel createModel(FlowModel flowModel) {
+        flowModel.setDesignerType(normalizeDesignerType(flowModel.getDesignerType()));
         // 生成唯一 KEY
         if (flowModel.getModelKey() == null || flowModel.getModelKey().isEmpty()) {
             flowModel.setModelKey("model_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
@@ -114,6 +115,11 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         if (existing == null) {
             throw new RuntimeException("流程模型不存在");
         }
+        if (flowModel.getDesignerType() == null || flowModel.getDesignerType().isBlank()) {
+            flowModel.setDesignerType(normalizeDesignerType(existing.getDesignerType()));
+        } else {
+            flowModel.setDesignerType(normalizeDesignerType(flowModel.getDesignerType()));
+        }
         
         // 已发布的模型不允许修改Key
         if (existing.getStatus() == 1 && !existing.getModelKey().equals(flowModel.getModelKey())) {
@@ -127,6 +133,10 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         updateById(flowModel);
         log.info("更新流程模型成功：{}", flowModel.getModelKey());
         return flowModel;
+    }
+
+    private String normalizeDesignerType(String designerType) {
+        return "business".equals(designerType) ? "business" : "approval";
     }
 
     @Override
@@ -474,6 +484,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         model.setModelKey(modelKey);
         model.setModelName(modelName != null ? modelName : "导入的流程");
         model.setCategory(category);
+        model.setDesignerType("business");
         model.setBpmnXml(bpmnXml);
         model.setStatus(0);
         model.setVersion(1);
@@ -511,6 +522,7 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
         newModel.setCategory(source.getCategory());
         newModel.setDescription(source.getDescription());
         newModel.setFlowType(source.getFlowType());
+        newModel.setDesignerType(normalizeDesignerType(source.getDesignerType()));
         newModel.setFormType(source.getFormType());
         newModel.setFormId(source.getFormId());
         newModel.setFormJson(source.getFormJson());

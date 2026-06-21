@@ -42,6 +42,11 @@ public class FlowModel {
      * 流程类型（leave-请假/expense-报销/approval-审批）
      */
     private String flowType;
+
+    /**
+     * 设计器类型（approval-审批流程/business-业务流程）
+     */
+    private String designerType;
     
     /**
      * 表单类型（dynamic-动态表单/custom-业务表单）

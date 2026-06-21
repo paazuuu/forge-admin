@@ -40,6 +40,17 @@ const DEFAULT_PERMISSIONS = Object.freeze({
   requireComment: true,
 })
 
+const DEFAULT_OVERDUE_REMINDER = Object.freeze({
+  dueDateDays: 0,
+  dueDateHours: 0,
+  overdueReminderEnabled: false,
+  overdueReminderTemplateCode: 'FLOW_TASK_OVERDUE',
+  overdueReminderChannels: ['WEB'],
+  overdueReminderRepeatMode: 'once',
+  overdueReminderIntervalMinutes: 1440,
+  overdueReminderMaxTimes: 1,
+})
+
 export function parseUserTaskConfig(taskElement) {
   const config = {
     taskType: 'assignee',
@@ -64,6 +75,7 @@ export function parseUserTaskConfig(taskElement) {
     executionListeners: [],
     formFieldPermissions: [],
     ...DEFAULT_PERMISSIONS,
+    ...DEFAULT_OVERDUE_REMINDER,
   }
   if (!taskElement)
     return config
@@ -197,10 +209,73 @@ function applyPriorityAndDueDate(el, config) {
 
   const dueDate = getFlowableAttr(el, 'dueDate') ?? getAttr(el, 'dueDate')
   if (dueDate != null) {
-    const match = String(dueDate).match(/(\d+)/)
-    if (match)
-      config.dueDate = Number.parseInt(match[1], 10) || 0
+    const parsed = parseDueDateDuration(dueDate)
+    config.dueDate = parsed.days
+    config.dueDateDays = parsed.days
+    config.dueDateHours = parsed.hours
   }
+
+  applyOverdueReminder(el, config)
+}
+
+function applyOverdueReminder(el, config) {
+  const enabled = parseBoolean(getFlowableAttr(el, 'overdueReminderEnabled'))
+  if (enabled != null)
+    config.overdueReminderEnabled = enabled
+
+  const templateCode = getFlowableAttr(el, 'overdueReminderTemplateCode')
+  if (templateCode)
+    config.overdueReminderTemplateCode = templateCode
+
+  const channels = getFlowableAttr(el, 'overdueReminderChannels')
+  if (channels)
+    config.overdueReminderChannels = splitCsv(channels)
+
+  const repeatMode = getFlowableAttr(el, 'overdueReminderRepeatMode')
+  if (repeatMode)
+    config.overdueReminderRepeatMode = repeatMode
+
+  const intervalMinutes = parseInteger(getFlowableAttr(el, 'overdueReminderIntervalMinutes'))
+  if (intervalMinutes != null)
+    config.overdueReminderIntervalMinutes = intervalMinutes
+
+  const maxTimes = parseInteger(getFlowableAttr(el, 'overdueReminderMaxTimes'))
+  if (maxTimes != null)
+    config.overdueReminderMaxTimes = maxTimes
+}
+
+function parseDueDateDuration(value) {
+  const text = String(value || '').trim()
+  const match = text.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?)?$/i)
+  if (match) {
+    return {
+      days: Number.parseInt(match[1] || '0', 10) || 0,
+      hours: Number.parseInt(match[2] || '0', 10) || 0,
+    }
+  }
+  const legacy = text.match(/(\d+)/)
+  return {
+    days: legacy ? Number.parseInt(legacy[1], 10) || 0 : 0,
+    hours: 0,
+  }
+}
+
+function parseBoolean(value) {
+  if (value == null)
+    return null
+  const normalized = String(value).trim().toLowerCase()
+  if (['true', '1', 'y', 'yes'].includes(normalized))
+    return true
+  if (['false', '0', 'n', 'no'].includes(normalized))
+    return false
+  return null
+}
+
+function parseInteger(value) {
+  if (value == null || value === '')
+    return null
+  const n = Number.parseInt(value, 10)
+  return Number.isFinite(n) ? n : null
 }
 
 function applyPermissions(el, config) {

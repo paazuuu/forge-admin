@@ -78,4 +78,15 @@
         ORDER BY t.create_time DESC
     </select>
 
+    <!-- 已逾期且仍待办理的任务 -->
+    <select id="selectOverduePendingTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
+        SELECT t.*, m.model_name AS process_name
+        FROM sys_flow_task t
+        LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        WHERE t.due_date IS NOT NULL
+          AND t.due_date &lt;= #{now}
+          AND t.status IN (0, 1)
+        ORDER BY t.due_date ASC, t.create_time ASC
+    </select>
+
 </mapper>

@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.flow.dto.ProcessDiagramInfo;
 import com.mdframe.forge.starter.flow.dto.TaskFormInfo;
 import com.mdframe.forge.starter.flow.entity.FlowTask;
+import com.mdframe.forge.starter.flow.service.FlowOverdueReminderService;
 import com.mdframe.forge.starter.flow.service.FlowTaskService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -32,6 +33,7 @@ import java.util.Map;
 public class FlowTaskController {
 
     private final FlowTaskService flowTaskService;
+    private final FlowOverdueReminderService flowOverdueReminderService;
 
     /**
      * 我的待办任务
@@ -273,6 +275,15 @@ public class FlowTaskController {
     public RespInfo<Void> remind(@RequestParam String taskId) {
         flowTaskService.remind(taskId);
         return RespInfo.success("催办成功", null);
+    }
+
+    /**
+     * 手动触发逾期提醒扫描。
+     */
+    @PostMapping("/overdue-reminder/scan")
+    public RespInfo<Void> scanOverdueReminders() {
+        flowOverdueReminderService.scanAndSendOverdueReminders();
+        return RespInfo.success("逾期提醒扫描已触发", null);
     }
 
     /**

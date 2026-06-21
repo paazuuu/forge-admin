@@ -66,12 +66,25 @@
         <!-- 流程设计器 -->
         <div class="designer-container">
           <DingFlowDesigner
+            v-if="isApprovalDesigner"
             ref="modelerRef"
+            :key="designerRenderKey"
             :xml="bpmnXml"
             :form-field-catalog="formFieldCatalog"
             :process-config="processConfig"
             @change="handleBpmnChange"
             @ready="handleModelerReady"
+            @import-start="handleDiagramImportStart"
+            @import-end="handleDiagramImportEnd"
+          />
+          <FlowModeler
+            v-else
+            ref="modelerRef"
+            :key="designerRenderKey"
+            :xml="bpmnXml"
+            @change="handleBpmnChange"
+            @ready="handleModelerReady"
+            @selection-change="handleBusinessElementSelect"
             @import-start="handleDiagramImportStart"
             @import-end="handleDiagramImportEnd"
           />
@@ -116,6 +129,23 @@
             </div>
           </Transition>
         </div>
+        <FlowPropertyPanelShell
+          v-show="isBusinessDesigner && dockedElement"
+          class="business-properties-panel"
+          :title="businessPanelTitle"
+          description="BPMN 元素属性"
+          :icon="businessPanelIcon"
+          @close="handleBusinessPanelClose"
+        >
+          <NodePropertiesPanel
+            v-if="dockedElement && modelerInstance"
+            :element="dockedElement"
+            :modeler="modelerInstance"
+            :field-catalog="formFieldCatalog"
+            class="business-properties-panel__body"
+            @update="handleBpmnChange"
+          />
+        </FlowPropertyPanelShell>
       </div>
 
       <div v-else class="settings-workspace">
@@ -132,6 +162,9 @@
               </div>
               <NTag :type="statusTag.type" size="small">
                 {{ statusTag.label }}
+              </NTag>
+              <NTag :type="isBusinessDesigner ? 'success' : 'info'" size="small" :bordered="false">
+                {{ designerTypeLabel }}
               </NTag>
             </div>
 
@@ -651,7 +684,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { modelListByProvider, providerPage } from '@/api/ai'
 import flowApi from '@/api/flow'
 import { streamFlowGenerate } from '@/api/flow-generator'
+import FlowModeler from '@/components/bpmn/FlowModeler.vue'
+import NodePropertiesPanel from '@/components/bpmn/NodePropertiesPanel.vue'
 import { DingFlowDesigner } from '@/components/flow-designer'
+import FlowPropertyPanelShell from '@/components/flow/FlowPropertyPanelShell.vue'
 import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { buildLocalFormFieldCatalog } from './utils/form-field-catalog'
@@ -701,6 +737,7 @@ const aiMessageEndRef = ref(null)
 const reasoningContentRefs = ref([])
 const showModelPanel = ref(false)
 const syncingModel = ref(false)
+let businessSelectionClearTimer = null
 
 const aiProviderId = ref(null)
 const aiModelId = ref(null)
@@ -716,6 +753,7 @@ const modelInfo = reactive({
   modelKey: '',
   category: '',
   flowType: '',
+  designerType: 'approval',
   allowSubmitterWithdraw: true,
   autoApprovalMode: 'none',
   formType: 'dynamic',
@@ -738,6 +776,13 @@ const showFormPreview = ref(false)
 
 const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
+const modelerInstance = ref(null)
+const dockedElement = ref(null)
+
+const designerTypeOptions = [
+  { label: '审批流程', value: 'approval' },
+  { label: '业务流程', value: 'business' },
+]
 
 function buildTreeSelectOptions(treeData) {
   return treeData.map(item => ({
@@ -834,6 +879,16 @@ const formConfigStatus = computed(() => {
   return { label: '未配置', type: 'warning' }
 })
 
+const designerType = computed(() => normalizeDesignerType(modelInfo.designerType))
+const isApprovalDesigner = computed(() => designerType.value === 'approval')
+const isBusinessDesigner = computed(() => designerType.value === 'business')
+const designerRenderKey = computed(() => `${modelInfo.id || 'new'}:${designerType.value}`)
+const designerTypeLabel = computed(() => {
+  return designerTypeOptions.find(item => item.value === designerType.value)?.label || '审批流程'
+})
+const businessPanelTitle = computed(() => getElementTitle(dockedElement.value))
+const businessPanelIcon = computed(() => getElementIcon(dockedElement.value))
+
 const processConfig = computed(() => ({
   allowSubmitterWithdraw: modelInfo.allowSubmitterWithdraw !== false,
   autoApprovalMode: normalizeAutoApprovalMode(modelInfo.autoApprovalMode),
@@ -861,12 +916,14 @@ const settingsTreeGroups = computed(() => [
         desc: '发起表单',
         icon: 'i-material-symbols:dynamic-form',
       },
-      {
-        key: 'approval',
-        label: '审批设置',
-        desc: '撤回 / 自动审批',
-        icon: 'i-material-symbols:approval-delegation-outline',
-      },
+      ...(isApprovalDesigner.value
+        ? [{
+            key: 'approval',
+            label: '审批设置',
+            desc: '撤回 / 自动审批',
+            icon: 'i-material-symbols:approval-delegation-outline',
+          }]
+        : []),
       {
         key: 'description',
         label: '说明',
@@ -931,20 +988,90 @@ watch(
   },
 )
 
+watch(
+  () => modelInfo.designerType,
+  (value) => {
+    const normalized = normalizeDesignerType(value)
+    if (value !== normalized) {
+      modelInfo.designerType = normalized
+      return
+    }
+    dockedElement.value = null
+    modelerInstance.value = null
+    if (normalized === 'business' && rightActiveTab.value === 'approval')
+      rightActiveTab.value = 'flow'
+  },
+)
+
+function getRouteModelId() {
+  const id = route.query.id
+  return Array.isArray(id) ? id[0] : id
+}
+
+function resetNewModelState() {
+  Object.assign(modelInfo, {
+    id: '',
+    modelName: '新流程',
+    modelKey: `process_${Date.now()}`,
+    category: '',
+    flowType: '',
+    designerType: 'approval',
+    allowSubmitterWithdraw: true,
+    autoApprovalMode: 'none',
+    formType: 'dynamic',
+    formId: null,
+    formUrl: '',
+    formJson: '',
+    description: '',
+    status: 0,
+    version: 1,
+    startListener: '',
+    endListener: '',
+  })
+  bpmnXml.value = ''
+  formSchema.value = []
+  formFieldCatalog.value = []
+  dockedElement.value = null
+  modelerInstance.value = null
+  workspaceMode.value = 'design'
+  rightActiveTab.value = 'flow'
+}
+
 onMounted(async () => {
   try {
     await loadCategories()
     await loadForms()
     await loadProviderOptions()
 
-    const modelId = props.modelId || route.query.id
+    const modelId = props.modelId || getRouteModelId()
     if (modelId) {
       await loadModel(modelId)
     }
     else {
-      modelInfo.modelKey = `process_${Date.now()}`
-      modelInfo.modelName = '新流程'
+      resetNewModelState()
     }
+  }
+  finally {
+    pageLoading.value = false
+  }
+})
+
+watch(() => route.query.id, async (value, oldValue) => {
+  if (props.embedded || value === oldValue)
+    return
+
+  pageLoading.value = true
+  try {
+    const modelId = getRouteModelId()
+    if (modelId) {
+      await loadModel(modelId)
+    }
+    else {
+      resetNewModelState()
+    }
+    await nextTick()
+    await modelerRef.value?.setXML?.(bpmnXml.value || '')
+    hasChanges.value = false
   }
   finally {
     pageLoading.value = false
@@ -958,8 +1085,7 @@ watch(() => props.modelId, async (value, oldValue) => {
   try {
     await loadModel(value)
     await nextTick()
-    if (bpmnXml.value)
-      await modelerRef.value?.setXML(bpmnXml.value)
+    await modelerRef.value?.setXML?.(bpmnXml.value || '')
     hasChanges.value = false
   }
   finally {
@@ -968,6 +1094,10 @@ watch(() => props.modelId, async (value, oldValue) => {
 })
 
 onUnmounted(() => {
+  if (businessSelectionClearTimer) {
+    clearTimeout(businessSelectionClearTimer)
+    businessSelectionClearTimer = null
+  }
   if (aiAbortController.value) {
     aiAbortController.value.abort()
     aiAbortController.value = null
@@ -1104,6 +1234,10 @@ function resolveLocalFormFieldCatalog() {
   return buildLocalFormFieldCatalog(formSchema.value)
 }
 
+function normalizeDesignerType(value) {
+  return value === 'business' ? 'business' : 'approval'
+}
+
 function normalizeAutoApprovalMode(value) {
   return ['firstOnly', 'consecutive', 'none'].includes(value) ? value : 'none'
 }
@@ -1203,7 +1337,12 @@ async function loadModel(id) {
   try {
     const res = await flowApi.getModelDetail(id)
     if (res.code === 200 && res.data) {
+      bpmnXml.value = ''
+      formSchema.value = []
+      formFieldCatalog.value = []
+      dockedElement.value = null
       Object.assign(modelInfo, res.data)
+      modelInfo.designerType = normalizeDesignerType(res.data.designerType)
       bpmnXml.value = res.data.bpmnXml || ''
       applyProcessConfigFromXml(bpmnXml.value)
 
@@ -1215,6 +1354,9 @@ async function loadModel(id) {
           console.error('解析表单配置失败:', e)
           formSchema.value = []
         }
+      }
+      else {
+        formSchema.value = []
       }
       await refreshFormFieldCatalog()
     }
@@ -1241,9 +1383,7 @@ async function handleVersionHistoryRefresh() {
 
   await loadModel(modelInfo.id)
   await nextTick()
-  if (bpmnXml.value) {
-    await modelerRef.value?.setXML(bpmnXml.value)
-  }
+  await modelerRef.value?.setXML?.(bpmnXml.value || '')
   hasChanges.value = false
 }
 
@@ -2194,9 +2334,76 @@ function handleBack() {
   }
 }
 
-function handleModelerReady() {
-  // DingFlowDesigner 不再暴露 modeler() / selectedElement，节点编辑改由画布内 NodeConfigDrawer 接管
-  // 此处保留空实现以兼容 @ready 事件回调签名
+function handleModelerReady(modeler) {
+  modelerInstance.value = modeler || modelerRef.value?.modeler?.() || null
+}
+
+function handleBusinessElementSelect(element) {
+  if (!isBusinessDesigner.value) {
+    dockedElement.value = null
+    return
+  }
+  if (businessSelectionClearTimer) {
+    clearTimeout(businessSelectionClearTimer)
+    businessSelectionClearTimer = null
+  }
+  if (element) {
+    dockedElement.value = element
+    return
+  }
+  businessSelectionClearTimer = setTimeout(() => {
+    dockedElement.value = null
+    businessSelectionClearTimer = null
+  }, 80)
+}
+
+function handleBusinessPanelClose() {
+  if (businessSelectionClearTimer) {
+    clearTimeout(businessSelectionClearTimer)
+    businessSelectionClearTimer = null
+  }
+  dockedElement.value = null
+  modelerRef.value?.clearSelection?.()
+}
+
+function getElementTitle(el) {
+  if (!el)
+    return '属性设置'
+  const typeNames = {
+    'bpmn:StartEvent': '开始节点',
+    'bpmn:EndEvent': '结束节点',
+    'bpmn:UserTask': '用户任务',
+    'bpmn:ServiceTask': '服务任务',
+    'bpmn:ScriptTask': '脚本任务',
+    'bpmn:BusinessRuleTask': '业务规则任务',
+    'bpmn:ManualTask': '手工任务',
+    'bpmn:ExclusiveGateway': '排他网关',
+    'bpmn:ParallelGateway': '并行网关',
+    'bpmn:InclusiveGateway': '包容网关',
+    'bpmn:SequenceFlow': '序列流',
+    'bpmn:SubProcess': '子流程',
+    'bpmn:CallActivity': '调用活动',
+  }
+  return el.businessObject?.name || typeNames[el.type] || '属性设置'
+}
+
+function getElementIcon(el) {
+  const iconMap = {
+    'bpmn:StartEvent': 'i-material-symbols:play-circle-outline',
+    'bpmn:EndEvent': 'i-material-symbols:stop-circle-outline',
+    'bpmn:UserTask': 'i-material-symbols:person-check-outline',
+    'bpmn:ServiceTask': 'i-material-symbols:settings-outline',
+    'bpmn:ScriptTask': 'i-material-symbols:code-blocks-outline',
+    'bpmn:BusinessRuleTask': 'i-material-symbols:rule-settings-outline',
+    'bpmn:ManualTask': 'i-material-symbols:pan-tool-outline',
+    'bpmn:ExclusiveGateway': 'i-material-symbols:conversion-path-outline',
+    'bpmn:ParallelGateway': 'i-material-symbols:call-split-outline',
+    'bpmn:InclusiveGateway': 'i-material-symbols:merge-type-outline',
+    'bpmn:SequenceFlow': 'i-material-symbols:arrow-right-alt',
+    'bpmn:SubProcess': 'i-material-symbols:account-tree-outline',
+    'bpmn:CallActivity': 'i-material-symbols:call-made',
+  }
+  return iconMap[el?.type] || 'i-material-symbols:tune'
 }
 </script>
 
@@ -2308,6 +2515,31 @@ function handleModelerReady() {
   overflow: hidden;
   background: #f8fafc;
   position: relative;
+}
+
+.business-properties-panel {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  bottom: 12px;
+  z-index: 70;
+  width: 520px;
+  max-width: min(520px, calc(100vw - 40px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dbe3ee;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  background: #fff;
+  box-shadow: -10px 0 24px rgba(15, 23, 42, 0.12);
+  contain: layout paint;
+  overflow: hidden;
+}
+
+.business-properties-panel__body {
+  flex: 1;
+  min-height: 0;
 }
 
 .designer-loading-mask {

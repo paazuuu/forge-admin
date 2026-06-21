@@ -16,6 +16,7 @@ import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
+import com.mdframe.forge.starter.flow.service.FlowTaskReceiverResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEvent;
 import org.flowable.common.engine.api.delegate.event.FlowableEntityEvent;
@@ -34,7 +35,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -92,6 +92,10 @@ public class FlowTaskEventListener implements FlowableEventListener {
     @Autowired(required = false)
     @Lazy
     private MessageService messageService;
+
+    @Autowired(required = false)
+    @Lazy
+    private FlowTaskReceiverResolver taskReceiverResolver;
 
     @Autowired(required = false)
     @Lazy
@@ -624,7 +628,11 @@ public class FlowTaskEventListener implements FlowableEventListener {
         if (messageService == null || flowTask == null || flowTask.getTaskId() == null) {
             return;
         }
-        Set<Long> receiverIds = resolveTaskMessageReceivers(flowTask);
+        if (taskReceiverResolver == null) {
+            log.warn("待办站内信接收人解析器未初始化: taskId={}", flowTask.getTaskId());
+            return;
+        }
+        Set<Long> receiverIds = taskReceiverResolver.resolveReceivers(flowTask);
         if (receiverIds.isEmpty()) {
             log.warn("待办任务没有可推送的站内信接收人: taskId={}, assignee={}, candidateUsers={}, candidateGroups={}",
                     flowTask.getTaskId(), flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
@@ -649,72 +657,6 @@ public class FlowTaskEventListener implements FlowableEventListener {
         } catch (Exception e) {
             log.warn("待办站内信推送失败，不阻断流程: taskId={}", flowTask.getTaskId(), e);
         }
-    }
-
-    private Set<Long> resolveTaskMessageReceivers(FlowTask flowTask) {
-        Set<Long> receiverIds = new HashSet<>();
-        addUserId(receiverIds, flowTask.getAssignee());
-        addUserIds(receiverIds, flowTask.getCandidateUsers());
-        if (receiverIds.isEmpty()) {
-            addCandidateGroupUsers(receiverIds, flowTask.getCandidateGroups());
-        }
-        return receiverIds;
-    }
-
-    private void addUserIds(Set<Long> receiverIds, String csv) {
-        if (csv == null || csv.isBlank()) {
-            return;
-        }
-        for (String item : csv.split(",")) {
-            addUserId(receiverIds, item);
-        }
-    }
-
-    private void addUserId(Set<Long> receiverIds, String raw) {
-        if (raw == null || raw.isBlank()) {
-            return;
-        }
-        try {
-            receiverIds.add(Long.parseLong(raw.trim()));
-        } catch (NumberFormatException e) {
-            log.warn("待办站内信接收人不是数值用户ID，已跳过: raw={}", raw);
-        }
-    }
-
-    private void addCandidateGroupUsers(Set<Long> receiverIds, String candidateGroups) {
-        if (flowOrgIntegrationService == null || candidateGroups == null || candidateGroups.isBlank()) {
-            return;
-        }
-        for (String rawGroup : candidateGroups.split(",")) {
-            String group = rawGroup == null ? null : rawGroup.trim();
-            if (group == null || group.isEmpty()) {
-                continue;
-            }
-            List<String> userIds = resolveGroupUsers(group);
-            for (String userId : userIds) {
-                addUserId(receiverIds, userId);
-            }
-        }
-    }
-
-    private List<String> resolveGroupUsers(String group) {
-        try {
-            List<String> roleUsers = isNumeric(group)
-                    ? flowOrgIntegrationService.getUserIdsByRoleId(group)
-                    : flowOrgIntegrationService.getUserIdsByRoleCode(group);
-            if (roleUsers != null && !roleUsers.isEmpty()) {
-                return roleUsers;
-            }
-            if (isNumeric(group)) {
-                List<String> deptUsers = flowOrgIntegrationService.getUserIdsByDeptId(group);
-                if (deptUsers != null) {
-                    return deptUsers;
-                }
-            }
-        } catch (Exception e) {
-            log.warn("解析候选组用户失败: group={}", group, e);
-        }
-        return List.of();
     }
 
     private void updateFormInstanceStatus(String processInstanceId, String status) {

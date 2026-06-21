@@ -36,6 +36,14 @@ const PERMISSION_DEFAULTS = {
   requireComment: true,
 }
 
+const OVERDUE_REMINDER_DEFAULTS = {
+  templateCode: 'FLOW_TASK_OVERDUE',
+  channels: ['WEB'],
+  repeatMode: 'once',
+  intervalMinutes: 1440,
+  maxTimes: 1,
+}
+
 const DOLLAR = '$'
 const STATIC_ASSIGNEES = new Set([
   `${DOLLAR}{initiator}`,
@@ -112,8 +120,21 @@ export function writeUserTaskConfig(config) {
   // priority / dueDate
   if (typeof cfg.priority === 'number' && cfg.priority !== 50)
     attrs.push(`flowable:priority="${cfg.priority}"`)
-  if (typeof cfg.dueDate === 'number' && cfg.dueDate > 0)
-    attrs.push(`flowable:dueDate="P${cfg.dueDate}D"`)
+  const dueDateDuration = buildDueDateDuration(cfg)
+  if (dueDateDuration)
+    attrs.push(`flowable:dueDate="${dueDateDuration}"`)
+
+  if (cfg.overdueReminderEnabled) {
+    attrs.push('flowable:overdueReminderEnabled="true"')
+    attrs.push(`flowable:overdueReminderTemplateCode="${escapeXmlAttr(cfg.overdueReminderTemplateCode || OVERDUE_REMINDER_DEFAULTS.templateCode)}"`)
+    const channels = Array.isArray(cfg.overdueReminderChannels) && cfg.overdueReminderChannels.length
+      ? cfg.overdueReminderChannels
+      : OVERDUE_REMINDER_DEFAULTS.channels
+    attrs.push(`flowable:overdueReminderChannels="${escapeXmlAttr(channels.join(','))}"`)
+    attrs.push(`flowable:overdueReminderRepeatMode="${escapeXmlAttr(cfg.overdueReminderRepeatMode || OVERDUE_REMINDER_DEFAULTS.repeatMode)}"`)
+    attrs.push(`flowable:overdueReminderIntervalMinutes="${normalizePositiveInt(cfg.overdueReminderIntervalMinutes, OVERDUE_REMINDER_DEFAULTS.intervalMinutes)}"`)
+    attrs.push(`flowable:overdueReminderMaxTimes="${normalizePositiveInt(cfg.overdueReminderMaxTimes, OVERDUE_REMINDER_DEFAULTS.maxTimes)}"`)
+  }
 
   // 7 个权限布尔（仅写出与默认值不同的）
   for (const key of PERMISSION_KEYS) {
@@ -160,6 +181,35 @@ function normalizeFormFieldPermission(item = {}) {
     writable: item.writable !== false,
     required: item.required === true,
   }
+}
+
+function buildDueDateDuration(cfg) {
+  const days = normalizeNonNegativeInt(cfg.dueDateDays, null)
+  const hours = normalizeNonNegativeInt(cfg.dueDateHours, null)
+  const legacyDays = normalizeNonNegativeInt(cfg.dueDate, 0)
+  const hasDayHourValue = (days || 0) > 0 || (hours || 0) > 0
+  const finalDays = hasDayHourValue ? (days || 0) : legacyDays
+  const finalHours = hours != null ? hours : 0
+
+  if (finalDays <= 0 && finalHours <= 0)
+    return ''
+  if (finalDays > 0 && finalHours > 0)
+    return `P${finalDays}DT${finalHours}H`
+  if (finalDays > 0)
+    return `P${finalDays}D`
+  return `PT${finalHours}H`
+}
+
+function normalizeNonNegativeInt(value, fallback) {
+  if (value == null || value === '')
+    return fallback
+  const n = Number.parseInt(value, 10)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
+function normalizePositiveInt(value, fallback) {
+  const n = Number.parseInt(value, 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
 function buildListener(tag, l) {

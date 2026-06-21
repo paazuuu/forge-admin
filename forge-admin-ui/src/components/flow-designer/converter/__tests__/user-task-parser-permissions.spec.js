@@ -33,6 +33,14 @@ const SAMPLE_FORM_PRIORITY = [
   '                   flowable:priority="80"',
   '                   flowable:dueDate="P3D"',
   '                   flowable:formFieldPermissions=\'[{"field":"amount","label":"金额","readable":true,"writable":false,"required":true}]\'/>',
+  '    <bpmn:userTask id="T_overdue"',
+  '                   flowable:dueDate="P1DT2H"',
+  '                   flowable:overdueReminderEnabled="true"',
+  '                   flowable:overdueReminderTemplateCode="FLOW_TASK_OVERDUE"',
+  '                   flowable:overdueReminderChannels="WEB,EMAIL"',
+  '                   flowable:overdueReminderRepeatMode="interval"',
+  '                   flowable:overdueReminderIntervalMinutes="60"',
+  '                   flowable:overdueReminderMaxTimes="3"/>',
   '    <bpmn:userTask id="T_dynamic" flowable:formKey="leaveForm"/>',
   '    <bpmn:userTask id="T_no_form"/>',
   '  </bpmn:process>',
@@ -85,6 +93,21 @@ describe('parseUserTaskConfig - 表单 / 优先级 / dueDate', () => {
     const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_external'))
     expect(cfg.priority).toBe(80)
     expect(cfg.dueDate).toBe(3)
+    expect(cfg.dueDateDays).toBe(3)
+    expect(cfg.dueDateHours).toBe(0)
+  })
+
+  it('解析天+小时处理时限和逾期提醒配置', () => {
+    const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_overdue'))
+    expect(cfg.dueDate).toBe(1)
+    expect(cfg.dueDateDays).toBe(1)
+    expect(cfg.dueDateHours).toBe(2)
+    expect(cfg.overdueReminderEnabled).toBe(true)
+    expect(cfg.overdueReminderTemplateCode).toBe('FLOW_TASK_OVERDUE')
+    expect(cfg.overdueReminderChannels).toEqual(['WEB', 'EMAIL'])
+    expect(cfg.overdueReminderRepeatMode).toBe('interval')
+    expect(cfg.overdueReminderIntervalMinutes).toBe(60)
+    expect(cfg.overdueReminderMaxTimes).toBe(3)
   })
 
   it('解析表单字段权限配置', () => {
@@ -98,5 +121,8 @@ describe('parseUserTaskConfig - 表单 / 优先级 / dueDate', () => {
     const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_no_form'))
     expect(cfg.priority).toBe(50)
     expect(cfg.dueDate).toBe(0)
+    expect(cfg.dueDateDays).toBe(0)
+    expect(cfg.dueDateHours).toBe(0)
+    expect(cfg.overdueReminderEnabled).toBe(false)
   })
 })
