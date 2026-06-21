@@ -43,6 +43,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  fieldPermissions: {
+    type: [Array, String],
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -55,7 +59,18 @@ const innerValue = ref(cloneValue(props.modelValue) || {})
 const hydratedRules = ref([])
 let hydrateSeq = 0
 
-const rawRules = computed(() => normalizeFormCreateRules(props.schema))
+const fieldPermissionMap = computed(() => {
+  const map = new Map()
+  for (const item of normalizeFieldPermissions(props.fieldPermissions)) {
+    if (item.field)
+      map.set(item.field, item)
+  }
+  return map
+})
+const rawRules = computed(() => applyFieldPermissions(
+  normalizeFormCreateRules(props.schema),
+  fieldPermissionMap.value,
+))
 const rules = computed(() => hydratedRules.value)
 const mergedOptions = computed(() => ({
   ...buildDefaultFormOptions(),
@@ -79,6 +94,71 @@ watch(
 function handleChange() {
   emit('update:modelValue', cloneValue(innerValue.value) || {})
   emit('change', cloneValue(innerValue.value) || {})
+}
+
+function normalizeFieldPermissions(source) {
+  let list = source
+  if (typeof source === 'string' && source.trim()) {
+    try {
+      list = JSON.parse(source)
+    }
+    catch {
+      list = []
+    }
+  }
+  if (!Array.isArray(list))
+    return []
+  return list.map(item => ({
+    field: String(item?.field || '').trim(),
+    readable: item?.readable !== false,
+    writable: item?.writable !== false,
+    required: item?.required === true,
+  }))
+}
+
+function applyFieldPermissions(rules, permissionMap) {
+  if (!permissionMap.size)
+    return rules
+  return applyFieldPermissionsToList(rules, permissionMap)
+}
+
+function applyFieldPermissionsToList(rules, permissionMap) {
+  return (rules || [])
+    .map(rule => applyFieldPermissionToRule(rule, permissionMap))
+    .filter(Boolean)
+}
+
+function applyFieldPermissionToRule(rule, permissionMap) {
+  if (!rule || typeof rule !== 'object')
+    return rule
+
+  const next = cloneValue(rule)
+  const field = String(next.field || next.props?.field || '').trim()
+  const permission = field ? permissionMap.get(field) : null
+
+  if (permission?.readable === false)
+    return null
+
+  if (permission) {
+    if (permission.writable === false) {
+      next.props = { ...(next.props || {}), disabled: true }
+      next.disabled = true
+    }
+    if (permission.required === true)
+      next.validate = ensureRequiredRule(next.validate, next.title || field)
+  }
+
+  if (Array.isArray(next.children))
+    next.children = applyFieldPermissionsToList(next.children, permissionMap)
+
+  return next
+}
+
+function ensureRequiredRule(validate, title) {
+  const list = Array.isArray(validate) ? [...validate] : []
+  if (!list.some(item => item?.required))
+    list.unshift({ required: true, message: `请输入${title || '该字段'}`, trigger: 'blur' })
+  return list
 }
 
 async function hydrateRules() {

@@ -22,7 +22,7 @@ const FIELDS = [
   { key: 'allowReturn', label: '允许退回', desc: '可退回到任意已审节点' },
   { key: 'allowTerminate', label: '允许终止', desc: '可直接终止流程' },
   { key: 'requireSignature', label: '强制签名', desc: '审批时必须电子签名' },
-  { key: 'requireComment', label: '强制评论', desc: '审批必须填写意见' },
+  { key: 'requireComment', label: '审批意见', desc: '同意或驳回流程时必须填写审批意见' },
 ]
 
 function bool(key, fallback = false) {

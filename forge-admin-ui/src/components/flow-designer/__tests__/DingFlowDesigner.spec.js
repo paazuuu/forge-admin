@@ -165,6 +165,52 @@ describe('dingFlowDesigner - 网关分支配置', () => {
     w.unmount()
   })
 
+  it('点击分支标签时只打开当前分支配置，点击网关节点恢复全部分支', async () => {
+    const w = mountDesigner()
+    w.vm.designer.addNode('StartEvent_1', 'condition')
+    await w.vm.$nextTick()
+
+    const branchHeaders = w.findAll('.branch-header')
+    expect(branchHeaders).toHaveLength(2)
+
+    await branchHeaders[0].trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.text()).toContain('正在配置 分支')
+    expect(w.findAll('.condition-branch')).toHaveLength(1)
+
+    await w.find('[data-node-type="condition"]').trigger('click')
+    await w.vm.$nextTick()
+
+    expect(w.text()).toContain('该网关共 2 条分支')
+    expect(w.findAll('.condition-branch')).toHaveLength(2)
+
+    w.unmount()
+  })
+
+  it('画布分支区域可继续添加第三条分支并聚焦新分支', async () => {
+    const w = mountDesigner()
+    const gatewayId = w.vm.designer.addNode('StartEvent_1', 'condition')
+    await w.vm.$nextTick()
+
+    expect(w.find('[data-test="canvas-add-branch"]').exists()).toBe(true)
+    await w.find('[data-node-type="condition"]').trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('.condition-add-branch').exists()).toBe(false)
+
+    await w.find('[data-test="canvas-add-branch"]').trigger('click')
+    await w.vm.$nextTick()
+
+    const outgoing = w.vm.designer.getOutgoingEdges(gatewayId)
+    expect(outgoing).toHaveLength(3)
+    expect(outgoing.filter(edge => edge.isDefault)).toHaveLength(1)
+    expect(w.text()).toContain('正在配置 分支 3')
+    expect(w.findAll('.condition-branch')).toHaveLength(1)
+    expect(w.findAll('.branch-header')).toHaveLength(3)
+
+    w.unmount()
+  })
+
   it('网关本身不显示普通添加按钮，分支节点可继续添加', async () => {
     const w = mountDesigner()
     w.vm.designer.addNode('StartEvent_1', 'condition')

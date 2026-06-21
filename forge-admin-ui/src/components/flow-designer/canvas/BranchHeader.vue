@@ -24,10 +24,16 @@ defineEmits(['click'])
 const labelText = computed(() => {
   if (props.edge?.isDefault)
     return '默认'
-  const t = String(props.edge?.condition || '')
-  if (!t)
+  if (!props.edge?.condition)
     return '配置条件'
-  return t.length > 18 ? `${t.slice(0, 18)}…` : t
+  const ruleCount = Array.isArray(props.edge?.conditionRules) ? props.edge.conditionRules.length : 0
+  return ruleCount > 1 ? `${ruleCount} 条条件` : '条件已设'
+})
+
+const labelTitle = computed(() => {
+  if (props.edge?.isDefault)
+    return '默认分支'
+  return props.edge?.condition || '点击配置条件'
 })
 
 const colorClass = computed(() => {
@@ -48,15 +54,17 @@ const colorClass = computed(() => {
       top: `${position.y}px`,
       transform: 'translate(-50%, -50%)',
     }"
+    :title="labelTitle"
     @click.stop="$emit('click', edge)"
   >
-    {{ labelText }}
+    <span class="branch-header-dot" />
+    <span class="branch-header-text">{{ labelText }}</span>
   </div>
 </template>
 
 <style scoped>
 .branch-header {
-  max-width: 160px;
+  max-width: 112px;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
@@ -65,6 +73,22 @@ const colorClass = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: box-shadow 160ms ease;
+}
+
+.branch-header-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.branch-header-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .branch-header:hover {

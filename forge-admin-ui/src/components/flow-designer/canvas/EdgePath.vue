@@ -37,14 +37,18 @@ const midpoint = computed(() => getEdgeMidpoint(props.path?.points || []))
 const labelVisible = computed(() => {
   if (props.showLabel != null)
     return props.showLabel
+  if (props.edge?.branchId)
+    return false
   return Boolean(props.edge?.condition || props.edge?.isDefault)
 })
 
 const labelText = computed(() => {
   if (props.edge?.isDefault)
     return '默认'
-  const text = String(props.edge?.condition || '')
-  return text.length > 20 ? `${text.slice(0, 20)}…` : text
+  if (!props.edge?.condition)
+    return ''
+  const ruleCount = Array.isArray(props.edge?.conditionRules) ? props.edge.conditionRules.length : 0
+  return ruleCount > 1 ? `${ruleCount} 条条件` : '条件已设'
 })
 
 const labelWidth = computed(() => Math.min(Math.max(labelText.value.length * 8 + 22, 58), 176))

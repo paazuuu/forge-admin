@@ -68,6 +68,8 @@
           <DingFlowDesigner
             ref="modelerRef"
             :xml="bpmnXml"
+            :form-field-catalog="formFieldCatalog"
+            :process-config="processConfig"
             @change="handleBpmnChange"
             @ready="handleModelerReady"
             @import-start="handleDiagramImportStart"
@@ -232,6 +234,61 @@
             </div>
             <div class="settings-tip">
               发起节点不再单独配置表单；这里的表单会作为流程全局发起表单使用。
+            </div>
+          </div>
+
+          <div v-else-if="rightActiveTab === 'approval'" class="settings-section-pane">
+            <div class="settings-pane-header">
+              <div>
+                <div class="settings-pane-title">
+                  审批设置
+                </div>
+                <div class="settings-pane-desc">
+                  控制提交人撤回权限，以及同一审批人重复出现时的自动处理规则。
+                </div>
+              </div>
+              <NTag size="small" :type="modelInfo.autoApprovalMode === 'none' ? 'default' : 'info'" :bordered="false">
+                {{ autoApprovalModeLabel }}
+              </NTag>
+            </div>
+
+            <div class="approval-setting-row">
+              <div class="approval-setting-main">
+                <div class="approval-setting-title">
+                  提交人权限
+                </div>
+                <div class="approval-setting-desc">
+                  允许提交人撤销审批中的申请。
+                </div>
+              </div>
+              <n-switch v-model:value="modelInfo.allowSubmitterWithdraw" />
+            </div>
+
+            <div class="approval-setting-block">
+              <div class="approval-setting-title">
+                自动审批
+              </div>
+              <div class="approval-setting-desc">
+                当同一审批人在流程中重复出现时，按以下策略处理后续节点。
+              </div>
+              <div class="approval-mode-list">
+                <button
+                  v-for="option in autoApprovalModeOptions"
+                  :key="option.value"
+                  type="button"
+                  class="approval-mode-option"
+                  :class="{ active: modelInfo.autoApprovalMode === option.value }"
+                  @click="modelInfo.autoApprovalMode = option.value"
+                >
+                  <span class="approval-mode-check">
+                    <i v-if="modelInfo.autoApprovalMode === option.value" class="i-material-symbols:check-small" />
+                  </span>
+                  <span class="approval-mode-main">
+                    <span class="approval-mode-title">{{ option.label }}</span>
+                    <span class="approval-mode-desc">{{ option.desc }}</span>
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -597,6 +654,7 @@ import { streamFlowGenerate } from '@/api/flow-generator'
 import { DingFlowDesigner } from '@/components/flow-designer'
 import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
+import { buildLocalFormFieldCatalog } from './utils/form-field-catalog'
 import VersionHistory from './version.vue'
 
 const props = defineProps({
@@ -642,6 +700,7 @@ const aiMessageListRef = ref(null)
 const aiMessageEndRef = ref(null)
 const reasoningContentRefs = ref([])
 const showModelPanel = ref(false)
+const syncingModel = ref(false)
 
 const aiProviderId = ref(null)
 const aiModelId = ref(null)
@@ -657,6 +716,8 @@ const modelInfo = reactive({
   modelKey: '',
   category: '',
   flowType: '',
+  allowSubmitterWithdraw: true,
+  autoApprovalMode: 'none',
   formType: 'dynamic',
   formId: null,
   formUrl: '',
@@ -691,6 +752,24 @@ const formTypeOptions = [
   { label: '动态表单', value: 'dynamic' },
   { label: '外置表单', value: 'external' },
   { label: '无表单', value: 'none' },
+]
+
+const autoApprovalModeOptions = [
+  {
+    label: '仅首个节点需审批，后续审批节点自动同意',
+    value: 'firstOnly',
+    desc: '同一审批人完成一次审批后，后续再次轮到该审批人时系统自动同意。',
+  },
+  {
+    label: '仅连续审批时自动同意',
+    value: 'consecutive',
+    desc: '只有相邻审批节点仍是同一审批人时，后续连续节点自动同意。',
+  },
+  {
+    label: '每个节点都需要审批',
+    value: 'none',
+    desc: '不触发重复审批自动同意，所有审批节点都需要人工处理。',
+  },
 ]
 
 const aiExamples = [
@@ -755,6 +834,15 @@ const formConfigStatus = computed(() => {
   return { label: '未配置', type: 'warning' }
 })
 
+const processConfig = computed(() => ({
+  allowSubmitterWithdraw: modelInfo.allowSubmitterWithdraw !== false,
+  autoApprovalMode: normalizeAutoApprovalMode(modelInfo.autoApprovalMode),
+}))
+
+const autoApprovalModeLabel = computed(() => {
+  return autoApprovalModeOptions.find(item => item.value === processConfig.value.autoApprovalMode)?.label || '每个节点都需要审批'
+})
+
 const isAiPanelActive = computed(() => workspaceMode.value === 'settings' && rightActiveTab.value === 'ai')
 
 const settingsTreeGroups = computed(() => [
@@ -772,6 +860,12 @@ const settingsTreeGroups = computed(() => [
         label: '表单配置',
         desc: '发起表单',
         icon: 'i-material-symbols:dynamic-form',
+      },
+      {
+        key: 'approval',
+        label: '审批设置',
+        desc: '撤回 / 自动审批',
+        icon: 'i-material-symbols:approval-delegation-outline',
       },
       {
         key: 'description',
@@ -806,6 +900,8 @@ function openSettingsPanel(key) {
 function getSettingsBadge(key) {
   if (key === 'form')
     return formConfigStatus.value.label
+  if (key === 'approval')
+    return processConfig.value.autoApprovalMode === 'none' ? '人工审批' : '自动'
   if (key === 'ai' && aiSending.value)
     return '生成中'
   return ''
@@ -814,6 +910,8 @@ function getSettingsBadge(key) {
 function getSettingsBadgeClass(key) {
   if (key === 'form')
     return `is-${formConfigStatus.value.type}`
+  if (key === 'approval')
+    return processConfig.value.autoApprovalMode === 'none' ? 'is-default' : 'is-info'
   if (key === 'ai')
     return 'is-info'
   return ''
@@ -824,6 +922,14 @@ watch(aiProviderId, async (val, old) => {
     await loadModelOptions(val, false)
   }
 })
+
+watch(
+  () => [modelInfo.allowSubmitterWithdraw, modelInfo.autoApprovalMode],
+  () => {
+    if (!syncingModel.value && !pageLoading.value)
+      hasChanges.value = true
+  },
+)
 
 onMounted(async () => {
   try {
@@ -980,8 +1086,10 @@ async function refreshFormFieldCatalog(formDetail = null) {
         modelKey: modelInfo.modelKey,
       })
       if (res.code === 200) {
-        formFieldCatalog.value = res.data || []
-        return
+        const remoteCatalog = res.data || []
+        formFieldCatalog.value = remoteCatalog.length ? remoteCatalog : resolveLocalFormFieldCatalog()
+        if (remoteCatalog.length)
+          return
       }
     }
     catch (error) {
@@ -993,43 +1101,111 @@ async function refreshFormFieldCatalog(formDetail = null) {
 }
 
 function resolveLocalFormFieldCatalog() {
-  const rules = Array.isArray(formSchema.value) ? formSchema.value : []
-  return rules
-    .map((rule) => {
-      const field = rule.field || rule.fieldName || rule.name || rule.key
-      if (!field)
-        return null
-      return {
-        field,
-        label: rule.title || rule.label || field,
-        componentType: rule.type || rule.component || '',
-        dataType: inferFieldDataType(rule),
-        required: Array.isArray(rule.validate) ? rule.validate.some(item => item?.required) : false,
-        source: 'model-inline',
-      }
-    })
-    .filter(Boolean)
+  return buildLocalFormFieldCatalog(formSchema.value)
 }
 
-function inferFieldDataType(rule) {
-  const type = String(rule.type || '').toLowerCase()
-  if (['inputnumber', 'number', 'slider', 'rate'].some(key => type.includes(key)))
-    return 'number'
-  if (['switch', 'checkbox'].some(key => type.includes(key)))
-    return 'boolean'
-  if (['date', 'time'].some(key => type.includes(key)))
-    return 'datetime'
-  if (['select', 'radio', 'cascader', 'tree'].some(key => type.includes(key)))
-    return 'enum'
-  return 'string'
+function normalizeAutoApprovalMode(value) {
+  return ['firstOnly', 'consecutive', 'none'].includes(value) ? value : 'none'
+}
+
+function parseBooleanWithDefault(value, fallback) {
+  if (value == null || value === '')
+    return fallback
+  const normalized = String(value).trim().toLowerCase()
+  if (['true', '1', 'y', 'yes'].includes(normalized))
+    return true
+  if (['false', '0', 'n', 'no'].includes(normalized))
+    return false
+  return fallback
+}
+
+function readFlowableAttr(el, name) {
+  if (!el)
+    return null
+  const nsValue = el.getAttributeNS?.('http://flowable.org/bpmn', name)
+  if (nsValue != null && nsValue !== '')
+    return nsValue
+  return el.getAttribute?.(`flowable:${name}`) || el.getAttribute?.(name) || null
+}
+
+function extractProcessConfigFromXml(xml) {
+  if (!xml)
+    return { allowSubmitterWithdraw: true, autoApprovalMode: 'none' }
+  try {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml')
+    if (doc.querySelector('parsererror'))
+      return { allowSubmitterWithdraw: true, autoApprovalMode: 'none' }
+    const processEl = findElementByLocalName(doc, 'process')
+    return {
+      allowSubmitterWithdraw: parseBooleanWithDefault(
+        readFlowableAttr(processEl, 'allowSubmitterWithdraw'),
+        true,
+      ),
+      autoApprovalMode: normalizeAutoApprovalMode(readFlowableAttr(processEl, 'autoApprovalMode')),
+    }
+  }
+  catch {
+    return { allowSubmitterWithdraw: true, autoApprovalMode: 'none' }
+  }
+}
+
+function applyProcessConfigFromXml(xml) {
+  const config = extractProcessConfigFromXml(xml)
+  modelInfo.allowSubmitterWithdraw = config.allowSubmitterWithdraw
+  modelInfo.autoApprovalMode = config.autoApprovalMode
+}
+
+function applyProcessConfigToXml(xml) {
+  if (!xml)
+    return ''
+  try {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml')
+    if (doc.querySelector('parsererror'))
+      return xml
+
+    const processEl = findElementByLocalName(doc, 'process')
+    if (!processEl)
+      return xml
+
+    const definitionsEl = doc.documentElement
+    if (definitionsEl && !definitionsEl.getAttribute('xmlns:flowable'))
+      definitionsEl.setAttribute('xmlns:flowable', 'http://flowable.org/bpmn')
+
+    processEl.setAttributeNS(
+      'http://flowable.org/bpmn',
+      'flowable:allowSubmitterWithdraw',
+      String(processConfig.value.allowSubmitterWithdraw !== false),
+    )
+    processEl.setAttributeNS(
+      'http://flowable.org/bpmn',
+      'flowable:autoApprovalMode',
+      normalizeAutoApprovalMode(processConfig.value.autoApprovalMode),
+    )
+    return new XMLSerializer().serializeToString(doc)
+  }
+  catch {
+    return xml
+  }
+}
+
+async function getXmlForSave() {
+  const currentXml = modelerRef.value?.getXML
+    ? await modelerRef.value.getXML()
+    : bpmnXml.value
+  const xml = applyProcessConfigToXml(currentXml)
+  if (xml)
+    bpmnXml.value = xml
+  return xml
 }
 
 async function loadModel(id) {
+  syncingModel.value = true
   try {
     const res = await flowApi.getModelDetail(id)
     if (res.code === 200 && res.data) {
       Object.assign(modelInfo, res.data)
       bpmnXml.value = res.data.bpmnXml || ''
+      applyProcessConfigFromXml(bpmnXml.value)
 
       if (res.data.formJson) {
         try {
@@ -1045,6 +1221,9 @@ async function loadModel(id) {
   }
   catch (error) {
     console.error('加载模型失败:', error)
+  }
+  finally {
+    syncingModel.value = false
   }
 }
 
@@ -1421,6 +1600,7 @@ async function handleApplyAiDraft() {
       ...aiDraft.value,
       bpmnXml: xmlToImport,
     }
+    applyProcessConfigFromXml(xmlToImport)
     bpmnXml.value = xmlToImport
     await modelerRef.value?.setXML(xmlToImport)
     hasChanges.value = true
@@ -1908,7 +2088,7 @@ async function handleSaveDraft() {
   try {
     saving.value = true
 
-    const xml = await modelerRef.value?.getXML()
+    const xml = await getXmlForSave()
 
     if (!xml) {
       window.$message?.warning('流程图验证失败，请检查后重试')
@@ -1954,7 +2134,7 @@ async function handleDeploy() {
   try {
     deploying.value = true
 
-    const xml = await modelerRef.value?.getXML()
+    const xml = await getXmlForSave()
     if (!xml) {
       window.$message?.error('流程图验证失败，无法部署。请检查：\n1. 所有连接线是否完整连接\n2. 是否包含开始和结束节点')
       return
@@ -2528,6 +2708,122 @@ function handleModelerReady() {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.approval-setting-row,
+.approval-setting-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.approval-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.approval-setting-main {
+  min-width: 0;
+}
+
+.approval-setting-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.approval-setting-desc {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.approval-mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.approval-mode-option {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.approval-mode-option:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.approval-mode-option.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.approval-mode-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.approval-mode-check {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 1px;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #fff;
+}
+
+.approval-mode-option.active .approval-mode-check {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.approval-mode-check i {
+  font-size: 16px;
+}
+
+.approval-mode-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.approval-mode-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.approval-mode-desc {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .ai-flow-panel {

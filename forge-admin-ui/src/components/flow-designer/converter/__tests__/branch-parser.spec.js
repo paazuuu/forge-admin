@@ -41,6 +41,19 @@ const SAMPLE_PARALLEL = [
   '</bpmn:definitions>',
 ].join('\n')
 
+const SAMPLE_DEFAULT_WITH_CONDITION = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">',
+  '  <bpmn:process id="P">',
+  '    <bpmn:exclusiveGateway id="GW1" default="F_default"/>',
+  '    <bpmn:userTask id="T_a"/>',
+  '    <bpmn:sequenceFlow id="F_default" sourceRef="GW1" targetRef="T_a">',
+  `      <bpmn:conditionExpression>${DOLLAR}{amount &lt;= 1000}</bpmn:conditionExpression>`,
+  '    </bpmn:sequenceFlow>',
+  '  </bpmn:process>',
+  '</bpmn:definitions>',
+].join('\n')
+
 const SAMPLE_NESTED = [
   '<?xml version="1.0" encoding="UTF-8"?>',
   '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">',
@@ -59,7 +72,7 @@ const SAMPLE_NESTED = [
 ].join('\n')
 
 describe('markBranches - 排他网关', () => {
-  it('两条出边分配 b1/b2，default 边 isDefault=true 且清空 condition', () => {
+  it('两条出边分配 b1/b2，default 边 isDefault=true', () => {
     const json = convertBpmnToJson(SAMPLE_EXCLUSIVE)
     const fa = json.edges.find(e => e.id === 'F_a')
     const fe = json.edges.find(e => e.id === 'F_else')
@@ -70,6 +83,14 @@ describe('markBranches - 排他网关', () => {
     expect(fe.branchId).toBe('b2')
     expect(fe.isDefault).toBe(true)
     expect(fe.condition).toBe('')
+  })
+
+  it('default 边带 conditionExpression 时保留条件', () => {
+    const json = convertBpmnToJson(SAMPLE_DEFAULT_WITH_CONDITION)
+    const edge = json.edges.find(e => e.id === 'F_default')
+    expect(edge.isDefault).toBe(true)
+    expect(edge.condition).toBe(`${DOLLAR}{amount <= 1000}`)
+    expect(edge.conditionType).toBe('expression')
   })
 
   it('非网关出边不分配 branchId', () => {

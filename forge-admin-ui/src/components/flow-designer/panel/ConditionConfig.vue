@@ -2,22 +2,11 @@
 /**
  * ConditionConfig — 网关条件配置
  *
- * 显示该网关所有出边的 condition / isDefault：
- * - 用户在此选择哪条边作为默认（互斥单选）
- * - 编辑每条边的 condition 表达式
+ * 条件分支支持两种编辑方式：
+ * - 表单字段条件：用动态表单字段 + 运算符 + 值生成 SpEL 条件表达式
+ * - 高级表达式：保留原始手写表达式
  *
- * 因为 ConditionConfig 涉及网关的所有出边而不仅是节点本身的 config，本组件接收
- * outgoingEdges + onEdgeUpdate 作为额外 props（注入式 — 由 NodeConfigDrawer 父组件传入）。
- *
- * Props:
- *   - node                  网关节点
- *   - outgoingEdges         网关的出边数组
- *   - nodes                 当前流程节点数组，用于把目标节点 ID 翻译成节点名称
- *   - readonly
- *
- * Events:
- *   - update:edge(edgeId, patch)
- *   - update:config(patch)   仅写 defaultFlowId 到节点 config，便于 markBranches 兼容
+ * BPMN 导出仍只消费 edge.condition，因此规则配置器必须同步生成标准表达式字符串。
  */
 import { computed } from 'vue'
 
@@ -25,16 +14,76 @@ const props = defineProps({
   node: { type: Object, required: true },
   outgoingEdges: { type: Array, default: () => [] },
   nodes: { type: Array, default: () => [] },
+  formFieldCatalog: { type: Array, default: () => [] },
+  focusEdgeId: { type: String, default: '' },
   readonly: Boolean,
 })
 
 const emit = defineEmits(['update:edge', 'update:config'])
 
 const edges = computed(() => props.outgoingEdges || [])
+const focusedEdge = computed(() => props.focusEdgeId ? edges.value.find(edge => edge.id === props.focusEdgeId) : null)
+const visibleEdges = computed(() => focusedEdge.value ? [focusedEdge.value] : edges.value)
+const focusedBranchIndex = computed(() => focusedEdge.value ? getBranchIndex(focusedEdge.value) : -1)
+const isConditionGateway = computed(() => props.node?.nodeType === 'condition')
 const nodeNameMap = computed(() => new Map((props.nodes || []).map(node => [node.id, node.name || '未命名节点'])))
+
+const formFields = computed(() => {
+  const fieldMap = new Map()
+  for (const item of props.formFieldCatalog || []) {
+    const field = item?.field || item?.fieldName || item?.name || item?.key
+    if (!field || fieldMap.has(field))
+      continue
+    const dataType = normalizeDataType(item?.dataType || item?.componentType || item?.type)
+    fieldMap.set(field, {
+      field,
+      label: item?.label || item?.title || field,
+      dataType,
+      required: !!item?.required,
+      componentType: item?.componentType || '',
+    })
+  }
+  return Array.from(fieldMap.values())
+})
+
+const fieldOptions = computed(() => formFields.value.map(item => ({
+  label: item.required ? `${item.label}（必填）` : item.label,
+  value: item.field,
+  dataType: item.dataType,
+})))
+
+const fieldMetaMap = computed(() => new Map(formFields.value.map(item => [item.field, item])))
+
+const logicOptions = [
+  { label: '符合全部', value: 'all' },
+  { label: '符合任一', value: 'any' },
+]
+
+const operatorOptions = [
+  { label: '等于', value: 'eq' },
+  { label: '不等于', value: 'ne' },
+  { label: '大于', value: 'gt' },
+  { label: '大于等于', value: 'ge' },
+  { label: '小于', value: 'lt' },
+  { label: '小于等于', value: 'le' },
+  { label: '区间', value: 'between' },
+  { label: '包含', value: 'contains' },
+  { label: '不包含', value: 'notContains' },
+  { label: '为空', value: 'empty' },
+  { label: '不为空', value: 'notEmpty' },
+]
 
 function getBranchTitle(index) {
   return `分支 ${index + 1}`
+}
+
+function getBranchIndex(edge) {
+  const index = edges.value.findIndex(item => item.id === edge?.id)
+  return index >= 0 ? index : 0
+}
+
+function getBranchTitleByEdge(edge) {
+  return getBranchTitle(getBranchIndex(edge))
 }
 
 function getTargetName(edge) {
@@ -45,54 +94,618 @@ function setDefault(edgeId) {
   if (props.readonly)
     return
   for (const e of edges.value)
-    emit('update:edge', e.id, { isDefault: e.id === edgeId, condition: e.id === edgeId ? '' : e.condition })
+    emit('update:edge', e.id, { isDefault: e.id === edgeId })
   emit('update:config', { defaultFlowId: edgeId })
 }
 
 function updateCondition(edgeId, value) {
-  emit('update:edge', edgeId, { condition: value, conditionType: 'expression' })
+  emit('update:edge', edgeId, { condition: value, conditionType: 'expression', conditionMode: 'advanced' })
+}
+
+function updateMode(edge, mode) {
+  if (props.readonly)
+    return
+
+  if (mode === 'advanced') {
+    emit('update:edge', edge.id, { conditionMode: 'advanced', conditionType: 'expression' })
+    return
+  }
+
+  const rules = ensureRules(edge)
+  emitRulesPatch(edge.id, rules, getLogic(edge))
+}
+
+function getMode(edge) {
+  if (edge?.conditionMode)
+    return edge.conditionMode
+  if (edge?.conditionRules?.length)
+    return 'rules'
+  if (parseConditionExpression(edge).rules.length)
+    return 'rules'
+  return formFields.value.length && !edge?.condition ? 'rules' : 'advanced'
+}
+
+function getLogic(edge) {
+  if (!edge?.conditionLogic) {
+    const parsed = parseConditionExpression(edge)
+    if (parsed.rules.length)
+      return parsed.logic
+  }
+  return edge?.conditionLogic === 'any' ? 'any' : 'all'
+}
+
+function getRules(edge) {
+  return ensureRules(edge)
+}
+
+function ensureRules(edge) {
+  if (Array.isArray(edge?.conditionRules))
+    return edge.conditionRules.map(normalizeRule)
+  const parsed = parseConditionExpression(edge)
+  if (parsed.rules.length)
+    return parsed.rules
+  return [createDefaultRule()]
+}
+
+function createDefaultRule() {
+  return {
+    field: formFields.value[0]?.field || '',
+    operator: 'eq',
+    value: '',
+    endValue: '',
+  }
+}
+
+function normalizeRule(rule = {}) {
+  return {
+    field: rule.field || '',
+    operator: rule.operator || 'eq',
+    value: rule.value ?? '',
+    endValue: rule.endValue ?? '',
+  }
+}
+
+function addRule(edge) {
+  if (props.readonly)
+    return
+  const rules = [...ensureRules(edge), createDefaultRule()]
+  emitRulesPatch(edge.id, rules, getLogic(edge))
+}
+
+function removeRule(edge, index) {
+  if (props.readonly)
+    return
+  const rules = ensureRules(edge).filter((_, idx) => idx !== index)
+  emitRulesPatch(edge.id, rules, getLogic(edge))
+}
+
+function updateRule(edge, index, patch) {
+  if (props.readonly)
+    return
+  const rules = ensureRules(edge)
+  rules[index] = normalizeRule({ ...rules[index], ...patch })
+  emitRulesPatch(edge.id, rules, getLogic(edge))
+}
+
+function updateLogic(edge, logic) {
+  if (props.readonly)
+    return
+  emitRulesPatch(edge.id, ensureRules(edge), logic)
+}
+
+function emitRulesPatch(edgeId, rules, logic) {
+  const normalizedRules = rules.map(normalizeRule)
+  emit('update:edge', edgeId, {
+    condition: buildExpression(normalizedRules, logic),
+    conditionType: 'expression',
+    conditionMode: 'rules',
+    conditionLogic: logic,
+    conditionRules: normalizedRules,
+  })
+}
+
+function buildExpression(rules, logic) {
+  const expressions = rules
+    .map(buildRuleExpression)
+    .filter(Boolean)
+  if (!expressions.length)
+    return ''
+  const joiner = logic === 'any' ? ' || ' : ' && '
+  return `\${${expressions.join(joiner)}}`
+}
+
+function buildRuleExpression(rule) {
+  const field = String(rule.field || '').trim()
+  const operator = rule.operator || 'eq'
+  if (!field)
+    return ''
+
+  if (operator === 'empty')
+    return `(${field} == null || ${field} == '')`
+  if (operator === 'notEmpty')
+    return `(${field} != null && ${field} != '')`
+
+  const meta = fieldMetaMap.value.get(field) || {}
+  const value = formatValue(rule.value, meta.dataType)
+  if (!value)
+    return ''
+
+  if (operator === 'between') {
+    const endValue = formatValue(rule.endValue, meta.dataType)
+    if (!endValue)
+      return ''
+    return `(${field} >= ${value} && ${field} <= ${endValue})`
+  }
+  if (operator === 'contains')
+    return `(${field} != null && ${field}.contains(${value}))`
+  if (operator === 'notContains')
+    return `(${field} == null || !${field}.contains(${value}))`
+
+  const symbolMap = {
+    eq: '==',
+    ne: '!=',
+    gt: '>',
+    ge: '>=',
+    lt: '<',
+    le: '<=',
+  }
+  return `${field} ${symbolMap[operator] || '=='} ${value}`
+}
+
+function formatValue(value, dataType) {
+  const raw = String(value ?? '').trim()
+  if (!raw)
+    return ''
+  if (dataType === 'number' && Number.isFinite(Number(raw)))
+    return raw
+  if (dataType === 'boolean' && ['true', 'false'].includes(raw.toLowerCase()))
+    return raw.toLowerCase()
+  return `'${raw.replaceAll('\\', '\\\\').replaceAll('\'', '\\\'')}'`
+}
+
+function normalizeDataType(type) {
+  const raw = String(type || '').toLowerCase()
+  if (['number', 'integer', 'decimal', 'inputnumber', 'slider', 'rate'].some(key => raw.includes(key)))
+    return 'number'
+  if (['boolean', 'switch', 'checkbox'].some(key => raw.includes(key)))
+    return 'boolean'
+  if (['date', 'time'].some(key => raw.includes(key)))
+    return 'datetime'
+  if (['select', 'radio', 'enum', 'cascader', 'tree'].some(key => raw.includes(key)))
+    return 'enum'
+  return 'string'
+}
+
+function needValue(operator) {
+  return !['empty', 'notEmpty'].includes(operator)
+}
+
+function isBetween(operator) {
+  return operator === 'between'
+}
+
+function parseConditionExpression(edge) {
+  const expression = unwrapExpression(edge?.condition)
+  if (!expression || !formFields.value.length)
+    return { logic: 'all', rules: [] }
+
+  const orParts = splitTopLevel(expression, '||')
+  const logic = orParts.length > 1 ? 'any' : 'all'
+  const parts = logic === 'any' ? orParts : splitTopLevel(expression, '&&')
+  const rules = parts
+    .map(parseRuleExpression)
+    .filter(Boolean)
+
+  if (rules.length !== parts.length)
+    return { logic: 'all', rules: [] }
+  return { logic, rules }
+}
+
+function unwrapExpression(condition) {
+  const raw = String(condition || '').trim()
+  if (!raw)
+    return ''
+  if (raw.startsWith('${') && raw.endsWith('}'))
+    return raw.slice(2, -1).trim()
+  return raw
+}
+
+function splitTopLevel(expression, operator) {
+  const parts = []
+  let start = 0
+  let depth = 0
+  let quote = ''
+  for (let i = 0; i < expression.length; i += 1) {
+    const char = expression[i]
+    const prev = expression[i - 1]
+    if (quote) {
+      if (char === quote && prev !== '\\')
+        quote = ''
+      continue
+    }
+    if (char === '\'' || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '(') {
+      depth += 1
+      continue
+    }
+    if (char === ')') {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (depth === 0 && expression.slice(i, i + operator.length) === operator) {
+      parts.push(expression.slice(start, i).trim())
+      start = i + operator.length
+      i += operator.length - 1
+    }
+  }
+  parts.push(expression.slice(start).trim())
+  return parts.filter(Boolean)
+}
+
+function parseRuleExpression(expression) {
+  const raw = trimPairParentheses(expression)
+  const emptyRule = parseEmptyRule(raw)
+  if (emptyRule)
+    return emptyRule
+
+  const containsRule = parseContainsRule(raw)
+  if (containsRule)
+    return containsRule
+
+  const betweenRule = parseBetweenRule(raw)
+  if (betweenRule)
+    return betweenRule
+
+  const binaryRule = parseBinaryRule(raw)
+  if (binaryRule)
+    return binaryRule
+
+  return null
+}
+
+function trimPairParentheses(expression) {
+  let raw = String(expression || '').trim()
+  while (raw.startsWith('(') && raw.endsWith(')') && hasWrappingParentheses(raw))
+    raw = raw.slice(1, -1).trim()
+  return raw
+}
+
+function hasWrappingParentheses(expression) {
+  let depth = 0
+  let quote = ''
+  for (let i = 0; i < expression.length; i += 1) {
+    const char = expression[i]
+    const prev = expression[i - 1]
+    if (quote) {
+      if (char === quote && prev !== '\\')
+        quote = ''
+      continue
+    }
+    if (char === '\'' || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '(')
+      depth += 1
+    if (char === ')')
+      depth -= 1
+    if (depth === 0 && i < expression.length - 1)
+      return false
+  }
+  return depth === 0
+}
+
+function parseEmptyRule(expression) {
+  const emptyMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*==\s*null\s*\|\|\s*\1\s*==\s*''$/)
+  if (emptyMatch && hasField(emptyMatch[1]))
+    return { field: emptyMatch[1], operator: 'empty', value: '', endValue: '' }
+
+  const notEmptyMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*!=\s*null\s*&&\s*\1\s*!=\s*''$/)
+  if (notEmptyMatch && hasField(notEmptyMatch[1]))
+    return { field: notEmptyMatch[1], operator: 'notEmpty', value: '', endValue: '' }
+
+  return null
+}
+
+function parseBetweenRule(expression) {
+  const match = expression.match(/^([A-Z_$][\w$]*)\s*>=\s*/i)
+  if (!match || !hasField(match[1]))
+    return null
+  const field = match[1]
+  const parts = splitTopLevel(expression.slice(match[0].length), '&&')
+  if (parts.length !== 2)
+    return null
+  const endPrefix = `${field} <=`
+  if (!parts[1].startsWith(endPrefix))
+    return null
+  return {
+    field,
+    operator: 'between',
+    value: parseLiteralValue(parts[0]),
+    endValue: parseLiteralValue(parts[1].slice(endPrefix.length)),
+  }
+}
+
+function parseContainsRule(expression) {
+  const containsMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*!=\s*null\s*&&\s*\1\.contains\(/)
+  if (containsMatch && hasField(containsMatch[1]) && expression.endsWith(')')) {
+    return {
+      field: containsMatch[1],
+      operator: 'contains',
+      value: parseLiteralValue(expression.slice(containsMatch[0].length, -1)),
+      endValue: '',
+    }
+  }
+
+  const notContainsMatch = expression.match(/^([A-Za-z_$][\w$]*)\s*==\s*null\s*\|\|\s*!\1\.contains\(/)
+  if (notContainsMatch && hasField(notContainsMatch[1]) && expression.endsWith(')')) {
+    return {
+      field: notContainsMatch[1],
+      operator: 'notContains',
+      value: parseLiteralValue(expression.slice(notContainsMatch[0].length, -1)),
+      endValue: '',
+    }
+  }
+
+  return null
+}
+
+function parseBinaryRule(expression) {
+  const match = expression.match(/^([A-Z_$][\w$]*)\s*(==|!=|>=|<=|>|<)\s*/i)
+  if (!match || !hasField(match[1]))
+    return null
+  const value = expression.slice(match[0].length).trim()
+  if (!value)
+    return null
+  const operatorMap = {
+    '==': 'eq',
+    '!=': 'ne',
+    '>': 'gt',
+    '>=': 'ge',
+    '<': 'lt',
+    '<=': 'le',
+  }
+  return {
+    field: match[1],
+    operator: operatorMap[match[2]] || 'eq',
+    value: parseLiteralValue(value),
+    endValue: '',
+  }
+}
+
+function parseLiteralValue(value) {
+  const raw = String(value || '').trim()
+  if ((raw.startsWith('\'') && raw.endsWith('\'')) || (raw.startsWith('"') && raw.endsWith('"')))
+    return raw.slice(1, -1).replaceAll('\\\'', '\'').replaceAll('\\\\', '\\')
+  return raw
+}
+
+function hasField(field) {
+  return fieldMetaMap.value.has(field)
 }
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div class="text-sm text-gray-600">
-      该网关共 {{ edges.length }} 条分支
+  <div class="condition-config">
+    <div class="condition-summary">
+      <div class="condition-summary-main">
+        <div class="condition-summary-title">
+          分支条件
+        </div>
+        <div class="condition-summary-desc">
+          <template v-if="focusedEdge">
+            正在配置 {{ getBranchTitle(focusedBranchIndex) }}，该网关共 {{ edges.length }} 条分支
+          </template>
+          <template v-else>
+            该网关共 {{ edges.length }} 条分支
+          </template>
+          <span v-if="isConditionGateway">，可使用 {{ formFields.length }} 个表单字段生成表达式</span>
+        </div>
+      </div>
     </div>
-    <div v-if="edges.length === 0" class="text-xs rounded bg-gray-50 px-3 py-2 text-gray-400">
+
+    <div v-if="edges.length === 0" class="condition-empty">
       暂无分支，请先在画布上添加下游节点
     </div>
+
     <div
-      v-for="(e, index) in edges"
+      v-for="e in visibleEdges"
       :key="e.id"
-      class="border border-gray-100 rounded p-3 space-y-2"
+      class="condition-branch"
     >
-      <div class="flex items-center justify-between">
+      <div class="condition-branch-header">
         <div class="min-w-0">
-          <div class="text-sm text-gray-800 font-medium">
-            {{ getBranchTitle(index) }}
+          <div class="condition-branch-title">
+            {{ getBranchTitleByEdge(e) }}
           </div>
-          <div class="text-xs mt-1 truncate text-gray-500">
+          <div class="condition-branch-target">
             下游节点：{{ getTargetName(e) }}
           </div>
         </div>
-        <n-tag v-if="e.isDefault" type="warning" size="small">
+        <n-tag v-if="e.isDefault" type="warning" size="small" :bordered="false">
           默认分支
         </n-tag>
       </div>
 
-      <n-form-item label="条件表达式" label-placement="top" :show-feedback="false">
-        <n-input
-          :value="e.condition"
-          :disabled="readonly || e.isDefault"
-          placeholder="${days > 3}"
-          @update:value="updateCondition(e.id, $event)"
-        />
-      </n-form-item>
-      <div class="flex items-center gap-2">
+      <div v-if="e.isDefault" class="condition-default-tip">
+        默认分支在 Flowable 中不会执行条件；这里的条件会保留在设计器里，但部署导出时不会写入该分支。
+      </div>
+
+      <template v-if="isConditionGateway">
+        <div class="condition-mode-switch">
+          <button
+            type="button"
+            class="condition-mode-button"
+            :class="{ active: getMode(e) === 'rules' }"
+            :disabled="readonly || formFields.length === 0"
+            data-test="mode-rules"
+            @click="updateMode(e, 'rules')"
+          >
+            表单字段条件
+          </button>
+          <button
+            type="button"
+            class="condition-mode-button"
+            :class="{ active: getMode(e) === 'advanced' }"
+            :disabled="readonly"
+            data-test="mode-advanced"
+            @click="updateMode(e, 'advanced')"
+          >
+            高级表达式
+          </button>
+        </div>
+
+        <div v-if="getMode(e) === 'rules' && formFields.length > 0" class="condition-rule-panel">
+          <div v-if="getRules(e).length > 0" class="condition-rule-header condition-rule-grid">
+            <span />
+            <span>字段</span>
+            <span>关系</span>
+            <span>取值</span>
+            <span />
+          </div>
+
+          <div
+            v-for="(rule, ruleIndex) in getRules(e)"
+            :key="`${e.id}-${ruleIndex}`"
+            class="condition-rule-row condition-rule-grid"
+          >
+            <div class="condition-rule-index">
+              {{ ruleIndex + 1 }}
+            </div>
+
+            <n-select
+              class="condition-rule-field"
+              :value="rule.field"
+              :options="fieldOptions"
+              :disabled="readonly"
+              size="small"
+              filterable
+              data-test="rule-field"
+              @update:value="updateRule(e, ruleIndex, { field: $event })"
+            />
+
+            <n-select
+              class="condition-rule-operator"
+              :value="rule.operator"
+              :options="operatorOptions"
+              :disabled="readonly"
+              size="small"
+              data-test="rule-operator"
+              @update:value="updateRule(e, ruleIndex, { operator: $event })"
+            />
+
+            <div
+              v-if="needValue(rule.operator)"
+              class="condition-rule-value-wrap"
+              :class="{ 'is-between': isBetween(rule.operator) }"
+            >
+              <template v-if="isBetween(rule.operator)">
+                <n-input
+                  class="condition-rule-value"
+                  :value="rule.value"
+                  :disabled="readonly"
+                  placeholder="起"
+                  size="small"
+                  data-test="rule-value"
+                  @update:value="updateRule(e, ruleIndex, { value: $event })"
+                />
+                <n-input
+                  class="condition-rule-value"
+                  :value="rule.endValue"
+                  :disabled="readonly"
+                  placeholder="止"
+                  size="small"
+                  data-test="rule-end-value"
+                  @update:value="updateRule(e, ruleIndex, { endValue: $event })"
+                />
+              </template>
+              <n-input
+                v-else
+                class="condition-rule-value"
+                :value="rule.value"
+                :disabled="readonly"
+                placeholder="请输入值"
+                size="small"
+                data-test="rule-value"
+                @update:value="updateRule(e, ruleIndex, { value: $event })"
+              />
+            </div>
+            <div v-else class="condition-rule-value-placeholder">
+              无需填写
+            </div>
+
+            <button
+              type="button"
+              class="condition-rule-remove"
+              :disabled="readonly"
+              :aria-label="`删除${getBranchTitleByEdge(e)}条件${ruleIndex + 1}`"
+              @click="removeRule(e, ruleIndex)"
+            >
+              <i class="i-material-symbols:remove-circle-outline" />
+            </button>
+          </div>
+
+          <div v-if="getRules(e).length === 0" class="condition-rule-empty">
+            暂无条件，点击“添加条件”后重新配置。
+          </div>
+
+          <button
+            type="button"
+            class="condition-add-rule"
+            :disabled="readonly"
+            @click="addRule(e)"
+          >
+            <i class="i-material-symbols:add-circle-outline" />
+            添加条件
+          </button>
+
+          <div class="condition-rule-footer">
+            <n-radio
+              v-for="item in logicOptions"
+              :key="item.value"
+              :checked="getLogic(e) === item.value"
+              :disabled="readonly"
+              @click="updateLogic(e, item.value)"
+            >
+              {{ item.label }}
+            </n-radio>
+            <span class="condition-expression-preview">{{ e.condition || '完成条件后自动生成表达式' }}</span>
+          </div>
+        </div>
+
+        <div v-else-if="getMode(e) === 'rules'" class="condition-empty">
+          当前流程尚未配置动态表单字段，请先在“更多设置 / 表单配置”中设计或选择动态表单。
+        </div>
+
+        <n-form-item
+          v-else
+          label="条件表达式"
+          label-placement="top"
+          :show-feedback="false"
+        >
+          <n-input
+            class="condition-advanced-input"
+            :value="e.condition"
+            :disabled="readonly"
+            type="textarea"
+            placeholder="${days > 3}"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            @update:value="updateCondition(e.id, $event)"
+          />
+        </n-form-item>
+      </template>
+
+      <div v-else class="condition-default-tip">
+        当前网关类型只展示分支列表，不需要配置条件表达式。
+      </div>
+
+      <div class="condition-default-row">
         <n-radio
           :checked="e.isDefault"
-          :disabled="readonly"
+          :disabled="readonly || !isConditionGateway"
           @click="setDefault(e.id)"
         >
           作为默认分支
@@ -101,3 +714,321 @@ function updateCondition(edgeId, value) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.condition-config {
+  padding: 0 18px 18px;
+}
+
+.condition-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 12px;
+}
+
+.condition-summary-main {
+  min-width: 0;
+}
+
+.condition-summary-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.condition-summary-desc {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.condition-empty {
+  border: 1px dashed #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+}
+
+.condition-branch {
+  min-width: 0;
+  margin-top: 12px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.condition-branch-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.condition-branch-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.condition-branch-target {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.condition-default-tip {
+  margin-top: 12px;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 9px 10px;
+}
+
+.condition-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 3px;
+}
+
+.condition-mode-button {
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.condition-mode-button.active {
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.condition-mode-button:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.condition-rule-panel {
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.condition-rule-grid {
+  display: grid;
+  grid-template-columns: 28px minmax(126px, 1fr) 104px minmax(118px, 1fr) 28px;
+  column-gap: 8px;
+  align-items: center;
+}
+
+.condition-rule-header {
+  margin-bottom: 6px;
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.condition-rule-row {
+  align-items: start;
+  margin-top: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 8px;
+}
+
+.condition-rule-remove {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 18px;
+  justify-self: end;
+  transition:
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.condition-rule-remove:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #ef4444;
+}
+
+.condition-rule-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.condition-rule-index {
+  min-width: 20px;
+  height: 24px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 24px;
+  text-align: center;
+}
+
+.condition-rule-field,
+.condition-rule-operator,
+.condition-rule-value {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.condition-rule-value-wrap {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.condition-rule-value-wrap.is-between {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.condition-rule-value-placeholder {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.condition-rule-empty {
+  margin-top: 10px;
+  border: 1px dashed #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 9px 10px;
+}
+
+.condition-add-rule {
+  margin-top: 12px;
+  height: 28px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.condition-add-rule:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.condition-rule-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #eef2f7;
+  padding-top: 12px;
+}
+
+.condition-expression-preview {
+  min-width: 0;
+  flex: 1;
+  flex-basis: 100%;
+  max-height: 72px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.condition-default-row {
+  margin-top: 12px;
+}
+
+.condition-advanced-input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:deep(.condition-advanced-input textarea) {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 560px) {
+  .condition-rule-header {
+    display: none;
+  }
+
+  .condition-rule-grid {
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+    row-gap: 8px;
+  }
+
+  .condition-rule-field,
+  .condition-rule-operator,
+  .condition-rule-value-wrap,
+  .condition-rule-value-placeholder {
+    grid-column: 2 / 3;
+  }
+
+  .condition-rule-remove {
+    grid-column: 3 / 4;
+    grid-row: 1 / 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .condition-mode-button,
+  .condition-rule-remove {
+    transition: none;
+  }
+}
+</style>

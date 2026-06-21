@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import AddNodeButton from '../AddNodeButton.vue'
 import AddNodePopover from '../AddNodePopover.vue'
+import BranchAddButton from '../BranchAddButton.vue'
 
 describe('addNodePopover', () => {
   it('渲染所有 3 个分组', () => {
@@ -53,6 +54,24 @@ describe('addNodeButton', () => {
 
   it('readonly 模式禁用按钮', () => {
     const wrapper = mount(AddNodeButton, {
+      props: { position: { x: 0, y: 0 }, readonly: true },
+    })
+    expect(wrapper.find('button').attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('branchAddButton', () => {
+  it('按 position 绝对定位并触发 click', async () => {
+    const wrapper = mount(BranchAddButton, {
+      props: { position: { x: 120, y: 88 } },
+    })
+    expect(wrapper.find('.branch-add-button-wrap').attributes('style')).toContain('left: 120px')
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('click')).toHaveLength(1)
+  })
+
+  it('readonly 模式禁用按钮', () => {
+    const wrapper = mount(BranchAddButton, {
       props: { position: { x: 0, y: 0 }, readonly: true },
     })
     expect(wrapper.find('button').attributes('disabled')).toBeDefined()

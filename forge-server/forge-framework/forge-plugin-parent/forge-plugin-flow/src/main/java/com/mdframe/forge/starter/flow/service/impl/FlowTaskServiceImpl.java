@@ -71,6 +71,9 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
     private static final String ACTION_DELEGATE = "delegate";
     private static final String ACTION_RETURN = "return";
     private static final String ACTION_TERMINATE = "terminate";
+    private static final String AUTO_APPROVAL_FIRST_ONLY = "firstOnly";
+    private static final String AUTO_APPROVAL_CONSECUTIVE = "consecutive";
+    private static final String AUTO_APPROVAL_NONE = "none";
 
     @Autowired
     private RuntimeService runtimeService;
@@ -233,6 +236,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             lambdaUpdate().eq(FlowTask::getTaskId, taskId).update(flowTask);
 
             log.info("审批通过：taskId={}, userId={}", taskId, userId);
+            autoApproveRepeatedTasks(task.getProcessInstanceId());
         } catch (Exception e) {
             recordTaskError(task.getProcessInstanceId(), taskId, task.getTaskDefinitionKey(),
                     task.getName(), "TASK_APPROVE", e);
@@ -411,6 +415,93 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         }
     }
 
+    private void autoApproveRepeatedTasks(String processInstanceId) {
+        if (isBlank(processInstanceId)) {
+            return;
+        }
+        ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (instance == null) {
+            return;
+        }
+
+        String mode = readProcessStringAttribute(instance.getProcessDefinitionId(), "autoApprovalMode");
+        if (!AUTO_APPROVAL_FIRST_ONLY.equals(mode) && !AUTO_APPROVAL_CONSECUTIVE.equals(mode)) {
+            return;
+        }
+
+        Set<String> completedAutomatically = new HashSet<>();
+        int guard = 0;
+        while (guard++ < 30) {
+            List<Task> activeTasks = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .list();
+            Task matchedTask = null;
+            for (Task activeTask : activeTasks) {
+                if (completedAutomatically.contains(activeTask.getId())) {
+                    continue;
+                }
+                if (shouldAutoApproveTask(activeTask, mode)) {
+                    matchedTask = activeTask;
+                    break;
+                }
+            }
+            if (matchedTask == null) {
+                return;
+            }
+            autoApproveTask(matchedTask, mode);
+            completedAutomatically.add(matchedTask.getId());
+        }
+        log.warn("重复审批自动同意达到保护上限：processInstanceId={}, mode={}", processInstanceId, mode);
+    }
+
+    private boolean shouldAutoApproveTask(Task task, String mode) {
+        if (task == null || isBlank(task.getAssignee())) {
+            return false;
+        }
+        String assignee = task.getAssignee();
+        if (AUTO_APPROVAL_FIRST_ONLY.equals(mode)) {
+            return hasFinishedTaskByAssignee(task.getProcessInstanceId(), assignee);
+        }
+        HistoricTaskInstance previousTask = findLastFinishedTask(task.getProcessInstanceId());
+        return previousTask != null && Objects.equals(previousTask.getAssignee(), assignee);
+    }
+
+    private boolean hasFinishedTaskByAssignee(String processInstanceId, String assignee) {
+        long count = historyService.createHistoricTaskInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .taskAssignee(assignee)
+                .finished()
+                .count();
+        return count > 0;
+    }
+
+    private HistoricTaskInstance findLastFinishedTask(String processInstanceId) {
+        List<HistoricTaskInstance> tasks = historyService.createHistoricTaskInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .finished()
+                .orderByHistoricTaskInstanceEndTime()
+                .desc()
+                .listPage(0, 1);
+        return tasks == null || tasks.isEmpty() ? null : tasks.get(0);
+    }
+
+    private void autoApproveTask(Task task, String mode) {
+        String comment = "系统自动同意（重复审批人）";
+        taskService.addComment(task.getId(), task.getProcessInstanceId(), comment);
+        completeTask(task, mergeActionVariables(null, true));
+
+        FlowTask flowTask = new FlowTask();
+        flowTask.setStatus(2);
+        flowTask.setComment(comment);
+        flowTask.setCompleteTime(LocalDateTime.now());
+        lambdaUpdate().eq(FlowTask::getTaskId, task.getId()).update(flowTask);
+
+        log.info("重复审批自动同意：taskId={}, processInstanceId={}, assignee={}, mode={}",
+                task.getId(), task.getProcessInstanceId(), task.getAssignee(), mode);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delegateTask(String taskId, String userId, String delegateUserId, String comment) {
@@ -421,6 +512,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(String processInstanceId, String userId) {
         try {
+            assertSubmitterWithdrawAllowed(processInstanceId, userId);
             runtimeService.deleteProcessInstance(processInstanceId, "用户撤回");
 
             FlowTask flowTask = new FlowTask();
@@ -436,6 +528,41 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             flowErrorLogService.recordError(errorLog, e);
             throw e;
         }
+    }
+
+    private void assertSubmitterWithdrawAllowed(String processInstanceId, String userId) {
+        ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (instance == null) {
+            throw new RuntimeException("流程实例不存在或已结束");
+        }
+
+        Boolean allowed = readBooleanProcessAttribute(instance.getProcessDefinitionId(), "allowSubmitterWithdraw");
+        if (Boolean.FALSE.equals(allowed)) {
+            throw new RuntimeException("当前流程不允许提交人撤回审批中的申请");
+        }
+
+        if (!isProcessSubmitter(processInstanceId, userId)) {
+            throw new RuntimeException("只有提交人可以撤回该申请");
+        }
+    }
+
+    private boolean isProcessSubmitter(String processInstanceId, String userId) {
+        if (isBlank(userId)) {
+            return false;
+        }
+        FlowBusiness business = flowBusinessMapper.selectByProcessInstanceId(processInstanceId);
+        if (business != null && !isBlank(business.getApplyUserId())) {
+            return Objects.equals(String.valueOf(business.getApplyUserId()), String.valueOf(userId));
+        }
+        Object initiator = runtimeService.getVariable(processInstanceId, "initiator");
+        if (initiator != null && !isBlank(String.valueOf(initiator))) {
+            return Objects.equals(String.valueOf(initiator), String.valueOf(userId));
+        }
+        log.warn("撤回申请未找到提交人信息，按历史兼容逻辑放行：processInstanceId={}, userId={}",
+                processInstanceId, userId);
+        return true;
     }
 
     @Override
@@ -1185,6 +1312,42 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         return parseBooleanValue(value);
     }
 
+    private Boolean readBooleanProcessAttribute(String processDefinitionId, String name) {
+        return parseBooleanValue(readProcessStringAttribute(processDefinitionId, name));
+    }
+
+    private String readProcessStringAttribute(String processDefinitionId, String name) {
+        Process process = getBpmnProcess(processDefinitionId);
+        if (process == null) {
+            return null;
+        }
+        String value = process.getAttributeValue(FLOWABLE_NS, name);
+        if (isBlank(value)) {
+            Map<String, List<ExtensionElement>> extensions = process.getExtensionElements();
+            List<ExtensionElement> elements = extensions != null ? extensions.get(name) : null;
+            if (elements != null && !elements.isEmpty()) {
+                value = elements.get(0).getElementText();
+            }
+        }
+        if ("autoApprovalMode".equals(name)
+                && !AUTO_APPROVAL_FIRST_ONLY.equals(value)
+                && !AUTO_APPROVAL_CONSECUTIVE.equals(value)) {
+            return AUTO_APPROVAL_NONE;
+        }
+        return value;
+    }
+
+    private Process getBpmnProcess(String processDefinitionId) {
+        if (isBlank(processDefinitionId)) {
+            return null;
+        }
+        BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinitionId);
+        if (bpmnModel == null) {
+            return null;
+        }
+        return bpmnModel.getMainProcess();
+    }
+
     private Boolean parseBooleanValue(String value) {
         if (isBlank(value)) {
             return null;
@@ -1276,6 +1439,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         String nodeFormJson = null;
         String nodeFormUrl = null;
         String nodeFormTarget = null;
+        String nodeFormFieldPermissions = null;
 
         // Flowable BPMN 命名空间（flowable:xxx 属性存放的命名空间）
         final String FLOWABLE_NS = "http://flowable.org/bpmn";
@@ -1293,9 +1457,13 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             String attrFormUrl = flowNode.getAttributeValue(FLOWABLE_NS, "formUrl");
             String attrFormJson = flowNode.getAttributeValue(FLOWABLE_NS, "formJson");
             String attrFormTarget = flowNode.getAttributeValue(FLOWABLE_NS, "formTarget");
+            String attrFormFieldPermissions = flowNode.getAttributeValue(FLOWABLE_NS, "formFieldPermissions");
             if (attrFormUrl != null && !attrFormUrl.isEmpty()) nodeFormUrl = attrFormUrl;
             if (attrFormJson != null && !attrFormJson.isEmpty()) nodeFormJson = attrFormJson;
             if (attrFormTarget != null && !attrFormTarget.isEmpty()) nodeFormTarget = attrFormTarget;
+            if (attrFormFieldPermissions != null && !attrFormFieldPermissions.isEmpty()) {
+                nodeFormFieldPermissions = attrFormFieldPermissions;
+            }
 
             // 方式3：兼容旧有以子元素方式写入的情况
             //   例如 <flowable:formUrl>/leave/LeaveApproveForm</flowable:formUrl>
@@ -1313,8 +1481,13 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                 if (nodeFormTarget == null && formTargetElements != null && !formTargetElements.isEmpty()) {
                     nodeFormTarget = formTargetElements.get(0).getElementText();
                 }
+                List<ExtensionElement> formFieldPermissionElements = extensions.get("formFieldPermissions");
+                if (nodeFormFieldPermissions == null && formFieldPermissionElements != null && !formFieldPermissionElements.isEmpty()) {
+                    nodeFormFieldPermissions = formFieldPermissionElements.get(0).getElementText();
+                }
             }
         }
+        formInfo.setFormFieldPermissions(nodeFormFieldPermissions);
         
         // 确定表单类型和配置
         if (nodeFormUrl != null && !nodeFormUrl.isEmpty()) {

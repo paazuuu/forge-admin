@@ -36,18 +36,19 @@ const PERMISSION_DEFAULTS = {
   requireComment: true,
 }
 
+const DOLLAR = '$'
 const STATIC_ASSIGNEES = new Set([
-  '${initiator}',
-  '${initiatorLeader}',
-  '${deptManager}',
-  '${hr}',
+  `${DOLLAR}{initiator}`,
+  `${DOLLAR}{initiatorLeader}`,
+  `${DOLLAR}{deptManager}`,
+  `${DOLLAR}{hr}`,
 ])
 
 /**
  * 把 UserTask config 写为属性串 + 子元素串。
  *
  * @param {object} config user-task-parser 的输出
- * @returns {{ attrs: string, children: string }}
+ * @returns {{ attrs: string, children: string }} 属性串与子元素串
  */
 export function writeUserTaskConfig(config) {
   const cfg = config || {}
@@ -100,6 +101,13 @@ export function writeUserTaskConfig(config) {
     attrs.push(`flowable:formJson="${escapeXmlAttr(cfg.formJson)}"`)
   if (cfg.formUrl)
     attrs.push(`flowable:formUrl="${escapeXmlAttr(cfg.formUrl)}"`)
+  if (Array.isArray(cfg.formFieldPermissions) && cfg.formFieldPermissions.length) {
+    const permissions = cfg.formFieldPermissions
+      .map(normalizeFormFieldPermission)
+      .filter(item => item.field)
+    if (permissions.length)
+      attrs.push(`flowable:formFieldPermissions="${escapeXmlAttr(JSON.stringify(permissions))}"`)
+  }
 
   // priority / dueDate
   if (typeof cfg.priority === 'number' && cfg.priority !== 50)
@@ -141,6 +149,16 @@ export function writeUserTaskConfig(config) {
   return {
     attrs: attrs.join(' '),
     children: children.join(''),
+  }
+}
+
+function normalizeFormFieldPermission(item = {}) {
+  return {
+    field: String(item.field || '').trim(),
+    label: String(item.label || item.field || '').trim(),
+    readable: item.readable !== false,
+    writable: item.writable !== false,
+    required: item.required === true,
   }
 }
 

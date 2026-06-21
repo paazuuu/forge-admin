@@ -13,6 +13,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AddNodeButton,
+  BranchAddButton,
   BranchHeader,
   EdgeLayer,
   FlowCanvas,
@@ -28,6 +29,8 @@ import { NodeConfigDrawer } from './panel/index.js'
 const props = defineProps({
   xml: { type: String, default: '' },
   readonly: { type: Boolean, default: false },
+  formFieldCatalog: { type: Array, default: () => [] },
+  processConfig: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits(['change', 'ready', 'importStart', 'importEnd'])
@@ -40,6 +43,7 @@ const lastEmittedXml = ref('')
 
 const drawerVisible = ref(false)
 const drawerNodeId = ref(null)
+const drawerFocusEdgeId = ref(null)
 const drawerNode = computed(() => designer.getNode(drawerNodeId.value))
 const drawerOutgoingEdges = computed(() => drawerNodeId.value ? designer.getOutgoingEdges(drawerNodeId.value) : [])
 
@@ -61,6 +65,42 @@ watch(
   },
   { immediate: true },
 )
+
+watch(
+  () => props.processConfig,
+  (config) => {
+    applyProcessConfig(config)
+  },
+  { immediate: true, deep: true },
+)
+
+function normalizeProcessConfig(config = {}) {
+  const mode = ['firstOnly', 'consecutive', 'none'].includes(config.autoApprovalMode)
+    ? config.autoApprovalMode
+    : 'none'
+  return {
+    allowSubmitterWithdraw: config.allowSubmitterWithdraw !== false,
+    autoApprovalMode: mode,
+  }
+}
+
+function applyProcessConfig(config = {}) {
+  const normalized = normalizeProcessConfig(config)
+  const current = designer.flowJson.value.config || {}
+  if (
+    current.allowSubmitterWithdraw === normalized.allowSubmitterWithdraw
+    && current.autoApprovalMode === normalized.autoApprovalMode
+  ) {
+    return
+  }
+  designer.flowJson.value = {
+    ...designer.flowJson.value,
+    config: {
+      ...current,
+      ...normalized,
+    },
+  }
+}
 
 async function importXml(xml) {
   isImporting.value = true
@@ -101,10 +141,24 @@ function scheduleEmit() {
 
 watch(designer.flowJson, scheduleEmit)
 
-function handleNodeClick(node) {
+function handleNodeClick(node, options = {}) {
+  if (!node)
+    return
   designer.selectedNodeId.value = node.id
   drawerNodeId.value = node.id
+  drawerFocusEdgeId.value = options.focusEdgeId || null
   drawerVisible.value = true
+}
+
+function handleBranchHeaderClick(edge) {
+  const gatewayNode = designer.getNode(edge.source)
+  handleNodeClick(gatewayNode, { focusEdgeId: edge.id })
+}
+
+function handleDrawerVisibleUpdate(visible) {
+  drawerVisible.value = visible
+  if (!visible)
+    drawerFocusEdgeId.value = null
 }
 
 function handleNodeDelete(node) {
@@ -176,6 +230,7 @@ function handleAddAfter(afterNodeId, type) {
     const newId = designer.addNode(afterNodeId, type)
     designer.selectedNodeId.value = newId
     drawerNodeId.value = newId
+    drawerFocusEdgeId.value = null
     drawerVisible.value = true
   }
   catch (e) {
@@ -196,6 +251,22 @@ function handleDrawerSave(patch, nodeId) {
 function handleDrawerEdgeUpdate(edgeId, patch) {
   try {
     designer.updateEdge(edgeId, patch)
+  }
+  catch (e) {
+    console.warn(e)
+  }
+}
+
+function handleAddBranch(gatewayId) {
+  if (props.readonly)
+    return
+  history.snapshot()
+  try {
+    const result = designer.addBranch(gatewayId)
+    designer.selectedNodeId.value = gatewayId
+    drawerNodeId.value = gatewayId
+    drawerFocusEdgeId.value = result.edgeId
+    drawerVisible.value = true
   }
   catch (e) {
     console.warn(e)
@@ -242,6 +313,31 @@ const branchHeaders = computed(() => {
   return out
 })
 
+const branchAddButtons = computed(() => {
+  const out = []
+  for (const node of designer.flowJson.value.nodes) {
+    if (node.nodeType !== 'condition')
+      continue
+    const gwPos = layoutResult.value.nodePositions.get(node.id)
+    if (!gwPos)
+      continue
+    const outgoing = designer.getOutgoingEdges(node.id)
+    const targetPositions = outgoing
+      .map(edge => layoutResult.value.nodePositions.get(edge.target))
+      .filter(Boolean)
+    if (!targetPositions.length)
+      continue
+    out.push({
+      gatewayId: node.id,
+      position: {
+        x: gwPos.x + gwPos.width / 2 + 52,
+        y: gwPos.y + gwPos.height + 14,
+      },
+    })
+  }
+  return out
+})
+
 const mergeMarkers = computed(() => {
   const out = []
   for (const node of designer.flowJson.value.nodes) {
@@ -260,7 +356,13 @@ async function setXML(xml) {
 }
 
 function getXML(_formatted = false) {
-  return convertJsonToBpmn(designer.flowJson.value)
+  return convertJsonToBpmn({
+    ...designer.flowJson.value,
+    config: {
+      ...(designer.flowJson.value.config || {}),
+      ...normalizeProcessConfig(props.processConfig),
+    },
+  })
 }
 
 function reset() {
@@ -348,7 +450,15 @@ onBeforeUnmount(() => {
           :key="`bh-${bh.edge.id}-${idx}`"
           :edge="bh.edge"
           :position="bh.position"
-          @click="handleNodeClick(designer.getNode(bh.edge.source))"
+          @click="handleBranchHeaderClick"
+        />
+
+        <BranchAddButton
+          v-for="btn in branchAddButtons"
+          :key="`branch-add-${btn.gatewayId}`"
+          :position="btn.position"
+          :readonly="readonly"
+          @click="handleAddBranch(btn.gatewayId)"
         />
 
         <MergeNode
@@ -369,11 +479,14 @@ onBeforeUnmount(() => {
     />
 
     <NodeConfigDrawer
-      v-model:visible="drawerVisible"
+      :visible="drawerVisible"
       :node="drawerNode"
       :outgoing-edges="drawerOutgoingEdges"
       :nodes="designer.flowJson.value.nodes"
+      :form-field-catalog="formFieldCatalog"
+      :focus-edge-id="drawerFocusEdgeId"
       :readonly="readonly"
+      @update:visible="handleDrawerVisibleUpdate"
       @save="handleDrawerSave"
       @update:edge="handleDrawerEdgeUpdate"
     />

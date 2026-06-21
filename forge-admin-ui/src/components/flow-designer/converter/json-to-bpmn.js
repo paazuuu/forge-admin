@@ -20,12 +20,18 @@ const NS_DECLS = [
   'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
 ].join(' ')
 
+const DEFAULT_PROCESS_CONFIG = {
+  allowSubmitterWithdraw: true,
+  autoApprovalMode: 'none',
+}
+
 export function convertJsonToBpmn(flowJson) {
   if (!flowJson || !Array.isArray(flowJson.nodes))
     return buildEmptyDefinitions()
 
   const processId = flowJson.processId || 'Process_1'
   const processName = flowJson.processName || ''
+  const processConfig = normalizeProcessConfig(flowJson.config)
   const layout = calculateLayout(flowJson)
 
   const nodeXml = flowJson.nodes.map(writeNode).filter(Boolean)
@@ -35,6 +41,8 @@ export function convertJsonToBpmn(flowJson) {
   const procAttrs = [`id="${escapeXmlAttr(processId)}"`]
   if (processName)
     procAttrs.push(`name="${escapeXmlAttr(processName)}"`)
+  procAttrs.push(`flowable:allowSubmitterWithdraw="${processConfig.allowSubmitterWithdraw}"`)
+  procAttrs.push(`flowable:autoApprovalMode="${escapeXmlAttr(processConfig.autoApprovalMode)}"`)
   procAttrs.push('isExecutable="true"')
 
   return [
@@ -47,6 +55,16 @@ export function convertJsonToBpmn(flowJson) {
     `  ${diagram}`,
     '</bpmn:definitions>',
   ].join('\n')
+}
+
+function normalizeProcessConfig(config = {}) {
+  const autoApprovalMode = ['firstOnly', 'consecutive', 'none'].includes(config.autoApprovalMode)
+    ? config.autoApprovalMode
+    : DEFAULT_PROCESS_CONFIG.autoApprovalMode
+  return {
+    allowSubmitterWithdraw: config.allowSubmitterWithdraw !== false,
+    autoApprovalMode,
+  }
 }
 
 function writeNode(node) {

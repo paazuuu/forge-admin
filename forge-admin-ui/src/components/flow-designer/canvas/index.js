@@ -14,6 +14,7 @@
 
 export { default as AddNodeButton } from './AddNodeButton.vue'
 export { default as AddNodePopover } from './AddNodePopover.vue'
+export { default as BranchAddButton } from './BranchAddButton.vue'
 export { default as BranchHeader } from './BranchHeader.vue'
 export { default as EdgeLayer } from './EdgeLayer.vue'
 export { default as EdgePath } from './EdgePath.vue'

@@ -85,6 +85,7 @@ export function convertBpmnToJson(xmlString) {
   const flowJson = {
     processId: getAttr(proc, 'id') || '',
     processName: getAttr(proc, 'name') || '',
+    config: parseProcessConfig(proc),
     nodes,
     edges,
   }
@@ -93,6 +94,33 @@ export function convertBpmnToJson(xmlString) {
   markBranches(flowJson)
 
   return flowJson
+}
+
+function parseProcessConfig(processElement) {
+  return {
+    allowSubmitterWithdraw: parseBooleanWithDefault(
+      getFlowableAttr(processElement, 'allowSubmitterWithdraw'),
+      true,
+    ),
+    autoApprovalMode: normalizeAutoApprovalMode(
+      getFlowableAttr(processElement, 'autoApprovalMode'),
+    ),
+  }
+}
+
+function parseBooleanWithDefault(value, fallback) {
+  if (value == null)
+    return fallback
+  const normalized = String(value).trim().toLowerCase()
+  if (['true', '1', 'y', 'yes'].includes(normalized))
+    return true
+  if (['false', '0', 'n', 'no'].includes(normalized))
+    return false
+  return fallback
+}
+
+function normalizeAutoApprovalMode(value) {
+  return ['firstOnly', 'consecutive', 'none'].includes(value) ? value : 'none'
 }
 
 /**

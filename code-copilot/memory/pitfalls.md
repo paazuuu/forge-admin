@@ -1796,3 +1796,153 @@ finally {
 ```
 
 若 loading 放在 `window.$dialog` 的 `onPositiveClick` 中，还应避免 finally 中抛错；必要时保存 dialog reactive 并在请求结束后显式 `dialog.destroy()`，否则 Promise reject 时 Naive Dialog 不会自动关闭。
+
+## 62. Vite dev server 启动报 EMFILE: too many open files
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+本地启动 `forge-admin-ui` 的 Vite 预览服务时，Chokidar 可能因为监听文件过多报错：
+
+```text
+Error: EMFILE: too many open files, watch
+```
+
+**解决方案**:
+启动前提高文件句柄上限，并启用 polling：
+
+```bash
+ulimit -n 65535
+source ~/.nvm/nvm.sh && nvm use v20.19.0
+CHOKIDAR_USEPOLLING=true pnpm --dir forge-admin-ui exec vite --host 127.0.0.1 --port 5188 --strictPort true
+```
+
+**适用场景**:
+- 临时 UI 预览页验证。
+- Vite dev server 在 macOS 上启动 watcher 失败。
+
+## 63. 流程统一表单字段目录为空时条件分支无法选择表单字段
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+流程模型设计里已经配置了统一动态表单，但条件分支配置中“表单字段条件”仍不可用，或提示没有动态表单字段。
+
+**根本原因**:
+条件分支依赖 `design.vue` 传入的 `formFieldCatalog`。如果已选统一表单的远端字段目录为空，或者当前模型内表单 schema 包含 form-create 的 `children` 嵌套、`_forge.fieldBinding.fieldCode` 绑定字段，前端只解析第一层 `field/title/type` 会漏字段，导致条件配置器认为字段数为 0。
+
+**解决方案**:
+前端本地字段目录解析必须与后端 `FlowFormServiceImpl.collectFields()` 保持同类规则：
+- 递归遍历 schema 数组/对象和 `children`。
+- 支持 `field`、`fieldCode`、`props.field/fieldCode/prop`、`fieldBinding.fieldCode`、`_forge.fieldBinding.fieldCode`。
+- 过滤 form-create 自动生成的 `ref_` 临时字段。
+- 远端 `/api/flow/form/field-catalog` 返回空列表时，用已加载的 `formSchema` 本地解析兜底。
+
+## 64. 流程条件分支标签点击必须保留 edgeId
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+流程设计器画布上点击某条条件分支标签时，右侧配置抽屉展示了该网关的所有分支，而不是用户点击的那一条分支。用户需要在多条分支配置中再次定位，容易改错条件。
+
+**根本原因**:
+`BranchHeader` 已经在点击事件中发出了当前 `edge`，但父组件如果只用 `edge.source` 找到网关节点再打开抽屉，会丢失“点击的是哪条边”的上下文。`ConditionConfig` 只能按网关出边数组渲染，自然会显示全部分支。
+
+**解决方案**:
+分支标签点击链路必须一路透传当前 `edge.id`：
+- `DingFlowDesigner` 保存 `drawerFocusEdgeId`，分支标签点击时设置为当前 edgeId。
+- `NodeConfigDrawer` 将 `focusEdgeId` 透传给网关配置组件。
+- `ConditionConfig` 有 `focusEdgeId` 时只渲染对应分支；点击网关节点本身时清空 `focusEdgeId`，恢复全部分支配置。
+
+**影响范围**:
+- `forge-admin-ui/src/components/flow-designer/canvas/BranchHeader.vue`
+- `forge-admin-ui/src/components/flow-designer/DingFlowDesigner.vue`
+- `forge-admin-ui/src/components/flow-designer/panel/NodeConfigDrawer.vue`
+- `forge-admin-ui/src/components/flow-designer/panel/ConditionConfig.vue`
+
+## 65. Flowable 默认分支不能导出 conditionExpression
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+流程模型设计器中如果把某条条件分支设置为默认分支，同时导出的 BPMN 仍给该 sequenceFlow 写入 `conditionExpression`，部署会失败：
+
+```text
+flowable-exclusive-gateway-condition-on-seq-flow:
+Default sequenceflow has a condition, which is not allowed
+```
+
+**根本原因**:
+Flowable 的 exclusiveGateway 默认边是兜底流转，不能再携带条件表达式。UI 为了用户切换默认分支时不丢草稿，可以保留 `edge.condition`，但 BPMN 导出时不能把这个条件写进 default 边。
+
+**解决方案**:
+默认分支状态只表示该边被标记为默认，处理规则必须分层：
+- `ConditionConfig` 可以保留并编辑默认分支上的草稿条件，设置默认分支时只更新 `isDefault` / `defaultFlowId`，不清空 `edge.condition`。
+- `json-to-bpmn.writeEdge()` 必须使用 `edge.condition && !edge.isDefault`，默认边永远不写 `conditionExpression`。
+- 画布标签默认分支只展示“默认”，不要把草稿条件显示成会执行的条件摘要。
+- 如果某个条件需要参与 Flowable 判断，就不能让这条 sequenceFlow 成为 gateway default。
+
+**影响范围**:
+- `forge-admin-ui/src/components/flow-designer/panel/ConditionConfig.vue`
+- `forge-admin-ui/src/components/flow-designer/converter/json-to-bpmn.js`
+- `forge-admin-ui/src/components/flow-designer/converter/branch-parser.js`
+- 条件分支画布标签：`BranchHeader.vue`、`EdgePath.vue`
+
+## 66. 条件网关不能把分支数量固定死为 2
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+流程设计器新增条件分支后，如果 `addGatewayNode()` 只硬编码生成两条分支，用户后续无法继续配置第三条、第四条条件路径。实际业务里的排他网关通常是“多条条件分支 + 一条默认分支”，不是固定两个节点。
+
+**根本原因**:
+初始创建网关可以默认生成两条分支，但编辑态必须提供追加分支能力。只在 `for (let i = 0; i < 2; i += 1)` 里创建分支，会让分支数量变成建模能力限制，而不是初始模板。
+
+**解决方案**:
+- `useFlowDesigner` 提供独立 `addBranch(gatewayId)`，不要通过重复插入网关模拟新增分支。
+- 追加分支时沿既有分支链路找到合流节点，把新分支接回同一个 merge target。
+- 条件/包容网关追加分支后必须归一化默认分支，保留一个且仅一个 `isDefault/defaultFlowId`；并行网关不设置默认分支。
+- 配置面板点击“添加分支”后聚焦新分支的条件配置，减少用户在多分支列表里定位的成本。
+
+**影响范围**:
+- `forge-admin-ui/src/components/flow-designer/composables/useFlowDesigner.js`
+- `forge-admin-ui/src/components/flow-designer/panel/ConditionConfig.vue`
+- `forge-admin-ui/src/components/flow-designer/DingFlowDesigner.vue`
+
+## 67. 条件分支画布标签不要直接展示 SpEL 原文
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+条件分支设置表达式后，如果画布边标签直接展示 `${amount > 1000}`、`${a && b}` 这类原始 SpEL，会让分支连线区域变得拥挤；同时如果 SVG 连线层和 HTML 分支标签都展示条件文本，一条边上会出现重复标签。
+
+**根本原因**:
+`edge.condition` 是执行表达式，不是画布展示文案。它适合放在配置抽屉里编辑，不适合作为分支概览直接铺在画布边上。
+
+**解决方案**:
+- `BranchHeader` 只展示“条件已设 / N 条条件 / 默认 / 配置条件”这类状态摘要，原始表达式可放到 `title` 或配置抽屉里查看。
+- `EdgePath` 对带 `branchId` 的网关分支边不再重复渲染 SVG 文本标签，避免和 `BranchHeader` 叠加。
+- 配置抽屉仍保留完整表达式预览，满足调试需要。
+
+**影响范围**:
+- `forge-admin-ui/src/components/flow-designer/canvas/BranchHeader.vue`
+- `forge-admin-ui/src/components/flow-designer/canvas/EdgePath.vue`
+
+## 68. BPMN 只保留 conditionExpression 时需要反解析表单规则
+
+**发现日期**: 2026-06-20
+
+**问题描述**:
+用户通过“表单字段条件”生成 `${amount > 1000}` 后，如果流程经过 BPMN XML 保存/导入，边上通常只剩 `conditionExpression` 字符串，`conditionRules` 和 `conditionMode` 这些前端辅助字段不会天然存在。再次打开条件配置时，如果只看 `conditionRules`，会误进入“高级表达式”模式。
+
+**解决方案**:
+`ConditionConfig` 判断模式时应优先使用显式 `conditionMode/conditionRules`；如果缺失，但当前表单字段目录能匹配表达式字段，则对常见表达式反解析为规则行：
+- `==`、`!=`、`>`、`>=`、`<`、`<=`
+- 区间：`field >= start && field <= end`
+- 包含/不包含
+- 为空/不为空
+
+字段不在当前表单目录，或表达式结构无法安全识别时，继续使用高级表达式模式。
+
+**影响范围**:
+- `forge-admin-ui/src/components/flow-designer/panel/ConditionConfig.vue`

@@ -246,6 +246,7 @@
                 ref="dynamicFormRef"
                 v-model="dynamicFormData"
                 :schema="taskFormInfo.formJson"
+                :field-permissions="taskFormInfo.formFieldPermissions"
               />
             </div>
 

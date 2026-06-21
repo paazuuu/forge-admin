@@ -48,12 +48,8 @@ export function markBranches(flowJson) {
     const defaultFlowId = node.config?.defaultFlowId || ''
     for (const edge of outgoing) {
       edge.branchId = nextBranchId()
-      if (defaultFlowId && edge.id === defaultFlowId) {
+      if (defaultFlowId && edge.id === defaultFlowId)
         edge.isDefault = true
-        // 默认分支不应有 condition，按 BPMN 规范清空
-        edge.condition = ''
-        edge.conditionType = null
-      }
     }
   }
 

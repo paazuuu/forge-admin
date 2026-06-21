@@ -91,6 +91,41 @@ describe('useFlowDesigner - addNode', () => {
     expect(outgoing.some(e => e.isDefault)).toBe(false)
     expect(gateway.config.defaultFlowId).toBeUndefined()
   })
+
+  it('条件网关支持继续添加分支并保持唯一默认分支', () => {
+    const designer = useFlowDesigner()
+    const gatewayId = designer.addNode('StartEvent_1', 'condition')
+    const initialDefaultFlowId = designer.getNode(gatewayId).config.defaultFlowId
+    const result = designer.addBranch(gatewayId)
+    const json = designer.flowJson.value
+    const gateway = designer.getNode(gatewayId)
+    const outgoing = designer.getOutgoingEdges(gatewayId)
+    const newBranchEdge = designer.getEdge(result.edgeId)
+    const newBranchNode = designer.getNode(result.nodeId)
+
+    expect(outgoing).toHaveLength(3)
+    expect(outgoing.filter(e => e.isDefault)).toHaveLength(1)
+    expect(gateway.config.defaultFlowId).toBe(initialDefaultFlowId)
+    expect(newBranchEdge).toMatchObject({
+      source: gatewayId,
+      target: result.nodeId,
+      isDefault: false,
+      condition: '',
+      conditionType: null,
+    })
+    expect(newBranchEdge.branchId).toBeTruthy()
+    expect(newBranchNode).toMatchObject({
+      nodeType: 'approver',
+      name: '分支3审批',
+    })
+    expect(json.edges.find(e => e.source === result.nodeId && e.target === 'EndEvent_1')).toBeTruthy()
+    expect(designer.getNode('EndEvent_1').config.mergeNode).toBe(true)
+  })
+
+  it('非网关节点不能添加分支', () => {
+    const designer = useFlowDesigner()
+    expect(() => designer.addBranch('StartEvent_1')).toThrow(/网关/)
+  })
 })
 
 describe('useFlowDesigner - deleteNode 普通节点', () => {

@@ -40,6 +40,20 @@ describe('convertJsonToBpmn - 主结构', () => {
     expect(xml).toContain('<bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1"')
   })
 
+  it('流程级审批策略写入 process 扩展属性', () => {
+    const json = baseJson()
+    json.config = {
+      allowSubmitterWithdraw: false,
+      autoApprovalMode: 'firstOnly',
+    }
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const proc = getRootProcess(doc)
+
+    expect(getFlowableAttr(proc, 'allowSubmitterWithdraw')).toBe('false')
+    expect(getFlowableAttr(proc, 'autoApprovalMode')).toBe('firstOnly')
+  })
+
   it('节点全部出现', () => {
     const xml = convertJsonToBpmn(baseJson())
     const doc = parseBpmnXml(xml)
@@ -75,6 +89,21 @@ describe('convertJsonToBpmn - 主结构', () => {
     expect(getFlowableAttr(t, 'allowReturn')).toBe('true')
     // 默认权限不出现
     expect(getFlowableAttr(t, 'allowApprove')).toBe(null)
+  })
+
+  it('userTask 写入表单字段权限配置', () => {
+    const json = baseJson()
+    json.nodes[1].config.formFieldPermissions = [
+      { field: 'amount', label: '金额', readable: true, writable: false, required: true },
+    ]
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const t = findElementsByLocalName(doc, 'userTask')[0]
+    const permissions = JSON.parse(getFlowableAttr(t, 'formFieldPermissions'))
+
+    expect(permissions).toEqual([
+      { field: 'amount', label: '金额', readable: true, writable: false, required: true },
+    ])
   })
 
   it('每个 BPMNShape 都有真实 bpmnElement 引用', () => {
@@ -117,5 +146,32 @@ describe('convertJsonToBpmn - 边界场景', () => {
     }
     const xml = convertJsonToBpmn(json)
     expect(xml).toContain('<bpmn:intermediateCatchEvent id="X"/>')
+  })
+
+  it('默认分支有条件时不写出 conditionExpression，避免 Flowable 部署失败', () => {
+    const json = {
+      processId: 'P',
+      nodes: [
+        { id: 'S', nodeType: 'start', name: '', config: {} },
+        { id: 'GW', nodeType: 'condition', name: '', config: { defaultFlowId: 'F_default' } },
+        { id: 'T1', nodeType: 'approver', name: '', config: {} },
+        { id: 'T2', nodeType: 'approver', name: '', config: {} },
+      ],
+      edges: [
+        { id: 'F1', source: 'S', target: 'GW' },
+        { id: 'F_normal', source: 'GW', target: 'T1', condition: `${DOLLAR}{amount > 1000}`, isDefault: false },
+        { id: 'F_default', source: 'GW', target: 'T2', condition: `${DOLLAR}{amount <= 1000}`, isDefault: true },
+      ],
+    }
+
+    const xml = convertJsonToBpmn(json)
+    const doc = parseBpmnXml(xml)
+    const gw = findElementsByLocalName(doc, 'exclusiveGateway').find(node => getAttr(node, 'id') === 'GW')
+    const normalFlow = findElementsByLocalName(doc, 'sequenceFlow').find(edge => getAttr(edge, 'id') === 'F_normal')
+    const defaultFlow = findElementsByLocalName(doc, 'sequenceFlow').find(edge => getAttr(edge, 'id') === 'F_default')
+
+    expect(getAttr(gw, 'default')).toBe('F_default')
+    expect(normalFlow.textContent).toContain(`${DOLLAR}{amount > 1000}`)
+    expect(findElementsByLocalName(defaultFlow, 'conditionExpression')).toHaveLength(0)
   })
 })

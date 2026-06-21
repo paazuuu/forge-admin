@@ -22,11 +22,12 @@ import {
   getTextContent,
 } from './xml-utils.js'
 
+const DOLLAR = '$'
 const STATIC_ASSIGNEES = new Set([
-  '${initiator}',
-  '${initiatorLeader}',
-  '${deptManager}',
-  '${hr}',
+  `${DOLLAR}{initiator}`,
+  `${DOLLAR}{initiatorLeader}`,
+  `${DOLLAR}{deptManager}`,
+  `${DOLLAR}{hr}`,
 ])
 
 const DEFAULT_PERMISSIONS = Object.freeze({
@@ -69,11 +70,44 @@ export function parseUserTaskConfig(taskElement) {
 
   applyAssignee(taskElement, config)
   applyForm(taskElement, config)
+  applyFormFieldPermissions(taskElement, config)
   applyPriorityAndDueDate(taskElement, config)
   applyPermissions(taskElement, config)
   applyMultiInstance(taskElement, config)
   applyListeners(taskElement, config)
   return config
+}
+
+function applyFormFieldPermissions(el, config) {
+  const raw = getFlowableAttr(el, 'formFieldPermissions') || readExtensionText(el, 'formFieldPermissions')
+  if (!raw)
+    return
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed))
+      return
+    config.formFieldPermissions = parsed
+      .map(normalizeFormFieldPermission)
+      .filter(item => item.field)
+  }
+  catch {
+    config.formFieldPermissions = []
+  }
+}
+
+function readExtensionText(el, localName) {
+  const item = getExtensionElements(el, localName)[0]
+  return item ? getTextContent(item) : ''
+}
+
+function normalizeFormFieldPermission(item = {}) {
+  return {
+    field: String(item.field || '').trim(),
+    label: String(item.label || item.field || '').trim(),
+    readable: item.readable !== false,
+    writable: item.writable !== false,
+    required: item.required === true,
+  }
 }
 
 function applyAssignee(el, config) {

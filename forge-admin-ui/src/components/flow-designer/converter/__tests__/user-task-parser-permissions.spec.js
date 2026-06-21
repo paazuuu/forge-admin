@@ -31,7 +31,8 @@ const SAMPLE_FORM_PRIORITY = [
   '    <bpmn:userTask id="T_external"',
   '                   flowable:formUrl="/leave/approve"',
   '                   flowable:priority="80"',
-  '                   flowable:dueDate="P3D"/>',
+  '                   flowable:dueDate="P3D"',
+  '                   flowable:formFieldPermissions=\'[{"field":"amount","label":"金额","readable":true,"writable":false,"required":true}]\'/>',
   '    <bpmn:userTask id="T_dynamic" flowable:formKey="leaveForm"/>',
   '    <bpmn:userTask id="T_no_form"/>',
   '  </bpmn:process>',
@@ -84,6 +85,13 @@ describe('parseUserTaskConfig - 表单 / 优先级 / dueDate', () => {
     const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_external'))
     expect(cfg.priority).toBe(80)
     expect(cfg.dueDate).toBe(3)
+  })
+
+  it('解析表单字段权限配置', () => {
+    const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_external'))
+    expect(cfg.formFieldPermissions).toEqual([
+      { field: 'amount', label: '金额', readable: true, writable: false, required: true },
+    ])
   })
 
   it('未配置时使用默认值', () => {

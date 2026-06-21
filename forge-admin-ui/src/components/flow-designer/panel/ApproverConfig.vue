@@ -5,9 +5,9 @@
  * 内部用 NTabs 切换：
  *   - basic        审批设置（assignee / candidates / form 引用）
  *   - multi        会签设置（multiInstance + completionCondition）
- *   - permissions  操作权限（7 个布尔开关）
  *   - form         表单字段权限（formFieldPermissions 列表）
- *   - listeners    任务监听器 / 执行监听器
+ *   - permissions  审批操作权限（7 个布尔开关）
+ *   - extensions   任务监听器 / 执行监听器
  *
  * 字段 1:1 迁移自 NodePropertiesPanel.vue:1562-2200，但用更扁平的 emit('update:config') 通信。
  *
@@ -28,6 +28,7 @@ import PermissionConfig from './PermissionConfig.vue'
 
 const props = defineProps({
   node: { type: Object, required: true },
+  formFieldCatalog: { type: Array, default: () => [] },
   readonly: Boolean,
 })
 
@@ -74,14 +75,15 @@ function updateNode(node) {
       <n-tab-pane name="form" tab="表单权限">
         <FormPermissionConfig
           :config="config"
+          :form-field-catalog="formFieldCatalog"
           :readonly="readonly"
           @update:config="patch"
         />
       </n-tab-pane>
-      <n-tab-pane name="actions" tab="审批后操作">
+      <n-tab-pane name="permissions" tab="审批权限">
         <div class="config-section-block">
           <div class="config-section-title">
-            操作权限
+            审批操作权限
           </div>
           <PermissionConfig
             :config="config"
@@ -89,6 +91,8 @@ function updateNode(node) {
             @update:config="patch"
           />
         </div>
+      </n-tab-pane>
+      <n-tab-pane name="extensions" tab="扩展配置">
         <div class="config-section-block">
           <div class="config-section-title">
             监听器

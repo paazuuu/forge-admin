@@ -3,7 +3,7 @@
  *
  * 职责：
  * - 管理 flowJson reactive 状态
- * - 提供节点 / 边 CRUD（addNode / deleteNode / updateNode / moveNodeUp/Down / copyNode）
+ * - 提供节点 / 边 CRUD（addNode / addBranch / deleteNode / updateNode / moveNodeUp/Down / copyNode）
  * - 提供查询（getNode / getEdge / getOutgoingEdges / getIncomingEdges / find*Node）
  * - 提供整体加载 / 导出（loadJson / exportJson / reset）
  *
@@ -28,6 +28,10 @@ export function createEmptyFlow() {
   return {
     processId: 'Process_1',
     processName: '新流程',
+    config: {
+      allowSubmitterWithdraw: true,
+      autoApprovalMode: 'none',
+    },
     nodes: [start, end],
     edges: [{
       id: 'Flow_1',
@@ -151,6 +155,89 @@ export function useFlowDesigner(initialJson) {
 
     commit(next)
     return gateway.id
+  }
+
+  function addBranch(gatewayId, override = {}) {
+    const next = cloneJson(flowJson.value)
+    const gateway = next.nodes.find(n => n.id === gatewayId)
+    if (!gateway)
+      throw new Error(`addBranch: gatewayId=${gatewayId} 不存在`)
+    if (!GATEWAY_TYPES.has(gateway.nodeType))
+      throw new Error('addBranch: 仅支持网关节点添加分支')
+
+    const outgoing = next.edges.filter(e => e.source === gatewayId)
+    const mergeTargetId = findGatewayMergeTarget(next, gatewayId)
+    const branchNode = buildNode(NODE_TYPE.APPROVER, {
+      name: `分支${outgoing.length + 1}审批`,
+      ...override,
+    })
+    branchNode.id = idGen.nextNodeId()
+    branchNode.bpmnElementId = branchNode.id
+    next.nodes.push(branchNode)
+
+    const branchEdgeId = idGen.nextEdgeId()
+    next.edges.push(makeEdge(branchEdgeId, gatewayId, branchNode.id, {
+      branchId: idGen.nextBranchId(),
+      isDefault: false,
+      condition: '',
+      conditionType: null,
+    }))
+
+    if (mergeTargetId) {
+      next.edges.push(makeEdge(idGen.nextEdgeId(), branchNode.id, mergeTargetId))
+      const mergeTarget = next.nodes.find(n => n.id === mergeTargetId)
+      if (mergeTarget)
+        mergeTarget.config = { ...(mergeTarget.config || {}), mergeNode: true }
+    }
+
+    normalizeGatewayDefault(next, gatewayId)
+    commit(next)
+    return { nodeId: branchNode.id, edgeId: branchEdgeId }
+  }
+
+  function findGatewayMergeTarget(json, gatewayId) {
+    const inDegreeOf = id => json.edges.filter(e => e.target === id).length
+    const nodeById = new Map(json.nodes.map(node => [node.id, node]))
+    const outgoing = json.edges.filter(e => e.source === gatewayId)
+
+    for (const edge of outgoing) {
+      let cur = edge.target
+      const guard = new Set([gatewayId])
+      while (cur && !guard.has(cur)) {
+        guard.add(cur)
+        const out = json.edges.filter(e => e.source === cur)
+        if (out.length !== 1)
+          break
+
+        const targetId = out[0].target
+        const targetNode = nodeById.get(targetId)
+        if ((inDegreeOf(targetId) >= 2 && targetId !== edge.target) || targetNode?.config?.mergeNode)
+          return targetId
+
+        cur = targetId
+      }
+    }
+
+    return null
+  }
+
+  function normalizeGatewayDefault(json, gatewayId) {
+    const gateway = json.nodes.find(n => n.id === gatewayId)
+    if (!gateway || gateway.nodeType === NODE_TYPE.PARALLEL)
+      return
+
+    const outgoing = json.edges.filter(e => e.source === gatewayId)
+    if (!outgoing.length) {
+      gateway.config = { ...(gateway.config || {}), defaultFlowId: '' }
+      return
+    }
+
+    const configuredDefault = outgoing.find(e => e.id === gateway.config?.defaultFlowId)
+    const existingDefault = outgoing.find(e => e.isDefault)
+    const defaultEdge = configuredDefault || existingDefault || outgoing[outgoing.length - 1]
+    for (const edge of outgoing)
+      edge.isDefault = edge.id === defaultEdge.id
+    gateway.config = { ...(gateway.config || {}), defaultFlowId: defaultEdge.id }
   }
 
   function deleteNode(nodeId) {
@@ -278,6 +365,7 @@ export function useFlowDesigner(initialJson) {
     flowJson,
     selectedNodeId,
     addNode,
+    addBranch,
     deleteNode,
     updateNode,
     moveNodeUp,

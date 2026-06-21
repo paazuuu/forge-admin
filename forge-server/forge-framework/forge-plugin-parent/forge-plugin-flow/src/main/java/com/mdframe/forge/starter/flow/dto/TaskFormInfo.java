@@ -72,6 +72,11 @@ public class TaskFormInfo {
     private String formKey;
 
     /**
+     * 节点表单字段权限配置JSON
+     */
+    private String formFieldPermissions;
+
+    /**
      * 流程变量（表单数据）
      */
     private Map<String, Object> variables;

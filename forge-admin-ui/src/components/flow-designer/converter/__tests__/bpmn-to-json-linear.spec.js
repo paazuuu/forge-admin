@@ -6,7 +6,7 @@ const SAMPLE_LINEAR = [
   '<?xml version="1.0" encoding="UTF-8"?>',
   '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"',
   '                  xmlns:flowable="http://flowable.org/bpmn">',
-  '  <bpmn:process id="Process_1" name="请假流程" isExecutable="true">',
+  '  <bpmn:process id="Process_1" name="请假流程" flowable:allowSubmitterWithdraw="false" flowable:autoApprovalMode="consecutive" isExecutable="true">',
   '    <bpmn:startEvent id="Start_1" name="发起" flowable:initiator="initiator">',
   '      <bpmn:documentation>流程开始</bpmn:documentation>',
   '    </bpmn:startEvent>',
@@ -39,6 +39,14 @@ describe('bpmn-to-json - 线性流程', () => {
     expect(json.processName).toBe('请假流程')
     expect(json.nodes.map(n => n.id)).toEqual(['Start_1', 'Service_1', 'End_1'])
     expect(json.edges.map(e => e.id)).toEqual(['Flow_1', 'Flow_2'])
+  })
+
+  it('解析流程级审批策略', () => {
+    const json = convertBpmnToJson(SAMPLE_LINEAR)
+    expect(json.config).toEqual({
+      allowSubmitterWithdraw: false,
+      autoApprovalMode: 'consecutive',
+    })
   })
 
   it('正确识别 nodeType', () => {
