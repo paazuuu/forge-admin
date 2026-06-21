@@ -62,6 +62,31 @@ public class GenDatasource implements Serializable {
     private Integer isDefault;
 
     /**
+     * 数据源用途范围：LOWCODE_RUNTIME/TENANT_BUSINESS/DEVELOPER_IMPORT/BOTH
+     */
+    private String usageScope;
+
+    /**
+     * 是否允许运行时写入（1-允许，0-禁止）
+     */
+    private Integer allowRuntimeWrite;
+
+    /**
+     * 是否允许运行时DDL（1-允许，0-禁止）
+     */
+    private Integer allowRuntimeDdl;
+
+    /**
+     * 是否只读（1-只读，0-可写）
+     */
+    private Integer readonly;
+
+    /**
+     * 风险等级：LOW/MEDIUM/HIGH
+     */
+    private String riskLevel;
+
+    /**
      * 是否启用（1-启用，0-禁用）
      */
     private Integer isEnabled;

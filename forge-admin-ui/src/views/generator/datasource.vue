@@ -4,10 +4,10 @@
       ref="crudRef"
       :api-config="{
         list: 'get@/generator/datasource/list',
-        detail: 'get@/generator/datasource/{id}',
+        detail: 'get@/generator/datasource/:id',
         add: 'post@/generator/datasource/add',
         update: 'post@/generator/datasource/edit',
-        delete: 'post@/generator/datasource/remove/{id}',
+        delete: 'post@/generator/datasource/remove/:id',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
@@ -39,6 +39,27 @@ const dbTypeOptions = [
   { label: 'SQLServer', value: 'SQLServer' },
 ]
 
+const usageScopeOptions = [
+  { label: '低代码运行', value: 'LOWCODE_RUNTIME' },
+  { label: '租户业务', value: 'TENANT_BUSINESS' },
+  { label: '开发导入', value: 'DEVELOPER_IMPORT' },
+  { label: '通用', value: 'BOTH' },
+]
+
+const riskLevelOptions = [
+  { label: '低', value: 'LOW' },
+  { label: '中', value: 'MEDIUM' },
+  { label: '高', value: 'HIGH' },
+]
+
+const usageScopeLabelMap = Object.fromEntries(usageScopeOptions.map(item => [item.value, item.label]))
+const riskLevelLabelMap = Object.fromEntries(riskLevelOptions.map(item => [item.value, item.label]))
+const riskLevelTagMap = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'error',
+}
+
 // 驱动类映射
 const driverClassMap = {
   MySQL: 'com.mysql.cj.jdbc.Driver',
@@ -55,6 +76,15 @@ const searchSchema = [
     type: 'input',
     props: {
       placeholder: '请输入数据源名称',
+    },
+  },
+  {
+    field: 'usageScope',
+    label: '用途',
+    type: 'select',
+    props: {
+      placeholder: '请选择用途',
+      options: usageScopeOptions,
     },
   },
 ]
@@ -77,9 +107,17 @@ const tableColumns = computed(() => [
     width: 100,
   },
   {
+    prop: 'usageScope',
+    label: '用途',
+    width: 110,
+    render: row => h(NTag, { size: 'small', type: 'info' }, {
+      default: () => usageScopeLabelMap[row.usageScope] || row.usageScope || '-',
+    }),
+  },
+  {
     prop: 'url',
     label: '连接地址',
-    minWidth: 250,
+    minWidth: 220,
     ellipsis: true,
   },
   {
@@ -97,6 +135,42 @@ const tableColumns = computed(() => [
         size: 'small',
       }, { default: () => row.isDefault === 1 ? '是' : '否' })
     },
+  },
+  {
+    prop: 'readonly',
+    label: '只读',
+    width: 80,
+    render: row => h(NTag, {
+      type: row.readonly === 1 ? 'warning' : 'success',
+      size: 'small',
+    }, { default: () => row.readonly === 1 ? '是' : '否' }),
+  },
+  {
+    prop: 'allowRuntimeWrite',
+    label: '写入',
+    width: 80,
+    render: row => h(NTag, {
+      type: row.allowRuntimeWrite === 1 ? 'success' : 'default',
+      size: 'small',
+    }, { default: () => row.allowRuntimeWrite === 1 ? '允许' : '禁止' }),
+  },
+  {
+    prop: 'allowRuntimeDdl',
+    label: 'DDL',
+    width: 80,
+    render: row => h(NTag, {
+      type: row.allowRuntimeDdl === 1 ? 'warning' : 'default',
+      size: 'small',
+    }, { default: () => row.allowRuntimeDdl === 1 ? '允许' : '禁止' }),
+  },
+  {
+    prop: 'riskLevel',
+    label: '风险',
+    width: 80,
+    render: row => h(NTag, {
+      type: riskLevelTagMap[row.riskLevel] || 'default',
+      size: 'small',
+    }, { default: () => riskLevelLabelMap[row.riskLevel] || row.riskLevel || '-' }),
   },
   {
     prop: 'isEnabled',
@@ -197,7 +271,7 @@ const editSchema = [
         required: true,
         message: '请输入密码',
         trigger: 'blur',
-        validator: (rule, value, callback, source, options) => {
+        validator: (_rule, value, _callback, source) => {
           // 编辑时密码可以为空（不修改）
           if (source.datasourceId && !value) {
             return true
@@ -210,6 +284,76 @@ const editSchema = [
       type: 'password',
       placeholder: '编辑时留空则不修改密码',
       showPasswordOn: 'click',
+    },
+  },
+  {
+    field: 'usageScope',
+    label: '用途范围',
+    type: 'select',
+    defaultValue: 'LOWCODE_RUNTIME',
+    rules: [{ required: true, message: '请选择用途范围', trigger: 'change' }],
+    props: {
+      placeholder: '请选择用途范围',
+      options: usageScopeOptions,
+    },
+  },
+  {
+    field: 'riskLevel',
+    label: '风险等级',
+    type: 'select',
+    defaultValue: 'LOW',
+    props: {
+      placeholder: '请选择风险等级',
+      options: riskLevelOptions,
+      onUpdateValue: (value, formData) => {
+        if (value === 'HIGH' && !formData.datasourceId) {
+          formData.readonly = 1
+          formData.allowRuntimeWrite = 0
+          formData.allowRuntimeDdl = 0
+        }
+      },
+    },
+  },
+  {
+    field: 'readonly',
+    label: '只读模式',
+    type: 'radio',
+    defaultValue: 0,
+    props: {
+      options: [
+        { label: '开启', value: 1 },
+        { label: '关闭', value: 0 },
+      ],
+      onUpdateValue: (value, formData) => {
+        if (value === 1) {
+          formData.allowRuntimeWrite = 0
+          formData.allowRuntimeDdl = 0
+        }
+      },
+    },
+  },
+  {
+    field: 'allowRuntimeWrite',
+    label: '允许运行写入',
+    type: 'radio',
+    defaultValue: 1,
+    props: {
+      options: [
+        { label: '允许', value: 1 },
+        { label: '禁止', value: 0 },
+      ],
+    },
+  },
+  {
+    field: 'allowRuntimeDdl',
+    label: '允许运行DDL',
+    type: 'radio',
+    defaultValue: 0,
+    props: {
+      options: [
+        { label: '允许', value: 1 },
+        { label: '禁止', value: 0 },
+      ],
     },
   },
   {
@@ -273,6 +417,15 @@ function beforeSubmit(formData) {
   if (!formData.password) {
     delete formData.password
   }
+  if (formData.readonly === 1) {
+    formData.allowRuntimeWrite = 0
+    formData.allowRuntimeDdl = 0
+  }
+  if (formData.riskLevel === 'HIGH' && !formData.datasourceId) {
+    formData.readonly = 1
+    formData.allowRuntimeWrite = 0
+    formData.allowRuntimeDdl = 0
+  }
   return formData
 }
 
@@ -298,7 +451,7 @@ function handleDelete(row) {
           crudRef.value?.refresh()
         }
       }
-      catch (error) {
+      catch {
         window.$message.error('删除失败')
       }
     },
@@ -317,7 +470,7 @@ async function handleTestConnection(row) {
       window.$message.error(res.msg || '连接失败', { key: 'testConn' })
     }
   }
-  catch (error) {
+  catch {
     window.$message.error('连接测试失败', { key: 'testConn' })
   }
 }

@@ -60,7 +60,7 @@ public class DynamicCrudController {
     @ApiEncrypt
     @GetMapping("/{id}")
     public RespInfo<Map<String, Object>> getById(@PathVariable String configKey,
-                                                  @PathVariable Long id) {
+                                                  @PathVariable String id) {
         return RespInfo.success(dynamicCrudService.selectById(configKey, id));
     }
 
@@ -82,9 +82,10 @@ public class DynamicCrudController {
                                   @RequestBody Map<String, Object> data) {
         // 获取更新前的数据用于变更检测
         Map<String, Object> previousData = null;
-        if (data.get("id") != null) {
+        Object recordId = dynamicCrudService.resolveRecordId(configKey, data);
+        if (recordId != null) {
             try {
-                previousData = dynamicCrudService.selectById(configKey, Long.parseLong(String.valueOf(data.get("id"))));
+                previousData = dynamicCrudService.selectById(configKey, recordId);
             } catch (Exception e) {
                 log.debug("获取更新前数据失败: {}", e.getMessage());
             }
@@ -98,7 +99,7 @@ public class DynamicCrudController {
     @ApiEncrypt
     @DeleteMapping("/{id}")
     public RespInfo<Void> delete(@PathVariable String configKey,
-                                  @PathVariable Long id) {
+                                  @PathVariable String id) {
         dynamicCrudService.deleteById(configKey, id);
         // 发布记录删除事件
         businessEventPublisher.publishRecordDeleted(configKey, String.valueOf(id));

@@ -10,6 +10,9 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessObjectRelationMapper;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudRepository;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContextHolder;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +34,7 @@ public class StoredAggregateRefreshService {
     private final DynamicCrudRepository repository;
     private final StoredFormulaRuntime storedFormulaRuntime;
     private final ObjectMapper objectMapper;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
 
     public void refreshAfterChildInsert(AiCrudConfig childConfig, Map<String, Object> childRecord) {
         refreshAfterChildChange(childConfig, null, childRecord);
@@ -46,20 +50,22 @@ public class StoredAggregateRefreshService {
         refreshAfterChildChange(childConfig, beforeRecord, null);
     }
 
-    public void refreshRecord(AiCrudConfig config, Long recordId) {
+    public void refreshRecord(AiCrudConfig config, Object recordId) {
         if (config == null || recordId == null || StringUtils.isBlank(config.getTableName())) {
             return;
         }
-        LowcodeModelSchema schema = parseModelSchema(config);
-        if (schema == null) {
-            return;
+        try (LowcodeRuntimeDataSourceContextHolder.Scope ignored = useRuntimeContext(config)) {
+            LowcodeModelSchema schema = parseModelSchema(config);
+            if (schema == null) {
+                return;
+            }
+            Set<String> formulaFields = new LinkedHashSet<>(storedFormulaRuntime.extractFormulas(schema).keySet());
+            if (formulaFields.isEmpty()) {
+                return;
+            }
+            Map<String, Object> rawRecord = repository.selectById(config.getTableName(), recordId);
+            refreshParentRecord(config, schema, rawRecord, formulaFields);
         }
-        Set<String> formulaFields = new LinkedHashSet<>(storedFormulaRuntime.extractFormulas(schema).keySet());
-        if (formulaFields.isEmpty()) {
-            return;
-        }
-        Map<String, Object> rawRecord = repository.selectById(config.getTableName(), recordId);
-        refreshParentRecord(config, schema, rawRecord, formulaFields);
     }
 
     private void refreshAfterChildChange(AiCrudConfig childConfig,
@@ -98,26 +104,28 @@ public class StoredAggregateRefreshService {
         if (parentConfig == null || StringUtils.isBlank(parentConfig.getTableName())) {
             return;
         }
-        LowcodeModelSchema parentSchema = parseModelSchema(parentConfig);
-        if (parentSchema == null) {
-            return;
-        }
-        Set<String> affectedFields = resolveAffectedStoredFormulaFields(parentSchema, relation);
-        if (affectedFields.isEmpty()) {
-            return;
-        }
-        Set<Object> parentKeys = new LinkedHashSet<>();
-        addIfNotNull(parentKeys, readFieldValue(beforeRecord, relation.getTargetFieldCode()));
-        addIfNotNull(parentKeys, readFieldValue(afterRecord, relation.getTargetFieldCode()));
-        if (parentKeys.isEmpty()) {
-            return;
-        }
-        String parentJoinColumn = resolveColumnName(parentSchema, parentConfig.getTableName(), relation.getSourceFieldCode());
-        if (StringUtils.isBlank(parentJoinColumn)) {
-            return;
-        }
-        for (Object parentKey : parentKeys) {
-            refreshParentByJoinValue(parentConfig, parentSchema, parentJoinColumn, parentKey, affectedFields);
+        try (LowcodeRuntimeDataSourceContextHolder.Scope ignored = useRuntimeContext(parentConfig)) {
+            LowcodeModelSchema parentSchema = parseModelSchema(parentConfig);
+            if (parentSchema == null) {
+                return;
+            }
+            Set<String> affectedFields = resolveAffectedStoredFormulaFields(parentSchema, relation);
+            if (affectedFields.isEmpty()) {
+                return;
+            }
+            Set<Object> parentKeys = new LinkedHashSet<>();
+            addIfNotNull(parentKeys, readFieldValue(beforeRecord, relation.getTargetFieldCode()));
+            addIfNotNull(parentKeys, readFieldValue(afterRecord, relation.getTargetFieldCode()));
+            if (parentKeys.isEmpty()) {
+                return;
+            }
+            String parentJoinColumn = resolveColumnName(parentSchema, parentConfig.getTableName(), relation.getSourceFieldCode());
+            if (StringUtils.isBlank(parentJoinColumn)) {
+                return;
+            }
+            for (Object parentKey : parentKeys) {
+                refreshParentByJoinValue(parentConfig, parentSchema, parentJoinColumn, parentKey, affectedFields);
+            }
         }
     }
 
@@ -127,13 +135,6 @@ public class StoredAggregateRefreshService {
                                           Object parentKey,
                                           Set<String> affectedFields) {
         if (parentKey == null) {
-            return;
-        }
-        if ("id".equals(parentJoinColumn)) {
-            Long id = toLong(parentKey);
-            if (id != null) {
-                refreshParentRecord(parentConfig, parentSchema, repository.selectById(parentConfig.getTableName(), id), affectedFields);
-            }
             return;
         }
         List<Map<String, Object>> parentRows = repository.selectListByColumn(
@@ -150,7 +151,7 @@ public class StoredAggregateRefreshService {
         if (rawRecord == null || rawRecord.isEmpty() || formulaFields == null || formulaFields.isEmpty()) {
             return;
         }
-        Long recordId = toLong(readFieldValue(rawRecord, "id"));
+        Object recordId = resolveRecordId(parentSchema, rawRecord);
         if (recordId == null) {
             return;
         }
@@ -218,6 +219,11 @@ public class StoredAggregateRefreshService {
         target.setAppType(source.getAppType());
         target.setTableMode(source.getTableMode());
         target.setSourceTable(source.getSourceTable());
+        target.setRuntimeDatasource(source.getRuntimeDatasource());
+        target.setPrimaryKey(source.getPrimaryKey());
+        target.setTenantStrategy(source.getTenantStrategy());
+        target.setAuditStrategy(source.getAuditStrategy());
+        target.setLogicDeleteStrategy(source.getLogicDeleteStrategy());
         target.setTableName(source.getTableName());
         target.setBusinessName(source.getBusinessName());
         target.setTreeConfig(source.getTreeConfig());
@@ -317,6 +323,23 @@ public class StoredAggregateRefreshService {
         return null;
     }
 
+    private Object resolveRecordId(LowcodeModelSchema schema, Map<String, Object> rawRecord) {
+        if (rawRecord == null || rawRecord.isEmpty()) {
+            return null;
+        }
+        if (schema != null && schema.getPrimaryKey() != null) {
+            Object value = readFieldValue(rawRecord, schema.getPrimaryKey().getField());
+            if (value != null) {
+                return value;
+            }
+            value = readFieldValue(rawRecord, schema.getPrimaryKey().getColumnName());
+            if (value != null) {
+                return value;
+            }
+        }
+        return readFieldValue(rawRecord, "id");
+    }
+
     private Object readFieldValue(Map<String, Object> row, String fieldName) {
         if (row == null || StringUtils.isBlank(fieldName)) {
             return null;
@@ -341,18 +364,10 @@ public class StoredAggregateRefreshService {
         }
     }
 
-    private Long toLong(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        try {
-            return Long.parseLong(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            return null;
-        }
+    private LowcodeRuntimeDataSourceContextHolder.Scope useRuntimeContext(AiCrudConfig config) {
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(config);
+        config.setTableName(StringUtils.defaultIfBlank(context.getTableName(), config.getTableName()));
+        return LowcodeRuntimeDataSourceContextHolder.use(context);
     }
 
     private String extractSuiteCode(AiCrudConfig config) {

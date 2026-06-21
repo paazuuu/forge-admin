@@ -165,7 +165,7 @@
 <script setup>
 import { TrashOutline } from '@vicons/ionicons5'
 import { NIcon, NTag } from 'naive-ui'
-import { computed, h, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
@@ -185,6 +185,7 @@ const usersModalVisible = ref(false)
 const usersLoading = ref(false)
 const currentTenant = ref({})
 const tenantUsers = ref([])
+const businessDatasources = ref([])
 const userSearchParams = ref({
   username: '',
   realName: '',
@@ -201,6 +202,10 @@ const { dict } = useDict(NORMAL_DISABLE_DICT, USER_TYPE_DICT, USER_STATUS_DICT)
 
 const tenantStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
 const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
+const businessDatasourceOptions = computed(() => businessDatasources.value.map(item => ({
+  label: `${item.datasourceName} (${item.datasourceCode || item.dbType})`,
+  value: item.datasourceId,
+})))
 const userPaginationConfig = computed(() => ({
   page: userPagination.value.page,
   pageSize: userPagination.value.pageSize,
@@ -337,6 +342,20 @@ const tableColumns = computed(() => [
     },
   },
   {
+    prop: 'defaultBusinessDatasourceCode',
+    label: '业务数据源',
+    minWidth: 150,
+    render: (row) => {
+      const datasource = findBusinessDatasource(row.defaultBusinessDatasourceId)
+      return h(NTag, {
+        size: 'small',
+        type: datasource ? 'info' : 'default',
+      }, {
+        default: () => datasource?.datasourceName || row.defaultBusinessDatasourceCode || '主库回退',
+      })
+    },
+  },
+  {
     prop: 'tenantDesc',
     label: '描述',
     minWidth: 150,
@@ -413,6 +432,25 @@ const editSchema = computed(() => [
     type: 'textarea',
     span: 2,
     props: { placeholder: '请输入租户描述', rows: 2 },
+  },
+
+  // ==================== 业务数据源 ====================
+  {
+    type: 'divider',
+    label: '业务数据源',
+    props: { titlePlacement: 'left', description: '未配置时 forge-business 模块按主库回退执行。' },
+    span: 2,
+  },
+  {
+    field: 'defaultBusinessDatasourceId',
+    label: '默认业务库',
+    type: 'select',
+    span: 2,
+    props: {
+      placeholder: '未选择时回退主库',
+      clearable: true,
+      options: businessDatasourceOptions.value,
+    },
   },
 
   // ==================== 品牌设置 ====================
@@ -709,6 +747,25 @@ function toNumberOptions(options = []) {
   }))
 }
 
+function findBusinessDatasource(datasourceId) {
+  if (datasourceId === null || datasourceId === undefined)
+    return null
+  return businessDatasources.value.find(item => String(item.datasourceId) === String(datasourceId)) || null
+}
+
+async function loadBusinessDatasources() {
+  try {
+    const res = await request.get('/generator/datasource/enabled', {
+      params: { usageScope: 'TENANT_BUSINESS' },
+    })
+    businessDatasources.value = res.data || []
+  }
+  catch (error) {
+    console.error('加载租户业务数据源失败:', error)
+    window.$message?.warning?.('租户业务数据源加载失败')
+  }
+}
+
 // 编辑
 function handleEdit(row) {
   crudRef.value?.showEdit(row)
@@ -957,6 +1014,15 @@ async function handleSubmitSuccess() {
 
 // 提交前处理 - 将主题配置字段组装成 JSON
 function handleBeforeSubmit(formData) {
+  const businessDatasource = findBusinessDatasource(formData.defaultBusinessDatasourceId)
+  if (businessDatasource) {
+    formData.defaultBusinessDatasourceCode = businessDatasource.datasourceCode || null
+  }
+  else {
+    formData.defaultBusinessDatasourceId = null
+    formData.defaultBusinessDatasourceCode = null
+  }
+
   // 检查是否有任何主题配置字段
   const hasThemeConfig = formData.theme_header_backgroundColor
     || formData.theme_header_textColor
@@ -1061,6 +1127,10 @@ function handleBeforeRenderDetail(data) {
 
   return data
 }
+
+onMounted(() => {
+  loadBusinessDatasources()
+})
 </script>
 
 <style scoped>

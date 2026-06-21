@@ -66,4 +66,25 @@ public class AiCrudConfig extends TenantEntity {
     private String objectCode;
     /** 业务对象名称 */
     private String objectName;
+
+    /** 运行数据源ID */
+    private Long runtimeDatasourceId;
+    /** 运行数据源编码 */
+    private String runtimeDatasourceCode;
+    /** 运行数据源快照，不含密码 */
+    private String runtimeDatasourceSnapshot;
+    /** 运行表名 */
+    private String runtimeTableName;
+    /** 主键字段名 */
+    private String primaryKeyField;
+    /** 主键列名 */
+    private String primaryKeyColumn;
+    /** 主键类型 */
+    private String primaryKeyType;
+    /** 租户隔离策略 */
+    private String tenantStrategy;
+    /** 审计字段策略 */
+    private String auditStrategy;
+    /** 逻辑删除策略 */
+    private String logicDeleteStrategy;
 }

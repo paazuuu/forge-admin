@@ -5,36 +5,36 @@
 <template>
   <!-- 表单分隔线 -->
   <AiFormSectionTitle
-      v-if="isSectionTitleField"
-      :title="field.label"
-      :anchor-id="field.__sectionId"
-      :description="field.props?.description || field.description"
-      :badge="field.props?.badge || field.badge"
-      :style="field.style || field.formItemStyle"
-      :class="field.className"
+    v-if="isSectionTitleField"
+    :title="field.label"
+    :anchor-id="field.__sectionId"
+    :description="field.props?.description || field.description"
+    :badge="field.props?.badge || field.badge"
+    :style="field.style || field.formItemStyle"
+    :class="field.className"
   />
 
   <!-- 分组标题 -->
   <AiFormGroupTitle
-      v-else-if="isGroupTitleField"
-      :label="field.label"
-      :title="field.props?.title || field.title"
-      :style="field.style || field.formItemStyle"
-      :class-name="field.className"
+    v-else-if="isGroupTitleField"
+    :label="field.label"
+    :title="field.props?.title || field.title"
+    :style="field.style || field.formItemStyle"
+    :class-name="field.className"
   />
 
   <!-- 普通表单项 -->
   <n-form-item
-      v-else
-      :label="field.label"
-      :path="field.field"
-      :label-width="field.labelWidth"
-      :show-label="field.showLabel !== false"
-      :show-feedback="field.showFeedback !== false"
-      :required="isFieldRequired"
-      :data-ai-field="field.field"
-      :style="field.formItemStyle"
-      :class="formItemClass"
+    v-else
+    :label="field.label"
+    :path="field.field"
+    :label-width="field.labelWidth"
+    :show-label="field.showLabel !== false"
+    :show-feedback="field.showFeedback !== false"
+    :required="isFieldRequired"
+    :data-ai-field="field.field"
+    :style="field.formItemStyle"
+    :class="formItemClass"
   >
     <template #label>
       <span class="ai-form-item-label">
@@ -45,20 +45,20 @@
 
     <div class="ai-form-item-body">
       <div
-          class="ai-form-control"
-          :style="componentControlStyle"
-          :class="componentControlClass"
+        class="ai-form-control"
+        :style="componentControlStyle"
+        :class="componentControlClass"
       >
         <div
-            v-if="shouldRenderReadonlySelectionText(field)"
-            class="ai-form-readonly-text"
-            :title="resolveReadonlySelectionText(field)"
+          v-if="shouldRenderReadonlySelectionText(field)"
+          class="ai-form-readonly-text"
+          :title="resolveReadonlySelectionText(field)"
         >
           {{ resolveReadonlySelectionText(field) }}
         </div>
 
-      <!-- 输入框 -->
-      <n-input
+        <!-- 输入框 -->
+        <n-input
           v-else-if="field.type === 'input'"
           :value="value"
           :placeholder="getPlaceholder(field)"
@@ -70,10 +70,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 多行文本 -->
-      <n-input
+        <!-- 多行文本 -->
+        <n-input
           v-else-if="field.type === 'textarea'"
           type="textarea"
           :value="value"
@@ -87,10 +87,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 数字输入框 -->
-      <n-input-number
+        <!-- 数字输入框 -->
+        <n-input-number
           v-else-if="field.type === 'number' || field.type === 'inputNumber'"
           :value="value"
           :placeholder="getPlaceholder(field)"
@@ -105,10 +105,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 下拉选择 -->
-      <n-select
+        <!-- 下拉选择 -->
+        <n-select
           v-else-if="field.type === 'select'"
           :value="resolveOptionValue(value)"
           :placeholder="getPlaceholder(field)"
@@ -123,10 +123,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 字典选择器 -->
-      <DictSelect
+        <!-- 字典选择器 -->
+        <DictSelect
           v-else-if="field.type === 'dictSelect'"
           :value="value"
           :dict-type="field.dictType || field.props?.dictType"
@@ -139,59 +139,59 @@
           :cascade="dictCascadeConfig"
           v-bind="field.props"
           @update:value="handleUpdate"
-      />
+        />
 
-      <!-- 单选框 -->
-      <n-radio-group
+        <!-- 单选框 -->
+        <n-radio-group
           v-else-if="field.type === 'radio'"
           :value="resolveOptionValue(value)"
           :disabled="disabledHandler(field)"
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      >
-        <n-space>
-          <n-radio
+        >
+          <n-space>
+            <n-radio
               v-for="option in currentOptions"
               :key="option.value"
               :value="option.value"
               :disabled="option.disabled"
-          >
-            {{ option.label }}
-          </n-radio>
-        </n-space>
-      </n-radio-group>
+            >
+              {{ option.label }}
+            </n-radio>
+          </n-space>
+        </n-radio-group>
 
-      <!-- 单选按钮组 -->
-      <n-radio-group
+        <!-- 单选按钮组 -->
+        <n-radio-group
           v-else-if="field.type === 'radioButton'"
           :value="resolveOptionValue(value)"
           :disabled="disabledHandler(field)"
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      >
-        <n-radio-button
+        >
+          <n-radio-button
             v-for="option in currentOptions"
             :key="option.value"
             :value="option.value"
             :disabled="option.disabled"
-        >
-          {{ option.label }}
-        </n-radio-button>
-      </n-radio-group>
+          >
+            {{ option.label }}
+          </n-radio-button>
+        </n-radio-group>
 
-      <!-- 多选框 -->
-      <n-checkbox-group
+        <!-- 多选框 -->
+        <n-checkbox-group
           v-else-if="field.type === 'checkbox'"
           :value="resolveOptionValue(value)"
           :disabled="disabledHandler(field)"
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      >
-        <n-space>
-          <n-checkbox
+        >
+          <n-space>
+            <n-checkbox
               v-for="option in currentOptions"
               :key="option.value"
               :value="option.value"
@@ -200,14 +200,14 @@
               :indeterminate="!!option.indeterminate"
               :focusable="option.focusable !== false"
               v-bind="option.props"
-          >
-            {{ option.label }}
-          </n-checkbox>
-        </n-space>
-      </n-checkbox-group>
+            >
+              {{ option.label }}
+            </n-checkbox>
+          </n-space>
+        </n-checkbox-group>
 
-      <!-- 开关 -->
-      <n-switch
+        <!-- 开关 -->
+        <n-switch
           v-else-if="field.type === 'switch'"
           :value="value"
           :disabled="disabledHandler(field)"
@@ -216,17 +216,17 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      >
-        <template v-if="field.checkedText" #checked>
-          {{ field.checkedText }}
-        </template>
-        <template v-if="field.uncheckedText" #unchecked>
-          {{ field.uncheckedText }}
-        </template>
-      </n-switch>
+        >
+          <template v-if="field.checkedText" #checked>
+            {{ field.checkedText }}
+          </template>
+          <template v-if="field.uncheckedText" #unchecked>
+            {{ field.uncheckedText }}
+          </template>
+        </n-switch>
 
-      <!-- 日期选择 -->
-      <n-date-picker
+        <!-- 日期选择 -->
+        <n-date-picker
           v-else-if="field.type === 'date'"
           :value="value"
           type="date"
@@ -240,10 +240,10 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 日期时间选择 -->
-      <n-date-picker
+        <!-- 日期时间选择 -->
+        <n-date-picker
           v-else-if="field.type === 'datetime'"
           :value="value"
           type="datetime"
@@ -257,10 +257,10 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 日期范围选择 -->
-      <n-date-picker
+        <!-- 日期范围选择 -->
+        <n-date-picker
           v-else-if="field.type === 'daterange'"
           :value="normalizeRangePickerValue(value)"
           type="daterange"
@@ -276,10 +276,10 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 日期时间范围选择 -->
-      <n-date-picker
+        <!-- 日期时间范围选择 -->
+        <n-date-picker
           v-else-if="field.type === 'datetimerange'"
           :value="normalizeRangePickerValue(value)"
           type="datetimerange"
@@ -295,10 +295,10 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM-dd HH:mm:ss'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 月份选择 -->
-      <n-date-picker
+        <!-- 月份选择 -->
+        <n-date-picker
           v-else-if="field.type === 'month'"
           :value="value"
           type="month"
@@ -312,10 +312,10 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy-MM'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 年份选择 -->
-      <n-date-picker
+        <!-- 年份选择 -->
+        <n-date-picker
           v-else-if="field.type === 'year'"
           :value="value"
           type="year"
@@ -329,10 +329,10 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'yyyy'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 时间选择 -->
-      <n-time-picker
+        <!-- 时间选择 -->
+        <n-time-picker
           v-else-if="field.type === 'time'"
           :value="value"
           :placeholder="getPlaceholder(field)"
@@ -345,11 +345,11 @@
           :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 时间范围选择 -->
-      <div v-else-if="field.type === 'timerange'" class="time-range-picker">
-        <n-time-picker
+        <!-- 时间范围选择 -->
+        <div v-else-if="field.type === 'timerange'" class="time-range-picker">
+          <n-time-picker
             :value="resolveRangeValue(value, 0)"
             :placeholder="field.startPlaceholder || '开始时间'"
             :disabled="disabledHandler(field)"
@@ -361,9 +361,9 @@
             :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
             @update:value="handleRangeUpdate(0, $event)"
             v-on="getComponentEvents(field)"
-        />
-        <span class="time-range-separator">至</span>
-        <n-time-picker
+          />
+          <span class="time-range-separator">至</span>
+          <n-time-picker
             :value="resolveRangeValue(value, 1)"
             :placeholder="field.endPlaceholder || '结束时间'"
             :disabled="disabledHandler(field)"
@@ -375,11 +375,11 @@
             :value-format="field.props?.valueFormat || field.valueFormat || 'HH:mm:ss'"
             @update:value="handleRangeUpdate(1, $event)"
             v-on="getComponentEvents(field)"
-        />
-      </div>
+          />
+        </div>
 
-      <!-- 文件上传 -->
-      <n-upload
+        <!-- 文件上传 -->
+        <n-upload
           v-else-if="field.type === 'upload'"
           :action="field.action"
           :headers="field.headers"
@@ -393,12 +393,12 @@
           :on-change="handleUploadChange"
           v-bind="field.props"
           v-on="getComponentEvents(field)"
-      >
-        <n-button>{{ field.uploadText || '点击上传' }}</n-button>
-      </n-upload>
+        >
+          <n-button>{{ field.uploadText || '点击上传' }}</n-button>
+        </n-upload>
 
-      <!-- 文件上传组件 -->
-      <FileUpload
+        <!-- 文件上传组件 -->
+        <FileUpload
           v-else-if="field.type === 'fileUpload'"
           :model-value="value"
           :action="field.action"
@@ -419,10 +419,10 @@
           @success="(data) => handleUploadSuccess(field, data)"
           @error="(error) => handleUploadError(field, error)"
           @remove="(file) => handleUploadRemove(field, file)"
-      />
+        />
 
-      <!-- 图片上传组件 -->
-      <ImageUpload
+        <!-- 图片上传组件 -->
+        <ImageUpload
           v-else-if="field.type === 'imageUpload'"
           :model-value="value"
           :action="field.action"
@@ -441,10 +441,10 @@
           @success="(data) => handleUploadSuccess(field, data)"
           @error="(error) => handleUploadError(field, error)"
           @remove="(file) => handleUploadRemove(field, file)"
-      />
+        />
 
-      <!-- 滑块 -->
-      <n-slider
+        <!-- 滑块 -->
+        <n-slider
           v-else-if="field.type === 'slider'"
           :value="value"
           :disabled="disabledHandler(field)"
@@ -456,10 +456,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 评分 -->
-      <n-rate
+        <!-- 评分 -->
+        <n-rate
           v-else-if="field.type === 'rate'"
           :value="value"
           :disabled="disabledHandler(field)"
@@ -468,10 +468,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 颜色选择器 -->
-      <n-color-picker
+        <!-- 颜色选择器 -->
+        <n-color-picker
           v-else-if="field.type === 'color'"
           :value="value"
           :disabled="disabledHandler(field)"
@@ -480,10 +480,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 级联选择 -->
-      <n-cascader
+        <!-- 级联选择 -->
+        <n-cascader
           v-else-if="field.type === 'cascader'"
           :value="resolveOptionValue(value)"
           :placeholder="getPlaceholder(field)"
@@ -497,10 +497,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 系统组织树选择 -->
-      <n-tree-select
+        <!-- 系统组织树选择 -->
+        <n-tree-select
           v-else-if="isOrgTreeSelectField(field)"
           v-bind="field.props"
           :value="resolveOptionValue(value)"
@@ -514,10 +514,10 @@
           :cascade="field.cascade !== false"
           @update:value="handleTreeSelectUpdate(field, $event)"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 系统用户选择 -->
-      <UserSelectPicker
+        <!-- 系统用户选择 -->
+        <UserSelectPicker
           v-else-if="isUserSelectField(field)"
           v-bind="field.props"
           :model-value="value"
@@ -530,10 +530,10 @@
           @update:model-value="handleUpdate"
           @update:label-value="handleUserSelectLabelUpdate(field, $event)"
           @select="handleUserSelect(field, $event)"
-      />
+        />
 
-      <!-- 行政区划树选择 -->
-      <RegionTreeSelect
+        <!-- 行政区划树选择 -->
+        <RegionTreeSelect
           v-else-if="field.type === 'regionTreeSelect'"
           :model-value="value"
           :placeholder="getPlaceholder(field)"
@@ -543,10 +543,10 @@
           :virtual-disabled="field.props?.virtualDisabled ?? !context?.isSearch"
           v-bind="field.props"
           @update:model-value="handleRegionTreeSelectUpdate(field, $event)"
-      />
+        />
 
-      <!-- 树形选择 -->
-      <n-tree-select
+        <!-- 树形选择 -->
+        <n-tree-select
           v-else-if="field.type === 'treeSelect'"
           :value="resolveOptionValue(value)"
           :placeholder="getPlaceholder(field)"
@@ -561,10 +561,10 @@
           v-bind="field.props"
           @update:value="handleTreeSelectUpdate(field, $event)"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 穿梭框 -->
-      <n-transfer
+        <!-- 穿梭框 -->
+        <n-transfer
           v-else-if="field.type === 'transfer'"
           :value="resolveOptionValue(value)"
           :disabled="disabledHandler(field)"
@@ -573,10 +573,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 远程搜索下拉框 -->
-      <AiCustomSelect
+        <!-- 远程搜索下拉框 -->
+        <AiCustomSelect
           v-else-if="field.type === 'customSelect'"
           :value="value"
           :placeholder="getPlaceholder(field)"
@@ -595,10 +595,10 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 业务对象引用选择 -->
-      <n-select
+        <!-- 业务对象引用选择 -->
+        <n-select
           v-else-if="field.type === 'objectReference'"
           :value="resolveOptionValue(value)"
           :placeholder="getPlaceholder(field)"
@@ -611,45 +611,45 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
 
-      <!-- 纯文本展示 -->
-      <div
+        <!-- 纯文本展示 -->
+        <div
           v-else-if="field.type === 'text'"
           class="ai-form-readonly-text"
           :style="field.style"
-      >
-        <span v-if="field.formatter">
-          {{ field.formatter(value, field, formData) }}
-        </span>
-        <span v-else>
-          {{ value }}
-        </span>
-        <n-button
+        >
+          <span v-if="field.formatter">
+            {{ field.formatter(value, field, formData) }}
+          </span>
+          <span v-else>
+            {{ value }}
+          </span>
+          <n-button
             v-if="field.copy"
             text
             size="small"
             style="margin-left: 8px"
             @click="handleCopy(value)"
-        >
-          <template #icon>
-            <n-icon><CopyOutline /></n-icon>
-          </template>
-        </n-button>
-      </div>
+          >
+            <template #icon>
+              <n-icon><CopyOutline /></n-icon>
+            </template>
+          </n-button>
+        </div>
 
-      <!-- 自定义插槽 -->
-      <slot
+        <!-- 自定义插槽 -->
+        <slot
           v-else-if="field.type === 'slot'"
           :name="field.slotName || field.field"
           :value="value"
           :field="field"
           :form-data="formData"
           :update-value="handleUpdate"
-      />
+        />
 
-      <!-- 默认为输入框 -->
-      <n-input
+        <!-- 默认为输入框 -->
+        <n-input
           v-else
           :value="value"
           :placeholder="getPlaceholder(field)"
@@ -658,7 +658,7 @@
           v-bind="field.props"
           @update:value="handleUpdate"
           v-on="getComponentEvents(field)"
-      />
+        />
       </div>
       <p v-if="fieldDescription" class="ai-form-item-description">
         {{ fieldDescription }}
@@ -844,15 +844,15 @@ function isCascadeDisabledByEmptyParent() {
 }
 
 watch(
-    remoteOptionSource,
-    (source) => {
-      if (!source) {
-        remoteOptions.value = []
-        return
-      }
-      loadRemoteOptions(source)
-    },
-    { immediate: true, deep: true },
+  remoteOptionSource,
+  (source) => {
+    if (!source) {
+      remoteOptions.value = []
+      return
+    }
+    loadRemoteOptions(source)
+  },
+  { immediate: true, deep: true },
 )
 
 watch(fieldDictType, loadDictOptions, { immediate: true })
@@ -935,13 +935,13 @@ function withCurrentValueOption(options = []) {
   if (labelValue === null || labelValue === undefined || labelValue === '')
     return result
   const values = Array.isArray(props.value)
-      ? props.value
-      : field.multiple && typeof props.value === 'string'
-          ? props.value.split(',').map(item => item.trim()).filter(Boolean)
-          : [props.value]
+    ? props.value
+    : field.multiple && typeof props.value === 'string'
+      ? props.value.split(',').map(item => item.trim()).filter(Boolean)
+      : [props.value]
   const labels = Array.isArray(labelValue)
-      ? labelValue
-      : String(labelValue).split(',').map(item => item.trim()).filter(Boolean)
+    ? labelValue
+    : String(labelValue).split(',').map(item => item.trim()).filter(Boolean)
   values.forEach((value, index) => {
     if (flattenOptionNodes(result).some(option => isSameOptionValue(option?.value ?? option?.key, value)))
       return
@@ -1004,9 +1004,9 @@ function hasEffectiveOptionSource(source) {
   if (typeof source !== 'object')
     return false
   return Boolean(
-      String(source.api || source.url || '').trim()
-      || Array.isArray(source.options)
-      || Array.isArray(source.data),
+    String(source.api || source.url || '').trim()
+    || Array.isArray(source.options)
+    || Array.isArray(source.data),
   )
 }
 
@@ -1149,10 +1149,10 @@ function normalizeOptionNode(row, source = {}, includeChildren = false) {
   }
   if (includeChildren) {
     const children = Array.isArray(row[childrenField])
-        ? row[childrenField]
-        : Array.isArray(row.children)
-            ? row.children
-            : []
+      ? row[childrenField]
+      : Array.isArray(row.children)
+        ? row.children
+        : []
     option.children = children.map(child => normalizeOptionNode(child, source, true)).filter(Boolean)
   }
   return option
@@ -1170,7 +1170,7 @@ function resolveFirstFilled(source, fields = []) {
 
 function resolveCascadeConfig(field = {}) {
   const configured = [field.cascade, field.cascadeConfig, field.props?.cascade, field.props?.cascadeConfig]
-      .find(item => item && typeof item === 'object' && item.sourceField)
+    .find(item => item && typeof item === 'object' && item.sourceField)
   const raw = configured || {
     sourceField: field.sourceField || field.props?.sourceField,
     sourceDictType: field.sourceDictType || field.props?.sourceDictType,
@@ -1277,9 +1277,9 @@ function clearCurrentValue() {
 
 function getNestedValue(source, path) {
   return String(path || '')
-      .split('.')
-      .filter(Boolean)
-      .reduce((value, key) => value?.[key], source)
+    .split('.')
+    .filter(Boolean)
+    .reduce((value, key) => value?.[key], source)
 }
 
 function resolveOptionValue(rawValue) {
@@ -1388,8 +1388,8 @@ function resolveSelectionLabelFields(field = {}) {
   if (isOrgTreeSelectField(field))
     candidates.push('orgName', 'deptName', 'departmentName')
   return candidates
-      .map(value => String(value || '').trim())
-      .filter((value, index, all) => value && all.indexOf(value) === index)
+    .map(value => String(value || '').trim())
+    .filter((value, index, all) => value && all.indexOf(value) === index)
 }
 
 function patchSelectionLabelValue(field = {}, labelValue) {
@@ -1407,13 +1407,13 @@ function patchSelectionLabelValue(field = {}, labelValue) {
 
 function syncSelectionLabelFromOptions(field = {}, value) {
   const values = Array.isArray(value)
-      ? value
-      : field.multiple && typeof value === 'string'
-          ? value.split(',').map(item => item.trim()).filter(Boolean)
-          : [value]
+    ? value
+    : field.multiple && typeof value === 'string'
+      ? value.split(',').map(item => item.trim()).filter(Boolean)
+      : [value]
   const labels = values
-      .map(item => flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, item))?.label)
-      .filter(Boolean)
+    .map(item => flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, item))?.label)
+    .filter(Boolean)
   if (labels.length)
     patchSelectionLabelValue(field, field.multiple ? labels : labels[0])
 }
@@ -1442,13 +1442,13 @@ function resolveReadonlySelectionText(field = {}) {
 function resolveSelectionDisplayLabels(field = {}) {
   const normalizedValue = normalizeOptionValue(props.value, currentOptions.value, field?.multiple)
   const values = Array.isArray(normalizedValue)
-      ? normalizedValue
-      : field.multiple && typeof normalizedValue === 'string'
-          ? normalizedValue.split(',').map(item => item.trim()).filter(Boolean)
-          : [normalizedValue]
+    ? normalizedValue
+    : field.multiple && typeof normalizedValue === 'string'
+      ? normalizedValue.split(',').map(item => item.trim()).filter(Boolean)
+      : [normalizedValue]
   return values
-      .map(item => flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, item))?.label)
-      .filter(Boolean)
+    .map(item => flattenOptionNodes(currentOptions.value).find(option => isSameOptionValue(option?.value ?? option?.key, item))?.label)
+    .filter(Boolean)
 }
 
 function normalizeDisplayText(value) {

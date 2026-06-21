@@ -23,6 +23,11 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-system</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-generator</artifactId>
+        </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>

@@ -75,24 +75,24 @@
             </label>
           </n-radio-group>
 
-          <div v-if="form.createMode === 'DB_IMPORT'" class="db-import-panel">
-            <n-grid :cols="2" :x-gap="12">
-              <n-form-item-gi label="数据源" required>
+          <div class="runtime-datasource-panel">
+            <n-grid :cols="form.createMode === 'DB_IMPORT' ? 2 : 1" :x-gap="12">
+              <n-form-item-gi label="运行数据源" required>
                 <n-select
-                  v-model:value="form.importDatasourceId"
+                  v-model:value="form.runtimeDatasourceId"
                   filterable
-                  :options="datasourceOptions"
+                  :options="runtimeDatasourceOptions"
                   :loading="datasourceLoading"
-                  placeholder="选择数据源"
-                  @update:value="handleDatasourceChange"
+                  placeholder="选择低代码运行数据源"
+                  @update:value="handleRuntimeDatasourceChange"
                 />
               </n-form-item-gi>
-              <n-form-item-gi label="数据表" required>
+              <n-form-item-gi v-if="form.createMode === 'DB_IMPORT'" label="数据表" required>
                 <n-select
                   v-model:value="form.importTableName"
                   filterable
                   clearable
-                  :disabled="!form.importDatasourceId"
+                  :disabled="!selectedRegisteredDatasourceId"
                   :options="tableOptions"
                   :loading="tableLoading"
                   placeholder="选择数据表"
@@ -194,6 +194,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'saved'])
 const message = useMessage()
+const MASTER_DATASOURCE_VALUE = 'MASTER'
 const currentStep = ref(1)
 const saving = ref(false)
 const form = reactive(defaultForm())
@@ -201,7 +202,7 @@ const lastSuggestedObjectCode = ref('')
 const lastSuggestedSuiteCode = ref('')
 const datasourceLoading = ref(false)
 const tableLoading = ref(false)
-const datasourceOptions = ref([])
+const datasourceList = ref([])
 const tableList = ref([])
 
 const createModes = [
@@ -231,6 +232,24 @@ const tableOptions = computed(() => tableList.value.map(item => ({
   label: item.tableComment ? `${item.tableName}（${item.tableComment}）` : item.tableName,
   value: item.tableName,
 })))
+
+const registeredDatasourceOptions = computed(() => datasourceList.value.map(item => ({
+  label: `${item.datasourceName}${item.isDefault === 1 ? '（默认）' : ''} / ${item.dbType || '-'}`,
+  value: item.datasourceId,
+  raw: item,
+})))
+
+const runtimeDatasourceOptions = computed(() => {
+  const options = form.createMode === 'DB_IMPORT'
+    ? []
+    : [{
+        label: '平台主库（默认）',
+        value: MASTER_DATASOURCE_VALUE,
+      }]
+  return [...options, ...registeredDatasourceOptions.value]
+})
+
+const selectedRegisteredDatasourceId = computed(() => resolveRegisteredDatasourceId(form.runtimeDatasourceId))
 
 const selectedTableInfo = computed(() => {
   if (!form.importTableName)
@@ -293,11 +312,25 @@ watch(
 
 watch(
   () => form.createMode,
-  (value) => {
-    if (value === 'DB_IMPORT')
-      loadDatasources()
+  async (value) => {
+    if (currentStep.value !== 2)
+      return
+    await loadDatasources()
+    ensureRuntimeDatasourceSelected()
+    if (value === 'DB_IMPORT') {
+      await loadTablesForRuntimeDatasource()
+    }
+    else {
+      form.importTableName = null
+      tableList.value = []
+    }
   },
 )
+
+watch(currentStep, (value) => {
+  if (value === 2)
+    loadDatasources()
+})
 
 function nextStep() {
   if (!validateStep())
@@ -312,6 +345,7 @@ async function saveObject() {
   try {
     const suiteCode = await resolveSuiteCode()
     const objectCode = normalizeObjectCode(form.objectCode, form.objectName)
+    const runtimeDatasourceId = selectedRegisteredDatasourceId.value
     const res = await createBusinessObject({
       suiteCode,
       objectName: form.objectName.trim(),
@@ -323,7 +357,8 @@ async function saveObject() {
       description: trimToNull(form.description),
       status: form.status,
       createMode: form.createMode,
-      importDatasourceId: form.createMode === 'DB_IMPORT' ? form.importDatasourceId : null,
+      runtimeDatasourceId,
+      importDatasourceId: form.createMode === 'DB_IMPORT' ? runtimeDatasourceId : null,
       importTableName: form.createMode === 'DB_IMPORT' ? form.importTableName : null,
       options: JSON.stringify(buildObjectOptions()),
     })
@@ -385,15 +420,44 @@ function buildSuiteOptions() {
 }
 
 function buildObjectOptions() {
-  const options = { createMode: form.createMode }
+  const options = {
+    createMode: form.createMode,
+    runtimeDatasourceId: selectedRegisteredDatasourceId.value,
+    runtimeDatasource: buildRuntimeDatasourceOption(),
+  }
   if (form.createMode === 'DB_IMPORT') {
     options.sourceTable = {
-      datasourceId: form.importDatasourceId,
+      datasourceId: selectedRegisteredDatasourceId.value,
       tableName: form.importTableName,
       tableComment: selectedTableInfo.value?.tableComment || null,
     }
   }
   return options
+}
+
+function buildRuntimeDatasourceOption() {
+  if (form.runtimeDatasourceId === MASTER_DATASOURCE_VALUE) {
+    return {
+      datasourceId: null,
+      datasourceCode: 'master',
+      datasourceName: '平台主库',
+      tableMode: form.createMode === 'DB_IMPORT' ? 'EXISTING' : 'CREATE',
+    }
+  }
+  const datasourceId = selectedRegisteredDatasourceId.value
+  const datasource = datasourceList.value.find(item => item.datasourceId === datasourceId) || {}
+  return {
+    datasourceId,
+    datasourceCode: datasource.datasourceCode || '',
+    datasourceName: datasource.datasourceName || '',
+    dbType: datasource.dbType || '',
+    usageScope: datasource.usageScope || '',
+    allowWrite: datasource.allowRuntimeWrite === 1,
+    allowDdl: datasource.allowRuntimeDdl === 1,
+    readonly: datasource.readonly === 1,
+    riskLevel: datasource.riskLevel || '',
+    tableMode: form.createMode === 'DB_IMPORT' ? 'EXISTING' : 'CREATE',
+  }
 }
 
 function validateStep() {
@@ -417,9 +481,13 @@ function validateStep() {
     message.warning('请选择创建方式')
     return false
   }
+  if (currentStep.value === 2 && !form.runtimeDatasourceId) {
+    message.warning('请选择运行数据源')
+    return false
+  }
   if (currentStep.value === 2 && form.createMode === 'DB_IMPORT') {
-    if (!form.importDatasourceId) {
-      message.warning('请选择数据源')
+    if (!selectedRegisteredDatasourceId.value) {
+      message.warning('请选择可导入的数据源')
       return false
     }
     if (!form.importTableName) {
@@ -441,21 +509,19 @@ function validateStep() {
 }
 
 async function loadDatasources() {
-  if (datasourceLoading.value || datasourceOptions.value.length > 0)
+  if (datasourceLoading.value)
     return
+  if (datasourceList.value.length > 0) {
+    ensureRuntimeDatasourceSelected()
+    return
+  }
   datasourceLoading.value = true
   try {
-    const res = await genDatasourceEnabled()
-    datasourceOptions.value = (res.data || []).map(item => ({
-      label: `${item.datasourceName} (${item.dbType})`,
-      value: item.datasourceId,
-      raw: item,
-    }))
-    const defaultDatasource = (res.data || []).find(item => item.isDefault === 1)
-    if (defaultDatasource && !form.importDatasourceId) {
-      form.importDatasourceId = defaultDatasource.datasourceId
-      await handleDatasourceChange(defaultDatasource.datasourceId)
-    }
+    const res = await genDatasourceEnabled('LOWCODE_RUNTIME')
+    datasourceList.value = res.data || []
+    ensureRuntimeDatasourceSelected()
+    if (form.createMode === 'DB_IMPORT')
+      await loadTablesForRuntimeDatasource()
   }
   catch (error) {
     console.error('加载数据源失败:', error)
@@ -466,7 +532,35 @@ async function loadDatasources() {
   }
 }
 
-async function handleDatasourceChange(datasourceId) {
+function ensureRuntimeDatasourceSelected() {
+  const registeredIds = datasourceList.value.map(item => item.datasourceId)
+  const selectedId = selectedRegisteredDatasourceId.value
+  if (form.createMode === 'DB_IMPORT') {
+    if (!selectedId || !registeredIds.includes(selectedId)) {
+      const fallback = datasourceList.value.find(item => item.isDefault === 1) || datasourceList.value[0]
+      form.runtimeDatasourceId = fallback?.datasourceId || null
+    }
+    return
+  }
+  if (form.runtimeDatasourceId === MASTER_DATASOURCE_VALUE)
+    return
+  if (selectedId && registeredIds.includes(selectedId))
+    return
+  const defaultDatasource = datasourceList.value.find(item => item.isDefault === 1)
+  form.runtimeDatasourceId = defaultDatasource?.datasourceId || MASTER_DATASOURCE_VALUE
+}
+
+async function handleRuntimeDatasourceChange() {
+  if (form.createMode === 'DB_IMPORT') {
+    await loadTablesForRuntimeDatasource()
+    return
+  }
+  form.importTableName = null
+  tableList.value = []
+}
+
+async function loadTablesForRuntimeDatasource() {
+  const datasourceId = selectedRegisteredDatasourceId.value
   form.importTableName = null
   tableList.value = []
   if (!datasourceId)
@@ -497,10 +591,17 @@ function handleTableChange(tableName) {
 }
 
 function resetImportState() {
-  form.importDatasourceId = null
+  form.runtimeDatasourceId = MASTER_DATASOURCE_VALUE
   form.importTableName = null
   tableList.value = []
-  datasourceOptions.value = []
+  datasourceList.value = []
+}
+
+function resolveRegisteredDatasourceId(value) {
+  if (!value || value === MASTER_DATASOURCE_VALUE)
+    return null
+  const datasourceId = Number(value)
+  return Number.isFinite(datasourceId) ? datasourceId : null
 }
 
 function normalizeCode(value, fallbackName = '') {
@@ -539,7 +640,7 @@ function defaultForm() {
     icon: '',
     description: '',
     status: 1,
-    importDatasourceId: null,
+    runtimeDatasourceId: MASTER_DATASOURCE_VALUE,
     importTableName: null,
   }
 }
@@ -593,7 +694,7 @@ function defaultForm() {
   display: block;
 }
 
-.db-import-panel {
+.runtime-datasource-panel {
   margin-top: 16px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;

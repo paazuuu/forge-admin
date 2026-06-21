@@ -36,10 +36,12 @@ const dueDateHours = useNumberField('dueDateHours', 0)
 const channelOptions = computed(() => normalizeDictOptions(dict.value.sys_message_channel))
 const repeatModeOptions = computed(() => {
   const options = normalizeDictOptions(dict.value.sys_flow_overdue_repeat_mode)
-  return options.length ? options : [
-    { label: '仅一次', value: 'once' },
-    { label: '按间隔重复', value: 'interval' },
-  ]
+  return options.length
+    ? options
+    : [
+        { label: '仅一次', value: 'once' },
+        { label: '按间隔重复', value: 'interval' },
+      ]
 })
 const mergedTemplateOptions = computed(() => mergeTemplateOptions(templateOptions.value, templateCode.value))
 const reminderFieldsDisabled = computed(() => props.readonly || !enabled.value)

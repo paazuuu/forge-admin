@@ -550,10 +550,11 @@ public class BusinessTriggerExecutor {
             throw new RuntimeException("创建记录动作没有可写入字段");
         }
         Map<String, Object> created = dynamicCrudService.insertInternal(targetConfigKey, targetData);
+        Object createdRecordId = created == null ? null : dynamicCrudService.resolveRecordId(targetConfigKey, created);
         JSONObject result = new JSONObject();
         result.put("status", "CREATED");
         result.put("targetConfigKey", targetConfigKey);
-        result.put("createdRecordId", created == null ? null : created.get("id"));
+        result.put("createdRecordId", createdRecordId);
         return result;
     }
 
@@ -565,7 +566,7 @@ public class BusinessTriggerExecutor {
         if (StringUtils.isBlank(targetConfigKey)) {
             throw new RuntimeException("更新字段动作缺少 targetConfigKey");
         }
-        Long targetRecordId = resolveTargetRecordId(config, event);
+        Object targetRecordId = resolveTargetRecordId(config, event);
         Map<String, Object> updateFields = buildUpdateFields(config, event);
         if (updateFields.isEmpty()) {
             throw new RuntimeException("更新字段动作没有可更新字段");
@@ -658,7 +659,7 @@ public class BusinessTriggerExecutor {
         return updateFields;
     }
 
-    private Long resolveTargetRecordId(JSONObject config, BusinessEvent event) {
+    private Object resolveTargetRecordId(JSONObject config, BusinessEvent event) {
         Object recordId = StringUtils.firstNonBlank(config.getString("targetRecordId"), config.getString("recordId"));
         String recordIdField = config.getString("recordIdField");
         if (StringUtils.isNotBlank(recordIdField)) {
@@ -673,11 +674,7 @@ public class BusinessTriggerExecutor {
         if (recordId == null) {
             throw new RuntimeException("更新字段动作缺少目标记录ID");
         }
-        try {
-            return Long.valueOf(String.valueOf(recordId));
-        } catch (NumberFormatException e) {
-            throw new RuntimeException("更新字段动作目标记录ID不是数字");
-        }
+        return recordId;
     }
 
     private JSONArray firstArray(JSONObject config, String... keys) {

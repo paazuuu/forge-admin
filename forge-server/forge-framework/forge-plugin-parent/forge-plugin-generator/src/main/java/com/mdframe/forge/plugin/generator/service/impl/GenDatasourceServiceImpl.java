@@ -1,22 +1,22 @@
 package com.mdframe.forge.plugin.generator.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.SecureUtil;
-import cn.hutool.crypto.symmetric.AES;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.generator.constant.GenDatasourceRuntime;
 import com.mdframe.forge.plugin.generator.domain.entity.GenDatasource;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
 import com.mdframe.forge.plugin.generator.mapper.GenDatasourceMapper;
 import com.mdframe.forge.plugin.generator.service.IGenDatasourceService;
 import com.mdframe.forge.plugin.generator.util.DynamicDataSourceUtil;
+import com.mdframe.forge.plugin.generator.util.GenDatasourcePasswordCodec;
 import com.mdframe.forge.plugin.generator.util.GenUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
+import java.io.Serializable;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
@@ -31,29 +31,40 @@ import java.util.List;
 @RequiredArgsConstructor
 public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, GenDatasource> implements IGenDatasourceService {
 
-    /**
-     * AES加密密钥（16字节）
-     */
-    private static final String AES_KEY = "ForgeGenerator16";
-
     private final GenDatasourceMapper genDatasourceMapper;
 
     @Override
     public boolean save(GenDatasource entity) {
+        applyRuntimeDefaults(entity, null);
         // 保存前加密密码
         if (StrUtil.isNotBlank(entity.getPassword())) {
-            entity.setPassword(encryptPassword(entity.getPassword()));
+            entity.setPassword(GenDatasourcePasswordCodec.encrypt(entity.getPassword()));
         }
         return super.save(entity);
     }
 
     @Override
     public boolean updateById(GenDatasource entity) {
+        GenDatasource existing = entity.getDatasourceId() == null ? null : genDatasourceMapper.selectById(entity.getDatasourceId());
+        applyRuntimeDefaults(entity, existing);
         // 更新时如果密码不为空，则加密
         if (StrUtil.isNotBlank(entity.getPassword())) {
-            entity.setPassword(encryptPassword(entity.getPassword()));
+            entity.setPassword(GenDatasourcePasswordCodec.encrypt(entity.getPassword()));
         }
-        return super.updateById(entity);
+        boolean updated = super.updateById(entity);
+        if (updated && entity.getDatasourceId() != null) {
+            DynamicDataSourceUtil.removeDataSource(entity.getDatasourceId());
+        }
+        return updated;
+    }
+
+    @Override
+    public boolean removeById(Serializable id) {
+        boolean removed = super.removeById(id);
+        if (removed && id != null) {
+            DynamicDataSourceUtil.removeDataSource(Long.valueOf(String.valueOf(id)));
+        }
+        return removed;
     }
 
     @Override
@@ -64,7 +75,7 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
         }
         // 解密密码用于测试连接
         if (StrUtil.isNotBlank(datasource.getPassword())) {
-            datasource.setPassword(decryptPassword(datasource.getPassword()));
+            datasource.setPassword(GenDatasourcePasswordCodec.decrypt(datasource.getPassword()));
         }
         return DynamicDataSourceUtil.testConnection(datasource);
     }
@@ -181,6 +192,47 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
         );
     }
 
+    private void applyRuntimeDefaults(GenDatasource entity, GenDatasource existing) {
+        String usageScope = StrUtil.blankToDefault(entity.getUsageScope(), existing == null ? null : existing.getUsageScope());
+        entity.setUsageScope(GenDatasourceRuntime.normalizeUsageScope(usageScope));
+
+        String requestedRiskLevel = entity.getRiskLevel();
+        String riskLevel = StrUtil.blankToDefault(requestedRiskLevel, existing == null ? null : existing.getRiskLevel());
+        entity.setRiskLevel(GenDatasourceRuntime.normalizeRiskLevel(riskLevel));
+
+        boolean highRisk = GenDatasourceRuntime.RISK_HIGH.equals(entity.getRiskLevel());
+        boolean explicitlyChangedToHighRisk = StrUtil.isNotBlank(requestedRiskLevel) && highRisk;
+
+        if (entity.getReadonly() == null) {
+            if (explicitlyChangedToHighRisk || existing == null || existing.getReadonly() == null) {
+                entity.setReadonly(highRisk ? 1 : 0);
+            } else {
+                entity.setReadonly(existing.getReadonly());
+            }
+        }
+
+        if (entity.getAllowRuntimeDdl() == null) {
+            if (!explicitlyChangedToHighRisk && existing != null && existing.getAllowRuntimeDdl() != null) {
+                entity.setAllowRuntimeDdl(existing.getAllowRuntimeDdl());
+            } else {
+                entity.setAllowRuntimeDdl(0);
+            }
+        }
+
+        if (entity.getAllowRuntimeWrite() == null) {
+            if (existing != null && existing.getAllowRuntimeWrite() != null && !Integer.valueOf(1).equals(entity.getReadonly())) {
+                entity.setAllowRuntimeWrite(existing.getAllowRuntimeWrite());
+            } else {
+                entity.setAllowRuntimeWrite(Integer.valueOf(1).equals(entity.getReadonly()) ? 0 : 1);
+            }
+        }
+
+        if (Integer.valueOf(1).equals(entity.getReadonly())) {
+            entity.setAllowRuntimeWrite(0);
+            entity.setAllowRuntimeDdl(0);
+        }
+    }
+
     /**
      * 根据ID获取数据源
      */
@@ -194,47 +246,8 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
         }
         // 解密密码用于连接
         if (StrUtil.isNotBlank(datasource.getPassword())) {
-            datasource.setPassword(decryptPassword(datasource.getPassword()));
+            datasource.setPassword(GenDatasourcePasswordCodec.decrypt(datasource.getPassword()));
         }
         return datasource;
-    }
-
-    /**
-     * 加密密码
-     *
-     * @param password 明文密码
-     * @return 加密后的密码（十六进制）
-     */
-    private String encryptPassword(String password) {
-        if (StrUtil.isBlank(password)) {
-            return password;
-        }
-        try {
-            AES aes = SecureUtil.aes(AES_KEY.getBytes(StandardCharsets.UTF_8));
-            return aes.encryptHex(password);
-        } catch (Exception e) {
-            log.error("密码加密失败", e);
-            throw new RuntimeException("密码加密失败");
-        }
-    }
-
-    /**
-     * 解密密码
-     *
-     * @param encryptedPassword 加密的密码
-     * @return 解密后的明文密码
-     */
-    private String decryptPassword(String encryptedPassword) {
-        if (StrUtil.isBlank(encryptedPassword)) {
-            return encryptedPassword;
-        }
-        try {
-            AES aes = SecureUtil.aes(AES_KEY.getBytes(StandardCharsets.UTF_8));
-            return aes.decryptStr(encryptedPassword);
-        } catch (Exception e) {
-            log.warn("密码解密失败，可能是未加密的旧数据: {}", e.getMessage());
-            // 如果解密失败，返回原密码（兼容未加密的旧数据）
-            return encryptedPassword;
-        }
     }
 }

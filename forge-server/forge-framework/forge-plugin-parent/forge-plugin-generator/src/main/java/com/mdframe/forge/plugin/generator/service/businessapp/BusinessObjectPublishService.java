@@ -22,6 +22,8 @@ import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodePublishService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeRuntimeConfigBuilder;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeSchemaValidator;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.service.formula.CrossObjectRecomputeTaskService;
 import com.mdframe.forge.plugin.generator.service.formula.FormulaObjectDependencyAnalyzer;
 import com.mdframe.forge.plugin.generator.service.formula.FormulaPublishValidator;
@@ -79,7 +81,7 @@ public class BusinessObjectPublishService {
             "FORM_TARGET_MISSING", "FORM_COMPONENT_EMPTY", "FORM_COMPONENT_DUPLICATE",
             "FORM_FIELD_BINDING_EMPTY", "FORM_FIELD_MISSING", "FORM_FIELD_COMPONENT_EMPTY",
             "VIEW_FIELD_MISSING", "RUNTIME_INVALID", "APP_ENTRY_PAGE_MISSING", "APP_ENTRY_FORM_MISSING",
-            "TABLE_NAME_EMPTY", "TABLE_MISSING", "TABLE_PK_MISSING", "TABLE_COLUMN_MISSING",
+            "DATASOURCE_UNAVAILABLE", "TABLE_NAME_EMPTY", "TABLE_MISSING", "TABLE_PK_MISSING", "TABLE_COLUMN_MISSING",
             "TABLE_COLUMN_CHANGED", "TABLE_INDEX_MISSING"
     );
 
@@ -91,6 +93,7 @@ public class BusinessObjectPublishService {
     private final FormulaPublishValidator formulaPublishValidator;
     private final CrossObjectRecomputeTaskService crossObjectRecomputeTaskService;
     private final LowcodeDdlService ddlService;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
     private final AiCrudConfigMapper crudConfigMapper;
     private final BusinessAppMapper businessAppMapper;
     private final BusinessObjectMapper businessObjectMapper;
@@ -113,6 +116,7 @@ public class BusinessObjectPublishService {
         checkAppEntry(context, items);
         checkDocumentConfig(context, items);
         checkPermissionSummary(context, items);
+        checkRuntimeDataSource(context.getModelSchema(), items);
         checkTable(context.getModelSchema(), items);
         checkFormula(context, items);
         return buildResult(items);
@@ -1234,6 +1238,45 @@ public class BusinessObjectPublishService {
         }
     }
 
+    private void checkRuntimeDataSource(LowcodeModelSchema modelSchema, List<BusinessPublishCheckItemVO> items) {
+        if (modelSchema == null) {
+            add(items, "DATASOURCE_MODEL_EMPTY", "DATASOURCE", BusinessPublishCheckLevel.BLOCK,
+                    "运行数据源无法解析", "模型协议为空，无法解析发布目标库", null, null,
+                    "ADVANCED_CONFIG", "高级配置", "advanced", 390);
+            return;
+        }
+        try {
+            LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+            add(items, "DATASOURCE_TARGET_PASS", "DATASOURCE", BusinessPublishCheckLevel.PASS,
+                    "发布目标库已确认",
+                    "目标库: " + runtimeDatasourceLabel(context) + "；表: " + context.getTableName()
+                            + "；主键: " + runtimePrimaryKeyLabel(context),
+                    null, null, null, null, "publish", 391);
+            if (context.isReadonly() || !context.isAllowWrite()) {
+                add(items, "DATASOURCE_WRITE_DISABLED", "DATASOURCE", BusinessPublishCheckLevel.WARN,
+                        "目标库未开放写入",
+                        "运行态新增、编辑、删除和导入会被拦截；仅查询、导出和详情可用",
+                        null, null, "CHECK_DATABASE", "检查数据源", "advanced", 392);
+            }
+            if (!context.isAllowDdl()) {
+                add(items, "DATASOURCE_DDL_DISABLED", "DATASOURCE", BusinessPublishCheckLevel.WARN,
+                        "目标库禁止在线 DDL",
+                        "发布时不会在该数据源自动建表或变更字段，需由数据库管理员手工同步表结构",
+                        null, null, "CHECK_DATABASE", "检查数据源", "advanced", 393);
+            }
+            if ("HIGH".equalsIgnoreCase(StringUtils.defaultString(context.getRiskLevel()))) {
+                add(items, "DATASOURCE_HIGH_RISK", "DATASOURCE", BusinessPublishCheckLevel.WARN,
+                        "高风险数据源",
+                        "当前运行目标被标记为高风险，发布前请确认不是旧系统生产写库或已启用只读保护",
+                        null, null, "CHECK_DATABASE", "检查数据源", "advanced", 394);
+            }
+        } catch (Exception e) {
+            add(items, "DATASOURCE_UNAVAILABLE", "DATASOURCE", BusinessPublishCheckLevel.BLOCK,
+                    "运行数据源不可用", e.getMessage(), null, null,
+                    "CHECK_DATABASE", "检查数据源", "advanced", 390);
+        }
+    }
+
     private void checkTable(LowcodeModelSchema modelSchema, List<BusinessPublishCheckItemVO> items) {
         if (modelSchema == null || StringUtils.isBlank(modelSchema.getTableName())) {
             add(items, "TABLE_NAME_EMPTY", "TABLE", BusinessPublishCheckLevel.BLOCK,
@@ -1242,16 +1285,22 @@ public class BusinessObjectPublishService {
             return;
         }
         try {
-            if (!ddlService.tableExists(modelSchema.getTableName())) {
+            LowcodeRuntimeDataSourceContext runtimeContext = runtimeDataSourceResolver.resolve(modelSchema);
+            if (!ddlService.tableExists(modelSchema)) {
                 boolean canOnlineDdl = hasPermission(DDL_PERMISSION);
-                add(items, "TABLE_MISSING", "TABLE", canOnlineDdl ? BusinessPublishCheckLevel.WARN : BusinessPublishCheckLevel.BLOCK,
-                        "数据表不存在", canOnlineDdl ? "可在发布时勾选同步表结构自动创建" : "缺少在线建表权限，请联系管理员同步表结构",
+                boolean canExecuteOnlineDdl = canOnlineDdl && runtimeContext.isAllowDdl();
+                add(items, "TABLE_MISSING", "TABLE", canExecuteOnlineDdl ? BusinessPublishCheckLevel.WARN : BusinessPublishCheckLevel.BLOCK,
+                        "数据表不存在", canExecuteOnlineDdl
+                                ? "可在发布时勾选同步表结构自动创建到目标库: " + runtimeDatasourceLabel(runtimeContext)
+                                : (!runtimeContext.isAllowDdl() ? "目标数据源禁止在线 DDL，请联系数据库管理员在 "
+                                + runtimeDatasourceLabel(runtimeContext) + " 手工创建数据表"
+                                : "缺少在线建表权限，请联系管理员同步表结构"),
                         null, null, "SYNC_TABLE", "同步表结构", "publish", 410);
                 return;
             }
-            if (!ddlService.hasAutoIncrementPrimaryId(modelSchema.getTableName())) {
+            if (!ddlService.hasSinglePrimaryKey(modelSchema)) {
                 add(items, "TABLE_PK_MISSING", "TABLE", BusinessPublishCheckLevel.BLOCK,
-                        "主键不符合要求", "业务表必须包含 id bigint 自增主键", null, null,
+                        "主键不符合要求", "业务表必须包含单字段主键", null, null,
                         "FIX_TABLE", "修复数据表", "advanced", 420);
                 return;
             }
@@ -1266,23 +1315,53 @@ public class BusinessObjectPublishService {
             List<String> ddlStatements = preview.getDdlStatements();
             if (ddlStatements != null && !ddlStatements.isEmpty()) {
                 boolean canOnlineDdl = hasPermission(DDL_PERMISSION);
+                boolean canExecuteOnlineDdl = canOnlineDdl && runtimeContext.isAllowDdl()
+                        && Boolean.TRUE.equals(preview.getExecutable());
                 String itemCode = resolveTableSyncItemCode(ddlStatements);
-                add(items, itemCode, "TABLE", canOnlineDdl ? BusinessPublishCheckLevel.WARN : BusinessPublishCheckLevel.BLOCK,
+                add(items, itemCode, "TABLE", canExecuteOnlineDdl ? BusinessPublishCheckLevel.WARN : BusinessPublishCheckLevel.BLOCK,
                         "数据表结构未同步",
-                        canOnlineDdl ? "发布时勾选同步数据表结构后自动执行受控变更: " + summarizeDdlStatements(ddlStatements)
-                                : "数据表结构与字段配置不一致且当前用户无在线同步权限: " + summarizeDdlStatements(ddlStatements),
-                        null, null, "SYNC_TABLE", "同步表结构", canOnlineDdl ? "publish" : "advanced", 430);
-                if (!canOnlineDdl) {
+                        canExecuteOnlineDdl ? "发布时勾选同步数据表结构后，会在 " + runtimeDatasourceLabel(runtimeContext)
+                                + " 自动执行受控变更: " + summarizeDdlStatements(ddlStatements)
+                                : (!runtimeContext.isAllowDdl() ? "目标数据源禁止在线 DDL，需手工同步: "
+                                + summarizeDdlStatements(ddlStatements)
+                                : "数据表结构与字段配置不一致且当前用户无在线同步权限: " + summarizeDdlStatements(ddlStatements)),
+                        null, null, "SYNC_TABLE", "同步表结构", canExecuteOnlineDdl ? "publish" : "advanced", 430);
+                if (!canExecuteOnlineDdl) {
                     return;
                 }
             }
             add(items, "TABLE_PASS", "TABLE", BusinessPublishCheckLevel.PASS,
-                    "数据表检查通过", "数据表存在且主键符合低代码运行要求", null, null, null, null, "publish", 490);
+                    "数据表检查通过", "目标库 " + runtimeDatasourceLabel(runtimeContext)
+                            + " 中数据表存在且主键符合低代码运行要求", null, null, null, null, "publish", 490);
         } catch (Exception e) {
             add(items, "TABLE_CHECK_WARN", "TABLE", BusinessPublishCheckLevel.WARN,
                     "数据表检查未完成", "当前环境无法完成数据表检查: " + e.getMessage(), null, null,
                     "CHECK_DATABASE", "检查数据库", "advanced", 430);
         }
+    }
+
+    private String runtimeDatasourceLabel(LowcodeRuntimeDataSourceContext context) {
+        if (context == null) {
+            return "未知数据源";
+        }
+        if (context.isMaster()) {
+            return "平台主库";
+        }
+        return StringUtils.firstNonBlank(
+                context.getDatasourceName(),
+                context.getDatasourceCode(),
+                context.getDatasourceId() == null ? null : String.valueOf(context.getDatasourceId()),
+                "外部数据源"
+        );
+    }
+
+    private String runtimePrimaryKeyLabel(LowcodeRuntimeDataSourceContext context) {
+        if (context == null || context.getPrimaryKey() == null) {
+            return "id";
+        }
+        String field = StringUtils.defaultIfBlank(context.getPrimaryKey().getField(), "id");
+        String column = StringUtils.defaultIfBlank(context.getPrimaryKey().getColumnName(), field);
+        return StringUtils.equals(field, column) ? column : field + "/" + column;
     }
 
     private String summarizeFlowGaps(Object gaps) {
@@ -1349,7 +1428,7 @@ public class BusinessObjectPublishService {
         if (modelSchema.getFields() == null) {
             return List.of();
         }
-        Set<String> existingColumns = ddlService.listColumns(modelSchema.getTableName());
+        Set<String> existingColumns = ddlService.listColumns(modelSchema);
         return modelSchema.getFields().stream()
                 .filter(field -> field != null && !Boolean.TRUE.equals(field.getSystemField()))
                 .filter(field -> "DISABLED".equalsIgnoreCase(StringUtils.defaultString(field.getFieldStatus()))

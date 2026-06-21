@@ -188,11 +188,11 @@
 </template>
 
 <script setup>
-import { DingFlowViewer } from '@/components/flow-designer'
 import { NButton, NDropdown, NTag } from 'naive-ui'
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import versionApi from '@/api/version'
 import DictTag from '@/components/DictTag.vue'
+import { DingFlowViewer } from '@/components/flow-designer'
 import { useDict } from '@/composables/useDict'
 import { useAuthStore } from '@/store'
 import { generateUUID } from '@/utils/common'

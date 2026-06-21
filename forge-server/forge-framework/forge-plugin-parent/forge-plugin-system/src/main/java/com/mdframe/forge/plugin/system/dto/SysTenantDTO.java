@@ -94,6 +94,16 @@ public class SysTenantDTO implements Serializable {
     private String systemTheme;
 
     /**
+     * 默认业务数据源ID
+     */
+    private Long defaultBusinessDatasourceId;
+
+    /**
+     * 默认业务数据源编码
+     */
+    private String defaultBusinessDatasourceCode;
+
+    /**
      * 主题配置
      */
     private String themeConfig;

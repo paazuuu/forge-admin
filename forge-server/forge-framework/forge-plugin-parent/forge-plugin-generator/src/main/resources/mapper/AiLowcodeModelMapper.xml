@@ -13,6 +13,10 @@
         <result column="status" property="status"/>
         <result column="tenant_enabled" property="tenantEnabled"/>
         <result column="master_data" property="masterData"/>
+        <result column="runtime_datasource_id" property="runtimeDatasourceId"/>
+        <result column="runtime_datasource_code" property="runtimeDatasourceCode"/>
+        <result column="runtime_table_name" property="runtimeTableName"/>
+        <result column="table_mode" property="tableMode"/>
         <result column="model_schema" property="modelSchema"/>
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
@@ -32,6 +36,10 @@
         status,
         tenant_enabled,
         master_data,
+        runtime_datasource_id,
+        runtime_datasource_code,
+        runtime_table_name,
+        table_mode,
         model_schema,
         create_by,
         create_time,

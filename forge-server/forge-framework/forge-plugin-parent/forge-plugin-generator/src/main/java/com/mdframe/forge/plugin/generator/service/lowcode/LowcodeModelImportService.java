@@ -5,13 +5,18 @@ import com.mdframe.forge.plugin.generator.domain.entity.GenDatasource;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDataModelDTO;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeAuditStrategy;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeDomainRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeLogicDeleteStrategy;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelImportRequest;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeObjectSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePrimaryKeyStrategy;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeSourceTableRef;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeTenantStrategy;
 import com.mdframe.forge.plugin.generator.service.IGenDatasourceService;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -40,6 +45,7 @@ public class LowcodeModelImportService {
     private final IGenDatasourceService datasourceService;
     private final LowcodeDomainService domainService;
     private final LowcodeDataModelService modelService;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
 
     public LowcodeModelSchema previewDbTableModel(LowcodeModelImportRequest request) {
         ImportContext context = resolveContext(request);
@@ -52,6 +58,12 @@ public class LowcodeModelImportService {
         schema.setDomain(buildDomainRef(context.domain()));
         schema.setObject(buildObject(context.modelCode(), context.modelName(), context.request().getModelDesc()));
         schema.setSourceTable(buildSourceTable(context.datasource(), context.table()));
+        schema.setRuntimeDatasource(runtimeDataSourceResolver.buildSnapshot(
+                context.datasource(), context.table().getTableName(), "EXISTING"));
+        schema.setPrimaryKey(buildPrimaryKey(context.columns()));
+        schema.setTenantStrategy(buildTenantStrategy(context.columns()));
+        schema.setAuditStrategy(buildAuditStrategy(context.columns()));
+        schema.setLogicDeleteStrategy(buildLogicDeleteStrategy(context.columns()));
         schema.setFields(context.columns().stream()
                 .filter(column -> !isAuditColumn(column.getColumnName()))
                 .map(this::toFieldSchema)
@@ -132,6 +144,73 @@ public class LowcodeModelImportService {
         ref.setTableName(table.getTableName());
         ref.setTableComment(table.getTableComment());
         return ref;
+    }
+
+    private LowcodePrimaryKeyStrategy buildPrimaryKey(List<GenTableColumn> columns) {
+        List<GenTableColumn> primaryKeys = columns.stream()
+                .filter(column -> column.getIsPk() != null && column.getIsPk() == 1)
+                .toList();
+        if (primaryKeys.isEmpty()) {
+            throw new BusinessException("导入低代码模型要求数据表存在单字段主键");
+        }
+        if (primaryKeys.size() > 1) {
+            throw new BusinessException("暂不支持复合主键表作为可写低代码模型");
+        }
+        GenTableColumn column = primaryKeys.get(0);
+        LowcodePrimaryKeyStrategy primaryKey = new LowcodePrimaryKeyStrategy();
+        primaryKey.setField(normalizeFieldName(StringUtils.defaultIfBlank(column.getJavaField(), column.getColumnName())));
+        primaryKey.setColumnName(column.getColumnName());
+        primaryKey.setDataType(mapDataType(column.getColumnType(), column.getJavaType()));
+        primaryKey.setAutoIncrement(column.getIsIncrement() != null && column.getIsIncrement() == 1);
+        return primaryKey;
+    }
+
+    private LowcodeTenantStrategy buildTenantStrategy(List<GenTableColumn> columns) {
+        LowcodeTenantStrategy strategy = new LowcodeTenantStrategy();
+        if (hasColumn(columns, "tenant_id")) {
+            strategy.setMode("FORGE_TENANT_ID");
+            strategy.setColumnName("tenant_id");
+        } else {
+            strategy.setMode("NONE");
+        }
+        return strategy;
+    }
+
+    private LowcodeAuditStrategy buildAuditStrategy(List<GenTableColumn> columns) {
+        LowcodeAuditStrategy strategy = new LowcodeAuditStrategy();
+        if (hasColumn(columns, "create_by")
+                && hasColumn(columns, "create_time")
+                && hasColumn(columns, "create_dept")
+                && hasColumn(columns, "update_by")
+                && hasColumn(columns, "update_time")) {
+            strategy.setMode("FORGE_COLUMNS");
+            strategy.setCreateByColumn("create_by");
+            strategy.setCreateTimeColumn("create_time");
+            strategy.setCreateDeptColumn("create_dept");
+            strategy.setUpdateByColumn("update_by");
+            strategy.setUpdateTimeColumn("update_time");
+        } else {
+            strategy.setMode("NONE");
+        }
+        return strategy;
+    }
+
+    private LowcodeLogicDeleteStrategy buildLogicDeleteStrategy(List<GenTableColumn> columns) {
+        LowcodeLogicDeleteStrategy strategy = new LowcodeLogicDeleteStrategy();
+        if (hasColumn(columns, "del_flag")) {
+            strategy.setMode("DEL_FLAG");
+            strategy.setColumnName("del_flag");
+            strategy.setActiveValue("0");
+            strategy.setDeletedValue("1");
+        } else {
+            strategy.setMode("NONE");
+        }
+        return strategy;
+    }
+
+    private boolean hasColumn(List<GenTableColumn> columns, String columnName) {
+        return columns.stream()
+                .anyMatch(column -> StringUtils.equalsIgnoreCase(column.getColumnName(), columnName));
     }
 
     private LowcodeFieldSchema toFieldSchema(GenTableColumn column) {
@@ -324,4 +403,3 @@ public class LowcodeModelImportService {
                                  String modelName) {
     }
 }
-

@@ -21,6 +21,8 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.service.AiCrudConfigService;
 import com.mdframe.forge.plugin.generator.service.MenuRegisterAdapter;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeVersionVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
@@ -61,6 +63,7 @@ public class LowcodePublishService {
     private final BusinessObjectMapper businessObjectMapper;
     private final BusinessAppMapper businessAppMapper;
     private final AiLowcodeModelMapper lowcodeModelMapper;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
 
     @Transactional(rollbackFor = Exception.class)
     public Long publish(Long id, LowcodePublishDTO dto) {
@@ -71,7 +74,7 @@ public class LowcodePublishService {
         LowcodePageSchema pageSchema = resolvePublishPage(config, dto, modelSchema);
         schemaValidator.validatePage(pageSchema, modelSchema);
         ensureTableReady(modelSchema, dto);
-        policyService.validatePublishedPolicies(modelSchema, ddlService.listColumns(modelSchema.getTableName()));
+        policyService.validatePublishedPolicies(modelSchema, ddlService.listColumns(modelSchema));
 
         LowcodeRuntimeConfig runtimeConfig = runtimeConfigBuilder.buildRuntimeConfig(config.getConfigKey(), modelSchema, pageSchema);
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig);
@@ -162,11 +165,11 @@ public class LowcodePublishService {
             ddlService.executeCreateTable(modelSchema);
             return;
         }
-        if (!ddlService.tableExists(modelSchema.getTableName())) {
+        if (!ddlService.tableExists(modelSchema)) {
             throw new BusinessException("数据表不存在，请先在数据模型页同步表结构");
         }
-        if (!ddlService.hasAutoIncrementPrimaryId(modelSchema.getTableName())) {
-            throw new BusinessException("数据表缺少 id 自增主键，请先在数据模型页修正表结构");
+        if (!ddlService.hasSinglePrimaryKey(modelSchema)) {
+            throw new BusinessException("数据表缺少单字段主键，请先在数据模型页修正表结构");
         }
     }
 
@@ -192,6 +195,23 @@ public class LowcodePublishService {
         config.setDesensitizeConfig(runtimeConfig.getDesensitizeConfig());
         config.setEncryptConfig(runtimeConfig.getEncryptConfig());
         config.setTransConfig(runtimeConfig.getTransConfig());
+        applyRuntimeDatasourceConfig(config, modelSchema);
+    }
+
+    private void applyRuntimeDatasourceConfig(AiCrudConfig config, LowcodeModelSchema modelSchema) {
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+        config.setRuntimeDatasourceId(context.getDatasourceId());
+        config.setRuntimeDatasourceCode(context.getDatasourceCode());
+        config.setRuntimeDatasourceSnapshot(context.getSnapshot() == null
+                ? null
+                : appService.writeJson(context.getSnapshot(), "runtimeDatasourceSnapshot"));
+        config.setRuntimeTableName(StringUtils.defaultIfBlank(context.getTableName(), config.getTableName()));
+        config.setPrimaryKeyField(context.getPrimaryKey().getField());
+        config.setPrimaryKeyColumn(context.getPrimaryKey().getColumnName());
+        config.setPrimaryKeyType(context.getPrimaryKey().getDataType());
+        config.setTenantStrategy(appService.writeJson(context.getTenantStrategy(), "tenantStrategy"));
+        config.setAuditStrategy(appService.writeJson(context.getAuditStrategy(), "auditStrategy"));
+        config.setLogicDeleteStrategy(appService.writeJson(context.getLogicDeleteStrategy(), "logicDeleteStrategy"));
     }
 
     private void applyMenuConfig(AiCrudConfig config, LowcodePublishDTO dto) {
@@ -354,6 +374,16 @@ public class LowcodePublishService {
         version.setEditSchema(config.getEditSchema());
         version.setApiConfig(config.getApiConfig());
         version.setOptions(config.getOptions());
+        version.setRuntimeDatasourceId(config.getRuntimeDatasourceId());
+        version.setRuntimeDatasourceCode(config.getRuntimeDatasourceCode());
+        version.setRuntimeDatasourceSnapshot(config.getRuntimeDatasourceSnapshot());
+        version.setRuntimeTableName(config.getRuntimeTableName());
+        version.setPrimaryKeyField(config.getPrimaryKeyField());
+        version.setPrimaryKeyColumn(config.getPrimaryKeyColumn());
+        version.setPrimaryKeyType(config.getPrimaryKeyType());
+        version.setTenantStrategy(config.getTenantStrategy());
+        version.setAuditStrategy(config.getAuditStrategy());
+        version.setLogicDeleteStrategy(config.getLogicDeleteStrategy());
         version.setPublishSnapshot(writeSnapshot(config));
         version.setRemark(StringUtils.defaultIfBlank(remark, "发布低代码应用"));
         versionMapper.insert(version);
@@ -377,6 +407,27 @@ public class LowcodePublishService {
         config.setTableName(StringUtils.defaultIfBlank(text(snapshot.get("tableName")), fallback.getTableName()));
         config.setTableComment(StringUtils.defaultIfBlank(text(snapshot.get("tableComment")), fallback.getTableComment()));
         config.setAppName(StringUtils.defaultIfBlank(text(snapshot.get("appName")), config.getTableComment()));
+        if (version.getRuntimeDatasourceId() != null) {
+            config.setRuntimeDatasourceId(version.getRuntimeDatasourceId());
+        }
+        config.setRuntimeDatasourceCode(StringUtils.defaultIfBlank(
+                version.getRuntimeDatasourceCode(), config.getRuntimeDatasourceCode()));
+        config.setRuntimeDatasourceSnapshot(StringUtils.defaultIfBlank(
+                version.getRuntimeDatasourceSnapshot(), config.getRuntimeDatasourceSnapshot()));
+        config.setRuntimeTableName(StringUtils.defaultIfBlank(
+                version.getRuntimeTableName(), config.getRuntimeTableName()));
+        config.setPrimaryKeyField(StringUtils.defaultIfBlank(
+                version.getPrimaryKeyField(), config.getPrimaryKeyField()));
+        config.setPrimaryKeyColumn(StringUtils.defaultIfBlank(
+                version.getPrimaryKeyColumn(), config.getPrimaryKeyColumn()));
+        config.setPrimaryKeyType(StringUtils.defaultIfBlank(
+                version.getPrimaryKeyType(), config.getPrimaryKeyType()));
+        config.setTenantStrategy(StringUtils.defaultIfBlank(
+                version.getTenantStrategy(), config.getTenantStrategy()));
+        config.setAuditStrategy(StringUtils.defaultIfBlank(
+                version.getAuditStrategy(), config.getAuditStrategy()));
+        config.setLogicDeleteStrategy(StringUtils.defaultIfBlank(
+                version.getLogicDeleteStrategy(), config.getLogicDeleteStrategy()));
     }
 
     private void applySnapshotMenuFields(AiCrudConfig config, Map<String, Object> snapshot) {
@@ -411,6 +462,16 @@ public class LowcodePublishService {
         snapshot.put("desensitizeConfig", config.getDesensitizeConfig());
         snapshot.put("encryptConfig", config.getEncryptConfig());
         snapshot.put("transConfig", config.getTransConfig());
+        snapshot.put("runtimeDatasourceId", config.getRuntimeDatasourceId());
+        snapshot.put("runtimeDatasourceCode", config.getRuntimeDatasourceCode());
+        snapshot.put("runtimeDatasourceSnapshot", config.getRuntimeDatasourceSnapshot());
+        snapshot.put("runtimeTableName", config.getRuntimeTableName());
+        snapshot.put("primaryKeyField", config.getPrimaryKeyField());
+        snapshot.put("primaryKeyColumn", config.getPrimaryKeyColumn());
+        snapshot.put("primaryKeyType", config.getPrimaryKeyType());
+        snapshot.put("tenantStrategy", config.getTenantStrategy());
+        snapshot.put("auditStrategy", config.getAuditStrategy());
+        snapshot.put("logicDeleteStrategy", config.getLogicDeleteStrategy());
         snapshot.put("menuName", config.getMenuName());
         snapshot.put("menuParentId", config.getMenuParentId());
         snapshot.put("menuSort", config.getMenuSort());

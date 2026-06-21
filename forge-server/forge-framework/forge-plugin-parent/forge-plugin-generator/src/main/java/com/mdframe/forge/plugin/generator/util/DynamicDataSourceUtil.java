@@ -28,8 +28,14 @@ public class DynamicDataSourceUtil {
      * 获取数据源连接
      */
     public static Connection getConnection(GenDatasource datasource) throws SQLException {
-        DataSource dataSource = getOrCreateDataSource(datasource);
-        return dataSource.getConnection();
+        return getDataSource(datasource).getConnection();
+    }
+
+    /**
+     * 获取数据源对象。
+     */
+    public static DataSource getDataSource(GenDatasource datasource) {
+        return getOrCreateDataSource(datasource);
     }
 
     /**

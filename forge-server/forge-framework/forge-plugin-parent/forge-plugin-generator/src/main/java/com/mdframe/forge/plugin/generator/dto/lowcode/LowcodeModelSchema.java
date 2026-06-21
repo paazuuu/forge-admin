@@ -28,6 +28,21 @@ public class LowcodeModelSchema {
     /** 绑定已有表时的代码生成表模型引用。 */
     private LowcodeSourceTableRef sourceTable;
 
+    /** 低代码运行数据源快照。 */
+    private LowcodeRuntimeDatasourceSnapshot runtimeDatasource;
+
+    /** 运行表主键策略。 */
+    private LowcodePrimaryKeyStrategy primaryKey;
+
+    /** 运行表租户隔离策略。 */
+    private LowcodeTenantStrategy tenantStrategy;
+
+    /** 运行表审计字段策略。 */
+    private LowcodeAuditStrategy auditStrategy;
+
+    /** 运行表逻辑删除策略。 */
+    private LowcodeLogicDeleteStrategy logicDeleteStrategy;
+
     private String tableName;
 
     private String businessName;

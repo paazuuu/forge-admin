@@ -40,12 +40,12 @@ defineProps({
   font-weight: 600;
   line-height: 1.4;
   position: relative;
-  &:before{
+  &:before {
     position: absolute;
     top: 50%;
     left: 0;
     transform: translateY(-50%);
-    content: "";
+    content: '';
     width: 3px;
     height: 18px;
     background: #2563eb;

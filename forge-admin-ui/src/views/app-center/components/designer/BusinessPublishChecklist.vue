@@ -38,6 +38,27 @@
             </n-space>
           </section>
 
+          <section
+            v-if="datasourceSummary.visible"
+            class="datasource-panel"
+            :class="`status-${String(datasourceSummary.level || 'WARN').toLowerCase()}`"
+          >
+            <span>发布目标库</span>
+            <strong :title="datasourceSummary.message">{{ datasourceSummary.title }}</strong>
+            <p>{{ datasourceSummary.message }}</p>
+            <div v-if="datasourceSummary.warnings.length" class="datasource-risks">
+              <n-tag
+                v-for="item in datasourceSummary.warnings"
+                :key="item.itemCode"
+                size="small"
+                :type="levelType(item.level)"
+                :bordered="false"
+              >
+                {{ item.title || item.itemCode }}
+              </n-tag>
+            </div>
+          </section>
+
           <button
             v-for="group in checkGroups"
             :key="group.level"
@@ -195,6 +216,31 @@ const checkGroups = computed(() => [
   },
 ])
 const activeCheckGroup = computed(() => checkGroups.value.find(group => group.level === activeCheckLevel.value) || checkGroups.value[0])
+const datasourceItems = computed(() => (checkResult.value.items || []).filter(item =>
+  item?.category === 'DATASOURCE' || String(item?.itemCode || '').startsWith('DATASOURCE_')))
+const datasourceSummary = computed(() => {
+  const items = datasourceItems.value
+  if (!items.length) {
+    return {
+      visible: false,
+      level: 'WARN',
+      title: '未确认',
+      message: '',
+      warnings: [],
+    }
+  }
+  const blockItem = items.find(item => item.level === 'BLOCK')
+  const targetItem = items.find(item => item.itemCode === 'DATASOURCE_TARGET_PASS') || items.find(item => item.level === 'PASS')
+  const warnings = items.filter(item => item.level === 'WARN')
+  const focusItem = blockItem || targetItem || warnings[0] || items[0]
+  return {
+    visible: true,
+    level: blockItem ? 'BLOCK' : warnings.length ? 'WARN' : targetItem?.level || focusItem?.level || 'WARN',
+    title: blockItem?.title || targetItem?.title || focusItem?.title || '发布目标库',
+    message: blockItem?.message || targetItem?.message || focusItem?.message || '-',
+    warnings,
+  }
+})
 
 watch(() => props.objectId, () => {
   refresh()
@@ -292,7 +338,7 @@ function resolveFixPanel(item = {}) {
     return 'relations'
   if (target === 'publish')
     return 'publish'
-  if (item.category === 'RUNTIME' || item.category === 'TABLE')
+  if (item.category === 'RUNTIME' || item.category === 'TABLE' || item.category === 'DATASOURCE')
     return 'advanced'
   if (item.category === 'PERMISSION')
     return 'permission'
@@ -433,12 +479,13 @@ defineExpose({
 
 .publish-summary {
   display: grid;
-  grid-template-columns: minmax(240px, 1.2fr) repeat(3, minmax(112px, 0.8fr));
+  grid-template-columns: minmax(240px, 1.1fr) minmax(220px, 0.95fr) repeat(3, minmax(112px, 0.7fr));
   gap: 12px;
   margin-bottom: 12px;
 }
 
 .publish-status-panel,
+.datasource-panel,
 .summary-metric,
 .check-workspace,
 .version-panel {
@@ -466,21 +513,65 @@ defineExpose({
 }
 
 .publish-status-panel > span,
+.datasource-panel > span,
 .summary-metric span,
 .version-item span {
   color: #64748b;
   font-size: 12px;
 }
 
-.publish-status-panel strong {
+.publish-status-panel strong,
+.datasource-panel strong {
   display: block;
   overflow: hidden;
   max-width: 100%;
   color: #111827;
-  font-size: clamp(20px, 3vw, 26px);
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.publish-status-panel strong {
+  font-size: clamp(20px, 3vw, 26px);
+}
+
+.datasource-panel {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 150px;
+  border-left: 4px solid #f59e0b;
+  padding: 16px;
+}
+
+.datasource-panel.status-pass {
+  border-left-color: #16a34a;
+}
+
+.datasource-panel.status-block {
+  border-left-color: #dc2626;
+}
+
+.datasource-panel strong {
+  font-size: 16px;
+}
+
+.datasource-panel p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.datasource-risks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .summary-metric {

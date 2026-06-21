@@ -20,6 +20,8 @@ public class BusinessObjectDTO {
 
     private String createMode;
 
+    private Long runtimeDatasourceId;
+
     private Long importDatasourceId;
 
     private String importTableName;

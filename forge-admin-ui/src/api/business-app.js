@@ -56,8 +56,10 @@ export function createBusinessObject(data) {
   return request.post('/ai/business/object', data)
 }
 
-export function genDatasourceEnabled() {
-  return request.get('/generator/datasource/enabled')
+export function genDatasourceEnabled(usageScope) {
+  return request.get('/generator/datasource/enabled', {
+    params: usageScope ? { usageScope } : undefined,
+  })
 }
 
 export function genDatasourceTables(datasourceId) {

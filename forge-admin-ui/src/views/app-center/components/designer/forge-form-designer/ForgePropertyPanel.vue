@@ -2602,6 +2602,7 @@
 import { computed, ref, watch } from 'vue'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
+import { camelToSnake } from '../form-first/namingUtils'
 
 const props = defineProps({
   schema: {
@@ -3065,7 +3066,7 @@ function updateFieldBindingCode(value = '') {
     fieldBinding: {
       ...(selectedComponent.value.fieldBinding || {}),
       fieldCode,
-      columnName: fieldCode,
+      columnName: camelToSnake(fieldCode),
     },
   })
 }

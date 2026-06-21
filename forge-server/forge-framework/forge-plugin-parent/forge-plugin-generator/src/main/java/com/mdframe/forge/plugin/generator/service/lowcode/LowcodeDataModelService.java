@@ -157,6 +157,16 @@ public class LowcodeDataModelService extends ServiceImpl<AiLowcodeModelMapper, A
         model.setStatus(status);
         model.setTenantEnabled(dto.getTenantEnabled() == null || dto.getTenantEnabled());
         model.setMasterData(Boolean.TRUE.equals(dto.getMasterData()));
+        model.setRuntimeDatasourceId(modelSchema.getRuntimeDatasource() == null
+                ? null
+                : modelSchema.getRuntimeDatasource().getDatasourceId());
+        model.setRuntimeDatasourceCode(modelSchema.getRuntimeDatasource() == null
+                ? null
+                : modelSchema.getRuntimeDatasource().getDatasourceCode());
+        model.setRuntimeTableName(StringUtils.defaultIfBlank(
+                modelSchema.getRuntimeDatasource() == null ? null : modelSchema.getRuntimeDatasource().getTableName(),
+                modelSchema.getTableName()));
+        model.setTableMode(modelSchema.getTableMode());
         model.setModelSchema(writeModelSchema(modelSchema));
     }
 

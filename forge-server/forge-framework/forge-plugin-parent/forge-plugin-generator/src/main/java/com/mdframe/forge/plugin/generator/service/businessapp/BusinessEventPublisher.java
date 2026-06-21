@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.generator.service.businessapp;
 
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
+import com.mdframe.forge.plugin.generator.service.DynamicCrudService;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class BusinessEventPublisher {
 
     private final BusinessTriggerExecutor triggerExecutor;
     private final AiCrudConfigMapper crudConfigMapper;
+    private final DynamicCrudService dynamicCrudService;
 
     /**
      * 发布记录创建事件
@@ -174,10 +176,7 @@ public class BusinessEventPublisher {
                 return null; // 非业务对象的动态CRUD，不触发
             }
 
-            String recordId = null;
-            if (data != null && data.get("id") != null) {
-                recordId = String.valueOf(data.get("id"));
-            }
+            String recordId = resolveRecordId(configKey, data);
 
             return BusinessEvent.builder()
                     .eventType(eventType)
@@ -194,6 +193,25 @@ public class BusinessEventPublisher {
             log.debug("构建业务事件失败, configKey={}: {}", configKey, e.getMessage());
             return null;
         }
+    }
+
+    private String resolveRecordId(String configKey, Map<String, Object> data) {
+        if (data == null || data.isEmpty()) {
+            return null;
+        }
+        try {
+            Object recordId = dynamicCrudService.resolveRecordId(configKey, data);
+            if (recordId != null) {
+                return String.valueOf(recordId);
+            }
+        } catch (Exception e) {
+            log.debug("按运行主键解析业务事件记录ID失败, configKey={}: {}", configKey, e.getMessage());
+        }
+        Object fallback = data.get("id");
+        if (fallback == null) {
+            fallback = data.get("Id");
+        }
+        return fallback == null ? null : String.valueOf(fallback);
     }
 
     /**

@@ -42,6 +42,18 @@ public class AiLowcodeModel extends TenantEntity {
     /** 是否主数据模型 */
     private Boolean masterData;
 
+    /** 模型运行数据源ID */
+    private Long runtimeDatasourceId;
+
+    /** 模型运行数据源编码 */
+    private String runtimeDatasourceCode;
+
+    /** 模型运行表名 */
+    private String runtimeTableName;
+
+    /** 表模式：CREATE-在线创建，EXISTING-绑定已有表 */
+    private String tableMode;
+
     /** 模型结构协议 JSON */
     private String modelSchema;
 }

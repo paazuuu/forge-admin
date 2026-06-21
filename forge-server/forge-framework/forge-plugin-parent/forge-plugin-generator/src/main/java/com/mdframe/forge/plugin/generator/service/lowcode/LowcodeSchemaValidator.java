@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class LowcodeSchemaValidator {
 
     private static final Pattern TABLE_NAME_PATTERN = Pattern.compile("^[a-z][a-z0-9_]{1,63}$");
-    private static final Pattern COLUMN_NAME_PATTERN = Pattern.compile("^[a-z][a-z0-9_]{1,63}$");
+    private static final Pattern COLUMN_NAME_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
     private static final Pattern FIELD_NAME_PATTERN = Pattern.compile("^[a-z][A-Za-z0-9]{1,63}$");
 
     private static final Set<String> RESERVED_TABLE_PREFIXES = Set.of(

@@ -2,6 +2,14 @@ package com.mdframe.forge.plugin.generator.service;
 
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
 import com.mdframe.forge.plugin.generator.dto.CustomQueryConditionDTO;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeAuditStrategy;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeLogicDeleteStrategy;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeTenantStrategy;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContextHolder;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialectFactory;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeJdbcTemplateProvider;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
@@ -32,7 +40,10 @@ import java.util.stream.Collectors;
 public class DynamicCrudRepository {
 
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
+    private final RuntimeJdbcTemplateProvider jdbcTemplateProvider;
+    private final RuntimeDatabaseDialectFactory dialectFactory;
 
+    private static final String DEFAULT_PRIMARY_KEY = "id";
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
     private static final Pattern SAFE_ALIAS = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,127}$");
 
@@ -53,6 +64,11 @@ public class DynamicCrudRepository {
 
     // 缓存：表名 -> {camelCase -> snake_case} 映射
     private final ConcurrentHashMap<String, Map<String, String>> columnMappingCache = new ConcurrentHashMap<>();
+
+    private NamedParameterJdbcTemplate jdbc() {
+        LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+        return context == null ? namedJdbcTemplate : jdbcTemplateProvider.namedJdbcTemplate(context);
+    }
 
     // ==================== 查询操作 ====================
 
@@ -84,12 +100,11 @@ public class DynamicCrudRepository {
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
 
         String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
-        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        Long total = jdbc().queryForObject(countSql, params, Long.class);
 
-        String dataSql = buildPageDataSql(tableName, whereClause, orderBy);
-        appendPageParams(params, pageNum, pageSize);
+        String dataSql = buildPageDataSql(tableName, whereClause, orderBy, pageNum, pageSize);
 
-        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+        List<Map<String, Object>> records = jdbc().queryForList(dataSql, params);
 
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
@@ -133,14 +148,13 @@ public class DynamicCrudRepository {
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
         boolean distinctMainRows = selectsOnlyMainTable(selectFields);
-        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT " + qualifyPrimaryKey("t0") + ") " : "SELECT COUNT(*) ")
                 + fromClause + buildWhereSql(whereClause);
-        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        Long total = jdbc().queryForObject(countSql, params, Long.class);
 
-        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause + buildWhereSql(whereClause)
-                + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
-        appendPageParams(params, pageNum, pageSize);
-        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+        String dataSql = paginateSql(buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
+                + buildWhereSql(whereClause) + buildOrderByClause(orderBy), pageNum, pageSize);
+        List<Map<String, Object>> records = jdbc().queryForList(dataSql, params);
 
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
@@ -151,28 +165,29 @@ public class DynamicCrudRepository {
      * 多模型左连接详情查询。
      */
     public Map<String, Object> selectJoinedById(String mainTableName,
-                                                Long id,
+                                                Object id,
                                                 List<JoinField> selectFields,
                                                 List<JoinSpec> joins) {
         return selectJoinedById(mainTableName, id, selectFields, joins, null);
     }
 
     public Map<String, Object> selectJoinedById(String mainTableName,
-                                                Long id,
+                                                Object id,
                                                 List<JoinField> selectFields,
                                                 List<JoinSpec> joins,
                                                 SqlCondition dataScopeCondition) {
         validateJoinQuery(mainTableName, selectFields, joins);
 
-        StringBuilder whereClause = new StringBuilder("t0.id = :id");
+        StringBuilder whereClause = new StringBuilder(qualifyPrimaryKey("t0") + " = :id");
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), mainTableName, "t0");
         MapSqlParameterSource params = buildBaseQueryParams("t0");
         appendIdParam(params, id);
         appendSqlCondition(whereClause, params, dataScopeCondition);
 
         String sql = buildJoinSelectClause(selectFields) + " " + buildJoinedFromClause(mainTableName, joins)
-                + buildWhereSql(whereClause) + " LIMIT 1";
-        List<Map<String, Object>> results = namedJdbcTemplate.queryForList(sql, params);
+                + buildWhereSql(whereClause);
+        sql = limitSql(sql, 1);
+        List<Map<String, Object>> results = jdbc().queryForList(sql, params);
         return results.isEmpty() ? null : results.get(0);
     }
 
@@ -206,10 +221,9 @@ public class DynamicCrudRepository {
 
         String dataSql = buildSelectSql("SELECT *", tableName, whereClause);
         dataSql += buildOrderByClause(orderBy);
-        dataSql += " LIMIT :limit";
-        params.addValue("limit", Math.max(1, limit));
+        dataSql = limitSql(dataSql, Math.max(1, limit));
 
-        return namedJdbcTemplate.queryForList(dataSql, params);
+        return jdbc().queryForList(dataSql, params);
     }
 
     /**
@@ -229,7 +243,7 @@ public class DynamicCrudRepository {
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
 
         String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
-        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        Long total = jdbc().queryForObject(countSql, params, Long.class);
         return total != null ? total : 0L;
     }
 
@@ -252,9 +266,8 @@ public class DynamicCrudRepository {
         appendSqlCondition(whereClause, params, dataScopeCondition);
         appendSearchConditions(whereClause, params, searchParams, allowedSearchFields, searchTypeMap, columnMapping);
 
-        String dataSql = buildPageDataSql(tableName, whereClause, orderBy);
-        appendPageParams(params, pageNum, pageSize);
-        return namedJdbcTemplate.queryForList(dataSql, params);
+        String dataSql = buildPageDataSql(tableName, whereClause, orderBy, pageNum, pageSize);
+        return jdbc().queryForList(dataSql, params);
     }
 
     /**
@@ -277,9 +290,9 @@ public class DynamicCrudRepository {
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
         boolean distinctMainRows = selectsOnlyMainTable(selectFields);
-        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT " + qualifyPrimaryKey("t0") + ") " : "SELECT COUNT(*) ")
                 + fromClause + buildWhereSql(whereClause);
-        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        Long total = jdbc().queryForObject(countSql, params, Long.class);
         return total != null ? total : 0L;
     }
 
@@ -306,10 +319,9 @@ public class DynamicCrudRepository {
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
         boolean distinctMainRows = selectsOnlyMainTable(selectFields);
-        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
-                + buildWhereSql(whereClause) + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
-        appendPageParams(params, pageNum, pageSize);
-        return namedJdbcTemplate.queryForList(dataSql, params);
+        String dataSql = paginateSql(buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
+                + buildWhereSql(whereClause) + buildOrderByClause(orderBy), pageNum, pageSize);
+        return jdbc().queryForList(dataSql, params);
     }
 
     /**
@@ -341,7 +353,7 @@ public class DynamicCrudRepository {
 
         String countSql = buildSelectSql("SELECT COUNT(*)", tableName, whereClause);
         logDynamicSql("自定义查询统计", countSql, params);
-        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        Long total = jdbc().queryForObject(countSql, params, Long.class);
 
         String dataSql = buildSelectSql(
                 buildCustomSelectClause(selectedFields, allowedFields, columnMapping),
@@ -349,11 +361,10 @@ public class DynamicCrudRepository {
                 whereClause
         );
         dataSql += buildOrderByClause(orderBy);
-        dataSql += " LIMIT :limit OFFSET :offset";
-        appendPageParams(params, pageNum, pageSize);
+        dataSql = paginateSql(dataSql, pageNum, pageSize);
         logDynamicSql("自定义查询数据", dataSql, params);
 
-        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+        List<Map<String, Object>> records = jdbc().queryForList(dataSql, params);
 
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
@@ -395,16 +406,15 @@ public class DynamicCrudRepository {
 
         String fromClause = buildJoinedFromClause(mainTableName, joins);
         boolean distinctMainRows = selectsOnlyMainTable(selectFields);
-        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT t0.id) " : "SELECT COUNT(*) ")
+        String countSql = (distinctMainRows ? "SELECT COUNT(DISTINCT " + qualifyPrimaryKey("t0") + ") " : "SELECT COUNT(*) ")
                 + fromClause + buildWhereSql(whereClause);
         logDynamicSql("自定义查询统计(左连接)", countSql, params);
-        Long total = namedJdbcTemplate.queryForObject(countSql, params, Long.class);
+        Long total = jdbc().queryForObject(countSql, params, Long.class);
 
-        String dataSql = buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
-                + buildWhereSql(whereClause) + buildOrderByClause(orderBy) + " LIMIT :limit OFFSET :offset";
-        appendPageParams(params, pageNum, pageSize);
+        String dataSql = paginateSql(buildJoinSelectClause(selectFields, distinctMainRows) + " " + fromClause
+                + buildWhereSql(whereClause) + buildOrderByClause(orderBy), pageNum, pageSize);
         logDynamicSql("自定义查询数据(左连接)", dataSql, params);
-        List<Map<String, Object>> records = namedJdbcTemplate.queryForList(dataSql, params);
+        List<Map<String, Object>> records = jdbc().queryForList(dataSql, params);
 
         Page<Map<String, Object>> page = new Page<>(pageNum, pageSize, total != null ? total : 0);
         page.setRecords(records);
@@ -697,7 +707,8 @@ public class DynamicCrudRepository {
             return "SELECT *";
         }
         LinkedHashSet<String> columns = new LinkedHashSet<>();
-        addSelectedColumn(columns, "id", allowedFields, columnMapping);
+        addSelectedColumn(columns, primaryKeyField(), allowedFields, columnMapping);
+        addSelectedColumn(columns, primaryKeyColumn(), allowedFields, columnMapping);
         for (String fieldName : selectedFields) {
             addSelectedColumn(columns, fieldName, allowedFields, columnMapping);
         }
@@ -745,34 +756,35 @@ public class DynamicCrudRepository {
     private MapSqlParameterSource buildBaseQueryParams(String tableAlias) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         appendBaseQueryConditions(new StringBuilder(), params, null, tableAlias);
+        appendLogicDeleteParam(params);
         return params;
     }
 
-    private String buildPageDataSql(String tableName, StringBuilder whereClause, String orderBy) {
+    private String buildPageDataSql(String tableName, StringBuilder whereClause, String orderBy, int pageNum, int pageSize) {
         String dataSql = buildSelectSql("SELECT *", tableName, whereClause);
         dataSql += buildOrderByClause(orderBy);
-        return dataSql + " LIMIT :limit OFFSET :offset";
+        return paginateSql(dataSql, pageNum, pageSize);
     }
 
     private String buildOrderByClause(String orderBy) {
         if (StringUtils.isNotBlank(orderBy)) {
             return " ORDER BY " + orderBy;
         }
-        return " ORDER BY id DESC";
-    }
-
-    private void appendPageParams(MapSqlParameterSource params, int pageNum, int pageSize) {
-        params.addValue("limit", pageSize);
-        params.addValue("offset", (pageNum - 1) * pageSize);
+        return " ORDER BY " + primaryKeyColumn() + " DESC";
     }
 
     private StringBuilder buildIdWhereClause(String tableName) {
-        StringBuilder whereClause = new StringBuilder("id = :id");
+        return buildIdWhereClause(tableName, primaryKeyColumn());
+    }
+
+    private StringBuilder buildIdWhereClause(String tableName, String primaryKeyColumn) {
+        validateIdentifier(primaryKeyColumn);
+        StringBuilder whereClause = new StringBuilder(primaryKeyColumn + " = :id");
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         return whereClause;
     }
 
-    private MapSqlParameterSource buildIdQueryParams(Long id) {
+    private MapSqlParameterSource buildIdQueryParams(Object id) {
         MapSqlParameterSource params = buildBaseQueryParams();
         appendIdParam(params, id);
         return params;
@@ -784,30 +796,40 @@ public class DynamicCrudRepository {
 
     private void appendBaseQueryConditions(StringBuilder whereClause, MapSqlParameterSource params,
                                            String tableName, String tableAlias) {
-        if (tableName == null || getTableColumns(tableName).contains("tenant_id")) {
+        String tenantColumn = tenantColumn();
+        if (tenantStrategyEnabled() && (tableName == null || getTableColumns(tableName).contains(tenantColumn))) {
             appendTenantWhereClause(whereClause, params, tableAlias);
         }
         if (tableName != null && hasDelFlag(tableName)) {
-            appendWhereCondition(whereClause, qualifyColumn(tableAlias, "del_flag") + " = '0'");
+            appendWhereCondition(whereClause, qualifyColumn(tableAlias, logicDeleteColumn()) + " = :logicActiveValue");
+            appendLogicDeleteParam(params);
         }
     }
 
     /**
      * 根据ID查询
      */
-    public Map<String, Object> selectById(String tableName, Long id) {
+    public Map<String, Object> selectById(String tableName, Object id) {
         return selectById(tableName, id, null);
     }
 
-    public Map<String, Object> selectById(String tableName, Long id, SqlCondition dataScopeCondition) {
-        validateTableName(tableName);
+    public Map<String, Object> selectById(String tableName, Object id, SqlCondition dataScopeCondition) {
+        return selectById(tableName, primaryKeyColumn(), id, dataScopeCondition);
+    }
 
-        StringBuilder whereClause = buildIdWhereClause(tableName);
+    public Map<String, Object> selectById(String tableName,
+                                          String primaryKeyColumn,
+                                          Object id,
+                                          SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+        validateIdentifier(primaryKeyColumn);
+
+        StringBuilder whereClause = buildIdWhereClause(tableName, primaryKeyColumn);
         MapSqlParameterSource params = buildIdQueryParams(id);
         appendSqlCondition(whereClause, params, dataScopeCondition);
 
         String sql = buildSelectSql("SELECT *", tableName, whereClause);
-        List<Map<String, Object>> results = namedJdbcTemplate.queryForList(sql, params);
+        List<Map<String, Object>> results = jdbc().queryForList(sql, params);
         return results.isEmpty() ? null : results.get(0);
     }
 
@@ -822,9 +844,9 @@ public class DynamicCrudRepository {
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("value", value);
-        String orderColumn = getTableColumns(tableName).contains("id") ? "id" : columnName;
+        String orderColumn = getTableColumns(tableName).contains(primaryKeyColumn()) ? primaryKeyColumn() : columnName;
         String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
-        return namedJdbcTemplate.queryForList(sql, params);
+        return jdbc().queryForList(sql, params);
     }
 
     public List<Map<String, Object>> selectListByColumnIn(String tableName,
@@ -849,9 +871,9 @@ public class DynamicCrudRepository {
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("values", nonNullValues);
-        String orderColumn = getTableColumns(tableName).contains("id") ? "id" : columnName;
+        String orderColumn = getTableColumns(tableName).contains(primaryKeyColumn()) ? primaryKeyColumn() : columnName;
         String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
-        return namedJdbcTemplate.queryForList(sql, params);
+        return jdbc().queryForList(sql, params);
     }
 
     public List<Map<String, Object>> selectTreeChildren(String tableName,
@@ -885,11 +907,10 @@ public class DynamicCrudRepository {
             params.addValue("parentValue", parentValue);
         }
         appendSqlCondition(whereClause, params, dataScopeCondition);
-        params.addValue("limit", Math.max(1, limit));
-
         String sql = buildSelectSql("SELECT *", tableName, whereClause)
-                + buildOrderByClause(orderBy) + " LIMIT :limit";
-        return namedJdbcTemplate.queryForList(sql, params);
+                + buildOrderByClause(orderBy);
+        sql = limitSql(sql, Math.max(1, limit));
+        return jdbc().queryForList(sql, params);
     }
 
     public boolean existsByColumn(String tableName, String columnName, Object value) {
@@ -908,22 +929,31 @@ public class DynamicCrudRepository {
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("value", value);
         appendSqlCondition(whereClause, params, dataScopeCondition);
-        String sql = buildSelectSql("SELECT COUNT(1)", tableName, whereClause) + " LIMIT 1";
-        Long count = namedJdbcTemplate.queryForObject(sql, params, Long.class);
+        String sql = buildSelectSql("SELECT COUNT(1)", tableName, whereClause);
+        Long count = jdbc().queryForObject(sql, params, Long.class);
         return count != null && count > 0;
     }
 
     public boolean existsByColumns(String tableName,
                                    Map<String, Object> columnValues,
-                                   Long excludeId) {
+                                   Object excludeId) {
         return existsByColumns(tableName, columnValues, excludeId, null);
     }
 
     public boolean existsByColumns(String tableName,
                                    Map<String, Object> columnValues,
-                                   Long excludeId,
+                                   Object excludeId,
+                                   SqlCondition dataScopeCondition) {
+        return existsByColumns(tableName, columnValues, primaryKeyColumn(), excludeId, dataScopeCondition);
+    }
+
+    public boolean existsByColumns(String tableName,
+                                   Map<String, Object> columnValues,
+                                   String primaryKeyColumn,
+                                   Object excludeId,
                                    SqlCondition dataScopeCondition) {
         validateTableName(tableName);
+        validateIdentifier(primaryKeyColumn);
         if (columnValues == null || columnValues.isEmpty()) {
             return false;
         }
@@ -945,12 +975,12 @@ public class DynamicCrudRepository {
         }
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         if (excludeId != null) {
-            appendWhereCondition(whereClause, "id <> :excludeId");
+            appendWhereCondition(whereClause, primaryKeyColumn + " <> :excludeId");
             params.addValue("excludeId", excludeId);
         }
         appendSqlCondition(whereClause, params, dataScopeCondition);
-        String sql = buildSelectSql("SELECT COUNT(1)", tableName, whereClause) + " LIMIT 1";
-        Long count = namedJdbcTemplate.queryForObject(sql, params, Long.class);
+        String sql = buildSelectSql("SELECT COUNT(1)", tableName, whereClause);
+        Long count = jdbc().queryForObject(sql, params, Long.class);
         return count != null && count > 0;
     }
 
@@ -963,20 +993,45 @@ public class DynamicCrudRepository {
         validateTableName(tableName);
 
         Map<String, Object> insertData = prepareInsertData(tableName, data);
-        return namedJdbcTemplate.update(buildInsertSql(tableName, insertData), toSqlParams(insertData));
+        return jdbc().update(buildInsertSql(tableName, insertData), toSqlParams(insertData));
     }
 
     /**
      * 新增记录并返回自增主键。
      */
     public Long insertReturningId(String tableName, Map<String, Object> data) {
+        Object key = insertReturningKey(tableName, data, DEFAULT_PRIMARY_KEY, true);
+        if (key == null) {
+            return null;
+        }
+        if (key instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.valueOf(String.valueOf(key));
+    }
+
+    /**
+     * 新增记录并返回运行时主键。非自增主键直接返回入参中的主键值。
+     */
+    public Object insertReturningKey(String tableName,
+                                     Map<String, Object> data,
+                                     String primaryKeyColumn,
+                                     boolean autoIncrement) {
         validateTableName(tableName);
+        validateIdentifier(primaryKeyColumn);
 
         Map<String, Object> insertData = prepareInsertData(tableName, data);
+        if (!autoIncrement && !insertData.containsKey(primaryKeyColumn)) {
+            throw new BusinessException("新增操作缺少主键字段: " + primaryKeyColumn);
+        }
+        if (!autoIncrement) {
+            jdbc().update(buildInsertSql(tableName, insertData), toSqlParams(insertData));
+            return insertData.get(primaryKeyColumn);
+        }
         KeyHolder keyHolder = new GeneratedKeyHolder();
-        namedJdbcTemplate.update(buildInsertSql(tableName, insertData), toSqlParams(insertData), keyHolder, new String[] { "id" });
+        jdbc().update(buildInsertSql(tableName, insertData), toSqlParams(insertData), keyHolder, new String[] { primaryKeyColumn });
         Number key = keyHolder.getKey();
-        return key == null ? null : key.longValue();
+        return key == null ? insertData.get(primaryKeyColumn) : key;
     }
 
     // ==================== 更新操作 ====================
@@ -984,18 +1039,27 @@ public class DynamicCrudRepository {
     /**
      * 根据ID更新
      */
-    public int updateById(String tableName, Long id, Map<String, Object> data) {
+    public int updateById(String tableName, Object id, Map<String, Object> data) {
         return updateById(tableName, id, data, null);
     }
 
-    public int updateById(String tableName, Long id, Map<String, Object> data, SqlCondition dataScopeCondition) {
-        validateTableName(tableName);
+    public int updateById(String tableName, Object id, Map<String, Object> data, SqlCondition dataScopeCondition) {
+        return updateById(tableName, primaryKeyColumn(), id, data, dataScopeCondition);
+    }
 
-        Map<String, Object> updateData = prepareUpdateData(tableName, data);
+    public int updateById(String tableName,
+                          String primaryKeyColumn,
+                          Object id,
+                          Map<String, Object> data,
+                          SqlCondition dataScopeCondition) {
+        validateTableName(tableName);
+        validateIdentifier(primaryKeyColumn);
+
+        Map<String, Object> updateData = prepareUpdateData(tableName, data, primaryKeyColumn);
         MapSqlParameterSource params = toSqlParams(updateData, id);
-        String sql = appendTenantCondition(buildUpdateSql(tableName, updateData), params);
+        String sql = appendTenantCondition(buildUpdateSql(tableName, updateData, primaryKeyColumn), params, tableName);
         sql = appendSqlCondition(sql, params, dataScopeCondition);
-        return namedJdbcTemplate.update(sql, params);
+        return jdbc().update(sql, params);
     }
 
     public Long selectFirstIdByColumn(String tableName, String columnName, Object value) {
@@ -1008,8 +1072,9 @@ public class DynamicCrudRepository {
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("value", value);
-        String sql = buildSelectSql("SELECT id", tableName, whereClause) + " ORDER BY id ASC LIMIT 1";
-        List<Long> ids = namedJdbcTemplate.queryForList(sql, params, Long.class);
+        String sql = buildSelectSql("SELECT id", tableName, whereClause) + " ORDER BY id ASC";
+        sql = limitSql(sql, 1);
+        List<Long> ids = jdbc().queryForList(sql, params, Long.class);
         return ids.isEmpty() ? null : ids.get(0);
     }
 
@@ -1018,17 +1083,29 @@ public class DynamicCrudRepository {
     /**
      * 根据ID删除
      */
-    public int deleteById(String tableName, Long id, boolean logicDelete) {
+    public int deleteById(String tableName, Object id, boolean logicDelete) {
         return deleteById(tableName, id, logicDelete, null);
     }
 
-    public int deleteById(String tableName, Long id, boolean logicDelete, SqlCondition dataScopeCondition) {
+    public int deleteById(String tableName, Object id, boolean logicDelete, SqlCondition dataScopeCondition) {
+        return deleteById(tableName, primaryKeyColumn(), id, logicDelete, dataScopeCondition);
+    }
+
+    public int deleteById(String tableName,
+                          String primaryKeyColumn,
+                          Object id,
+                          boolean logicDelete,
+                          SqlCondition dataScopeCondition) {
         validateTableName(tableName);
+        validateIdentifier(primaryKeyColumn);
 
         MapSqlParameterSource params = toIdParam(id);
-        String sql = appendTenantCondition(buildDeleteSql(tableName, logicDelete), params);
+        if (logicDelete) {
+            params.addValue("deletedValue", logicDeletedValue());
+        }
+        String sql = appendTenantCondition(buildDeleteSql(tableName, logicDelete, primaryKeyColumn), params, tableName);
         sql = appendSqlCondition(sql, params, dataScopeCondition);
-        return namedJdbcTemplate.update(sql, params);
+        return jdbc().update(sql, params);
     }
 
     public int deleteByColumn(String tableName, String columnName, Object value, boolean logicDelete) {
@@ -1041,11 +1118,13 @@ public class DynamicCrudRepository {
         params.addValue("value", value);
         String sql;
         if (logicDelete) {
-            sql = "UPDATE " + tableName + " SET del_flag = '1', update_time = NOW() WHERE " + columnName + " = :value";
+            params.addValue("deletedValue", logicDeletedValue());
+            sql = "UPDATE " + tableName + " SET " + logicDeleteSetClause(tableName)
+                    + " WHERE " + columnName + " = :value";
         } else {
             sql = "DELETE FROM " + tableName + " WHERE " + columnName + " = :value";
         }
-        return namedJdbcTemplate.update(appendTenantCondition(sql, params), params);
+        return jdbc().update(appendTenantCondition(sql, params, tableName), params);
     }
 
     // ==================== 工具方法 ====================
@@ -1055,8 +1134,10 @@ public class DynamicCrudRepository {
      */
     public boolean tableExists(String tableName) {
         try {
-            Integer count = queryInformationSchemaCount(
-                    "tables", "table_name = :tableName", "tableName", tableName);
+            LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+            RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+            Integer count = jdbcTemplateProvider.jdbcTemplate(context)
+                    .queryForObject(dialect.tableExistsSql(), Integer.class, tableName);
             return count != null && count > 0;
         } catch (Exception e) {
             log.warn("[DynamicCrudRepository] 检查表是否存在失败, tableName={}", tableName, e);
@@ -1068,13 +1149,12 @@ public class DynamicCrudRepository {
      * 检查表是否有del_flag列（带缓存）
      */
     public boolean hasDelFlag(String tableName) {
-        return delFlagCache.computeIfAbsent(tableName, key -> {
+        String cacheKey = metadataCacheKey(tableName) + ":logic:" + logicDeleteColumn() + ":" + logicDeleteEnabled();
+        return delFlagCache.computeIfAbsent(cacheKey, key -> {
             try {
-                Integer count = queryInformationSchemaCount(
-                        "columns", "table_name = :tableName AND column_name = 'del_flag'", "tableName", key);
-                return count != null && count > 0;
+                return logicDeleteEnabled() && getTableColumns(tableName).contains(logicDeleteColumn());
             } catch (Exception e) {
-                log.warn("[DynamicCrudRepository] 检查del_flag失败, tableName={}", key, e);
+                log.warn("[DynamicCrudRepository] 检查del_flag失败, tableName={}", tableName, e);
                 return false;
             }
         });
@@ -1084,13 +1164,18 @@ public class DynamicCrudRepository {
      * 获取表的所有列名（带缓存）
      */
     public Set<String> getTableColumns(String tableName) {
-        return tableColumnsCache.computeIfAbsent(tableName, key -> {
+        String cacheKey = metadataCacheKey(tableName);
+        return tableColumnsCache.computeIfAbsent(cacheKey, key -> {
             try {
-                List<String> columns = queryInformationSchemaList(
-                        "column_name", "columns", "table_name = :tableName", "tableName", key);
-                return new HashSet<>(columns);
+                LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+                RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+                List<String> columns = jdbcTemplateProvider.jdbcTemplate(context)
+                        .queryForList(dialect.listColumnsSql(), String.class, tableName);
+                return columns.stream()
+                        .map(column -> StringUtils.defaultString(column).toLowerCase(Locale.ROOT))
+                        .collect(Collectors.toCollection(HashSet::new));
             } catch (Exception e) {
-                log.warn("[DynamicCrudRepository] 获取表列名失败, tableName={}", key, e);
+                log.warn("[DynamicCrudRepository] 获取表列名失败, tableName={}", tableName, e);
                 return Collections.emptySet();
             }
         });
@@ -1100,9 +1185,10 @@ public class DynamicCrudRepository {
      * 获取表的字段映射（camelCase -> snake_case）
      */
     public Map<String, String> getColumnMapping(String tableName) {
-        return columnMappingCache.computeIfAbsent(tableName, key -> {
+        String cacheKey = metadataCacheKey(tableName);
+        return columnMappingCache.computeIfAbsent(cacheKey, key -> {
             Map<String, String> mapping = new HashMap<>();
-            Set<String> columns = getTableColumns(key);
+            Set<String> columns = getTableColumns(tableName);
             for (String column : columns) {
                 String camelName = DynamicQueryGenerator.snakeToCamel(column);
                 mapping.put(camelName, column);
@@ -1116,9 +1202,17 @@ public class DynamicCrudRepository {
      * DDL 执行后清理动态表结构缓存，避免追加字段后运行时继续使用旧列集合。
      */
     public void clearTableMetadataCache(String tableName) {
-        delFlagCache.remove(tableName);
-        tableColumnsCache.remove(tableName);
-        columnMappingCache.remove(tableName);
+        String suffix = ":" + tableName;
+        delFlagCache.keySet().removeIf(key -> key.endsWith(suffix));
+        tableColumnsCache.keySet().removeIf(key -> key.endsWith(suffix));
+        columnMappingCache.keySet().removeIf(key -> key.endsWith(suffix));
+    }
+
+    public void clearTableMetadataCache(LowcodeRuntimeDataSourceContext context, String tableName) {
+        String cacheKey = metadataCacheKey(context, tableName);
+        delFlagCache.remove(cacheKey);
+        tableColumnsCache.remove(cacheKey);
+        columnMappingCache.remove(cacheKey);
     }
 
     /**
@@ -1161,7 +1255,7 @@ public class DynamicCrudRepository {
     private String buildJoinSelectClause(List<JoinField> fields, boolean distinct) {
         LinkedHashSet<String> selectItems = new LinkedHashSet<>();
         for (JoinField field : fields) {
-            selectItems.add(qualifyColumn(field.tableAlias(), field.columnName()) + " AS `" + field.fieldName() + "`");
+            selectItems.add(qualifyColumn(field.tableAlias(), field.columnName()) + " AS " + quoteIdentifier(field.fieldName()));
         }
         return "SELECT " + (distinct ? "DISTINCT " : "") + String.join(", ", selectItems);
     }
@@ -1184,11 +1278,12 @@ public class DynamicCrudRepository {
                     .append(qualifyColumn(join.tableAlias(), join.joinColumn()))
                     .append(" = ")
                     .append(qualifyColumn("t0", join.mainColumn()));
-            if (tenantId != null && getTableColumns(join.tableName()).contains("tenant_id")) {
-                sql.append(" AND ").append(qualifyColumn(join.tableAlias(), "tenant_id")).append(" = :tenantId");
+            String tenantColumn = tenantColumn();
+            if (tenantId != null && tenantStrategyEnabled() && getTableColumns(join.tableName()).contains(tenantColumn)) {
+                sql.append(" AND ").append(qualifyColumn(join.tableAlias(), tenantColumn)).append(" = :tenantId");
             }
             if (hasDelFlag(join.tableName())) {
-                sql.append(" AND ").append(qualifyColumn(join.tableAlias(), "del_flag")).append(" = '0'");
+                sql.append(" AND ").append(qualifyColumn(join.tableAlias(), logicDeleteColumn())).append(" = :logicActiveValue");
             }
         }
         return sql.toString();
@@ -1226,17 +1321,63 @@ public class DynamicCrudRepository {
         return tableAlias + "." + columnName;
     }
 
+    private String qualifyPrimaryKey(String tableAlias) {
+        return qualifyColumn(tableAlias, primaryKeyColumn());
+    }
+
+    private String primaryKeyColumn() {
+        LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+        String columnName = context == null || context.getPrimaryKey() == null
+                ? DEFAULT_PRIMARY_KEY
+                : context.getPrimaryKey().getColumnName();
+        columnName = StringUtils.defaultIfBlank(columnName, DEFAULT_PRIMARY_KEY);
+        validateIdentifier(columnName);
+        return columnName;
+    }
+
+    private String primaryKeyField() {
+        LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+        String field = context == null || context.getPrimaryKey() == null
+                ? DEFAULT_PRIMARY_KEY
+                : context.getPrimaryKey().getField();
+        field = StringUtils.defaultIfBlank(field, DEFAULT_PRIMARY_KEY);
+        validateIdentifier(field);
+        return field;
+    }
+
+    private String quoteIdentifier(String identifier) {
+        validateAlias(identifier);
+        return dialectFactory.resolve(LowcodeRuntimeDataSourceContextHolder.get()).quote(identifier);
+    }
+
+    private String paginateSql(String sql, int pageNum, int pageSize) {
+        long limit = Math.max(1, pageSize);
+        long offset = Math.max(0, pageNum - 1L) * limit;
+        return dialectFactory.resolve(LowcodeRuntimeDataSourceContextHolder.get()).paginate(sql, offset, limit);
+    }
+
+    private String limitSql(String sql, int limit) {
+        return dialectFactory.resolve(LowcodeRuntimeDataSourceContextHolder.get())
+                .paginate(sql, 0, Math.max(1, limit));
+    }
+
     private void appendTenantWhereClause(StringBuilder whereClause, MapSqlParameterSource params) {
         appendTenantWhereClause(whereClause, params, null);
     }
 
     private void appendTenantWhereClause(StringBuilder whereClause, MapSqlParameterSource params, String tableAlias) {
         Long tenantId = TenantContextHolder.getTenantId();
-        if (tenantId == null) {
+        if (tenantId == null || !tenantStrategyEnabled()) {
             return;
         }
-        appendWhereCondition(whereClause, qualifyColumn(tableAlias, "tenant_id") + " = :tenantId");
+        appendWhereCondition(whereClause, qualifyColumn(tableAlias, tenantColumn()) + " = :tenantId");
         params.addValue("tenantId", tenantId);
+    }
+
+    private void appendLogicDeleteParam(MapSqlParameterSource params) {
+        if (params != null && logicDeleteEnabled()) {
+            params.addValue("logicActiveValue", logicActiveValue());
+        }
     }
 
     private void appendWhereCondition(StringBuilder whereClause, String condition) {
@@ -1261,12 +1402,20 @@ public class DynamicCrudRepository {
     }
 
     private String appendTenantCondition(String sql, MapSqlParameterSource params) {
+        return appendTenantCondition(sql, params, null);
+    }
+
+    private String appendTenantCondition(String sql, MapSqlParameterSource params, String tableName) {
         Long tenantId = TenantContextHolder.getTenantId();
-        if (tenantId == null) {
+        if (tenantId == null || !tenantStrategyEnabled()) {
+            return sql;
+        }
+        String tenantColumn = tenantColumn();
+        if (tableName != null && !getTableColumns(tableName).contains(tenantColumn)) {
             return sql;
         }
         params.addValue("tenantId", tenantId);
-        return sql + " AND tenant_id = :tenantId";
+        return sql + " AND " + tenantColumn + " = :tenantId";
     }
 
     private String appendSqlCondition(String sql, MapSqlParameterSource params, SqlCondition condition) {
@@ -1287,18 +1436,28 @@ public class DynamicCrudRepository {
         return "INSERT INTO " + tableName + " (" + columns + ") VALUES (" + placeholders + ")";
     }
 
-    private String buildUpdateSql(String tableName, Map<String, Object> data) {
+    private String buildUpdateSql(String tableName, Map<String, Object> data, String primaryKeyColumn) {
         String setClauses = data.entrySet().stream()
                 .map(entry -> entry.getKey() + " = :" + entry.getKey())
                 .collect(Collectors.joining(", "));
-        return "UPDATE " + tableName + " SET " + setClauses + " WHERE id = :id";
+        return "UPDATE " + tableName + " SET " + setClauses + " WHERE " + primaryKeyColumn + " = :id";
     }
 
-    private String buildDeleteSql(String tableName, boolean logicDelete) {
+    private String buildDeleteSql(String tableName, boolean logicDelete, String primaryKeyColumn) {
         if (logicDelete) {
-            return "UPDATE " + tableName + " SET del_flag = '1', update_time = NOW() WHERE id = :id";
+            return "UPDATE " + tableName + " SET " + logicDeleteSetClause(tableName) + " WHERE "
+                    + primaryKeyColumn + " = :id";
         }
-        return "DELETE FROM " + tableName + " WHERE id = :id";
+        return "DELETE FROM " + tableName + " WHERE " + primaryKeyColumn + " = :id";
+    }
+
+    private String logicDeleteSetClause(String tableName) {
+        StringBuilder setClause = new StringBuilder(logicDeleteColumn()).append(" = :deletedValue");
+        String updateTimeColumn = auditUpdateTimeColumn(auditStrategy());
+        if (auditStrategyEnabled() && getTableColumns(tableName).contains(updateTimeColumn)) {
+            setClause.append(", ").append(updateTimeColumn).append(" = CURRENT_TIMESTAMP");
+        }
+        return setClause.toString();
     }
 
     private MapSqlParameterSource toSqlParams(Map<String, Object> data) {
@@ -1307,39 +1466,50 @@ public class DynamicCrudRepository {
         return params;
     }
 
-    private MapSqlParameterSource toSqlParams(Map<String, Object> data, Long id) {
+    private MapSqlParameterSource toSqlParams(Map<String, Object> data, Object id) {
         MapSqlParameterSource params = toSqlParams(data);
         appendIdParam(params, id);
         return params;
     }
 
-    private MapSqlParameterSource toIdParam(Long id) {
+    private MapSqlParameterSource toIdParam(Object id) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         appendIdParam(params, id);
         return params;
     }
 
-    private void appendIdParam(MapSqlParameterSource params, Long id) {
+    private void appendIdParam(MapSqlParameterSource params, Object id) {
         params.addValue("id", id);
     }
 
     private Integer queryInformationSchemaCount(String table, String condition, String paramName, Object value) {
         String sql = "SELECT COUNT(*) FROM information_schema." + table
                 + " WHERE " + condition + " AND table_schema = (SELECT DATABASE())";
-        return namedJdbcTemplate.queryForObject(sql, singleParam(paramName, value), Integer.class);
+        return jdbc().queryForObject(sql, singleParam(paramName, value), Integer.class);
     }
 
     private List<String> queryInformationSchemaList(String selectColumn, String table,
                                                     String condition, String paramName, Object value) {
         String sql = "SELECT " + selectColumn + " FROM information_schema." + table
                 + " WHERE " + condition + " AND table_schema = (SELECT DATABASE())";
-        return namedJdbcTemplate.queryForList(sql, singleParam(paramName, value), String.class);
+        return jdbc().queryForList(sql, singleParam(paramName, value), String.class);
     }
 
     private MapSqlParameterSource singleParam(String paramName, Object value) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         params.addValue(paramName, value);
         return params;
+    }
+
+    private String metadataCacheKey(String tableName) {
+        return metadataCacheKey(LowcodeRuntimeDataSourceContextHolder.get(), tableName);
+    }
+
+    private String metadataCacheKey(LowcodeRuntimeDataSourceContext context, String tableName) {
+        String datasourceKey = context == null || context.isMaster()
+                ? "master"
+                : String.valueOf(context.getDatasourceId());
+        return datasourceKey + ":" + tableName;
     }
 
     private void logDynamicSql(String scene, String sql, MapSqlParameterSource params) {
@@ -1354,8 +1524,12 @@ public class DynamicCrudRepository {
     }
 
     private Map<String, Object> prepareUpdateData(String tableName, Map<String, Object> data) {
+        return prepareUpdateData(tableName, data, DEFAULT_PRIMARY_KEY);
+    }
+
+    private Map<String, Object> prepareUpdateData(String tableName, Map<String, Object> data, String primaryKeyColumn) {
         Map<String, Object> updateData = prepareWriteData(data, "没有可更新的字段");
-        removeImmutableFields(updateData, "id", "tenant_id");
+        removeImmutableFields(updateData, DEFAULT_PRIMARY_KEY, primaryKeyColumn, "tenant_id", tenantColumn());
         fillUpdateAuditFields(updateData, getTableColumns(tableName));
         return updateData;
     }
@@ -1379,20 +1553,116 @@ public class DynamicCrudRepository {
         Long userId = SessionHelper.getUserId();
         Long mainOrgId = SessionHelper.getMainOrgId();
 
-        putIfColumnExists(data, columns, "tenant_id", tenantId);
-        putIfColumnExists(data, columns, "create_by", userId);
-        putIfColumnExists(data, columns, "create_dept", mainOrgId);
-        putIfColumnExists(data, columns, "create_time", now);
-        putIfColumnExists(data, columns, "update_by", userId);
-        putIfColumnExists(data, columns, "update_time", now);
+        if (tenantStrategyEnabled()) {
+            putIfColumnExists(data, columns, tenantColumn(), tenantId);
+        }
+        if (!auditStrategyEnabled()) {
+            return;
+        }
+        LowcodeAuditStrategy auditStrategy = auditStrategy();
+        putIfColumnExists(data, columns, auditCreateByColumn(auditStrategy), userId);
+        putIfColumnExists(data, columns, auditCreateDeptColumn(auditStrategy), mainOrgId);
+        putIfColumnExists(data, columns, auditCreateTimeColumn(auditStrategy), now);
+        putIfColumnExists(data, columns, auditUpdateByColumn(auditStrategy), userId);
+        putIfColumnExists(data, columns, auditUpdateTimeColumn(auditStrategy), now);
     }
 
     private void fillUpdateAuditFields(Map<String, Object> data, Set<String> columns) {
+        if (!auditStrategyEnabled()) {
+            return;
+        }
         Date now = new Date();
         Long userId = SessionHelper.getUserId();
+        LowcodeAuditStrategy auditStrategy = auditStrategy();
 
-        putIfColumnExists(data, columns, "update_by", userId);
-        putIfColumnExists(data, columns, "update_time", now);
+        putIfColumnExists(data, columns, auditUpdateByColumn(auditStrategy), userId);
+        putIfColumnExists(data, columns, auditUpdateTimeColumn(auditStrategy), now);
+    }
+
+    private boolean tenantStrategyEnabled() {
+        LowcodeTenantStrategy strategy = tenantStrategy();
+        return strategy == null || !isNoneMode(strategy.getMode());
+    }
+
+    private String tenantColumn() {
+        LowcodeTenantStrategy strategy = tenantStrategy();
+        String column = strategy == null ? null : strategy.getColumnName();
+        column = StringUtils.defaultIfBlank(column, "tenant_id");
+        validateIdentifier(column);
+        return column;
+    }
+
+    private LowcodeTenantStrategy tenantStrategy() {
+        LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+        return context == null ? null : context.getTenantStrategy();
+    }
+
+    private boolean auditStrategyEnabled() {
+        LowcodeAuditStrategy strategy = auditStrategy();
+        return strategy == null || !isNoneMode(strategy.getMode());
+    }
+
+    private LowcodeAuditStrategy auditStrategy() {
+        LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+        return context == null ? null : context.getAuditStrategy();
+    }
+
+    private String auditCreateByColumn(LowcodeAuditStrategy strategy) {
+        return auditColumn(strategy == null ? null : strategy.getCreateByColumn(), "create_by");
+    }
+
+    private String auditCreateTimeColumn(LowcodeAuditStrategy strategy) {
+        return auditColumn(strategy == null ? null : strategy.getCreateTimeColumn(), "create_time");
+    }
+
+    private String auditCreateDeptColumn(LowcodeAuditStrategy strategy) {
+        return auditColumn(strategy == null ? null : strategy.getCreateDeptColumn(), "create_dept");
+    }
+
+    private String auditUpdateByColumn(LowcodeAuditStrategy strategy) {
+        return auditColumn(strategy == null ? null : strategy.getUpdateByColumn(), "update_by");
+    }
+
+    private String auditUpdateTimeColumn(LowcodeAuditStrategy strategy) {
+        return auditColumn(strategy == null ? null : strategy.getUpdateTimeColumn(), "update_time");
+    }
+
+    private String auditColumn(String configuredColumn, String defaultColumn) {
+        String column = StringUtils.defaultIfBlank(configuredColumn, defaultColumn);
+        validateIdentifier(column);
+        return column;
+    }
+
+    private boolean logicDeleteEnabled() {
+        LowcodeLogicDeleteStrategy strategy = logicDeleteStrategy();
+        return strategy == null || !isNoneMode(strategy.getMode());
+    }
+
+    private String logicDeleteColumn() {
+        LowcodeLogicDeleteStrategy strategy = logicDeleteStrategy();
+        String column = strategy == null ? null : strategy.getColumnName();
+        column = StringUtils.defaultIfBlank(column, "del_flag");
+        validateIdentifier(column);
+        return column;
+    }
+
+    private Object logicActiveValue() {
+        LowcodeLogicDeleteStrategy strategy = logicDeleteStrategy();
+        return StringUtils.defaultIfBlank(strategy == null ? null : strategy.getActiveValue(), "0");
+    }
+
+    private Object logicDeletedValue() {
+        LowcodeLogicDeleteStrategy strategy = logicDeleteStrategy();
+        return StringUtils.defaultIfBlank(strategy == null ? null : strategy.getDeletedValue(), "1");
+    }
+
+    private LowcodeLogicDeleteStrategy logicDeleteStrategy() {
+        LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+        return context == null ? null : context.getLogicDeleteStrategy();
+    }
+
+    private boolean isNoneMode(String mode) {
+        return "NONE".equalsIgnoreCase(StringUtils.defaultString(mode));
     }
 
     private void putIfColumnExists(Map<String, Object> data, Set<String> columns, String column, Object value) {

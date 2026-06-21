@@ -1,15 +1,21 @@
 package com.mdframe.forge.plugin.generator.service.lowcode;
 
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialectFactory;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeJdbcTemplateProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 低代码受控 DDL 仓储。
@@ -19,36 +25,42 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class LowcodeDdlRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final RuntimeJdbcTemplateProvider jdbcTemplateProvider;
+    private final RuntimeDatabaseDialectFactory dialectFactory;
 
     public boolean tableExists(String tableName) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT COUNT(1)
-                FROM information_schema.tables
-                WHERE table_schema = DATABASE()
-                  AND table_name = ?
-                """, Integer.class, tableName);
+        return tableExists(LowcodeRuntimeDataSourceContext.master(tableName), tableName);
+    }
+
+    public boolean tableExists(LowcodeRuntimeDataSourceContext context, String tableName) {
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.jdbcTemplate(context);
+        RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+        Integer count = jdbcTemplate.queryForObject(dialect.tableExistsSql(), Integer.class, tableName);
         return count != null && count > 0;
     }
 
     public Set<String> listColumns(String tableName) {
-        List<String> columns = jdbcTemplate.queryForList("""
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = DATABASE()
-                  AND table_name = ?
-                """, String.class, tableName);
-        return new HashSet<>(columns);
+        return listColumns(LowcodeRuntimeDataSourceContext.master(tableName), tableName);
+    }
+
+    public Set<String> listColumns(LowcodeRuntimeDataSourceContext context, String tableName) {
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.jdbcTemplate(context);
+        RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+        List<String> columns = jdbcTemplate.queryForList(dialect.listColumnsSql(), String.class, tableName);
+        return columns.stream()
+                .map(this::normalizeIdentifier)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     public Map<String, ColumnMetadata> listColumnMetadata(String tableName) {
-        List<ColumnMetadata> columns = jdbcTemplate.query("""
-                SELECT column_name, column_type, is_nullable, column_default, extra, column_comment, generation_expression
-                FROM information_schema.columns
-                WHERE table_schema = DATABASE()
-                  AND table_name = ?
-                """, (rs, rowNum) -> new ColumnMetadata(
-                rs.getString("column_name"),
+        return listColumnMetadata(LowcodeRuntimeDataSourceContext.master(tableName), tableName);
+    }
+
+    public Map<String, ColumnMetadata> listColumnMetadata(LowcodeRuntimeDataSourceContext context, String tableName) {
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.jdbcTemplate(context);
+        RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+        List<ColumnMetadata> columns = jdbcTemplate.query(dialect.listColumnMetadataSql(), (rs, rowNum) -> new ColumnMetadata(
+                normalizeIdentifier(rs.getString("column_name")),
                 rs.getString("column_type"),
                 rs.getString("is_nullable"),
                 rs.getObject("column_default"),
@@ -56,51 +68,86 @@ public class LowcodeDdlRepository {
                 rs.getString("column_comment"),
                 rs.getString("generation_expression")
         ), tableName);
-        return columns.stream().collect(java.util.stream.Collectors.toMap(ColumnMetadata::columnName, column -> column));
+        return columns.stream().collect(Collectors.toMap(ColumnMetadata::columnName, column -> column));
     }
 
     public Set<String> listIndexes(String tableName) {
-        List<String> indexes = jdbcTemplate.queryForList("""
-                SELECT DISTINCT index_name
-                FROM information_schema.statistics
-                WHERE table_schema = DATABASE()
-                  AND table_name = ?
-                """, String.class, tableName);
-        return new HashSet<>(indexes);
+        return listIndexes(LowcodeRuntimeDataSourceContext.master(tableName), tableName);
+    }
+
+    public Set<String> listIndexes(LowcodeRuntimeDataSourceContext context, String tableName) {
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.jdbcTemplate(context);
+        RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+        List<String> indexes = jdbcTemplate.queryForList(dialect.listIndexesSql(), String.class, tableName);
+        return indexes.stream()
+                .map(this::normalizeIdentifier)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     public boolean hasAutoIncrementPrimaryId(String tableName) {
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-                SELECT data_type, column_type, column_key, extra
-                FROM information_schema.columns
-                WHERE table_schema = DATABASE()
-                  AND table_name = ?
-                  AND column_name = 'id'
-                """, tableName);
-        if (rows.isEmpty()) {
+        return hasAutoIncrementPrimaryId(LowcodeRuntimeDataSourceContext.master(tableName), tableName);
+    }
+
+    public boolean hasAutoIncrementPrimaryId(LowcodeRuntimeDataSourceContext context, String tableName) {
+        List<PrimaryKeyMetadata> primaryKeys = listPrimaryKeys(context, tableName);
+        if (primaryKeys.size() != 1) {
             return false;
         }
-        Map<String, Object> row = rows.get(0);
-        String dataType = text(row.get("data_type")).toLowerCase(Locale.ROOT);
-        String columnType = text(row.get("column_type")).toLowerCase(Locale.ROOT);
-        String columnKey = text(row.get("column_key")).toUpperCase(Locale.ROOT);
-        String extra = text(row.get("extra")).toLowerCase(Locale.ROOT);
-        return "bigint".equals(dataType)
-                && columnType.contains("bigint")
-                && "PRI".equals(columnKey)
-                && extra.contains("auto_increment");
+        PrimaryKeyMetadata primaryKey = primaryKeys.get(0);
+        return "id".equalsIgnoreCase(primaryKey.columnName())
+                && primaryKey.dataType().toLowerCase(Locale.ROOT).contains("bigint")
+                && primaryKey.autoIncrement();
+    }
+
+    public boolean hasSinglePrimaryKey(LowcodeRuntimeDataSourceContext context, String tableName) {
+        return listPrimaryKeys(context, tableName).size() == 1;
+    }
+
+    public List<PrimaryKeyMetadata> listPrimaryKeys(LowcodeRuntimeDataSourceContext context, String tableName) {
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.jdbcTemplate(context);
+        RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(dialect.primaryKeyMetadataSql(), tableName);
+        List<PrimaryKeyMetadata> primaryKeys = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String columnName = normalizeIdentifier(text(row.get("column_name")));
+            String dataType = text(row.get("data_type"));
+            String extra = text(row.get("extra"));
+            primaryKeys.add(new PrimaryKeyMetadata(columnName, dataType, isAutoIncrement(extra)));
+        }
+        return primaryKeys;
     }
 
     public void executeDdl(String ddl) {
-        log.info("[LowcodeDdlRepository] 执行低代码受控DDL: {}", ddl);
-        jdbcTemplate.execute(ddl);
+        executeDdl(LowcodeRuntimeDataSourceContext.master(null), ddl);
+    }
+
+    public void executeDdl(LowcodeRuntimeDataSourceContext context, String ddl) {
+        log.info("[LowcodeDdlRepository] 执行低代码受控DDL: datasourceId={}, tableName={}, ddl={}",
+                context == null ? null : context.getDatasourceId(),
+                context == null ? null : context.getTableName(),
+                ddl);
+        jdbcTemplateProvider.jdbcTemplate(context).execute(ddl);
     }
 
     private String text(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
 
+    private boolean isAutoIncrement(String extra) {
+        String normalized = text(extra).toLowerCase(Locale.ROOT);
+        return normalized.contains("auto_increment")
+                || normalized.contains("nextval")
+                || "yes".equalsIgnoreCase(normalized);
+    }
+
+    private String normalizeIdentifier(String value) {
+        return text(value).toLowerCase(Locale.ROOT);
+    }
+
     public record ColumnMetadata(String columnName, String columnType, String isNullable, Object columnDefault,
                                  String extra, String columnComment, String generationExpression) {
+    }
+
+    public record PrimaryKeyMetadata(String columnName, String dataType, boolean autoIncrement) {
     }
 }

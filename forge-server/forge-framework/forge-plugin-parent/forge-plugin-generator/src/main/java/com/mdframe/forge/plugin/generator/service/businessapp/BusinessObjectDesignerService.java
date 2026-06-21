@@ -11,6 +11,7 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiLowcodeDomain;
 import com.mdframe.forge.plugin.generator.domain.entity.AiLowcodeModel;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessObjectDesignVersion;
+import com.mdframe.forge.plugin.generator.domain.entity.GenDatasource;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFieldDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectDesignerDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectRelationDTO;
@@ -25,6 +26,7 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageZone;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRelationSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRuntimeDatasourceSnapshot;
 import com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper;
 import com.mdframe.forge.plugin.generator.mapper.AiLowcodeModelMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
@@ -32,10 +34,12 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessObjectDesignVersionMapp
 import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessObjectRelationMapper;
 import com.mdframe.forge.plugin.generator.service.AiCrudConfigService;
+import com.mdframe.forge.plugin.generator.service.IGenDatasourceService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDomainService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeDdlService;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeModelSchemaNormalizer;
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodeSchemaValidator;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectDesignerVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectRelationVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectVO;
@@ -70,6 +74,8 @@ public class BusinessObjectDesignerService {
     private static final String VIEW_SCHEMA_OPTION_KEY = "viewSchema";
     private static final String LINKAGE_SCHEMA_OPTION_KEY = "linkageSchema";
     private static final String LINKAGE_SCHEMA_MANAGED_BY = "linkageSchema";
+    private static final String OBJECT_OPTION_RUNTIME_DATASOURCE_ID = "runtimeDatasourceId";
+    private static final String OBJECT_OPTION_RUNTIME_DATASOURCE = "runtimeDatasource";
     private static final Set<String> FORM_FIELD_COMPONENT_KEYS = Set.of(
             "input", "textarea", "number", "inputNumber", "integer", "money", "date", "datetime", "time",
             "switch", "select", "radio", "checkbox", "dictSelect", "cascader",
@@ -116,6 +122,8 @@ public class BusinessObjectDesignerService {
     private final LowcodeDdlService ddlService;
     private final LowcodeModelSchemaNormalizer schemaNormalizer;
     private final LowcodeSchemaValidator schemaValidator;
+    private final IGenDatasourceService datasourceService;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
     private final BusinessFieldSchemaService fieldSchemaService;
     private final BusinessDocumentConfigService documentConfigService;
     private final BusinessAppService businessAppService;
@@ -452,6 +460,7 @@ public class BusinessObjectDesignerService {
         objectSchema.setName(StringUtils.defaultIfBlank(objectSchema.getName(), object.getObjectName()));
         objectSchema.setDescription(StringUtils.defaultIfBlank(objectSchema.getDescription(), object.getDescription()));
         target.setObject(objectSchema);
+        applyRuntimeDatasourceFromObjectOptions(object, target);
         return schemaNormalizer.normalizeModelFields(target, true);
     }
 
@@ -495,6 +504,12 @@ public class BusinessObjectDesignerService {
         target.setStatus("ENABLED");
         target.setTenantEnabled(true);
         target.setMasterData("MASTER".equalsIgnoreCase(object.getObjectType()));
+        LowcodeRuntimeDatasourceSnapshot runtimeDatasource = modelSchema.getRuntimeDatasource();
+        target.setRuntimeDatasourceId(runtimeDatasource == null ? null : runtimeDatasource.getDatasourceId());
+        target.setRuntimeDatasourceCode(runtimeDatasource == null ? null : runtimeDatasource.getDatasourceCode());
+        target.setRuntimeTableName(StringUtils.defaultIfBlank(
+                runtimeDatasource == null ? null : runtimeDatasource.getTableName(),
+                modelSchema.getTableName()));
         target.setModelSchema(writeJson(modelSchema, "modelSchema"));
         if (target.getId() == null) {
             lowcodeModelMapper.insert(target);
@@ -525,10 +540,17 @@ public class BusinessObjectDesignerService {
         }
         LowcodeDomainRef domain = modelSchema.getDomain();
         LowcodeObjectSchema lowcodeObject = modelSchema.getObject();
+        LowcodeRuntimeDatasourceSnapshot runtimeDatasource = modelSchema.getRuntimeDatasource();
         target.setDomainId(domain == null ? target.getDomainId() : domain.getId());
         target.setDomainCode(domain == null ? target.getDomainCode() : domain.getCode());
         target.setObjectCode(lowcodeObject == null ? resolveModelCode(object) : lowcodeObject.getCode());
         target.setObjectName(object.getObjectName());
+        target.setRuntimeDatasourceId(runtimeDatasource == null ? null : runtimeDatasource.getDatasourceId());
+        target.setRuntimeDatasourceCode(runtimeDatasource == null ? null : runtimeDatasource.getDatasourceCode());
+        target.setRuntimeDatasourceSnapshot(writeJson(runtimeDatasource, "runtimeDatasourceSnapshot"));
+        target.setRuntimeTableName(StringUtils.defaultIfBlank(
+                runtimeDatasource == null ? null : runtimeDatasource.getTableName(),
+                modelSchema.getTableName()));
         target.setModelSchema(writeJson(modelSchema, "modelSchema"));
         target.setPageSchema(writeJson(pageSchema, "pageSchema"));
         if (target.getId() == null) {
@@ -537,6 +559,32 @@ public class BusinessObjectDesignerService {
             crudConfigService.updateById(target);
         }
         return target;
+    }
+
+    private void applyRuntimeDatasourceFromObjectOptions(AiBusinessObject object, LowcodeModelSchema schema) {
+        if (object == null || schema == null || schema.getRuntimeDatasource() != null) {
+            return;
+        }
+        Long datasourceId = resolveRuntimeDatasourceId(object);
+        if (datasourceId == null) {
+            return;
+        }
+        GenDatasource datasource = datasourceService.getById(datasourceId);
+        if (datasource == null || !Integer.valueOf(1).equals(datasource.getIsEnabled())) {
+            throw new BusinessException("运行数据源不存在或已禁用");
+        }
+        schema.setRuntimeDatasource(runtimeDataSourceResolver.buildSnapshot(
+                datasource, schema.getTableName(), schema.getTableMode()));
+    }
+
+    private Long resolveRuntimeDatasourceId(AiBusinessObject object) {
+        Map<String, Object> options = readMap(object.getOptions());
+        Long datasourceId = numberAsLong(options.get(OBJECT_OPTION_RUNTIME_DATASOURCE_ID));
+        if (datasourceId != null) {
+            return datasourceId;
+        }
+        Map<String, Object> runtimeDatasource = mapValue(options.get(OBJECT_OPTION_RUNTIME_DATASOURCE));
+        return numberAsLong(runtimeDatasource.get("datasourceId"));
     }
 
     private void applyObjectFields(AiBusinessObject object, BusinessObjectDesignerDTO dto) {

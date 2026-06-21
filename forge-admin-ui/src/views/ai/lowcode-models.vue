@@ -539,7 +539,7 @@ async function selectDomain(domain) {
 async function loadDatasources() {
   datasourceLoading.value = true
   try {
-    const res = await genDatasourceEnabled()
+    const res = await genDatasourceEnabled('LOWCODE_RUNTIME')
     datasources.value = res.data || []
     ensureDefaultDatasourceSelected()
   }

@@ -275,8 +275,8 @@ public class BusinessFieldDesignService {
             return false;
         }
         try {
-            return ddlService.tableExists(modelSchema.getTableName())
-                    && ddlService.listColumns(modelSchema.getTableName()).contains(existing.getColumnName());
+            return ddlService.tableExists(modelSchema)
+                    && ddlService.listColumns(modelSchema).contains(existing.getColumnName());
         } catch (Exception e) {
             throw new BusinessException("无法确认数据表列状态，暂不能修改字段英文名或列名");
         }

@@ -164,7 +164,7 @@ public class BusinessTriggerSchedulerService {
 
         LocalDateTime dedupeSince = today.atStartOfDay();
         for (Map<String, Object> row : rows) {
-            String recordId = readRecordId(row);
+            String recordId = readRecordId(configKey, row);
             if (StringUtils.isBlank(recordId)) {
                 continue;
             }
@@ -304,9 +304,17 @@ public class BusinessTriggerSchedulerService {
                 .build();
     }
 
-    private String readRecordId(Map<String, Object> row) {
+    private String readRecordId(String configKey, Map<String, Object> row) {
         if (row == null) {
             return null;
+        }
+        try {
+            Object recordId = dynamicCrudService.resolveRecordId(configKey, row);
+            if (recordId != null) {
+                return String.valueOf(recordId);
+            }
+        } catch (Exception e) {
+            log.debug("[定时触发] 按运行主键解析记录ID失败, configKey={}: {}", configKey, e.getMessage());
         }
         Object value = row.get("id");
         if (value == null) {

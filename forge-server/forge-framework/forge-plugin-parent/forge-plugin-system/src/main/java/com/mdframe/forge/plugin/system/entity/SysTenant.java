@@ -99,6 +99,17 @@ public class SysTenant extends BaseEntity {
      * 系统主题（light-亮色，dark-暗色，auto-跟随系统等）
      */
     private String systemTheme;
+
+    /**
+     * 默认业务数据源ID
+     */
+    private Long defaultBusinessDatasourceId;
+
+    /**
+     * 默认业务数据源编码
+     */
+    private String defaultBusinessDatasourceCode;
+
     /**
     * 主题配置
     */

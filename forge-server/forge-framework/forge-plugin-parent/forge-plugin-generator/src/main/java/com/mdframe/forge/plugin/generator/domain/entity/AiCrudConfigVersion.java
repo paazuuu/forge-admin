@@ -54,6 +54,26 @@ public class AiCrudConfigVersion extends TenantEntity {
 
     private String options;
 
+    private Long runtimeDatasourceId;
+
+    private String runtimeDatasourceCode;
+
+    private String runtimeDatasourceSnapshot;
+
+    private String runtimeTableName;
+
+    private String primaryKeyField;
+
+    private String primaryKeyColumn;
+
+    private String primaryKeyType;
+
+    private String tenantStrategy;
+
+    private String auditStrategy;
+
+    private String logicDeleteStrategy;
+
     private String publishSnapshot;
 
     private String remark;

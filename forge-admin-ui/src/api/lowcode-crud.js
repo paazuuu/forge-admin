@@ -231,8 +231,10 @@ export function lowcodeImportDbTableModel(data) {
   return request.post('/ai/lowcode/model/import-db-table', data)
 }
 
-export function genDatasourceEnabled() {
-  return request.get('/generator/datasource/enabled')
+export function genDatasourceEnabled(usageScope) {
+  return request.get('/generator/datasource/enabled', {
+    params: usageScope ? { usageScope } : undefined,
+  })
 }
 
 export function genDatasourceTables(datasourceId) {

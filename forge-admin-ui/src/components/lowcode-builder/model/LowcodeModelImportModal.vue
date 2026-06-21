@@ -200,7 +200,7 @@ async function bootstrap() {
 async function loadDatasources() {
   datasourceLoading.value = true
   try {
-    const res = await genDatasourceEnabled()
+    const res = await genDatasourceEnabled('LOWCODE_RUNTIME')
     datasources.value = res.data || []
     const current = datasources.value.find(item => item.datasourceId === selectedDatasourceId.value)
     const fallback = current || datasources.value.find(item => item.isDefault === 1) || datasources.value[0]

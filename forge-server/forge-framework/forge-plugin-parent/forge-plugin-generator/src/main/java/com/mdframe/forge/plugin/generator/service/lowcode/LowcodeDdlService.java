@@ -5,6 +5,8 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeIndexSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRelationSchema;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudRepository;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeDdlPreviewVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +31,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class LowcodeDdlService {
 
-    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-z][a-z0-9_]{1,63}$");
+    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
     private static final Set<String> INDEXABLE_TYPES = Set.of(
             "varchar", "char", "int", "bigint", "decimal", "date", "datetime", "time", "tinyint"
     );
@@ -37,23 +39,36 @@ public class LowcodeDdlService {
     private final LowcodeSchemaValidator schemaValidator;
     private final LowcodeDdlRepository ddlRepository;
     private final DynamicCrudRepository dynamicCrudRepository;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
 
     public LowcodeDdlPreviewVO previewCreateTable(LowcodeModelSchema modelSchema) {
         schemaValidator.validateModel(modelSchema);
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
         LowcodeDdlPreviewVO preview = new LowcodeDdlPreviewVO();
-        preview.setTableName(modelSchema.getTableName());
+        preview.setTableName(context.getTableName());
 
-        boolean tableExists = ddlRepository.tableExists(modelSchema.getTableName());
+        boolean tableExists = ddlRepository.tableExists(context, context.getTableName());
         preview.setTableExists(tableExists);
         if (!tableExists) {
-            preview.getDdlStatements().add(buildCreateTableSql(modelSchema, preview.getWarnings()));
-        } else {
-            if (!ddlRepository.hasAutoIncrementPrimaryId(modelSchema.getTableName())) {
+            if (!context.isAllowDdl()) {
                 preview.setExecutable(false);
-                preview.getWarnings().add("已有表必须包含 `id` bigint AUTO_INCREMENT PRIMARY KEY 后才能绑定为低代码模型");
+                preview.getWarnings().add("运行数据源不允许在线DDL，请先在目标库创建数据表");
+                preview.getDdlStatements().add(buildCreateTableSql(modelSchema, preview.getWarnings()));
                 return preview;
             }
-            preview.getDdlStatements().addAll(buildAddColumnSql(modelSchema, preview.getWarnings()));
+            preview.getDdlStatements().add(buildCreateTableSql(modelSchema, preview.getWarnings()));
+        } else {
+            if (!ddlRepository.hasSinglePrimaryKey(context, context.getTableName())) {
+                preview.setExecutable(false);
+                preview.getWarnings().add("已有表必须包含单字段主键后才能绑定为可写低代码模型");
+                return preview;
+            }
+            preview.getDdlStatements().addAll(buildAddColumnSql(context, modelSchema, preview.getWarnings()));
+            if (!preview.getDdlStatements().isEmpty() && !context.isAllowDdl()) {
+                preview.setExecutable(false);
+                preview.getWarnings().add("运行数据源不允许在线DDL，请由数据库管理员手工同步表结构");
+                return preview;
+            }
         }
         preview.setExecutable(true);
         if (preview.getDdlStatements().isEmpty()) {
@@ -68,11 +83,15 @@ public class LowcodeDdlService {
         if (!Boolean.TRUE.equals(preview.getExecutable())) {
             throw new BusinessException("DDL预览不可执行");
         }
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+        if (!context.isAllowDdl()) {
+            throw new BusinessException("运行数据源不允许在线DDL");
+        }
         for (String ddl : preview.getDdlStatements()) {
             assertSafeDdl(ddl);
-            ddlRepository.executeDdl(ddl);
+            ddlRepository.executeDdl(context, ddl);
         }
-        dynamicCrudRepository.clearTableMetadataCache(modelSchema.getTableName());
+        dynamicCrudRepository.clearTableMetadataCache(context.getTableName());
     }
 
     public boolean tableExists(String tableName) {
@@ -80,14 +99,32 @@ public class LowcodeDdlService {
         return ddlRepository.tableExists(tableName);
     }
 
+    public boolean tableExists(LowcodeModelSchema modelSchema) {
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+        validateIdentifier(context.getTableName(), "表名");
+        return ddlRepository.tableExists(context, context.getTableName());
+    }
+
     public boolean hasAutoIncrementPrimaryId(String tableName) {
         validateIdentifier(tableName, "表名");
         return ddlRepository.hasAutoIncrementPrimaryId(tableName);
     }
 
+    public boolean hasSinglePrimaryKey(LowcodeModelSchema modelSchema) {
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+        validateIdentifier(context.getTableName(), "表名");
+        return ddlRepository.hasSinglePrimaryKey(context, context.getTableName());
+    }
+
     public Set<String> listColumns(String tableName) {
         validateIdentifier(tableName, "表名");
         return ddlRepository.listColumns(tableName);
+    }
+
+    public Set<String> listColumns(LowcodeModelSchema modelSchema) {
+        LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+        validateIdentifier(context.getTableName(), "表名");
+        return ddlRepository.listColumns(context, context.getTableName());
     }
 
     private String buildCreateTableSql(LowcodeModelSchema modelSchema, List<String> warnings) {
@@ -115,31 +152,35 @@ public class LowcodeDdlService {
                 + "'";
     }
 
-    private List<String> buildAddColumnSql(LowcodeModelSchema modelSchema, List<String> warnings) {
-        Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata = ddlRepository.listColumnMetadata(modelSchema.getTableName());
+    private List<String> buildAddColumnSql(LowcodeRuntimeDataSourceContext context,
+                                           LowcodeModelSchema modelSchema,
+                                           List<String> warnings) {
+        Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata =
+                ddlRepository.listColumnMetadata(context, context.getTableName());
         Set<String> existingColumns = columnMetadata.keySet();
         List<String> ddlList = new ArrayList<>();
         List<String> addedColumns = new ArrayList<>();
-        appendMissingSystemColumns(modelSchema.getTableName(), existingColumns, ddlList);
+        appendMissingSystemColumns(modelSchema, context.getTableName(), existingColumns, ddlList);
         for (LowcodeFieldSchema field : businessFields(modelSchema)) {
             if (existingColumns.contains(field.getColumnName())) {
                 continue;
             }
-            ddlList.add("ALTER TABLE `" + modelSchema.getTableName() + "` ADD COLUMN "
+            ddlList.add("ALTER TABLE `" + context.getTableName() + "` ADD COLUMN "
                     + buildColumnDefinition(field, false));
             addedColumns.add(field.getColumnName());
         }
         if (!addedColumns.isEmpty()) {
             warnings.add("新增字段发布时将追加数据表列: " + String.join("、", addedColumns));
         }
-        appendExistingColumnChanges(modelSchema, columnMetadata, ddlList, warnings);
-        appendMissingIndexes(modelSchema, ddlRepository.listIndexes(modelSchema.getTableName()), ddlList, warnings);
+        appendExistingColumnChanges(context.getTableName(), modelSchema, columnMetadata, ddlList, warnings);
+        appendMissingIndexes(modelSchema, context.getTableName(), ddlRepository.listIndexes(context, context.getTableName()), ddlList, warnings);
         warnings.add("已有表在线变更仅追加缺失字段、同步字段长度/类型/是否必填和索引，不会删除或重命名字段");
         warnings.add("必填字段只有配置默认值时才同步为 NOT NULL；未配置默认值时由运行态表单校验，数据库列保持可空");
         return ddlList;
     }
 
-    private void appendExistingColumnChanges(LowcodeModelSchema modelSchema,
+    private void appendExistingColumnChanges(String tableName,
+                                             LowcodeModelSchema modelSchema,
                                              Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata,
                                              List<String> ddlList,
                                              List<String> warnings) {
@@ -169,27 +210,34 @@ public class LowcodeDdlService {
                     warnings.add("字段 " + fieldLabel(field) + " 长度变小，若历史数据超长数据库可能拒绝执行");
                 }
             }
-            ddlList.add("ALTER TABLE `" + modelSchema.getTableName() + "` MODIFY COLUMN "
+            ddlList.add("ALTER TABLE `" + tableName + "` MODIFY COLUMN "
                     + (typeChanged ? buildColumnDefinition(field, false)
                     : buildExistingColumnDefinition(metadata, field, expectedRequired)));
         }
     }
 
-    private void appendMissingSystemColumns(String tableName, Set<String> existingColumns, List<String> ddlList) {
-        appendMissingColumn(tableName, existingColumns, ddlList, "tenant_id",
-                "`tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户编号'");
-        appendMissingColumn(tableName, existingColumns, ddlList, "del_flag",
-                "`del_flag` char(1) NOT NULL DEFAULT '0' COMMENT '删除标志'");
-        appendMissingColumn(tableName, existingColumns, ddlList, "create_by",
-                "`create_by` bigint DEFAULT NULL COMMENT '创建人ID'");
-        appendMissingColumn(tableName, existingColumns, ddlList, "create_time",
-                "`create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'");
-        appendMissingColumn(tableName, existingColumns, ddlList, "create_dept",
-                "`create_dept` bigint DEFAULT NULL COMMENT '创建部门ID'");
-        appendMissingColumn(tableName, existingColumns, ddlList, "update_by",
-                "`update_by` bigint DEFAULT NULL COMMENT '更新人ID'");
-        appendMissingColumn(tableName, existingColumns, ddlList, "update_time",
-                "`update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'");
+    private void appendMissingSystemColumns(LowcodeModelSchema modelSchema, String tableName,
+                                            Set<String> existingColumns, List<String> ddlList) {
+        if (usesForgeTenant(modelSchema)) {
+            appendMissingColumn(tableName, existingColumns, ddlList, tenantColumn(modelSchema),
+                    "`" + tenantColumn(modelSchema) + "` bigint NOT NULL DEFAULT 1 COMMENT '租户编号'");
+        }
+        if (usesLogicDelete(modelSchema)) {
+            appendMissingColumn(tableName, existingColumns, ddlList, logicDeleteColumn(modelSchema),
+                    "`" + logicDeleteColumn(modelSchema) + "` char(1) NOT NULL DEFAULT '0' COMMENT '删除标志'");
+        }
+        if (usesForgeAudit(modelSchema)) {
+            appendMissingColumn(tableName, existingColumns, ddlList, "create_by",
+                    "`create_by` bigint DEFAULT NULL COMMENT '创建人ID'");
+            appendMissingColumn(tableName, existingColumns, ddlList, "create_time",
+                    "`create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'");
+            appendMissingColumn(tableName, existingColumns, ddlList, "create_dept",
+                    "`create_dept` bigint DEFAULT NULL COMMENT '创建部门ID'");
+            appendMissingColumn(tableName, existingColumns, ddlList, "update_by",
+                    "`update_by` bigint DEFAULT NULL COMMENT '更新人ID'");
+            appendMissingColumn(tableName, existingColumns, ddlList, "update_time",
+                    "`update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'");
+        }
     }
 
     private void appendMissingColumn(String tableName, Set<String> existingColumns, List<String> ddlList,
@@ -197,6 +245,33 @@ public class LowcodeDdlService {
         if (!existingColumns.contains(columnName)) {
             ddlList.add("ALTER TABLE `" + tableName + "` ADD COLUMN " + columnDefinition);
         }
+    }
+
+    private boolean usesForgeTenant(LowcodeModelSchema modelSchema) {
+        String mode = modelSchema.getTenantStrategy() == null ? null : modelSchema.getTenantStrategy().getMode();
+        return "FORGE_TENANT_ID".equalsIgnoreCase(StringUtils.defaultIfBlank(mode, "FORGE_TENANT_ID"));
+    }
+
+    private String tenantColumn(LowcodeModelSchema modelSchema) {
+        return modelSchema.getTenantStrategy() == null
+                ? "tenant_id"
+                : StringUtils.defaultIfBlank(modelSchema.getTenantStrategy().getColumnName(), "tenant_id");
+    }
+
+    private boolean usesForgeAudit(LowcodeModelSchema modelSchema) {
+        String mode = modelSchema.getAuditStrategy() == null ? null : modelSchema.getAuditStrategy().getMode();
+        return "FORGE_COLUMNS".equalsIgnoreCase(StringUtils.defaultIfBlank(mode, "FORGE_COLUMNS"));
+    }
+
+    private boolean usesLogicDelete(LowcodeModelSchema modelSchema) {
+        String mode = modelSchema.getLogicDeleteStrategy() == null ? null : modelSchema.getLogicDeleteStrategy().getMode();
+        return "DEL_FLAG".equalsIgnoreCase(StringUtils.defaultIfBlank(mode, "DEL_FLAG"));
+    }
+
+    private String logicDeleteColumn(LowcodeModelSchema modelSchema) {
+        return modelSchema.getLogicDeleteStrategy() == null
+                ? "del_flag"
+                : StringUtils.defaultIfBlank(modelSchema.getLogicDeleteStrategy().getColumnName(), "del_flag");
     }
 
     private void appendIndexDefinitions(LowcodeModelSchema modelSchema, List<String> definitions, List<String> warnings) {
@@ -229,7 +304,7 @@ public class LowcodeDdlService {
         }
     }
 
-    private void appendMissingIndexes(LowcodeModelSchema modelSchema, Set<String> existingIndexNames,
+    private void appendMissingIndexes(LowcodeModelSchema modelSchema, String tableName, Set<String> existingIndexNames,
                                       List<String> ddlList, List<String> warnings) {
         Set<String> emitted = new HashSet<>(existingIndexNames);
         List<String> definitions = new ArrayList<>();
@@ -239,7 +314,7 @@ public class LowcodeDdlService {
             if (StringUtils.isBlank(indexName) || emitted.contains(indexName)) {
                 continue;
             }
-            ddlList.add("ALTER TABLE `" + modelSchema.getTableName() + "` ADD " + definition);
+            ddlList.add("ALTER TABLE `" + tableName + "` ADD " + definition);
             emitted.add(indexName);
         }
     }

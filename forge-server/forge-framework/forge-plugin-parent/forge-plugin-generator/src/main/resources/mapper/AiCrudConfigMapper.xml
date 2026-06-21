@@ -37,6 +37,16 @@
         <result column="domain_code" property="domainCode"/>
         <result column="object_code" property="objectCode"/>
         <result column="object_name" property="objectName"/>
+        <result column="runtime_datasource_id" property="runtimeDatasourceId"/>
+        <result column="runtime_datasource_code" property="runtimeDatasourceCode"/>
+        <result column="runtime_datasource_snapshot" property="runtimeDatasourceSnapshot"/>
+        <result column="runtime_table_name" property="runtimeTableName"/>
+        <result column="primary_key_field" property="primaryKeyField"/>
+        <result column="primary_key_column" property="primaryKeyColumn"/>
+        <result column="primary_key_type" property="primaryKeyType"/>
+        <result column="tenant_strategy" property="tenantStrategy"/>
+        <result column="audit_strategy" property="auditStrategy"/>
+        <result column="logic_delete_strategy" property="logicDeleteStrategy"/>
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
         <result column="create_dept" property="createDept"/>
@@ -79,6 +89,16 @@
         domain_code,
         object_code,
         object_name,
+        runtime_datasource_id,
+        runtime_datasource_code,
+        runtime_datasource_snapshot,
+        runtime_table_name,
+        primary_key_field,
+        primary_key_column,
+        primary_key_type,
+        tenant_strategy,
+        audit_strategy,
+        logic_delete_strategy,
         create_by,
         create_time,
         create_dept,

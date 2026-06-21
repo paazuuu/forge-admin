@@ -20,6 +20,16 @@
         <result column="edit_schema" property="editSchema"/>
         <result column="api_config" property="apiConfig"/>
         <result column="options" property="options"/>
+        <result column="runtime_datasource_id" property="runtimeDatasourceId"/>
+        <result column="runtime_datasource_code" property="runtimeDatasourceCode"/>
+        <result column="runtime_datasource_snapshot" property="runtimeDatasourceSnapshot"/>
+        <result column="runtime_table_name" property="runtimeTableName"/>
+        <result column="primary_key_field" property="primaryKeyField"/>
+        <result column="primary_key_column" property="primaryKeyColumn"/>
+        <result column="primary_key_type" property="primaryKeyType"/>
+        <result column="tenant_strategy" property="tenantStrategy"/>
+        <result column="audit_strategy" property="auditStrategy"/>
+        <result column="logic_delete_strategy" property="logicDeleteStrategy"/>
         <result column="publish_snapshot" property="publishSnapshot"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
@@ -47,6 +57,16 @@
         edit_schema,
         api_config,
         options,
+        runtime_datasource_id,
+        runtime_datasource_code,
+        runtime_datasource_snapshot,
+        runtime_table_name,
+        primary_key_field,
+        primary_key_column,
+        primary_key_type,
+        tenant_strategy,
+        audit_strategy,
+        logic_delete_strategy,
         publish_snapshot,
         remark,
         create_by,
