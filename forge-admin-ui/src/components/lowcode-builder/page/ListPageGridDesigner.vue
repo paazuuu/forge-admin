@@ -863,7 +863,7 @@
             <!-- Search / Table 字段配置 -->
             <template v-if="isFieldConfigurableBlock(selectedBlock.blockType)">
               <n-form-item :label="resolveFieldConfigLabel(selectedBlock.blockType)">
-                <n-button size="small" type="primary" secondary @click="fieldDrawerOpen = true">
+                <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
                   配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
                 </n-button>
               </n-form-item>
@@ -1159,6 +1159,17 @@
                         placeholder="行距"
                         @update:value="patchBlockProps(selectedBlock.id, { searchYGap: $event ?? 16 })"
                       />
+                    </div>
+                  </n-form-item>
+                  <n-form-item label="查询条件">
+                    <div class="field-config-entry">
+                      <div>
+                        <strong>{{ resolveBlockFieldCount(selectedBlock, 'search') }} 个查询字段</strong>
+                        <span>配置查询字段、查询方式、组件类型和映射字段。</span>
+                      </div>
+                      <n-button size="small" type="primary" secondary @click="openFieldDrawer('search')">
+                        配置查询条件
+                      </n-button>
                     </div>
                   </n-form-item>
                   <n-form-item label="表格展示">
@@ -1772,7 +1783,7 @@
 
             <template v-if="selectedBlock.blockType === 'detail-info'">
               <n-form-item label="详情字段">
-                <n-button size="small" type="primary" secondary @click="fieldDrawerOpen = true">
+                <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
                   配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
                 </n-button>
               </n-form-item>
@@ -2314,11 +2325,11 @@
     </aside>
 
     <n-drawer v-model:show="fieldDrawerOpen" :width="680" placement="right">
-      <n-drawer-content :title="`配置字段 · ${selectedBlockMeta?.title || ''}`" closable>
+      <n-drawer-content :title="`配置${selectedFieldDrawerTitle} · ${selectedBlockMeta?.title || ''}`" closable>
         <div v-if="selectedBlock" class="field-config">
           <div class="field-config-section">
             <div class="section-title">
-              已选字段 ({{ selectedBlock.fieldRefs?.length || 0 }})
+              已选{{ selectedFieldDrawerTitle }} ({{ selectedFieldRefs.length || 0 }})
             </div>
             <draggable
               :model-value="selectedFieldsList"
@@ -2332,8 +2343,8 @@
                 <div
                   class="selected-row"
                   :class="{
-                    search: selectedBlock.blockType === 'search-form',
-                    table: ['data-table', 'AiCrudPage', 'AiTable', 'AiForm', 'detail-info'].includes(selectedBlock.blockType),
+                    search: selectedBlockZoneKey === 'search',
+                    table: selectedBlockZoneKey !== 'search',
                   }"
                 >
                   <span class="f-handle">☰</span>
@@ -2345,7 +2356,7 @@
                   <button type="button" class="f-remove" @click="toggleField(element.field, false)">
                     移除
                   </button>
-                  <div v-if="selectedBlock.blockType === 'search-form'" class="field-setting-row search-setting-row">
+                  <div v-if="selectedBlockZoneKey === 'search'" class="field-setting-row search-setting-row">
                     <n-select
                       :value="resolveFieldSetting(element.field).queryType || element.queryType || 'like'"
                       size="tiny"
@@ -2376,7 +2387,7 @@
                       @update:value="updateFieldSetting(element.field, { align: $event || 'left' })"
                     />
                   </div>
-                  <div v-if="['data-table', 'AiCrudPage', 'AiTable', 'AiForm', 'detail-info'].includes(selectedBlock.blockType)" class="field-setting-row table-setting-row">
+                  <div v-if="selectedBlockZoneKey !== 'search' && ['data-table', 'AiCrudPage', 'AiTable', 'AiForm', 'detail-info'].includes(selectedBlock.blockType)" class="field-setting-row table-setting-row">
                     <n-select
                       :value="resolveFieldSetting(element.field).renderType || resolveDefaultTableRenderType(element)"
                       size="tiny"
@@ -2402,7 +2413,7 @@
                       @update:value="updateFieldSetting(element.field, { targetField: $event })"
                     />
                   </div>
-                  <div v-if="['data-table', 'AiCrudPage', 'AiTable'].includes(selectedBlock.blockType)" class="field-setting-row column-link-row">
+                  <div v-if="selectedBlockZoneKey !== 'search' && ['data-table', 'AiCrudPage', 'AiTable'].includes(selectedBlock.blockType)" class="field-setting-row column-link-row">
                     <label class="field-setting-control">
                       <span>文字颜色</span>
                       <n-color-picker
@@ -2473,7 +2484,7 @@
                 </div>
               </template>
             </draggable>
-            <div v-if="!(selectedBlock.fieldRefs?.length)" class="empty">
+            <div v-if="!selectedFieldRefs.length" class="empty">
               当前没有选择字段
             </div>
           </div>
@@ -2532,7 +2543,7 @@
                   {{ activeAction.label || '自定义按钮' }}
                 </div>
                 <div class="action-editor-desc">
-                  支持站内跳转、外部链接、调用 API 和刷新列表；目标地址和参数值可使用 :id 或 ${field} 占位符。
+                  支持站内跳转、外部链接、调用 API、发起主流程、执行触发器和刷新列表；目标地址和参数值可使用 :id 或 ${field} 占位符。
                 </div>
               </div>
               <n-button quaternary type="error" @click="removeCustomAction(activeActionIndex)">
@@ -2583,14 +2594,29 @@
                 <n-form-item label="打开方式">
                   <n-select
                     :value="activeAction.openTarget || '_self'"
-                    :disabled="['refresh', 'CALL_API'].includes(resolveActionBehaviorValue(activeAction.actionType))"
+                    :disabled="['refresh', 'CALL_API', 'START_FLOW', 'TRIGGER'].includes(resolveActionBehaviorValue(activeAction.actionType))"
                     :options="actionOpenTargetOptions"
                     @update:value="updateActiveCustomAction({ openTarget: $event })"
                   />
                 </n-form-item>
               </div>
 
-              <n-form-item v-if="!isApiCustomAction(activeAction)" label="目标地址 / 表单">
+              <n-form-item v-if="isStartFlowCustomAction(activeAction)" label="主流程">
+                <div class="main-flow-action-hint">
+                  <strong>使用“流程与自动化”中配置的主流程</strong>
+                  <span>这里只维护按钮名称、位置、权限、确认提示和成功失败文案。</span>
+                </div>
+              </n-form-item>
+
+              <n-form-item v-else-if="isTriggerCustomAction(activeAction)" label="触发器标识">
+                <n-input
+                  :value="activeAction.actionConfig?.triggerCode || activeAction.routePath || ''"
+                  placeholder="例如：customer_notify"
+                  @update:value="updateActiveGenericActionConfig({ triggerCode: $event || '' })"
+                />
+              </n-form-item>
+
+              <n-form-item v-else-if="!isApiCustomAction(activeAction)" label="目标地址 / 表单">
                 <div class="action-form-grid">
                   <n-input
                     :value="activeAction.routePath"
@@ -2745,7 +2771,7 @@
                 </n-form-item>
               </div>
 
-              <n-form-item v-if="!isApiCustomAction(activeAction)" label="参数映射">
+              <n-form-item v-if="isParamConfigurableAction(activeAction)" label="参数映射">
                 <div class="action-param-editor">
                   <div
                     v-for="(param, paramIdx) in (activeAction.params || [])"
@@ -2919,9 +2945,13 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  customActions: {
+    type: Array,
+    default: null,
+  },
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'update:customActions'])
 
 const rowHeight = 32
 const gap = 8
@@ -2967,6 +2997,7 @@ const blockWidthModeOptions = [
 const actionPositionOptions = [
   { label: '工具栏', value: 'toolbar' },
   { label: '行操作列', value: 'row' },
+  { label: '详情页', value: 'detail' },
 ]
 const actionTypeOptions = [
   { label: '默认', value: 'default' },
@@ -2980,6 +3011,8 @@ const actionBehaviorOptions = [
   { label: '站内跳转', value: 'route' },
   { label: '外部链接', value: 'external' },
   { label: '调用 API', value: 'CALL_API' },
+  { label: '发起主流程', value: 'START_FLOW' },
+  { label: '执行触发器', value: 'TRIGGER' },
   { label: '刷新列表', value: 'refresh' },
 ]
 const actionOpenTargetOptions = [
@@ -3169,6 +3202,7 @@ const canvasRef = ref(null)
 const canvasScrollRef = ref(null)
 const selectedBlockId = ref(null)
 const fieldDrawerOpen = ref(false)
+const fieldDrawerMode = ref('table')
 const customActionModalOpen = ref(false)
 const sourceModalOpen = ref(false)
 const activeActionIndex = ref(0)
@@ -3286,7 +3320,8 @@ const layoutCodeText = computed(() => JSON.stringify(localLayout.value || {}, nu
 const selectedBlockCodeText = computed(() => selectedBlock.value
   ? JSON.stringify(selectedBlock.value, null, 2)
   : '请先选中一个区块')
-const customActionList = computed(() => selectedBlock.value?.props?.customActions || [])
+const externalCustomActionsEnabled = computed(() => Array.isArray(props.customActions))
+const customActionList = computed(() => externalCustomActionsEnabled.value ? (props.customActions || []) : (selectedBlock.value?.props?.customActions || []))
 const activeAction = computed(() => customActionList.value[activeActionIndex.value] || null)
 const apiConfigs = ref([])
 const apiConfigLoading = ref(false)
@@ -3337,10 +3372,10 @@ const movePlaceholderStyle = computed(() => {
 })
 const layoutTitle = computed(() => {
   if (props.layoutType === 'tree-crud')
-    return '左树右表'
+    return '自由画布 · 左树右表模板'
   if (props.layoutType === 'master-detail-crud')
-    return '主子表'
-  return '标准单表'
+    return '自由画布 · 关联数据'
+  return '自由画布'
 })
 const selectedBlockMeta = computed(() => selectedBlock.value ? resolveListPageBlockMeta(selectedBlock.value.blockType) : null)
 
@@ -3485,12 +3520,18 @@ const queryFieldOptions = computed(() => {
     options.unshift({ label: 'ID（id）', value: 'id' })
   return options
 })
-const selectedBlockZoneKey = computed(() => selectedBlock.value?.blockType === 'search-form' ? 'search' : 'table')
-const selectedFieldsList = computed(() => (selectedBlock.value?.fieldRefs || [])
+const selectedBlockZoneKey = computed(() => {
+  if (fieldDrawerMode.value === 'search')
+    return 'search'
+  return selectedBlock.value?.blockType === 'search-form' ? 'search' : 'table'
+})
+const selectedFieldDrawerTitle = computed(() => selectedBlockZoneKey.value === 'search' ? '查询条件' : '字段')
+const selectedFieldRefs = computed(() => resolveSelectedFieldRefs())
+const selectedFieldsList = computed(() => selectedFieldRefs.value
   .map(ref => fieldMap.value.get(ref))
   .filter(Boolean))
 const availableFields = computed(() => {
-  const set = new Set(selectedBlock.value?.fieldRefs || [])
+  const set = new Set(selectedFieldRefs.value)
   return props.fields.filter(f => isPageFieldVisible(f, selectedBlockZoneKey.value) && !set.has(f.field))
 })
 
@@ -5892,23 +5933,57 @@ onBeforeUnmount(() => {
 })
 
 // Field config drawer
+function openFieldDrawer(mode = 'table') {
+  fieldDrawerMode.value = mode === 'search' ? 'search' : 'table'
+  fieldDrawerOpen.value = true
+}
+
+function resolveSelectedFieldRefs(block = selectedBlock.value, zoneKey = selectedBlockZoneKey.value) {
+  if (!block)
+    return []
+  if (zoneKey === 'search' && block.blockType === 'AiCrudPage') {
+    const refs = Array.isArray(block.props?.searchFieldRefs)
+      ? block.props.searchFieldRefs
+      : block.fieldRefs || []
+    const fieldSet = new Set(props.fields.filter(field => isPageFieldVisible(field, 'search')).map(field => field.field))
+    return refs.filter(ref => fieldSet.has(ref))
+  }
+  return Array.isArray(block.fieldRefs) ? block.fieldRefs : []
+}
+
+function resolveBlockFieldCount(block = selectedBlock.value, zoneKey = 'table') {
+  return resolveSelectedFieldRefs(block, zoneKey).length
+}
+
 function toggleField(fieldName, add) {
   if (!selectedBlock.value)
     return
-  const current = selectedBlock.value.fieldRefs || []
+  const current = selectedFieldRefs.value || []
   const next = add
     ? [...current, fieldName]
     : current.filter(f => f !== fieldName)
-  patchBlock(selectedBlock.value.id, { fieldRefs: Array.from(new Set(next)) })
+  updateSelectedFieldRefs(Array.from(new Set(next)))
 }
 
 function handleSelectedReorder(rows) {
   if (!selectedBlock.value)
     return
-  patchBlock(selectedBlock.value.id, { fieldRefs: rows.map(r => r.field) })
+  updateSelectedFieldRefs(rows.map(r => r.field))
+}
+
+function updateSelectedFieldRefs(fieldRefs = []) {
+  if (!selectedBlock.value)
+    return
+  if (selectedBlockZoneKey.value === 'search' && selectedBlock.value.blockType === 'AiCrudPage') {
+    patchBlockProps(selectedBlock.value.id, { searchFieldRefs: fieldRefs })
+    return
+  }
+  patchBlock(selectedBlock.value.id, { fieldRefs })
 }
 
 function resolveFieldSetting(fieldName) {
+  if (selectedBlockZoneKey.value === 'search' && selectedBlock.value?.blockType === 'AiCrudPage')
+    return selectedBlock.value?.props?.searchFieldSettings?.[fieldName] || {}
   return selectedBlock.value?.props?.fieldSettings?.[fieldName] || {}
 }
 
@@ -5955,6 +6030,18 @@ function renderTargetFieldOptions(field = {}) {
 function updateFieldSetting(fieldName, settingPatch) {
   if (!selectedBlock.value)
     return
+  if (selectedBlockZoneKey.value === 'search' && selectedBlock.value.blockType === 'AiCrudPage') {
+    patchBlockProps(selectedBlock.value.id, {
+      searchFieldSettings: {
+        ...(selectedBlock.value.props?.searchFieldSettings || {}),
+        [fieldName]: {
+          ...(selectedBlock.value.props?.searchFieldSettings?.[fieldName] || {}),
+          ...settingPatch,
+        },
+      },
+    })
+    return
+  }
   patchBlockProps(selectedBlock.value.id, {
     fieldSettings: {
       ...(selectedBlock.value.props?.fieldSettings || {}),
@@ -5967,11 +6054,11 @@ function updateFieldSetting(fieldName, settingPatch) {
 }
 
 function applySelectedTableGlobalAlign(value) {
-  if (!selectedBlock.value || selectedBlock.value.blockType !== 'data-table')
+  if (!selectedBlock.value || !['data-table', 'AiCrudPage', 'AiTable'].includes(selectedBlock.value.blockType))
     return
   const align = ['left', 'center', 'right'].includes(value) ? value : 'left'
   const nextSettings = { ...(selectedBlock.value.props?.fieldSettings || {}) }
-  ;(selectedBlock.value.fieldRefs || []).forEach((fieldName) => {
+  ;(selectedFieldRefs.value || []).forEach((fieldName) => {
     nextSettings[fieldName] = {
       ...(nextSettings[fieldName] || {}),
       align,
@@ -6064,7 +6151,7 @@ function removeTimelineItem(idx) {
 }
 
 function addCustomAction() {
-  const list = [...(selectedBlock.value?.props?.customActions || [])]
+  const list = [...customActionList.value]
   list.push({
     key: `custom_${Date.now()}`,
     label: '自定义按钮',
@@ -6083,22 +6170,32 @@ function addCustomAction() {
     actionConfig: normalizeCustomApiConfig({}),
     params: [],
   })
-  patchBlockProps(selectedBlock.value.id, { customActions: list })
+  persistCustomActionList(list)
   activeActionIndex.value = list.length - 1
   customActionModalOpen.value = true
 }
 
 function updateCustomAction(idx, patch) {
-  const list = [...(selectedBlock.value?.props?.customActions || [])]
+  const list = [...customActionList.value]
   list[idx] = { ...list[idx], ...patch }
-  patchBlockProps(selectedBlock.value.id, { customActions: list })
+  persistCustomActionList(list)
 }
 
 function removeCustomAction(idx) {
-  const list = [...(selectedBlock.value?.props?.customActions || [])]
+  const list = [...customActionList.value]
   list.splice(idx, 1)
-  patchBlockProps(selectedBlock.value.id, { customActions: list })
+  persistCustomActionList(list)
   activeActionIndex.value = Math.max(0, Math.min(activeActionIndex.value, list.length - 1))
+}
+
+function persistCustomActionList(list = []) {
+  const normalized = normalizeCustomActionList(list)
+  if (externalCustomActionsEnabled.value) {
+    emit('update:customActions', normalized)
+  }
+  if (selectedBlock.value && ['AiCrudPage', 'toolbar', 'data-table', 'AiTable'].includes(selectedBlock.value.blockType)) {
+    patchBlockProps(selectedBlock.value.id, { customActions: normalized })
+  }
 }
 
 function openCustomActionModal() {
@@ -6125,6 +6222,15 @@ function updateActiveCustomActionType(value) {
     patch.openTarget = '_self'
     loadEnabledApiConfigs()
   }
+  else if (actionType === 'START_FLOW') {
+    patch.actionConfig = { ...(activeAction.value?.actionConfig || {}), useMainFlow: true }
+    patch.routePath = ''
+    patch.openTarget = '_self'
+  }
+  else if (actionType === 'TRIGGER') {
+    patch.actionConfig = { ...(activeAction.value?.actionConfig || {}), triggerCode: activeAction.value?.routePath || '' }
+    patch.openTarget = '_self'
+  }
   updateActiveCustomAction(patch)
 }
 
@@ -6136,6 +6242,16 @@ function updateActiveActionConfig(patch = {}) {
       ...current,
       ...patch,
     },
+  })
+}
+
+function updateActiveGenericActionConfig(patch = {}) {
+  updateActiveCustomAction({
+    actionConfig: {
+      ...(activeAction.value?.actionConfig || {}),
+      ...patch,
+    },
+    ...(Object.prototype.hasOwnProperty.call(patch, 'triggerCode') ? { routePath: patch.triggerCode || '' } : {}),
   })
 }
 
@@ -6265,10 +6381,18 @@ function normalizeApiParamSourcePatch(sourceType = 'rowField', param = {}) {
 
 function normalizeCustomActionType(value) {
   const normalized = String(value || 'route')
-  if (['CALL_API', 'REQUEST'].includes(normalized.toUpperCase()))
+    .replace(/[-\s]+/g, '_')
+  const upper = normalized.toUpperCase()
+  if (['CALL_API', 'REQUEST'].includes(upper))
     return 'CALL_API'
-  if (normalized === 'external' || normalized === 'refresh')
-    return normalized
+  if (['START_FLOW', 'START_APPROVAL'].includes(upper))
+    return 'START_FLOW'
+  if (upper === 'TRIGGER')
+    return 'TRIGGER'
+  if (upper === 'EXTERNAL')
+    return 'external'
+  if (upper === 'REFRESH')
+    return 'refresh'
   return 'route'
 }
 
@@ -6276,8 +6400,98 @@ function resolveActionBehaviorValue(value) {
   return normalizeCustomActionType(value)
 }
 
+function normalizeCustomActionList(list = []) {
+  return (Array.isArray(list) ? list : [])
+    .filter(action => action && typeof action === 'object')
+    .map((action, index) => {
+      const actionType = normalizeCustomActionType(action.actionType)
+      const actionConfig = actionType === 'CALL_API'
+        ? normalizeCustomApiConfig(action.actionConfig)
+        : normalizeGenericActionConfig(actionType, action.actionConfig)
+      return {
+        ...action,
+        key: normalizeActionKey(action.key || action.label) || `custom_${index + 1}`,
+        label: action.label || '自定义按钮',
+        position: ['toolbar', 'row', 'detail'].includes(action.position) ? action.position : 'row',
+        type: action.type || defaultCustomActionButtonType(actionType),
+        actionType,
+        routePath: action.routePath || resolveCustomActionRoutePath(actionType, actionConfig),
+        targetFormKey: action.targetFormKey || actionConfig.targetFormKey || '',
+        openTarget: action.openTarget || actionConfig.openTarget || (actionType === 'external' ? '_blank' : '_self'),
+        permissionCode: action.permissionCode || action.permission || '',
+        confirmText: action.confirmText || '',
+        displayCondition: action.displayCondition || actionConfig.displayCondition || '',
+        successBehavior: action.successBehavior || actionConfig.successBehavior || 'none',
+        successMessage: action.successMessage || actionConfig.successMessage || '',
+        failureMessage: action.failureMessage || actionConfig.failureMessage || '',
+        params: normalizeCustomActionParams(action.params?.length ? action.params : actionConfig.params || []),
+        actionConfig,
+      }
+    })
+}
+
+function normalizeGenericActionConfig(actionType = 'route', config = {}) {
+  const source = config && typeof config === 'object' && !Array.isArray(config) ? config : parseJsonObject(config)
+  if (actionType === 'START_FLOW') {
+    return {
+      ...source,
+      useMainFlow: true,
+    }
+  }
+  return {
+    ...source,
+    params: normalizeCustomActionParams(source.params || []),
+  }
+}
+
+function normalizeCustomActionParams(params = []) {
+  return (Array.isArray(params) ? params : [])
+    .filter(param => param && typeof param === 'object')
+    .map((param, index) => ({
+      clientKey: param.clientKey || `param_${Date.now()}_${index}`,
+      name: String(param.name || '').trim(),
+      sourceType: ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'static',
+      sourceField: String(param.sourceField || '').trim(),
+      value: param.value === undefined || param.value === null ? '' : String(param.value),
+      target: ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : '',
+    }))
+}
+
+function defaultCustomActionButtonType(actionType = 'route') {
+  if (actionType === 'START_FLOW')
+    return 'success'
+  if (actionType === 'CALL_API')
+    return 'primary'
+  if (actionType === 'TRIGGER')
+    return 'warning'
+  return 'default'
+}
+
+function resolveCustomActionRoutePath(actionType = 'route', config = {}) {
+  if (actionType === 'external')
+    return config.url || ''
+  if (actionType === 'CALL_API')
+    return config.url || ''
+  if (actionType === 'TRIGGER')
+    return config.triggerCode || ''
+  return config.targetPath || ''
+}
+
 function isApiCustomAction(action = {}) {
   return normalizeCustomActionType(action?.actionType) === 'CALL_API'
+}
+
+function isStartFlowCustomAction(action = {}) {
+  return normalizeCustomActionType(action?.actionType) === 'START_FLOW'
+}
+
+function isTriggerCustomAction(action = {}) {
+  return normalizeCustomActionType(action?.actionType) === 'TRIGGER'
+}
+
+function isParamConfigurableAction(action = {}) {
+  const actionType = normalizeCustomActionType(action?.actionType)
+  return ['route', 'external'].includes(actionType)
 }
 
 function normalizeCustomApiConfig(config = {}) {
@@ -7805,6 +8019,48 @@ function centerCanvasViewport() {
   width: 100%;
   display: grid;
   gap: 8px;
+}
+
+.field-config-entry,
+.main-flow-action-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.field-config-entry > div,
+.main-flow-action-hint {
+  min-width: 0;
+}
+
+.field-config-entry strong,
+.main-flow-action-hint strong {
+  display: block;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.field-config-entry span,
+.main-flow-action-hint span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.main-flow-action-hint {
+  display: grid;
+  justify-content: stretch;
+  border-color: #bfdbfe;
+  background: #eff6ff;
 }
 
 .preview-status {

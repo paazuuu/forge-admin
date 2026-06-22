@@ -910,6 +910,8 @@ export function createDefaultListGridLayout(modelSchema, options = {}) {
       style: createDefaultBlockFrameStyle(mainX, 0, mainW, 16),
       events: [],
       fieldSettings: {},
+      searchFieldRefs: filterPageFields(fields, 'search').map(f => f.field),
+      searchFieldSettings: {},
       defaultSortField: 'id',
       defaultSortOrder: 'desc',
     },
@@ -949,6 +951,19 @@ export function syncGridLayoutWithModel(layout, modelSchema, options = {}) {
           ...resolveDefaultTreeConfig(modelSchema, item.props || {}),
         }
       : sanitizeGridBlockProps(item.blockType, item.props || {}, new Set(refs), fieldSet)
+    if (item.blockType === 'AiCrudPage') {
+      const hasSearchRefs = Object.prototype.hasOwnProperty.call(item.props || {}, 'searchFieldRefs')
+      if (hasSearchRefs) {
+        const searchRefs = Array.isArray(item.props?.searchFieldRefs)
+          ? item.props.searchFieldRefs.filter(field => searchFieldSet.has(field))
+          : []
+        props = {
+          ...props,
+          searchFieldRefs: searchRefs,
+          searchFieldSettings: sanitizeFieldSettings(item.props?.searchFieldSettings, new Set(searchRefs), searchFieldSet),
+        }
+      }
+    }
     if (item.blockType === 'grid-layout') {
       props = {
         ...props,
@@ -1231,7 +1246,7 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
 export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
   const items = gridLayout?.items || []
   const crud = items.find(i => i.blockType === 'AiCrudPage')
-  const search = items.find(i => i.blockType === 'search-form') || crud
+  const search = items.find(i => i.blockType === 'search-form')
   const table = items.find(i => i.blockType === 'data-table') || crud || items.find(i => i.blockType === 'AiTable')
   const tree = items.find(i => i.blockType === 'tree-panel')
   const toolbar = items.find(i => i.blockType === 'toolbar')
@@ -1240,15 +1255,22 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
 
   return (zones || []).map((zone) => {
     if (zone.zoneKey === 'search') {
-      const refs = (search?.fieldRefs || []).filter(ref => searchFieldSet.has(ref))
+      const hasCrudSearchRefs = Object.prototype.hasOwnProperty.call(crud?.props || {}, 'searchFieldRefs')
+      const crudSearchRefs = hasCrudSearchRefs
+        ? crud?.props?.searchFieldRefs || []
+        : crud?.fieldRefs || []
+      const refs = (search?.fieldRefs || crudSearchRefs || []).filter(ref => searchFieldSet.has(ref))
+      const fieldSettings = search?.props?.fieldSettings
+        || crud?.props?.searchFieldSettings
+        || zone.props?.fieldSettings
       return {
         ...zone,
-        enabled: !!search,
+        enabled: Boolean(search || crud),
         fieldRefs: refs,
         props: {
           ...(zone.props || {}),
           fieldSettings: sanitizeFieldSettings(
-            search?.props?.fieldSettings || zone.props?.fieldSettings,
+            fieldSettings,
             new Set(refs),
             searchFieldSet,
           ),
@@ -1398,6 +1420,16 @@ function sanitizeGridBlockProps(blockType, props = {}, ownerFieldSet = new Set()
   }
   else if (['data-table', 'AiCrudPage', 'AiTable', 'AiForm', 'detail-info'].includes(blockType)) {
     next.fieldSettings = sanitizeFieldSettings(next.fieldSettings, ownerFieldSet)
+    if (blockType === 'AiCrudPage') {
+      const hasSearchRefs = Object.prototype.hasOwnProperty.call(next, 'searchFieldRefs')
+      if (hasSearchRefs) {
+        const searchRefs = Array.isArray(next.searchFieldRefs)
+          ? next.searchFieldRefs.filter(field => queryFieldSet.has(field))
+          : []
+        next.searchFieldRefs = searchRefs
+        next.searchFieldSettings = sanitizeFieldSettings(next.searchFieldSettings, new Set(searchRefs), queryFieldSet)
+      }
+    }
   }
   return next
 }
@@ -1615,6 +1647,8 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
     base.props = {
       ...base.props,
       ...createDefaultAiCrudPageProps(),
+      searchFieldRefs: filterPageFields(fields, 'search').slice(0, 8).map(f => f.field),
+      searchFieldSettings: {},
     }
     base.fieldRefs = filterPageFields(fields, 'table').slice(0, 8).map(f => f.field)
   }
@@ -1866,6 +1900,8 @@ function createDefaultAiCrudPageProps() {
     searchEnableCollapse: true,
     searchMaxVisibleFields: 3,
     searchYGap: 16,
+    searchFieldRefs: [],
+    searchFieldSettings: {},
     tableSize: 'small',
     renderMode: 'table',
     showRenderModeSwitch: true,

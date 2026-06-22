@@ -131,7 +131,6 @@
 <script setup>
 import {
   ArrowBackOutline,
-  BuildOutline,
   CheckmarkDoneOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
@@ -217,7 +216,6 @@ const navItems = [
   { key: 'relations', label: '关系与级联', icon: GitNetworkOutline },
   { key: 'document', label: '单据设置', icon: DocumentTextOutline },
   { key: 'automation', label: '流程与自动化', icon: GitBranchOutline },
-  { key: 'actions', label: '自定义操作', icon: BuildOutline },
   { key: 'permission', label: '数据权限', icon: KeyOutline },
   { key: 'publish', label: '发布检查', icon: CheckmarkDoneOutline },
   { key: 'advanced', label: '高级配置', icon: SettingsOutline },

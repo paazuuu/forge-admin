@@ -18,9 +18,10 @@
         </n-button>
         <n-select
           class="list-template-select"
-          :value="currentTemplateValue"
+          :value="templateSelectValue"
           :options="listTemplateOptions"
           size="small"
+          placeholder="套用模板"
           @update:value="updateListTemplate"
         />
         <n-dropdown trigger="click" :options="listMoreOptions" @select="handleListMoreSelect">
@@ -211,7 +212,9 @@
           :pages="designerPages"
           :form-options="formOptions"
           :runtime-crud-props="designerRuntimeCrudProps"
+          :custom-actions="listCustomActions"
           @update:model-value="handleGridLayoutUpdate"
+          @update:custom-actions="handleListCustomActionsUpdate"
         />
       </main>
     </div>
@@ -233,6 +236,7 @@
         :pages="designerPages"
         :form-options="formOptions"
         :runtime-crud-props="designerRuntimeCrudProps"
+        :custom-actions="listCustomActions"
         readonly
       />
     </n-modal>
@@ -253,7 +257,7 @@ import {
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { saveBusinessObjectDesigner, saveBusinessObjectListLayout } from '@/api/business-app'
+import { saveBusinessObjectActions, saveBusinessObjectDesigner, saveBusinessObjectListLayout } from '@/api/business-app'
 import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import {
   applyCrudHookRules,
@@ -304,9 +308,17 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  designerOptions: {
+    type: Object,
+    default: () => ({}),
+  },
+  designerActions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
-const emit = defineEmits(['update:modelValue', 'update:viewSchema', 'saved', 'dirtyChange'])
+const emit = defineEmits(['update:modelValue', 'update:viewSchema', 'update:designerActions', 'saved', 'dirtyChange'])
 
 const message = useMessage()
 const saving = ref(false)
@@ -328,12 +340,12 @@ const baseModelSchema = computed(() => {
 const localSchema = ref(resolveSchema(props.modelValue, resolveDesignModelSchema(props.modelValue, baseModelSchema.value)))
 const effectiveModelSchema = computed(() => resolveDesignModelSchema(localSchema.value, baseModelSchema.value))
 const designFields = computed(() => effectiveModelSchema.value.fields || [])
-const treeLayoutEnabled = computed(() => localSchema.value.layoutType === 'tree-crud')
-const currentTemplateValue = computed(() => treeLayoutEnabled.value ? 'tree-crud' : 'simple-crud')
 const layoutModeLabel = computed(() => resolveLayoutModeLabel(localSchema.value.layoutType))
 const canUndo = computed(() => undoStack.value.length > 0)
 const canRedo = computed(() => redoStack.value.length > 0)
 const listPreviewVisible = ref(false)
+const templateSelectValue = ref(null)
+const listCustomActions = ref([])
 const pageTypeOptions = [
   { label: '列表页', value: 'list' },
   { label: '详情页', value: 'detail' },
@@ -348,7 +360,7 @@ const requestMethodOptions = [
   { label: 'POST', value: 'post' },
 ]
 const listTemplateOptions = [
-  { label: '标准 CRUD 列表', value: 'simple-crud' },
+  { label: '标准列表模板', value: 'simple-crud' },
   { label: '左树右表模板', value: 'tree-crud' },
 ]
 const listMoreOptions = computed(() => [
@@ -387,7 +399,18 @@ const previewGridLayout = computed(() => {
     : bootstrapGridLayoutFromZones(localSchema.value.zones || [], effectiveModelSchema.value, { layoutType: localSchema.value.layoutType })
   return syncGridLayoutWithModel(source, effectiveModelSchema.value, { layoutType: localSchema.value.layoutType })
 })
-const designerRuntimeCrudProps = computed(() => buildDesignerRuntimeCrudProps(localSchema.value, designFields.value))
+const designerRuntimeCrudProps = computed(() => buildDesignerRuntimeCrudProps(localSchema.value, designFields.value, listCustomActions.value))
+
+watch(
+  () => props.designerActions,
+  (value) => {
+    const mappedActions = normalizeDesignerActionsForList(value)
+    const fallbackActions = mappedActions.length ? mappedActions : collectSchemaCustomActions(localSchema.value)
+    if (!isSameSchema(fallbackActions, listCustomActions.value))
+      listCustomActions.value = fallbackActions
+  },
+  { deep: true, immediate: true },
+)
 
 watch(
   () => props.modelValue,
@@ -468,6 +491,13 @@ function createCleanTemplateGridLayout(layoutType, schema = localSchema.value) {
         : tableZone.fieldRefs?.length
           ? tableZone.fieldRefs
           : item.fieldRefs
+      const hasPreviousSearchRefs = Object.prototype.hasOwnProperty.call(normalizedPreviousProps, 'searchFieldRefs')
+      const hasSearchZoneRefs = Array.isArray(searchZone.fieldRefs)
+      const searchFieldRefs = hasPreviousSearchRefs
+        ? normalizedPreviousProps.searchFieldRefs || []
+        : hasSearchZoneRefs
+          ? searchZone.fieldRefs || []
+          : item.props?.searchFieldRefs || []
       return {
         ...item,
         fieldRefs,
@@ -484,9 +514,13 @@ function createCleanTemplateGridLayout(layoutType, schema = localSchema.value) {
           defaultSortField: normalizedPreviousProps.defaultSortField || normalizedTableProps.defaultSortField || 'id',
           defaultSortOrder: normalizedPreviousProps.defaultSortOrder || normalizedTableProps.defaultSortOrder || 'desc',
           fieldSettings: {
-            ...(searchProps.fieldSettings || {}),
             ...(normalizedTableProps.fieldSettings || {}),
             ...(normalizedPreviousProps.fieldSettings || {}),
+          },
+          searchFieldRefs,
+          searchFieldSettings: {
+            ...(searchProps.fieldSettings || {}),
+            ...(normalizedPreviousProps.searchFieldSettings || {}),
           },
           style: item.props?.style,
           events: normalizedPreviousProps.events || item.props?.events || [],
@@ -548,7 +582,10 @@ function updateTreeLayoutEnabled(enabled) {
 }
 
 function updateListTemplate(value) {
+  if (!value)
+    return
   updateTreeLayoutEnabled(value === 'tree-crud')
+  templateSelectValue.value = null
 }
 
 function handleGridLayoutUpdate(layout) {
@@ -837,13 +874,24 @@ function resetZoneFields(zoneKey = '') {
     .filter(field => isPageFieldVisible(field, zoneKey))
     .map(field => field.field)
   const targetBlockTypes = zoneKey === 'search'
-    ? ['search-form']
+    ? ['search-form', 'AiCrudPage']
     : ['data-table', 'AiTable', 'AiCrudPage']
   const nextGridLayout = {
     ...(localSchema.value.listGridLayout || {}),
-    items: (localSchema.value.listGridLayout?.items || []).map(item => targetBlockTypes.includes(item.blockType)
-      ? { ...item, fieldRefs: nextRefs }
-      : item),
+    items: (localSchema.value.listGridLayout?.items || []).map((item) => {
+      if (!targetBlockTypes.includes(item.blockType))
+        return item
+      if (zoneKey === 'search' && item.blockType === 'AiCrudPage') {
+        return {
+          ...item,
+          props: {
+            ...(item.props || {}),
+            searchFieldRefs: nextRefs,
+          },
+        }
+      }
+      return { ...item, fieldRefs: nextRefs }
+    }),
   }
   setLocalSchema({
     ...localSchema.value,
@@ -875,8 +923,16 @@ async function saveLayout() {
   if (!props.objectId)
     return
   const schema = normalizeSchemaForSave(resolveSchema(localSchema.value, effectiveModelSchema.value))
+  const designerActions = buildDesignerActionsForSave()
+  const invalidApiAction = designerActions.find(action => action.status !== 0 && isInvalidDesignerApiAction(action))
+  if (invalidApiAction) {
+    const actionName = invalidApiAction.actionName || '自定义操作'
+    message.warning(`请为“${actionName}”配置接口地址或能力标识`)
+    throw new Error(`请为“${actionName}”配置接口地址或能力标识`)
+  }
   saving.value = true
   try {
+    await saveBusinessObjectActions(props.objectId, designerActions)
     await saveBusinessObjectListLayout(props.objectId, {
       layoutKey: 'list',
       layoutName: '列表布局',
@@ -891,9 +947,14 @@ async function saveLayout() {
     await saveBusinessObjectDesigner(props.objectId, {
       pageSchema: cloneSchema(schema),
       viewSchema: cloneSchema(viewSchema),
+      designerOptions: cloneSchema({
+        ...(props.designerOptions || {}),
+        actions: designerActions,
+      }),
     })
     setLocalSchema(schema, { external: true })
     emit('update:viewSchema', cloneSchema(viewSchema))
+    emit('update:designerActions', cloneSchema(designerActions))
     emit('saved', cloneSchema(schema))
     emit('dirtyChange', false)
     message.success('列表布局已保存')
@@ -911,7 +972,7 @@ function buildCurrentViewSchema(schema = localSchema.value) {
   return createViewSchemaFromPageSchema(normalizeSchemaForSave(schema), designFields.value, props.viewSchema || {})
 }
 
-function buildDesignerRuntimeCrudProps(schema = {}, fields = []) {
+function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions = []) {
   const zones = schema.zones || []
   const searchZone = zones.find(zone => zone.zoneKey === 'search') || {}
   const tableZone = zones.find(zone => zone.zoneKey === 'table') || {}
@@ -923,6 +984,7 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = []) {
   const fieldMap = buildDesignerFieldMap(fields)
   const editFields = buildDesignerEditSchema(editZone, fieldMap)
   const hookHandlers = buildDesignerCrudHookHandlers(tableProps)
+  const runtimeActions = normalizeListCustomActions(customActions)
   return {
     lazy: true,
     loadDetailOnEdit: false,
@@ -990,6 +1052,8 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = []) {
     publicQuery: tableProps.publicQuery || {},
     formDefaultValues: tableProps.formDefaultValues || {},
     submitDefaultParams: tableProps.submitDefaultParams || {},
+    toolbarActions: runtimeActions.filter(action => (action.position || 'toolbar') === 'toolbar'),
+    runtimeActions: runtimeActions.filter(action => (action.position || 'row') === 'row'),
     ...hookHandlers,
   }
 }
@@ -1002,6 +1066,383 @@ function buildDesignerCrudHookHandlers(tableProps = {}) {
       handlers[target.value] = data => applyCrudHookRules(data, list)
     return handlers
   }, {})
+}
+
+function handleListCustomActionsUpdate(actions = []) {
+  const nextActions = normalizeListCustomActions(actions)
+  listCustomActions.value = nextActions
+  emit('update:designerActions', cloneSchema(nextActions.map(listActionToDesignerAction)))
+  emit('dirtyChange', true)
+}
+
+function buildDesignerActionsForSave() {
+  return normalizeListCustomActions(listCustomActions.value).map(listActionToDesignerAction)
+}
+
+function normalizeDesignerActionsForList(actions = []) {
+  if (!Array.isArray(actions))
+    return []
+  return normalizeListCustomActions(actions.map(designerActionToListAction))
+}
+
+function designerActionToListAction(action = {}, index = 0) {
+  const actionType = normalizeDesignerActionType(action.actionType)
+  const config = parsePlainObject(action.actionConfig)
+  const position = normalizeListActionPosition(action.actionPosition)
+  const key = normalizeActionCode(action.actionCode || action.key || action.actionName) || `custom_${index + 1}`
+  const routePath = actionType === 'OPEN_EXTERNAL'
+    ? (config.url || action.routePath || '')
+    : actionType === 'CALL_API'
+      ? (config.url || action.routePath || '')
+      : actionType === 'TRIGGER'
+        ? (config.triggerCode || action.routePath || '')
+        : config.targetPath || action.routePath || ''
+  return {
+    key,
+    label: action.actionName || action.label || '自定义操作',
+    position,
+    type: action.type || resolveDefaultActionButtonType(actionType),
+    actionType: designerActionTypeToListType(actionType),
+    routePath,
+    targetFormKey: config.targetFormKey || action.targetFormKey || '',
+    openTarget: config.openTarget || action.openTarget || (actionType === 'OPEN_EXTERNAL' ? '_blank' : '_self'),
+    permissionCode: action.permission || action.permissionCode || '',
+    confirmText: action.confirmText || (action.confirmRequired ? `确认执行“${action.actionName || action.label || '该操作'}”？` : ''),
+    displayCondition: action.displayCondition || config.displayCondition || '',
+    successBehavior: action.successBehavior || config.successBehavior || 'none',
+    successMessage: action.successMessage || config.successMessage || '',
+    failureMessage: action.failureMessage || config.failureMessage || '',
+    params: normalizeActionParams(config.params || action.params || []),
+    actionConfig: normalizeListActionConfig(designerActionTypeToListType(actionType), config),
+    status: action.status ?? 1,
+    sortOrder: action.sortOrder ?? index * 10 + 10,
+  }
+}
+
+function listActionToDesignerAction(action = {}, index = 0) {
+  const normalized = normalizeListCustomAction(action, index)
+  const actionType = listActionTypeToDesignerType(normalized.actionType)
+  return {
+    actionCode: normalizeActionCode(normalized.key || normalized.label) || `custom_${index + 1}`,
+    actionName: normalized.label || '自定义操作',
+    actionPosition: normalizeDesignerActionPosition(normalized.position),
+    actionType,
+    permission: normalized.permissionCode || '',
+    confirmRequired: Boolean(normalized.confirmText),
+    confirmText: normalized.confirmText || '',
+    successMessage: normalized.successMessage || '',
+    failureMessage: normalized.failureMessage || '',
+    status: normalized.status ?? 1,
+    sortOrder: normalized.sortOrder ?? index * 10 + 10,
+    actionConfig: buildDesignerActionConfig(normalized, actionType),
+  }
+}
+
+function buildDesignerActionConfig(action = {}, actionType = 'OPEN_PAGE') {
+  const config = parsePlainObject(action.actionConfig)
+  const params = toDesignerActionParams(action.params?.length ? action.params : config.params || [])
+  if (actionType === 'CALL_API') {
+    return {
+      ...config,
+      method: normalizeActionApiMethod(config.method || 'POST'),
+      url: config.url || action.routePath || '',
+      capabilityCode: config.capabilityCode || '',
+      successBehavior: action.successBehavior || config.successBehavior || '',
+      successMessage: action.successMessage || config.successMessage || '',
+      failureMessage: action.failureMessage || config.failureMessage || '',
+      params,
+    }
+  }
+  if (actionType === 'START_FLOW') {
+    return {
+      ...config,
+      useMainFlow: true,
+    }
+  }
+  if (actionType === 'TRIGGER') {
+    return {
+      ...config,
+      triggerCode: config.triggerCode || action.triggerCode || action.routePath || '',
+      params,
+    }
+  }
+  if (actionType === 'OPEN_EXTERNAL') {
+    return {
+      ...config,
+      url: action.routePath || config.url || '',
+      openTarget: action.openTarget || config.openTarget || '_blank',
+      params,
+      successBehavior: action.successBehavior || config.successBehavior || '',
+    }
+  }
+  return {
+    ...config,
+    targetPath: action.routePath || config.targetPath || '',
+    targetFormKey: action.targetFormKey || config.targetFormKey || '',
+    openTarget: action.openTarget || config.openTarget || '_self',
+    params,
+    successBehavior: action.successBehavior || config.successBehavior || '',
+  }
+}
+
+function normalizeListCustomActions(actions = []) {
+  if (!Array.isArray(actions))
+    return []
+  return actions
+    .filter(action => action && typeof action === 'object')
+    .map(normalizeListCustomAction)
+}
+
+function normalizeListCustomAction(action = {}, index = 0) {
+  const actionType = normalizeListActionType(action.actionType)
+  const key = normalizeActionCode(action.key || action.actionCode || action.label) || `custom_${index + 1}`
+  const config = normalizeListActionConfig(actionType, action.actionConfig)
+  return {
+    ...action,
+    key,
+    label: action.label || action.actionName || '自定义操作',
+    position: normalizeListActionPosition(action.position || action.actionPosition),
+    type: action.type || resolveDefaultListButtonType(actionType),
+    actionType,
+    routePath: action.routePath || resolveListActionRoutePath(actionType, config),
+    targetFormKey: action.targetFormKey || config.targetFormKey || '',
+    openTarget: action.openTarget || config.openTarget || (actionType === 'external' ? '_blank' : '_self'),
+    permissionCode: action.permissionCode || action.permission || '',
+    confirmText: action.confirmText || '',
+    displayCondition: action.displayCondition || config.displayCondition || '',
+    successBehavior: action.successBehavior || config.successBehavior || 'none',
+    successMessage: action.successMessage || config.successMessage || '',
+    failureMessage: action.failureMessage || config.failureMessage || '',
+    params: normalizeActionParams(action.params?.length ? action.params : config.params || []),
+    actionConfig: config,
+    status: action.status ?? 1,
+    sortOrder: action.sortOrder ?? index * 10 + 10,
+  }
+}
+
+function normalizeListActionConfig(actionType = 'route', config = {}) {
+  const source = parsePlainObject(config)
+  if (actionType === 'CALL_API') {
+    return {
+      ...source,
+      apiConfigId: source.apiConfigId === undefined || source.apiConfigId === null ? null : String(source.apiConfigId),
+      apiCode: String(source.apiCode || '').trim(),
+      apiName: String(source.apiName || '').trim(),
+      method: normalizeActionApiMethod(source.method || source.reqMethod || source.apiMethod || 'POST'),
+      url: String(source.url || source.apiUrl || source.urlPath || source.path || '').trim(),
+      capabilityCode: String(source.capabilityCode || '').trim(),
+      params: normalizeActionParams(source.params || source.paramMappings || []),
+    }
+  }
+  if (actionType === 'START_FLOW') {
+    return {
+      ...source,
+      useMainFlow: true,
+    }
+  }
+  return {
+    ...source,
+    params: normalizeActionParams(source.params || []),
+  }
+}
+
+function normalizeActionParams(params = []) {
+  if (!Array.isArray(params))
+    return []
+  return params
+    .filter(param => param && typeof param === 'object')
+    .map((param, index) => ({
+      clientKey: param.clientKey || `param_${Date.now()}_${index}`,
+      name: String(param.name || '').trim(),
+      target: ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : '',
+      sourceType: ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'rowField',
+      sourceField: String(param.sourceField || '').trim(),
+      value: param.value === undefined || param.value === null ? '' : String(param.value),
+    }))
+}
+
+function toDesignerActionParams(params = []) {
+  return normalizeActionParams(params)
+    .filter(param => param.name && (param.sourceType === 'static' ? param.value !== '' : param.sourceField))
+    .map(({ clientKey, ...param }) => param)
+}
+
+function collectSchemaCustomActions(schema = {}) {
+  const grids = [
+    schema.listGridLayout,
+    ...(Array.isArray(schema.pages) ? schema.pages.map(page => page?.gridLayout).filter(Boolean) : []),
+  ]
+  const actions = []
+  grids.forEach((grid) => {
+    ;(grid?.items || []).forEach((item) => {
+      if (Array.isArray(item?.props?.customActions))
+        actions.push(...item.props.customActions)
+    })
+  })
+  const tableZone = (schema.zones || []).find(zone => zone.zoneKey === 'table')
+  if (Array.isArray(tableZone?.props?.customActions))
+    actions.push(...tableZone.props.customActions)
+  return normalizeListCustomActions(deduplicateListActions(actions))
+}
+
+function deduplicateListActions(actions = []) {
+  const seen = new Set()
+  return actions.filter((action) => {
+    const key = action?.key || action?.actionCode || action?.label
+    if (!key)
+      return true
+    const normalized = String(key)
+    if (seen.has(normalized))
+      return false
+    seen.add(normalized)
+    return true
+  })
+}
+
+function isInvalidDesignerApiAction(action = {}) {
+  if (normalizeDesignerActionType(action.actionType) !== 'CALL_API')
+    return false
+  const config = parsePlainObject(action.actionConfig)
+  return !String(config.url || config.apiUrl || config.urlPath || '').trim()
+    && !String(config.capabilityCode || '').trim()
+}
+
+function normalizeDesignerActionType(value = '') {
+  const normalized = String(value || 'OPEN_PAGE')
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[-\s]+/g, '_')
+    .toUpperCase()
+  if (['CALL_API', 'REQUEST'].includes(normalized))
+    return 'CALL_API'
+  if (['START_FLOW', 'START_APPROVAL'].includes(normalized))
+    return 'START_FLOW'
+  if (normalized === 'OPEN_EXTERNAL')
+    return 'OPEN_EXTERNAL'
+  if (normalized === 'TRIGGER')
+    return 'TRIGGER'
+  return 'OPEN_PAGE'
+}
+
+function designerActionTypeToListType(actionType = 'OPEN_PAGE') {
+  if (actionType === 'CALL_API')
+    return 'CALL_API'
+  if (actionType === 'START_FLOW')
+    return 'START_FLOW'
+  if (actionType === 'TRIGGER')
+    return 'TRIGGER'
+  if (actionType === 'OPEN_EXTERNAL')
+    return 'external'
+  return 'route'
+}
+
+function listActionTypeToDesignerType(actionType = 'route') {
+  const normalized = normalizeListActionType(actionType)
+  if (normalized === 'CALL_API')
+    return 'CALL_API'
+  if (normalized === 'START_FLOW')
+    return 'START_FLOW'
+  if (normalized === 'TRIGGER')
+    return 'TRIGGER'
+  if (normalized === 'external')
+    return 'OPEN_EXTERNAL'
+  return 'OPEN_PAGE'
+}
+
+function normalizeListActionType(value = '') {
+  const raw = String(value || 'route')
+  const upper = raw.replace(/[-\s]+/g, '_').toUpperCase()
+  if (['CALL_API', 'REQUEST'].includes(upper))
+    return 'CALL_API'
+  if (['START_FLOW', 'START_APPROVAL'].includes(upper))
+    return 'START_FLOW'
+  if (upper === 'TRIGGER')
+    return 'TRIGGER'
+  if (upper === 'EXTERNAL')
+    return 'external'
+  if (upper === 'REFRESH')
+    return 'refresh'
+  return 'route'
+}
+
+function normalizeListActionPosition(value = '') {
+  const normalized = String(value || 'row').replace(/[-\s]+/g, '_').toUpperCase()
+  if (normalized === 'TOOLBAR')
+    return 'toolbar'
+  if (normalized === 'DETAIL')
+    return 'detail'
+  return 'row'
+}
+
+function normalizeDesignerActionPosition(value = '') {
+  const normalized = normalizeListActionPosition(value)
+  if (normalized === 'toolbar')
+    return 'TOOLBAR'
+  if (normalized === 'detail')
+    return 'DETAIL'
+  return 'ROW'
+}
+
+function resolveDefaultActionButtonType(actionType = 'OPEN_PAGE') {
+  if (actionType === 'START_FLOW')
+    return 'success'
+  if (actionType === 'CALL_API')
+    return 'primary'
+  if (actionType === 'TRIGGER')
+    return 'warning'
+  return 'default'
+}
+
+function resolveDefaultListButtonType(actionType = 'route') {
+  if (actionType === 'START_FLOW')
+    return 'success'
+  if (actionType === 'CALL_API')
+    return 'primary'
+  if (actionType === 'TRIGGER')
+    return 'warning'
+  return 'default'
+}
+
+function resolveListActionRoutePath(actionType = 'route', config = {}) {
+  if (actionType === 'external')
+    return config.url || ''
+  if (actionType === 'CALL_API')
+    return config.url || ''
+  if (actionType === 'TRIGGER')
+    return config.triggerCode || ''
+  return config.targetPath || ''
+}
+
+function normalizeActionApiMethod(value = '') {
+  const method = String(value || 'POST')
+    .replace('-', '_')
+    .toUpperCase()
+  return ['GET', 'POST', 'POST_ENCRYPT', 'PUT', 'DELETE', 'PATCH'].includes(method) ? method : 'POST'
+}
+
+function normalizeActionCode(value = '') {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/\W+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase()
+    .slice(0, 64)
+}
+
+function parsePlainObject(value) {
+  if (!value)
+    return {}
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    }
+    catch {
+      return {}
+    }
+  }
+  return typeof value === 'object' && !Array.isArray(value) ? { ...value } : {}
 }
 
 function resolveDesignerDefaultApiValues(schema = {}) {
@@ -1450,10 +1891,10 @@ function isRelationLayout(pageSchema = {}, modelSchema = {}) {
 
 function resolveLayoutModeLabel(layoutType) {
   if (layoutType === 'tree-crud')
-    return '左树右表模板'
+    return '自由画布 · 已套用左树右表'
   if (layoutType === 'master-detail-crud')
-    return '已启用关联数据'
-  return '标准列表'
+    return '自由画布 · 已启用关联数据'
+  return '自由画布'
 }
 
 function updateTreeZone(zones = [], enabled) {

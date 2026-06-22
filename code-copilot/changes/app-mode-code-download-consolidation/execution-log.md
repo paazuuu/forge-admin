@@ -270,3 +270,31 @@
 - 未启动 Vite 做浏览器点击验证；本轮已通过目标文件 ESLint、diff check 和生产构建覆盖模板、脚本和打包风险。
 - 未启动后端服务执行真实 API 操作调用；需要已发布业务对象和具体业务接口数据。
 - 本轮未启动常驻服务，无需清理服务 PID。
+
+## 2026-06-22 22:29 列表设计动作整合与查询条件验证
+
+**变更范围**
+
+- 前端：移除对象设计器左侧独立「自定义操作」入口，旧 `panel=actions` 链接兼容跳转到「列表设计」。
+- 前端：列表设计接管 `designerOptions.actions`，自定义操作弹窗保留站内跳转、外部链接、调用 API、发起主流程、执行触发器、按钮权限、确认提示和参数映射；保存时同步调用对象 actions 接口并回写 `designerOptions.actions`。
+- 前端：AiCrudPage 列表设计新增「配置查询条件」，查询字段写入 `searchFieldRefs/searchFieldSettings`，表格列继续写入 `fieldRefs/fieldSettings`。
+- 前端：标准列表、左树右表调整为「套用模板」动作，页面文案改为自由画布语义。
+
+**命令与结果**
+
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint 'src/views/app-center/object-designer.[objectCode].vue' src/views/app-center/components/designer/BusinessObjectDesignerShell.vue src/views/app-center/components/designer/BusinessListDesigner.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/page/page-schema.js --fix`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `git diff --check`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+  - 工作目录：仓库根目录。
+  - 结果：构建通过，`✓ built in 1m 2s`。
+  - 警告：仍为既有 CSS `//` 注释、`UserSelectModal` 组件命名冲突和 `src/store/index.js` 动静态混合导入分包提示，非本轮新增。
+
+**跳过项**
+
+- 未启动 Vite/浏览器做真实点击验证；需要登录态、业务对象草稿和可用后端服务。
+- 未启动后端服务执行保存接口验证；本轮前端保存仍调用既有 `/designer`、`/layout/list`、`/actions` 接口。
+- 本轮未启动常驻服务，无需清理服务 PID。

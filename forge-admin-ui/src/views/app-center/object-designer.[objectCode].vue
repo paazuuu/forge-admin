@@ -126,6 +126,9 @@
       :model-schema="draft.modelSchema"
       :fields="draft.fields"
       :form-options="runtimeFormOptions"
+      :designer-options="draft.designerOptions"
+      :designer-actions="draft.designerOptions?.actions || []"
+      @update:designer-actions="handleActionsUpdated"
       @saved="handleLayoutSaved"
       @dirty-change="handleDirtyChange"
     />
@@ -164,16 +167,6 @@
       :object-code="draft.objectCode"
       :fields="draft.fields"
       @saved="handleFlowSaved"
-      @dirty-change="handleDirtyChange"
-    />
-
-    <BusinessActionDesigner
-      v-else-if="activePanel === 'actions'"
-      ref="actionDesignerRef"
-      :object-id="objectId"
-      :fields="draft.fields"
-      :form-options="runtimeFormOptions"
-      @updated="handleActionsUpdated"
       @dirty-change="handleDirtyChange"
     />
 
@@ -227,7 +220,6 @@ import {
 import { cloneSchema } from '@/components/lowcode-builder/model/model-schema'
 import { useTabStore, useUserStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
-import BusinessActionDesigner from './components/designer/BusinessActionDesigner.vue'
 import BusinessAdvancedConfig from './components/designer/BusinessAdvancedConfig.vue'
 import BusinessDetailDesigner from './components/designer/BusinessDetailDesigner.vue'
 import BusinessDocumentPanel from './components/designer/BusinessDocumentPanel.vue'
@@ -299,7 +291,6 @@ const detailDesignerRef = ref(null)
 const relationDesignerRef = ref(null)
 const documentPanelRef = ref(null)
 const flowBindingPanelRef = ref(null)
-const actionDesignerRef = ref(null)
 const permissionFlowRef = ref(null)
 const publishChecklistRef = ref(null)
 const draft = reactive(createEmptyDraft())
@@ -358,6 +349,8 @@ function resolveInitialPanel() {
   const panel = props.embedded ? props.initialPanel : route.query.panel
   if (panel === 'flow')
     return 'automation'
+  if (panel === 'actions')
+    return 'list'
   return panel === 'detail' ? 'form' : panel || 'form'
 }
 
@@ -521,12 +514,6 @@ async function handleSave() {
       await loadDesigner()
       return
     }
-    if (activePanel.value === 'actions') {
-      await persistPendingDesignerDraft()
-      await actionDesignerRef.value?.saveActions?.()
-      await loadDesigner()
-      return
-    }
     if (activePanel.value === 'permission') {
       permissionFlowRef.value?.saveConfig?.()
     }
@@ -566,11 +553,12 @@ async function waitForSaveLoadingPaint() {
 }
 
 async function handlePanelSwitch(panel) {
-  if (!panel || panel === activePanel.value)
+  const nextPanel = panel === 'actions' ? 'list' : panel
+  if (!nextPanel || nextPanel === activePanel.value)
     return
   await syncActiveFormDraft()
   await syncActiveListDraft()
-  activePanel.value = panel
+  activePanel.value = nextPanel
 }
 
 async function syncActiveFormDraft() {
@@ -811,6 +799,10 @@ function handleActionsUpdated(actions) {
   draft.designerOptions = {
     ...(draft.designerOptions || {}),
     actions: cloneSchema(actions || []),
+  }
+  if (ready.value && activePanel.value === 'list') {
+    dirty.value = true
+    designerDraftDirty.value = true
   }
 }
 
