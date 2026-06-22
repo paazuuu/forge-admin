@@ -438,3 +438,7 @@ export function getPermissionOverview(objectCode) {
 export function businessObjectPermissionActions(objectId) {
   return request.get(`/ai/business/object/${objectId}/permission-actions`)
 }
+
+export function enabledApiConfigs() {
+  return request.get('/apiConfig/getAllEnabled')
+}

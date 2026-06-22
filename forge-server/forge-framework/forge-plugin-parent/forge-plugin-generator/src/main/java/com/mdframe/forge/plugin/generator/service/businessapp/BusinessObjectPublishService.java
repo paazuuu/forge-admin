@@ -305,6 +305,17 @@ public class BusinessObjectPublishService {
             putIfNotBlank(item, "routePath", resolveActionRoutePath(actionType, config));
             putIfNotBlank(item, "targetFormKey", text(config.get("targetFormKey")));
             putIfNotBlank(item, "openTarget", StringUtils.defaultIfBlank(text(config.get("openTarget")), "_self"));
+            putIfNotBlank(item, "permissionCode", text(action.get("permission")));
+            putIfNotBlank(item, "successMessage", text(action.get("successMessage")));
+            putIfNotBlank(item, "failureMessage", text(action.get("failureMessage")));
+            putIfNotBlank(item, "successBehavior", text(config.get("successBehavior")));
+            List<Map<String, Object>> params = listOfMap(config.get("params"));
+            if (!params.isEmpty()) {
+                item.put("params", params);
+            }
+            if ("CALL_API".equals(actionType) && !config.isEmpty()) {
+                item.put("actionConfig", new LinkedHashMap<>(config));
+            }
             if (Boolean.TRUE.equals(booleanValue(action.get("confirmRequired")))) {
                 item.put("confirmText", "确认执行“" + StringUtils.defaultIfBlank(actionName, "该操作") + "”？");
             }

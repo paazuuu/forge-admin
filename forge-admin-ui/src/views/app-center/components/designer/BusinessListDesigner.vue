@@ -23,14 +23,6 @@
           size="small"
           @update:value="updateListTemplate"
         />
-        <n-radio-group :value="listLayoutMode" size="small" @update:value="updateListLayoutMode">
-          <n-radio-button value="grid">
-            自由画布
-          </n-radio-button>
-          <n-radio-button value="structured">
-            CRUD配置
-          </n-radio-button>
-        </n-radio-group>
         <n-dropdown trigger="click" :options="listMoreOptions" @select="handleListMoreSelect">
           <n-button class="list-toolbar-more-button" circle size="small" type="primary" title="更多操作">
             <template #icon>
@@ -41,7 +33,7 @@
       </n-space>
     </div>
 
-    <div v-if="listLayoutMode === 'grid'" class="list-page-switch">
+    <div class="list-page-switch">
       <div class="page-switch-row">
         <div class="page-switch-title">
           <span class="page-switch-icon">P</span>
@@ -211,7 +203,6 @@
     <div class="list-designer-body">
       <main class="list-workspace">
         <ListPageGridDesigner
-          v-if="listLayoutMode === 'grid'"
           :model-value="currentPageGridLayout"
           :fields="designFields"
           :model-schema="effectiveModelSchema"
@@ -221,14 +212,6 @@
           :form-options="formOptions"
           :runtime-crud-props="designerRuntimeCrudProps"
           @update:model-value="handleGridLayoutUpdate"
-        />
-        <StructuredListPageDesigner
-          v-else
-          v-model="localSchema"
-          :fields="designFields"
-          :model-schema="effectiveModelSchema"
-          :layout-type="localSchema.layoutType"
-          :pages="designerPages"
         />
       </main>
     </div>
@@ -294,7 +277,6 @@ import {
   syncGridLayoutWithModel,
   syncPageSchemaWithModel,
 } from '@/components/lowcode-builder/page/page-schema'
-import StructuredListPageDesigner from '@/components/lowcode-builder/page/StructuredListPageDesigner.vue'
 import { createViewSchemaFromPageSchema } from './form-first/viewSchema'
 
 const props = defineProps({
@@ -346,7 +328,6 @@ const baseModelSchema = computed(() => {
 const localSchema = ref(resolveSchema(props.modelValue, resolveDesignModelSchema(props.modelValue, baseModelSchema.value)))
 const effectiveModelSchema = computed(() => resolveDesignModelSchema(localSchema.value, baseModelSchema.value))
 const designFields = computed(() => effectiveModelSchema.value.fields || [])
-const listLayoutMode = computed(() => localSchema.value.listLayoutMode || 'grid')
 const treeLayoutEnabled = computed(() => localSchema.value.layoutType === 'tree-crud')
 const currentTemplateValue = computed(() => treeLayoutEnabled.value ? 'tree-crud' : 'simple-crud')
 const layoutModeLabel = computed(() => resolveLayoutModeLabel(localSchema.value.layoutType))
@@ -441,24 +422,6 @@ watch(
   },
   { deep: true },
 )
-
-function updateListLayoutMode(value) {
-  if (value === listLayoutMode.value)
-    return
-  const next = {
-    ...localSchema.value,
-    listLayoutMode: value,
-  }
-  if (value === 'grid') {
-    const grid = next.listGridLayout?.items?.length
-      ? next.listGridLayout
-      : createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: next.layoutType })
-    next.listGridLayout = syncGridLayoutWithModel(grid, effectiveModelSchema.value, { layoutType: next.layoutType })
-    next.pages = updateDesignerPageGrid(next.pages || [], 'list', next.listGridLayout)
-    next.zones = applyGridLayoutToZones(next.zones || [], next.listGridLayout, effectiveModelSchema.value)
-  }
-  setLocalSchema(resolveSchema(next, effectiveModelSchema.value))
-}
 
 function createCleanTemplateGridLayout(layoutType, schema = localSchema.value) {
   const defaultGrid = createDefaultListGridLayout(effectiveModelSchema.value, { layoutType })
@@ -873,27 +836,21 @@ function resetZoneFields(zoneKey = '') {
   const nextRefs = designFields.value
     .filter(field => isPageFieldVisible(field, zoneKey))
     .map(field => field.field)
-  if (localSchema.value.listLayoutMode === 'grid') {
-    const targetBlockType = zoneKey === 'search' ? 'search-form' : 'data-table'
-    const nextGridLayout = {
-      ...(localSchema.value.listGridLayout || {}),
-      items: (localSchema.value.listGridLayout?.items || []).map(item => item.blockType === targetBlockType
-        ? { ...item, fieldRefs: nextRefs }
-        : item),
-    }
-    setLocalSchema({
-      ...localSchema.value,
-      listGridLayout: nextGridLayout,
-      pages: updateDesignerPageGrid(localSchema.value.pages || [], 'list', nextGridLayout),
-      zones: applyGridLayoutToZones(localSchema.value.zones || [], nextGridLayout, effectiveModelSchema.value),
-    })
-    return
+  const targetBlockTypes = zoneKey === 'search'
+    ? ['search-form']
+    : ['data-table', 'AiTable', 'AiCrudPage']
+  const nextGridLayout = {
+    ...(localSchema.value.listGridLayout || {}),
+    items: (localSchema.value.listGridLayout?.items || []).map(item => targetBlockTypes.includes(item.blockType)
+      ? { ...item, fieldRefs: nextRefs }
+      : item),
   }
   setLocalSchema({
     ...localSchema.value,
-    zones: (localSchema.value.zones || []).map(zone => zone.zoneKey === zoneKey
-      ? { ...zone, fieldRefs: nextRefs }
-      : zone),
+    listLayoutMode: 'grid',
+    listGridLayout: nextGridLayout,
+    pages: updateDesignerPageGrid(localSchema.value.pages || [], 'list', nextGridLayout),
+    zones: applyGridLayoutToZones(localSchema.value.zones || [], nextGridLayout, effectiveModelSchema.value),
   })
 }
 
@@ -903,16 +860,12 @@ function resetListSchema() {
   const nextZones = nextLayoutType === 'tree-crud'
     ? updateTreeZone(nextSchema.zones || [], true)
     : nextSchema.zones
-  const nextGridLayout = localSchema.value.listLayoutMode === 'grid'
-    ? syncGridLayoutWithModel(createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: nextLayoutType }), effectiveModelSchema.value, { layoutType: nextLayoutType })
-    : nextSchema.listGridLayout
+  const nextGridLayout = syncGridLayoutWithModel(createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: nextLayoutType }), effectiveModelSchema.value, { layoutType: nextLayoutType })
   setLocalSchema({
     ...nextSchema,
     layoutType: nextLayoutType,
-    zones: localSchema.value.listLayoutMode === 'grid'
-      ? applyGridLayoutToZones(nextZones || [], nextGridLayout, effectiveModelSchema.value)
-      : nextZones,
-    listLayoutMode: localSchema.value.listLayoutMode || nextSchema.listLayoutMode || 'grid',
+    zones: applyGridLayoutToZones(nextZones || [], nextGridLayout, effectiveModelSchema.value),
+    listLayoutMode: 'grid',
     listGridLayout: nextGridLayout,
     pages: ensureDesignerPages({ ...nextSchema, listGridLayout: nextGridLayout, layoutType: nextLayoutType }, effectiveModelSchema.value),
   })
@@ -931,7 +884,7 @@ async function saveLayout() {
       pageSchema: cloneSchema(schema),
       zones: schema.zones?.filter(zone => ['search', 'table'].includes(zone.zoneKey)) || [],
       settings: {
-        listLayoutMode: schema.listLayoutMode,
+        listLayoutMode: 'grid',
       },
     })
     const viewSchema = buildCurrentViewSchema(schema)
@@ -1214,14 +1167,15 @@ function syncDesignerDraft() {
 }
 
 function normalizeSchemaForSave(schema = localSchema.value) {
-  const resolved = resolveSchema(schema, effectiveModelSchema.value)
+  const resolved = ensureGridListSchema(resolveSchema(schema, effectiveModelSchema.value), effectiveModelSchema.value)
   const listPage = (resolved.pages || []).find(page => page.pageKey === 'list')
   const sourceGrid = listPage?.gridLayout || resolved.listGridLayout
   if (!sourceGrid)
-    return resolved
+    return { ...resolved, listLayoutMode: 'grid' }
   const syncedGrid = syncGridLayoutWithModel(sourceGrid, effectiveModelSchema.value, { layoutType: resolved.layoutType })
   return {
     ...resolved,
+    listLayoutMode: 'grid',
     listGridLayout: syncedGrid,
     pages: updateDesignerPageGrid(resolved.pages || [], 'list', syncedGrid),
     zones: applyGridLayoutToZones(resolved.zones || [], syncedGrid, effectiveModelSchema.value),
@@ -1238,11 +1192,29 @@ function resolveSchema(pageSchema, modelSchema) {
     },
     modelSchema,
   )
-  return {
+  const gridSchema = ensureGridListSchema({
     ...schema,
     layoutType,
-    listLayoutMode: schema.listLayoutMode || 'grid',
-    pages: ensureDesignerPages(schema, modelSchema),
+  }, modelSchema)
+  return {
+    ...gridSchema,
+    pages: ensureDesignerPages(gridSchema, modelSchema),
+  }
+}
+
+function ensureGridListSchema(schema = {}, modelSchema = effectiveModelSchema.value) {
+  const listPageGrid = (schema.pages || []).find(page => page?.pageKey === 'list')?.gridLayout
+  const sourceGrid = listPageGrid || schema.listGridLayout
+  const fallbackGrid = sourceGrid?.items?.length
+    ? sourceGrid
+    : bootstrapGridLayoutFromZones(schema.zones || [], modelSchema, { layoutType: schema.layoutType })
+  const syncedGrid = syncGridLayoutWithModel(fallbackGrid, modelSchema, { layoutType: schema.layoutType })
+  return {
+    ...schema,
+    listLayoutMode: 'grid',
+    listGridLayout: syncedGrid,
+    pages: updateDesignerPageGrid(schema.pages || [], 'list', syncedGrid),
+    zones: applyGridLayoutToZones(schema.zones || [], syncedGrid, modelSchema),
   }
 }
 

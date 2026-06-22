@@ -71,6 +71,19 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
     }
 
     @Override
+    public void disableMenu(Long menuResourceId) {
+        if (menuResourceId == null) {
+            return;
+        }
+        SysResource resource = new SysResource();
+        resource.setId(menuResourceId);
+        resource.setMenuStatus(0);
+        resource.setVisible(0);
+        resourceService.updateById(resource);
+        log.info("[MenuRegisterAdapter] 禁用菜单成功: menuId={}", menuResourceId);
+    }
+
+    @Override
     public Long registerAppMenu(String menuName, Long parentId, String path, String component,
                                 String perms, String icon, Integer sort, boolean enabled) {
         Long tenantId = resolveTenantId();

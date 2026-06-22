@@ -2532,7 +2532,7 @@
                   {{ activeAction.label || '自定义按钮' }}
                 </div>
                 <div class="action-editor-desc">
-                  支持站内跳转、外部链接、刷新列表；目标地址和参数值可使用 :id 或 ${field} 占位符。
+                  支持站内跳转、外部链接、调用 API 和刷新列表；目标地址和参数值可使用 :id 或 ${field} 占位符。
                 </div>
               </div>
               <n-button quaternary type="error" @click="removeCustomAction(activeActionIndex)">
@@ -2575,22 +2575,22 @@
               <div class="action-form-grid">
                 <n-form-item label="交互方式">
                   <n-select
-                    :value="activeAction.actionType || 'route'"
+                    :value="resolveActionBehaviorValue(activeAction.actionType)"
                     :options="actionBehaviorOptions"
-                    @update:value="updateActiveCustomAction({ actionType: $event })"
+                    @update:value="updateActiveCustomActionType"
                   />
                 </n-form-item>
                 <n-form-item label="打开方式">
                   <n-select
                     :value="activeAction.openTarget || '_self'"
-                    :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                    :disabled="['refresh', 'CALL_API'].includes(resolveActionBehaviorValue(activeAction.actionType))"
                     :options="actionOpenTargetOptions"
                     @update:value="updateActiveCustomAction({ openTarget: $event })"
                   />
                 </n-form-item>
               </div>
 
-              <n-form-item label="目标地址 / 表单">
+              <n-form-item v-if="!isApiCustomAction(activeAction)" label="目标地址 / 表单">
                 <div class="action-form-grid">
                   <n-input
                     :value="activeAction.routePath"
@@ -2608,6 +2608,108 @@
                     placeholder="目标表单"
                     @update:value="updateActiveCustomAction({ targetFormKey: $event || '' })"
                   />
+                </div>
+              </n-form-item>
+
+              <n-form-item v-else label="API 调用">
+                <div class="api-action-panel">
+                  <div class="action-form-grid">
+                    <n-select
+                      :value="activeAction.actionConfig?.apiConfigId || null"
+                      :options="apiConfigOptions"
+                      :loading="apiConfigLoading"
+                      clearable
+                      filterable
+                      placeholder="选择已登记 API，或手工填写"
+                      @focus="loadEnabledApiConfigs"
+                      @update:value="applyCustomActionApiConfig"
+                    />
+                    <n-select
+                      :value="activeAction.actionConfig?.method || 'POST'"
+                      :options="apiMethodOptions"
+                      @update:value="updateActiveActionConfig({ method: normalizeCustomApiMethod($event) })"
+                    />
+                    <n-input
+                      :value="activeAction.actionConfig?.capabilityCode || ''"
+                      placeholder="能力标识，可选"
+                      @update:value="updateActiveActionConfig({ capabilityCode: $event || '' })"
+                    />
+                    <n-input
+                      :value="resolveCustomApiUrl(activeAction)"
+                      placeholder="/business/customer/audit/:id"
+                      @update:value="updateActiveActionConfig({ url: $event || '' })"
+                    />
+                    <n-input
+                      :value="activeAction.successMessage || activeAction.actionConfig?.successMessage || ''"
+                      placeholder="成功提示，默认操作成功"
+                      @update:value="updateActiveCustomAction({ successMessage: $event || '' })"
+                    />
+                  </div>
+
+                  <div class="api-param-head">
+                    <span>API 参数映射</span>
+                    <n-button size="small" secondary @click="addApiActionParam">
+                      添加参数
+                    </n-button>
+                  </div>
+                  <div v-if="activeAction.actionConfig?.params?.length" class="api-param-list">
+                    <div
+                      v-for="(param, paramIdx) in activeAction.actionConfig.params"
+                      :key="param.clientKey || paramIdx"
+                      class="api-param-row"
+                    >
+                      <n-input
+                        :value="param.name"
+                        placeholder="参数名"
+                        @update:value="updateApiActionParam(paramIdx, { name: normalizeParamName($event) })"
+                      />
+                      <n-select
+                        :value="param.target || ''"
+                        :options="apiParamTargetOptions"
+                        placeholder="自动"
+                        clearable
+                        @update:value="updateApiActionParam(paramIdx, { target: $event || '' })"
+                      />
+                      <n-select
+                        :value="param.sourceType || 'rowField'"
+                        :options="paramSourceOptions"
+                        @update:value="updateApiActionParam(paramIdx, normalizeApiParamSourcePatch($event, param))"
+                      />
+                      <n-select
+                        v-if="param.sourceType === 'rowField'"
+                        :value="param.sourceField || ''"
+                        :options="rowFieldOptions"
+                        filterable
+                        clearable
+                        placeholder="当前行字段"
+                        @update:value="updateApiActionParam(paramIdx, { sourceField: $event || '' })"
+                      />
+                      <n-select
+                        v-else-if="param.sourceType === 'system'"
+                        :value="param.sourceField || ''"
+                        :options="systemVariableOptions"
+                        clearable
+                        placeholder="系统变量"
+                        @update:value="updateApiActionParam(paramIdx, { sourceField: $event || '' })"
+                      />
+                      <n-input
+                        v-else-if="param.sourceType === 'routeQuery'"
+                        :value="param.sourceField || ''"
+                        placeholder="路由参数名"
+                        @update:value="updateApiActionParam(paramIdx, { sourceField: normalizeParamName($event) })"
+                      />
+                      <n-input
+                        v-else
+                        :value="param.value || ''"
+                        placeholder="固定值，支持 :id / ${field}"
+                        @update:value="updateApiActionParam(paramIdx, { value: $event })"
+                      />
+                      <n-button quaternary type="error" @click="removeApiActionParam(paramIdx)">
+                        删除
+                      </n-button>
+                    </div>
+                  </div>
+                  <span v-else class="empty">暂无 API 参数映射</span>
                 </div>
               </n-form-item>
 
@@ -2643,7 +2745,7 @@
                 </n-form-item>
               </div>
 
-              <n-form-item label="参数映射">
+              <n-form-item v-if="!isApiCustomAction(activeAction)" label="参数映射">
                 <div class="action-param-editor">
                   <div
                     v-for="(param, paramIdx) in (activeAction.params || [])"
@@ -2757,6 +2859,7 @@ import {
 } from '@vicons/ionicons5'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
+import { enabledApiConfigs } from '@/api/business-app'
 import CrudDefaultParamsEditor from './CrudDefaultParamsEditor.vue'
 import CrudHookRulesEditor from './CrudHookRulesEditor.vue'
 import GridBlockRenderer from './GridBlockRenderer.vue'
@@ -2876,6 +2979,7 @@ const actionTypeOptions = [
 const actionBehaviorOptions = [
   { label: '站内跳转', value: 'route' },
   { label: '外部链接', value: 'external' },
+  { label: '调用 API', value: 'CALL_API' },
   { label: '刷新列表', value: 'refresh' },
 ]
 const actionOpenTargetOptions = [
@@ -2886,6 +2990,20 @@ const successBehaviorOptions = [
   { label: '无', value: 'none' },
   { label: '刷新列表', value: 'refreshList' },
   { label: '返回上一页', value: 'goBack' },
+]
+const apiMethodOptions = [
+  { label: 'GET', value: 'GET' },
+  { label: 'POST', value: 'POST' },
+  { label: 'POST 加密', value: 'POST_ENCRYPT' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'DELETE', value: 'DELETE' },
+  { label: 'PATCH', value: 'PATCH' },
+]
+const apiParamTargetOptions = [
+  { label: 'Path', value: 'path' },
+  { label: 'Query', value: 'query' },
+  { label: 'Body', value: 'body' },
+  { label: 'Header', value: 'header' },
 ]
 const paramSourceOptions = [
   { label: '固定值', value: 'static' },
@@ -2904,6 +3022,7 @@ const systemVariableOptions = [
   { label: '当前日期', value: 'today' },
   { label: '当前用户 ID', value: 'userId' },
   { label: '当前租户 ID', value: 'tenantId' },
+  { label: '勾选行 ID', value: 'selectedIds' },
 ]
 const labelPlacementOptions = [
   { label: '左侧', value: 'left' },
@@ -3169,6 +3288,13 @@ const selectedBlockCodeText = computed(() => selectedBlock.value
   : '请先选中一个区块')
 const customActionList = computed(() => selectedBlock.value?.props?.customActions || [])
 const activeAction = computed(() => customActionList.value[activeActionIndex.value] || null)
+const apiConfigs = ref([])
+const apiConfigLoading = ref(false)
+const apiConfigLoaded = ref(false)
+const apiConfigOptions = computed(() => apiConfigs.value.map(item => ({
+  label: `${item.apiName || item.apiCode || item.urlPath} · ${item.reqMethod || 'GET'} ${item.urlPath || ''}`,
+  value: String(item.id || item.apiCode || item.urlPath),
+})))
 const dropPreviewLabel = computed(() => {
   const meta = resolveListPageBlockMeta(resolveDraggedPreviewBlockType())
   return meta ? `放置 ${meta.title}` : '放置区块'
@@ -5952,6 +6078,9 @@ function addCustomAction() {
     confirmText: '',
     displayCondition: '',
     successBehavior: 'none',
+    successMessage: '',
+    failureMessage: '',
+    actionConfig: normalizeCustomApiConfig({}),
     params: [],
   })
   patchBlockProps(selectedBlock.value.id, { customActions: list })
@@ -5974,6 +6103,8 @@ function removeCustomAction(idx) {
 
 function openCustomActionModal() {
   activeActionIndex.value = customActionList.value.length ? 0 : -1
+  if (isApiCustomAction(customActionList.value[activeActionIndex.value]))
+    loadEnabledApiConfigs()
   customActionModalOpen.value = true
 }
 
@@ -5981,6 +6112,93 @@ function updateActiveCustomAction(patch) {
   if (activeActionIndex.value < 0)
     return
   updateCustomAction(activeActionIndex.value, patch)
+}
+
+function updateActiveCustomActionType(value) {
+  const actionType = normalizeCustomActionType(value)
+  const patch = { actionType }
+  if (actionType === 'CALL_API') {
+    const nextConfig = normalizeCustomApiConfig(activeAction.value?.actionConfig)
+    if (!nextConfig.url && activeAction.value?.routePath)
+      nextConfig.url = activeAction.value.routePath
+    patch.actionConfig = nextConfig
+    patch.openTarget = '_self'
+    loadEnabledApiConfigs()
+  }
+  updateActiveCustomAction(patch)
+}
+
+function updateActiveActionConfig(patch = {}) {
+  const current = normalizeCustomApiConfig(activeAction.value?.actionConfig)
+  updateActiveCustomAction({
+    actionType: 'CALL_API',
+    actionConfig: {
+      ...current,
+      ...patch,
+    },
+  })
+}
+
+async function loadEnabledApiConfigs() {
+  if (apiConfigLoaded.value || apiConfigLoading.value)
+    return
+  apiConfigLoading.value = true
+  try {
+    const res = await enabledApiConfigs()
+    apiConfigs.value = Array.isArray(res.data) ? res.data : []
+    apiConfigLoaded.value = true
+  }
+  catch (error) {
+    apiConfigs.value = []
+    apiConfigLoaded.value = true
+    console.warn('[ListPageGridDesigner] API配置不可用，已切换为手工输入模式', error?.message || error)
+  }
+  finally {
+    apiConfigLoading.value = false
+  }
+}
+
+function applyCustomActionApiConfig(value) {
+  const configId = value === undefined || value === null ? '' : String(value)
+  const selected = apiConfigs.value.find(item => String(item.id || item.apiCode || item.urlPath) === configId)
+  const patch = { apiConfigId: configId || null }
+  if (selected) {
+    patch.apiCode = selected.apiCode || ''
+    patch.apiName = selected.apiName || ''
+    patch.method = selected.needEncrypt && String(selected.reqMethod || '').toUpperCase() === 'POST'
+      ? 'POST_ENCRYPT'
+      : normalizeCustomApiMethod(selected.reqMethod || 'POST')
+    patch.url = selected.urlPath || ''
+  }
+  updateActiveActionConfig(patch)
+}
+
+function addApiActionParam() {
+  const config = normalizeCustomApiConfig(activeAction.value?.actionConfig)
+  const target = normalizeCustomApiMethod(config.method) === 'GET' ? 'query' : 'body'
+  updateActiveActionConfig({
+    params: [
+      ...config.params,
+      normalizeCustomApiParam({
+        target,
+        sourceType: 'rowField',
+      }),
+    ],
+  })
+}
+
+function updateApiActionParam(paramIdx, patch) {
+  const config = normalizeCustomApiConfig(activeAction.value?.actionConfig)
+  const params = [...config.params]
+  params[paramIdx] = normalizeCustomApiParam({ ...(params[paramIdx] || {}), ...patch })
+  updateActiveActionConfig({ params })
+}
+
+function removeApiActionParam(paramIdx) {
+  const config = normalizeCustomApiConfig(activeAction.value?.actionConfig)
+  const params = [...config.params]
+  params.splice(paramIdx, 1)
+  updateActiveActionConfig({ params })
 }
 
 function addActionParam() {
@@ -6037,6 +6255,85 @@ function resolveParamTemplateValue(sourceType = 'static', sourceField = '') {
   return ''
 }
 
+function normalizeApiParamSourcePatch(sourceType = 'rowField', param = {}) {
+  return {
+    sourceType,
+    sourceField: '',
+    value: sourceType === 'static' ? (param.value || '') : '',
+  }
+}
+
+function normalizeCustomActionType(value) {
+  const normalized = String(value || 'route')
+  if (['CALL_API', 'REQUEST'].includes(normalized.toUpperCase()))
+    return 'CALL_API'
+  if (normalized === 'external' || normalized === 'refresh')
+    return normalized
+  return 'route'
+}
+
+function resolveActionBehaviorValue(value) {
+  return normalizeCustomActionType(value)
+}
+
+function isApiCustomAction(action = {}) {
+  return normalizeCustomActionType(action?.actionType) === 'CALL_API'
+}
+
+function normalizeCustomApiConfig(config = {}) {
+  const source = typeof config === 'string' ? parseJsonObject(config) : config && typeof config === 'object' ? config : {}
+  const params = Array.isArray(source.params)
+    ? source.params
+    : Array.isArray(source.paramMappings)
+      ? source.paramMappings
+      : []
+  return {
+    ...source,
+    apiConfigId: source.apiConfigId === undefined || source.apiConfigId === null ? null : String(source.apiConfigId),
+    apiCode: String(source.apiCode || '').trim(),
+    apiName: String(source.apiName || '').trim(),
+    method: normalizeCustomApiMethod(source.method || source.reqMethod || source.apiMethod || 'POST'),
+    url: String(source.url || source.apiUrl || source.urlPath || source.path || '').trim(),
+    capabilityCode: String(source.capabilityCode || '').trim(),
+    params: params.map(normalizeCustomApiParam).filter(Boolean),
+  }
+}
+
+function resolveCustomApiUrl(action = {}) {
+  const config = action.actionConfig && typeof action.actionConfig === 'object' ? action.actionConfig : {}
+  return config.url || config.apiUrl || config.urlPath || config.path || action.routePath || ''
+}
+
+function normalizeCustomApiMethod(value) {
+  const method = String(value || 'POST')
+    .replace('-', '_')
+    .toUpperCase()
+  return apiMethodOptions.some(item => item.value === method) ? method : 'POST'
+}
+
+function normalizeCustomApiParam(param = {}) {
+  const sourceType = ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'rowField'
+  const target = ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : ''
+  return {
+    clientKey: param.clientKey || `param_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: String(param.name || '').trim(),
+    target,
+    sourceType,
+    sourceField: String(param.sourceField || '').trim(),
+    value: param.value === undefined || param.value === null ? '' : String(param.value),
+  }
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
+}
+
 function normalizeActionKey(value) {
   return String(value || '')
     .trim()
@@ -6058,14 +6355,17 @@ function actionPositionText(position) {
 }
 
 function actionBehaviorText(actionType) {
-  return actionBehaviorOptions.find(item => item.value === (actionType || 'route'))?.label || '站内跳转'
+  return actionBehaviorOptions.find(item => item.value === resolveActionBehaviorValue(actionType))?.label || '站内跳转'
 }
 
 function actionPathPlaceholder(action = {}) {
-  if ((action.actionType || 'route') === 'external')
+  const actionType = resolveActionBehaviorValue(action.actionType)
+  if (actionType === 'external')
     return 'https://example.com/:id'
-  if ((action.actionType || 'route') === 'refresh')
+  if (actionType === 'refresh')
     return '刷新列表无需地址'
+  if (actionType === 'CALL_API')
+    return '/business/customer/audit/:id'
   return '/ai/xxx/:id'
 }
 
@@ -7376,6 +7676,38 @@ function centerCanvasViewport() {
   align-items: center;
 }
 
+.api-action-panel {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 12px;
+}
+
+.api-param-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.api-param-list {
+  display: grid;
+  gap: 8px;
+}
+
+.api-param-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) 96px 112px minmax(140px, 1.1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .action-empty-panel {
   display: grid;
   place-items: center;
@@ -7725,7 +8057,8 @@ function centerCanvasViewport() {
 
   .action-modal-layout,
   .action-form-grid,
-  .action-param-row {
+  .action-param-row,
+  .api-param-row {
     grid-template-columns: 1fr;
   }
 }

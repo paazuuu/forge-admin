@@ -104,6 +104,95 @@
                   <n-form-item-gi v-else-if="action.actionType === 'OPEN_EXTERNAL'" :span="3" label="外部链接">
                     <n-input v-model:value="action.actionConfig.url" placeholder="https://example.com" @update:value="markDirty" />
                   </n-form-item-gi>
+                  <template v-else-if="action.actionType === 'CALL_API'">
+                    <n-form-item-gi :span="3" label="API 调用">
+                      <div class="api-action-panel">
+                        <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
+                          <n-form-item-gi label="已登记 API">
+                            <n-select
+                              v-model:value="action.actionConfig.apiConfigId"
+                              :options="apiConfigOptions"
+                              :loading="apiConfigLoading"
+                              clearable
+                              filterable
+                              placeholder="可手工填写"
+                              @update:value="value => applyApiConfig(action, value)"
+                            />
+                          </n-form-item-gi>
+                          <n-form-item-gi label="请求方式">
+                            <n-select v-model:value="action.actionConfig.method" :options="apiMethodOptions" @update:value="markDirty" />
+                          </n-form-item-gi>
+                          <n-form-item-gi label="成功后">
+                            <n-select
+                              v-model:value="action.actionConfig.successBehavior"
+                              :options="successBehaviorOptions"
+                              clearable
+                              placeholder="仅提示"
+                              @update:value="markDirty"
+                            />
+                          </n-form-item-gi>
+                          <n-form-item-gi :span="2" label="接口地址">
+                            <n-input v-model:value="action.actionConfig.url" placeholder="/business/customer/audit/:id" @update:value="markDirty" />
+                          </n-form-item-gi>
+                          <n-form-item-gi label="能力标识">
+                            <n-input v-model:value="action.actionConfig.capabilityCode" placeholder="可选，例如：customer_audit" @update:value="markDirty" />
+                          </n-form-item-gi>
+                        </n-grid>
+
+                        <div class="api-param-head">
+                          <span>参数映射</span>
+                          <n-button size="small" secondary @click="addApiParam(action)">
+                            <template #icon>
+                              <n-icon><AddOutline /></n-icon>
+                            </template>
+                            添加参数
+                          </n-button>
+                        </div>
+                        <div v-if="action.actionConfig.params?.length" class="api-param-list">
+                          <div v-for="(param, paramIndex) in action.actionConfig.params" :key="param.clientKey" class="api-param-row">
+                            <n-input v-model:value="param.name" placeholder="参数名" @update:value="markDirty" />
+                            <n-select v-model:value="param.target" :options="apiParamTargetOptions" @update:value="markDirty" />
+                            <n-select v-model:value="param.sourceType" :options="apiParamSourceOptions" @update:value="markDirty" />
+                            <n-select
+                              v-if="param.sourceType === 'rowField'"
+                              v-model:value="param.sourceField"
+                              :options="fieldOptions"
+                              clearable
+                              filterable
+                              placeholder="选择字段"
+                              @update:value="markDirty"
+                            />
+                            <n-select
+                              v-else-if="param.sourceType === 'system'"
+                              v-model:value="param.sourceField"
+                              :options="systemParamOptions"
+                              clearable
+                              placeholder="系统变量"
+                              @update:value="markDirty"
+                            />
+                            <n-input
+                              v-else-if="param.sourceType === 'routeQuery'"
+                              v-model:value="param.sourceField"
+                              placeholder="路由参数名"
+                              @update:value="markDirty"
+                            />
+                            <n-input
+                              v-else
+                              v-model:value="param.value"
+                              placeholder="固定值，支持 :id / ${field}"
+                              @update:value="markDirty"
+                            />
+                            <n-button quaternary circle size="small" @click="removeApiParam(action, paramIndex)">
+                              <template #icon>
+                                <n-icon><TrashOutline /></n-icon>
+                              </template>
+                            </n-button>
+                          </div>
+                        </div>
+                        <n-empty v-else size="small" description="暂无参数映射" />
+                      </div>
+                    </n-form-item-gi>
+                  </template>
                   <n-form-item-gi v-else-if="action.actionType === 'TRIGGER'" :span="3" label="触发器标识">
                     <n-input v-model:value="action.actionConfig.triggerCode" placeholder="例如：customer_notify" @update:value="markDirty" />
                   </n-form-item-gi>
@@ -138,11 +227,12 @@
 </template>
 
 <script setup>
-import { TrashOutline } from '@vicons/ionicons5'
+import { AddOutline, TrashOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   businessObjectActions,
+  enabledApiConfigs,
   saveBusinessObjectActions,
 } from '@/api/business-app'
 
@@ -167,6 +257,9 @@ const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
 const localActions = ref([])
+const apiConfigs = ref([])
+const apiConfigLoading = ref(false)
+const apiConfigLoaded = ref(false)
 
 const positionOptions = [
   { label: '工具栏', value: 'TOOLBAR' },
@@ -176,10 +269,45 @@ const positionOptions = [
 
 const actionTypeOptions = [
   { label: '打开页面', value: 'OPEN_PAGE' },
-  { label: '调用能力', value: 'CALL_API' },
+  { label: '调用 API', value: 'CALL_API' },
   { label: '发起主流程', value: 'START_FLOW' },
   { label: '执行触发器', value: 'TRIGGER' },
   { label: '打开外部链接', value: 'OPEN_EXTERNAL' },
+]
+
+const apiMethodOptions = [
+  { label: 'GET', value: 'GET' },
+  { label: 'POST', value: 'POST' },
+  { label: 'POST 加密', value: 'POST_ENCRYPT' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'DELETE', value: 'DELETE' },
+  { label: 'PATCH', value: 'PATCH' },
+]
+
+const apiParamTargetOptions = [
+  { label: 'Path', value: 'path' },
+  { label: 'Query', value: 'query' },
+  { label: 'Body', value: 'body' },
+  { label: 'Header', value: 'header' },
+]
+
+const apiParamSourceOptions = [
+  { label: '当前行字段', value: 'rowField' },
+  { label: '路由参数', value: 'routeQuery' },
+  { label: '固定值', value: 'static' },
+  { label: '系统变量', value: 'system' },
+]
+
+const systemParamOptions = [
+  { label: '当前时间', value: 'now' },
+  { label: '当前日期', value: 'today' },
+  { label: '租户ID', value: 'tenantId' },
+  { label: '勾选行ID', value: 'selectedIds' },
+]
+
+const successBehaviorOptions = [
+  { label: '刷新列表', value: 'refreshList' },
+  { label: '返回上一页', value: 'goBack' },
 ]
 
 const actionStats = computed(() => positionOptions.map(item => ({
@@ -187,6 +315,27 @@ const actionStats = computed(() => positionOptions.map(item => ({
   label: item.label,
   count: localActions.value.filter(action => action.actionPosition === item.value && action.status !== 0).length,
 })))
+
+const apiConfigOptions = computed(() => apiConfigs.value.map(item => ({
+  label: `${item.apiName || item.apiCode || item.urlPath} · ${item.reqMethod || 'GET'} ${item.urlPath || ''}`,
+  value: String(item.id || item.apiCode || item.urlPath),
+})))
+
+const fieldOptions = computed(() => (Array.isArray(props.fields) ? props.fields : [])
+  .map((field) => {
+    const value = field.field || field.fieldCode || field.fieldName
+    if (!value)
+      return null
+    return {
+      label: `${field.label || field.fieldName || value}（${value}）`,
+      value,
+    }
+  })
+  .filter(Boolean))
+
+onMounted(() => {
+  loadEnabledApiConfigs()
+})
 
 watch(() => props.objectId, () => {
   loadActions()
@@ -205,6 +354,25 @@ async function loadActions() {
   }
   finally {
     loading.value = false
+  }
+}
+
+async function loadEnabledApiConfigs() {
+  if (apiConfigLoaded.value || apiConfigLoading.value)
+    return
+  apiConfigLoading.value = true
+  try {
+    const res = await enabledApiConfigs()
+    apiConfigs.value = Array.isArray(res.data) ? res.data : []
+    apiConfigLoaded.value = true
+  }
+  catch (error) {
+    apiConfigs.value = []
+    apiConfigLoaded.value = true
+    console.warn('[BusinessActionDesigner] API配置不可用，已切换为手工输入模式', error?.message || error)
+  }
+  finally {
+    apiConfigLoading.value = false
   }
 }
 
@@ -258,6 +426,11 @@ function updateStatus(action, value) {
 async function saveActions() {
   if (!props.objectId)
     return
+  const invalidApiAction = localActions.value.find(action => action.status !== 0 && isInvalidApiAction(action))
+  if (invalidApiAction) {
+    message.warning(`请为“${invalidApiAction.actionName || '自定义操作'}”配置接口地址或能力标识`)
+    return
+  }
   saving.value = true
   try {
     await saveBusinessObjectActions(props.objectId, localActions.value.map(toActionPayload))
@@ -320,7 +493,10 @@ function normalizeActionType(value) {
 
 function normalizeActionConfig(actionType, config = {}) {
   const source = typeof config === 'string' ? safeParseJson(config) : { ...(config || {}) }
-  if (normalizeActionType(actionType) !== 'START_FLOW')
+  const normalizedType = normalizeActionType(actionType)
+  if (normalizedType === 'CALL_API')
+    return normalizeApiActionConfig(source)
+  if (normalizedType !== 'START_FLOW')
     return source
   return {
     useMainFlow: true,
@@ -329,7 +505,10 @@ function normalizeActionConfig(actionType, config = {}) {
 
 function normalizeActionConfigForPayload(actionType, config = {}) {
   const source = normalizeActionConfig(actionType, config)
-  if (normalizeActionType(actionType) !== 'START_FLOW')
+  const normalizedType = normalizeActionType(actionType)
+  if (normalizedType === 'CALL_API')
+    return normalizeApiActionConfigForPayload(source)
+  if (normalizedType !== 'START_FLOW')
     return source
   return {
     useMainFlow: true,
@@ -339,6 +518,99 @@ function normalizeActionConfigForPayload(actionType, config = {}) {
 function updateActionType(action, value) {
   action.actionType = normalizeActionType(value)
   action.actionConfig = normalizeActionConfig(action.actionType, action.actionConfig)
+  if (action.actionType === 'CALL_API')
+    loadEnabledApiConfigs()
+  markDirty()
+}
+
+function normalizeApiActionConfig(config = {}) {
+  const params = Array.isArray(config.params)
+    ? config.params
+    : Array.isArray(config.paramMappings)
+      ? config.paramMappings
+      : []
+  return {
+    ...config,
+    apiConfigId: config.apiConfigId === undefined || config.apiConfigId === null ? null : String(config.apiConfigId),
+    apiCode: String(config.apiCode || '').trim(),
+    apiName: String(config.apiName || '').trim(),
+    method: normalizeApiMethod(config.method || config.reqMethod || config.apiMethod || 'POST'),
+    url: String(config.url || config.apiUrl || config.urlPath || config.path || '').trim(),
+    capabilityCode: String(config.capabilityCode || '').trim(),
+    successBehavior: String(config.successBehavior || '').trim() || null,
+    params: params.map(normalizeApiParam).filter(Boolean),
+  }
+}
+
+function normalizeApiActionConfigForPayload(config = {}) {
+  const normalized = normalizeApiActionConfig(config)
+  return {
+    ...normalized,
+    params: normalized.params
+      .filter(param => param.name && hasApiParamSource(param))
+      .map(({ clientKey, ...param }) => param),
+  }
+}
+
+function normalizeApiMethod(value) {
+  const method = String(value || 'POST')
+    .replace('-', '_')
+    .toUpperCase()
+  return apiMethodOptions.some(item => item.value === method) ? method : 'POST'
+}
+
+function normalizeApiParam(param = {}) {
+  const sourceType = ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'rowField'
+  const target = ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : ''
+  return {
+    clientKey: param.clientKey || `param_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: String(param.name || '').trim(),
+    target,
+    sourceType,
+    sourceField: String(param.sourceField || '').trim(),
+    value: param.value === undefined || param.value === null ? '' : String(param.value),
+  }
+}
+
+function hasApiParamSource(param = {}) {
+  if (param.sourceType === 'static')
+    return param.value !== ''
+  return Boolean(param.sourceField)
+}
+
+function isInvalidApiAction(action = {}) {
+  if (normalizeActionType(action.actionType) !== 'CALL_API')
+    return false
+  const config = normalizeApiActionConfig(action.actionConfig)
+  return !config.url && !config.capabilityCode
+}
+
+function addApiParam(action) {
+  action.actionConfig = normalizeApiActionConfig(action.actionConfig)
+  action.actionConfig.params.push(normalizeApiParam({
+    target: normalizeApiMethod(action.actionConfig.method) === 'GET' ? 'query' : 'body',
+    sourceType: 'rowField',
+  }))
+  markDirty()
+}
+
+function removeApiParam(action, index) {
+  action.actionConfig.params.splice(index, 1)
+  markDirty()
+}
+
+function applyApiConfig(action, value) {
+  const configId = value === undefined || value === null ? '' : String(value)
+  const selected = apiConfigs.value.find(item => String(item.id || item.apiCode || item.urlPath) === configId)
+  action.actionConfig.apiConfigId = configId || null
+  if (selected) {
+    action.actionConfig.apiCode = selected.apiCode || ''
+    action.actionConfig.apiName = selected.apiName || ''
+    action.actionConfig.method = selected.needEncrypt && String(selected.reqMethod || '').toUpperCase() === 'POST'
+      ? 'POST_ENCRYPT'
+      : normalizeApiMethod(selected.reqMethod || 'POST')
+    action.actionConfig.url = selected.urlPath || ''
+  }
   markDirty()
 }
 
@@ -506,6 +778,42 @@ defineExpose({
   font-size: 12px;
 }
 
+.api-action-panel {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 12px;
+}
+
+.api-action-panel :deep(.n-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.api-param-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.api-param-list {
+  display: grid;
+  gap: 8px;
+}
+
+.api-param-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 104px 120px minmax(150px, 1.2fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
 @media (max-width: 1100px) {
   .action-designer-body {
     grid-template-columns: 1fr;
@@ -514,6 +822,10 @@ defineExpose({
   .action-summary-pane {
     border-left: 0;
     border-top: 1px solid #e5e7eb;
+  }
+
+  .api-param-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

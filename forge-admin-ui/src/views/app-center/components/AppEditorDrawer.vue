@@ -32,7 +32,7 @@
           </n-radio-group>
         </n-form-item>
 
-        <template v-if="isAdminMount">
+        <template v-if="isAdminMount && !isCodeDownloadMode">
           <n-form-item :label="form.suiteAsMenuParent ? '业务域目录上级' : '父级菜单或模块'">
             <MenuParentSelect v-model:value="form.adminMenuParentId" placeholder="选择挂载在哪个管理端菜单下" />
           </n-form-item>
@@ -356,6 +356,7 @@ const showConfigKey = computed(() => form.entryMode === 'RUNTIME')
 const showEntryUrl = computed(() => !['RUNTIME', 'API'].includes(form.entryMode))
 const showSecurityFields = computed(() => ['IFRAME', 'EXTERNAL', 'H5'].includes(form.entryMode))
 const isDynamicRenderMode = computed(() => normalizeAppMode(form.appMode) === 'DYNAMIC_RENDER')
+const isCodeDownloadMode = computed(() => showConfigKey.value && normalizeAppMode(form.appMode) === 'CODE_DOWNLOAD')
 const entryModeOptions = computed(() => {
   const dictMap = new Map((dict.value.ai_business_app_entry_mode || []).map(item => [item.value, item]))
   return allowedEntryModesForTarget(form.mountTarget).map((value) => {
@@ -518,6 +519,11 @@ watch(() => form.entryMode, () => {
   normalizeRuntimeTargets()
 })
 
+watch(() => form.appMode, () => {
+  if (isCodeDownloadMode.value)
+    form.adminMenuSyncEnabled = false
+})
+
 watch(() => form.appName, () => {
   if (!form.id && form.entryMode === 'RUNTIME' && !runtimeOpenModeTouched.value)
     form.runtimeOpenMode = inferRuntimeOpenMode()
@@ -666,6 +672,8 @@ function hydrateOptions() {
   if (form.entryMode !== 'RUNTIME')
     form.appMode = 'DYNAMIC_RENDER'
   normalizeRuntimeTargets()
+  if (isCodeDownloadMode.value)
+    form.adminMenuSyncEnabled = false
 }
 
 function buildOptions() {
@@ -691,7 +699,7 @@ function buildOptions() {
     options.adminMenu = {
       parentId: adminMenuParentId || null,
       originalParentId: adminMenuParentId || null,
-      syncEnabled: Boolean(form.adminMenuSyncEnabled),
+      syncEnabled: !isCodeDownloadMode.value && Boolean(form.adminMenuSyncEnabled),
       suiteAsParent: Boolean(form.suiteAsMenuParent),
       sort: Number(form.menuSort || 0),
     }

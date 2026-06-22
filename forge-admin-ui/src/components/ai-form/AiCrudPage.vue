@@ -995,7 +995,7 @@ function isActionDisabled(action, row) {
 
 function actionDisabledReason(action, row) {
   if (isActionLoading(action, row))
-    return '正在发起流程，请稍候'
+    return '操作执行中，请稍候'
   if (typeof action.disabledReason === 'function')
     return action.disabledReason(row)
   return action.disabledReason || '当前状态不可执行'
@@ -1078,6 +1078,7 @@ function handleActionClick(actionOrKey, row) {
 
 async function handleConfiguredAction(action, row) {
   const actionType = action.actionType || 'route'
+  const normalizedActionType = String(actionType).toUpperCase()
   if (actionType === 'START_FLOW' || action.key === 'START_FLOW') {
     await startFlowAction(action, row)
     return
@@ -1087,6 +1088,10 @@ async function handleConfiguredAction(action, row) {
     return
   if (actionType === 'refresh') {
     loadList()
+    return
+  }
+  if (['CALL_API', 'REQUEST'].includes(normalizedActionType)) {
+    await callConfiguredApiAction(action, row)
     return
   }
   if (actionType === 'route' && action.routePath) {
@@ -1153,6 +1158,253 @@ async function startFlowAction(action, row) {
   }
 }
 
+async function callConfiguredApiAction(action, row) {
+  const requestInfo = buildConfiguredApiRequest(action, row)
+  if (!requestInfo.url) {
+    if (requestInfo.config.capabilityCode) {
+      window.$message.info('已触发自定义能力事件')
+      return null
+    }
+    window.$message.warning('未配置接口地址，无法调用 API')
+    return null
+  }
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message.info('操作正在执行，请稍候')
+    return null
+  }
+  setActionLoading(loadingKey, true)
+  try {
+    const response = await sendConfiguredApiRequest(requestInfo)
+    const successMessage = action.successMessage || requestInfo.config.successMessage || '操作成功'
+    if (successMessage)
+      window.$message.success(resolveActionText(successMessage, row))
+    const successBehavior = action.successBehavior || requestInfo.config.successBehavior
+    if (successBehavior) {
+      handleConfiguredActionSuccess({ ...action, successBehavior })
+    }
+    else if (!isFalseLike(requestInfo.config.refreshAfter)) {
+      await loadList()
+    }
+    return response
+  }
+  catch (error) {
+    const failureMessage = action.failureMessage || requestInfo.config.failureMessage || error.message || '操作失败'
+    window.$message.error(resolveActionText(failureMessage, row))
+    return null
+  }
+  finally {
+    setActionLoading(loadingKey, false)
+  }
+}
+
+async function sendConfiguredApiRequest(requestInfo) {
+  const { method, url, params, data, headers } = requestInfo
+  if (method === 'postEncrypt')
+    return postEncrypt(url, data, compactRequestOptions({ params, headers }))
+  const requestConfig = {
+    method,
+    url,
+    ...compactRequestOptions({ params, headers }),
+  }
+  if (method !== 'get' || Object.keys(data).length)
+    requestConfig.data = data
+  return request(requestConfig)
+}
+
+function compactRequestOptions(options = {}) {
+  const result = {}
+  Object.entries(options).forEach(([key, value]) => {
+    if (value && typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length)
+      return
+    if (value === undefined || value === null)
+      return
+    result[key] = value
+  })
+  return result
+}
+
+function buildConfiguredApiRequest(action = {}, row = {}) {
+  const config = normalizeConfiguredApiConfig(action)
+  const urlTemplate = config.url
+  let url = resolveActionText(urlTemplate, row)
+  const method = normalizeConfiguredApiMethod(config.method)
+  const params = {}
+  const data = {}
+  const headers = {}
+  config.params.forEach((param) => {
+    const name = String(param?.name || '').trim()
+    if (!name)
+      return
+    const value = resolveActionParamRawValue(param, row)
+    if (isEmptyApiParamValue(value))
+      return
+    const target = resolveApiParamTarget(param, method, urlTemplate)
+    if (target === 'path') {
+      url = replaceApiPathParam(url, name, value)
+    }
+    else if (target === 'header') {
+      headers[name] = value
+    }
+    else if (target === 'query') {
+      setApiObjectValue(params, name, value)
+    }
+    else {
+      setApiObjectValue(data, name, value)
+    }
+  })
+  return {
+    method,
+    url,
+    params,
+    data,
+    headers,
+    config,
+  }
+}
+
+function normalizeConfiguredApiConfig(action = {}) {
+  const actionConfig = action.actionConfig && typeof action.actionConfig === 'object' ? action.actionConfig : {}
+  const parsed = parseConfiguredApiValue(
+    actionConfig.apiConfigValue
+    || actionConfig.api
+    || actionConfig.request
+    || action.apiConfigValue
+    || action.api,
+  )
+  const params = Array.isArray(actionConfig.params) && actionConfig.params.length
+    ? actionConfig.params
+    : Array.isArray(actionConfig.paramMappings) && actionConfig.paramMappings.length
+      ? actionConfig.paramMappings
+      : Array.isArray(action.params)
+        ? action.params
+        : []
+  return {
+    ...actionConfig,
+    method: normalizeConfiguredApiMethod(
+      actionConfig.method
+      || actionConfig.reqMethod
+      || actionConfig.apiMethod
+      || action.method
+      || parsed.method
+      || 'post',
+    ),
+    url: String(
+      actionConfig.url
+      || actionConfig.apiUrl
+      || actionConfig.urlPath
+      || actionConfig.path
+      || action.url
+      || action.apiUrl
+      || parsed.url
+      || action.routePath
+      || '',
+    ).trim(),
+    capabilityCode: String(actionConfig.capabilityCode || action.capabilityCode || '').trim(),
+    params: params.map(normalizeConfiguredApiParam).filter(Boolean),
+  }
+}
+
+function parseConfiguredApiValue(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  const parts = text.split('@')
+  if (parts.length > 1 && /^[A-Z_]+$/i.test(parts[0]))
+    return { method: normalizeConfiguredApiMethod(parts[0]), url: parts.slice(1).join('@') }
+  return { url: text }
+}
+
+function normalizeConfiguredApiMethod(value) {
+  const method = String(value || 'post')
+    .replace('-', '_')
+    .toLowerCase()
+  if (['postencrypt', 'post_encrypt'].includes(method))
+    return 'postEncrypt'
+  if (['get', 'post', 'put', 'delete', 'patch'].includes(method))
+    return method
+  return 'post'
+}
+
+function normalizeConfiguredApiParam(param = {}) {
+  if (!param || typeof param !== 'object')
+    return null
+  const sourceType = ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'static'
+  const target = ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : ''
+  return {
+    name: String(param.name || '').trim(),
+    target,
+    sourceType,
+    sourceField: String(param.sourceField || '').trim(),
+    value: param.value,
+  }
+}
+
+function resolveApiParamTarget(param = {}, method = 'post', urlTemplate = '') {
+  if (param.target)
+    return param.target
+  const name = String(param.name || '').trim()
+  if (name && (String(urlTemplate).includes(`:${name}`) || String(urlTemplate).includes(`{${name}}`)))
+    return 'path'
+  return method === 'get' ? 'query' : 'body'
+}
+
+function resolveActionParamRawValue(param = {}, row = {}) {
+  const sourceType = param.sourceType || 'static'
+  const sourceField = String(param.sourceField || '').trim()
+  if (sourceType === 'rowField' && sourceField)
+    return resolveObjectPathValue(row, sourceField)
+  if (sourceType === 'routeQuery' && sourceField)
+    return route.query?.[sourceField] ?? ''
+  if (sourceType === 'system' && sourceField)
+    return resolveSystemParamValue(sourceField)
+  return resolveActionText(param.value, row)
+}
+
+function resolveObjectPathValue(source = {}, path = '') {
+  const directValue = source?.[path]
+  if (directValue !== undefined)
+    return directValue
+  return String(path || '').split('.').filter(Boolean).reduce((value, key) => value?.[key], source)
+}
+
+function replaceApiPathParam(url, name, value) {
+  const encoded = encodeURIComponent(Array.isArray(value) ? value.join(',') : String(value))
+  return String(url || '')
+    .replaceAll(`:${name}`, encoded)
+    .replaceAll(`{${name}}`, encoded)
+}
+
+function setApiObjectValue(target, name, value) {
+  const keys = String(name || '').split('.').filter(Boolean)
+  if (keys.length <= 1) {
+    target[name] = value
+    return
+  }
+  let cursor = target
+  keys.forEach((key, index) => {
+    if (index === keys.length - 1) {
+      cursor[key] = value
+      return
+    }
+    if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key]))
+      cursor[key] = {}
+    cursor = cursor[key]
+  })
+}
+
+function isEmptyApiParamValue(value) {
+  if (value === null || value === undefined)
+    return true
+  if (Array.isArray(value))
+    return value.length === 0
+  return typeof value === 'string' && value === ''
+}
+
+function isFalseLike(value) {
+  return value === false || value === 0 || String(value).toLowerCase() === 'false'
+}
+
 function confirmConfiguredAction(message, options = {}) {
   if (!window.$dialog?.warning) {
     const nativeConfirm = globalThis?.confirm
@@ -1174,9 +1426,10 @@ function confirmConfiguredAction(message, options = {}) {
 
 function getActionLoadingKey(action, row) {
   const actionType = String(action?.actionType || action?.key || '').toUpperCase()
+  const actionKey = action?.key || action?.actionCode || action?.label || ''
   const objectCode = action?.objectCode || row?._runtimeObjectCode || row?.objectCode || ''
   const recordId = action?.recordId || resolveRowKeyValue(row) || ''
-  return `${actionType}:${objectCode}:${recordId}`
+  return `${actionType}:${actionKey}:${objectCode}:${recordId}`
 }
 
 function isActionLoading(action, row) {
@@ -1232,8 +1485,12 @@ function resolveSystemParamValue(sourceField = '') {
     return new Date().toISOString()
   if (sourceField === 'today')
     return new Date().toISOString().slice(0, 10)
+  if (sourceField === 'userId')
+    return userStore.userId || ''
   if (sourceField === 'tenantId')
-    return route.query?.tenantId || ''
+    return userStore.userInfo?.tenantId || route.query?.tenantId || ''
+  if (sourceField === 'selectedIds')
+    return [...selectedKeys.value]
   return ''
 }
 

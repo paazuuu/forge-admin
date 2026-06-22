@@ -214,7 +214,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         JSONObject adminMenu = readAdminMenu(options);
         Long menuResourceId = readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId")));
         if (!isManagementMenuEnabled(app, options, adminMenu)) {
-            removeManagementMenuIfExists(menuResourceId);
+            detachManagementMenuIfExists(menuResourceId);
             adminMenu.remove("menuResourceId");
             adminMenu.remove("activeMenuKey");
             adminMenu.remove("actualParentId");
@@ -291,6 +291,17 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         removeManagementMenuIfExists(menuResourceId);
     }
 
+    private void detachManagementMenuIfExists(Long menuResourceId) {
+        if (menuResourceId == null) {
+            return;
+        }
+        if (menuRegisterAdapter.hasRolePermission(menuResourceId)) {
+            menuRegisterAdapter.disableMenu(menuResourceId);
+            return;
+        }
+        menuRegisterAdapter.deleteMenu(menuResourceId);
+    }
+
     private void removeManagementMenuIfExists(Long menuResourceId) {
         if (menuResourceId == null) {
             return;
@@ -302,9 +313,17 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
     }
 
     private boolean isManagementMenuEnabled(AiBusinessApp app, JSONObject options, JSONObject adminMenu) {
+        if (isCodeDownloadRuntime(app, options)) {
+            return false;
+        }
         String mountTarget = StringUtils.defaultIfBlank(options.getString("mountTarget"), deriveMountTarget(app));
         boolean syncEnabled = readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), true);
         return "ADMIN".equalsIgnoreCase(mountTarget) && syncEnabled;
+    }
+
+    private boolean isCodeDownloadRuntime(AiBusinessApp app, JSONObject options) {
+        String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
+        return "RUNTIME".equals(entryMode) && BusinessAppMode.isCodeDownload(options == null ? null : options.get("appMode"));
     }
 
     private String buildAppMenuPerms(AiBusinessApp app) {
@@ -398,7 +417,10 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         vo.setAdminMenuParentId(adminMenuParentId);
         vo.setAdminMenuActualParentId(actualParentId);
         vo.setSuiteMenuResourceId(suiteMenuResourceId);
-        vo.setAdminMenuSyncEnabled(readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), true));
+        boolean codeDownloadRuntime = "RUNTIME".equals(StringUtils.defaultString(vo.getEntryMode()).toUpperCase())
+                && BusinessAppMode.isCodeDownload(options.get("appMode"));
+        vo.setAdminMenuSyncEnabled(!codeDownloadRuntime
+                && readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), true));
         vo.setSuiteAsMenuParent(suiteAsParent);
         vo.setMenuSort(readInteger(firstNonNull(adminMenu.get("sort"), options.get("menuSort")), vo.getSortOrder()));
     }

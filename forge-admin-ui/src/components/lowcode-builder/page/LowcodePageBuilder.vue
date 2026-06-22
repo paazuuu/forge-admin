@@ -10,19 +10,6 @@
         </n-tab>
       </n-tabs>
       <n-space size="small" align="center">
-        <n-radio-group
-          v-if="builderTab === 'list'"
-          :value="listLayoutMode"
-          size="small"
-          @update:value="updateListLayoutMode"
-        >
-          <n-radio-button value="grid">
-            自由布局
-          </n-radio-button>
-          <n-radio-button value="structured">
-            结构化模式
-          </n-radio-button>
-        </n-radio-group>
         <n-radio-group v-model:value="localSchema.layoutType" size="small">
           <n-radio-button
             v-for="option in layoutOptions"
@@ -36,18 +23,11 @@
     </div>
     <div v-if="builderTab === 'list'" class="structured-builder">
       <ListPageGridDesigner
-        v-if="listLayoutMode === 'grid'"
         :model-value="localSchema.listGridLayout || {}"
         :fields="fields"
         :model-schema="modelSchema"
         :layout-type="localSchema.layoutType"
         @update:model-value="handleGridLayoutUpdate"
-      />
-      <StructuredListPageDesigner
-        v-else
-        v-model="localSchema"
-        :fields="fields"
-        :layout-type="localSchema.layoutType"
       />
     </div>
     <div v-else class="form-component-builder">
@@ -91,7 +71,6 @@ import {
   syncGridLayoutWithModel,
   syncPageSchemaWithModel,
 } from './page-schema'
-import StructuredListPageDesigner from './StructuredListPageDesigner.vue'
 
 const props = defineProps({
   modelValue: {
@@ -106,7 +85,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-const localSchema = ref(syncPageSchemaWithModel(cloneSchema(props.modelValue), props.modelSchema))
+const localSchema = ref(resolvePageBuilderSchema(props.modelValue, props.modelSchema))
 const builderTab = ref('list')
 const selectedEditItemId = ref('')
 const layoutOptions = [
@@ -122,12 +101,11 @@ const selectedEditItem = computed(() => {
   return items.find(item => item.id === selectedEditItemId.value) || null
 })
 const editUsedFieldRefs = computed(() => resolveCanvasFieldRefs(editZone.value?.props?.canvas?.items || []))
-const listLayoutMode = computed(() => localSchema.value.listLayoutMode || 'grid')
 
 watch(
   () => props.modelValue,
   (value) => {
-    const next = syncPageSchemaWithModel(cloneSchema(value), props.modelSchema)
+    const next = resolvePageBuilderSchema(value, props.modelSchema)
     if (!isSameSchema(next, localSchema.value)) {
       localSchema.value = next
     }
@@ -138,7 +116,7 @@ watch(
 watch(
   () => props.modelSchema,
   (value) => {
-    const next = syncPageSchemaWithModel(localSchema.value, value)
+    const next = resolvePageBuilderSchema(localSchema.value, value)
     if (!isSameSchema(next, localSchema.value)) {
       localSchema.value = next
     }
@@ -159,8 +137,6 @@ watch(
 watch(
   () => localSchema.value.layoutType,
   () => {
-    if (listLayoutMode.value !== 'grid')
-      return
     const synced = syncGridLayoutWithModel(
       localSchema.value.listGridLayout || createDefaultListGridLayout(props.modelSchema, { layoutType: localSchema.value.layoutType }),
       props.modelSchema,
@@ -178,6 +154,13 @@ function handleZoneUpdate(zone) {
 }
 
 function noop() {}
+
+function resolvePageBuilderSchema(schema, modelSchema) {
+  return syncPageSchemaWithModel({
+    ...cloneSchema(schema || {}),
+    listLayoutMode: 'grid',
+  }, modelSchema)
+}
 
 function resolveCanvasFieldRefs(items = []) {
   const refs = []
@@ -225,20 +208,6 @@ function applyGridLayoutChange(layout) {
     listLayoutMode: 'grid',
     listGridLayout: synced,
     zones,
-  }
-}
-
-function updateListLayoutMode(mode) {
-  if (mode === 'grid') {
-    const layout = localSchema.value.listGridLayout
-      || createDefaultListGridLayout(props.modelSchema, { layoutType: localSchema.value.layoutType })
-    applyGridLayoutChange(layout)
-  }
-  else {
-    localSchema.value = {
-      ...localSchema.value,
-      listLayoutMode: 'structured',
-    }
   }
 }
 </script>

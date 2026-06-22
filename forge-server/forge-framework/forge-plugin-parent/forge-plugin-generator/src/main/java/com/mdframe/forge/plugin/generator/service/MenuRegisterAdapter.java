@@ -12,6 +12,13 @@ public interface MenuRegisterAdapter {
 
     void deleteMenu(Long menuResourceId);
 
+    /**
+     * 禁用菜单资源但保留角色授权关系。
+     * 用于访问入口切换为不再展示菜单的模式，且历史菜单已被角色授权时的平滑迁移。
+     */
+    default void disableMenu(Long menuResourceId) {
+    }
+
     default Long registerAppMenu(String menuName, Long parentId, String path, String component,
                                  String perms, String icon, Integer sort, boolean enabled) {
         return null;

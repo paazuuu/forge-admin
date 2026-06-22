@@ -164,3 +164,109 @@
 
 - 未直接修改 `.agents/skills/forge-codegen-crud` 文件本体；原因是当前沙箱将 `.agents` 标记为只读，`apply_patch` 拒绝写入。
 - 本轮未启动常驻服务，无需清理服务 PID。
+
+## 2026-06-22 20:14 低代码应用菜单与自定义 API 操作增量验证
+
+**变更范围**
+
+- 后端：下载代码模式访问入口不再同步管理端菜单；发布自定义操作时透传 API 动作配置、成功/失败提示和参数映射；运行配置构建器保留 `actionConfig` 与参数 `target`。
+- 前端：访问入口编辑抽屉在下载代码模式下关闭菜单同步；自定义操作设计器支持选择已启用 API 配置或手工填写方法/URL；运行态 `AiCrudPage` 支持执行 `CALL_API` 并映射 path/query/body/header 参数。
+
+**命令与结果**
+
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/api/business-app.js src/views/app-center/components/AppEditorDrawer.vue src/views/app-center/components/designer/BusinessActionDesigner.vue src/components/ai-form/AiCrudPage.vue --fix`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `git diff --check`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `env JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:/usr/local/apache-maven-3.9.3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests`
+  - 工作目录：`forge-server`。
+  - 结果：BUILD SUCCESS。
+  - 警告：仍为既有 `GenTableServiceImpl` deprecated API 和 `BusinessObjectDesignerService` unchecked/unsafe operations 提示。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+  - 工作目录：仓库根目录。
+  - 结果：构建通过，`✓ built in 1m 28s`。
+  - 警告：仍为既有 CSS `//` 注释、`UserSelectModal` 组件命名冲突提示和 `src/store/index.js` 动静态混合导入分包提示，非本轮新增。
+
+**跳过项**
+
+- 未启动后端服务执行真实菜单同步和 API 动作接口调用；需要本地 MySQL/Redis、已发布业务对象和具体业务接口数据。
+- 未启动 Vite/浏览器做页面点击验证；本轮已通过目标文件 lint 和生产构建覆盖前端语法、模板和打包风险。
+- 本轮未启动常驻服务，无需清理服务 PID。
+
+## 2026-06-22 20:34 下载代码模式旧菜单授权阻断修复验证
+
+**变更范围**
+
+- 后端：访问入口切换为不展示菜单的模式时，历史菜单若已被角色授权，不再阻断保存，而是禁用菜单 `menu_status=0、visible=0` 并解除访问入口菜单绑定。
+- 后端：新增 `MenuRegisterAdapter.disableMenu`，`forge-admin-server` 实现只更新菜单可见性，不删除角色授权关系。
+- 保留原有删除保护：删除访问入口时仍使用严格删除逻辑，菜单已被角色授权仍需先在角色管理移除授权。
+
+**命令与结果**
+
+- `git diff --check`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `env JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:/usr/local/apache-maven-3.9.3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -pl forge-admin-server -am compile -DskipTests`
+  - 工作目录：`forge-server`。
+  - 结果：BUILD SUCCESS。
+  - 警告：仍为既有 `GenTableServiceImpl` deprecated API、`BusinessObjectDesignerService` unchecked/unsafe operations、`EmployeeServiceImpl` deprecated API 提示，非本轮新增。
+
+**跳过项**
+
+- 未启动后端服务做真实保存接口验证；需要本地数据库/Redis 和带历史菜单授权的访问入口数据。
+- 本轮未启动常驻服务，无需清理服务 PID。
+
+## 2026-06-22 20:52 列表设计自定义操作入口补齐验证
+
+**变更范围**
+
+- 前端：在「业务单元设计器 - 列表设计」顶部工具栏补充「配置自定义操作」按钮。
+- 前端：点击后以弹窗方式打开 `BusinessActionDesigner`，复用原有工具栏操作、行操作、详情操作和 `CALL_API` 配置能力。
+
+**命令与结果**
+
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/views/app-center/components/designer/BusinessListDesigner.vue --fix`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `git diff --check`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+  - 工作目录：仓库根目录。
+  - 结果：构建通过，`✓ built in 1m 7s`。
+  - 警告：仍为既有 CSS `//` 注释、`UserSelectModal` 组件命名冲突和 `src/store/index.js` 动静态混合导入分包提示，非本轮新增。
+
+**跳过项**
+
+- 未启动 Vite 做浏览器点击验证；本轮为入口挂载和模板接线，已通过 lint 与生产构建验证。
+- 本轮未启动常驻服务，无需清理服务 PID。
+
+## 2026-06-22 21:41 列表设计入口收敛与自定义 API 操作验证
+
+**变更范围**
+
+- 前端：移除「业务单元设计器 - 列表设计」顶部重复的「配置自定义操作」按钮，收敛到 AiCrudPage/工具栏区块右侧属性面板里的「自定义操作」。
+- 前端：移除用户可见的「自由画布 / CRUD配置」与旧低代码构建器「自由布局 / 结构化模式」切换，列表设计固定走统一画布模式；历史结构化数据加载时强制归一为 `listLayoutMode=grid`。
+- 前端：在自由画布原有自定义操作弹窗中补齐「调用 API」配置，支持选择已启用 API 配置或手工填写方法/URL，并配置 path/query/body/header 参数映射。
+- 前端：运行态 `AiCrudPage` 兼容历史 `request` 类型自定义操作，系统参数补齐 `userId`、`tenantId`、`selectedIds`。
+
+**命令与结果**
+
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/views/app-center/components/designer/BusinessListDesigner.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/page/LowcodePageBuilder.vue src/components/ai-form/AiCrudPage.vue --fix`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `git diff --check`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+  - 工作目录：仓库根目录。
+  - 结果：构建通过，`✓ built in 1m 25s`。
+  - 警告：仍为既有 CSS `//` 注释、`UserSelectModal` 组件命名冲突和 `src/store/index.js` 动静态混合导入分包提示，非本轮新增。
+
+**跳过项**
+
+- 未启动 Vite 做浏览器点击验证；本轮已通过目标文件 ESLint、diff check 和生产构建覆盖模板、脚本和打包风险。
+- 未启动后端服务执行真实 API 操作调用；需要已发布业务对象和具体业务接口数据。
+- 本轮未启动常驻服务，无需清理服务 PID。
