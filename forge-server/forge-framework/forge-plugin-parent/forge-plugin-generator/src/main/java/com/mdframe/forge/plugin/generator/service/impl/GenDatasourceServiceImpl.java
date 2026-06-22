@@ -9,18 +9,20 @@ import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
 import com.mdframe.forge.plugin.generator.mapper.GenDatasourceMapper;
 import com.mdframe.forge.plugin.generator.service.IGenDatasourceService;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialectFactory;
 import com.mdframe.forge.plugin.generator.util.DynamicDataSourceUtil;
 import com.mdframe.forge.plugin.generator.util.GenDatasourcePasswordCodec;
 import com.mdframe.forge.plugin.generator.util.GenUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.Serializable;
-import java.sql.Connection;
 import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.ArrayList;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 
 /**
@@ -32,6 +34,7 @@ import java.util.List;
 public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, GenDatasource> implements IGenDatasourceService {
 
     private final GenDatasourceMapper genDatasourceMapper;
+    private final RuntimeDatabaseDialectFactory dialectFactory;
 
     @Override
     public boolean save(GenDatasource entity) {
@@ -84,103 +87,42 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
     @Override
     public List<GenTable> selectDbTableList(Long datasourceId) {
         GenDatasource datasource = getDatasourceById(datasourceId);
-        List<GenTable> tables = new ArrayList<>();
-
-        String sql = "SELECT table_name, table_comment, create_time, update_time " +
-                     "FROM information_schema.tables " +
-                     "WHERE table_schema = DATABASE() " +
-                     "AND table_type = 'BASE TABLE' " +
-                     "AND table_name NOT LIKE 'qrtz_%' AND table_name NOT LIKE 'gen_%' " +
-                     "ORDER BY create_time DESC";
-
-        try (Connection conn = DynamicDataSourceUtil.getConnection(datasource);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            while (rs.next()) {
-                GenTable table = new GenTable();
-                table.setTableName(rs.getString("table_name"));
-                table.setTableComment(rs.getString("table_comment"));
-                table.setCreateTime(rs.getTimestamp("create_time").toLocalDateTime());
-                tables.add(table);
-            }
+        RuntimeDatabaseDialect dialect = dialect(datasource);
+        try {
+            return jdbcTemplate(datasource).query(dialect.listImportTablesSql(),
+                    (rs, rowNum) -> mapGenTable(rs, datasourceId));
         } catch (Exception e) {
             log.error("查询数据源表列表失败: datasourceId={}", datasourceId, e);
             throw new RuntimeException("查询表列表失败: " + e.getMessage());
         }
-
-        return tables;
     }
 
     @Override
     public GenTable selectDbTableByName(Long datasourceId, String tableName) {
         GenDatasource datasource = getDatasourceById(datasourceId);
-
-        String sql = "SELECT table_name, table_comment, create_time, update_time " +
-                     "FROM information_schema.tables " +
-                     "WHERE table_schema = DATABASE() " +
-                     "AND table_name = '" + tableName + "'";
-
-        try (Connection conn = DynamicDataSourceUtil.getConnection(datasource);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            if (rs.next()) {
-                GenTable table = new GenTable();
-                table.setTableName(rs.getString("table_name"));
-                table.setTableComment(rs.getString("table_comment"));
-                table.setCreateTime(rs.getTimestamp("create_time").toLocalDateTime());
-                return table;
-            }
+        RuntimeDatabaseDialect dialect = dialect(datasource);
+        try {
+            List<GenTable> tables = jdbcTemplate(datasource).query(dialect.importTableInfoSql(),
+                    (rs, rowNum) -> mapGenTable(rs, datasourceId), tableName);
+            return tables.isEmpty() ? null : tables.get(0);
         } catch (Exception e) {
             log.error("查询表信息失败: datasourceId={}, tableName={}", datasourceId, tableName, e);
             throw new RuntimeException("查询表信息失败: " + e.getMessage());
         }
-
-        return null;
     }
 
     @Override
     public List<GenTableColumn> selectDbTableColumnsByName(Long datasourceId, String tableName) {
         GenDatasource datasource = getDatasourceById(datasourceId);
-        List<GenTableColumn> columns = new ArrayList<>();
-
-        String sql = "SELECT " +
-                     "    column_name, " +
-                     "    column_comment, " +
-                     "    column_type, " +
-                     "    (CASE WHEN column_key = 'PRI' THEN 1 ELSE 0 END) AS is_pk, " +
-                     "    (CASE WHEN extra = 'auto_increment' THEN 1 ELSE 0 END) AS is_increment, " +
-                     "    (CASE WHEN is_nullable = 'NO' AND column_key != 'PRI' THEN 1 ELSE 0 END) AS is_required " +
-                     "FROM information_schema.columns " +
-                     "WHERE table_schema = DATABASE() " +
-                     "AND table_name = '" + tableName + "' " +
-                     "ORDER BY ordinal_position";
-
-        try (Connection conn = DynamicDataSourceUtil.getConnection(datasource);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            while (rs.next()) {
-                GenTableColumn column = new GenTableColumn();
-                column.setColumnName(rs.getString("column_name"));
-                column.setColumnComment(rs.getString("column_comment"));
-                column.setColumnType(rs.getString("column_type"));
-                column.setIsPk(rs.getInt("is_pk"));
-                column.setIsIncrement(rs.getInt("is_increment"));
-                column.setIsRequired(rs.getInt("is_required"));
-
-                // 初始化字段配置
-                GenUtils.initColumnField(column);
-
-                columns.add(column);
-            }
+        RuntimeDatabaseDialect dialect = dialect(datasource);
+        try {
+            Object[] args = tableNameArgs(tableName, dialect.listImportColumnsTableNameParameterCount());
+            return jdbcTemplate(datasource).query(dialect.listImportColumnsSql(),
+                    (rs, rowNum) -> mapGenTableColumn(rs), args);
         } catch (Exception e) {
             log.error("查询表字段信息失败: datasourceId={}, tableName={}", datasourceId, tableName, e);
             throw new RuntimeException("查询表字段信息失败: " + e.getMessage());
         }
-
-        return columns;
     }
 
     @Override
@@ -196,6 +138,12 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
     private void applyRuntimeDefaults(GenDatasource entity, GenDatasource existing) {
         String usageScope = StrUtil.blankToDefault(entity.getUsageScope(), existing == null ? null : existing.getUsageScope());
         entity.setUsageScope(GenDatasourceRuntime.normalizeUsageScope(usageScope));
+
+        String dbType = StrUtil.blankToDefault(entity.getDbType(), existing == null ? null : existing.getDbType());
+        if (StrUtil.isNotBlank(dbType)) {
+            entity.setDbType(dbType);
+            applyTestQueryDefault(entity, existing, dbType);
+        }
 
         String requestedRiskLevel = entity.getRiskLevel();
         String riskLevel = StrUtil.blankToDefault(requestedRiskLevel, existing == null ? null : existing.getRiskLevel());
@@ -232,6 +180,81 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
             entity.setAllowRuntimeWrite(0);
             entity.setAllowRuntimeDdl(0);
         }
+    }
+
+    private void applyTestQueryDefault(GenDatasource entity, GenDatasource existing, String dbType) {
+        String defaultTestQuery = defaultTestQuery(dbType);
+        String requested = entity.getTestQuery();
+        if (StrUtil.isBlank(requested)) {
+            entity.setTestQuery(existing != null && StrUtil.isNotBlank(existing.getTestQuery())
+                    ? existing.getTestQuery()
+                    : defaultTestQuery);
+            return;
+        }
+        boolean dbTypeChanged = existing != null
+                && (existing.getDbType() == null || !dbType.equalsIgnoreCase(existing.getDbType()));
+        if (isKnownDefaultTestQuery(requested)
+                && (existing == null || dbTypeChanged || !requested.equals(existing.getTestQuery()))) {
+            entity.setTestQuery(defaultTestQuery);
+        }
+    }
+
+    private String defaultTestQuery(String dbType) {
+        try {
+            return dialectFactory.resolve(dbType).defaultTestQuery();
+        } catch (Exception e) {
+            return "SELECT 1";
+        }
+    }
+
+    private boolean isKnownDefaultTestQuery(String testQuery) {
+        String normalized = StrUtil.trim(testQuery);
+        return "SELECT 1".equalsIgnoreCase(normalized)
+                || "SELECT 1 FROM DUAL".equalsIgnoreCase(normalized);
+    }
+
+    private RuntimeDatabaseDialect dialect(GenDatasource datasource) {
+        return dialectFactory.resolve(datasource == null ? null : datasource.getDbType());
+    }
+
+    private JdbcTemplate jdbcTemplate(GenDatasource datasource) {
+        return new JdbcTemplate(DynamicDataSourceUtil.getDataSource(datasource));
+    }
+
+    private Object[] tableNameArgs(String tableName, int count) {
+        Object[] args = new Object[Math.max(1, count)];
+        for (int i = 0; i < args.length; i++) {
+            args[i] = tableName;
+        }
+        return args;
+    }
+
+    private GenTable mapGenTable(ResultSet rs, Long datasourceId) throws SQLException {
+        GenTable table = new GenTable();
+        table.setDatasourceId(datasourceId);
+        table.setTableName(rs.getString("table_name"));
+        table.setTableComment(rs.getString("table_comment"));
+        Timestamp createTime = rs.getTimestamp("create_time");
+        if (createTime != null) {
+            table.setCreateTime(createTime.toLocalDateTime());
+        }
+        Timestamp updateTime = rs.getTimestamp("update_time");
+        if (updateTime != null) {
+            table.setUpdateTime(updateTime.toLocalDateTime());
+        }
+        return table;
+    }
+
+    private GenTableColumn mapGenTableColumn(ResultSet rs) throws SQLException {
+        GenTableColumn column = new GenTableColumn();
+        column.setColumnName(rs.getString("column_name"));
+        column.setColumnComment(rs.getString("column_comment"));
+        column.setColumnType(rs.getString("column_type"));
+        column.setIsPk(rs.getInt("is_pk"));
+        column.setIsIncrement(rs.getInt("is_increment"));
+        column.setIsRequired(rs.getInt("is_required"));
+        GenUtils.initColumnField(column);
+        return column;
     }
 
     /**

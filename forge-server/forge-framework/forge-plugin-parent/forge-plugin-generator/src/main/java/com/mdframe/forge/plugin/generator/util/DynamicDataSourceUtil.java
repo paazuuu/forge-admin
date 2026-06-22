@@ -64,7 +64,10 @@ public class DynamicDataSourceUtil {
         config.setConnectionTimeout(30000);
         config.setIdleTimeout(600000);
         config.setMaxLifetime(1800000);
-        config.setConnectionTestQuery(datasource.getTestQuery());
+        String testQuery = resolveTestQuery(datasource);
+        if (isNotBlank(testQuery)) {
+            config.setConnectionTestQuery(testQuery);
+        }
         
         return new HikariDataSource(config);
     }
@@ -75,7 +78,7 @@ public class DynamicDataSourceUtil {
     public static boolean testConnection(GenDatasource datasource) {
         try (Connection conn = getConnection(datasource);
              Statement stmt = conn.createStatement()) {
-            stmt.execute(datasource.getTestQuery());
+            stmt.execute(resolveTestQuery(datasource));
             log.info("数据源连接测试成功: {}", datasource.getDatasourceName());
             return true;
         } catch (Exception e) {
@@ -115,5 +118,19 @@ public class DynamicDataSourceUtil {
         Connection conn = getConnection(datasource);
         Statement stmt = conn.createStatement();
         return stmt.executeQuery(sql);
+    }
+
+    private static boolean isNotBlank(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private static String resolveTestQuery(GenDatasource datasource) {
+        if (datasource != null && isNotBlank(datasource.getTestQuery())) {
+            return datasource.getTestQuery();
+        }
+        if (datasource != null && "oracle".equalsIgnoreCase(datasource.getDbType())) {
+            return "SELECT 1 FROM DUAL";
+        }
+        return "SELECT 1";
     }
 }

@@ -202,3 +202,29 @@ P1 后续补充：
 
 - 启动后端并配置租户业务 dsKey 后，调用带数据权限配置的业务 Mapper，确认业务 SQL 命中业务库且日志中不再出现 `Table '<业务库>.sys_data_scope_config' doesn't exist`。
 - 验证 REGION 数据权限生成的 SQL 不包含 `sys_region_code` 子查询，业务库无需复制平台行政区划表。
+
+## 本轮增量验证：Oracle 低代码和应用服务适配
+
+变更范围：
+
+- 统一锁定 Oracle JDBC 驱动版本为 `com.oracle.database.jdbc:ojdbc8:21.9.0.0`，覆盖低代码 generator、`forge-business-core` 和 `forge-app-server`。
+- 低代码运行时方言补齐 Oracle 默认连接测试 SQL、表/列/主键/索引元数据、数据库导入 SQL、分页 SQL 和受控 DDL。
+- `LowcodeDdlService` 的建表、加列、字段变更、索引和注释语句改为按方言生成，避免 Oracle 执行 MySQL 专属 `ENGINE=InnoDB` / `COMMENT` 内联语法。
+- 数据源管理前端在选择 Oracle 时自动填充 `oracle.jdbc.OracleDriver` 和 `SELECT 1 FROM DUAL`。
+
+P0 必跑：
+
+- `git diff --check` 覆盖 Oracle 适配 Java/POM/Vue 和当前变更文档。
+- `mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests`。
+- `mvn -pl forge-business/forge-business-core -am compile -DskipTests`。
+- `mvn -pl forge-app-server -am compile -DskipTests`。
+- `mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-business/forge-business-core,forge-app-server dependency:tree -Dincludes=com.oracle.database.jdbc:ojdbc8 -DskipTests`，确认实际解析版本为 `21.9.0.0`。
+- targeted eslint 覆盖 `forge-admin-ui/src/views/generator/datasource.vue`。
+- `pnpm --dir forge-admin-ui build` 覆盖前端打包链路。
+
+P1 后续补充：
+
+- 准备真实 Oracle 外部库，验证数据源连接测试、表列表导入、字段导入和 `SELECT 1 FROM DUAL`。
+- 用 Oracle 运行数据源发布一个低代码对象，验证 `CREATE TABLE`、`COMMENT ON TABLE/COLUMN`、`CREATE INDEX`、`ALTER TABLE ADD/MODIFY` 能执行。
+- 验证动态 CRUD 在 Oracle 下的新增自增主键回填、分页查询、详情、编辑、删除和导出。
+- 验证 `forge-business` 租户业务数据源 dsKey 指向 Oracle 时，MyBatis-Plus Mapper/XML 能通过 dynamic-datasource 正常路由。

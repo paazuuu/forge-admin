@@ -5,6 +5,10 @@ import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeIndexSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRelationSchema;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudRepository;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect.DdlColumn;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect.IndexDefinition;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialectFactory;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeDdlPreviewVO;
@@ -40,10 +44,12 @@ public class LowcodeDdlService {
     private final LowcodeDdlRepository ddlRepository;
     private final DynamicCrudRepository dynamicCrudRepository;
     private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
+    private final RuntimeDatabaseDialectFactory dialectFactory;
 
     public LowcodeDdlPreviewVO previewCreateTable(LowcodeModelSchema modelSchema) {
         schemaValidator.validateModel(modelSchema);
         LowcodeRuntimeDataSourceContext context = runtimeDataSourceResolver.resolve(modelSchema);
+        RuntimeDatabaseDialect dialect = dialectFactory.resolve(context);
         LowcodeDdlPreviewVO preview = new LowcodeDdlPreviewVO();
         preview.setTableName(context.getTableName());
 
@@ -53,17 +59,17 @@ public class LowcodeDdlService {
             if (!context.isAllowDdl()) {
                 preview.setExecutable(false);
                 preview.getWarnings().add("运行数据源不允许在线DDL，请先在目标库创建数据表");
-                preview.getDdlStatements().add(buildCreateTableSql(modelSchema, preview.getWarnings()));
+                preview.getDdlStatements().addAll(buildCreateTableSql(context, modelSchema, dialect, preview.getWarnings()));
                 return preview;
             }
-            preview.getDdlStatements().add(buildCreateTableSql(modelSchema, preview.getWarnings()));
+            preview.getDdlStatements().addAll(buildCreateTableSql(context, modelSchema, dialect, preview.getWarnings()));
         } else {
             if (!ddlRepository.hasSinglePrimaryKey(context, context.getTableName())) {
                 preview.setExecutable(false);
                 preview.getWarnings().add("已有表必须包含单字段主键后才能绑定为可写低代码模型");
                 return preview;
             }
-            preview.getDdlStatements().addAll(buildAddColumnSql(context, modelSchema, preview.getWarnings()));
+            preview.getDdlStatements().addAll(buildAddColumnSql(context, modelSchema, dialect, preview.getWarnings()));
             if (!preview.getDdlStatements().isEmpty() && !context.isAllowDdl()) {
                 preview.setExecutable(false);
                 preview.getWarnings().add("运行数据源不允许在线DDL，请由数据库管理员手工同步表结构");
@@ -91,7 +97,7 @@ public class LowcodeDdlService {
             assertSafeDdl(ddl);
             ddlRepository.executeDdl(context, ddl);
         }
-        dynamicCrudRepository.clearTableMetadataCache(context.getTableName());
+        dynamicCrudRepository.clearTableMetadataCache(context, context.getTableName());
     }
 
     public boolean tableExists(String tableName) {
@@ -127,53 +133,77 @@ public class LowcodeDdlService {
         return ddlRepository.listColumns(context, context.getTableName());
     }
 
-    private String buildCreateTableSql(LowcodeModelSchema modelSchema, List<String> warnings) {
+    private List<String> buildCreateTableSql(LowcodeRuntimeDataSourceContext context,
+                                             LowcodeModelSchema modelSchema,
+                                             RuntimeDatabaseDialect dialect,
+                                             List<String> warnings) {
+        String tableName = context.getTableName();
+        String tableComment = StringUtils.defaultIfBlank(modelSchema.getBusinessName(), tableName);
+        List<DdlColumn> columns = new ArrayList<>();
         List<String> definitions = new ArrayList<>();
-        definitions.add("`id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID'");
-        definitions.add("`tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户编号'");
+        DdlColumn primaryColumn = new DdlColumn("id", dialect.resolveSqlType("bigint", 19, "19,0"),
+                true, null, null, "主键ID", true);
+        columns.add(primaryColumn);
+        definitions.add(dialect.columnDefinition(primaryColumn));
+        appendSystemColumn(columns, definitions, dialect, "tenant_id", "bigint", true, 1, "租户编号");
         for (LowcodeFieldSchema field : businessFields(modelSchema)) {
-            definitions.add(buildColumnDefinition(field, false));
+            DdlColumn column = buildColumn(field, false, dialect);
+            columns.add(column);
+            definitions.add(dialect.columnDefinition(column));
         }
-        definitions.add("`del_flag` char(1) NOT NULL DEFAULT '0' COMMENT '删除标志'");
-        definitions.add("`create_by` bigint DEFAULT NULL COMMENT '创建人ID'");
-        definitions.add("`create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'");
-        definitions.add("`create_dept` bigint DEFAULT NULL COMMENT '创建部门ID'");
-        definitions.add("`update_by` bigint DEFAULT NULL COMMENT '更新人ID'");
-        definitions.add("`update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'");
-        definitions.add("PRIMARY KEY (`id`)");
-        definitions.add("KEY `idx_" + modelSchema.getTableName() + "_tenant` (`tenant_id`)");
-        definitions.add("KEY `idx_" + modelSchema.getTableName() + "_create_time` (`create_time`)");
-        appendIndexDefinitions(modelSchema, definitions, warnings);
+        appendSystemColumn(columns, definitions, dialect, "del_flag", "char", true, "0", "删除标志");
+        appendSystemColumn(columns, definitions, dialect, "create_by", "bigint", false, null, "创建人ID");
+        appendSystemColumn(columns, definitions, dialect, "create_time", "datetime", true, "CURRENT_TIMESTAMP", "创建时间");
+        appendSystemColumn(columns, definitions, dialect, "create_dept", "bigint", false, null, "创建部门ID");
+        appendSystemColumn(columns, definitions, dialect, "update_by", "bigint", false, null, "更新人ID");
+        appendSystemColumn(columns, definitions, dialect, "update_time", "datetime", true, "CURRENT_TIMESTAMP",
+                "ON UPDATE CURRENT_TIMESTAMP", "更新时间");
+        definitions.add(dialect.primaryKeyConstraint(tableName, "id"));
 
-        return "CREATE TABLE IF NOT EXISTS `" + modelSchema.getTableName() + "` (\n  "
-                + String.join(",\n  ", definitions)
-                + "\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='"
-                + escapeSqlComment(StringUtils.defaultIfBlank(modelSchema.getBusinessName(), modelSchema.getTableName()))
-                + "'";
+        List<IndexDefinition> indexes = new ArrayList<>();
+        indexes.add(new IndexDefinition(normalizeIndexName("idx_" + tableName + "_tenant", dialect),
+                List.of("tenant_id"), false));
+        indexes.add(new IndexDefinition(normalizeIndexName("idx_" + tableName + "_create_time", dialect),
+                List.of("create_time"), false));
+        indexes.addAll(buildIndexDefinitions(modelSchema, warnings, dialect));
+        for (IndexDefinition index : indexes) {
+            String inline = dialect.inlineIndexDefinition(index);
+            if (StringUtils.isNotBlank(inline)) {
+                definitions.add(inline);
+            }
+        }
+
+        List<String> ddlList = new ArrayList<>();
+        ddlList.add(dialect.createTableSql(tableName, definitions, tableComment));
+        ddlList.addAll(dialect.afterCreateTableSql(tableName, tableComment, columns, indexes));
+        return ddlList;
     }
 
     private List<String> buildAddColumnSql(LowcodeRuntimeDataSourceContext context,
                                            LowcodeModelSchema modelSchema,
+                                           RuntimeDatabaseDialect dialect,
                                            List<String> warnings) {
         Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata =
                 ddlRepository.listColumnMetadata(context, context.getTableName());
         Set<String> existingColumns = columnMetadata.keySet();
         List<String> ddlList = new ArrayList<>();
         List<String> addedColumns = new ArrayList<>();
-        appendMissingSystemColumns(modelSchema, context.getTableName(), existingColumns, ddlList);
+        appendMissingSystemColumns(modelSchema, context.getTableName(), existingColumns, ddlList, dialect);
         for (LowcodeFieldSchema field : businessFields(modelSchema)) {
             if (existingColumns.contains(field.getColumnName())) {
                 continue;
             }
-            ddlList.add("ALTER TABLE `" + context.getTableName() + "` ADD COLUMN "
-                    + buildColumnDefinition(field, false));
+            DdlColumn column = buildColumn(field, false, dialect);
+            ddlList.add(dialect.addColumnSql(context.getTableName(), column));
+            ddlList.addAll(dialect.afterAddColumnSql(context.getTableName(), column));
             addedColumns.add(field.getColumnName());
         }
         if (!addedColumns.isEmpty()) {
             warnings.add("新增字段发布时将追加数据表列: " + String.join("、", addedColumns));
         }
-        appendExistingColumnChanges(context.getTableName(), modelSchema, columnMetadata, ddlList, warnings);
-        appendMissingIndexes(modelSchema, context.getTableName(), ddlRepository.listIndexes(context, context.getTableName()), ddlList, warnings);
+        appendExistingColumnChanges(context.getTableName(), modelSchema, columnMetadata, ddlList, warnings, dialect);
+        appendMissingIndexes(modelSchema, context.getTableName(),
+                ddlRepository.listIndexes(context, context.getTableName()), ddlList, warnings, dialect);
         warnings.add("已有表在线变更仅追加缺失字段、同步字段长度/类型/是否必填和索引，不会删除或重命名字段");
         warnings.add("必填字段只有配置默认值时才同步为 NOT NULL；未配置默认值时由运行态表单校验，数据库列保持可空");
         return ddlList;
@@ -183,7 +213,8 @@ public class LowcodeDdlService {
                                              LowcodeModelSchema modelSchema,
                                              Map<String, LowcodeDdlRepository.ColumnMetadata> columnMetadata,
                                              List<String> ddlList,
-                                             List<String> warnings) {
+                                             List<String> warnings,
+                                             RuntimeDatabaseDialect dialect) {
         for (LowcodeFieldSchema field : businessFields(modelSchema)) {
             validateIdentifier(field.getColumnName(), "字段列名");
             LowcodeDdlRepository.ColumnMetadata metadata = columnMetadata.get(field.getColumnName());
@@ -195,8 +226,8 @@ public class LowcodeDdlService {
                 continue;
             }
             String dataType = normalizeDataType(field);
-            String expectedSqlType = resolveSqlType(field, dataType);
-            boolean typeChanged = !sameSqlType(expectedSqlType, metadata.columnType());
+            String expectedSqlType = resolveSqlType(field, dataType, dialect);
+            boolean typeChanged = !dialect.sameSqlType(expectedSqlType, metadata.columnType());
             boolean currentRequired = "NO".equalsIgnoreCase(metadata.isNullable());
             boolean expectedRequired = shouldUseNotNull(field, dataType);
             boolean requiredChanged = currentRequired != expectedRequired;
@@ -210,40 +241,51 @@ public class LowcodeDdlService {
                     warnings.add("字段 " + fieldLabel(field) + " 长度变小，若历史数据超长数据库可能拒绝执行");
                 }
             }
-            ddlList.add("ALTER TABLE `" + tableName + "` MODIFY COLUMN "
-                    + (typeChanged ? buildColumnDefinition(field, false)
-                    : buildExistingColumnDefinition(metadata, field, expectedRequired)));
+            DdlColumn column = typeChanged
+                    ? buildColumn(field, false, dialect)
+                    : buildExistingColumn(metadata, field, expectedRequired);
+            ddlList.addAll(dialect.modifyColumnSql(tableName, column));
         }
     }
 
     private void appendMissingSystemColumns(LowcodeModelSchema modelSchema, String tableName,
-                                            Set<String> existingColumns, List<String> ddlList) {
+                                            Set<String> existingColumns, List<String> ddlList,
+                                            RuntimeDatabaseDialect dialect) {
         if (usesForgeTenant(modelSchema)) {
             appendMissingColumn(tableName, existingColumns, ddlList, tenantColumn(modelSchema),
-                    "`" + tenantColumn(modelSchema) + "` bigint NOT NULL DEFAULT 1 COMMENT '租户编号'");
+                    systemColumn(dialect, tenantColumn(modelSchema), "bigint", true, 1, "租户编号"),
+                    dialect);
         }
         if (usesLogicDelete(modelSchema)) {
             appendMissingColumn(tableName, existingColumns, ddlList, logicDeleteColumn(modelSchema),
-                    "`" + logicDeleteColumn(modelSchema) + "` char(1) NOT NULL DEFAULT '0' COMMENT '删除标志'");
+                    systemColumn(dialect, logicDeleteColumn(modelSchema), "char", true, "0", "删除标志"),
+                    dialect);
         }
         if (usesForgeAudit(modelSchema)) {
             appendMissingColumn(tableName, existingColumns, ddlList, "create_by",
-                    "`create_by` bigint DEFAULT NULL COMMENT '创建人ID'");
+                    systemColumn(dialect, "create_by", "bigint", false, null, "创建人ID"),
+                    dialect);
             appendMissingColumn(tableName, existingColumns, ddlList, "create_time",
-                    "`create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'");
+                    systemColumn(dialect, "create_time", "datetime", true, "CURRENT_TIMESTAMP", "创建时间"),
+                    dialect);
             appendMissingColumn(tableName, existingColumns, ddlList, "create_dept",
-                    "`create_dept` bigint DEFAULT NULL COMMENT '创建部门ID'");
+                    systemColumn(dialect, "create_dept", "bigint", false, null, "创建部门ID"),
+                    dialect);
             appendMissingColumn(tableName, existingColumns, ddlList, "update_by",
-                    "`update_by` bigint DEFAULT NULL COMMENT '更新人ID'");
+                    systemColumn(dialect, "update_by", "bigint", false, null, "更新人ID"),
+                    dialect);
             appendMissingColumn(tableName, existingColumns, ddlList, "update_time",
-                    "`update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'");
+                    systemColumn(dialect, "update_time", "datetime", true, "CURRENT_TIMESTAMP",
+                            "ON UPDATE CURRENT_TIMESTAMP", "更新时间"),
+                    dialect);
         }
     }
 
     private void appendMissingColumn(String tableName, Set<String> existingColumns, List<String> ddlList,
-                                     String columnName, String columnDefinition) {
+                                     String columnName, DdlColumn column, RuntimeDatabaseDialect dialect) {
         if (!existingColumns.contains(columnName)) {
-            ddlList.add("ALTER TABLE `" + tableName + "` ADD COLUMN " + columnDefinition);
+            ddlList.add(dialect.addColumnSql(tableName, column));
+            ddlList.addAll(dialect.afterAddColumnSql(tableName, column));
         }
     }
 
@@ -274,8 +316,11 @@ public class LowcodeDdlService {
                 : StringUtils.defaultIfBlank(modelSchema.getLogicDeleteStrategy().getColumnName(), "del_flag");
     }
 
-    private void appendIndexDefinitions(LowcodeModelSchema modelSchema, List<String> definitions, List<String> warnings) {
+    private List<IndexDefinition> buildIndexDefinitions(LowcodeModelSchema modelSchema,
+                                                        List<String> warnings,
+                                                        RuntimeDatabaseDialect dialect) {
         Set<String> indexNames = new HashSet<>();
+        List<IndexDefinition> definitions = new ArrayList<>();
         for (LowcodeFieldSchema field : businessFields(modelSchema)) {
             String dataType = normalizeDataType(field);
             if (!Boolean.TRUE.equals(field.getSearchable()) || !INDEXABLE_TYPES.contains(dataType)) {
@@ -286,56 +331,53 @@ public class LowcodeDdlService {
                 continue;
             }
             appendIndexDefinition(definitions, warnings, indexNames, modelSchema, "idx_" + field.getColumnName(),
-                    List.of(field.getField()), false);
+                    List.of(field.getField()), false, dialect);
         }
         for (LowcodeRelationSchema relation : relationList(modelSchema)) {
             if (StringUtils.isBlank(relation.getSourceField())) {
                 continue;
             }
             appendIndexDefinition(definitions, warnings, indexNames, modelSchema, "idx_rel_" + relation.getSourceField(),
-                    List.of(relation.getSourceField()), false);
+                    List.of(relation.getSourceField()), false, dialect);
         }
         for (LowcodeIndexSchema index : indexList(modelSchema)) {
             if (index == null || index.getFields() == null || index.getFields().isEmpty()) {
                 continue;
             }
             appendIndexDefinition(definitions, warnings, indexNames, modelSchema, index.getIndexName(),
-                    index.getFields(), isUniqueIndex(index));
+                    index.getFields(), isUniqueIndex(index), dialect);
         }
+        return definitions;
     }
 
     private void appendMissingIndexes(LowcodeModelSchema modelSchema, String tableName, Set<String> existingIndexNames,
-                                      List<String> ddlList, List<String> warnings) {
+                                      List<String> ddlList, List<String> warnings,
+                                      RuntimeDatabaseDialect dialect) {
         Set<String> emitted = new HashSet<>(existingIndexNames);
-        List<String> definitions = new ArrayList<>();
-        appendIndexDefinitions(modelSchema, definitions, warnings);
-        for (String definition : definitions) {
-            String indexName = extractIndexName(definition);
-            if (StringUtils.isBlank(indexName) || emitted.contains(indexName)) {
+        for (IndexDefinition index : buildIndexDefinitions(modelSchema, warnings, dialect)) {
+            String indexName = index.indexName();
+            if (StringUtils.isBlank(indexName) || emitted.contains(indexName.toLowerCase(Locale.ROOT))) {
                 continue;
             }
-            ddlList.add("ALTER TABLE `" + tableName + "` ADD " + definition);
-            emitted.add(indexName);
+            ddlList.add(dialect.addIndexSql(tableName, index));
+            emitted.add(indexName.toLowerCase(Locale.ROOT));
         }
     }
 
-    private void appendIndexDefinition(List<String> definitions, List<String> warnings, Set<String> indexNames,
+    private void appendIndexDefinition(List<IndexDefinition> definitions, List<String> warnings, Set<String> indexNames,
                                        LowcodeModelSchema modelSchema, String preferredName,
-                                       List<String> fieldNames, boolean unique) {
+                                       List<String> fieldNames, boolean unique,
+                                       RuntimeDatabaseDialect dialect) {
         List<String> columns = resolveIndexColumns(modelSchema, fieldNames, warnings);
         if (columns.isEmpty()) {
             return;
         }
         String indexName = normalizeIndexName(StringUtils.defaultIfBlank(preferredName,
-                "idx_" + String.join("_", columns)));
+                "idx_" + String.join("_", columns)), dialect);
         if (!indexNames.add(indexName)) {
             return;
         }
-        String columnSql = columns.stream()
-                .map(column -> "`" + column + "`")
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        definitions.add((unique ? "UNIQUE KEY" : "KEY") + " `" + indexName + "` (" + columnSql + ")");
+        definitions.add(new IndexDefinition(indexName, columns, unique));
     }
 
     private List<String> resolveIndexColumns(LowcodeModelSchema modelSchema, List<String> fieldNames, List<String> warnings) {
@@ -382,7 +424,7 @@ public class LowcodeDdlService {
         return modelSchema.getIndexes() == null ? List.of() : modelSchema.getIndexes();
     }
 
-    private String normalizeIndexName(String indexName) {
+    private String normalizeIndexName(String indexName, RuntimeDatabaseDialect dialect) {
         String normalized = StringUtils.defaultIfBlank(indexName, "idx_lowcode")
                 .replaceAll("[^a-zA-Z0-9_]", "_")
                 .replaceAll("_+", "_")
@@ -390,41 +432,86 @@ public class LowcodeDdlService {
         if (!normalized.startsWith("idx_") && !normalized.startsWith("uk_")) {
             normalized = "idx_" + normalized;
         }
-        return normalized.length() > 64 ? normalized.substring(0, 64) : normalized;
+        int maxLength = Math.max(1, dialect.maxIdentifierLength());
+        return normalized.length() > maxLength ? normalized.substring(0, maxLength) : normalized;
     }
 
-    private String extractIndexName(String definition) {
-        int start = definition.indexOf('`');
-        int end = definition.indexOf('`', start + 1);
-        return start >= 0 && end > start ? definition.substring(start + 1, end) : null;
+    private void appendSystemColumn(List<DdlColumn> columns,
+                                    List<String> definitions,
+                                    RuntimeDatabaseDialect dialect,
+                                    String columnName,
+                                    String dataType,
+                                    boolean required,
+                                    Object defaultValue,
+                                    String comment) {
+        appendSystemColumn(columns, definitions, dialect, columnName, dataType, required, defaultValue, null, comment);
     }
 
-    private String buildColumnDefinition(LowcodeFieldSchema field, boolean forceNullable) {
+    private void appendSystemColumn(List<DdlColumn> columns,
+                                    List<String> definitions,
+                                    RuntimeDatabaseDialect dialect,
+                                    String columnName,
+                                    String dataType,
+                                    boolean required,
+                                    Object defaultValue,
+                                    String extra,
+                                    String comment) {
+        DdlColumn column = systemColumn(dialect, columnName, dataType, required, defaultValue, extra, comment);
+        columns.add(column);
+        definitions.add(dialect.columnDefinition(column));
+    }
+
+    private DdlColumn systemColumn(RuntimeDatabaseDialect dialect,
+                                   String columnName,
+                                   String dataType,
+                                   boolean required,
+                                   Object defaultValue,
+                                   String comment) {
+        return systemColumn(dialect, columnName, dataType, required, defaultValue, null, comment);
+    }
+
+    private DdlColumn systemColumn(RuntimeDatabaseDialect dialect,
+                                   String columnName,
+                                   String dataType,
+                                   boolean required,
+                                   Object defaultValue,
+                                   String extra,
+                                   String comment) {
+        validateIdentifier(columnName, "字段列名");
+        int length = "char".equals(dataType) ? 1 : 255;
+        String sqlType = dialect.resolveSqlType(dataType, length, "18,2");
+        return new DdlColumn(columnName, sqlType, required, defaultValue, extra, comment, false);
+    }
+
+    private DdlColumn buildColumn(LowcodeFieldSchema field, boolean forceNullable, RuntimeDatabaseDialect dialect) {
         validateIdentifier(field.getColumnName(), "字段列名");
         String dataType = normalizeDataType(field);
-        String sqlType = resolveSqlType(field, dataType);
+        String sqlType = resolveSqlType(field, dataType, dialect);
         boolean required = !forceNullable && shouldUseNotNull(field, dataType);
-        StringBuilder definition = new StringBuilder();
-        definition.append("`").append(field.getColumnName()).append("` ").append(sqlType);
-        definition.append(required ? " NOT NULL" : " NULL");
-        appendDefaultValue(definition, required ? field.getDefaultValue() : null, !required);
-        definition.append(" COMMENT '")
-                .append(escapeSqlComment(StringUtils.defaultIfBlank(field.getLabel(), field.getColumnName())))
-                .append("'");
-        return definition.toString();
+        return new DdlColumn(
+                field.getColumnName(),
+                sqlType,
+                required,
+                required ? field.getDefaultValue() : null,
+                null,
+                StringUtils.defaultIfBlank(field.getLabel(), field.getColumnName()),
+                false
+        );
     }
 
-    private String buildExistingColumnDefinition(LowcodeDdlRepository.ColumnMetadata metadata,
-                                                 LowcodeFieldSchema field,
-                                                 boolean required) {
+    private DdlColumn buildExistingColumn(LowcodeDdlRepository.ColumnMetadata metadata,
+                                          LowcodeFieldSchema field,
+                                          boolean required) {
         validateIdentifier(metadata.columnName(), "字段列名");
-        StringBuilder definition = new StringBuilder();
-        definition.append("`").append(metadata.columnName()).append("` ").append(metadata.columnType());
-        definition.append(required ? " NOT NULL" : " NULL");
-        appendDefaultValue(definition, required ? field.getDefaultValue() : metadata.columnDefault(), !required);
-        appendExtra(definition, metadata.extra());
-        definition.append(" COMMENT '").append(escapeSqlComment(metadata.columnComment())).append("'");
-        return definition.toString();
+        return new DdlColumn(
+                metadata.columnName(),
+                metadata.columnType(),
+                required,
+                required ? field.getDefaultValue() : metadata.columnDefault(),
+                metadata.extra(),
+                metadata.columnComment(),
+                false
+        );
     }
 
     private boolean shouldUseNotNull(LowcodeFieldSchema field, String dataType) {
@@ -441,84 +528,18 @@ public class LowcodeDdlService {
         return true;
     }
 
-    private void appendDefaultValue(StringBuilder definition, Object defaultValue, boolean nullable) {
-        if (defaultValue == null) {
-            if (nullable) {
-                definition.append(" DEFAULT NULL");
-            }
-            return;
-        }
-        String value = String.valueOf(defaultValue);
-        if ("NULL".equalsIgnoreCase(value)) {
-            if (nullable) {
-                definition.append(" DEFAULT NULL");
-            }
-            return;
-        }
-        if (isExpressionDefault(value)) {
-            definition.append(" DEFAULT ").append(value);
-            return;
-        }
-        definition.append(" DEFAULT '").append(escapeSqlComment(value)).append("'");
-    }
-
-    private boolean isExpressionDefault(String value) {
-        String normalized = StringUtils.defaultString(value).trim().toUpperCase(Locale.ROOT);
-        return normalized.equals("CURRENT_TIMESTAMP")
-                || normalized.equals("CURRENT_TIMESTAMP()")
-                || normalized.equals("CURRENT_DATE")
-                || normalized.equals("CURRENT_DATE()")
-                || normalized.equals("CURRENT_TIME")
-                || normalized.equals("CURRENT_TIME()")
-                || normalized.startsWith("B'")
-                || normalized.startsWith("X'");
-    }
-
-    private void appendExtra(StringBuilder definition, String extra) {
-        String normalized = StringUtils.defaultString(extra).trim();
-        if (StringUtils.isBlank(normalized)) {
-            return;
-        }
-        String upper = normalized.toUpperCase(Locale.ROOT);
-        if (upper.contains("ON UPDATE CURRENT_TIMESTAMP")) {
-            definition.append(" ON UPDATE CURRENT_TIMESTAMP");
-        }
-    }
-
-    private String resolveSqlType(LowcodeFieldSchema field, String dataType) {
-        return switch (dataType) {
-            case "varchar" -> "varchar(" + normalizeLength(field, 255, 1, 2048) + ")";
-            case "char" -> "char(" + normalizeLength(field, 1, 1, 255) + ")";
-            case "text", "longtext", "date", "datetime", "time" -> dataType;
-            case "int" -> "int";
-            case "bigint" -> "bigint";
-            case "tinyint" -> "tinyint";
-            case "decimal" -> "decimal(" + normalizeDecimalPrecision(field) + ")";
-            default -> throw new BusinessException("不支持的数据类型: " + dataType);
+    private String resolveSqlType(LowcodeFieldSchema field, String dataType, RuntimeDatabaseDialect dialect) {
+        int length = switch (dataType) {
+            case "varchar" -> normalizeLength(field, 255, 1, 2048);
+            case "char" -> normalizeLength(field, 1, 1, 255);
+            default -> field.getLength() == null ? 0 : field.getLength();
         };
-    }
-
-    private boolean sameSqlType(String expected, String actual) {
-        return normalizeSqlType(expected).equals(normalizeSqlType(actual));
-    }
-
-    private String normalizeSqlType(String value) {
-        String normalized = StringUtils.defaultString(value)
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("\\s+", "");
-        if (normalized.startsWith("int(")) {
-            return "int";
+        String decimalPrecision = "decimal".equals(dataType) ? normalizeDecimalPrecision(field) : "18,2";
+        try {
+            return dialect.resolveSqlType(dataType, length, decimalPrecision);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(e.getMessage());
         }
-        if (normalized.startsWith("bigint(")) {
-            return "bigint";
-        }
-        if (normalized.startsWith("tinyint(")) {
-            return "tinyint";
-        }
-        if (normalized.startsWith("datetime(")) {
-            return "datetime";
-        }
-        return normalized;
     }
 
     private boolean isPotentialLengthShrink(String currentType, String expectedType) {
@@ -572,29 +593,40 @@ public class LowcodeDdlService {
         }
     }
 
-    private String escapeSqlComment(String value) {
-        return StringUtils.defaultString(value).replace("'", "''");
-    }
-
     private String fieldLabel(LowcodeFieldSchema field) {
         return StringUtils.defaultIfBlank(field.getLabel(), field.getColumnName());
     }
 
     private void assertSafeDdl(String ddl) {
         String normalized = ddl.trim().toUpperCase(Locale.ROOT);
-        if (normalized.startsWith("CREATE TABLE IF NOT EXISTS")) {
+        if (normalized.startsWith("CREATE TABLE IF NOT EXISTS") || normalized.startsWith("CREATE TABLE ")) {
             return;
         }
         if (normalized.startsWith("ALTER TABLE") && normalized.contains(" ADD COLUMN ")) {
             return;
         }
+        if (normalized.startsWith("ALTER TABLE") && normalized.contains(" ADD (")) {
+            return;
+        }
         if (normalized.startsWith("ALTER TABLE") && normalized.contains(" MODIFY COLUMN ")) {
+            return;
+        }
+        if (normalized.startsWith("ALTER TABLE") && normalized.contains(" MODIFY (")) {
+            return;
+        }
+        if (normalized.startsWith("ALTER TABLE") && normalized.contains(" ALTER COLUMN ")) {
             return;
         }
         if (normalized.startsWith("ALTER TABLE") && (normalized.contains(" ADD KEY ") || normalized.contains(" ADD UNIQUE KEY "))) {
             return;
         }
-        throw new BusinessException("仅允许执行受控 CREATE TABLE、ALTER TABLE ADD/MODIFY COLUMN 或 ADD KEY 语句");
+        if (normalized.startsWith("CREATE INDEX ") || normalized.startsWith("CREATE UNIQUE INDEX ")) {
+            return;
+        }
+        if (normalized.startsWith("COMMENT ON TABLE ") || normalized.startsWith("COMMENT ON COLUMN ")) {
+            return;
+        }
+        throw new BusinessException("仅允许执行受控 CREATE TABLE、ALTER TABLE ADD/MODIFY COLUMN、ADD KEY、CREATE INDEX 或 COMMENT 语句");
     }
 
     private List<LowcodeFieldSchema> businessFields(LowcodeModelSchema modelSchema) {

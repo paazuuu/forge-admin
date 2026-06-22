@@ -35,6 +35,48 @@
 
 - 本轮未启动任何长期运行服务，无需清理 PID。
 
+## 2026-06-22 Oracle 低代码和应用服务适配验证
+
+执行时间：2026-06-22 17:54:32 CST
+
+变更范围：
+
+- `forge-server` 根 POM 和 `forge-dependencies` 统一新增 `oracle.jdbc.version=21.9.0.0`，并在 dependencyManagement 中锁定 `com.oracle.database.jdbc:ojdbc8`。
+- `forge-plugin-generator`、`forge-business-core` 和 `forge-app-server` 直接引入 `ojdbc8`，分别覆盖低代码运行数据源、业务侧动态数据源和应用服务 Oracle 连接能力。
+- `RuntimeDatabaseDialect` 扩展默认测试 SQL、导入元数据 SQL 和受控 DDL 语义；`OracleRuntimeDatabaseDialect` 补齐 Oracle 表/列/主键/索引元数据、分页、导入、建表、加列、字段修改、注释和索引语句。
+- `LowcodeDdlService` 改为按方言生成 CREATE/ALTER/COMMENT/INDEX DDL；`LowcodeDdlRepository` 对 Oracle `NUMBER(18/19,0)` 主键类型做兼容判断。
+- `GenDatasourceServiceImpl` 的表导入从 MySQL `information_schema` 硬编码改为按方言 SQL 查询；数据源默认连接测试 SQL 支持 Oracle `SELECT 1 FROM DUAL`。
+- `forge-admin-ui/src/views/generator/datasource.vue` 在选择 Oracle 时自动填充驱动类和测试 SQL。
+
+验证命令与结果：
+
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:/usr/local/apache-maven-3.9.3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests`
+  - 结果：通过，`forge-plugin-generator` 及依赖模块编译成功。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:/usr/local/apache-maven-3.9.3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -pl forge-business/forge-business-core -am compile -DskipTests`
+  - 结果：通过，`forge-business-core` 及依赖模块编译成功。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:/usr/local/apache-maven-3.9.3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -pl forge-app-server -am compile -DskipTests`
+  - 结果：通过，`forge-app-server` 及依赖模块编译成功。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:/usr/local/apache-maven-3.9.3/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-business/forge-business-core,forge-app-server dependency:tree -Dincludes=com.oracle.database.jdbc:ojdbc8 -DskipTests`
+  - 结果：通过，三个模块均解析为 `com.oracle.database.jdbc:ojdbc8:jar:21.9.0.0:compile`。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm --dir forge-admin-ui exec eslint src/views/generator/datasource.vue --fix`
+  - 结果：通过，数据源管理页面 targeted eslint 无错误。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+  - 结果：通过，Vite build 成功，耗时约 1 分 27 秒。
+
+警告：
+
+- Maven 编译存在既有 deprecation / unchecked warning，未阻断。
+- 前端 build 存在既有 CSS `//` 注释 minify warning、`UserSelectModal` 组件命名冲突提示，以及 `src/store/index.js` 同时动态/静态导入导致的 chunk 提示，未阻断。
+
+跳过项：
+
+- 未连接真实 Oracle 实例执行连接、表导入、DDL 和动态 CRUD 联调，原因是本地未提供可用 Oracle 测试库；已在 `test-spec.md` 记录为 P1 集成验证。
+- 未启动后端服务和未执行 curl 接口验证，原因是 Oracle 端到端验证需要真实外部库和登录态数据源配置。
+
+服务清理：
+
+- 本轮未启动任何长期运行服务，无需清理 PID。
+
 ## 2026-06-22 数据权限控制面元数据主库快照验证
 
 执行时间：2026-06-22 16:38:50 CST

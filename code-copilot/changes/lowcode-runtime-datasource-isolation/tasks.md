@@ -13,7 +13,7 @@
 - [x] 新增低代码运行时数据源协议 DTO：运行数据源快照、主键策略、租户策略、审计策略、逻辑删除策略。
 - [x] 新增运行时数据源解析器：从 `LowcodeModelSchema` 和 `AiCrudConfig` 解析运行数据源，历史配置回退主库。
 - [x] 新增运行时 JDBC 模板提供器：按 `datasourceId` 获取 `JdbcTemplate` / `NamedParameterJdbcTemplate`，兼容主库。
-- [x] 新增数据库方言层：MySQL、PostgreSQL、Oracle 的 schema 解析、表/列/主键元数据、分页、主键回填、受控 DDL。
+- [x] 新增数据库方言层：MySQL、PostgreSQL、Oracle 的 schema 解析、表/列/主键元数据、分页、主键回填、受控 DDL；Oracle 已补默认测试 SQL、导入元数据 SQL 和受控 DDL 语义。
 
 ## 阶段三：模型、发布与 DDL 链路
 
@@ -57,5 +57,5 @@
 
 - [ ] 编写后端单元测试：运行数据源解析、方言、元数据缓存、自定义主键、租户默认业务数据源回退、全局开关、dynamic-datasource dsKey 解析。（已补 `TenantBusinessDataSourceTaskDecoratorTest`，但当前父 POM 默认跳过 testCompile/surefire，需后续统一调整测试插件配置后执行。）
 - [ ] 编写 `forge-business` ORM 路由集成测试：`@TenantBusinessDataSource` + MyBatis-Plus Mapper/XML 命中租户业务库，异步任务上下文不丢失且不串库。
-- [ ] 编写集成测试方案：主库 + MySQL/PostgreSQL/Oracle 外部库的动态 CRUD 读写验证。
+- [ ] 编写集成测试方案：主库 + MySQL/PostgreSQL/Oracle 外部库的动态 CRUD 读写验证；Oracle 需覆盖连接测试、表导入、建表/加列/索引/注释 DDL、分页查询和自增主键回填。
 - [x] 执行后端增量编译、前端 lint/build，并按自动化测试标准更新 `execution-log.md`。

@@ -95,7 +95,7 @@ public class LowcodeDdlRepository {
         }
         PrimaryKeyMetadata primaryKey = primaryKeys.get(0);
         return "id".equalsIgnoreCase(primaryKey.columnName())
-                && primaryKey.dataType().toLowerCase(Locale.ROOT).contains("bigint")
+                && isBigIntegerPrimaryType(primaryKey.dataType())
                 && primaryKey.autoIncrement();
     }
 
@@ -138,6 +138,29 @@ public class LowcodeDdlRepository {
         return normalized.contains("auto_increment")
                 || normalized.contains("nextval")
                 || "yes".equalsIgnoreCase(normalized);
+    }
+
+    private boolean isBigIntegerPrimaryType(String dataType) {
+        String normalized = text(dataType).toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        if (normalized.contains("bigint")) {
+            return true;
+        }
+        if (!normalized.startsWith("number(")) {
+            return false;
+        }
+        int start = normalized.indexOf('(');
+        int end = normalized.indexOf(')', start + 1);
+        if (start < 0 || end <= start) {
+            return false;
+        }
+        String[] parts = normalized.substring(start + 1, end).split(",");
+        try {
+            int precision = Integer.parseInt(parts[0]);
+            int scale = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+            return precision >= 18 && scale == 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private String normalizeIdentifier(String value) {

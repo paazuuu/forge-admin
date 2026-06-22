@@ -68,6 +68,13 @@ const driverClassMap = {
   SQLServer: 'com.microsoft.sqlserver.jdbc.SQLServerDriver',
 }
 
+const testQueryMap = {
+  MySQL: 'SELECT 1',
+  Oracle: 'SELECT 1 FROM DUAL',
+  PostgreSQL: 'SELECT 1',
+  SQLServer: 'SELECT 1',
+}
+
 // 搜索表单配置
 const searchSchema = [
   {
@@ -229,6 +236,9 @@ const editSchema = [
         // 自动填充驱动类名
         if (driverClassMap[value]) {
           formData.driverClassName = driverClassMap[value]
+        }
+        if (!formData.testQuery || Object.values(testQueryMap).includes(formData.testQuery)) {
+          formData.testQuery = testQueryMap[value] || 'SELECT 1'
         }
       },
     },

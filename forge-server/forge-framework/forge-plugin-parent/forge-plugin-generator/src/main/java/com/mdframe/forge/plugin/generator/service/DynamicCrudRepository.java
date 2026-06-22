@@ -1482,25 +1482,6 @@ public class DynamicCrudRepository {
         params.addValue("id", id);
     }
 
-    private Integer queryInformationSchemaCount(String table, String condition, String paramName, Object value) {
-        String sql = "SELECT COUNT(*) FROM information_schema." + table
-                + " WHERE " + condition + " AND table_schema = (SELECT DATABASE())";
-        return jdbc().queryForObject(sql, singleParam(paramName, value), Integer.class);
-    }
-
-    private List<String> queryInformationSchemaList(String selectColumn, String table,
-                                                    String condition, String paramName, Object value) {
-        String sql = "SELECT " + selectColumn + " FROM information_schema." + table
-                + " WHERE " + condition + " AND table_schema = (SELECT DATABASE())";
-        return jdbc().queryForList(sql, singleParam(paramName, value), String.class);
-    }
-
-    private MapSqlParameterSource singleParam(String paramName, Object value) {
-        MapSqlParameterSource params = new MapSqlParameterSource();
-        params.addValue(paramName, value);
-        return params;
-    }
-
     private String metadataCacheKey(String tableName) {
         return metadataCacheKey(LowcodeRuntimeDataSourceContextHolder.get(), tableName);
     }
