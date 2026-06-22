@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://gitee.com/ForgeLab/forge-admin/stargazers"><img src="https://gitee.com/ForgeLab/forge-admin/badge/star.svg?theme=gvp" alt="Gitee stars"></a>
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/license-Apache-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/Spring%20Boot-3.x-green.svg" alt="Spring Boot">
   <img src="https://img.shields.io/badge/Vue-3.x-brightgreen.svg" alt="Vue3">
   <img src="https://img.shields.io/badge/Report-AI%20Enhanced-orange.svg" alt="AI Dashboard">
@@ -642,4 +642,4 @@ A: 立即更换相关密码或密钥，然后从仓库历史和当前索引中�
 
 ## 📄 许可证
 
-本项目基于 [MIT](LICENSE) 许可证开源。
+本项目基于 [Apache 2.0](LICENSE) 许可证开源。
