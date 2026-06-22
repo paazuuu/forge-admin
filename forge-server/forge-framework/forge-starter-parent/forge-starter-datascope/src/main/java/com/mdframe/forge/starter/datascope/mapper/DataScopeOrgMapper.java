@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.datascope.mapper;
 
+import com.mdframe.forge.starter.datascope.model.DataScopeOrgInfo;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -25,4 +26,9 @@ public interface DataScopeOrgMapper {
             "</foreach>" +
             "</script>")
     Set<Long> selectChildOrgIds(@Param("orgIds") List<Long> orgIds);
+
+    /**
+     * 查询全部组织层级，用于构建平台元数据快照。
+     */
+    List<DataScopeOrgInfo> selectAllOrgAncestors();
 }

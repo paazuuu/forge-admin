@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.datascope.mapper.SysDataScopeConfigMapper">
+
+    <resultMap id="SysDataScopeConfigResultMap" type="com.mdframe.forge.starter.datascope.entity.SysDataScopeConfig">
+        <id property="id" column="id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="resourceCode" column="resource_code"/>
+        <result property="resourceName" column="resource_name"/>
+        <result property="mapperMethod" column="mapper_method"/>
+        <result property="tableAlias" column="table_alias"/>
+        <result property="userIdColumn" column="user_id_column"/>
+        <result property="orgIdColumn" column="org_id_column"/>
+        <result property="tenantIdColumn" column="tenant_id_column"/>
+        <result property="regionCodeColumn" column="region_code_column"/>
+        <result property="userRegionColumn" column="user_region_column"/>
+        <result property="userTableAlias" column="user_table_alias"/>
+        <result property="enabled" column="enabled"/>
+        <result property="remark" column="remark"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="createDept" column="create_dept"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <select id="selectEnabledConfigs" resultMap="SysDataScopeConfigResultMap">
+        SELECT
+            id,
+            tenant_id,
+            resource_code,
+            resource_name,
+            mapper_method,
+            table_alias,
+            user_id_column,
+            org_id_column,
+            tenant_id_column,
+            region_code_column,
+            user_region_column,
+            user_table_alias,
+            enabled,
+            remark,
+            create_by,
+            create_time,
+            create_dept,
+            update_by,
+            update_time
+        FROM sys_data_scope_config
+        WHERE enabled = 1
+    </select>
+
+</mapper>

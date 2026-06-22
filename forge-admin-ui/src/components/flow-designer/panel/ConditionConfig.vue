@@ -99,7 +99,12 @@ function setDefault(edgeId) {
 }
 
 function updateCondition(edgeId, value) {
-  emit('update:edge', edgeId, { condition: value, conditionType: 'expression', conditionMode: 'advanced' })
+  emit('update:edge', edgeId, {
+    condition: value,
+    conditionType: 'expression',
+    conditionMode: 'advanced',
+    advancedCondition: value,
+  })
 }
 
 function updateMode(edge, mode) {
@@ -107,12 +112,21 @@ function updateMode(edge, mode) {
     return
 
   if (mode === 'advanced') {
-    emit('update:edge', edge.id, { conditionMode: 'advanced', conditionType: 'expression' })
+    const advancedCondition = getAdvancedCondition(edge)
+    const patch = {
+      condition: advancedCondition,
+      conditionMode: 'advanced',
+      conditionType: 'expression',
+      advancedCondition,
+    }
+    if (getMode(edge) === 'rules' && edge.rulesCondition === undefined)
+      patch.rulesCondition = edge.condition || ''
+    emit('update:edge', edge.id, patch)
     return
   }
 
   const rules = ensureRules(edge)
-  emitRulesPatch(edge.id, rules, getLogic(edge))
+  emitRulesPatch(edge.id, rules, getLogic(edge), edge)
 }
 
 function getMode(edge) {
@@ -120,14 +134,14 @@ function getMode(edge) {
     return edge.conditionMode
   if (edge?.conditionRules?.length)
     return 'rules'
-  if (parseConditionExpression(edge).rules.length)
+  if (parseConditionExpression(getRulesCondition(edge)).rules.length)
     return 'rules'
   return formFields.value.length && !edge?.condition ? 'rules' : 'advanced'
 }
 
 function getLogic(edge) {
   if (!edge?.conditionLogic) {
-    const parsed = parseConditionExpression(edge)
+    const parsed = parseConditionExpression(getRulesCondition(edge))
     if (parsed.rules.length)
       return parsed.logic
   }
@@ -141,10 +155,24 @@ function getRules(edge) {
 function ensureRules(edge) {
   if (Array.isArray(edge?.conditionRules))
     return edge.conditionRules.map(normalizeRule)
-  const parsed = parseConditionExpression(edge)
+  const parsed = parseConditionExpression(getRulesCondition(edge))
   if (parsed.rules.length)
     return parsed.rules
   return [createDefaultRule()]
+}
+
+function getAdvancedCondition(edge) {
+  if (edge?.advancedCondition !== undefined)
+    return edge.advancedCondition
+  return edge?.condition || ''
+}
+
+function getRulesCondition(edge) {
+  if (edge?.rulesCondition !== undefined)
+    return edge.rulesCondition
+  if (edge?.conditionMode === 'advanced')
+    return ''
+  return edge?.condition || ''
 }
 
 function createDefaultRule() {
@@ -169,14 +197,14 @@ function addRule(edge) {
   if (props.readonly)
     return
   const rules = [...ensureRules(edge), createDefaultRule()]
-  emitRulesPatch(edge.id, rules, getLogic(edge))
+  emitRulesPatch(edge.id, rules, getLogic(edge), edge)
 }
 
 function removeRule(edge, index) {
   if (props.readonly)
     return
   const rules = ensureRules(edge).filter((_, idx) => idx !== index)
-  emitRulesPatch(edge.id, rules, getLogic(edge))
+  emitRulesPatch(edge.id, rules, getLogic(edge), edge)
 }
 
 function updateRule(edge, index, patch) {
@@ -184,24 +212,29 @@ function updateRule(edge, index, patch) {
     return
   const rules = ensureRules(edge)
   rules[index] = normalizeRule({ ...rules[index], ...patch })
-  emitRulesPatch(edge.id, rules, getLogic(edge))
+  emitRulesPatch(edge.id, rules, getLogic(edge), edge)
 }
 
 function updateLogic(edge, logic) {
   if (props.readonly)
     return
-  emitRulesPatch(edge.id, ensureRules(edge), logic)
+  emitRulesPatch(edge.id, ensureRules(edge), logic, edge)
 }
 
-function emitRulesPatch(edgeId, rules, logic) {
+function emitRulesPatch(edgeId, rules, logic, edge = null) {
   const normalizedRules = rules.map(normalizeRule)
-  emit('update:edge', edgeId, {
-    condition: buildExpression(normalizedRules, logic),
+  const rulesCondition = buildExpression(normalizedRules, logic)
+  const patch = {
+    condition: rulesCondition,
     conditionType: 'expression',
     conditionMode: 'rules',
     conditionLogic: logic,
     conditionRules: normalizedRules,
-  })
+    rulesCondition,
+  }
+  if (edge && getMode(edge) === 'advanced' && edge.advancedCondition === undefined)
+    patch.advancedCondition = edge.condition || ''
+  emit('update:edge', edgeId, patch)
 }
 
 function buildExpression(rules, logic) {
@@ -284,8 +317,8 @@ function isBetween(operator) {
   return operator === 'between'
 }
 
-function parseConditionExpression(edge) {
-  const expression = unwrapExpression(edge?.condition)
+function parseConditionExpression(condition) {
+  const expression = unwrapExpression(condition)
   if (!expression || !formFields.value.length)
     return { logic: 'all', rules: [] }
 
@@ -688,7 +721,7 @@ function hasField(field) {
         >
           <n-input
             class="condition-advanced-input"
-            :value="e.condition"
+            :value="getAdvancedCondition(e)"
             :disabled="readonly"
             type="textarea"
             placeholder="${days > 3}"

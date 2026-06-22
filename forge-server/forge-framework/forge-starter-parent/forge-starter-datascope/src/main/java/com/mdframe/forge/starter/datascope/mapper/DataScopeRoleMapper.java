@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.datascope.mapper;
 
+import com.mdframe.forge.starter.datascope.model.DataScopeRoleInfo;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -32,4 +33,9 @@ public interface DataScopeRoleMapper {
             " AND role_status = 1" +
             "</script>")
     Integer selectMinDataScope(@Param("roleIds") List<Long> roleIds);
+
+    /**
+     * 查询启用角色的数据权限范围，用于构建平台元数据快照。
+     */
+    List<DataScopeRoleInfo> selectActiveRoleDataScopes();
 }

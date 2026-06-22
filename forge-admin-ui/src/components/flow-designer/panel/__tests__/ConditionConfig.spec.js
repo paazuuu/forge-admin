@@ -196,6 +196,45 @@ describe('conditionConfig', () => {
 
     expect(wrapper.vm.edges[0].condition).toBe(`${DOLLAR}{amount > 1000}`)
     expect(wrapper.vm.edges[0].conditionMode).toBe('advanced')
+    expect(wrapper.vm.edges[0].advancedCondition).toBe(`${DOLLAR}{amount > 1000}`)
+
+    wrapper.unmount()
+  })
+
+  it('高级表达式切换到表单字段条件再切回时保留原内容', async () => {
+    const advancedExpression = `${DOLLAR}{days > 3 && applicant == 'tom'}`
+    const wrapper = mountConfig({
+      edges: [
+        {
+          id: 'F1',
+          source: 'GW',
+          target: 'T1',
+          condition: advancedExpression,
+          conditionMode: 'advanced',
+          isDefault: false,
+        },
+      ],
+    })
+
+    expect(wrapper.find('[data-test="mode-advanced"]').classes()).toContain('active')
+    expect(wrapper.find('.n-input').element.value).toBe(advancedExpression)
+
+    await wrapper.find('[data-test="mode-rules"]').trigger('click')
+    await nextTick()
+    expect(wrapper.vm.edges[0].conditionMode).toBe('rules')
+    expect(wrapper.vm.edges[0].advancedCondition).toBe(advancedExpression)
+
+    await wrapper.find('[data-test="rule-value"]').setValue('3000')
+    await nextTick()
+    expect(wrapper.vm.edges[0].condition).toBe(`${DOLLAR}{amount == 3000}`)
+    expect(wrapper.vm.edges[0].rulesCondition).toBe(`${DOLLAR}{amount == 3000}`)
+
+    await wrapper.find('[data-test="mode-advanced"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.vm.edges[0].conditionMode).toBe('advanced')
+    expect(wrapper.vm.edges[0].condition).toBe(advancedExpression)
+    expect(wrapper.find('.n-input').element.value).toBe(advancedExpression)
 
     wrapper.unmount()
   })

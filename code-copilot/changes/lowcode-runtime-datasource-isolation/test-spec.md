@@ -20,13 +20,18 @@ P1 后续补充：
 - Dynamic CRUD 按运行数据源路由后，补自定义单字段主键、只读数据源、租户/审计/逻辑删除策略单测。
 - 前端适配完成后，补 `pnpm build` 和关键页面联调验证。
 
-## 本轮增量验证：动态 CRUD、租户默认业务数据源和前端适配
+## 本轮增量验证：动态 CRUD、租户默认业务数据源和前端适配（历史记录）
 
 变更范围：
 
 - 动态 CRUD Controller/Service/Repository 自定义单字段主键、只读写入拦截、租户/审计/逻辑删除策略。
 - `forge-business` 租户默认业务数据源解析器、上下文、JDBC 模板提供器和主库回退。
 - 数据源管理、低代码模型导入、模型管理、业务对象向导和租户管理前端适配。
+
+纠偏说明：
+
+- 该轮 `forge-business` 验证只能证明 JDBC 模板方案编译通过，不能证明业务侧 MyBatis-Plus Mapper/XML 能切换租户业务数据源。
+- 阶段五验收标准以后续“`forge-business` dynamic-datasource 纠偏验证”为准。
 
 P0 必跑：
 
@@ -41,6 +46,43 @@ P1 后续补充：
 - 为运行数据源解析、方言分页、元数据缓存、自定义主键和租户默认业务数据源回退补单元测试。
 - 准备主库 + MySQL/PostgreSQL/Oracle 外部库的动态 CRUD 集成验证数据。
 - 发布目标库展示、就绪度检查、导入导出/触发器/单据编号全链路完成后补接口级验证。
+
+## 本轮增量验证：`forge-business` dynamic-datasource 纠偏
+
+变更范围：
+
+- 租户业务数据源全局开关：`forge.business.datasource.enabled` 和 `business.datasource.tenant-routing-enabled`。
+- dynamic-datasource 解析：租户表 `default_business_datasource_code` 保存已配置 dynamic-datasource dsKey，Resolver 校验 dsKey 存在后切换。
+- `@TenantBusinessDataSource` 注解和 AOP：方法执行前按当前租户 push dsKey，finally 清理。
+- `TenantBusinessDataSourceExecutor`：支持显式 `tenantId`，用于无登录态任务。
+- `TenantBusinessDataSourceTaskDecorator`：在 `forge.business.datasource.enabled=true` 时覆盖 `@Async`/线程池任务上下文传播。
+- 业务侧 Mapper/XML 仍通过 MyBatis-Plus 执行，不使用 `BusinessJdbcTemplateProvider` 作为主路径。
+- `business/datasource-demo` 后端用例：使用 `@TenantBusinessDataSource` 和显式 `TenantBusinessDataSourceExecutor` 验证同一 Mapper/XML 在不同租户下命中不同业务库。
+
+P0 必跑：
+
+- `git diff --check` 覆盖 `code-copilot/changes/lowcode-runtime-datasource-isolation`、`forge-server/forge-framework/forge-starter-parent/forge-starter-tenant`、`forge-server/forge-business/forge-business-core`、dynamic-datasource 路由相关 Java 文件和配置文件。
+- `mvn -pl forge-admin-server -am compile -DskipTests`，确保 admin 入口能带起 `forge-starter-tenant` 通用能力和 `forge-business-core` demo。
+- `mvn -pl forge-business/forge-business-core -am compile -DskipTests`。
+- `mvn -pl forge-business/forge-business-core -am test -Dtest='*TenantBusinessDataSource*,*BusinessDataSource*'`；当前父 POM 固定跳过 testCompile/surefire，执行时必须同时记录是否实际运行测试源。
+- 单测覆盖：
+  - 全局开关关闭时，注解方法不 push 租户业务 dsKey，Mapper 走 `master`。
+  - 开关开启且租户配置数据源时，解析出稳定 dsKey。
+  - 租户配置的 dsKey 未在 dynamic-datasource 中注册时抛业务异常。
+  - AOP finally 清理 dynamic-datasource 上下文。
+  - 异步任务连续执行两个租户时不串库。
+
+当前已补：
+
+- `TenantBusinessDataSourceTaskDecoratorTest` 覆盖异步装饰器传播租户和 dynamic-datasource key、隔离线程池旧上下文、执行后恢复 worker 原上下文。
+- `BusinessDatasourceDemoController` / `BusinessDatasourceDemoMapper.xml` 提供手工验证接口：`POST /business/datasource-demo/prepare?tenantId=<id>&title=...`、`GET /business/datasource-demo/list?tenantId=<id>`。
+
+P1 集成验证：
+
+- 准备 `master` + 两个已配置到 dynamic-datasource 的租户业务测试库，两个库创建同名业务表并写入不同数据。
+- 写一个最小 `forge-business` 测试 Mapper/XML，Service 标注 `@TenantBusinessDataSource`，分别模拟租户 A/B 查询，确认返回各自业务库数据。
+- 验证 `@Transactional` 场景：切面先于事务生效；已开启主库事务后再切换业务库的场景必须失败或被代码审查阻断。
+- 验证 `@Async` 或线程池任务：提交时带 tenantId，异步线程内 Mapper 命中对应业务库，任务结束后上下文清理。
 
 ## 本轮增量验证：发布检查、触发器事件和公式聚合自定义主键补齐
 
@@ -102,3 +144,61 @@ P1 后续补充：
 
 - 启动前后端后验证新建空白对象时能看到“平台主库（默认）”和 `LOWCODE_RUNTIME/BOTH` 数据源。
 - 验证数据库导入模式选择某个 `LOWCODE_RUNTIME` 数据源后，只加载该数据源表，并在保存草稿后模型/运行配置保留同一个运行数据源快照。
+
+## 本轮增量验证：异步日志租户上下文修复
+
+变更范围：
+
+- `SystemLogServiceImpl` 补全日志用户信息时忽略租户条件查询 `SysUser`，并对用户不存在做 null 保护。
+- `TenantBusinessDataSourceTaskDecorator` 传播并恢复 `TenantContextHolder.isIgnore()` 状态，避免异步线程清掉系统级忽略租户标记。
+- `TenantBusinessDataSourceTaskDecoratorTest` 增加忽略租户标记传播和恢复断言。
+
+P0 必跑：
+
+- `git diff --check` 覆盖本轮 Java、测试和文档文件。
+- `mvn -pl forge-admin-server -am compile -DskipTests`，确认 admin 入口带起 `forge-plugin-system`、`forge-starter-tenant` 和 `forge-business-core` 编译通过。
+
+P1 后续补充：
+
+- 启动后端后复现一次带操作日志的加密接口请求，确认 `log-async-*` 不再出现 `SysUser.getUsername()` 空指针。
+- 在租户业务数据源开关开启时验证 `@Async` 日志线程不会因为用户补全查询打印“当前上下文中没有租户ID”的告警。
+
+## 本轮增量验证：业务数据源调试前端页面
+
+变更范围：
+
+- 新增 `business/datasource-debug.vue`，支持选择租户、检测当前路由、写入测试记录、读取演示表记录。
+- 新增 `V1.0.77__add_business_datasource_debug_menu.sql`，注册“业务数据源调试”菜单和 demo 接口 API 资源，并给 admin / 已有数据源管理角色授权。
+- 更新阶段任务，明确调试台属于租户业务数据源路由改造的验证入口。
+
+P0 必跑：
+
+- `git diff --check` 覆盖新 Vue、Flyway 脚本和当前变更文档。
+- targeted eslint 覆盖 `forge-admin-ui/src/views/business/datasource-debug.vue`。
+- `pnpm --dir forge-admin-ui build` 覆盖动态路由页面打包。
+- `mvn -pl forge-admin-server -am compile -DskipTests` 覆盖新增 Flyway 脚本随 admin 服务资源打包。
+
+P1 后续补充：
+
+- 启动前后端后登录 admin，确认菜单“应用中心 / 业务数据源调试”可见并能打开。
+- 配置两个租户不同 `default_business_datasource_code` 后，分别写入记录，确认页面展示的 `当前数据库`、`线程 dsKey` 和 `routeKey` 与预期一致。
+
+## 本轮增量验证：数据权限控制面元数据主库快照
+
+变更范围：
+
+- `DataScopeServiceImpl` 改为启动/刷新时强制在 `metadataDatasource=master` 且忽略租户条件下加载数据权限配置、角色数据范围、自定义组织、组织层级和行政区划父子关系。
+- 业务 Mapper 查询期间只读取内存快照，不再因租户业务数据源 dsKey 访问 `sys_data_scope_config`、`sys_role`、`sys_org`、`sys_region_code` 等平台表。
+- 行政区划数据权限不再生成 `IN (SELECT code FROM sys_region_code ...)` 子查询，而是提前解析为业务库可执行的字面量 `IN (...)` 条件。
+- 新增 `forge.datascope.metadata-datasource` 和 `forge.datascope.default-config-tenant-id` 配置项，默认分别为 `master` 和 `1`。
+
+P0 必跑：
+
+- `git diff --check` 覆盖 `forge-starter-datascope` Java/POM 和当前变更文档。
+- `mvn -pl forge-framework/forge-starter-parent/forge-starter-datascope -am compile -DskipTests`。
+- `mvn -pl forge-admin-server -am compile -DskipTests`，确认 admin 入口聚合 `forge-starter-datascope`、`forge-starter-tenant`、dynamic-datasource 后编译通过。
+
+P1 后续补充：
+
+- 启动后端并配置租户业务 dsKey 后，调用带数据权限配置的业务 Mapper，确认业务 SQL 命中业务库且日志中不再出现 `Table '<业务库>.sys_data_scope_config' doesn't exist`。
+- 验证 REGION 数据权限生成的 SQL 不包含 `sys_region_code` 子查询，业务库无需复制平台行政区划表。

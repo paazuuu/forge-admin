@@ -26,4 +26,9 @@ public interface SysRoleDataScopeMapper extends BaseMapper<SysRoleDataScope> {
             "</foreach>" +
             "</script>")
     Set<Long> selectOrgIdsByRoleIds(@Param("roleIds") List<Long> roleIds);
+
+    /**
+     * 查询全部角色自定义数据权限，用于构建平台元数据快照。
+     */
+    List<SysRoleDataScope> selectAllRoleDataScopes();
 }

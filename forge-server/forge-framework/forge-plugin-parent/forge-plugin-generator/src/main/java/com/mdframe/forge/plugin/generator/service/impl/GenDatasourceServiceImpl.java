@@ -62,7 +62,8 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
     public boolean removeById(Serializable id) {
         boolean removed = super.removeById(id);
         if (removed && id != null) {
-            DynamicDataSourceUtil.removeDataSource(Long.valueOf(String.valueOf(id)));
+            Long datasourceId = Long.valueOf(String.valueOf(id));
+            DynamicDataSourceUtil.removeDataSource(datasourceId);
         }
         return removed;
     }

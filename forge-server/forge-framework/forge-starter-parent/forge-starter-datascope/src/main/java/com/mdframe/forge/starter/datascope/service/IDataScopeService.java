@@ -33,6 +33,14 @@ public interface IDataScopeService {
      * @return 组织及子组织ID集合
      */
     Set<Long> getOrgAndChildIds(List<Long> orgIds);
+
+    /**
+     * 获取行政区划及其直接下级区划编码。
+     *
+     * @param regionCode 行政区划编码
+     * @return 当前区划及直接下级区划编码集合
+     */
+    Set<String> getRegionAndChildCodes(String regionCode);
     
     /**
      * 刷新数据权限配置缓存

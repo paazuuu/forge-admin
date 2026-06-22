@@ -364,6 +364,15 @@ public class DataScopeInterceptor implements InnerInterceptor {
             result = result.replace("#{regionAncestors}", context.getRegionAncestors());
         }
 
+        // 替换 #{regionCodes}，供业务数据源场景避免在业务库 SQL 中引用 sys_region_code。
+        if (context.getRegionCode() != null) {
+            IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
+            Set<String> regionCodes = dataScopeService.getRegionAndChildCodes(context.getRegionCode());
+            result = result.replace("#{regionCodes}", quoteSqlStrings(regionCodes));
+        } else {
+            result = result.replace("#{regionCodes}", "NULL");
+        }
+
         return result;
     }
     
@@ -458,34 +467,19 @@ public class DataScopeInterceptor implements InnerInterceptor {
         }
 
         // 省级（level=1）在入口已被跳过，此处仅处理无 level 兜底
-        return buildEqualsCondition(tableAlias, column, regionCode);
+        return buildStringEqualsCondition(fullColumnName, regionCode);
     }
 
     /**
-     * 构建 本级 OR 下级 IN 条件：column = 'XXX' OR column IN (SELECT code FROM sys_region_code WHERE parent_code = 'XXX')
+     * 构建本级和下级行政区划条件。区划编码已由数据权限服务从平台库快照解析，业务 SQL 不再引用 sys_region_code。
      */
     private Expression buildRegionWithChildCondition(String fullColumnName, String regionCode) {
-        // 本级匹配
-        EqualsTo eq = new EqualsTo();
-        eq.setLeftExpression(new Column(fullColumnName));
-        eq.setRightExpression(new StringValue(regionCode));
-
-        // 下级子查询
-        String subQuerySql = "SELECT code FROM sys_region_code WHERE parent_code = '" + regionCode + "'";
-        try {
-            ParenthesedSelect parenthesedSelect = new ParenthesedSelect();
-            Select parsed = (Select) CCJSqlParserUtil.parse(subQuerySql);
-            parenthesedSelect.setSelect(parsed);
-
-            InExpression inExp = new InExpression();
-            inExp.setLeftExpression(new Column(fullColumnName));
-            inExp.setRightExpression(parenthesedSelect);
-
-            return new OrExpression(eq, wrapWithParentheses(inExp));
-        } catch (Exception e) {
-            log.error("数据权限拦截器：构建行政区划子查询失败，降级为精确匹配", e);
-            return eq;
+        IDataScopeService dataScopeService = SpringUtil.getBean(IDataScopeService.class);
+        Set<String> regionCodes = dataScopeService.getRegionAndChildCodes(regionCode);
+        if (regionCodes == null || regionCodes.isEmpty() || regionCodes.size() == 1) {
+            return buildStringEqualsCondition(fullColumnName, regionCode);
         }
+        return buildStringInCondition(fullColumnName, regionCodes);
     }
 
     /**
@@ -516,5 +510,42 @@ public class DataScopeInterceptor implements InnerInterceptor {
             sqlExpression = sqlExpression.substring(0, sqlExpression.length() - 6).trim();
         }
         return sqlExpression;
+    }
+
+    private Expression buildStringEqualsCondition(String fullColumnName, String value) {
+        EqualsTo eq = new EqualsTo();
+        eq.setLeftExpression(new Column(fullColumnName));
+        eq.setRightExpression(new StringValue(value));
+        return eq;
+    }
+
+    private Expression buildStringInCondition(String fullColumnName, Iterable<String> values) {
+        InExpression inExpression = new InExpression();
+        inExpression.setLeftExpression(new Column(fullColumnName));
+
+        List<Expression> expressions = new ArrayList<>();
+        for (String value : values) {
+            if (StrUtil.isNotBlank(value)) {
+                expressions.add(new StringValue(value));
+            }
+        }
+        if (expressions.size() == 1 && expressions.get(0) instanceof StringValue stringValue) {
+            return buildStringEqualsCondition(fullColumnName, stringValue.getValue());
+        }
+
+        ExpressionList expressionList = new ExpressionList();
+        expressionList.setExpressions(expressions);
+        inExpression.setRightExpression(new ParenthesedExpressionList(expressionList));
+        return inExpression;
+    }
+
+    private String quoteSqlStrings(Set<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "NULL";
+        }
+        return values.stream()
+                .filter(StrUtil::isNotBlank)
+                .map(value -> "'" + value.replace("'", "''") + "'")
+                .collect(java.util.stream.Collectors.joining(","));
     }
 }

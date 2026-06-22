@@ -19,4 +19,14 @@ public class DataScopeProperties {
      * 是否打印SQL改写日志
      */
     private Boolean printSql = false;
+
+    /**
+     * 数据权限控制面元数据所在数据源。
+     */
+    private String metadataDatasource = "master";
+
+    /**
+     * 默认数据权限配置租户。租户未配置时回退到该租户的通用配置。
+     */
+    private Long defaultConfigTenantId = 1L;
 }

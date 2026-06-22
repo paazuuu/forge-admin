@@ -10,6 +10,7 @@ import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.starter.log.domain.LoginLogInfo;
 import com.mdframe.forge.starter.log.domain.OperationLogInfo;
 import com.mdframe.forge.starter.log.service.ILogService;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,13 +33,7 @@ public class SystemLogServiceImpl implements ILogService {
         try {
             // 补充用户信息（从Session中获取）
             if (logInfo.getUserId() != null) {
-                try {
-                    SysUser sysUser = sysUserMapper.selectById(logInfo.getUserId());
-                    logInfo.setUsername(sysUser.getUsername());
-                    logInfo.setTenantId(sysUser.getTenantId());
-                } catch (Exception e) {
-                    log.debug("从Session获取用户信息失败", e);
-                }
+                fillOperationLogUserInfo(logInfo);
             }
             // 转换并保存
             SysOperationLog entity = new SysOperationLog();
@@ -56,13 +51,7 @@ public class SystemLogServiceImpl implements ILogService {
     public void saveLoginLog(LoginLogInfo logInfo) {
         try {
             if (logInfo.getUserId() != null) {
-                try {
-                    SysUser sysUser = sysUserMapper.selectById(logInfo.getUserId());
-                    logInfo.setUsername(sysUser.getUsername());
-                    logInfo.setTenantId(sysUser.getTenantId());
-                } catch (Exception e) {
-                    log.debug("从SysUser获取用户信息失败", e);
-                }
+                fillLoginLogUserInfo(logInfo);
             }
             // 转换并保存
             SysLoginLog entity = new SysLoginLog();
@@ -75,5 +64,41 @@ public class SystemLogServiceImpl implements ILogService {
         } catch (Exception e) {
             log.error("登录日志保存失败", e);
         }
+    }
+
+    private void fillOperationLogUserInfo(OperationLogInfo logInfo) {
+        try {
+            SysUser sysUser = selectUserIgnoreTenant(logInfo.getUserId());
+            if (sysUser == null) {
+                log.debug("未查询到操作日志用户信息: userId={}", logInfo.getUserId());
+                return;
+            }
+            logInfo.setUsername(sysUser.getUsername());
+            if (logInfo.getTenantId() == null) {
+                logInfo.setTenantId(sysUser.getTenantId());
+            }
+        } catch (Exception e) {
+            log.debug("从SysUser获取操作日志用户信息失败: userId={}", logInfo.getUserId(), e);
+        }
+    }
+
+    private void fillLoginLogUserInfo(LoginLogInfo logInfo) {
+        try {
+            SysUser sysUser = selectUserIgnoreTenant(logInfo.getUserId());
+            if (sysUser == null) {
+                log.debug("未查询到登录日志用户信息: userId={}", logInfo.getUserId());
+                return;
+            }
+            logInfo.setUsername(sysUser.getUsername());
+            if (logInfo.getTenantId() == null) {
+                logInfo.setTenantId(sysUser.getTenantId());
+            }
+        } catch (Exception e) {
+            log.debug("从SysUser获取登录日志用户信息失败: userId={}", logInfo.getUserId(), e);
+        }
+    }
+
+    private SysUser selectUserIgnoreTenant(Long userId) {
+        return TenantContextHolder.executeIgnore(() -> sysUserMapper.selectById(userId));
     }
 }

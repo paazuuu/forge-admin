@@ -68,6 +68,12 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-generator</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-business-core</artifactId>
+            <version>${revision}</version>
+        </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>

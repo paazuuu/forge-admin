@@ -263,6 +263,17 @@ const fieldModalVisible = ref(false)
 const fieldModalTitle = ref('字段列表')
 const fieldLoading = ref(false)
 const fieldRows = ref([])
+// 列表行级"测试连接"loading 跟踪，用 Set 保证多行并发独立
+const testingConnectionIds = ref(new Set())
+
+function setRowTesting(id, loading) {
+  const next = new Set(testingConnectionIds.value)
+  if (loading)
+    next.add(id)
+  else
+    next.delete(id)
+  testingConnectionIds.value = next
+}
 
 const queryForm = reactive({
   connectionName: '',
@@ -315,7 +326,10 @@ const statCards = computed(() => [
   },
 ])
 
-const tableColumns = computed(() => [
+const tableColumns = computed(() => {
+  // 显式订阅 testing 集合，使行的"测试连接"按钮可动态切换 label/disabled
+  const testingIds = testingConnectionIds.value
+  return [
   {
     prop: 'connectionName',
     label: '连接资产',
@@ -376,12 +390,21 @@ const tableColumns = computed(() => [
     maxActionButtons: 4,
     actions: [
       { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },
-      { label: '测试连接', key: 'test', type: 'info', onClick: handleTest },
+      {
+        label: '测试连接',
+        key: 'test',
+        type: 'info',
+        onClick: handleTest,
+        // 行级 loading：disabled 函数禁用重复点击，配合 $message 反馈
+        disabled: row => testingIds.has(row?.id),
+        disabledReason: '正在测试，请稍候…',
+      },
       { label: '查看表', key: 'tables', type: 'info', onClick: handleViewTables },
       { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
     ],
   },
-])
+  ]
+})
 
 const connectionTableColumns = [
   {
@@ -692,18 +715,41 @@ function handleDelete(row) {
 }
 
 async function handleTest(row) {
+  if (!row?.id || testingConnectionIds.value.has(row.id)) {
+    return
+  }
+  setRowTesting(row.id, true)
+  // 项目封装的 $message.loading 不返回实例，需用 key 触发自身销毁机制
+  const msgKey = `testConn:${row.id}`
+  const label = row.connectionName || row.id
+  window.$message?.loading?.(`正在测试连接「${label}」...`, { key: msgKey })
+  let succeeded = false
+  let resultMsg = ''
   try {
-    window.$message.loading('正在测试连接...', { duration: 0, key: 'testConn' })
     const res = await testDataConnection(row.id)
-    if (res.code === 200 && res.data) {
-      window.$message.success('连接成功', { key: 'testConn' })
+    if (res?.code === 200 && res.data) {
+      succeeded = true
+      resultMsg = `连接「${label}」测试成功`
     }
     else {
-      window.$message.error('连接失败', { key: 'testConn' })
+      resultMsg = res?.msg || `连接「${label}」测试失败`
     }
   }
-  catch {
-    window.$message.error('连接测试失败', { key: 'testConn' })
+  catch (error) {
+    resultMsg = error?.message || '连接测试失败'
+  }
+  finally {
+    setRowTesting(row.id, false)
+    // 先销毁 loading，再弹一条全新 success/error，避免复用消息被旧定时器立即销毁
+    window.$message?.destroy?.(msgKey, 0)
+    setTimeout(() => {
+      if (succeeded) {
+        window.$message?.success?.(resultMsg, { duration: 3000 })
+      }
+      else {
+        window.$message?.error?.(resultMsg, { duration: 4000 })
+      }
+    }, 50)
   }
 }
 

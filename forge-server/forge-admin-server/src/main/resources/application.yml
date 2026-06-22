@@ -116,3 +116,7 @@ forge:
     secretKey: 8r0fV9G3kLcNz7p2xQaA1w==
   api-config:
     enabled: false
+  business:
+    datasource:
+      enabled: true
+      tenant-routing-enabled-default: true

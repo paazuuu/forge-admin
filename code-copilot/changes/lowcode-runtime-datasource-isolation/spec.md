@@ -177,7 +177,31 @@
 - `spring.datasource.dynamic.primary=master`
 - `spring.datasource.dynamic.datasource.master`
 
-结论：工程基础已支持动态数据源生态，但低代码动态 CRUD 当前未使用 `@DS` 或 `DynamicDataSourceContextHolder`。本期可选择“轻量 JDBC 模板路由”先落地，也可后续纳入 dynamic-datasource 统一管理。
+结论：工程基础已支持 dynamic-datasource 生态。低代码动态 CRUD 由于本身是动态 SQL/JdbcTemplate 场景，可以继续由低代码运行上下文选择目标 JDBC 模板；但 `forge-business` 手写业务模块不能采用独立 JDBC 模板路由，必须接入 dynamic-datasource，让 MyBatis-Plus Mapper/XML 在同一个 ORM 链路内完成数据源切换。
+
+官方 dynamic-datasource 使用模型参考：https://baomidou.com/guides/dynamic-datasource/ 。本变更按以下边界设计：
+
+- 平台主库仍是 `spring.datasource.dynamic.primary=master`。
+- 业务模块显式进入租户业务数据源时，通过 dynamic-datasource 的上下文选择数据源；方法级声明优先于类级声明。
+- 数据源不存在时是否严格失败由 `spring.datasource.dynamic.strict` 和业务侧全局开关共同控制；业务模块默认要求解析不到租户数据源时回退 `master`，但解析到已禁用/不可用数据源时失败。
+- 运行期不从低代码 `gen_datasource` 注册业务库；`forge-business` 只校验并切换租户表中配置的 dynamic-datasource dsKey，不再维护一套绕开 MyBatis-Plus 的 `JdbcTemplate` 路由。
+
+### 2.9 纠偏前 `forge-business` 多数据源实现偏离目标
+
+纠偏前 `forge-business-core` 已新增：
+
+- `BusinessTenantDataSourceResolver`
+- `BusinessDataSourceContextHolder`
+- `BusinessDataSourceExecutor`
+- `BusinessJdbcTemplateProvider`
+
+现有实现存在三个关键问题：
+
+1. `BusinessJdbcTemplateProvider` 复用低代码 `RuntimeJdbcTemplateProvider`，只能影响手写 `JdbcTemplate`/`NamedParameterJdbcTemplate`，不能影响业务侧 MyBatis-Plus Mapper/XML。后续 `forge-business` 真实复杂业务如果按项目规范走 Mapper/XML，仍会落到当前 dynamic-datasource 默认主库。
+2. `BusinessDataSourceContextHolder` 是独立 ThreadLocal，和 dynamic-datasource 的上下文不是同一个体系。即使 Service 外层设置了该上下文，MyBatis-Plus 获取连接时也不会读取它。
+3. 异步任务、调度任务、事件监听任务不会自动继承该 ThreadLocal；如果异步逻辑里执行业务 Mapper，会丢失租户和数据源上下文，最终回到主库或错误数据源。
+
+结论：阶段五的 `forge-business` 方案需要纠偏。保留 `sys_tenant.default_business_datasource_id/code` 作为“租户选择哪个数据源”的配置，其中 `default_business_datasource_code` 必须对应 baomidou dynamic-datasource 已配置的数据源名称；新增全局开关、AOP/执行器和异步上下文传播，确保业务侧 ORM 层仍由 MyBatis-Plus 控制。
 
 ## 3. 功能点
 
@@ -315,31 +339,63 @@
 - [ ] 旧表无审计字段时，`auditStrategy=NONE` 不写入 Forge 审计字段。
 - [ ] 旧表字段类型、必填、长度和主键不满足运行要求时，发布检查必须给出阻断原因。
 
-### 3.7 租户默认业务数据源
+### 3.7 租户默认业务数据源（`forge-business` + MyBatis-Plus）
 
-- [ ] `sys_tenant` 增加默认业务数据源字段。
-- [ ] 租户管理页面支持选择默认业务数据源。
-- [ ] 新增 `TenantBusinessDataSourceResolver`，按当前租户解析默认业务数据源。
-- [ ] `forge-business` 手写模块通过明确注解或上下文工具进入租户业务数据源。
-- [ ] 未配置租户默认业务数据源时，统一回退平台主数据源 `master`，并记录 debug 日志便于排查。
-- [ ] 租户默认业务数据源只影响显式声明的业务模块，不覆盖低代码应用绑定数据源。
+阶段五改造目标调整为：`forge-business` 业务侧仍按项目标准使用 MyBatis-Plus Mapper/XML，不引导业务模块改用 `JdbcTemplate`。数据源切换由 baomidou dynamic-datasource 接管，业务代码只声明“当前方法需要进入租户默认业务数据源”。
+
+#### 3.7.1 全局开关
+
+- [x] 新增 `forge.business.datasource.enabled` 配置项，默认 `false`，用于灰度控制租户业务数据源路由能力。
+- [x] 新增系统配置项 `business.datasource.tenant-routing-enabled`，运行期可关闭租户业务数据源路由；关闭后即使租户配置了默认业务数据源，`forge-business` 显式声明方法也必须走 `master`。
+- [x] 全局开关关闭时记录 debug 日志，不能报错，便于线上快速回退。
+- [x] 全局开关开启后，只有显式注解或显式执行器包裹的业务逻辑进入租户业务数据源；普通平台、系统、低代码元数据接口不受影响。
+
+#### 3.7.2 dynamic-datasource 解析与校验
+
+- [x] 保留 `sys_tenant.default_business_datasource_id` / `default_business_datasource_code`，只负责记录“当前租户默认使用哪个业务数据源”。
+- [x] 新增 `TenantBusinessDataSourceResolver`，按 `TenantContextHolder` / `SessionHelper` 获取当前租户，读取 `sys_tenant.default_business_datasource_code`。
+- [x] `default_business_datasource_code` 只表示业务租户要使用的 dynamic-datasource dsKey，不复用低代码 `gen_datasource` 连接配置。
+- [x] Resolver 校验 dsKey 已存在于 `DynamicRoutingDataSource#getDataSources()`；不存在时抛业务异常，避免静默写错库。
+- [x] 租户未配置默认业务数据源时回退 `master`；租户配置了未注册的 dsKey 时失败。
+
+#### 3.7.3 MyBatis-Plus 路由方式
+
+- [x] 新增 `@TenantBusinessDataSource` 注解，建议标在 `forge-business` Service 方法或类上，不建议标在 Mapper 上。
+- [x] 新增 AOP 切面：进入注解方法前解析当前租户的数据源 key，并调用 dynamic-datasource 上下文 `push(dsKey)`；finally 中必须 `poll()` 清理，避免线程复用串库。
+- [x] 切面顺序必须早于 `@Transactional`，确保事务开启前 dynamic-datasource 已经选中正确数据源。
+- [x] 如果方法已经在平台主库事务中，禁止中途切换到租户业务数据源；需要拆分事务边界，避免同一事务内跨库。
+- [x] 业务侧 Mapper 查询、XML SQL、分页和 MyBatis-Plus 插件链都走同一个 dynamic-datasource DataSource，不再通过 `BusinessJdbcTemplateProvider` 执行主路径。
 
 建议开发模型：
 
 ```java
 @TenantBusinessDataSource
-public Page<CustomerVO> selectCustomerPage(CustomerQuery query) {
-    // mapper/xml 查询走当前租户默认业务数据源
+public Page<CustomerVO> selectCustomerPage(Page<CustomerVO> page, CustomerQuery query) {
+    return customerMapper.selectCustomerPage(page, query);
 }
 ```
 
-或：
+或用于需要显式指定租户的后台任务：
 
 ```java
-tenantBusinessDataSourceExecutor.execute(() -> {
+tenantBusinessDataSourceExecutor.execute(tenantId, () -> {
     return customerMapper.selectCustomerPage(page, query);
 });
 ```
+
+#### 3.7.4 异步场景
+
+- [x] 不能依赖普通 ThreadLocal 自动进入异步线程；`@Async`、线程池、事件监听、定时任务必须显式传播租户和数据源上下文。
+- [x] 新增 `TenantBusinessDataSourceTaskDecorator`，在提交任务时捕获 `tenantId` 和当前 dynamic-datasource key，在异步线程执行前重新设置，finally 中清理。
+- [x] `forge.business.datasource.enabled=true` 时对系统级线程池统一配置 TaskDecorator；对手动创建的异步任务必须使用 `TenantBusinessDataSourceExecutor.execute(tenantId, action)`，禁止直接调用业务 Mapper。
+- [x] 定时任务、消息消费、补偿任务没有登录态时必须传入明确 `tenantId`；缺少租户上下文时只允许走 `master` 或直接失败，不能猜测租户。
+- [x] 异步任务不能跨线程复用未提交事务；业务库写入和平台日志/消息记录按最终一致性处理。
+
+#### 3.7.5 当前实现处理
+
+- [x] 废弃 `BusinessJdbcTemplateProvider` 作为业务模块主路径；如保留，只能用于少量非 Mapper 的工具型 SQL，并且必须显式标注不参与业务 ORM 主链路。
+- [x] `BusinessDataSourceContextHolder` 不再作为最终数据源选择依据；最终连接选择必须进入 dynamic-datasource 上下文。
+- [x] `SysTenantBusinessDataSourceResolver` 不再返回低代码 `LowcodeRuntimeDataSourceContext`，应返回业务数据源 key、数据源摘要和开关状态。
 
 ### 3.8 应用中心前端适配
 
@@ -366,6 +422,10 @@ tenantBusinessDataSourceExecutor.execute(() -> {
 - 低代码应用优先使用业务对象绑定数据源，不使用租户默认业务数据源兜底，避免同一应用在不同租户下误写不同库。
 - `forge-business` 手写业务模块只有显式声明时才按租户默认业务数据源切换。
 - `forge-business` 手写业务模块解析不到租户默认业务数据源时，必须回退平台主数据源 `master`。
+- `forge-business` 租户业务数据源路由受全局开关控制；开关关闭时所有业务模块显式声明都必须降级到 `master`。
+- `forge-business` 业务侧 ORM 主路径必须使用 MyBatis-Plus Mapper/XML，数据源选择必须进入 dynamic-datasource 上下文；禁止把 `BusinessJdbcTemplateProvider` 当作复杂业务模块的主访问方式。
+- `@TenantBusinessDataSource` 切面必须早于事务切面执行；已经开启主库事务的方法不得中途切换到租户业务库。
+- 异步任务必须显式传播 `tenantId` 和 dynamic-datasource key；没有租户上下文的异步业务 Mapper 调用禁止默认猜测数据源。
 - 数据源标记为只读时，低代码运行页只能查询和导出，不能新增、编辑、删除、导入。
 - 旧系统生产库或高风险数据源默认只读、默认禁止 DDL；解除只读和开启 DDL 必须有管理员权限和二次确认。
 - 外部旧系统生产库默认不允许 DDL；只有数据源配置允许且用户二次确认后才可执行。
@@ -405,6 +465,7 @@ tenantBusinessDataSourceExecutor.execute(() -> {
 | 修改 | `ai_crud_config_version` | 同步 `ai_crud_config` 运行数据源相关字段 | 发布版本和回滚保持一致 |
 | 修改 | `sys_tenant` | `default_business_datasource_id bigint DEFAULT NULL` | 租户默认业务数据源 |
 | 修改 | `sys_tenant` | `default_business_datasource_code varchar(64) DEFAULT NULL` | 租户默认业务数据源编码 |
+| 新增 | `sys_config` | `business.datasource.tenant-routing-enabled=false` | 租户业务数据源全局开关，关闭时 `forge-business` 统一走 `master` |
 | 修改 | `sys_resource` | 新增或补齐权限资源 | 运行数据源绑定、租户业务数据源配置 |
 
 数据迁移规则：
@@ -468,6 +529,7 @@ tenantBusinessDataSourceExecutor.execute(() -> {
 | 修改 | `/system/tenant/{id}` | GET | 返回默认业务数据源字段 |
 | 修改 | `/system/tenant` | POST/PUT | 支持保存默认业务数据源 |
 | 新增 | `/system/tenant/{id}/business-datasource/check` | GET | 检查租户默认业务数据源可用性 |
+| 新增 | `/system/tenant/business-datasource/config` | GET/PUT | 查询和修改租户业务数据源全局开关 |
 
 ## 7. 影响范围
 
@@ -491,9 +553,19 @@ tenantBusinessDataSourceExecutor.execute(() -> {
   - `SysTenantDTO`
   - `SysTenantMapper.xml`
   - `SysTenantServiceImpl`
-- `forge-starter-orm` 或新增 starter
-  - 运行时数据源模板提供器
-  - 租户业务数据源上下文执行器
+  - `SysTenantBusinessDataSourceResolver`
+- `forge-starter-tenant`
+  - `@TenantBusinessDataSource`
+  - `TenantBusinessDataSourceInfo`
+  - `BusinessDataSourceProperties`
+  - `TenantBusinessDataSourceAspect`
+  - `TenantBusinessDataSourceResolver`
+  - `TenantBusinessDataSourceExecutor`
+  - `TenantBusinessDataSourceTaskDecorator`
+  - 线程池 `TaskDecorator` 后处理器
+- `forge-business-core`
+  - `business/datasource-demo` 后端验证用例
+  - 删除 `BusinessJdbcTemplateProvider`、`BusinessDataSourceContextHolder`、旧 `BusinessDataSourceExecutor`
 
 ### 7.2 前端
 
@@ -589,12 +661,35 @@ tenantBusinessDataSourceExecutor.execute(() -> {
 - 新增权限资源必须默认只授予超级管理员或开发者角色。
 - 数据源配置、发布到外部库、DDL 执行必须记录操作日志。
 
-## 8.5 测试策略
+### 8.8 `forge-business` ORM 路由失效
+
+风险：业务侧代码按规范使用 MyBatis-Plus Mapper/XML，但数据源切换只发生在自定义 JDBC 模板或独立 ThreadLocal 中，导致 Mapper 仍访问 `master`。
+
+控制：
+
+- `forge-business` 主路径必须通过 dynamic-datasource 选择数据源，不再依赖低代码 `RuntimeJdbcTemplateProvider`。
+- `@TenantBusinessDataSource` 切面必须在事务开启前 `push(dsKey)`，并在 finally 中 `poll()`。
+- 为业务 Mapper 增加最小集成测试，验证相同 Mapper 在不同租户下访问不同物理库。
+
+### 8.9 异步上下文丢失
+
+风险：`@Async`、线程池、定时任务或事件监听中没有登录态和 ThreadLocal，导致业务 Mapper 回退主库或串到上一次线程残留数据源。
+
+控制：
+
+- 系统线程池统一配置 `TenantBusinessDataSourceTaskDecorator`。
+- 后台任务必须显式传入 `tenantId`，由执行器重新解析并设置 dynamic-datasource key。
+- 所有上下文设置必须 finally 清理；测试覆盖同一线程连续执行两个租户任务不串库。
+
+## 9. 测试策略
 
 - **测试范围**：
   - 单元测试：运行数据源解析、运行上下文构建、租户/审计/逻辑删除策略、主键解析、缓存 key。
+  - `forge-business` 单元测试：全局开关、租户默认业务数据源解析、用途校验、dynamic-datasource key 生成、开关关闭回退 `master`。
   - Repository 测试：不同数据源同名表元数据隔离；无 `tenant_id` 表更新删除不追加租户条件。
   - Service 测试：发布检查按绑定数据源执行；历史无数据源应用回退主库。
+  - `forge-business` 集成测试：Service 标注 `@TenantBusinessDataSource` 后，MyBatis-Plus Mapper/XML 查询命中租户默认业务库；同一 Mapper 在不同租户下命中不同库。
+  - 异步测试：`@Async`/线程池任务显式传入租户后能命中租户业务库，任务结束后 dynamic-datasource 上下文清理干净。
   - 前端测试：新建对象选择数据源、发布面板展示目标数据源、租户配置保存。
   - 集成测试：至少准备主库和外部 MySQL、PostgreSQL、Oracle 测试库，验证 `/ai/crud` 按绑定数据源读写。
 - **覆盖率目标**：
@@ -607,20 +702,24 @@ tenantBusinessDataSourceExecutor.execute(() -> {
 ```bash
 cd forge-server && mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am test
 cd forge-server && mvn -pl forge-framework/forge-plugin-parent/forge-plugin-system -am test
+cd forge-server && mvn -pl forge-business/forge-business-core -am test
 cd forge-admin-ui && pnpm exec eslint src/views/generator/datasource.vue src/views/system/tenant.vue src/views/app-center/components/BusinessObjectWizardDrawer.vue
 cd forge-admin-ui && pnpm build
 ```
 
-## 9. 待澄清与确认结论
+## 10. 待澄清与确认结论
 
 - [x] 首期支持旧系统非 `id` 主键表的可写 CRUD：支持单字段自定义主键；复合主键第一阶段不支持可写动态 CRUD。
 - [x] 租户默认业务数据源未配置时，`forge-business` 模块统一回退平台主数据源 `master`。
 - [x] 旧系统生产库需要增加“只读模式默认开启”的产品策略；高风险数据源默认只读、默认禁止 DDL。
 - [x] 第一阶段完整支持 MySQL、PostgreSQL、Oracle；其他数据库作为后续方言扩展。
+- [x] `forge-business` 多数据源必须基于 dynamic-datasource + MyBatis-Plus ORM 链路，不能以 `JdbcTemplate` 路由作为主方案。
+- [x] 租户业务数据源需要全局启停开关；租户表只负责记录默认使用哪个业务数据源。
+- [x] 异步任务必须显式传播租户和 dynamic-datasource 上下文，不能依赖普通 ThreadLocal 自动继承。
 
 当前无待澄清项。
 
-## 10. 技术决策
+## 11. 技术决策
 
 1. 低代码运行数据源以业务对象/模型绑定为准，不受租户默认业务数据源影响。
 2. 平台元数据继续保存在主数据源，不迁移到外部业务库。
@@ -635,20 +734,24 @@ cd forge-admin-ui && pnpm build
 11. 高风险或旧系统生产数据源默认只读、默认禁止 DDL。
 12. 首期完整支持 MySQL、PostgreSQL、Oracle 三类数据库方言。
 13. 数据源密码不进入任何运行配置快照。
+14. `forge-business` 业务侧 ORM 主路径必须使用 dynamic-datasource 选择数据源，让 MyBatis-Plus Mapper/XML 透明落到租户业务库；`BusinessJdbcTemplateProvider` 不作为复杂业务模块主链路。
+15. 租户业务数据源路由必须受全局开关控制，关闭时所有显式声明方法统一走 `master`。
+16. `@TenantBusinessDataSource` 切面必须先于事务切面执行；异步任务必须通过 TaskDecorator 或显式执行器传播租户和数据源上下文。
 
-## 11. 执行日志
+## 12. 执行日志
 
 | Task | 状态 | 实际改动文件 | 备注 |
 |------|------|--------------|------|
 | Spec | completed | `code-copilot/changes/lowcode-runtime-datasource-isolation/spec.md` | 初版需求和技术方案 |
 | Clarification | completed | `code-copilot/changes/lowcode-runtime-datasource-isolation/spec.md` | 补充自定义主键、主库回退、高风险只读、MySQL/PostgreSQL/Oracle 支持范围 |
 | Runtime datasource adaptation | completed | `forge-plugin-generator`、`forge-plugin-system`、`forge-business-core`、`forge-admin-ui`、`forge-server/db/migration/V1.0.75__add_lowcode_runtime_datasource_fields.sql` | 已完成元数据、DDL、动态 CRUD、租户默认业务数据源、触发器/公式外围链路和发布目标库展示；流程审批 `Long recordId` 与多库集成测试后续单独处理 |
+| Business datasource correction | implemented | `forge-starter-tenant`、`forge-plugin-system`、`forge-business-core`、`forge-server/db/migration/V1.0.76__add_business_datasource_routing_config.sql`、`application.yml`、`spec.md`、`tasks.md`、`test-spec.md` | 已落地 dynamic-datasource + MyBatis-Plus 主链路、全局开关、通用注解/AOP/显式执行器/异步上下文传播、系统侧租户 resolver 和 `business/datasource-demo` 验证用例；业务侧只选择已配置 dsKey，不监听或注册低代码 `gen_datasource`；真实多库 Mapper/XML 集成测试后续补齐 |
 
-## 12. 审查结论
+## 13. 审查结论
 
 待 review。
 
-## 13. 确认记录（HARD-GATE）
+## 14. 确认记录（HARD-GATE）
 
 - **确认时间**：2026-06-21
 - **确认人**：用户本轮确认

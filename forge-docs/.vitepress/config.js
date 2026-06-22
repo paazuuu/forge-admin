@@ -21,6 +21,8 @@ export default defineConfig({
           items: [
             { text: '渐进式 SDD 开发流程', link: '/guide/sdd-workflow' },
             { text: '项目编码规范', link: '/guide/conventions' },
+            { text: '业务数据源配置教程', link: '/guide/business-datasource-routing' },
+            { text: '低代码 CRUD 搭建器', link: '/guide/lowcode-crud-builder' },
           ]
         }
       ],
