@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.system.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -16,9 +17,11 @@ import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.entity.SysPost;
+import com.mdframe.forge.plugin.system.entity.SysRegion;
 import com.mdframe.forge.plugin.system.entity.SysRole;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysPostMapper;
+import com.mdframe.forge.plugin.system.mapper.SysRegionMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserPostMapper;
@@ -61,6 +64,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private final SysRoleMapper roleMapper;
     private final SysOrgMapper orgMapper;
     private final SysPostMapper postMapper;
+    private final SysRegionMapper regionMapper;
 
     @Override
     public IPage<SysUser> selectUserPage(SysUserQuery query) {
@@ -204,7 +208,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         
         // 获取用户信息以获取租户ID
         assertCanManageUser(userId);
-        assertNotSelfManagement(userId);
+        assertNotSelfManagementUnlessAdmin(userId);
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             return false;
@@ -240,7 +244,12 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         userOrg.setUserId(userId);
         userOrg.setOrgId(orgId);
         userOrg.setIsMain(isMain != null ? isMain : 0);
-        return userOrgMapper.insert(userOrg) > 0;
+        boolean inserted = userOrgMapper.insert(userOrg) > 0;
+        if (inserted && isMain != null && isMain == 1) {
+            syncUserRegionFromMainOrg(userId, orgId);
+            syncCurrentUserOrgSession(userId, tenantId);
+        }
+        return inserted;
     }
 
     @Override
@@ -373,7 +382,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         
         // 获取用户信息以获取租户ID
         assertCanManageUser(userId);
-        assertNotSelfManagement(userId);
+        assertNotSelfManagementUnlessAdmin(userId);
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             return false;
@@ -432,7 +441,11 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 }
             }
         }
-        
+
+        if (mainOrgId != null) {
+            syncUserRegionFromMainOrg(userId, mainOrgId);
+        }
+        syncCurrentUserOrgSession(userId, tenantId);
         return true;
     }
     
@@ -707,6 +720,16 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         }
     }
 
+    private void assertNotSelfManagementUnlessAdmin(Long userId) {
+        LoginUser loginUser = requireLoginUser();
+        if (loginUser.isAdmin()) {
+            return;
+        }
+        if (userId != null && Objects.equals(userId, loginUser.getUserId())) {
+            throw new RuntimeException("不能在用户管理中维护当前登录用户");
+        }
+    }
+
     private boolean isCurrentLoginUser(Long userId, LoginUser loginUser) {
         return userId != null && loginUser != null && Objects.equals(userId, loginUser.getUserId());
     }
@@ -722,6 +745,93 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (dto.getEmail() != null) loginUser.setEmail(dto.getEmail());
         if (dto.getAvatar() != null) loginUser.setAvatar(dto.getAvatar());
         SessionHelper.setLoginUser(loginUser);
+    }
+
+    private void syncUserRegionFromMainOrg(Long userId, Long mainOrgId) {
+        if (userId == null || mainOrgId == null) {
+            return;
+        }
+        SysOrg org = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(mainOrgId));
+        if (org == null || StrUtil.isBlank(org.getRegionCode())) {
+            return;
+        }
+        SysUser user = new SysUser();
+        user.setId(userId);
+        user.setRegionCode(org.getRegionCode());
+        TenantContextHolder.executeIgnore(() -> userMapper.updateById(user));
+    }
+
+    private void syncCurrentUserOrgSession(Long userId, Long tenantId) {
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null
+                || !Objects.equals(loginUser.getUserId(), userId)
+                || !Objects.equals(loginUser.getTenantId(), tenantId)) {
+            return;
+        }
+
+        List<SysUserOrg> userOrgs = TenantContextHolder.executeIgnore(() ->
+                userOrgMapper.selectList(new LambdaQueryWrapper<SysUserOrg>()
+                        .eq(SysUserOrg::getUserId, userId)
+                        .eq(SysUserOrg::getTenantId, tenantId)));
+        List<Long> orgIds = userOrgs.stream()
+                .map(SysUserOrg::getOrgId)
+                .collect(Collectors.toList());
+        loginUser.setOrgIds(orgIds);
+
+        SysUserOrg mainOrg = userOrgs.stream()
+                .filter(item -> item.getIsMain() != null && item.getIsMain() == 1)
+                .findFirst()
+                .orElse(null);
+        if (mainOrg == null) {
+            loginUser.setMainOrgId(null);
+            loginUser.setDeptName(null);
+            SessionHelper.setLoginUser(loginUser);
+            return;
+        }
+
+        loginUser.setMainOrgId(mainOrg.getOrgId());
+        SysOrg org = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(mainOrg.getOrgId()));
+        if (org != null) {
+            loginUser.setDeptName(org.getOrgName());
+            applyRegionToSession(loginUser, org.getRegionCode());
+        }
+        SessionHelper.setLoginUser(loginUser);
+    }
+
+    private void applyRegionToSession(LoginUser loginUser, String regionCode) {
+        if (loginUser == null || StrUtil.isBlank(regionCode)) {
+            return;
+        }
+        SysRegion region = TenantContextHolder.executeIgnore(() -> regionMapper.selectById(regionCode));
+        if (region == null) {
+            return;
+        }
+        loginUser.setRegionCode(region.getCode());
+        loginUser.setRegionName(region.getName());
+        loginUser.setRegionLevel(region.getLevel());
+        loginUser.setRegionFullName(region.getFullName());
+        loginUser.setRegionAncestors(buildRegionAncestors(region));
+    }
+
+    private String buildRegionAncestors(SysRegion region) {
+        if (region == null || StrUtil.isBlank(region.getCode())) {
+            return null;
+        }
+        StringBuilder ancestors = new StringBuilder();
+        String currentCode = region.getCode();
+        while (StrUtil.isNotBlank(currentCode)) {
+            String lookupCode = currentCode;
+            SysRegion currentRegion = TenantContextHolder.executeIgnore(() -> regionMapper.selectById(lookupCode));
+            if (currentRegion == null) {
+                break;
+            }
+            if (ancestors.length() > 0) {
+                ancestors.insert(0, ",");
+            }
+            ancestors.insert(0, currentCode);
+            currentCode = currentRegion.getParentCode();
+        }
+        return ancestors.toString();
     }
 
     private int resolveEffectiveUserType(Long userId, Long tenantId) {

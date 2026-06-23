@@ -709,7 +709,7 @@ const tableColumns = computed(() => [
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
       { label: '授权', key: 'auth', onClick: handleAuth, visible: row => !isCurrentLoginUser(row.id) },
-      { label: '组织', key: 'org', onClick: handleOrg, visible: row => !isCurrentLoginUser(row.id) },
+      { label: '组织', key: 'org', onClick: handleOrg, visible: row => userStore.isAdmin || !isCurrentLoginUser(row.id) },
       { label: '岗位', key: 'post', onClick: handlePost, visible: row => !isCurrentLoginUser(row.id) },
       { label: '租户', key: 'tenant', onClick: handleTenant, visible: row => userStore.isAdmin && !isCurrentLoginUser(row.id) },
       {
