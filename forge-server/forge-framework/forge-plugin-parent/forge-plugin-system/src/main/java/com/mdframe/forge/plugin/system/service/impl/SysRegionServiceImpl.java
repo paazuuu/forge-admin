@@ -186,14 +186,15 @@ public class SysRegionServiceImpl extends ServiceImpl<SysRegionMapper, SysRegion
     @Override
     public List<SysRegionTreeVO> selectRegionTreeAll(String rootCode, Boolean dataRight) {
         long startTime = System.currentTimeMillis();
-        rootCode = resolveRootCode(rootCode, dataRight);
-        log.debug("开始查询行政区划树, rootCode={}, dataRight={}", rootCode, dataRight);
+        boolean applyDataRight = Boolean.TRUE.equals(dataRight) && !isCurrentUserAdmin();
+        rootCode = resolveRootCode(rootCode, applyDataRight);
+        log.debug("开始查询行政区划树, rootCode={}, dataRight={}, applyDataRight={}", rootCode, dataRight, applyDataRight);
 
         try {
             List<SysRegion> allList;
 
             // ========== 数据权限场景 ==========
-            if (dataRight != null && dataRight) {
+            if (applyDataRight) {
                 // 有数据权限限制：通过 listSysRegion 查询，数据权限拦截器会自动追加过滤条件
                 allList = regionMapper.listSysRegion(null, null, rootCode);
                 log.debug("查询到 {} 条数据（含数据权限）", allList != null ? allList.size() : 0);
@@ -264,6 +265,11 @@ public class SysRegionServiceImpl extends ServiceImpl<SysRegionMapper, SysRegion
             return null;
         }
         return removeVirtualRegionSuffix(loginUser.getRegionCode());
+    }
+
+    private boolean isCurrentUserAdmin() {
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        return loginUser != null && loginUser.isAdmin();
     }
 
     private String removeVirtualRegionSuffix(String regionCode) {

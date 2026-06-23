@@ -2044,3 +2044,21 @@ Table 'forge_admin_test.sys_data_scope_config' doesn't exist
 - `DataScopeServiceImpl`
 - `DataScopeInterceptor`
 - 租户业务数据源下所有带数据权限控制的业务 Mapper
+
+## 73. 超级管理员区划树被登录用户 regionCode 误裁剪
+
+**发现日期**: 2026-06-23
+
+**问题描述**:
+超级管理员打开用户/组织编辑表单时，行政区划树只能看到当前登录用户 `regionCode` 对应范围，例如只能选内蒙古，无法选择其他省份。
+
+**根本原因**:
+`/system/region/treeAll?dataRight=true` 在进入数据权限拦截器之前，服务层先用当前登录用户 `regionCode` 解析默认 `rootCode`。即使数据权限拦截器对超级管理员是 `ALL` 放行，SQL 仍然已经被 `rootCode` 条件限制。
+
+**解决方案**:
+- 超级管理员请求区划树时，不启用默认 `regionCode` 根节点裁剪，直接走无数据权限查询。
+- 普通用户和租户用户继续按当前行政区划/角色数据权限过滤。
+
+**影响范围**:
+- `SysRegionServiceImpl.selectRegionTreeAll`
+- 用户/组织编辑表单中的行政区划树
