@@ -2617,59 +2617,111 @@
               </n-form-item>
 
               <n-form-item v-else-if="!isApiCustomAction(activeAction)" label="目标地址 / 表单">
-                <div class="action-form-grid">
-                  <n-input
-                    :value="activeAction.routePath"
-                    :disabled="(activeAction.actionType || 'route') === 'refresh'"
-                    :placeholder="actionPathPlaceholder(activeAction)"
-                    @update:value="updateActiveCustomAction({ routePath: $event })"
-                  />
-                  <n-select
-                    v-if="formTargetOptions.length"
-                    :value="activeAction.targetFormKey || ''"
-                    :disabled="(activeAction.actionType || 'route') === 'refresh'"
-                    :options="formTargetOptions"
-                    clearable
-                    filterable
-                    placeholder="目标表单"
-                    @update:value="updateActiveCustomAction({ targetFormKey: $event || '' })"
-                  />
+                <div class="action-route-panel">
+                  <div v-if="isRouteCustomAction(activeAction)" class="action-config-tip">
+                    <strong>站内跳转</strong>
+                    <span>优先选择系统菜单中已经配置的页面，会自动填入目标地址；未配置菜单时可以直接手工输入路由。</span>
+                  </div>
+                  <div class="action-form-grid">
+                    <div v-if="isRouteCustomAction(activeAction)" class="action-field">
+                      <span class="action-field-label">系统菜单页面</span>
+                      <n-select
+                        :value="resolveSystemMenuPageTargetValue(activeAction)"
+                        :options="systemMenuPageTargetOptions"
+                        :loading="systemMenuPageLoading"
+                        clearable
+                        filterable
+                        placeholder="选择系统菜单页面"
+                        @focus="loadSystemMenuPages"
+                        @update:value="applySystemMenuPageTarget"
+                      />
+                      <small>来源于系统管理 / 菜单管理，只列出菜单类型资源。</small>
+                    </div>
+                    <div class="action-field">
+                      <span class="action-field-label">目标地址</span>
+                      <n-input
+                        :value="activeAction.routePath"
+                        :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                        :placeholder="actionPathPlaceholder(activeAction)"
+                        @update:value="updateActiveCustomAction({ routePath: $event })"
+                      />
+                      <small v-if="isRouteCustomAction(activeAction)">例如 /system/user、/app/customer/detail/:id，:id 可由参数映射替换。</small>
+                      <small v-else-if="normalizeCustomActionType(activeAction.actionType) === 'external'">填写完整外部地址，例如 https://example.com/detail/:id。</small>
+                    </div>
+                    <div v-if="formTargetOptions.length" class="action-field">
+                      <span class="action-field-label">目标表单</span>
+                      <n-select
+                        :value="activeAction.targetFormKey || ''"
+                        :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                        :options="formTargetOptions"
+                        clearable
+                        filterable
+                        placeholder="目标表单"
+                        @update:value="updateActiveCustomAction({ targetFormKey: $event || '' })"
+                      />
+                      <small>用于当前业务对象内的表单页、弹窗页或抽屉页。</small>
+                    </div>
+                  </div>
                 </div>
               </n-form-item>
 
               <n-form-item v-else label="API 调用">
                 <div class="api-action-panel">
+                  <div class="action-config-tip">
+                    <strong>API 调用</strong>
+                    <span>接口地址填写后端路径，Path 参数使用 :id 这类占位；GET 默认走 Query，POST/PUT/PATCH 默认走 Body。</span>
+                  </div>
                   <div class="action-form-grid">
-                    <n-select
-                      :value="activeAction.actionConfig?.apiConfigId || null"
-                      :options="apiConfigOptions"
-                      :loading="apiConfigLoading"
-                      clearable
-                      filterable
-                      placeholder="选择已登记 API，或手工填写"
-                      @focus="loadEnabledApiConfigs"
-                      @update:value="applyCustomActionApiConfig"
-                    />
-                    <n-select
-                      :value="activeAction.actionConfig?.method || 'POST'"
-                      :options="apiMethodOptions"
-                      @update:value="updateActiveActionConfig({ method: normalizeCustomApiMethod($event) })"
-                    />
-                    <n-input
-                      :value="activeAction.actionConfig?.capabilityCode || ''"
-                      placeholder="能力标识，可选"
-                      @update:value="updateActiveActionConfig({ capabilityCode: $event || '' })"
-                    />
-                    <n-input
-                      :value="resolveCustomApiUrl(activeAction)"
-                      placeholder="/business/customer/audit/:id"
-                      @update:value="updateActiveActionConfig({ url: $event || '' })"
-                    />
-                    <n-input
-                      :value="activeAction.successMessage || activeAction.actionConfig?.successMessage || ''"
-                      placeholder="成功提示，默认操作成功"
-                      @update:value="updateActiveCustomAction({ successMessage: $event || '' })"
-                    />
+                    <div class="action-field">
+                      <span class="action-field-label">已登记 API</span>
+                      <n-select
+                        :value="activeAction.actionConfig?.apiConfigId || null"
+                        :options="apiConfigOptions"
+                        :loading="apiConfigLoading"
+                        clearable
+                        filterable
+                        placeholder="选择 API 配置；关闭时可留空"
+                        @focus="loadEnabledApiConfigs"
+                        @update:value="applyCustomActionApiConfig"
+                      />
+                      <small>选择后会带出请求方式和接口地址，也可以不选直接手工填写。</small>
+                    </div>
+                    <div class="action-field">
+                      <span class="action-field-label">请求方式</span>
+                      <n-select
+                        :value="activeAction.actionConfig?.method || 'POST'"
+                        :options="apiMethodOptions"
+                        @update:value="updateActiveActionConfig({ method: normalizeCustomApiMethod($event) })"
+                      />
+                      <small>POST 加密会走前端加密请求链路。</small>
+                    </div>
+                    <div class="action-field">
+                      <span class="action-field-label">能力标识</span>
+                      <n-input
+                        :value="activeAction.actionConfig?.capabilityCode || ''"
+                        placeholder="例如 customer_audit，可选"
+                        @update:value="updateActiveActionConfig({ capabilityCode: $event || '' })"
+                      />
+                      <small>业务模块存在统一能力处理器时填写；普通接口可不填。</small>
+                    </div>
+                    <div class="action-field">
+                      <span class="action-field-label">接口地址</span>
+                      <n-input
+                        :value="resolveCustomApiUrl(activeAction)"
+                        placeholder="/business/customer/audit/:id"
+                        @update:value="updateActiveActionConfig({ url: $event || '' })"
+                      />
+                      <small>Path 占位写成 :id、:code，参数映射位置选择 Path。</small>
+                    </div>
+                    <div class="action-field">
+                      <span class="action-field-label">成功提示</span>
+                      <n-input
+                        :value="activeAction.successMessage || activeAction.actionConfig?.successMessage || ''"
+                        placeholder="例如 审核成功；留空默认操作成功"
+                        @update:value="updateActiveCustomAction({ successMessage: $event || '' })"
+                      />
+                      <small>接口返回成功后展示，失败提示可在下方单独配置。</small>
+                    </div>
                   </div>
 
                   <div class="api-param-head">
@@ -2679,6 +2731,13 @@
                     </n-button>
                   </div>
                   <div v-if="activeAction.actionConfig?.params?.length" class="api-param-list">
+                    <div class="api-param-columns">
+                      <span>参数名</span>
+                      <span>位置</span>
+                      <span>来源</span>
+                      <span>来源值</span>
+                      <span />
+                    </div>
                     <div
                       v-for="(param, paramIdx) in activeAction.actionConfig.params"
                       :key="param.clientKey || paramIdx"
@@ -2886,6 +2945,7 @@ import {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { enabledApiConfigs } from '@/api/business-app'
+import { request } from '@/utils/http'
 import CrudDefaultParamsEditor from './CrudDefaultParamsEditor.vue'
 import CrudHookRulesEditor from './CrudHookRulesEditor.vue'
 import GridBlockRenderer from './GridBlockRenderer.vue'
@@ -3326,10 +3386,14 @@ const activeAction = computed(() => customActionList.value[activeActionIndex.val
 const apiConfigs = ref([])
 const apiConfigLoading = ref(false)
 const apiConfigLoaded = ref(false)
+const systemMenuPages = ref([])
+const systemMenuPageLoading = ref(false)
+const systemMenuPageLoaded = ref(false)
 const apiConfigOptions = computed(() => apiConfigs.value.map(item => ({
   label: `${item.apiName || item.apiCode || item.urlPath} · ${item.reqMethod || 'GET'} ${item.urlPath || ''}`,
   value: String(item.id || item.apiCode || item.urlPath),
 })))
+const systemMenuPageTargetOptions = computed(() => buildSystemMenuPageTargetOptions(systemMenuPages.value))
 const dropPreviewLabel = computed(() => {
   const meta = resolveListPageBlockMeta(resolveDraggedPreviewBlockType())
   return meta ? `放置 ${meta.title}` : '放置区块'
@@ -6274,6 +6338,25 @@ async function loadEnabledApiConfigs() {
   }
 }
 
+async function loadSystemMenuPages() {
+  if (systemMenuPageLoaded.value || systemMenuPageLoading.value)
+    return
+  systemMenuPageLoading.value = true
+  try {
+    const res = await request.get('/system/resource/tree')
+    systemMenuPages.value = normalizeResourceTreeResponse(res)
+    systemMenuPageLoaded.value = true
+  }
+  catch (error) {
+    systemMenuPages.value = []
+    systemMenuPageLoaded.value = true
+    console.warn('[ListPageGridDesigner] 系统菜单资源不可用，已保留手工输入模式', error?.message || error)
+  }
+  finally {
+    systemMenuPageLoading.value = false
+  }
+}
+
 function applyCustomActionApiConfig(value) {
   const configId = value === undefined || value === null ? '' : String(value)
   const selected = apiConfigs.value.find(item => String(item.id || item.apiCode || item.urlPath) === configId)
@@ -6287,6 +6370,20 @@ function applyCustomActionApiConfig(value) {
     patch.url = selected.urlPath || ''
   }
   updateActiveActionConfig(patch)
+}
+
+function applySystemMenuPageTarget(value) {
+  const routePath = value === undefined || value === null ? '' : String(value)
+  const selected = systemMenuPageTargetOptions.value.find(item => item.value === routePath)
+  updateActiveCustomAction({
+    routePath,
+    actionConfig: {
+      ...(activeAction.value?.actionConfig || {}),
+      targetPath: routePath,
+      targetMenuId: selected?.raw?.id || '',
+      targetMenuName: selected?.raw?.resourceName || '',
+    },
+  })
 }
 
 function addApiActionParam() {
@@ -6379,6 +6476,13 @@ function normalizeApiParamSourcePatch(sourceType = 'rowField', param = {}) {
   }
 }
 
+function resolveSystemMenuPageTargetValue(action = {}) {
+  const routePath = String(action?.routePath || action?.actionConfig?.targetPath || '').trim()
+  if (!routePath)
+    return null
+  return systemMenuPageTargetOptions.value.some(item => item.value === routePath) ? routePath : null
+}
+
 function normalizeCustomActionType(value) {
   const normalized = String(value || 'route')
     .replace(/[-\s]+/g, '_')
@@ -6408,6 +6512,9 @@ function normalizeCustomActionList(list = []) {
       const actionConfig = actionType === 'CALL_API'
         ? normalizeCustomApiConfig(action.actionConfig)
         : normalizeGenericActionConfig(actionType, action.actionConfig)
+      const actionParams = actionType === 'CALL_API'
+        ? actionConfig.params || []
+        : action.params?.length ? action.params : actionConfig.params || []
       return {
         ...action,
         key: normalizeActionKey(action.key || action.label) || `custom_${index + 1}`,
@@ -6424,7 +6531,7 @@ function normalizeCustomActionList(list = []) {
         successBehavior: action.successBehavior || actionConfig.successBehavior || 'none',
         successMessage: action.successMessage || actionConfig.successMessage || '',
         failureMessage: action.failureMessage || actionConfig.failureMessage || '',
-        params: normalizeCustomActionParams(action.params?.length ? action.params : actionConfig.params || []),
+        params: normalizeCustomActionParams(actionParams),
         actionConfig,
       }
     })
@@ -6479,6 +6586,10 @@ function resolveCustomActionRoutePath(actionType = 'route', config = {}) {
 
 function isApiCustomAction(action = {}) {
   return normalizeCustomActionType(action?.actionType) === 'CALL_API'
+}
+
+function isRouteCustomAction(action = {}) {
+  return normalizeCustomActionType(action?.actionType) === 'route'
 }
 
 function isStartFlowCustomAction(action = {}) {
@@ -6536,6 +6647,50 @@ function normalizeCustomApiParam(param = {}) {
     sourceField: String(param.sourceField || '').trim(),
     value: param.value === undefined || param.value === null ? '' : String(param.value),
   }
+}
+
+function normalizeResourceTreeResponse(res) {
+  if (Array.isArray(res))
+    return res
+  if (Array.isArray(res?.data))
+    return res.data
+  if (Array.isArray(res?.data?.records))
+    return res.data.records
+  if (Array.isArray(res?.data?.list))
+    return res.data.list
+  if (Array.isArray(res?.data?.children))
+    return res.data.children
+  return []
+}
+
+function buildSystemMenuPageTargetOptions(resources = []) {
+  const result = []
+  const seen = new Set()
+  const walk = (items = [], parents = []) => {
+    ;(Array.isArray(items) ? items : []).forEach((item) => {
+      if (!item || typeof item !== 'object')
+        return
+      const name = String(item.resourceName || item.menuName || item.name || item.title || '').trim()
+      const nextParents = name ? [...parents, name] : parents
+      const routePath = normalizeSystemMenuRoutePath(item)
+      if (Number(item.resourceType) === 2 && routePath && !seen.has(routePath)) {
+        seen.add(routePath)
+        result.push({
+          label: `${nextParents.join(' / ')} · ${routePath}`,
+          value: routePath,
+          raw: item,
+        })
+      }
+      if (Array.isArray(item.children) && item.children.length)
+        walk(item.children, nextParents)
+    })
+  }
+  walk(resources)
+  return result
+}
+
+function normalizeSystemMenuRoutePath(resource = {}) {
+  return String(resource.path || resource.routePath || resource.component || '').trim()
 }
 
 function parseJsonObject(value) {
@@ -7870,6 +8025,47 @@ function centerCanvasViewport() {
   gap: 12px;
 }
 
+.action-route-panel {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+}
+
+.action-config-tip {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #334155;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.action-config-tip strong {
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.action-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.action-field-label {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.action-field small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .action-button-event-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7913,6 +8109,15 @@ function centerCanvasViewport() {
 .api-param-list {
   display: grid;
   gap: 8px;
+}
+
+.api-param-columns {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) 96px 112px minmax(140px, 1.1fr) auto;
+  gap: 8px;
+  align-items: center;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .api-param-row {
@@ -8314,6 +8519,7 @@ function centerCanvasViewport() {
   .action-modal-layout,
   .action-form-grid,
   .action-param-row,
+  .api-param-columns,
   .api-param-row {
     grid-template-columns: 1fr;
   }

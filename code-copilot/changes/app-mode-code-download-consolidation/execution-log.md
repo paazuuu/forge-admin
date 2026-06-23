@@ -298,3 +298,33 @@
 - 未启动 Vite/浏览器做真实点击验证；需要登录态、业务对象草稿和可用后端服务。
 - 未启动后端服务执行保存接口验证；本轮前端保存仍调用既有 `/designer`、`/layout/list`、`/actions` 接口。
 - 本轮未启动常驻服务，无需清理服务 PID。
+
+## 2026-06-23 09:28 列表模板回显与自定义操作提示验证
+
+**变更范围**
+
+- 前端：列表设计「套用模板」下拉应用后保留当前模板选中值，并随 `layoutType` 同步回显。
+- 前端：自定义操作站内跳转新增系统菜单页面选择，读取 `/system/resource/tree` 的菜单资源并自动写入目标地址，同时保留手工输入。
+- 前端：自定义操作 API 调用补充配置提示、字段说明、输入示例和参数映射列头。
+- 前端：修复 API 参数添加后被父子组件同步过滤的问题，编辑态保留草稿参数，保存时再清洗无效参数。
+
+**命令与结果**
+
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/views/app-center/components/designer/BusinessListDesigner.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue --fix`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `git diff --check`
+  - 工作目录：仓库根目录。
+  - 结果：通过。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+  - 工作目录：仓库根目录。
+  - 首次结果：失败，`ListPageGridDesigner.vue` 误从 `@/utils/request` 导入请求工具，Vite 无法解析。
+  - 修复：改为项目实际请求工具 `@/utils/http` 后复跑。
+  - 最终结果：构建通过，`✓ built in 1m 13s`。
+  - 警告：仍为既有 CSS `//` 注释、`UserSelectModal` 组件命名冲突和 `src/store/index.js` 动静态混合导入分包提示，非本轮新增。
+
+**跳过项**
+
+- 未启动 Vite/浏览器做真实点击验证；需要登录态、业务对象草稿和可用后端服务。
+- 未启动后端服务验证 `/system/resource/tree` 实际返回；本轮前端仅复用既有系统资源树接口并保留手工输入兜底。
+- 本轮未启动常驻服务，无需清理服务 PID。

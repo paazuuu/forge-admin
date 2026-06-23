@@ -344,7 +344,7 @@ const layoutModeLabel = computed(() => resolveLayoutModeLabel(localSchema.value.
 const canUndo = computed(() => undoStack.value.length > 0)
 const canRedo = computed(() => redoStack.value.length > 0)
 const listPreviewVisible = ref(false)
-const templateSelectValue = ref(null)
+const templateSelectValue = ref(resolveTemplateSelectValue(localSchema.value.layoutType))
 const listCustomActions = ref([])
 const pageTypeOptions = [
   { label: '列表页', value: 'list' },
@@ -401,6 +401,10 @@ const previewGridLayout = computed(() => {
 })
 const designerRuntimeCrudProps = computed(() => buildDesignerRuntimeCrudProps(localSchema.value, designFields.value, listCustomActions.value))
 
+function resolveTemplateSelectValue(layoutType = '') {
+  return layoutType === 'tree-crud' ? 'tree-crud' : 'simple-crud'
+}
+
 watch(
   () => props.designerActions,
   (value) => {
@@ -444,6 +448,14 @@ watch(
     }
   },
   { deep: true },
+)
+
+watch(
+  () => localSchema.value.layoutType,
+  (value) => {
+    templateSelectValue.value = resolveTemplateSelectValue(value)
+  },
+  { immediate: true },
 )
 
 function createCleanTemplateGridLayout(layoutType, schema = localSchema.value) {
@@ -584,8 +596,8 @@ function updateTreeLayoutEnabled(enabled) {
 function updateListTemplate(value) {
   if (!value)
     return
+  templateSelectValue.value = value
   updateTreeLayoutEnabled(value === 'tree-crud')
-  templateSelectValue.value = null
 }
 
 function handleGridLayoutUpdate(layout) {
@@ -1071,12 +1083,12 @@ function buildDesignerCrudHookHandlers(tableProps = {}) {
 function handleListCustomActionsUpdate(actions = []) {
   const nextActions = normalizeListCustomActions(actions)
   listCustomActions.value = nextActions
-  emit('update:designerActions', cloneSchema(nextActions.map(listActionToDesignerAction)))
+  emit('update:designerActions', cloneSchema(nextActions.map((action, index) => listActionToDesignerAction(action, index, { preserveDraftParams: true }))))
   emit('dirtyChange', true)
 }
 
 function buildDesignerActionsForSave() {
-  return normalizeListCustomActions(listCustomActions.value).map(listActionToDesignerAction)
+  return normalizeListCustomActions(listCustomActions.value).map((action, index) => listActionToDesignerAction(action, index))
 }
 
 function normalizeDesignerActionsForList(actions = []) {
@@ -1119,7 +1131,7 @@ function designerActionToListAction(action = {}, index = 0) {
   }
 }
 
-function listActionToDesignerAction(action = {}, index = 0) {
+function listActionToDesignerAction(action = {}, index = 0, options = {}) {
   const normalized = normalizeListCustomAction(action, index)
   const actionType = listActionTypeToDesignerType(normalized.actionType)
   return {
@@ -1134,13 +1146,18 @@ function listActionToDesignerAction(action = {}, index = 0) {
     failureMessage: normalized.failureMessage || '',
     status: normalized.status ?? 1,
     sortOrder: normalized.sortOrder ?? index * 10 + 10,
-    actionConfig: buildDesignerActionConfig(normalized, actionType),
+    actionConfig: buildDesignerActionConfig(normalized, actionType, options),
   }
 }
 
-function buildDesignerActionConfig(action = {}, actionType = 'OPEN_PAGE') {
+function buildDesignerActionConfig(action = {}, actionType = 'OPEN_PAGE', options = {}) {
   const config = parsePlainObject(action.actionConfig)
-  const params = toDesignerActionParams(action.params?.length ? action.params : config.params || [])
+  const sourceParams = actionType === 'CALL_API'
+    ? config.params || []
+    : action.params?.length ? action.params : config.params || []
+  const params = options.preserveDraftParams
+    ? normalizeActionParams(sourceParams).map(({ clientKey, ...param }) => param)
+    : toDesignerActionParams(sourceParams)
   if (actionType === 'CALL_API') {
     return {
       ...config,
