@@ -1,7 +1,7 @@
 <template>
   <div
     class="forge-form-designer"
-    :class="{ 'left-collapsed': leftCollapsed, 'right-open': rightOpen, 'right-collapsed': !rightOpen }"
+    :class="{ 'left-collapsed': leftCollapsed, 'right-open': rightOpen, 'right-collapsed': !rightOpen, 'canvas-focused': canvasFocusMode }"
   >
     <aside class="designer-left">
       <button
@@ -110,7 +110,14 @@
         @select="handleFormTabsMenuSelect"
         @clickoutside="formTabsMenuVisible = false"
       />
-      <div class="designer-form-tabs-bar" @contextmenu.prevent="openFormTabsMenu">
+      <div class="designer-form-tabs-bar page-design-switcher" @contextmenu.prevent="openFormTabsMenu">
+        <div class="page-switch-title">
+          <span class="page-switch-icon">F</span>
+          <div>
+            <strong>表单页设计</strong>
+            <small>{{ normalizedSchema.formName || '当前表单' }} · {{ componentCount }} 个组件</small>
+          </div>
+        </div>
         <div class="designer-form-tabs" aria-label="表单切换">
           <button type="button" class="designer-form-tab active" @click="selectedId = ''">
             <em>1</em>
@@ -128,6 +135,45 @@
             <span>{{ asset.formName || `表单 ${assetIndex + 2}` }}</span>
           </button>
         </div>
+        <div class="page-switch-actions">
+          <n-button class="designer-toolbar-icon-button neutral" circle size="small" secondary :disabled="!canUndo" title="撤销" @click="undoSchema">
+            <template #icon>
+              <n-icon><ArrowUndoOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-button class="designer-toolbar-icon-button neutral" circle size="small" secondary :disabled="!canRedo" title="重做" @click="redoSchema">
+            <template #icon>
+              <n-icon><ArrowRedoOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-button class="designer-toolbar-icon-button neutral danger" circle size="small" secondary :disabled="!canClearCanvas" title="清空画布" @click="openClearCanvasDialog">
+            <template #icon>
+              <n-icon><TrashOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-dropdown trigger="click" placement="bottom-end" :options="formTabsMenuOptions" @select="handleFormTabsMenuSelect">
+            <n-button class="designer-toolbar-icon-button neutral" circle size="small" secondary title="表单页面操作">
+              <template #icon>
+                <n-icon><EllipsisHorizontalOutline /></n-icon>
+              </template>
+            </n-button>
+          </n-dropdown>
+          <n-button
+            class="designer-toolbar-icon-button neutral"
+            circle
+            size="small"
+            secondary
+            :title="rightOpen ? '收起属性栏' : '打开属性栏'"
+            @click="rightOpen ? (rightOpen = false) : openPropertyPanel(selectedId)"
+          >
+            <template #icon>
+              <n-icon>
+                <ChevronForwardOutline v-if="rightOpen" />
+                <ChevronBackOutline v-else />
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
       </div>
 
       <ForgeFormCanvas
@@ -137,6 +183,8 @@
         @update:schema="updateSchema"
         @update:selected-id="handleCanvasSelectedIdChange"
         @configure="openPropertyPanel"
+        @open-source="openSourcePanel"
+        @toggle-focus="toggleCanvasFocus"
       />
     </main>
 
@@ -368,7 +416,7 @@
 <script setup>
 import { ArrowRedoOutline, ArrowUndoOutline, ChevronBackOutline, ChevronForwardOutline, EllipsisHorizontalOutline, TrashOutline, WarningOutline } from '@vicons/ionicons5'
 import { NSpace } from 'naive-ui'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import AiForm from '@/components/ai-form/AiForm.vue'
 import AiFormGroupTitle from '@/components/ai-form/AiFormGroupTitle.vue'
@@ -414,6 +462,7 @@ const emit = defineEmits(['update:modelValue', 'dirtyChange', 'moreSelect'])
 const selectedId = ref('')
 const leftCollapsed = ref(false)
 const rightOpen = ref(false)
+const canvasFocusMode = ref(false)
 const formTabsMenuVisible = ref(false)
 const formTabsMenuX = ref(0)
 const formTabsMenuY = ref(0)
@@ -453,6 +502,7 @@ const canClearCanvas = computed(() => {
     return true
   return formAssets.value.some(asset => asset?.schema?.components?.length)
 })
+const componentCount = computed(() => countComponents(normalizedSchema.value.components))
 const previewModeTitle = computed(() => previewModeOptions.find(item => item.value === previewMode.value)?.label || '新增')
 const previewModeDescription = computed(() => {
   const modeMap = {
@@ -468,8 +518,7 @@ const formTabsMenuOptions = [
 ]
 const canvasMetaText = computed(() => {
   const fieldCount = usedFieldSet.value.size
-  const componentCount = countComponents(normalizedSchema.value.components)
-  return `${fieldCount} 个业务字段 · ${componentCount} 个画布节点 · ${normalizedSchema.value.layout?.gridColumns || 2} 列`
+  return `${fieldCount} 个业务字段 · ${componentCount.value} 个画布节点 · ${normalizedSchema.value.layout?.gridColumns || 2} 列`
 })
 
 function updateSchema(schema, options = {}) {
@@ -723,6 +772,19 @@ function openPropertyPanel(componentId = '') {
   if (componentId)
     selectedId.value = componentId
   rightOpen.value = true
+}
+
+function openSourcePanel() {
+  rightOpen.value = true
+  nextTick(() => {
+    window.dispatchEvent(new CustomEvent('forge-form-designer:open-source-panel'))
+  })
+}
+
+function toggleCanvasFocus() {
+  canvasFocusMode.value = !canvasFocusMode.value
+  leftCollapsed.value = canvasFocusMode.value
+  rightOpen.value = false
 }
 
 function handleCanvasSelectedIdChange(componentId = '') {
@@ -1527,24 +1589,42 @@ onBeforeUnmount(() => {
   line-height: 16px;
   padding: 0 5px;
 }
+
+/* Workbench visual unification */
 .forge-form-designer {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 350px;
+  grid-template-columns: 256px minmax(0, 1fr) 320px;
   height: 100%;
   min-height: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #f8f9fa;
   overflow: hidden;
 }
 
 .forge-form-designer.left-collapsed {
-  grid-template-columns: 36px minmax(0, 1fr) 350px;
+  grid-template-columns: 36px minmax(0, 1fr) 320px;
 }
 
 .forge-form-designer.right-collapsed {
-  grid-template-columns: 260px minmax(0, 1fr) 0;
+  grid-template-columns: 256px minmax(0, 1fr) 0;
 }
 
 .forge-form-designer.left-collapsed.right-collapsed {
   grid-template-columns: 36px minmax(0, 1fr) 0;
+}
+
+.forge-form-designer.canvas-focused,
+.forge-form-designer.canvas-focused.left-collapsed,
+.forge-form-designer.canvas-focused.right-collapsed,
+.forge-form-designer.canvas-focused.left-collapsed.right-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+.forge-form-designer.canvas-focused .designer-left,
+.forge-form-designer.canvas-focused .designer-right {
+  border: 0;
+  overflow: hidden;
 }
 
 .designer-left,
@@ -1554,40 +1634,211 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
+.designer-left {
+  border-right: 1px solid #e4e4e7;
+  background: #fcfcfc;
+}
+
+.designer-right {
+  border-left: 1px solid #e4e4e7;
+  background: #fafafa;
+}
+
 .designer-center {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #f8f9fa;
   overflow: hidden;
 }
 
 .designer-toolbar {
-  min-height: 42px;
-  padding: 6px 10px;
+  display: none;
+  min-height: 48px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
 }
 
 .designer-toolbar h3 {
   margin: 0;
-  font-size: 14px;
-  line-height: 20px;
+  color: #18181b;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .designer-toolbar p {
   margin: 1px 0 0;
+  color: #71717a;
   font-size: 11px;
-  line-height: 16px;
+  line-height: 15px;
 }
 
 .designer-form-tabs-bar {
-  padding: 5px 10px 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.page-design-switcher {
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr) minmax(64px, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.page-switch-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.page-switch-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eef2ff;
+  color: #3153d8;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.page-switch-title strong,
+.page-switch-title small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-switch-title strong {
+  color: #27272a;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.page-switch-title small {
+  margin-top: 2px;
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.page-switch-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.designer-form-tabs {
+  justify-content: center;
+  justify-self: center;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid rgba(228, 228, 231, 0.8);
+  border-radius: 8px;
+  background: rgba(244, 244, 245, 0.9);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.designer-form-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .designer-form-tab {
-  height: 28px;
+  height: 26px;
+  min-width: 76px;
+  max-width: 156px;
+  border-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 9px;
+  color: #71717a;
+  box-shadow: none;
+}
+
+.designer-form-tab:hover {
+  border-color: transparent;
+  background: rgba(228, 228, 231, 0.75);
+}
+
+.designer-form-tab.active {
+  border-color: #fff;
+  background: #fff;
+  color: #27272a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .designer-form-tab em {
   width: 16px;
   height: 16px;
+  background: #e4e4e7;
+  color: #71717a;
+  font-size: 10px;
+}
+
+.designer-form-tab.active em {
+  background: #4266f7;
+  color: #fff;
+}
+
+.designer-form-tab span {
+  font-size: 12px;
+}
+
+.designer-form-tab strong {
+  display: none;
+}
+
+.designer-toolbar-text-button,
+.designer-toolbar-icon-button.neutral,
+.designer-toolbar-more-button {
+  --n-color: #fff !important;
+  --n-color-hover: #f4f6ff !important;
+  --n-color-pressed: #e8edff !important;
+  --n-color-focus: #fff !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-pressed: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #c7d2fe !important;
+  --n-text-color: #52525b !important;
+  --n-text-color-hover: #3153d8 !important;
+  --n-text-color-pressed: #253fb2 !important;
+  --n-text-color-focus: #3153d8 !important;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.designer-toolbar-icon-button.neutral.danger {
+  --n-text-color-hover: #dc2626 !important;
+  --n-border-hover: 1px solid #fecaca !important;
+  --n-color-hover: #fff7f7 !important;
+}
+
+.designer-toolbar-more-button :deep(.n-button__icon),
+.designer-toolbar-more-button :deep(.n-icon),
+.designer-toolbar-icon-button :deep(.n-button__icon),
+.designer-toolbar-icon-button :deep(.n-icon) {
+  color: inherit !important;
+}
+
+.field-shelf-collapse-button {
+  --n-color: #fff !important;
+  --n-color-hover: #f4f6ff !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-text-color: #71717a !important;
+  --n-text-color-hover: #3153d8 !important;
 }
 .designer-toolbar {
   position: relative;

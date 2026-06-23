@@ -405,7 +405,9 @@ watch(activeTab, () => {
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
 }
-
+.icon-grid::before {
+  display: none;
+}
 .icon-item {
   display: flex;
   flex-direction: column;

@@ -147,7 +147,7 @@ function removeRule(idx) {
 <style scoped>
 .crud-hook-rules-editor {
   display: grid;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
   min-width: 0;
 }
@@ -162,8 +162,9 @@ function removeRule(idx) {
 
 .hook-rule-head strong {
   display: block;
-  color: #0f172a;
+  color: #27272a;
   font-size: 12px;
+  font-weight: 650;
   line-height: 18px;
 }
 
@@ -171,9 +172,9 @@ function removeRule(idx) {
 .hook-rule-desc,
 .hook-rule-empty,
 .hook-rule-note {
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .hook-select {
@@ -182,10 +183,10 @@ function removeRule(idx) {
 
 .hook-rule-desc,
 .hook-rule-empty {
-  padding: 7px 9px;
-  border: 1px dashed #dbe3ee;
+  padding: 10px 9px;
+  border: 1px dashed #d4d4d8;
   border-radius: 7px;
-  background: #f8fafc;
+  background: #fafafa;
 }
 
 .hook-rule-list {
@@ -200,14 +201,36 @@ function removeRule(idx) {
   align-items: center;
   min-width: 0;
   padding: 8px;
-  border: 1px solid #dbe3ee;
-  border-radius: 7px;
-  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
 }
 
 .hook-rule-row :deep(.n-select),
 .hook-rule-row :deep(.n-input) {
   width: 100%;
   min-width: 0;
+}
+
+.crud-hook-rules-editor :deep(.n-button) {
+  --n-border-radius: 6px !important;
+  font-size: 12px;
+}
+
+.crud-hook-rules-editor :deep(.n-input),
+.crud-hook-rules-editor :deep(.n-base-selection) {
+  --n-color: #fff !important;
+  --n-color-hover: #fff !important;
+  --n-color-focus: #fff !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #6366f1 !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+  border-radius: 6px;
+}
+
+.crud-hook-rules-editor :deep(.n-input__input-el),
+.crud-hook-rules-editor :deep(.n-base-selection-label) {
+  font-size: 12px !important;
 }
 </style>
