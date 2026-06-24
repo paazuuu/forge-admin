@@ -2062,3 +2062,23 @@ Table 'forge_admin_test.sys_data_scope_config' doesn't exist
 **影响范围**:
 - `SysRegionServiceImpl.selectRegionTreeAll`
 - 用户/组织编辑表单中的行政区划树
+
+## 74. Spring Boot 3.5 与 Redisson 3.34.1 会触发登录 Redis 适配死循环
+
+**发现日期**: 2026-06-24
+
+**问题描述**:
+`/auth/login` 登录链路使用 Redis/Redisson 时可能报 `StackOverflowError`，表现为请求进入 Redis 过期时间相关命令后死循环。
+
+**根本原因**:
+Forge 后端升级到 Spring Boot 3.5.x 后，Spring Data Redis 3.5 的 `RedisKeyCommands` 新增了 `pExpire(byte[], Expiration, ExpirationOptions)` 签名。Redisson 3.34.1 的 `redisson-spring-boot-starter` 仍解析到 `redisson-spring-data-33`，该适配层只覆盖旧接口签名，新接口 default 方法会与 Redisson 旧实现互相转发，最终栈溢出。
+
+**解决方案**:
+- Spring Boot 3.5.x / Spring Data Redis 3.5.x 必须使用解析到 `redisson-spring-data-35` 的 Redisson 版本。
+- 本项目已将 `redisson.version` 从 `3.34.1` 升级到 `3.50.0`，依赖树应显示 `org.redisson:redisson-spring-data-35:3.50.0`。
+- 排查类似 Redis 命令栈溢出时，优先执行 `mvn -pl forge-framework/forge-starter-parent/forge-starter-cache -am dependency:tree -Dincludes=org.redisson -DskipTests` 查看适配层是否匹配 Spring Data Redis 小版本。
+
+**影响范围**:
+- `/auth/login`
+- `forge-starter-cache`
+- 所有通过 Redisson/Spring Data Redis 执行 Redis 过期时间命令的链路
