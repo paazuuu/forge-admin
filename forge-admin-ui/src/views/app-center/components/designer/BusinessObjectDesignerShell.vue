@@ -32,31 +32,39 @@
       </div>
 
       <div class="topbar-actions" @click.capture="handleTopbarActionsClick">
-        <n-button secondary :disabled="loading || previewDisabled" @click="$emit('preview')">
+        <div class="save-state" :class="{ dirty }">
+          <n-icon>
+            <AlertCircleOutline v-if="dirty" />
+            <CheckmarkCircleOutline v-else />
+          </n-icon>
+          <span>{{ dirty ? '未保存' : '已保存' }}</span>
+        </div>
+        <n-dropdown trigger="click" :options="moreOptions" @select="$emit($event)">
+          <n-button class="topbar-icon-button" quaternary circle title="设置">
+            <template #icon>
+              <n-icon><SettingsOutline /></n-icon>
+            </template>
+          </n-button>
+        </n-dropdown>
+        <n-button class="topbar-icon-button" quaternary circle :disabled="loading || previewDisabled" title="预览" @click="$emit('preview')">
           <template #icon>
-            <n-icon><EyeOutline /></n-icon>
+            <n-icon><CaretForward /></n-icon>
           </template>
-          预览
         </n-button>
-        <n-button :loading="saving" :disabled="loading" type="primary" @click="$emit('save')">
+        <n-button class="topbar-save-button" :loading="saving" :disabled="loading" secondary @click="$emit('save')">
           <template #icon>
             <n-icon><SaveOutline /></n-icon>
           </template>
           保存
         </n-button>
-        <n-button :loading="publishing" :disabled="loading || publishDisabled" type="success" secondary @click="$emit('publish')">
-          <template #icon>
-            <n-icon><RocketOutline /></n-icon>
-          </template>
+        <button
+          type="button"
+          class="topbar-publish-button"
+          :disabled="loading || publishDisabled || publishing"
+          @click="$emit('publish')"
+        >
           {{ publishing ? '发布中' : '发布' }}
-        </n-button>
-        <n-dropdown trigger="click" :options="moreOptions" @select="$emit($event)">
-          <n-button quaternary circle>
-            <template #icon>
-              <n-icon><EllipsisHorizontalOutline /></n-icon>
-            </template>
-          </n-button>
-        </n-dropdown>
+        </button>
       </div>
     </header>
 
@@ -130,24 +138,25 @@
 
 <script setup>
 import {
+  AlertCircleOutline,
   ArrowBackOutline,
+  CheckmarkCircleOutline,
   CheckmarkDoneOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
   CubeOutline,
   DocumentTextOutline,
-  EllipsisHorizontalOutline,
-  EyeOutline,
   GitBranchOutline,
   GitNetworkOutline,
   KeyOutline,
   ListOutline,
   OptionsOutline,
+  PlayCircleOutline,
   ReaderOutline,
-  RocketOutline,
   SaveOutline,
   SettingsOutline,
   TextOutline,
+  CaretForward,
 } from '@vicons/ionicons5'
 import { computed, ref } from 'vue'
 
@@ -350,7 +359,7 @@ function handleTopbarActionsClick(event) {
   grid-template-rows: auto minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
-  background: #f6f8fb;
+  background: #f8f9fa;
 }
 
 .designer-main-content {
@@ -361,7 +370,7 @@ function handleTopbarActionsClick(event) {
 
 .designer-loading-mask {
   position: absolute;
-  z-index: 10;
+  z-index: 120;
   display: grid;
   place-items: center;
   inset: 0;
@@ -374,11 +383,12 @@ function handleTopbarActionsClick(event) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 72px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
-  padding: 12px 20px;
+  gap: 12px;
+  min-height: 48px;
+  border-bottom: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 6px 12px;
+  backdrop-filter: blur(12px);
 }
 
 .topbar-left,
@@ -389,55 +399,144 @@ function handleTopbarActionsClick(event) {
   gap: 10px;
 }
 
+.topbar-actions {
+  gap: 6px;
+}
+
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 2px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.save-state .n-icon {
+  color: #22c55e;
+  font-size: 15px;
+}
+
+.save-state.dirty .n-icon {
+  color: #f59e0b;
+}
+
+.topbar-icon-button {
+  width: 30px;
+  height: 30px;
+  --n-color-hover: #f4f4f5 !important;
+  --n-color-pressed: #e4e4e7 !important;
+  --n-text-color: #71717a !important;
+  --n-text-color-hover: #18181b !important;
+}
+
+.topbar-save-button {
+  height: 30px;
+  padding: 0 10px;
+  background: #fff !important;
+  color: #27272a !important;
+  border-color: #e4e4e7 !important;
+  --n-border-radius: 6px !important;
+  --n-color: #fff !important;
+  --n-color-hover: #f8fafc !important;
+  --n-color-pressed: #f4f4f5 !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #d4d4d8 !important;
+  --n-border-pressed: 1px solid #d4d4d8 !important;
+  --n-text-color: #27272a !important;
+  --n-text-color-hover: #18181b !important;
+}
+
+.topbar-save-button :deep(.n-button__content),
+.topbar-save-button :deep(.n-button__icon) {
+  color: #27272a !important;
+}
+
+.topbar-publish-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  min-width: 52px;
+  padding: 0 12px;
+  cursor: pointer;
+  border: 1px solid #2944CC;
+  border-radius: 6px;
+  background: #2944CC;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.topbar-publish-button:hover:not(:disabled) {
+  border-color: #0e32f3;
+  background: #0e32f3;
+}
+
+.topbar-publish-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .object-mark {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   place-items: center;
-  border-radius: 8px;
-  background: #eef6ff;
-  color: #2563eb;
-  font-size: 22px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eef2ff;
+  color: #3153d8;
+  font-size: 16px;
 }
 
 .object-title h1 {
   margin: 0;
-  color: #111827;
-  font-size: 18px;
+  color: #18181b;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
+  line-height: 18px;
 }
 
 .object-title p {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 12px;
+  gap: 8px;
+  margin: 1px 0 0;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 14px;
 }
 
 .designer-workbench {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   min-height: 0;
-  height: calc(100vh - 72px);
+  height: calc(100vh - 48px);
 }
 
 .designer-workbench.nav-collapsed {
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
 }
 
 .designer-nav {
   min-height: 0;
   overflow-y: auto;
-  border-right: 1px solid #e5e7eb;
-  background: #fff;
-  padding: 14px 10px;
+  border-right: 1px solid #e4e4e7;
+  background: #fcfcfc;
+  padding: 10px 8px;
 }
 
 .designer-nav.collapsed {
-  padding: 12px 7px;
+  padding: 8px;
 }
 
 .nav-collapse-button {
@@ -445,22 +544,23 @@ function handleTopbarActionsClick(event) {
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
   width: 100%;
-  min-height: 34px;
-  margin-bottom: 10px;
+  min-height: 32px;
+  margin-bottom: 8px;
   padding: 0 9px;
   cursor: pointer;
-  border: 1px solid #dbe5f2;
+  border: 1px solid #e4e4e7;
   border-radius: 8px;
-  background: #f8fbff;
-  color: #2563eb;
-  font-size: 13px;
+  background: #fff;
+  color: #52525b;
+  font-size: 12px;
   font-weight: 650;
   text-align: left;
 }
 
 .nav-collapse-button:hover {
-  border-color: #93c5fd;
-  background: #eef6ff;
+  border-color: #c7d2fe;
+  background: #f4f6ff;
+  color: #3153d8;
 }
 
 .designer-nav.collapsed .nav-collapse-button {
@@ -478,13 +578,13 @@ function handleTopbarActionsClick(event) {
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
   width: 100%;
-  min-height: 40px;
+  min-height: 34px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
-  color: #475569;
+  color: #52525b;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   text-align: left;
   padding: 0 10px;
 }
@@ -501,12 +601,12 @@ function handleTopbarActionsClick(event) {
 }
 
 .nav-item + .nav-item {
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .nav-item:hover {
-  background: #f1f5f9;
-  color: #111827;
+  background: #f4f4f5;
+  color: #18181b;
 }
 
 .nav-item.disabled,
@@ -522,8 +622,8 @@ function handleTopbarActionsClick(event) {
 }
 
 .nav-item.active {
-  background: #eaf2ff;
-  color: #1d4ed8;
+  background: #eef2ff;
+  color: #3153d8;
   font-weight: 700;
 }
 
@@ -624,8 +724,9 @@ function handleTopbarActionsClick(event) {
 .designer-main {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  padding: 12px;
+  overflow: hidden;
+  padding: 0;
+  background: #f8f9fa;
 }
 
 .designer-main :deep(.n-spin-container),
@@ -637,15 +738,16 @@ function handleTopbarActionsClick(event) {
 .panel-frame {
   box-sizing: border-box;
   width: 100%;
-  min-height: calc(100vh - 104px);
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: #f8f9fa;
   overflow: hidden;
 }
 
 .panel-frame.dirty {
-  border-color: #f59e0b;
+  box-shadow: inset 0 2px 0 #f59e0b;
 }
 
 @media (max-width: 900px) {
@@ -694,10 +796,11 @@ function handleTopbarActionsClick(event) {
 }
 .panel-frame {
   min-height: 0;
-  padding: 10px;
+  padding: 0;
 }
 
 .panel-frame > * {
   min-height: 0;
 }
 </style>
+  PlayCircleOutline,

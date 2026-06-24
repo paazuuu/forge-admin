@@ -939,7 +939,7 @@ function handleDelete(row) {
 :global(.data-scope-edit-form .n-form-item-label__text) {
   color: #374151;
   font-weight: 500;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 /* 深色模式 */

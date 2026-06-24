@@ -17,6 +17,7 @@ import { request } from '@/utils'
 
 // 全局字典缓存
 const dictCache = new Map()
+const dictPendingCache = new Map()
 
 /**
  * 加载字典数据
@@ -72,9 +73,21 @@ async function getDictData(dictType, forceReload = false) {
     return dictCache.get(dictType)
   }
 
-  const data = await loadDictData(dictType)
-  dictCache.set(dictType, data)
-  return data
+  if (!forceReload && dictPendingCache.has(dictType)) {
+    return dictPendingCache.get(dictType)
+  }
+
+  const pending = loadDictData(dictType)
+    .then((data) => {
+      dictCache.set(dictType, data)
+      return data
+    })
+    .finally(() => {
+      if (dictPendingCache.get(dictType) === pending)
+        dictPendingCache.delete(dictType)
+    })
+  dictPendingCache.set(dictType, pending)
+  return pending
 }
 
 /**
@@ -84,9 +97,11 @@ async function getDictData(dictType, forceReload = false) {
 function clearDictCache(dictType) {
   if (dictType) {
     dictCache.delete(dictType)
+    dictPendingCache.delete(dictType)
   }
   else {
     dictCache.clear()
+    dictPendingCache.clear()
   }
 }
 

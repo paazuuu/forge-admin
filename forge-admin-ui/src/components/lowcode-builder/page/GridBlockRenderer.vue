@@ -1443,10 +1443,7 @@ function emitCrudPreviewState(patch = {}) {
     return
   emit('crudPreviewStateChange', {
     blockId: props.block.id,
-    patch: {
-      lastPreviewAt: new Date().toISOString(),
-      ...patch,
-    },
+    patch,
   })
 }
 

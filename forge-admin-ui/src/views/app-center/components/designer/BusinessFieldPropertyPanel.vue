@@ -1682,7 +1682,7 @@ defineExpose({
 
 .formula-form-item :deep(.n-form-item-label__text) {
   color: #202938;
-  font-size: 15px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 20px;
 }

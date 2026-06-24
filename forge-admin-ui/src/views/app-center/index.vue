@@ -54,46 +54,57 @@
           </template>
         </n-input>
 
-        <n-spin :show="loadingSuites">
+        <n-spin :show="loadingSuites && !bootstrapping">
           <div class="suite-nav-list">
-            <button
-              class="suite-nav-item"
-              :class="{ active: !suiteCode }"
-              type="button"
-              @click="selectSuite(null)"
-            >
-              <span class="suite-mark all">
-                <n-icon><GridOutline /></n-icon>
-              </span>
-              <span class="suite-nav-copy">
-                <strong>全部业务域</strong>
-                <small>{{ suiteObjectTotal }} 个业务单元 · {{ suiteAppTotal }} 个入口</small>
-              </span>
-            </button>
+            <template v-if="bootstrapping">
+              <div v-for="idx in 5" :key="idx" class="suite-skeleton-row">
+                <n-skeleton circle :width="38" :height="38" />
+                <div>
+                  <n-skeleton text :width="idx === 1 ? '62%' : '78%'" />
+                  <n-skeleton text :width="idx === 1 ? '82%' : '58%'" />
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <button
+                class="suite-nav-item"
+                :class="{ active: !suiteCode }"
+                type="button"
+                @click="selectSuite(null)"
+              >
+                <span class="suite-mark all">
+                  <n-icon><GridOutline /></n-icon>
+                </span>
+                <span class="suite-nav-copy">
+                  <strong>全部业务域</strong>
+                  <small>{{ suiteObjectTotal }} 个业务单元 · {{ suiteAppTotal }} 个入口</small>
+                </span>
+              </button>
 
-            <button
-              v-for="suite in filteredSuites"
-              :key="suite.id"
-              class="suite-nav-item"
-              :class="{ active: suiteCode === suite.suiteCode }"
-              type="button"
-              @click="selectSuite(suite)"
-            >
-              <span class="suite-mark" :class="{ 'has-icon': suite.icon }">
-                <IconRenderer v-if="suite.icon" :icon="suite.icon" :size="22" />
-                <template v-else>{{ suiteInitial(suite) }}</template>
-              </span>
-              <span class="suite-nav-copy">
-                <strong>{{ suite.suiteName || suite.suiteCode }}</strong>
-                <small>{{ suite.objectCount || 0 }} 个业务单元 · {{ suite.appCount || 0 }} 个入口</small>
-              </span>
-            </button>
+              <button
+                v-for="suite in filteredSuites"
+                :key="suite.id"
+                class="suite-nav-item"
+                :class="{ active: suiteCode === suite.suiteCode }"
+                type="button"
+                @click="selectSuite(suite)"
+              >
+                <span class="suite-mark" :class="{ 'has-icon': suite.icon }">
+                  <IconRenderer v-if="suite.icon" :icon="suite.icon" :size="22" />
+                  <template v-else>{{ suiteInitial(suite) }}</template>
+                </span>
+                <span class="suite-nav-copy">
+                  <strong>{{ suite.suiteName || suite.suiteCode }}</strong>
+                  <small>{{ suite.objectCount || 0 }} 个业务单元 · {{ suite.appCount || 0 }} 个入口</small>
+                </span>
+              </button>
 
-            <n-empty
-              v-if="suiteKeyword && !filteredSuites.length && !loadingSuites"
-              size="small"
-              description="没有匹配的业务域"
-            />
+              <n-empty
+                v-if="suiteKeyword && !filteredSuites.length && !loadingSuites"
+                size="small"
+                description="没有匹配的业务域"
+              />
+            </template>
           </div>
         </n-spin>
       </aside>
@@ -128,10 +139,18 @@
         </section>
 
         <section class="metric-grid">
-          <div v-for="metric in metrics" :key="metric.label" class="metric-item">
-            <span>{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-          </div>
+          <template v-if="bootstrapping">
+            <div v-for="idx in 4" :key="idx" class="metric-item metric-skeleton">
+              <n-skeleton text :width="idx % 2 ? '46%' : '58%'" />
+              <n-skeleton text :width="idx % 2 ? '34%' : '42%'" />
+            </div>
+          </template>
+          <template v-else>
+            <div v-for="metric in metrics" :key="metric.label" class="metric-item">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+            </div>
+          </template>
         </section>
 
         <section class="workspace-toolbar">
@@ -155,8 +174,25 @@
             <span>{{ businessUnitTotal }} 个业务单元</span>
           </div>
 
-          <n-spin :show="workspaceLoading">
-            <div v-if="pagedBusinessUnits.length" class="unit-grid">
+          <n-spin :show="workspaceLoading && !bootstrapping">
+            <div v-if="bootstrapping" class="unit-grid">
+              <div v-for="idx in 6" :key="idx" class="unit-skeleton-card">
+                <div class="unit-skeleton-head">
+                  <n-skeleton circle :width="34" :height="34" />
+                  <div>
+                    <n-skeleton text :width="idx % 2 ? '72%' : '58%'" />
+                    <n-skeleton text :width="idx % 2 ? '48%' : '64%'" />
+                  </div>
+                </div>
+                <n-skeleton text :repeat="2" />
+                <div class="unit-skeleton-actions">
+                  <n-skeleton text width="28%" />
+                  <n-skeleton text width="24%" />
+                  <n-skeleton text width="20%" />
+                </div>
+              </div>
+            </div>
+            <div v-else-if="pagedBusinessUnits.length" class="unit-grid">
               <BusinessUnitCard
                 v-for="unit in pagedBusinessUnits"
                 :key="unit.key"
@@ -275,6 +311,7 @@ const apps = ref([])
 const loadingSuites = ref(false)
 const loadingObjects = ref(false)
 const loadingApps = ref(false)
+const bootstrapping = ref(true)
 const editorVisible = ref(false)
 const editingApp = ref(null)
 const codePanelVisible = ref(false)
@@ -450,8 +487,13 @@ watch(() => route.query.codeAppId, () => {
 })
 
 onMounted(async () => {
-  await loadAll()
-  await openCodePanelFromQuery()
+  try {
+    await loadAll()
+    await openCodePanelFromQuery()
+  }
+  finally {
+    bootstrapping.value = false
+  }
 })
 
 async function loadAll() {
@@ -819,19 +861,19 @@ function deleteApp(app) {
 .app-center-page {
   min-height: 100%;
   background: #f6f8fb;
-  padding: 20px;
+  padding: 12px;
 }
 
 .page-head {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 16px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
-  padding: 16px;
+  padding: 12px 14px;
 }
 
 .head-actions {
@@ -849,11 +891,12 @@ function deleteApp(app) {
 }
 
 .page-title-block h1 {
-  font-size: 24px;
+  font-size: 20px;
+  line-height: 26px;
 }
 
 .workspace-head h2 {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .content-head h3 {
@@ -863,16 +906,16 @@ function deleteApp(app) {
 .page-title-block p,
 .workspace-head p,
 .content-head p {
-  margin: 6px 0 0;
+  margin: 3px 0 0;
   color: #6b7280;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .app-center-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
@@ -888,12 +931,12 @@ function deleteApp(app) {
 
 .suite-nav {
   position: sticky;
-  top: 16px;
+  top: 12px;
   display: grid;
-  gap: 12px;
-  max-height: calc(100vh - 140px);
+  gap: 10px;
+  max-height: calc(100vh - 116px);
   overflow: auto;
-  padding: 14px;
+  padding: 10px;
 }
 
 .suite-nav-head {
@@ -925,21 +968,21 @@ function deleteApp(app) {
 
 .suite-nav-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .suite-nav-item {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 11px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 9px;
   align-items: center;
   width: 100%;
-  min-height: 64px;
+  min-height: 56px;
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 8px;
   background: #f9fafb;
-  padding: 10px;
+  padding: 8px;
   text-align: left;
   transition:
     background 160ms ease,
@@ -960,8 +1003,8 @@ function deleteApp(app) {
 
 .suite-mark {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   place-items: center;
   border-radius: 8px;
   background: #eef2ff;
@@ -982,8 +1025,8 @@ function deleteApp(app) {
 }
 
 .suite-mark.large {
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   font-size: 14px;
 }
 
@@ -1001,7 +1044,7 @@ function deleteApp(app) {
 
 .suite-nav-copy strong {
   color: #111827;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.35;
 }
 
@@ -1014,15 +1057,15 @@ function deleteApp(app) {
 .workspace {
   display: grid;
   min-width: 0;
-  gap: 14px;
+  gap: 10px;
 }
 
 .workspace-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  padding: 16px;
+  padding: 12px;
 }
 
 .workspace-actions {
@@ -1032,8 +1075,8 @@ function deleteApp(app) {
 
 .selected-suite-title {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
   min-width: 0;
 }
@@ -1063,9 +1106,9 @@ function deleteApp(app) {
 
 .metric-item {
   min-width: 0;
-  min-height: 76px;
+  min-height: 58px;
   border-right: 1px solid #eef2f7;
-  padding: 14px 16px;
+  padding: 10px 14px;
 }
 
 .metric-item:last-child {
@@ -1083,22 +1126,22 @@ function deleteApp(app) {
 }
 
 .metric-item strong {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #111827;
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1.1;
 }
 
 .workspace-toolbar {
   background: #fbfcfe;
-  padding: 12px;
+  padding: 10px;
 }
 
 .workspace-content {
   display: grid;
   min-width: 0;
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .content-head {
@@ -1125,9 +1168,60 @@ function deleteApp(app) {
 
 .unit-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
   align-items: stretch;
+}
+
+.suite-skeleton-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  min-height: 56px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 8px;
+}
+
+.suite-skeleton-row > div:last-child,
+.unit-skeleton-head > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metric-skeleton {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.unit-skeleton-card {
+  display: grid;
+  gap: 10px;
+  min-height: 172px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.unit-skeleton-head {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.unit-skeleton-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .card-pagination {

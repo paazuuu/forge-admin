@@ -16,14 +16,6 @@
             <n-icon><ArrowRedoOutline /></n-icon>
           </template>
         </n-button>
-        <n-select
-          class="list-template-select"
-          :value="templateSelectValue"
-          :options="listTemplateOptions"
-          size="small"
-          placeholder="套用模板"
-          @update:value="updateListTemplate"
-        />
         <n-dropdown trigger="click" :options="listMoreOptions" @select="handleListMoreSelect">
           <n-button class="list-toolbar-more-button" circle size="small" type="primary" title="更多操作">
             <template #icon>
@@ -38,9 +30,21 @@
       <div class="page-switch-row">
         <div class="page-switch-title">
           <span class="page-switch-icon">P</span>
-          <div>
-            <strong>页面设计</strong>
-            <small>{{ activeDesignerPage?.pageName || '当前页面' }} · {{ pageTypeText(activeDesignerPage?.pageType) }}</small>
+          <div class="page-switch-copy">
+            <n-dropdown
+              trigger="click"
+              :options="listTemplateOptions"
+              @select="updateListTemplate"
+            >
+              <button class="list-template-trigger" type="button">
+                <n-icon><LayersOutline /></n-icon>
+                <span>{{ activeTemplateLabel }}</span>
+                <n-icon class="template-chevron">
+                  <ChevronDownOutline />
+                </n-icon>
+              </button>
+            </n-dropdown>
+            <small>{{ pageTypeText(activeDesignerPage?.pageType) }} · {{ designerPages.length }} 个页面</small>
           </div>
         </div>
         <div class="page-tab-list">
@@ -61,21 +65,137 @@
             </template>
           </n-button>
         </div>
-        <n-space size="small" align="center" class="page-actions">
-          <n-button class="page-tool-button page-icon-button" circle size="small" secondary :title="pageSettingsExpanded ? '收起页面设置' : '页面设置'" @click="pageSettingsExpanded = !pageSettingsExpanded">
+        <div class="page-actions">
+          <n-button class="page-tool-button page-icon-button" circle size="small" secondary :disabled="!canUndo" title="撤销" @click="undoSchema">
             <template #icon>
-              <n-icon><SettingsOutline /></n-icon>
+              <n-icon><ArrowUndoOutline /></n-icon>
             </template>
           </n-button>
-          <n-button class="page-tool-button page-icon-button" circle size="small" secondary title="复制页面" @click="duplicateActivePage">
+          <n-button class="page-tool-button page-icon-button" circle size="small" secondary :disabled="!canRedo" title="重做" @click="redoSchema">
+            <template #icon>
+              <n-icon><ArrowRedoOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-button class="page-tool-button page-icon-button" circle size="small" secondary :title="pageSettingsExpanded ? '收起页面设置' : '页面设置'" @click="pageSettingsExpanded = !pageSettingsExpanded">
+            <template #icon>
+              <n-icon><DocumentTextOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-dropdown trigger="click" placement="bottom-end" :options="pageActionOptions" @select="handlePageActionSelect">
+            <n-button class="page-tool-button page-icon-button" circle size="small" secondary title="页面操作">
+              <template #icon>
+                <n-icon><EllipsisHorizontalOutline /></n-icon>
+              </template>
+            </n-button>
+          </n-dropdown>
+        </div>
+      </div>
+      <div v-if="activeDesignerPage && pageSettingsExpanded" class="page-settings-popover">
+        <div class="page-settings-head">
+          <strong>页面设置</strong>
+          <span>{{ activeDesignerPage.pageName || activeDesignerPage.pageKey }}</span>
+        </div>
+        <div class="page-config-row">
+          <n-input
+            :value="activeDesignerPage.pageName"
+            size="small"
+            placeholder="页面名称"
+            @update:value="patchActivePage({ pageName: $event })"
+          />
+          <n-input
+            :value="activeDesignerPage.pageKey"
+            size="small"
+            placeholder="页面编码"
+            :disabled="isProtectedPage(activeDesignerPage.pageKey)"
+            @update:value="updateActivePageKey($event)"
+          />
+          <n-select
+            :value="activeDesignerPage.pageType || 'custom'"
+            :options="pageTypeOptions"
+            size="small"
+            @update:value="patchActivePage({ pageType: $event })"
+          />
+          <n-input
+            :value="activeDesignerPage.routePath"
+            size="small"
+            placeholder="路由片段/页面标识，如 detail/:id"
+            title="当前多页面仍由业务对象运行页统一承载，这里用于事件跳转、弹窗页和详情页识别，不是单独前端路由文件"
+            @update:value="patchActivePage({ routePath: $event })"
+          />
+          <n-input
+            :value="activeDesignerPage.description"
+            size="small"
+            placeholder="页面说明"
+            @update:value="patchActivePage({ description: $event })"
+          />
+        </div>
+        <div class="page-param-row">
+          <div class="page-param-title">
+            页面入参
+          </div>
+          <div
+            v-for="(param, paramIdx) in (activeDesignerPage.params || [])"
+            :key="paramIdx"
+            class="page-param-item"
+          >
+            <n-input
+              :value="param.name"
+              size="tiny"
+              placeholder="参数名"
+              @update:value="updateActivePageParam(paramIdx, { name: normalizePageParamName($event) })"
+            />
+            <n-input
+              :value="param.value"
+              size="tiny"
+              placeholder="默认值 / 字段映射"
+              @update:value="updateActivePageParam(paramIdx, { value: $event })"
+            />
+            <n-button size="tiny" quaternary circle title="删除参数" @click="removeActivePageParam(paramIdx)">
+              <template #icon>
+                <n-icon><TrashOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+          <n-button class="page-param-add-button" size="tiny" dashed @click="addActivePageParam">
+            + 参数
+          </n-button>
+        </div>
+        <div v-if="activeDesignerPage?.pageType === 'detail'" class="page-data-row">
+          <div class="page-param-title">
+            详情数据
+          </div>
+          <n-select
+            :value="activeDesignerPage.detailMethod || 'get'"
+            :options="requestMethodOptions"
+            size="small"
+            class="page-method-select"
+            @update:value="patchActivePage({ detailMethod: $event || 'get' })"
+          />
+          <n-input
+            :value="activeDesignerPage.detailApi || ''"
+            size="small"
+            placeholder="详情接口，如 get@/api/customer/:id 或 /api/customer/:id"
+            @update:value="patchActivePage({ detailApi: $event })"
+          />
+          <n-input
+            :value="activeDesignerPage.detailDataField || 'data'"
+            size="small"
+            placeholder="数据字段，如 data"
+            @update:value="patchActivePage({ detailDataField: $event || 'data' })"
+          />
+        </div>
+        <div class="page-settings-footer">
+          <n-button size="tiny" secondary title="复制页面" @click="duplicateActivePage">
             <template #icon>
               <n-icon><CopyOutline /></n-icon>
             </template>
+            复制
           </n-button>
-          <n-button class="page-tool-button page-icon-button" circle size="small" secondary title="重置当前页面布局" @click="resetActivePageLayout">
+          <n-button size="tiny" secondary title="重置当前页面布局" @click="resetActivePageLayout">
             <template #icon>
               <n-icon><RefreshOutline /></n-icon>
             </template>
+            重置
           </n-button>
           <n-popconfirm
             :show-icon="false"
@@ -84,10 +204,11 @@
             @positive-click="clearActivePageLayout"
           >
             <template #trigger>
-              <n-button class="page-tool-button page-icon-button" circle size="small" secondary title="清空当前页面布局">
+              <n-button size="tiny" secondary title="清空当前页面布局">
                 <template #icon>
                   <n-icon><CloseCircleOutline /></n-icon>
                 </template>
+                清空
               </n-button>
             </template>
             清空当前页面画布上的所有组件？
@@ -100,104 +221,16 @@
             @positive-click="removeActivePage"
           >
             <template #trigger>
-              <n-button class="page-tool-button page-icon-button" circle size="small" secondary type="error" :disabled="isProtectedPage(activePageKey)" title="删除当前页面">
+              <n-button size="tiny" secondary type="error" :disabled="isProtectedPage(activePageKey)" title="删除当前页面">
                 <template #icon>
                   <n-icon><TrashOutline /></n-icon>
                 </template>
+                删除
               </n-button>
             </template>
             删除当前页面及布局？列表页不允许删除。
           </n-popconfirm>
-        </n-space>
-      </div>
-      <div v-if="activeDesignerPage && pageSettingsExpanded" class="page-config-row">
-        <n-input
-          :value="activeDesignerPage.pageName"
-          size="small"
-          placeholder="页面名称"
-          @update:value="patchActivePage({ pageName: $event })"
-        />
-        <n-input
-          :value="activeDesignerPage.pageKey"
-          size="small"
-          placeholder="页面编码"
-          :disabled="isProtectedPage(activeDesignerPage.pageKey)"
-          @update:value="updateActivePageKey($event)"
-        />
-        <n-select
-          :value="activeDesignerPage.pageType || 'custom'"
-          :options="pageTypeOptions"
-          size="small"
-          @update:value="patchActivePage({ pageType: $event })"
-        />
-        <n-input
-          :value="activeDesignerPage.routePath"
-          size="small"
-          placeholder="路由片段/页面标识，如 detail/:id"
-          title="当前多页面仍由业务对象运行页统一承载，这里用于事件跳转、弹窗页和详情页识别，不是单独前端路由文件"
-          @update:value="patchActivePage({ routePath: $event })"
-        />
-        <n-input
-          :value="activeDesignerPage.description"
-          size="small"
-          placeholder="页面说明"
-          @update:value="patchActivePage({ description: $event })"
-        />
-      </div>
-      <div v-if="activeDesignerPage && pageSettingsExpanded" class="page-param-row">
-        <div class="page-param-title">
-          页面入参
         </div>
-        <div
-          v-for="(param, paramIdx) in (activeDesignerPage.params || [])"
-          :key="paramIdx"
-          class="page-param-item"
-        >
-          <n-input
-            :value="param.name"
-            size="tiny"
-            placeholder="参数名"
-            @update:value="updateActivePageParam(paramIdx, { name: normalizePageParamName($event) })"
-          />
-          <n-input
-            :value="param.value"
-            size="tiny"
-            placeholder="默认值 / 字段映射"
-            @update:value="updateActivePageParam(paramIdx, { value: $event })"
-          />
-          <n-button size="tiny" quaternary circle title="删除参数" @click="removeActivePageParam(paramIdx)">
-            <template #icon>
-              <n-icon><TrashOutline /></n-icon>
-            </template>
-          </n-button>
-        </div>
-        <n-button class="page-param-add-button" size="tiny" dashed @click="addActivePageParam">
-          + 参数
-        </n-button>
-      </div>
-      <div v-if="activeDesignerPage?.pageType === 'detail' && pageSettingsExpanded" class="page-data-row">
-        <div class="page-param-title">
-          详情数据
-        </div>
-        <n-select
-          :value="activeDesignerPage.detailMethod || 'get'"
-          :options="requestMethodOptions"
-          size="small"
-          class="page-method-select"
-          @update:value="patchActivePage({ detailMethod: $event || 'get' })"
-        />
-        <n-input
-          :value="activeDesignerPage.detailApi || ''"
-          size="small"
-          placeholder="详情接口，如 get@/api/customer/:id 或 /api/customer/:id"
-          @update:value="patchActivePage({ detailApi: $event })"
-        />
-        <n-input
-          :value="activeDesignerPage.detailDataField || 'data'"
-          size="small"
-          placeholder="数据字段，如 data"
-          @update:value="patchActivePage({ detailDataField: $event || 'data' })"
-        />
       </div>
     </div>
 
@@ -248,15 +281,21 @@ import {
   AddOutline,
   ArrowRedoOutline,
   ArrowUndoOutline,
+  ChevronDownOutline,
   CloseCircleOutline,
   CopyOutline,
+  DocumentTextOutline,
   EllipsisHorizontalOutline,
+  FunnelOutline,
+  GridOutline,
+  LayersOutline,
+  ListOutline,
   RefreshOutline,
-  SettingsOutline,
+  SparklesOutline,
   TrashOutline,
 } from '@vicons/ionicons5'
-import { useMessage } from 'naive-ui'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { NIcon as NaiveIcon, useMessage } from 'naive-ui'
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { saveBusinessObjectActions, saveBusinessObjectDesigner, saveBusinessObjectListLayout } from '@/api/business-app'
 import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import {
@@ -360,17 +399,22 @@ const requestMethodOptions = [
   { label: 'POST', value: 'post' },
 ]
 const listTemplateOptions = [
-  { label: '标准列表模板', value: 'simple-crud' },
-  { label: '左树右表模板', value: 'tree-crud' },
+  { label: '标准列表模板', key: 'simple-crud', icon: renderMenuIcon(ListOutline) },
+  { label: '左树右表模板', key: 'tree-crud', icon: renderMenuIcon(GridOutline) },
 ]
+const activeTemplateLabel = computed(() => {
+  return listTemplateOptions.find(item => item.key === templateSelectValue.value)?.label || '列表模板'
+})
 const listMoreOptions = computed(() => [
   {
     label: '按字段生成查询条件',
     key: 'resetSearchFields',
+    icon: renderMenuIcon(FunnelOutline),
   },
   {
     label: '按字段生成表格列',
     key: 'resetTableFields',
+    icon: renderMenuIcon(GridOutline),
   },
   {
     type: 'divider',
@@ -379,6 +423,7 @@ const listMoreOptions = computed(() => [
   {
     label: '新增空白页面',
     key: 'addPage',
+    icon: renderMenuIcon(AddOutline),
   },
   {
     type: 'divider',
@@ -387,7 +432,18 @@ const listMoreOptions = computed(() => [
   {
     label: '重置当前列表',
     key: 'resetListSchema',
+    icon: renderMenuIcon(RefreshOutline),
   },
+])
+const pageActionOptions = computed(() => [
+  { label: '按字段生成查询条件', key: 'resetSearchFields', icon: renderMenuIcon(FunnelOutline) },
+  { label: '按字段生成表格列', key: 'resetTableFields', icon: renderMenuIcon(GridOutline) },
+  { type: 'divider', key: 'pageActionDivider1' },
+  { label: '新增空白页面', key: 'addPage', icon: renderMenuIcon(AddOutline) },
+  { type: 'divider', key: 'pageActionDivider2' },
+  { label: '复制页面', key: 'duplicate', icon: renderMenuIcon(CopyOutline) },
+  { label: '重置布局', key: 'reset', icon: renderMenuIcon(SparklesOutline) },
+  { label: '重置当前列表', key: 'resetListSchema', icon: renderMenuIcon(RefreshOutline) },
 ])
 const designerPages = computed(() => localSchema.value.pages || [])
 const activeDesignerPage = computed(() => designerPages.value.find(page => page.pageKey === activePageKey.value) || designerPages.value[0] || null)
@@ -403,6 +459,10 @@ const designerRuntimeCrudProps = computed(() => buildDesignerRuntimeCrudProps(lo
 
 function resolveTemplateSelectValue(layoutType = '') {
   return layoutType === 'tree-crud' ? 'tree-crud' : 'simple-crud'
+}
+
+function renderMenuIcon(icon) {
+  return () => h(NaiveIcon, null, { default: () => h(icon) })
 }
 
 watch(
@@ -634,6 +694,20 @@ function handleListMoreSelect(key = '') {
   }
   if (key === 'resetListSchema')
     resetListSchema()
+}
+
+function handlePageActionSelect(key = '') {
+  if (['resetSearchFields', 'resetTableFields', 'addPage', 'resetListSchema'].includes(key)) {
+    handleListMoreSelect(key)
+    return
+  }
+  if (key === 'duplicate') {
+    duplicateActivePage()
+    return
+  }
+  if (key === 'reset') {
+    resetActivePageLayout()
+  }
 }
 
 function addDesignerPage() {
@@ -2002,21 +2076,23 @@ onBeforeUnmount(() => {
 <style scoped>
 .business-list-designer {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   height: calc(100vh - 106px);
   min-height: 0;
   container-type: inline-size;
+  background: #f8f9fa;
 }
 
 .list-designer-head {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 40px;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 6px 10px;
-  background: #fff;
+  min-height: 48px;
+  border-bottom: 1px solid #e4e4e7;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
 }
 
 .list-designer-title {
@@ -2030,9 +2106,9 @@ onBeforeUnmount(() => {
 .list-designer-head h3 {
   flex: 0 0 auto;
   margin: 0;
-  color: #111827;
-  font-size: 15px;
-  line-height: 20px;
+  color: #18181b;
+  font-size: 13px;
+  line-height: 18px;
   letter-spacing: 0;
 }
 
@@ -2040,9 +2116,9 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2050,10 +2126,6 @@ onBeforeUnmount(() => {
 .list-designer-actions {
   flex: 0 0 auto;
   flex-wrap: nowrap;
-}
-
-.list-template-select {
-  width: 128px;
 }
 
 .list-toolbar-icon-button {
@@ -2071,13 +2143,14 @@ onBeforeUnmount(() => {
 }
 
 .list-page-switch {
+  position: relative;
+  z-index: 10;
   display: grid;
-  gap: 8px;
-  padding: 8px 10px 10px;
-  border-bottom: 1px solid #eef2f7;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 251, 255, 0.98) 100%),
-    radial-gradient(circle at 24px 18px, rgba(37, 99, 235, 0.08), transparent 28%);
+  gap: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
 }
 
 .page-switch-head {
@@ -2090,38 +2163,86 @@ onBeforeUnmount(() => {
 .page-switch-title {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   min-width: 0;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+}
+
+.page-switch-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.list-template-trigger {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, auto) auto;
+  gap: 5px;
+  align-items: center;
+  justify-self: start;
+  max-width: 168px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #27272a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  padding: 2px 5px;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.list-template-trigger:hover {
+  background: #f4f4f5;
+  color: #1d4ed8;
+}
+
+.list-template-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-template-trigger :deep(.n-icon) {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.list-template-trigger:hover :deep(.n-icon) {
+  color: #2563eb;
+}
+
+.list-template-trigger .template-chevron {
+  font-size: 12px;
 }
 
 .page-switch-icon {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: #2563eb;
-  color: #fff;
-  font-size: 11px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eef2ff;
+  color: #3153d8;
+  font-size: 13px;
   font-weight: 800;
-  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.18);
-}
-
-.page-switch-title strong {
-  display: block;
-  color: #0f172a;
-  font-size: 12px;
-  line-height: 15px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .page-switch-title small {
   display: block;
   max-width: 150px;
   overflow: hidden;
-  color: #64748b;
+  color: #a1a1aa;
   font-size: 10px;
-  line-height: 14px;
+  line-height: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2138,19 +2259,26 @@ onBeforeUnmount(() => {
 
 .page-switch-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 1.4fr) minmax(260px, 0.9fr);
+  align-items: center;
   justify-content: stretch;
-  gap: 8px;
+  gap: 12px;
 }
 
 .page-tab-list {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  justify-self: center;
+  gap: 2px;
   min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 0;
+  padding: 3px;
+  border: 1px solid rgba(228, 228, 231, 0.8);
+  border-radius: 8px;
+  background: rgba(244, 244, 245, 0.9);
   scrollbar-width: none;
 }
 
@@ -2164,29 +2292,21 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr);
   gap: 1px;
   flex: 0 0 auto;
-  min-width: 96px;
-  max-width: 148px;
-  min-height: 30px;
-  padding: 4px 8px 4px 21px;
-  border: 1px solid #dbe3ee;
-  border-radius: 7px;
-  background: #fff;
-  color: #475569;
-  text-align: left;
+  min-width: 76px;
+  max-width: 142px;
+  min-height: 26px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  text-align: center;
   cursor: pointer;
   transition: all 0.16s ease;
 }
 
 .page-tab-button::before {
-  content: '';
-  position: absolute;
-  top: 10px;
-  left: 8px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #94a3b8;
-  box-shadow: 0 0 0 3px #f1f5f9;
+  display: none;
 }
 
 .page-tab-button.type-list::before {
@@ -2214,30 +2334,42 @@ onBeforeUnmount(() => {
 }
 
 .page-tab-name {
-  color: #0f172a;
-  font-size: 11px;
+  color: inherit;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .page-tab-button small {
-  color: #64748b;
+  display: none;
+  color: #71717a;
   font-size: 9px;
 }
 
 .page-tab-button:hover,
 .page-tab-button.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.1);
+  border-color: transparent;
+  background: rgba(228, 228, 231, 0.75);
+  box-shadow: none;
+}
+
+.page-tab-button.active {
+  border-color: #fff;
+  background: #fff;
+  color: #27272a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .page-tab-button.active span,
 .page-tab-button.active small {
-  color: #1d4ed8;
+  color: inherit;
 }
 
 .page-actions {
-  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .page-tool-button {
@@ -2251,21 +2383,61 @@ onBeforeUnmount(() => {
   height: 30px;
 }
 
+.page-settings-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 12px;
+  display: grid;
+  gap: 10px;
+  width: min(760px, calc(100vw - 360px));
+  min-width: 520px;
+  padding: 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(14px);
+}
+
+.page-settings-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.page-settings-head strong {
+  color: #27272a;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.page-settings-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: #71717a;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .page-config-row {
   display: grid;
   grid-template-columns:
-    minmax(120px, 0.9fr)
-    minmax(120px, 0.9fr)
-    minmax(108px, 0.7fr)
-    minmax(160px, 1.2fr)
-    minmax(180px, 1.4fr);
+    minmax(112px, 0.9fr)
+    minmax(112px, 0.9fr)
+    minmax(104px, 0.72fr)
+    minmax(150px, 1.2fr)
+    minmax(150px, 1.25fr);
   gap: 8px;
   align-items: end;
-  padding: 10px;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .page-config-row :deep(.n-input),
@@ -2279,22 +2451,29 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 6px;
   min-height: 42px;
-  padding: 8px 10px;
-  border: 1px solid #dbe3ee;
+  padding: 8px;
+  border: 1px solid #f1f1f2;
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  background: #fafafa;
+  box-shadow: none;
 }
 
 .page-data-row {
   display: grid;
   grid-template-columns: auto 88px minmax(260px, 1fr) minmax(140px, 0.45fr);
   gap: 8px;
-  padding: 10px;
-  border: 1px solid #dbe3ee;
+  padding: 8px;
+  border: 1px solid #f1f1f2;
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  background: #fafafa;
+  box-shadow: none;
+}
+
+.page-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 2px;
 }
 
 .page-method-select {
@@ -2386,9 +2565,9 @@ onBeforeUnmount(() => {
 .list-workspace {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  background: #f8fafc;
-  padding: 8px;
+  overflow: hidden;
+  background: #f8f9fa;
+  padding: 0;
 }
 
 .list-preview-modal :deep(.n-card__content),

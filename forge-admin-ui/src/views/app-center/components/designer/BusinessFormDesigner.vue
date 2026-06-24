@@ -1,7 +1,7 @@
 <template>
   <div class="business-form-designer" :class="{ 'relation-object-active': !isPrimaryObjectActive, 'native-form-active': isPrimaryObjectActive && !useLegacyFormCreateDesigner }">
     <section class="form-canvas-region">
-      <div class="designer-section-head">
+      <div v-if="!isPrimaryObjectActive || useLegacyFormCreateDesigner" class="designer-section-head">
         <div class="designer-section-main">
           <h3>{{ activeObjectTitle }}</h3>
           <p>{{ activeObjectDescription }}</p>
@@ -1807,6 +1807,7 @@ defineExpose({
   height: calc(100vh - 106px);
   min-height: 0;
   container-type: inline-size;
+  background: #f8f9fa;
   overflow: hidden;
 }
 
@@ -1823,7 +1824,7 @@ defineExpose({
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid #e4e4e7;
   overflow: hidden;
 }
 
@@ -1841,6 +1842,8 @@ defineExpose({
   min-height: 40px;
   gap: 10px;
   padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
 }
 
 .designer-section-main {
@@ -1924,12 +1927,12 @@ defineExpose({
 .form-builder-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 0;
   height: 100%;
   min-height: 0;
-  background: #f8fafc;
+  background: #f8f9fa;
   overflow: hidden;
-  padding: 8px;
+  padding: 0;
 }
 
 .form-builder-grid.relation-mode {

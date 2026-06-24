@@ -67,7 +67,36 @@
       </div>
     </div>
     <div v-if="!previewMode" class="canvas-viewport-dock">
-      <n-popover trigger="click" placement="top-end" :width="282" :to="false">
+      <div class="viewport-device-group" aria-label="预览设备">
+        <button
+          type="button"
+          class="viewport-device-button"
+          :class="{ active: canvasPreviewMode === 'desktop' }"
+          title="Desktop"
+          @click.stop="applyCanvasPreviewMode('desktop')"
+        >
+          <n-icon><DesktopOutline /></n-icon>
+        </button>
+        <button
+          type="button"
+          class="viewport-device-button"
+          :class="{ active: canvasPreviewMode === 'narrow' }"
+          title="Tablet"
+          @click.stop="applyCanvasPreviewMode('narrow')"
+        >
+          <n-icon><TabletLandscapeOutline /></n-icon>
+        </button>
+        <button
+          type="button"
+          class="viewport-device-button"
+          :class="{ active: canvasPreviewMode === 'mobile' }"
+          title="Mobile"
+          @click.stop="applyCanvasPreviewMode('mobile')"
+        >
+          <n-icon><PhonePortraitOutline /></n-icon>
+        </button>
+      </div>
+      <n-popover trigger="click" placement="bottom" :width="282" :to="false">
         <template #trigger>
           <n-button class="viewport-icon-button" circle secondary title="预览形态和设计宽度">
             <template #icon>
@@ -115,7 +144,13 @@
           </label>
         </div>
       </n-popover>
-      <n-popover trigger="click" placement="top-end" :width="238" :to="false">
+      <span class="viewport-divider" />
+      <n-button class="viewport-icon-button" circle secondary title="缩小" @click.stop="updateCanvasZoom(canvasZoom - 0.1)">
+        <template #icon>
+          <n-icon><RemoveOutline /></n-icon>
+        </template>
+      </n-button>
+      <n-popover trigger="click" placement="bottom" :width="238" :to="false">
         <template #trigger>
           <n-button class="viewport-zoom-button" secondary title="画布缩放">
             <template #icon>
@@ -150,12 +185,28 @@
           </n-button>
         </div>
       </n-popover>
+      <n-button class="viewport-icon-button" circle secondary title="放大" @click.stop="updateCanvasZoom(canvasZoom + 0.1)">
+        <template #icon>
+          <n-icon><AddOutline /></n-icon>
+        </template>
+      </n-button>
+      <span class="viewport-divider" />
+      <n-button class="viewport-icon-button" circle secondary title="查看源码" @click.stop="$emit('openSource')">
+        <template #icon>
+          <n-icon><CodeSlashOutline /></n-icon>
+        </template>
+      </n-button>
+      <n-button class="viewport-icon-button" circle secondary title="专注画布" @click.stop="$emit('toggleFocus')">
+        <template #icon>
+          <n-icon><ExpandOutline /></n-icon>
+        </template>
+      </n-button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { BrowsersOutline, ResizeOutline } from '@vicons/ionicons5'
+import { AddOutline, BrowsersOutline, CodeSlashOutline, DesktopOutline, ExpandOutline, PhonePortraitOutline, RemoveOutline, ResizeOutline, TabletLandscapeOutline } from '@vicons/ionicons5'
 import { computed, reactive, ref } from 'vue'
 import { createComponentFromField, insertDesignerComponent, moveDesignerComponent, normalizeFormDesignerSchema } from '../form-first/formDesignerSchema'
 import { clearDesignerDropKey, designerDropError, designerDropKey, setDesignerDropKey } from './designerDragState'
@@ -181,7 +232,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:schema', 'update:selectedId', 'configure'])
+const emit = defineEmits(['update:schema', 'update:selectedId', 'configure', 'openSource', 'toggleFocus'])
 const DRAG_COMPONENT_MIME = 'application/x-forge-form-component'
 const DRAG_FIELD_MIME = 'application/x-forge-form-field'
 const DRAG_LAYOUT_MIME = 'application/x-forge-form-layout'
@@ -371,9 +422,8 @@ defineExpose({
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background:
-    linear-gradient(#eef2f7 1px, transparent 1px), linear-gradient(90deg, #eef2f7 1px, transparent 1px), #f8fafc;
-  background-size: 24px 24px;
+  background: radial-gradient(circle at 1px 1px, rgba(113, 113, 122, 0.22) 1px, transparent 0), #f8f9fa;
+  background-size: 20px 20px;
   overscroll-behavior: contain;
 }
 
@@ -381,7 +431,7 @@ defineExpose({
   height: 100%;
   min-height: 0;
   overflow: auto;
-  padding: 10px 12px 14px;
+  padding: 72px 16px 24px;
   overscroll-behavior: contain;
 }
 
@@ -390,7 +440,7 @@ defineExpose({
   top: 10px;
   right: 18px;
   left: 18px;
-  z-index: 20;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -423,22 +473,65 @@ defineExpose({
 
 .canvas-viewport-dock {
   position: absolute;
-  z-index: 18;
-  bottom: 12px;
-  right: 18px;
+  z-index: 8;
+  top: 14px;
+  left: 50%;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
   width: max-content;
-  max-width: calc(100% - 12px);
+  max-width: calc(100% - 28px);
   margin: 0;
-  padding: 5px;
-  border: 1px solid #dbe3ee;
-  border-radius: 9px;
+  padding: 5px 7px;
+  border: 1px solid rgba(228, 228, 231, 0.9);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(10px);
+  box-shadow:
+    0 4px 12px rgba(15, 23, 42, 0.06),
+    0 1px 3px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(12px);
+  transform: translateX(-50%);
+}
+
+.viewport-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: #e4e4e7;
+}
+
+.viewport-device-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  border-right: 1px solid #e4e4e7;
+}
+
+.viewport-device-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #a1a1aa;
+  font-size: 16px;
+  padding: 0;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.viewport-device-button:hover,
+.viewport-device-button.active {
+  background: #f4f4f5;
+  color: #3f3f46;
 }
 
 .canvas-viewport-popover {
@@ -492,46 +585,48 @@ defineExpose({
 
 .viewport-icon-button {
   --n-color: #fff !important;
-  --n-color-hover: #eff6ff !important;
-  --n-color-pressed: #dbeafe !important;
+  --n-color-hover: #f4f6ff !important;
+  --n-color-pressed: #e8edff !important;
   --n-color-focus: #fff !important;
-  --n-border: 1px solid #dbe3ee !important;
-  --n-border-hover: 1px solid #93c5fd !important;
-  --n-border-pressed: 1px solid #60a5fa !important;
-  --n-border-focus: 1px solid #93c5fd !important;
-  --n-text-color: #334155 !important;
-  --n-text-color-hover: #1d4ed8 !important;
-  --n-text-color-pressed: #1e40af !important;
-  --n-text-color-focus: #1d4ed8 !important;
-  width: 30px;
-  height: 30px;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-pressed: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #c7d2fe !important;
+  --n-text-color: #52525b !important;
+  --n-text-color-hover: #3153d8 !important;
+  --n-text-color-pressed: #253fb2 !important;
+  --n-text-color-focus: #3153d8 !important;
+  width: 28px;
+  height: 28px;
   font-weight: 700;
+  border-radius: 999px !important;
 }
 
 .viewport-zoom-button {
   --n-color: #fff !important;
-  --n-color-hover: #eff6ff !important;
-  --n-color-pressed: #dbeafe !important;
+  --n-color-hover: #f4f6ff !important;
+  --n-color-pressed: #e8edff !important;
   --n-color-focus: #fff !important;
-  --n-border: 1px solid #dbe3ee !important;
-  --n-border-hover: 1px solid #93c5fd !important;
-  --n-border-pressed: 1px solid #60a5fa !important;
-  --n-border-focus: 1px solid #93c5fd !important;
-  --n-text-color: #334155 !important;
-  --n-text-color-hover: #1d4ed8 !important;
-  --n-text-color-pressed: #1e40af !important;
-  --n-text-color-focus: #1d4ed8 !important;
-  min-width: 76px;
-  height: 30px;
-  padding: 0 9px !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-pressed: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #c7d2fe !important;
+  --n-text-color: #52525b !important;
+  --n-text-color-hover: #3153d8 !important;
+  --n-text-color-pressed: #253fb2 !important;
+  --n-text-color-focus: #3153d8 !important;
+  min-width: 72px;
+  height: 28px;
+  padding: 0 8px !important;
   font-weight: 700;
+  border-radius: 999px !important;
 }
 
 .canvas-stage-shell {
   display: flex;
   justify-content: center;
   min-height: 100%;
-  padding-top: 8px;
+  padding-top: 10px;
   padding-bottom: 56px;
   transition: width 160ms ease;
 }
@@ -540,11 +635,11 @@ defineExpose({
   flex: none;
   min-height: 100%;
   margin: 0 auto;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e4e4e7;
   border-radius: 8px;
   background: #fff;
-  padding: 12px;
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+  padding: 14px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
   transition:
     width 160ms ease,
     transform 160ms ease;
@@ -655,12 +750,13 @@ defineExpose({
   }
 
   .canvas-scroll {
-    padding: 8px;
+    padding: 52px 8px 12px;
   }
 
   .canvas-viewport-dock {
-    right: 12px;
-    bottom: 10px;
+    top: 10px;
+    left: 50%;
+    right: auto;
   }
 
   .canvas-stage-shell {

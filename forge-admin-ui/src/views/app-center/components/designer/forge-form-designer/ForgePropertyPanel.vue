@@ -6,18 +6,6 @@
         <span>{{ panelDescription }}</span>
       </div>
       <div class="edit-panel-tools">
-        <n-button v-if="selectedComponent" size="tiny" secondary @click="showFormSettings">
-          编辑表单
-        </n-button>
-        <n-button v-if="selectedComponent" size="tiny" secondary type="info" @click="propertyActiveTab = 'interaction'">
-          交互
-        </n-button>
-        <n-button v-if="selectedComponent" size="tiny" secondary type="warning" @click="propertyActiveTab = 'source'">
-          源码
-        </n-button>
-        <n-button v-if="!selectedComponent" size="tiny" secondary type="warning" @click="formPropertyActiveTab = 'source'">
-          源码
-        </n-button>
         <button type="button" class="panel-close-button" title="收起" @click="$emit('close')">
           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M20.207 20.207a.99.99 0 0 0 .003-1.403L13.406 12l6.804-6.804a.99.99 0 0 0-.003-1.403.99.99 0 0 0-1.403-.003L12 10.594 5.196 3.79a.99.99 0 0 0-1.403.003.99.99 0 0 0-.003 1.403L10.594 12 3.79 18.804a.99.99 0 0 0 .003 1.403.99.99 0 0 0 1.403.003L12 13.406l6.804 6.804a.99.99 0 0 0 1.403-.003Z" fill="currentColor" />
@@ -41,7 +29,13 @@
 
     <template v-if="selectedComponent">
       <n-tabs v-model:value="propertyActiveTab" type="line" size="medium" animated class="property-tabs">
-        <n-tab-pane name="basic" tab="基础配置">
+        <n-tab-pane name="basic">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><SettingsOutline /></n-icon>
+              属性
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
             <n-collapse v-model:expanded-names="selectedBasicExpandedNames" class="config-collapse">
               <n-collapse-item title="标识" name="identity">
@@ -559,221 +553,398 @@
                   </n-form-item>
                 </section>
               </n-collapse-item>
+
+              <n-collapse-item v-if="isField" title="校验规则" name="validation">
+                <section class="panel-item validation-panel">
+                  <div class="switch-line compact">
+                    <span>必填项 Required</span>
+                    <n-switch
+                      size="small"
+                      :value="!!selectedComponent.validation?.required"
+                      @update:value="updateComponent({ validation: { required: $event } })"
+                    />
+                  </div>
+                  <n-form-item v-if="selectedComponent.validation?.required" label="必填错误提示">
+                    <n-input
+                      :value="selectedComponent.validation?.requiredMessage"
+                      clearable
+                      placeholder="为空时使用默认提示"
+                      @update:value="updateComponent({ validation: { requiredMessage: $event } })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="正则表达式 Pattern">
+                    <n-input
+                      :value="selectedComponent.validation?.pattern || ''"
+                      clearable
+                      placeholder="例如: ^[A-Za-z]+$"
+                      @update:value="updateComponent({ validation: { pattern: $event || undefined } })"
+                    />
+                  </n-form-item>
+                  <div class="switch-line compact">
+                    <span>唯一校验</span>
+                    <n-switch
+                      size="small"
+                      :value="!!selectedComponent.advancedProps?.unique"
+                      @update:value="updateUniqueValidation"
+                    />
+                  </div>
+                </section>
+              </n-collapse-item>
             </n-collapse>
           </n-form>
         </n-tab-pane>
 
-        <n-tab-pane name="style" tab="样式配置">
+        <n-tab-pane name="style">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><ColorPaletteOutline /></n-icon>
+              样式
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
-            <section class="panel-item">
-              <div class="panel-item-title">
-                背景
-              </div>
-              <n-form-item label="背景色">
-                <div class="color-control">
-                  <n-color-picker
-                    :value="selectedDesignerStyle.backgroundColor || ''"
-                    :show-alpha="true"
-                    :modes="['hex']"
-                    :swatches="colorSwatches"
-                    @update:value="updateDesignerStyle({ backgroundColor: $event || undefined })"
-                  />
-                  <n-button size="small" quaternary @click="updateDesignerStyle({ backgroundColor: undefined })">
-                    默认
-                  </n-button>
-                </div>
-              </n-form-item>
-              <n-form-item label="透明度">
-                <n-slider
-                  :value="selectedOpacityPercent"
-                  :min="20"
-                  :max="100"
-                  :step="5"
-                  @update:value="updateDesignerStyle({ opacity: Number($event || 100) / 100 })"
-                />
-              </n-form-item>
-            </section>
+            <n-collapse :default-expanded-names="['position', 'layout', 'typography', 'appearance']" class="config-collapse style-config-collapse">
+              <n-collapse-item title="位置与尺寸" name="position">
+                <section class="panel-item position-control">
+                  <div class="position-axis-grid">
+                    <label class="position-number-field">
+                      <span>左 X</span>
+                      <n-input-number
+                        :value="selectedDesignerTranslate.x"
+                        size="small"
+                        :show-button="false"
+                        @update:value="updateDesignerTranslate('x', $event)"
+                      />
+                      <em>px</em>
+                    </label>
+                    <label class="position-number-field">
+                      <span>上 Y</span>
+                      <n-input-number
+                        :value="selectedDesignerTranslate.y"
+                        size="small"
+                        :show-button="false"
+                        @update:value="updateDesignerTranslate('y', $event)"
+                      />
+                      <em>px</em>
+                    </label>
+                  </div>
 
-            <section class="panel-item">
-              <div class="panel-item-title">
-                边框
-              </div>
-              <n-form-item label="圆角">
-                <n-input-number
-                  :value="resolvePxNumber(selectedDesignerStyle.borderRadius, 6)"
-                  :min="0"
-                  :max="32"
-                  @update:value="updateDesignerStyle({ borderRadius: `${$event ?? 6}px` })"
-                />
-              </n-form-item>
-              <n-form-item label="边框样式">
-                <n-radio-group
-                  :value="selectedDesignerStyle.borderStyle || 'solid'"
-                  size="small"
-                  @update:value="updateDesignerBorderStyle"
-                >
-                  <n-radio-button value="solid">
-                    实线
-                  </n-radio-button>
-                  <n-radio-button value="dashed">
-                    虚线
-                  </n-radio-button>
-                  <n-radio-button value="none">
-                    无
-                  </n-radio-button>
-                </n-radio-group>
-              </n-form-item>
-              <n-form-item label="边框颜色">
-                <div class="color-control">
-                  <n-color-picker
-                    :value="selectedDesignerStyle.borderColor || ''"
-                    :show-alpha="true"
-                    :modes="['hex']"
-                    :swatches="colorSwatches"
-                    @update:value="updateDesignerBorderColor"
-                  />
-                  <n-button size="small" quaternary @click="updateDesignerBorderColor('')">
-                    默认
-                  </n-button>
-                </div>
-              </n-form-item>
-            </section>
+                  <div class="position-rule">
+                    <div class="position-rule-head">
+                      <span>宽度</span>
+                      <label v-if="(selectedDesignerStyle.widthMode || 'default') === 'default'" class="position-inline-number">
+                        <n-input-number
+                          :value="resolvePxNumber(selectedDesignerStyle.width, 0)"
+                          size="tiny"
+                          :min="0"
+                          :show-button="false"
+                          placeholder="自动"
+                          @update:value="updateDesignerStyle({ width: valueToPx($event) })"
+                        />
+                        <em>px</em>
+                      </label>
+                    </div>
+                    <div class="segmented-mini">
+                      <button
+                        type="button"
+                        :class="{ active: (selectedDesignerStyle.widthMode || 'default') === 'default' }"
+                        @click="updateWidthMode('default')"
+                      >
+                        默认宽度
+                      </button>
+                      <button
+                        type="button"
+                        :class="{ active: selectedDesignerStyle.widthMode === 'fill' }"
+                        @click="updateWidthMode('fill')"
+                      >
+                        填充容器
+                      </button>
+                    </div>
+                  </div>
 
-            <section class="panel-item">
-              <div class="panel-item-title">
-                阴影与尺寸
-              </div>
-              <n-form-item label="阴影">
-                <n-select
-                  :value="selectedDesignerStyle.boxShadow || ''"
-                  :options="shadowOptions"
-                  @update:value="updateDesignerStyle({ boxShadow: $event || undefined })"
-                />
-              </n-form-item>
-              <div class="size-setting-row">
-                <div class="size-setting-label">
-                  宽度
-                </div>
-                <n-radio-group
-                  :value="selectedDesignerStyle.widthMode || 'default'"
-                  size="small"
-                  @update:value="updateWidthMode"
-                >
-                  <n-radio-button value="default">
-                    默认宽度
-                  </n-radio-button>
-                  <n-radio-button value="fill">
-                    填充容器
-                  </n-radio-button>
-                </n-radio-group>
-              </div>
-              <div class="size-setting-row">
-                <div class="size-setting-label">
-                  高度
-                </div>
-                <n-radio-group
-                  :value="selectedDesignerStyle.heightMode || 'default'"
-                  size="small"
-                  @update:value="updateHeightMode"
-                >
-                  <n-radio-button value="default">
-                    默认高度
-                  </n-radio-button>
-                  <n-radio-button value="fit">
-                    适应内容
-                  </n-radio-button>
-                  <n-radio-button value="fill">
-                    填充容器
-                  </n-radio-button>
-                </n-radio-group>
-              </div>
-            </section>
+                  <div class="position-rule">
+                    <div class="position-rule-head">
+                      <span>高度</span>
+                      <label v-if="(selectedDesignerStyle.heightMode || 'default') === 'default'" class="position-inline-number">
+                        <n-input-number
+                          :value="resolvePxNumber(selectedDesignerStyle.height, 0)"
+                          size="tiny"
+                          :min="0"
+                          :show-button="false"
+                          placeholder="自动"
+                          @update:value="updateDesignerStyle({ height: valueToPx($event) })"
+                        />
+                        <em>px</em>
+                      </label>
+                    </div>
+                    <div class="segmented-mini three">
+                      <button
+                        type="button"
+                        :class="{ active: (selectedDesignerStyle.heightMode || 'default') === 'default' }"
+                        @click="updateHeightMode('default')"
+                      >
+                        默认高度
+                      </button>
+                      <button
+                        type="button"
+                        :class="{ active: selectedDesignerStyle.heightMode === 'fit' }"
+                        @click="updateHeightMode('fit')"
+                      >
+                        适应内容
+                      </button>
+                      <button
+                        type="button"
+                        :class="{ active: selectedDesignerStyle.heightMode === 'fill' }"
+                        @click="updateHeightMode('fill')"
+                      >
+                        填充容器
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </n-collapse-item>
 
-            <section class="panel-item">
-              <div class="panel-item-title">
-                内外边距
-              </div>
-              <div class="spacing-editor">
-                <div class="spacing-editor-title">
-                  Padding
-                </div>
-                <div class="spacing-grid">
-                  <label v-for="item in spacingSides" :key="`component-padding-${item.key}`">
-                    <span>{{ item.label }}</span>
-                    <n-input-number
-                      :value="resolvePxNumber(selectedDesignerStyle.customStyle?.[`padding${item.key}`], 0)"
-                      :min="0"
-                      :max="120"
-                      :show-button="false"
-                      size="small"
-                      @update:value="updateDesignerSpacing(`padding${item.key}`, $event)"
+              <n-collapse-item title="布局与边距" name="layout">
+                <section class="panel-item">
+                  <div class="spacing-editor">
+                    <div class="spacing-editor-title">
+                      Padding
+                    </div>
+                    <div class="spacing-grid">
+                      <label v-for="item in spacingSides" :key="`component-padding-${item.key}`">
+                        <span>{{ item.label }}</span>
+                        <n-input-number
+                          :value="resolvePxNumber(selectedDesignerStyle.customStyle?.[`padding${item.key}`], 0)"
+                          :min="0"
+                          :max="120"
+                          :show-button="false"
+                          size="small"
+                          @update:value="updateDesignerSpacing(`padding${item.key}`, $event)"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <div class="spacing-editor">
+                    <div class="spacing-editor-title">
+                      Margin
+                    </div>
+                    <div class="spacing-grid">
+                      <label v-for="item in spacingSides" :key="`component-margin-${item.key}`">
+                        <span>{{ item.label }}</span>
+                        <n-input-number
+                          :value="resolvePxNumber(selectedDesignerStyle.customStyle?.[`margin${item.key}`], 0)"
+                          :min="-80"
+                          :max="120"
+                          :show-button="false"
+                          size="small"
+                          @update:value="updateDesignerSpacing(`margin${item.key}`, $event)"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              </n-collapse-item>
+
+              <n-collapse-item title="文字排版" name="typography">
+                <section class="panel-item">
+                  <div class="crud-inline-grid">
+                    <n-form-item label="字号">
+                      <n-input-number
+                        :value="resolvePxNumber(selectedDesignerStyle.customStyle?.fontSize, 14)"
+                        :min="10"
+                        :max="48"
+                        :show-button="false"
+                        @update:value="updateDesignerSpacing('fontSize', $event)"
+                      />
+                    </n-form-item>
+                    <n-form-item label="行高">
+                      <n-input
+                        :value="selectedDesignerStyle.customStyle?.lineHeight || ''"
+                        clearable
+                        placeholder="1.5 / 22px"
+                        @update:value="updateDesignerCustomStyle({ lineHeight: $event || undefined })"
+                      />
+                    </n-form-item>
+                  </div>
+                  <n-form-item label="文字颜色">
+                    <div class="color-control">
+                      <n-color-picker
+                        :value="selectedDesignerStyle.customStyle?.color || ''"
+                        :show-alpha="true"
+                        :modes="['hex']"
+                        :swatches="colorSwatches"
+                        @update:value="updateDesignerCustomStyle({ color: $event || undefined })"
+                      />
+                      <n-button size="small" quaternary @click="updateDesignerCustomStyle({ color: undefined })">
+                        默认
+                      </n-button>
+                    </div>
+                  </n-form-item>
+                </section>
+              </n-collapse-item>
+
+              <n-collapse-item title="外观与装饰" name="appearance">
+                <section class="panel-item appearance-control">
+                  <div class="appearance-field">
+                    <label>背景色</label>
+                    <div class="appearance-input-shell">
+                      <label class="appearance-swatch" :style="{ background: selectedAppearanceBackgroundPreview }" title="选择背景色">
+                        <input
+                          type="color"
+                          :value="selectedAppearanceBackgroundPreview"
+                          @input="updateSelectedAppearanceBackground($event.target.value)"
+                        >
+                      </label>
+                      <input
+                        :value="selectedAppearanceBackgroundHex"
+                        class="appearance-hex-input"
+                        placeholder="FFFFFF"
+                        @input="updateSelectedAppearanceBackground($event.target.value)"
+                      >
+                      <span class="appearance-percent">{{ selectedOpacityPercent }}%</span>
+                    </div>
+                  </div>
+                  <div class="appearance-field">
+                    <label>边框 (Border)</label>
+                    <div class="appearance-input-shell">
+                      <select
+                        :value="selectedDesignerStyle.borderStyle || 'solid'"
+                        class="appearance-select"
+                        @change="updateDesignerBorderStyle($event.target.value)"
+                      >
+                        <option value="solid">
+                          实线
+                        </option>
+                        <option value="dashed">
+                          虚线
+                        </option>
+                        <option value="none">
+                          无
+                        </option>
+                      </select>
+                      <label class="appearance-swatch" :style="{ background: selectedAppearanceBorderPreview }" title="选择边框颜色">
+                        <input
+                          type="color"
+                          :value="selectedAppearanceBorderPreview"
+                          @input="updateSelectedAppearanceBorder($event.target.value)"
+                        >
+                      </label>
+                      <input
+                        :value="selectedAppearanceBorderHex"
+                        class="appearance-hex-input"
+                        placeholder="E4E4E7"
+                        @input="updateSelectedAppearanceBorder($event.target.value)"
+                      >
+                    </div>
+                  </div>
+                  <div class="appearance-field">
+                    <label>圆角 (Border Radius)</label>
+                    <div class="appearance-radius-shell">
+                      <span>R</span>
+                      <input
+                        :value="resolvePxNumber(selectedDesignerStyle.borderRadius, 6)"
+                        type="number"
+                        min="0"
+                        max="32"
+                        @input="updateDesignerStyle({ borderRadius: `${$event.target.value || 6}px` })"
+                      >
+                    </div>
+                  </div>
+                  <div class="appearance-field">
+                    <label class="appearance-row-label">
+                      <span>阴影 (Shadow)</span>
+                      <select
+                        :value="selectedDesignerStyle.boxShadow || ''"
+                        class="appearance-plain-select"
+                        @change="updateDesignerStyle({ boxShadow: $event.target.value || undefined })"
+                      >
+                        <option
+                          v-for="option in shadowOptions"
+                          :key="option.value || 'none'"
+                          :value="option.value"
+                        >
+                          {{ option.label }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="appearance-field">
+                    <label>透明度 (Opacity)</label>
+                    <div class="appearance-radius-shell">
+                      <span>%</span>
+                      <input
+                        :value="selectedOpacityPercent"
+                        type="number"
+                        min="20"
+                        max="100"
+                        step="5"
+                        @input="updateSelectedAppearanceOpacity($event.target.value)"
+                      >
+                    </div>
+                  </div>
+                  <n-form-item label="CSS Style">
+                    <n-input
+                      :value="selectedDesignerStyle.customStyleText || stringifyStyle(selectedDesignerStyle.customStyle)"
+                      type="textarea"
+                      :autosize="{ minRows: 3, maxRows: 6 }"
+                      placeholder="例如 color:#111; padding:12px;"
+                      @update:value="updateComponentStyleText"
                     />
-                  </label>
-                </div>
-              </div>
-              <div class="spacing-editor">
-                <div class="spacing-editor-title">
-                  Margin
-                </div>
-                <div class="spacing-grid">
-                  <label v-for="item in spacingSides" :key="`component-margin-${item.key}`">
-                    <span>{{ item.label }}</span>
-                    <n-input-number
-                      :value="resolvePxNumber(selectedDesignerStyle.customStyle?.[`margin${item.key}`], 0)"
-                      :min="-80"
-                      :max="120"
-                      :show-button="false"
-                      size="small"
-                      @update:value="updateDesignerSpacing(`margin${item.key}`, $event)"
-                    />
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            <section class="panel-item">
-              <div class="panel-item-title">
-                自定义样式
-              </div>
-              <n-form-item label="CSS Style">
-                <n-input
-                  :value="selectedDesignerStyle.customStyleText || stringifyStyle(selectedDesignerStyle.customStyle)"
-                  type="textarea"
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-                  placeholder="例如 color:#111; padding:12px;"
-                  @update:value="updateComponentStyleText"
-                />
-              </n-form-item>
-            </section>
+                  </n-form-item>
+                </section>
+              </n-collapse-item>
+            </n-collapse>
           </n-form>
         </n-tab-pane>
 
-        <n-tab-pane v-if="isCrudBlock" name="crud" tab="CRUD">
+        <n-tab-pane v-if="isCrudBlock" name="crud">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><ServerOutline /></n-icon>
+              CRUD
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
-            <section class="panel-item panel-item-strong">
+            <section class="panel-item panel-item-strong form-api-panel">
               <div class="panel-title-row">
                 <div class="panel-item-title">
-                  系统 CRUD 组件
+                  接口与数据源
                 </div>
                 <n-button class="more-config-button" size="tiny" type="primary" @click="advancedConfigVisible = true">
                   更多配置
                 </n-button>
               </div>
-              <n-form-item label="接口基础路径">
-                <n-input
-                  :value="selectedComponent.props?.apiBase"
-                  clearable
-                  placeholder="/employee"
-                  @update:value="updateCrudApiBase"
-                />
-              </n-form-item>
-              <n-form-item label="行主键">
-                <n-input
-                  :value="selectedComponent.props?.rowKey || 'id'"
-                  placeholder="id"
-                  @update:value="updateComponent({ props: { rowKey: $event || 'id' } })"
-                />
-              </n-form-item>
+              <div class="form-api-field">
+                <span class="form-api-label">基础路径 / 行主键</span>
+                <div class="form-api-base-row">
+                  <n-input
+                    :value="selectedComponent.props?.apiBase"
+                    clearable
+                    placeholder="/employee"
+                    @update:value="updateCrudApiBase"
+                  />
+                  <n-input
+                    :value="selectedComponent.props?.rowKey || 'id'"
+                    placeholder="id"
+                    @update:value="updateComponent({ props: { rowKey: $event || 'id' } })"
+                  />
+                </div>
+              </div>
+              <div class="form-api-field">
+                <span class="form-api-label">API 接口地址配置</span>
+                <div class="form-api-endpoint-list">
+                  <div v-for="item in crudApiFields" :key="item.key" class="form-api-endpoint-row">
+                    <span class="form-api-method-badge" :class="resolveCrudApiMethodClass(item)">
+                      {{ resolveCrudApiMethodLabel(item) }}
+                    </span>
+                    <n-input
+                      :value="crudApiConfig[item.key]"
+                      clearable
+                      :placeholder="item.placeholder"
+                      @update:value="updateCrudApiConfig(item.key, $event)"
+                    />
+                  </div>
+                </div>
+              </div>
             </section>
 
             <section class="panel-item">
@@ -966,7 +1137,13 @@
           </n-form>
         </n-tab-pane>
 
-        <n-tab-pane name="layout" tab="布局">
+        <n-tab-pane v-if="false" name="layout">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><GridOutline /></n-icon>
+              布局
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
             <section class="panel-item">
               <div class="panel-item-title">
@@ -1296,7 +1473,13 @@
           </n-form>
         </n-tab-pane>
 
-        <n-tab-pane name="state" tab="状态">
+        <n-tab-pane v-if="false" name="state">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><ToggleOutline /></n-icon>
+              状态
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
             <section class="panel-item">
               <div class="panel-item-title">
@@ -1356,7 +1539,13 @@
           </n-form>
         </n-tab-pane>
 
-        <n-tab-pane name="interaction" tab="交互">
+        <n-tab-pane name="interaction">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><FlashOutline /></n-icon>
+              交互
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
             <section class="panel-item">
               <div class="panel-title-row">
@@ -1577,10 +1766,58 @@
                 暂无事件规则
               </div>
             </section>
+
+            <section class="panel-item">
+              <div class="panel-item-title">
+                状态联动
+              </div>
+              <div class="linkage-action-list">
+                <button type="button" class="linkage-action-row" @click="configureLinkageRule('showHide')">
+                  <span>显示/隐藏规则</span>
+                  <strong>配置</strong>
+                </button>
+                <button type="button" class="linkage-action-row" @click="configureLinkageRule('enableDisable')">
+                  <span>禁用/只读规则</span>
+                  <strong>配置</strong>
+                </button>
+              </div>
+              <div class="switch-list">
+                <label>
+                  <span>隐藏组件</span>
+                  <n-switch
+                    size="small"
+                    :value="!!selectedComponent.visibility?.hidden"
+                    @update:value="updateComponent({ visibility: { hidden: $event } })"
+                  />
+                </label>
+                <label v-if="isField">
+                  <span>只读</span>
+                  <n-switch
+                    size="small"
+                    :value="!!selectedComponent.visibility?.readonly"
+                    @update:value="updateComponent({ visibility: { readonly: $event } })"
+                  />
+                </label>
+                <label v-if="isField || isButtonComponent">
+                  <span>禁用</span>
+                  <n-switch
+                    size="small"
+                    :value="!!selectedComponent.props?.disabled"
+                    @update:value="updateComponent({ props: { disabled: $event } })"
+                  />
+                </label>
+              </div>
+            </section>
           </n-form>
         </n-tab-pane>
 
-        <n-tab-pane name="source" tab="源码">
+        <n-tab-pane v-if="false" name="source">
+          <template #tab>
+            <span class="property-tab-label">
+              <n-icon><CodeSlashOutline /></n-icon>
+              源码
+            </span>
+          </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
             <section class="panel-item source-panel">
               <div class="panel-title-row">
@@ -1630,14 +1867,19 @@
               <div class="panel-item-title">
                 AiCrudPage API
               </div>
-              <n-form-item v-for="item in crudApiFields" :key="item.key" :label="item.label">
-                <n-input
-                  :value="crudApiConfig[item.key]"
-                  clearable
-                  :placeholder="item.placeholder"
-                  @update:value="updateCrudApiConfig(item.key, $event)"
-                />
-              </n-form-item>
+              <div class="form-api-endpoint-list">
+                <div v-for="item in crudApiFields" :key="item.key" class="form-api-endpoint-row">
+                  <span class="form-api-method-badge" :class="resolveCrudApiMethodClass(item)">
+                    {{ resolveCrudApiMethodLabel(item) }}
+                  </span>
+                  <n-input
+                    :value="crudApiConfig[item.key]"
+                    clearable
+                    :placeholder="item.placeholder"
+                    @update:value="updateCrudApiConfig(item.key, $event)"
+                  />
+                </div>
+              </div>
             </section>
 
             <section class="panel-item">
@@ -1977,7 +2219,13 @@
     </template>
 
     <n-tabs v-else v-model:value="formPropertyActiveTab" type="line" size="medium" animated class="property-tabs form-property-tabs">
-      <n-tab-pane name="basic" tab="基础配置">
+      <n-tab-pane name="basic">
+        <template #tab>
+          <span class="property-tab-label">
+            <n-icon><LayersOutline /></n-icon>
+            表单属性
+          </span>
+        </template>
         <n-form label-placement="top" :show-feedback="false" class="property-form">
           <n-collapse v-model:expanded-names="formBasicExpandedNames" class="form-property-collapse">
             <n-collapse-item title="表单资产" name="assets">
@@ -1992,23 +2240,21 @@
                     </p>
                   </div>
                   <div class="form-asset-actions">
-                    <button type="button" class="form-asset-icon-button" title="新建空白表单" @click="createBlankFormAsset">
-                      <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M11 4a1 1 0 1 1 2 0v7h7a1 1 0 1 1 0 2h-7v7a1 1 0 1 1-2 0v-7H4a1 1 0 1 1 0-2h7V4Z" fill="currentColor" />
-                      </svg>
-                      新建
-                    </button>
                     <button type="button" class="form-asset-icon-button" title="复制当前表单" @click="duplicateCurrentFormAsset">
                       <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M9 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v12a1 1 0 1 1-2 0V4h-9a1 1 0 0 1-1-1Z" fill="currentColor" />
                         <path d="M5 6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5Zm0 2h10v12H5V8Z" fill="currentColor" />
                       </svg>
-                      复制
+                    </button>
+                    <button type="button" class="form-asset-icon-button" title="新建空白表单" @click="createBlankFormAsset">
+                      <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M11 4a1 1 0 1 1 2 0v7h7a1 1 0 1 1 0 2h-7v7a1 1 0 1 1-2 0v-7H4a1 1 0 1 1 0-2h7V4Z" fill="currentColor" />
+                      </svg>
                     </button>
                   </div>
                 </div>
                 <div :key="schema.formKey" class="current-form-banner">
-                  <span>正在编辑</span>
+                  <span>当前编辑</span>
                   <strong>{{ schema.formName || '主表单' }}</strong>
                 </div>
                 <div class="form-asset-tabs">
@@ -2054,17 +2300,23 @@
                     />
                   </n-form-item>
                   <n-form-item label="默认表单">
+                    <span v-if="defaultFormKey === schema.formKey" class="form-default-badge">
+                      默认表单
+                    </span>
                     <n-button
+                      v-else
                       size="small"
                       secondary
-                      :type="defaultFormKey === schema.formKey ? 'primary' : 'default'"
                       @click="setDefaultFormKey(schema.formKey)"
                     >
-                      {{ defaultFormKey === schema.formKey ? '当前为默认' : '设为默认' }}
+                      设为默认
                     </n-button>
                   </n-form-item>
                 </div>
                 <div v-if="formAssets.length" class="form-asset-list">
+                  <div class="form-asset-list-title">
+                    其他表单维护
+                  </div>
                   <div v-for="asset in formAssets" :key="asset.formKey" class="form-asset-card">
                     <div class="form-asset-main">
                       <n-input
@@ -2082,9 +2334,6 @@
                         placeholder="用途"
                         @update:value="updateFormAssetMeta(asset.formKey, { usage: $event })"
                       />
-                      <button type="button" class="form-asset-switch" @click="switchFormAsset(asset.formKey)">
-                        切换编辑
-                      </button>
                     </div>
                     <n-button size="tiny" quaternary :type="defaultFormKey === asset.formKey ? 'primary' : 'default'" @click="setDefaultFormKey(asset.formKey)">
                       {{ defaultFormKey === asset.formKey ? '默认' : '设默认' }}
@@ -2097,144 +2346,29 @@
               </section>
             </n-collapse-item>
 
-            <n-collapse-item title="权限、规则与事件" name="governance">
-              <section class="panel-item">
-                <div class="panel-item-title">
-                  表单级权限
-                </div>
-                <div class="style-grid">
-                  <n-input
-                    :value="formPermissionConfig.viewPermission || ''"
-                    clearable
-                    placeholder="查看权限码，例如 ai:business:customer:query"
-                    @update:value="updateFormPermission({ viewPermission: $event || '' })"
-                  />
-                  <n-input
-                    :value="formPermissionConfig.editPermission || ''"
-                    clearable
-                    placeholder="编辑权限码，例如 ai:business:customer:edit"
-                    @update:value="updateFormPermission({ editPermission: $event || '' })"
-                  />
-                </div>
-                <div class="switch-list compact">
-                  <label>
-                    <span>默认可见</span>
-                    <n-switch
-                      size="small"
-                      :value="formPermissionConfig.visible !== false"
-                      @update:value="updateFormPermission({ visible: $event })"
-                    />
-                  </label>
-                  <label>
-                    <span>默认可编辑</span>
-                    <n-switch
-                      size="small"
-                      :value="formPermissionConfig.editable !== false"
-                      @update:value="updateFormPermission({ editable: $event })"
-                    />
-                  </label>
-                </div>
-
-                <div class="panel-item-title">
-                  字段覆盖规则
-                </div>
-                <div class="form-rule-list">
-                  <div v-for="(rule, idx) in formFieldRuleRows" :key="rule.id || idx" class="form-rule-row">
-                    <n-select
-                      :value="rule.field || ''"
-                      :options="formFieldOptions"
-                      filterable
-                      clearable
-                      placeholder="字段"
-                      @update:value="updateFormFieldRule(idx, { field: $event || '' })"
-                    />
-                    <n-switch
-                      size="small"
-                      :value="!!rule.required"
-                      title="必填"
-                      @update:value="updateFormFieldRule(idx, { required: $event })"
-                    />
-                    <n-switch
-                      size="small"
-                      :value="!!rule.readonly"
-                      title="只读"
-                      @update:value="updateFormFieldRule(idx, { readonly: $event })"
-                    />
-                    <n-switch
-                      size="small"
-                      :value="!!rule.hidden"
-                      title="隐藏"
-                      @update:value="updateFormFieldRule(idx, { hidden: $event })"
-                    />
-                    <n-input
-                      :value="rule.defaultValue ?? ''"
-                      clearable
-                      placeholder="默认值"
-                      @update:value="updateFormFieldRule(idx, { defaultValue: $event })"
-                    />
-                    <n-button size="tiny" quaternary type="error" @click="removeFormFieldRule(idx)">
-                      删除
-                    </n-button>
-                  </div>
-                  <n-button size="small" dashed block @click="addFormFieldRule">
-                    + 添加字段规则
-                  </n-button>
-                </div>
-
-                <div class="panel-item-title">
-                  表单事件
-                </div>
-                <div class="form-rule-list">
-                  <div v-for="(eventItem, idx) in formEventRows" :key="eventItem.id || idx" class="form-event-row">
-                    <n-select
-                      :value="eventItem.hook || 'beforeLoad'"
-                      :options="formEventHookOptions"
-                      placeholder="触发时机"
-                      @update:value="updateFormEvent(idx, { hook: $event || 'beforeLoad' })"
-                    />
-                    <n-select
-                      :value="eventItem.action || 'customScript'"
-                      :options="formEventActionOptions"
-                      placeholder="动作"
-                      @update:value="updateFormEvent(idx, { action: $event || 'customScript' })"
-                    />
-                    <n-input
-                      :value="eventItem.handler || ''"
-                      clearable
-                      placeholder="脚本名 / 接口地址 / 动作编码"
-                      @update:value="updateFormEvent(idx, { handler: $event || '' })"
-                    />
-                    <n-input
-                      :value="eventItem.resultMapping || ''"
-                      clearable
-                      placeholder="结果回填，如 data.name->name,total->total"
-                      @update:value="updateFormEvent(idx, { resultMapping: $event || '' })"
-                    />
-                    <n-button size="tiny" quaternary type="error" @click="removeFormEvent(idx)">
-                      删除
-                    </n-button>
-                  </div>
-                  <n-button size="small" dashed block @click="addFormEvent">
-                    + 添加表单事件
-                  </n-button>
-                </div>
-              </section>
-            </n-collapse-item>
-
-            <n-collapse-item title="AiForm 布局" name="layout">
-              <section class="panel-item">
-                <div class="panel-item-title">
-                  AiForm 布局
-                </div>
-                <n-form-item label="编辑打开方式">
+            <n-collapse-item title="表单项配置" name="layout">
+              <section class="panel-item form-item-config">
+                <div class="compact-config-row">
+                  <label>编辑打开方式</label>
                   <n-select
                     :value="schema.layout?.formOpenMode || schema.layout?.modalType || 'modal'"
                     :options="formOpenModeOptions"
                     size="small"
                     @update:value="updateFormOpenModeLayout"
                   />
-                </n-form-item>
-                <n-form-item label="表单列数">
+                </div>
+                <div class="form-columns-control">
+                  <div class="form-columns-head">
+                    <label>表单列数</label>
+                    <n-input-number
+                      :value="normalizedFormGridColumns"
+                      :min="1"
+                      :max="maxFormGridColumns"
+                      :show-button="false"
+                      size="tiny"
+                      @update:value="updateFormLayout({ gridColumns: $event || 1, gridCols: $event || 1 })"
+                    />
+                  </div>
                   <div class="slider-control">
                     <n-slider
                       :value="normalizedFormGridColumns"
@@ -2244,57 +2378,204 @@
                       :marks="gridColumnMarks"
                       @update:value="updateFormLayout({ gridColumns: $event, gridCols: $event })"
                     />
-                    <n-input-number
-                      :value="normalizedFormGridColumns"
-                      :min="1"
-                      :max="maxFormGridColumns"
-                      :show-button="false"
-                      size="small"
-                      @update:value="updateFormLayout({ gridColumns: $event || 1, gridCols: $event || 1 })"
-                    />
                   </div>
-                </n-form-item>
-                <n-form-item label="表单大小">
-                  <n-select
-                    :value="schema.layout?.size || 'medium'"
-                    :options="componentSizeOptions.filter(item => item.value)"
-                    @update:value="updateFormLayout({ size: $event || 'medium' })"
-                  />
-                </n-form-item>
-                <n-form-item label="标签位置">
-                  <n-radio-group :value="schema.layout?.labelPlacement || 'left'" size="small" @update:value="updateFormLayout({ labelPlacement: $event })">
-                    <n-radio-button value="left">
+                </div>
+                <div class="compact-config-row">
+                  <label>表单大小</label>
+                  <div class="segmented-mini three form-config-segment">
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.size || 'medium') === 'small' }"
+                      @click="updateFormLayout({ size: 'small' })"
+                    >
+                      小
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.size || 'medium') === 'medium' }"
+                      @click="updateFormLayout({ size: 'medium' })"
+                    >
+                      中
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.size || 'medium') === 'large' }"
+                      @click="updateFormLayout({ size: 'large' })"
+                    >
+                      大
+                    </button>
+                  </div>
+                </div>
+                <div class="compact-config-row">
+                  <label>标签位置</label>
+                  <div class="segmented-mini form-config-segment">
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.labelPlacement || 'left') === 'left' }"
+                      @click="updateFormLayout({ labelPlacement: 'left' })"
+                    >
                       左侧
-                    </n-radio-button>
-                    <n-radio-button value="top">
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.labelPlacement || 'left') === 'top' }"
+                      @click="updateFormLayout({ labelPlacement: 'top' })"
+                    >
                       顶部
-                    </n-radio-button>
-                  </n-radio-group>
-                </n-form-item>
-                <n-form-item label="标签对齐">
-                  <n-radio-group :value="schema.layout?.labelAlign || 'right'" size="small" @update:value="updateFormLayout({ labelAlign: $event })">
-                    <n-radio-button value="left">
+                    </button>
+                  </div>
+                </div>
+                <div class="compact-config-row">
+                  <label>标签对齐</label>
+                  <div class="segmented-mini form-config-segment">
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.labelAlign || 'right') === 'left' }"
+                      @click="updateFormLayout({ labelAlign: 'left' })"
+                    >
                       左对齐
-                    </n-radio-button>
-                    <n-radio-button value="right">
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: (schema.layout?.labelAlign || 'right') === 'right' }"
+                      @click="updateFormLayout({ labelAlign: 'right' })"
+                    >
                       右对齐
-                    </n-radio-button>
-                  </n-radio-group>
-                </n-form-item>
-                <n-form-item label="标签宽度">
-                  <n-input
-                    :value="String(schema.layout?.labelWidth ?? 'auto')"
-                    placeholder="auto / 100"
-                    @update:value="updateFormLayout({ labelWidth: normalizeLabelWidthInput($event) })"
-                  />
-                </n-form-item>
+                    </button>
+                  </div>
+                </div>
+                <div class="compact-config-row">
+                  <label>标签宽度</label>
+                  <div class="label-width-control">
+                    <n-input
+                      :value="String(schema.layout?.labelWidth ?? 'auto')"
+                      placeholder="auto / 100"
+                      size="small"
+                      @update:value="updateFormLayout({ labelWidth: normalizeLabelWidthInput($event) })"
+                    />
+                    <em>px</em>
+                  </div>
+                </div>
               </section>
             </n-collapse-item>
 
-            <n-collapse-item title="间距与反馈" name="spacing">
+            <n-collapse-item title="表单权限控制" name="permissions">
+              <section class="panel-item form-permission-panel">
+                <div class="compact-field">
+                  <label>查看权限码</label>
+                  <n-input
+                    :value="formPermissionConfig.viewPermission || ''"
+                    clearable
+                    placeholder="例如: ai:business:customer:query"
+                    size="small"
+                    @update:value="updateFormPermission({ viewPermission: $event || '' })"
+                  />
+                </div>
+                <div class="compact-field">
+                  <label>编辑权限码</label>
+                  <n-input
+                    :value="formPermissionConfig.editPermission || ''"
+                    clearable
+                    placeholder="例如: ai:business:customer:edit"
+                    size="small"
+                    @update:value="updateFormPermission({ editPermission: $event || '' })"
+                  />
+                </div>
+                <div class="field-permission-rules">
+                  <div class="field-permission-head">
+                    <span>字段权限覆盖</span>
+                    <n-button size="tiny" text type="primary" @click="addFormFieldRule">
+                      添加
+                    </n-button>
+                  </div>
+                  <div v-for="(rule, idx) in formFieldRuleRows" :key="rule.id || idx" class="field-permission-card">
+                    <n-select
+                      :value="rule.field || ''"
+                      :options="formFieldOptions"
+                      filterable
+                      clearable
+                      placeholder="选择字段"
+                      size="small"
+                      @update:value="updateFormFieldRule(idx, { field: $event || '' })"
+                    />
+                    <div class="field-rule-switches">
+                      <label>
+                        <span>必填</span>
+                        <n-switch size="small" :value="!!rule.required" @update:value="updateFormFieldRule(idx, { required: $event })" />
+                      </label>
+                      <label>
+                        <span>只读</span>
+                        <n-switch size="small" :value="!!rule.readonly" @update:value="updateFormFieldRule(idx, { readonly: $event })" />
+                      </label>
+                      <label>
+                        <span>隐藏</span>
+                        <n-switch size="small" :value="!!rule.hidden" @update:value="updateFormFieldRule(idx, { hidden: $event })" />
+                      </label>
+                    </div>
+                    <div class="field-permission-footer">
+                      <n-input
+                        :value="rule.defaultValue ?? ''"
+                        clearable
+                        placeholder="默认值"
+                        size="small"
+                        @update:value="updateFormFieldRule(idx, { defaultValue: $event })"
+                      />
+                      <n-button size="tiny" quaternary type="error" @click="removeFormFieldRule(idx)">
+                        删除
+                      </n-button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </n-collapse-item>
+
+            <n-collapse-item title="表单事件与生命周期" name="events">
+              <section class="panel-item form-lifecycle-panel">
+                <div v-for="(eventItem, idx) in formEventRows" :key="eventItem.id || idx" class="lifecycle-event-card">
+                  <button type="button" class="event-delete-icon" title="删除事件" @click="removeFormEvent(idx)">
+                    ×
+                  </button>
+                  <div class="compact-field event-type-field">
+                    <label>事件类型 / 默认值</label>
+                    <n-select
+                      :value="eventItem.hook || 'beforeLoad'"
+                      :options="formEventHookOptions"
+                      placeholder="触发时机"
+                      size="small"
+                      @update:value="updateFormEvent(idx, { hook: $event || 'beforeLoad' })"
+                    />
+                  </div>
+                  <div class="compact-field">
+                    <label>脚本名 / 接口地址 / 动作编码</label>
+                    <n-input
+                      :value="eventItem.handler || ''"
+                      clearable
+                      placeholder="例如: /api/v1/customer/init"
+                      size="small"
+                      @update:value="updateFormEvent(idx, { handler: $event || '' })"
+                    />
+                  </div>
+                  <div class="compact-field">
+                    <label>结果回填</label>
+                    <n-input
+                      :value="eventItem.resultMapping || ''"
+                      clearable
+                      placeholder="如: data.name->name,total->total"
+                      size="small"
+                      @update:value="updateFormEvent(idx, { resultMapping: $event || '' })"
+                    />
+                  </div>
+                </div>
+                <n-button size="small" dashed block type="primary" @click="addFormEvent">
+                  + 添加表单事件
+                </n-button>
+              </section>
+            </n-collapse-item>
+
+            <n-collapse-item title="校验规则" name="spacing">
               <section class="panel-item">
                 <div class="panel-item-title">
-                  间距与反馈
+                  校验规则
                 </div>
                 <n-form-item label="行间距">
                   <n-input-number
@@ -2425,73 +2706,108 @@
         </n-form>
       </n-tab-pane>
 
-      <n-tab-pane name="style" tab="样式配置">
+      <n-tab-pane name="style">
+        <template #tab>
+          <span class="property-tab-label">
+            <n-icon><ColorPaletteOutline /></n-icon>
+            样式
+          </span>
+        </template>
         <n-form label-placement="top" :show-feedback="false" class="property-form">
           <n-collapse v-model:expanded-names="formStyleExpandedNames" class="form-property-collapse">
-            <n-collapse-item title="表单外观" name="appearance">
-              <section class="panel-item">
-                <div class="panel-item-title">
-                  表单外观
+            <n-collapse-item title="位置与尺寸" name="position">
+              <section class="panel-item position-control">
+                <div class="position-axis-grid">
+                  <label class="position-number-field">
+                    <span>左 X</span>
+                    <n-input-number
+                      :value="formTranslate.x"
+                      size="small"
+                      :show-button="false"
+                      @update:value="updateFormTranslate('x', $event)"
+                    />
+                    <em>px</em>
+                  </label>
+                  <label class="position-number-field">
+                    <span>上 Y</span>
+                    <n-input-number
+                      :value="formTranslate.y"
+                      size="small"
+                      :show-button="false"
+                      @update:value="updateFormTranslate('y', $event)"
+                    />
+                    <em>px</em>
+                  </label>
                 </div>
-                <n-form-item label="背景">
-                  <div class="color-control">
-                    <n-color-picker
-                      :value="formStyle.backgroundColor || ''"
-                      :show-alpha="true"
-                      :modes="['hex']"
-                      :swatches="colorSwatches"
-                      @update:value="updateFormStyle({ backgroundColor: $event || undefined })"
-                    />
-                    <n-button size="small" quaternary @click="updateFormStyle({ backgroundColor: undefined })">
-                      默认
-                    </n-button>
+                <div class="position-rule">
+                  <div class="position-rule-head">
+                    <span>页面宽度</span>
+                    <label class="position-inline-number">
+                      <n-input-number
+                        :value="resolvePxNumber(formStyle.maxWidth, 960)"
+                        size="tiny"
+                        :min="320"
+                        :show-button="false"
+                        @update:value="updateFormStyle({ maxWidth: valueToPx($event) })"
+                      />
+                      <em>px</em>
+                    </label>
                   </div>
-                </n-form-item>
-                <n-form-item label="圆角">
-                  <n-input-number
-                    :value="resolvePxNumber(formStyle.borderRadius, 0)"
-                    :min="0"
-                    :max="32"
-                    @update:value="updateFormStyle({ borderRadius: `${$event ?? 0}px` })"
-                  />
-                </n-form-item>
-                <n-form-item label="边框颜色">
-                  <div class="color-control">
-                    <n-color-picker
-                      :value="formStyle.borderColor || ''"
-                      :show-alpha="true"
-                      :modes="['hex']"
-                      :swatches="colorSwatches"
-                      @update:value="updateFormStyle({ borderColor: $event || undefined })"
-                    />
-                    <n-button size="small" quaternary @click="updateFormStyle({ borderColor: undefined })">
-                      默认
-                    </n-button>
+                  <div class="segmented-mini">
+                    <button
+                      type="button"
+                      :class="{ active: formStyle.maxWidth !== '100%' }"
+                      @click="updateFormStyle({ maxWidth: formStyle.maxWidth === '100%' ? '960px' : formStyle.maxWidth || '960px' })"
+                    >
+                      默认宽度
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: formStyle.maxWidth === '100%' }"
+                      @click="updateFormStyle({ maxWidth: '100%' })"
+                    >
+                      填充容器
+                    </button>
                   </div>
-                </n-form-item>
-                <n-form-item label="阴影">
-                  <n-select
-                    :value="formStyle.boxShadow || ''"
-                    :options="shadowOptions"
-                    @update:value="updateFormStyle({ boxShadow: $event || undefined })"
-                  />
-                </n-form-item>
-                <n-form-item label="透明度">
-                  <n-slider
-                    :value="formOpacityPercent"
-                    :min="20"
-                    :max="100"
-                    :step="5"
-                    @update:value="updateFormStyle({ opacity: Number($event || 100) / 100 })"
-                  />
-                </n-form-item>
+                </div>
+                <div class="position-rule">
+                  <div class="position-rule-head">
+                    <span>页面高度</span>
+                    <label class="position-inline-number">
+                      <n-input-number
+                        :value="resolvePxNumber(formStyle.minHeight, 320)"
+                        size="tiny"
+                        :min="0"
+                        :show-button="false"
+                        @update:value="updateFormStyle({ minHeight: valueToPx($event) })"
+                      />
+                      <em>px</em>
+                    </label>
+                  </div>
+                  <div class="segmented-mini">
+                    <button
+                      type="button"
+                      :class="{ active: formStyle.minHeight !== 'auto' }"
+                      @click="updateFormStyle({ minHeight: formStyle.minHeight === 'auto' ? '320px' : formStyle.minHeight || '320px' })"
+                    >
+                      默认高度
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: formStyle.minHeight === 'auto' }"
+                      @click="updateFormStyle({ minHeight: 'auto' })"
+                    >
+                      适应内容
+                    </button>
+                  </div>
+                </div>
               </section>
             </n-collapse-item>
 
-            <n-collapse-item title="内外边距" name="spacing">
+            <n-collapse-item title="布局与边距" name="spacing">
               <section class="panel-item">
                 <div class="panel-item-title">
-                  内外边距
+                  布局与边距
                 </div>
                 <div class="spacing-editor">
                   <div class="spacing-editor-title">
@@ -2532,6 +2848,149 @@
               </section>
             </n-collapse-item>
 
+            <n-collapse-item title="文字排版" name="typography">
+              <section class="panel-item">
+                <div class="panel-item-title">
+                  文字排版
+                </div>
+                <div class="crud-inline-grid">
+                  <n-form-item label="字号">
+                    <n-input-number
+                      :value="resolvePxNumber(formStyle.fontSize, 14)"
+                      :min="10"
+                      :max="48"
+                      :show-button="false"
+                      @update:value="updateFormStyle({ fontSize: valueToPx($event) })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="行高">
+                    <n-input
+                      :value="formStyle.lineHeight || ''"
+                      clearable
+                      placeholder="1.5 / 22px"
+                      @update:value="updateFormStyle({ lineHeight: $event || undefined })"
+                    />
+                  </n-form-item>
+                </div>
+                <n-form-item label="文字颜色">
+                  <div class="color-control">
+                    <n-color-picker
+                      :value="formStyle.color || ''"
+                      :show-alpha="true"
+                      :modes="['hex']"
+                      :swatches="colorSwatches"
+                      @update:value="updateFormStyle({ color: $event || undefined })"
+                    />
+                    <n-button size="small" quaternary @click="updateFormStyle({ color: undefined })">
+                      默认
+                    </n-button>
+                  </div>
+                </n-form-item>
+              </section>
+            </n-collapse-item>
+
+            <n-collapse-item title="外观与装饰" name="appearance">
+              <section class="panel-item appearance-control">
+                <div class="appearance-field">
+                  <label>背景色</label>
+                  <div class="appearance-input-shell">
+                    <label class="appearance-swatch" :style="{ background: formAppearanceBackgroundPreview }" title="选择背景色">
+                      <input
+                        type="color"
+                        :value="formAppearanceBackgroundPreview"
+                        @input="updateFormAppearanceBackground($event.target.value)"
+                      >
+                    </label>
+                    <input
+                      :value="formAppearanceBackgroundHex"
+                      class="appearance-hex-input"
+                      placeholder="FFFFFF"
+                      @input="updateFormAppearanceBackground($event.target.value)"
+                    >
+                    <span class="appearance-percent">{{ formOpacityPercent }}%</span>
+                  </div>
+                </div>
+                <div class="appearance-field">
+                  <label>边框 (Border)</label>
+                  <div class="appearance-input-shell">
+                    <select
+                      :value="formStyle.borderStyle || 'solid'"
+                      class="appearance-select"
+                      @change="updateFormStyle({ borderStyle: $event.target.value || undefined })"
+                    >
+                      <option value="solid">
+                        实线
+                      </option>
+                      <option value="dashed">
+                        虚线
+                      </option>
+                      <option value="none">
+                        无
+                      </option>
+                    </select>
+                    <label class="appearance-swatch" :style="{ background: formAppearanceBorderPreview }" title="选择边框颜色">
+                      <input
+                        type="color"
+                        :value="formAppearanceBorderPreview"
+                        @input="updateFormAppearanceBorder($event.target.value)"
+                      >
+                    </label>
+                    <input
+                      :value="formAppearanceBorderHex"
+                      class="appearance-hex-input"
+                      placeholder="E4E4E7"
+                      @input="updateFormAppearanceBorder($event.target.value)"
+                    >
+                  </div>
+                </div>
+                <div class="appearance-field">
+                  <label>圆角 (Border Radius)</label>
+                  <div class="appearance-radius-shell">
+                    <span>R</span>
+                    <input
+                      :value="resolvePxNumber(formStyle.borderRadius, 0)"
+                      type="number"
+                      min="0"
+                      max="32"
+                      @input="updateFormStyle({ borderRadius: `${$event.target.value || 0}px` })"
+                    >
+                  </div>
+                </div>
+                <div class="appearance-field">
+                  <label class="appearance-row-label">
+                    <span>阴影 (Shadow)</span>
+                    <select
+                      :value="formStyle.boxShadow || ''"
+                      class="appearance-plain-select"
+                      @change="updateFormStyle({ boxShadow: $event.target.value || undefined })"
+                    >
+                      <option
+                        v-for="option in shadowOptions"
+                        :key="option.value || 'none'"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+                <div class="appearance-field">
+                  <label>透明度 (Opacity)</label>
+                  <div class="appearance-radius-shell">
+                    <span>%</span>
+                    <input
+                      :value="formOpacityPercent"
+                      type="number"
+                      min="20"
+                      max="100"
+                      step="5"
+                      @input="updateFormAppearanceOpacity($event.target.value)"
+                    >
+                  </div>
+                </div>
+              </section>
+            </n-collapse-item>
+
             <n-collapse-item title="自定义样式" name="custom-style">
               <section class="panel-item">
                 <div class="panel-item-title">
@@ -2560,7 +3019,13 @@
         </n-form>
       </n-tab-pane>
 
-      <n-tab-pane name="source" tab="源码">
+      <n-tab-pane v-if="false" name="source">
+        <template #tab>
+          <span class="property-tab-label">
+            <n-icon><CodeSlashOutline /></n-icon>
+            源码
+          </span>
+        </template>
         <n-form label-placement="top" :show-feedback="false" class="property-form">
           <section class="panel-item source-panel">
             <div class="panel-title-row">
@@ -2595,11 +3060,64 @@
         </n-form>
       </n-tab-pane>
     </n-tabs>
+
+    <n-modal v-model:show="sourceModalVisible" preset="card" class="form-source-modal" :bordered="false" title="源码编辑">
+      <section class="panel-item source-panel">
+        <div class="panel-title-row">
+          <div>
+            <div class="panel-item-title">
+              {{ selectedComponent ? '当前组件 JSON' : '表单 Schema JSON' }}
+            </div>
+            <div class="source-path">
+              {{ selectedComponent ? selectedComponent.id : (schema.formKey || 'formDesignerSchema') }}
+            </div>
+          </div>
+          <div class="source-actions">
+            <n-button size="tiny" tertiary @click="selectedComponent ? resetSelectedCodeDraft() : resetSchemaCodeDraft()">
+              重置
+            </n-button>
+          </div>
+        </div>
+        <div class="source-editor-hint">
+          支持实时编辑，并保存应用到画布
+        </div>
+        <n-input
+          :value="selectedComponent ? selectedCodeText : schemaCodeText"
+          type="textarea"
+          class="source-editor"
+          :autosize="{ minRows: 18, maxRows: 32 }"
+          @update:value="value => selectedComponent ? updateSelectedCodeDraft(value) : updateSchemaCodeDraft(value)"
+        />
+        <div v-if="sourceError" class="source-error">
+          {{ sourceError }}
+        </div>
+      </section>
+      <template #footer>
+        <div class="source-modal-footer">
+          <n-button @click="cancelSourceModalEdit">
+            取消
+          </n-button>
+          <n-button type="primary" @click="applySourceModalCode">
+            保存并应用
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import {
+  CodeSlashOutline,
+  ColorPaletteOutline,
+  FlashOutline,
+  GridOutline,
+  LayersOutline,
+  ServerOutline,
+  SettingsOutline,
+  ToggleOutline,
+} from '@vicons/ionicons5'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
@@ -2623,10 +3141,13 @@ const crudFieldDrawerVisible = ref(false)
 const editingCrudFieldId = ref('')
 const propertyActiveTab = ref('basic')
 const formPropertyActiveTab = ref('basic')
-const basicExpandedNames = ['identity', 'gridQuick']
+const basicExpandedNames = ['identity', 'gridQuick', 'field', 'validation']
 const selectedBasicExpandedNames = ref([...basicExpandedNames])
-const formBasicExpandedNames = ref(['assets'])
-const formStyleExpandedNames = ref(['appearance'])
+const formBasicExpandedNames = ref(['assets', 'layout', 'permissions', 'events'])
+const formStyleExpandedNames = ref(['position', 'layout', 'typography', 'appearance'])
+const allSelectedBasicExpandNames = ['identity', 'gridQuick', 'field', 'button', 'options', 'crud-field', 'temporal', 'assist', 'validation']
+const allFormBasicExpandNames = ['assets', 'layout', 'permissions', 'events', 'spacing', 'actions']
+const allFormStyleExpandNames = ['position', 'spacing', 'typography', 'appearance', 'custom-style']
 const propertySearchKeyword = ref('')
 const propertySearchHit = ref('')
 const selectedCodeDraft = ref('')
@@ -2634,6 +3155,7 @@ const selectedCodeDraftTarget = ref('')
 const schemaCodeDraft = ref('')
 const schemaCodeDirty = ref(false)
 const sourceError = ref('')
+const sourceModalVisible = ref(false)
 const selectedComponent = computed(() => getDesignerComponent(props.schema, props.selectedId))
 const isField = computed(() => selectedComponent.value ? isFieldComponent(selectedComponent.value) : false)
 const isLayout = computed(() => selectedComponent.value ? isLayoutComponent(selectedComponent.value) : false)
@@ -2674,13 +3196,6 @@ const formEventHookOptions = [
   { label: '字段变化', value: 'fieldChange' },
   { label: '按钮动作', value: 'buttonAction' },
 ]
-const formEventActionOptions = [
-  { label: '自定义脚本', value: 'customScript' },
-  { label: '接口请求', value: 'request' },
-  { label: '字段赋值', value: 'setFieldValue' },
-  { label: '显示/隐藏字段', value: 'toggleField' },
-  { label: '刷新选项', value: 'refreshOptions' },
-]
 const formAssetOptions = computed(() => [
   { label: `${props.schema.formName || '主表单'}（当前表单）`, value: 'current' },
   ...formAssets.value.map(asset => ({
@@ -2699,6 +3214,24 @@ const schemaCodeRaw = computed(() => JSON.stringify(props.schema || {}, null, 2)
 const schemaCodeText = computed(() => schemaCodeDirty.value ? schemaCodeDraft.value : schemaCodeRaw.value)
 const selectedOpacityPercent = computed(() => Math.round(Number(selectedDesignerStyle.value.opacity ?? 1) * 100))
 const formOpacityPercent = computed(() => Math.round(Number(formStyle.value.opacity ?? 1) * 100))
+const selectedDesignerTranslate = computed(() => parseTranslateStyle(selectedDesignerStyle.value.customStyle?.transform))
+const formTranslate = computed(() => parseTranslateStyle(formStyle.value.transform))
+const selectedAppearanceBackgroundHex = computed(() => colorToHexInput(selectedDesignerStyle.value.backgroundColor, 'FFFFFF'))
+const selectedAppearanceBorderHex = computed(() => colorToHexInput(selectedDesignerStyle.value.borderColor, 'E4E4E7'))
+const selectedAppearanceBackgroundPreview = computed(() => hexInputToColor(selectedAppearanceBackgroundHex.value, '#ffffff'))
+const selectedAppearanceBorderPreview = computed(() => {
+  if (selectedDesignerStyle.value.borderStyle === 'none')
+    return '#e4e4e7'
+  return hexInputToColor(selectedAppearanceBorderHex.value, '#e4e4e7')
+})
+const formAppearanceBackgroundHex = computed(() => colorToHexInput(formStyle.value.backgroundColor, 'FFFFFF'))
+const formAppearanceBorderHex = computed(() => colorToHexInput(formStyle.value.borderColor, 'E4E4E7'))
+const formAppearanceBackgroundPreview = computed(() => hexInputToColor(formAppearanceBackgroundHex.value, '#ffffff'))
+const formAppearanceBorderPreview = computed(() => {
+  if (formStyle.value.borderStyle === 'none')
+    return '#e4e4e7'
+  return hexInputToColor(formAppearanceBorderHex.value, '#e4e4e7')
+})
 const maxFormGridColumns = 24
 const normalizedFormGridColumns = computed(() => normalizeGridCount(props.schema.layout?.gridColumns || 2))
 const isDatePickerField = computed(() => ['date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'quarter'].includes(selectedComponent.value?.componentKey))
@@ -2746,24 +3279,26 @@ const buttonTypeOptions = [
 ]
 const propertySearchIndex = [
   { keys: ['标识', '名称', '绑定字段', 'field', '字段编码'], label: '基础配置 / 标识', selectedTab: 'basic', selectedExpand: ['identity'], formTab: 'basic', formExpand: ['assets'] },
-  { keys: ['字段', '占位', '默认', '默认值', '字典', 'dict', '组件属性'], label: '基础配置 / 字段组件', selectedTab: 'basic', selectedExpand: ['field'] },
-  { keys: ['选项', 'option', '新增选项'], label: '基础配置 / 选项配置', selectedTab: 'basic', selectedExpand: ['options'] },
-  { keys: ['按钮', 'button', '块级', '禁用'], label: '基础配置 / 按钮组件', selectedTab: 'basic', selectedExpand: ['button'] },
+  { keys: ['字段', '字段组件', '占位', 'placeholder', '默认', '默认值', '字典', 'dict', '组件属性', '标签', '标题'], label: '基础配置 / 字段组件', selectedTab: 'basic', selectedExpand: ['field'] },
+  { keys: ['选项', 'option', '新增选项', '静态选项', '标签', '值'], label: '基础配置 / 选项配置', selectedTab: 'basic', selectedExpand: ['options'] },
+  { keys: ['按钮', 'button', '块级', '禁用', '类型', '文案', '动作'], label: '基础配置 / 按钮组件', selectedTab: 'basic', selectedExpand: ['button'] },
   { keys: ['说明', '说明文本', '角标', '辅助', 'badge'], label: '基础配置 / 辅助展示', selectedTab: 'basic', selectedExpand: ['assist'] },
-  { keys: ['日期', '时间', '格式', 'datetime', 'date'], label: '基础配置 / 日期时间组件', selectedTab: 'basic', selectedExpand: ['temporal'] },
-  { keys: ['crud字段', '查询字段', '表格列字段', '编辑字段'], label: '基础配置 / CRUD 字段配置', selectedTab: 'basic', selectedExpand: ['crud-field'] },
-  { keys: ['crud', '查询', '表格', '列表', '分页', '接口', 'api'], label: 'CRUD 配置', selectedTab: 'crud' },
-  { keys: ['布局', '跨度', '栅格', '列数', '宽度', 'labelWidth'], label: '布局', selectedTab: 'layout', formTab: 'basic', formExpand: ['layout'] },
-  { keys: ['校验', '唯一', '唯一校验', '不能重复', '必填', '只读', '隐藏', '状态', 'unique', 'required', 'readonly'], label: '状态 / 可见性与校验', selectedTab: 'state', formTab: 'basic', formExpand: ['spacing'] },
-  { keys: ['事件', '交互', '联动', '弹窗事件', 'openModal'], label: '交互 / 事件规则', selectedTab: 'interaction' },
+  { keys: ['日期', '时间', '格式', 'datetime', 'date', '范围', '年月日'], label: '基础配置 / 日期时间组件', selectedTab: 'basic', selectedExpand: ['temporal'] },
+  { keys: ['crud字段', '查询字段', '搜索字段', '表格列字段', '编辑字段', '列标题', '列宽', '对齐', '固定', '省略', '排序'], label: '基础配置 / CRUD 字段配置', selectedTab: 'basic', selectedExpand: ['crud-field'] },
+  { keys: ['crud', '查询', '搜索', '表格', '列表', '分页', '接口', 'api', '数据源', '基础路径', '行主键', '渲染模式', '表格尺寸', '编辑表单'], label: 'CRUD 配置', selectedTab: 'crud' },
+  { keys: ['布局', '跨度', '栅格', '列数', '宽度', 'labelWidth', '标签宽度', '标签位置', '标签对齐', '打开方式'], label: '布局', selectedTab: 'basic', selectedExpand: ['gridQuick'], formTab: 'basic', formExpand: ['layout'] },
+  { keys: ['校验', '唯一', '唯一校验', '不能重复', '必填', '只读', '隐藏', '状态', 'unique', 'required', 'readonly'], label: '可见性与校验', selectedTab: 'basic', selectedExpand: ['validation'], formTab: 'basic', formExpand: ['spacing'] },
+  { keys: ['事件', '交互', '联动', '弹窗事件', 'openModal', '生命周期', '加载', '提交', '字段变化'], label: '交互 / 事件规则', selectedTab: 'interaction', formTab: 'basic', formExpand: ['events'] },
   { keys: ['样式', '颜色', '背景', '边框', '圆角', '阴影', '间距', 'padding', 'margin'], label: '样式配置', selectedTab: 'style', formTab: 'style', formExpand: ['appearance', 'spacing'] },
   { keys: ['表单资产', '多表单', '表单名称', '表单编码'], label: '表单属性 / 表单资产', formTab: 'basic', formExpand: ['assets'] },
   { keys: ['弹窗', '抽屉', 'modal', 'drawer', '打开方式'], label: '表单属性 / AiForm 布局', formTab: 'basic', formExpand: ['layout'] },
-  { keys: ['反馈', '折叠', '最大显示字段', '行间距', '列间距'], label: '表单属性 / 间距与反馈', formTab: 'basic', formExpand: ['spacing'] },
-  { keys: ['操作', '提交', '重置', '取消'], label: '表单属性 / 操作按钮', formTab: 'basic', formExpand: ['actions'] },
-  { keys: ['外观', '透明度'], label: '表单属性 / 表单外观', formTab: 'style', formExpand: ['appearance'] },
-  { keys: ['自定义', 'class', 'css'], label: '样式配置 / 自定义样式', selectedTab: 'style', formTab: 'style', formExpand: ['custom-style'] },
-  { keys: ['源码', 'json', 'schema'], label: '源码', selectedTab: 'source', formTab: 'source' },
+  { keys: ['反馈', '折叠', '最大显示字段', '行间距', '列间距', '表单列数'], label: '表单属性 / 间距与反馈', formTab: 'basic', formExpand: ['spacing', 'layout'] },
+  { keys: ['操作', '提交', '重置', '取消', '提交文案'], label: '表单属性 / 操作按钮', formTab: 'basic', formExpand: ['actions'] },
+  { keys: ['位置', '尺寸', '最大宽度', '最小高度', '左', '上', 'x', 'y', '坐标', '填充', '适应内容'], label: '样式 / 位置与尺寸', selectedTab: 'style', formTab: 'style', selectedExpand: ['position'], formExpand: ['position'] },
+  { keys: ['排版', '文字', '字号', '行高', '文字颜色', 'font', 'lineHeight'], label: '样式 / 文字排版', selectedTab: 'style', formTab: 'style', selectedExpand: ['typography'], formExpand: ['typography'] },
+  { keys: ['外观', '透明度', '边框', '背景色', '圆角', '阴影', 'border', 'shadow', 'opacity'], label: '样式 / 外观与装饰', selectedTab: 'style', formTab: 'style', selectedExpand: ['appearance'], formExpand: ['appearance'] },
+  { keys: ['自定义', 'class', 'css', 'style', '自定义样式'], label: '样式配置 / 自定义样式', selectedTab: 'style', formTab: 'style', formExpand: ['custom-style'] },
+  { keys: ['源码', 'json', 'schema'], label: '源码入口在画布中间工具栏', selectedTab: 'basic', formTab: 'basic' },
 ]
 const cardSizeOptions = [
   { label: '小 small', value: 'small' },
@@ -2837,21 +3372,21 @@ const tableFixedOptions = [
   { label: '右固定', value: 'right' },
 ]
 const triggerOptions = [
-  { label: '点击（click）', value: 'click' },
-  { label: '值变化（change）', value: 'change' },
-  { label: '获得焦点（focus）', value: 'focus' },
-  { label: '失去焦点（blur）', value: 'blur' },
-  { label: '清空（clear）', value: 'clear' },
-  { label: '初始化（mounted）', value: 'mounted' },
+  { label: '点击组件时', value: 'click' },
+  { label: '字段值变化时', value: 'change' },
+  { label: '输入获得焦点时', value: 'focus' },
+  { label: '输入失去焦点时', value: 'blur' },
+  { label: '字段被清空时', value: 'clear' },
+  { label: '组件初始化后', value: 'mounted' },
 ]
 const actionOptions = [
-  { label: '设置目标值（setValue）', value: 'setValue' },
-  { label: '清空目标值（clearValue）', value: 'clearValue' },
-  { label: '设置下拉选项（setOptions）', value: 'setOptions' },
-  { label: '显示/隐藏（showHide）', value: 'showHide' },
-  { label: '启用/禁用（enableDisable）', value: 'enableDisable' },
-  { label: '打开弹窗（openModal）', value: 'openModal' },
-  { label: '调用接口（apiRequest）', value: 'apiRequest' },
+  { label: '给目标字段赋值', value: 'setValue' },
+  { label: '清空目标字段', value: 'clearValue' },
+  { label: '刷新下拉选项', value: 'setOptions' },
+  { label: '控制显示或隐藏', value: 'showHide' },
+  { label: '控制启用或禁用', value: 'enableDisable' },
+  { label: '打开弹窗表单', value: 'openModal' },
+  { label: '请求后端接口', value: 'apiRequest' },
 ]
 const formOpenModeOptions = [
   { label: '弹窗', value: 'modal' },
@@ -3089,7 +3624,8 @@ function handlePropertySearch(value = '') {
 
   const hit = propertySearchIndex.find(item => item.keys.some(key => String(key).toLowerCase().includes(keyword) || keyword.includes(String(key).toLowerCase())))
   if (!hit) {
-    propertySearchHit.value = '未找到匹配配置'
+    expandAllSearchableSections()
+    propertySearchHit.value = '已展开当前面板全部配置'
     return
   }
 
@@ -3122,6 +3658,17 @@ function handlePropertySearch(value = '') {
 
 function mergeExpandNames(current = [], names = []) {
   return Array.from(new Set([...(Array.isArray(current) ? current : []), ...names]))
+}
+
+function expandAllSearchableSections() {
+  if (selectedComponent.value) {
+    propertyActiveTab.value = 'basic'
+    selectedBasicExpandedNames.value = mergeExpandNames(selectedBasicExpandedNames.value, allSelectedBasicExpandNames)
+    return
+  }
+  formPropertyActiveTab.value = 'basic'
+  formBasicExpandedNames.value = mergeExpandNames(formBasicExpandedNames.value, allFormBasicExpandNames)
+  formStyleExpandedNames.value = mergeExpandNames(formStyleExpandedNames.value, allFormStyleExpandNames)
 }
 
 function showFormSettings() {
@@ -3526,6 +4073,11 @@ function addInteractionPreset(key = '') {
       action: 'showHide',
       value: 'true',
     },
+    enableDisable: {
+      trigger: 'change',
+      action: 'enableDisable',
+      value: 'true',
+    },
     apiRequest: {
       trigger: defaultTrigger.value,
       action: 'apiRequest',
@@ -3537,6 +4089,11 @@ function addInteractionPreset(key = '') {
     ...(map[key] || {}),
   })
   updateComponent({ props: { __events: nextRules } })
+}
+
+function configureLinkageRule(action = 'showHide') {
+  addInteractionPreset(action)
+  propertyActiveTab.value = 'interaction'
 }
 
 function updateInteractionRule(index, patch = {}) {
@@ -3651,7 +4208,7 @@ function resetSelectedCodeDraft() {
 
 function applySelectedCode() {
   if (!props.selectedId)
-    return
+    return false
   try {
     const parsed = JSON.parse(selectedCodeText.value || '{}')
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
@@ -3661,9 +4218,11 @@ function applySelectedCode() {
     sourceError.value = ''
     selectedCodeDraftTarget.value = ''
     selectedCodeDraft.value = ''
+    return true
   }
   catch (error) {
     sourceError.value = error?.message || 'JSON 解析失败'
+    return false
   }
 }
 
@@ -3686,10 +4245,26 @@ function applySchemaCode() {
     sourceError.value = ''
     schemaCodeDirty.value = false
     schemaCodeDraft.value = ''
+    return true
   }
   catch (error) {
     sourceError.value = error?.message || 'JSON 解析失败'
+    return false
   }
+}
+
+function applySourceModalCode() {
+  const applied = selectedComponent.value ? applySelectedCode() : applySchemaCode()
+  if (applied)
+    sourceModalVisible.value = false
+}
+
+function cancelSourceModalEdit() {
+  if (selectedComponent.value)
+    resetSelectedCodeDraft()
+  else
+    resetSchemaCodeDraft()
+  sourceModalVisible.value = false
 }
 
 function replaceComponentInSchema(schema = {}, componentId = '', replacement = {}) {
@@ -3702,6 +4277,47 @@ function replaceComponentInSchema(schema = {}, componentId = '', replacement = {
     children = children[path[index]].children || []
   children[path[path.length - 1]] = replacement
   return nextSchema
+}
+
+function colorToHexInput(value, fallback = '') {
+  const text = String(value || '').trim()
+  const match = text.match(/^#?([0-9a-f]{3}(?:[0-9a-f]{3})?)/i)
+  if (!match)
+    return fallback
+  const hex = match[1]
+  if (hex.length === 3)
+    return hex.split('').map(item => `${item}${item}`).join('').toUpperCase()
+  return hex.toUpperCase()
+}
+
+function hexInputToColor(value, fallback = '#ffffff') {
+  const text = String(value || '').trim().replace(/^#/, '')
+  if (!/^[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(text))
+    return fallback
+  return `#${text}`
+}
+
+function normalizeAppearanceColor(value, fallback = '#ffffff') {
+  return hexInputToColor(value, fallback)
+}
+
+function normalizeOpacityPercent(value, fallback = 100) {
+  const number = Number(value)
+  if (!Number.isFinite(number))
+    return fallback
+  return Math.min(100, Math.max(20, number))
+}
+
+function updateSelectedAppearanceBackground(value) {
+  updateDesignerStyle({ backgroundColor: normalizeAppearanceColor(value, '#ffffff') })
+}
+
+function updateSelectedAppearanceBorder(value) {
+  updateDesignerBorderColor(normalizeAppearanceColor(value, '#e4e4e7'))
+}
+
+function updateSelectedAppearanceOpacity(value) {
+  updateDesignerStyle({ opacity: normalizeOpacityPercent(value, selectedOpacityPercent.value) / 100 })
 }
 
 function updateDesignerStyle(stylePatch = {}) {
@@ -3777,6 +4393,25 @@ function updateDesignerSpacing(key, value) {
   })
 }
 
+function updateDesignerCustomStyle(patch = {}) {
+  const nextCustomStyle = Object.entries(patch).reduce((style, [key, value]) => applyStyleValue(style, key, value), {
+    ...(selectedDesignerStyle.value.customStyle || {}),
+  })
+  updateDesignerStyle({
+    customStyle: nextCustomStyle,
+    customStyleText: stringifyStyle(nextCustomStyle),
+  })
+}
+
+function updateDesignerTranslate(axis, value) {
+  const current = selectedDesignerTranslate.value
+  const next = {
+    x: axis === 'x' ? normalizePositionNumber(value) : current.x,
+    y: axis === 'y' ? normalizePositionNumber(value) : current.y,
+  }
+  updateDesignerCustomStyle({ transform: formatTranslateStyle(next) })
+}
+
 function updateFormStyle(stylePatch = {}) {
   updateFormLayout({
     formStyle: {
@@ -3784,6 +4419,23 @@ function updateFormStyle(stylePatch = {}) {
       ...stylePatch,
     },
   })
+}
+
+function updateFormAppearanceBackground(value) {
+  updateFormStyle({ backgroundColor: normalizeAppearanceColor(value, '#ffffff') })
+}
+
+function updateFormAppearanceBorder(value) {
+  updateFormStyle({
+    borderColor: normalizeAppearanceColor(value, '#e4e4e7'),
+    borderStyle: formStyle.value.borderStyle === 'none'
+      ? 'solid'
+      : formStyle.value.borderStyle || 'solid',
+  })
+}
+
+function updateFormAppearanceOpacity(value) {
+  updateFormStyle({ opacity: normalizeOpacityPercent(value, formOpacityPercent.value) / 100 })
 }
 
 function updateFormStyleText(value) {
@@ -3799,6 +4451,15 @@ function updateFormSpacing(key, value) {
     formStyle: nextStyle,
     formStyleText: stringifyStyle(nextStyle),
   })
+}
+
+function updateFormTranslate(axis, value) {
+  const current = formTranslate.value
+  const next = {
+    x: axis === 'x' ? normalizePositionNumber(value) : current.x,
+    y: axis === 'y' ? normalizePositionNumber(value) : current.y,
+  }
+  updateFormStyle({ transform: formatTranslateStyle(next) })
 }
 
 function updateCrudApiBase(value) {
@@ -3820,6 +4481,21 @@ function updateCrudApiConfig(key, value) {
       },
     },
   })
+}
+
+function resolveCrudApiMethodLabel(item = {}) {
+  const apiValue = crudApiConfig.value?.[item.key] || item.placeholder || ''
+  const method = String(apiValue).split('@')[0]?.trim()?.toUpperCase()
+  if (method === 'DELETE')
+    return 'DEL'
+  return method || 'API'
+}
+
+function resolveCrudApiMethodClass(item = {}) {
+  const label = resolveCrudApiMethodLabel(item).toLowerCase()
+  if (label === 'del')
+    return 'delete'
+  return ['get', 'post', 'put'].includes(label) ? label : 'post'
 }
 
 function updateCrudOption(key, value) {
@@ -4506,6 +5182,36 @@ function resolvePxNumber(value, fallback = 0) {
   return Number(match[0])
 }
 
+function normalizePositionNumber(value) {
+  const next = Number(value)
+  return Number.isFinite(next) ? next : 0
+}
+
+function parseTranslateStyle(value = '') {
+  const text = String(value || '')
+  const translateMatch = text.match(/translate(?:3d)?\(\s*(-?\d+(?:\.\d+)?)px(?:\s*,\s*(-?\d+(?:\.\d+)?)px)?/)
+  if (translateMatch) {
+    return {
+      x: Number(translateMatch[1]) || 0,
+      y: Number(translateMatch[2]) || 0,
+    }
+  }
+  const xMatch = text.match(/translateX\(\s*(-?\d+(?:\.\d+)?)px\)/)
+  const yMatch = text.match(/translateY\(\s*(-?\d+(?:\.\d+)?)px\)/)
+  return {
+    x: xMatch ? Number(xMatch[1]) || 0 : 0,
+    y: yMatch ? Number(yMatch[1]) || 0 : 0,
+  }
+}
+
+function formatTranslateStyle(position = {}) {
+  const x = normalizePositionNumber(position.x)
+  const y = normalizePositionNumber(position.y)
+  if (!x && !y)
+    return undefined
+  return `translate(${x}px, ${y}px)`
+}
+
 function parseStyleText(value = '') {
   return String(value || '')
     .split(';')
@@ -4552,6 +5258,19 @@ function toCamelCase(value = '') {
 function toKebabCase(value = '') {
   return String(value).replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)
 }
+
+function handleOpenSourcePanel() {
+  sourceError.value = ''
+  sourceModalVisible.value = true
+}
+
+onMounted(() => {
+  window.addEventListener('forge-form-designer:open-source-panel', handleOpenSourcePanel)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('forge-form-designer:open-source-panel', handleOpenSourcePanel)
+})
 </script>
 
 <style scoped>
@@ -4560,7 +5279,7 @@ function toKebabCase(value = '') {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: #f7f8fa;
+  background: #fafafa;
 }
 
 .edit-panel-header {
@@ -4569,9 +5288,9 @@ function toKebabCase(value = '') {
   justify-content: space-between;
   gap: 12px;
   height: 48px;
-  padding: 0 12px 0 16px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fafafa;
 }
 
 .edit-panel-title {
@@ -4587,16 +5306,16 @@ function toKebabCase(value = '') {
 }
 
 .edit-panel-title strong {
-  color: #1f2329;
-  font-size: 14px;
+  color: #18181b;
+  font-size: 13px;
   font-weight: 600;
   line-height: 20px;
 }
 
 .edit-panel-title span {
-  color: #646a73;
-  font-size: 12px;
-  line-height: 18px;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .edit-panel-tools {
@@ -4627,16 +5346,16 @@ function toKebabCase(value = '') {
 .property-search-box {
   display: grid;
   gap: 6px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fafafa;
 }
 
 .property-search-box :deep(.n-input) {
-  --n-border: 1px solid #dbe3ee !important;
-  --n-border-hover: 1px solid #7aa7ff !important;
-  --n-border-focus: 1px solid #3478f6 !important;
-  --n-box-shadow-focus: 0 0 0 2px rgba(52, 120, 246, 0.12) !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-focus: 1px solid #4266f7 !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(66, 102, 247, 0.12) !important;
   border-radius: 7px;
 }
 
@@ -4666,69 +5385,132 @@ function toKebabCase(value = '') {
 }
 
 .property-tabs :deep(.n-tabs-nav) {
-  background: #fff;
-  padding: 0 14px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fafafa;
 }
 
 .property-tabs :deep(.n-tabs-tab) {
-  padding: 13px 0 11px;
-  color: #646a73;
-  font-size: 13px;
+  flex: 0 0 auto;
+  justify-content: center;
+  min-width: 68px;
+  min-height: 28px;
+  margin-bottom: 0;
+  padding: 0 7px;
+  border-radius: 7px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.property-tabs :deep(.n-tabs-nav-scroll-content) {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #e4e4e7;
+  border-radius: 9px;
+  background: #f4f4f5;
+}
+
+.property-tabs :deep(.n-tabs-scroll-padding) {
+  display: none;
+}
+
+.property-tab-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.property-tab-label .n-icon {
+  color: #71717a;
+  font-size: 14px;
+}
+
+.property-tabs :deep(.n-tabs-tab--active .property-tab-label .n-icon) {
+  color: #27272a;
+}
+
+.property-tabs :deep(.n-tabs-tab:hover) {
+  background: rgba(228, 228, 231, 0.72);
+  color: #27272a;
 }
 
 .property-tabs :deep(.n-tabs-tab--active) {
-  color: #1f2329;
+  background: #fff;
+  color: #27272a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
   font-weight: 600;
+}
+
+.property-tabs :deep(.n-tabs-bar) {
+  display: none;
 }
 
 .property-tabs :deep(.n-tabs-pane-wrapper) {
   min-height: 0;
   overflow: auto;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef4fb 100%);
+  background: #fafafa;
 }
 
 .property-form {
   min-height: 0;
   overflow: auto;
-  padding: 12px 14px 22px;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef4fb 100%);
+  padding: 8px 8px 42px;
+  background: #fafafa;
+}
+
+.property-form :deep(.n-collapse),
+.property-form > .panel-item {
+  display: grid;
+  gap: 6px;
 }
 
 .panel-item {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .form-property-collapse,
 .config-collapse {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .form-property-collapse :deep(.n-collapse-item),
 .config-collapse :deep(.n-collapse-item) {
   overflow: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(228, 228, 231, 0.72);
   border-radius: 8px;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.form-property-collapse :deep(.n-collapse-item__header:hover),
+.config-collapse :deep(.n-collapse-item__header:hover) {
+  background: #fafafa;
 }
 
 .form-property-collapse :deep(.n-collapse-item__header),
 .config-collapse :deep(.n-collapse-item__header) {
-  min-height: 38px;
+  min-height: 35px;
   padding: 0 12px;
   border-bottom: 0;
 }
 
 .form-property-collapse :deep(.n-collapse-item__header-main),
 .config-collapse :deep(.n-collapse-item__header-main) {
-  color: #1f2329;
-  font-size: 13px;
+  color: #3f3f46;
+  font-size: 12px;
   font-weight: 650;
 }
 
 .form-property-collapse :deep(.n-collapse-item__content-inner),
 .config-collapse :deep(.n-collapse-item__content-inner) {
-  padding: 0 12px 12px;
+  padding: 2px 10px 10px;
 }
 
 .form-property-collapse :deep(.n-collapse-item__content-inner > .panel-item),
@@ -4745,40 +5527,38 @@ function toKebabCase(value = '') {
 }
 
 .property-form > .panel-item {
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(228, 228, 231, 0.72);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 12px;
+  background: #fff;
+  padding: 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .panel-item-strong {
-  border: 1px solid #bfdbfe;
-  border-radius: 6px;
-  background: #eff6ff;
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: 8px;
+  background: #fff;
   padding: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .more-config-button {
-  --n-color: #f8fbff !important;
-  --n-color-hover: #eef6ff !important;
-  --n-color-pressed: #deedff !important;
-  --n-color-focus: #f8fbff !important;
-  --n-border: 1px dashed #6ea8ff !important;
-  --n-border-hover: 1px dashed #3478f6 !important;
-  --n-border-pressed: 1px dashed #1d4ed8 !important;
-  --n-border-focus: 1px dashed #3478f6 !important;
-  --n-text-color: #0f4fb8 !important;
-  --n-text-color-hover: #073f96 !important;
-  --n-text-color-pressed: #063277 !important;
-  --n-text-color-focus: #0f4fb8 !important;
-  height: 34px;
+  --n-color: #fff !important;
+  --n-color-hover: #f4f4f5 !important;
+  --n-color-pressed: #e4e4e7 !important;
+  --n-color-focus: #fff !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-pressed: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #c7d2fe !important;
+  --n-text-color: #4f46e5 !important;
+  --n-text-color-hover: #4338ca !important;
+  --n-text-color-pressed: #3730a3 !important;
+  --n-text-color-focus: #4f46e5 !important;
+  height: 28px;
   justify-content: center;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.75),
-    0 4px 12px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   font-weight: 600;
-  border: 2px dashed #3478f6;
 }
 
 .more-config-button :deep(.n-button__content) {
@@ -4799,6 +5579,109 @@ function toKebabCase(value = '') {
 
 .more-config-button:hover .button-icon {
   background: #1d4ed8;
+}
+
+.form-api-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.form-api-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.form-api-label {
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.form-api-base-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.form-api-base-row :deep(.n-input:first-child) {
+  flex: 2 1 0;
+}
+
+.form-api-base-row :deep(.n-input:last-child) {
+  flex: 1 1 72px;
+}
+
+.form-api-endpoint-list {
+  display: grid;
+  gap: 6px;
+}
+
+.form-api-endpoint-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fff;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.form-api-endpoint-row:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.form-api-method-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  flex: 0 0 48px;
+  border-right: 1px solid currentColor;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.form-api-method-badge.get {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.form-api-method-badge.post {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.form-api-method-badge.put {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.form-api-method-badge.delete {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.form-api-endpoint-row :deep(.n-input) {
+  --n-border: 0 !important;
+  --n-border-hover: 0 !important;
+  --n-border-focus: 0 !important;
+  --n-box-shadow-focus: none !important;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  border-radius: 0;
+}
+
+.form-api-endpoint-row :deep(.n-input__input-el) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px !important;
 }
 
 .option-add-button {
@@ -4827,6 +5710,211 @@ function toKebabCase(value = '') {
   font-size: 13px;
   font-weight: 800;
   line-height: 1;
+}
+
+.validation-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.switch-line.compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e4e4e7;
+  border-radius: 7px;
+  background: #fafafa;
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.linkage-action-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.appearance-control {
+  display: grid;
+  gap: 14px;
+}
+
+.appearance-field {
+  display: grid;
+  gap: 6px;
+}
+
+.appearance-field > label,
+.appearance-row-label {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.appearance-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.appearance-input-shell,
+.appearance-radius-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #f4f4f5;
+  padding: 4px;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.appearance-input-shell:hover,
+.appearance-radius-shell:hover {
+  background: rgba(228, 228, 231, 0.5);
+}
+
+.appearance-input-shell:focus-within,
+.appearance-radius-shell:focus-within {
+  border-color: #6366f1;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.appearance-swatch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  cursor: pointer;
+  border: 1px solid rgba(212, 212, 216, 0.72);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.appearance-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: 0;
+  opacity: 0;
+}
+
+.appearance-hex-input,
+.appearance-radius-shell input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #3f3f46;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  text-transform: uppercase;
+}
+
+.appearance-percent {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  color: #a1a1aa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.appearance-select {
+  flex: 0 0 auto;
+  max-width: 70px;
+  border: 0;
+  border-right: 1px solid rgba(212, 212, 216, 0.72);
+  outline: 0;
+  background: transparent;
+  color: #3f3f46;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.appearance-plain-select {
+  max-width: 96px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.appearance-plain-select:hover,
+.appearance-select:hover {
+  color: #4f46e5;
+}
+
+.appearance-radius-shell {
+  position: relative;
+}
+
+.appearance-radius-shell span {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.appearance-radius-shell:focus-within span {
+  color: #6366f1;
+}
+
+.linkage-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
+  padding: 7px 9px;
+  color: #3f3f46;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.linkage-action-row:hover {
+  border-color: #c7d2fe;
+  background: #fff;
+  color: #4f46e5;
+}
+
+.linkage-action-row strong {
+  color: #4f46e5;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.linkage-action-row:hover strong {
+  opacity: 1;
 }
 
 .panel-item-title {
@@ -4870,11 +5958,11 @@ function toKebabCase(value = '') {
 
 .panel-item :deep(.n-form-item) {
   margin-bottom: 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 10px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
 }
 
 .panel-item :deep(.n-form-item:last-child) {
@@ -4886,27 +5974,19 @@ function toKebabCase(value = '') {
   display: flex !important;
   align-items: center;
   align-self: flex-start;
-  min-height: 24px;
-  height: 24px;
+  min-height: 18px;
+  height: auto;
   padding-top: 0;
-  padding-bottom: 0;
-  padding-left: 10px;
-  color: #334155;
-  font-size: 12px;
+  padding-bottom: 5px;
+  padding-left: 0;
+  color: #52525b;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 16px;
 }
 
 .panel-item :deep(.n-form-item-label::before) {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 4px;
-  height: 12px;
-  border-radius: 999px;
-  background: #2563eb;
-  content: '';
-  transform: translateY(-50%);
+  display: none;
 }
 
 .panel-item :deep(.n-form-item-label--right-mark) {
@@ -4919,12 +5999,38 @@ function toKebabCase(value = '') {
   align-items: center;
   min-height: 20px;
   line-height: 20px;
+  font-size: 11px;
 }
 
 .panel-item :deep(.n-radio-group),
 .panel-item :deep(.n-input-number),
 .panel-item :deep(.n-select) {
   width: 100%;
+}
+
+.property-form :deep(.n-input),
+.property-form :deep(.n-input-number),
+.property-form :deep(.n-base-selection) {
+  --n-color: #f4f4f5 !important;
+  --n-color-focus: #fff !important;
+  --n-color-hover: #f4f4f5 !important;
+  --n-border: 1px solid transparent !important;
+  --n-border-hover: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #6366f1 !important;
+  --n-box-shadow-focus: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+  border-radius: 6px;
+}
+
+.property-form :deep(.n-input__input-el),
+.property-form :deep(.n-input__textarea-el),
+.property-form :deep(.n-base-selection-label) {
+  color: #27272a !important;
+  font-size: 12px !important;
+}
+
+.property-form :deep(.n-button) {
+  --n-border-radius: 6px !important;
+  font-size: 12px;
 }
 
 .drawer-property-form {
@@ -4948,9 +6054,92 @@ function toKebabCase(value = '') {
   padding: 0 2px 8px;
 }
 
+.form-item-config,
+.form-permission-panel,
+.form-lifecycle-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.compact-config-row {
+  display: grid;
+  grid-template-columns: minmax(86px, 1fr) 124px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.compact-config-row > label,
+.form-columns-head > label,
+.compact-field > label {
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.form-config-segment {
+  width: 124px;
+}
+
+.form-config-segment.three,
+.form-config-segment:has(button:nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-columns-control {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.form-columns-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.form-columns-head :deep(.n-input-number) {
+  width: 52px;
+}
+
+.form-columns-control .slider-control {
+  display: block;
+  padding: 0 4px 2px;
+}
+
+.label-width-control {
+  position: relative;
+  min-width: 0;
+}
+
+.label-width-control :deep(.n-input__input-el) {
+  padding-right: 24px !important;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.label-width-control em {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #a1a1aa;
+  font-size: 10px;
+  font-style: normal;
+  pointer-events: none;
+}
+
+.compact-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .grid-quick-config {
-  border: 1px solid #bfdbfe;
-  background: linear-gradient(180deg, #eff6ff 0%, #fff 100%);
+  border: 0;
+  background: transparent;
 }
 
 .spacing-editor {
@@ -5012,13 +6201,131 @@ function toKebabCase(value = '') {
   font-weight: 600;
 }
 
+.position-control {
+  display: grid;
+  gap: 14px;
+}
+
+.position-axis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.position-number-field,
+.position-inline-number {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.position-number-field > span,
+.position-rule-head > span {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.position-number-field em,
+.position-inline-number em {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-style: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  pointer-events: none;
+}
+
+.position-rule {
+  display: grid;
+  gap: 8px;
+}
+
+.position-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.position-inline-number {
+  width: 76px;
+}
+
+.position-inline-number :deep(.n-input__input-el) {
+  padding-right: 18px !important;
+  text-align: right;
+}
+
+.segmented-mini {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: 6px;
+  background: rgba(244, 244, 245, 0.8);
+}
+
+.segmented-mini.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.segmented-mini button {
+  min-width: 0;
+  height: 25px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.segmented-mini button:hover {
+  color: #3f3f46;
+  background: rgba(228, 228, 231, 0.5);
+}
+
+.segmented-mini button.active {
+  border-color: rgba(212, 212, 216, 0.72);
+  background: #fff;
+  color: #4f46e5;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
 .form-asset-panel {
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  background: #fff;
 }
 
 .form-asset-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+
+.form-asset-list-title {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.form-default-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 8px;
 }
 
 .form-asset-actions {
@@ -5031,21 +6338,26 @@ function toKebabCase(value = '') {
 .form-asset-icon-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
-  border: 1px solid #bfdbfe;
-  border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #a1a1aa;
+  font-size: 13px;
   font-weight: 600;
-  padding: 0 8px;
+  padding: 0;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .form-asset-icon-button:hover {
-  border-color: #93c5fd;
-  background: #dbeafe;
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .form-asset-tabs {
@@ -5188,26 +6500,9 @@ button.form-asset-card,
 .form-asset-main {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-}
-
-.form-asset-switch {
-  height: 28px;
-  cursor: pointer;
-  border: 1px solid #bfdbfe;
-  border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 8px;
-}
-
-.form-asset-switch:hover {
-  border-color: #93c5fd;
-  background: #dbeafe;
+  gap: 6px;
 }
 
 .form-asset-card strong,
@@ -5255,10 +6550,11 @@ button.form-asset-card,
 
 .layout-child-card,
 .interaction-rule-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: 1px solid rgba(228, 228, 231, 0.82);
+  border-radius: 8px;
   background: #fff;
   padding: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .layout-child-card {
@@ -5295,12 +6591,12 @@ button.form-asset-card,
 .interaction-preset-card {
   display: grid;
   gap: 4px;
-  min-height: 76px;
+  min-height: 64px;
   cursor: pointer;
-  border: 1px solid #dbeafe;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #eff6ff 0%, #fff 72%);
-  color: #1f2329;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #27272a;
   padding: 10px;
   text-align: left;
   transition:
@@ -5310,19 +6606,19 @@ button.form-asset-card,
 }
 
 .interaction-preset-card:hover {
-  border-color: #60a5fa;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+  border-color: #c7d2fe;
+  box-shadow: 0 6px 14px rgba(99, 102, 241, 0.1);
   transform: translateY(-1px);
 }
 
 .interaction-preset-card strong {
-  color: #1d4ed8;
+  color: #27272a;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .interaction-preset-card span {
-  color: #64748b;
+  color: #71717a;
   font-size: 11px;
   line-height: 16px;
 }
@@ -5367,15 +6663,15 @@ button.form-asset-card,
 
 .interaction-rule-head strong {
   display: block;
-  color: #1f2329;
+  color: #27272a;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .interaction-rule-head span {
   display: block;
   margin-top: 2px;
-  color: #64748b;
+  color: #71717a;
   font-size: 11px;
   line-height: 16px;
 }
@@ -5433,18 +6729,31 @@ button.form-asset-card,
 }
 
 .empty-config-box {
-  border: 1px dashed #dbe3ee;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #646a73;
+  border: 1px dashed #d4d4d8;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #71717a;
   font-size: 12px;
   line-height: 18px;
-  padding: 12px;
+  padding: 18px 12px;
   text-align: center;
 }
 
 .source-editor {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.source-editor :deep(.n-input) {
+  --n-border: 1px solid #1f2937 !important;
+  --n-border-hover: 1px solid #334155 !important;
+  --n-border-focus: 1px solid #3b82f6 !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(59, 130, 246, 0.18) !important;
+  --n-color: #050816 !important;
+  --n-color-focus: #050816 !important;
+  --n-color-hover: #050816 !important;
+  --n-text-color: #f8fafc !important;
+  --n-placeholder-color: #64748b !important;
+  background: #050816;
 }
 
 .source-panel {
@@ -5463,9 +6772,27 @@ button.form-asset-card,
 }
 
 .source-editor :deep(textarea) {
+  background: #050816;
+  caret-color: #f8fafc;
+  color: #f8fafc;
   font-family: inherit;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.source-editor :deep(textarea::selection) {
+  background: rgba(37, 99, 235, 0.48);
+}
+
+.source-editor-hint {
+  margin: 10px 0;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 7px 10px;
 }
 
 .source-error {
@@ -5479,16 +6806,55 @@ button.form-asset-card,
   padding: 8px 10px;
 }
 
+.form-source-modal {
+  width: min(860px, calc(100vw - 48px));
+}
+
+.form-source-modal :deep(.n-card) {
+  background: #09090b;
+  color: #f8fafc;
+}
+
+.form-source-modal :deep(.n-card-header),
+.form-source-modal :deep(.n-card__footer) {
+  border-color: #1f2937;
+}
+
+.form-source-modal :deep(.n-card-header__main) {
+  color: #f8fafc;
+}
+
+.form-source-modal .source-panel {
+  margin: 0;
+  border-color: #1f2937;
+  background: #09090b;
+}
+
+.form-source-modal .panel-item-title {
+  color: #f8fafc;
+}
+
+.form-source-modal .source-path {
+  color: #94a3b8;
+}
+
+.source-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .crud-field-config-list {
   display: grid;
   gap: 10px;
 }
 
 .crud-field-config-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: 1px solid rgba(228, 228, 231, 0.82);
+  border-radius: 8px;
   background: #fff;
   padding: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .crud-field-card-head {
@@ -5519,12 +6885,12 @@ button.form-asset-card,
 
 .crud-field-name strong {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   line-height: 18px;
 }
 
 .crud-field-name small {
-  color: #8f959e;
+  color: #71717a;
   font-size: 11px;
   line-height: 16px;
 }
@@ -5545,7 +6911,7 @@ button.form-asset-card,
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #475569;
+  color: #52525b;
   font-size: 12px;
   line-height: 22px;
 }
@@ -5564,18 +6930,19 @@ button.form-asset-card,
   align-items: center;
   justify-content: space-between;
   margin-top: 10px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #f4f4f5;
   padding-top: 8px;
 }
 
 .crud-field-empty {
-  border: 1px dashed #dbe3ee;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #646a73;
+  border: 1px dashed #d4d4d8;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #71717a;
   font-size: 12px;
   line-height: 18px;
-  padding: 12px;
+  padding: 18px 12px;
+  text-align: center;
 }
 
 .option-list {
@@ -5634,11 +7001,72 @@ button.form-asset-card,
   margin-bottom: 14px;
 }
 
+.field-permission-rules {
+  display: grid;
+  gap: 8px;
+}
+
+.field-permission-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.field-permission-card,
+.lifecycle-event-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(228, 228, 231, 0.8);
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+}
+
+.field-permission-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .form-rule-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 42px 42px 42px minmax(90px, 1fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.field-rule-switches {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+.field-rule-switches label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.field-rule-switches span {
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .form-event-row {
@@ -5646,6 +7074,47 @@ button.form-asset-card,
   grid-template-columns: minmax(90px, 1fr) minmax(90px, 1fr) minmax(120px, 1.4fr) auto;
   align-items: center;
   gap: 6px;
+}
+
+.lifecycle-event-card {
+  position: relative;
+  padding-right: 34px;
+}
+
+.event-delete-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #a1a1aa;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.lifecycle-event-card:hover .event-delete-icon {
+  opacity: 1;
+}
+
+.event-delete-icon:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.event-type-field {
+  padding-right: 2px;
 }
 
 .switch-list + :deep(.n-form-item) {

@@ -319,7 +319,7 @@ function finishDragging() {
   grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  background: #f3f6fa;
+  background: #fcfcfc;
 }
 
 .shelf-head {
@@ -327,9 +327,9 @@ function finishDragging() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid #dbe3ee;
-  background: #fff;
+  padding: 12px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fcfcfc;
 }
 
 .shelf-head-main {
@@ -342,15 +342,15 @@ function finishDragging() {
 }
 
 .shelf-head h3 {
-  color: #0f172a;
-  font-size: 15px;
+  color: #18181b;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .shelf-head p {
   margin-top: 2px;
-  color: #64748b;
-  font-size: 12px;
+  color: #71717a;
+  font-size: 11px;
 }
 
 .shelf-search {
@@ -361,18 +361,22 @@ function finishDragging() {
 .shelf-mode-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 0 10px 8px;
+  gap: 2px;
+  margin: 0 10px 8px;
+  padding: 3px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #f4f4f5;
 }
 
 .shelf-mode-tabs button {
   cursor: pointer;
-  height: 34px;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
-  background: #fff;
-  color: #475569;
-  font-size: 13px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  font-size: 12px;
   font-weight: 600;
   transition:
     border-color 180ms ease,
@@ -382,22 +386,23 @@ function finishDragging() {
 }
 
 .shelf-mode-tabs button:hover {
-  border-color: #93c5fd;
-  color: #2563eb;
+  border-color: transparent;
+  background: #e4e4e7;
+  color: #27272a;
 }
 
 .shelf-mode-tabs button.active {
-  border-color: #60a5fa;
-  background: #eff6ff;
-  color: #1d4ed8;
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18);
+  border-color: #fff;
+  background: #fff;
+  color: #27272a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .component-palette {
   min-height: 0;
   overflow: auto;
   padding: 2px 10px 12px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%);
+  background: #fcfcfc;
 }
 
 .palette-section + .palette-section {
@@ -410,15 +415,15 @@ function finishDragging() {
   justify-content: space-between;
   gap: 8px;
   margin: 2px 0 8px;
-  color: #334155;
+  color: #52525b;
   font-size: 12px;
   font-weight: 700;
 }
 
 .palette-section h4 em {
   border-radius: 999px;
-  background: #dbe3ee;
-  color: #64748b;
+  background: #f4f4f5;
+  color: #71717a;
   font-size: 11px;
   font-style: normal;
   line-height: 18px;
@@ -434,7 +439,7 @@ function finishDragging() {
 .palette-item,
 .field-item {
   cursor: grab;
-  border: 1px solid #dbe3ee;
+  border: 1px solid #e4e4e7;
   background: #fff;
   transition:
     border-color 180ms ease,
@@ -445,9 +450,9 @@ function finishDragging() {
 
 .palette-item:hover,
 .field-item:hover:not(:disabled) {
-  border-color: #93c5fd;
-  background: #f8fbff;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
+  border-color: #c7d2fe;
+  background: #f8faff;
+  box-shadow: 0 8px 18px rgba(49, 83, 216, 0.08);
 }
 
 .palette-item.dragging,
@@ -463,15 +468,15 @@ function finishDragging() {
 }
 
 .palette-item {
-  min-height: 42px;
+  min-height: 40px;
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 8px;
+  border-radius: 7px;
   padding: 0 10px;
-  color: #334155;
-  font-size: 13px;
+  color: #3f3f46;
+  font-size: 12px;
   font-weight: 600;
   text-align: left;
   overflow: hidden;
@@ -491,8 +496,8 @@ function finishDragging() {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
-  border-top: 1px solid #dbe3ee;
-  background: #fff;
+  border-top: 1px solid #e4e4e7;
+  background: #fcfcfc;
 }
 
 .field-tabs {
@@ -500,25 +505,26 @@ function finishDragging() {
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   padding: 8px 10px 7px;
-  border-bottom: 1px solid #dbe3ee;
-  background: #fff;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fcfcfc;
 }
 
 .field-tabs button {
   cursor: pointer;
   border: 1px solid transparent;
   border-radius: 6px;
-  background: #dbe3ee;
-  color: #64748b;
+  background: #f4f4f5;
+  color: #71717a;
   font-size: 12px;
   line-height: 26px;
 }
 
 .field-tabs button.active {
-  border-color: #94a3b8;
+  border-color: #fff;
   background: #fff;
-  color: #0f172a;
+  color: #27272a;
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .field-list {
@@ -527,7 +533,7 @@ function finishDragging() {
   gap: 5px;
   min-height: 0;
   overflow: auto;
-  background: #fff;
+  background: #fcfcfc;
   padding: 8px 10px 12px;
 }
 

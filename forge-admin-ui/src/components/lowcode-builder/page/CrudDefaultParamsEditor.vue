@@ -309,7 +309,7 @@ function normalizeParamConfig(source = {}) {
 <style scoped>
 .crud-default-params-editor {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   width: 100%;
   min-width: 0;
 }
@@ -317,17 +317,18 @@ function normalizeParamConfig(source = {}) {
 .default-param-head strong,
 .default-param-section-head strong {
   display: block;
-  color: #0f172a;
+  color: #27272a;
   font-size: 12px;
+  font-weight: 650;
   line-height: 18px;
 }
 
 .default-param-head span,
 .default-param-section-head span,
 .default-param-empty {
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .default-param-section {
@@ -335,9 +336,10 @@ function normalizeParamConfig(source = {}) {
   gap: 8px;
   min-width: 0;
   padding: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(228, 228, 231, 0.72);
   border-radius: 8px;
-  background: #f8fafc;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .default-param-section-head {
@@ -358,9 +360,9 @@ function normalizeParamConfig(source = {}) {
   gap: 6px;
   min-width: 0;
   padding: 8px;
-  border: 1px solid #dbe3ee;
-  border-radius: 7px;
-  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
 }
 
 .default-param-row :deep(.n-select),
@@ -377,9 +379,32 @@ function normalizeParamConfig(source = {}) {
 }
 
 .default-param-empty {
-  padding: 7px 9px;
-  border: 1px dashed #dbe3ee;
+  padding: 12px 9px;
+  border: 1px dashed #d4d4d8;
   border-radius: 7px;
-  background: #fff;
+  background: #fafafa;
+  text-align: center;
+}
+
+.crud-default-params-editor :deep(.n-button) {
+  --n-border-radius: 6px !important;
+  font-size: 12px;
+}
+
+.crud-default-params-editor :deep(.n-input),
+.crud-default-params-editor :deep(.n-base-selection) {
+  --n-color: #fff !important;
+  --n-color-hover: #fff !important;
+  --n-color-focus: #fff !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #6366f1 !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(99, 102, 241, 0.1) !important;
+  border-radius: 6px;
+}
+
+.crud-default-params-editor :deep(.n-input__input-el),
+.crud-default-params-editor :deep(.n-base-selection-label) {
+  font-size: 12px !important;
 }
 </style>

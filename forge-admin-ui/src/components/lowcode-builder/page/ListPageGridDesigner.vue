@@ -98,18 +98,6 @@
           <span>{{ blocks.length }} 个区块 · {{ canvasGridWidth }}px · {{ canvasViewportSummary }}</span>
         </div>
         <n-space v-if="!readonly" class="canvas-primary-actions" size="small" align="center">
-          <n-button size="small" secondary @click="sourceModalOpen = true">
-            源码
-          </n-button>
-          <n-button size="small" secondary @click="toggleCanvasFocus">
-            <template #icon>
-              <n-icon>
-                <ContractOutline v-if="canvasFocusMode" />
-                <ExpandOutline v-else />
-              </n-icon>
-            </template>
-            {{ canvasFocusMode ? '退出专注' : '专注画布' }}
-          </n-button>
           <n-popconfirm
             :show-icon="false"
             positive-text="清空"
@@ -251,7 +239,36 @@
           </div>
         </div>
         <div v-if="!readonly" class="canvas-viewport-dock">
-          <n-popover trigger="click" placement="top-end" :width="282" :to="false">
+          <div class="viewport-device-group" aria-label="预览设备">
+            <button
+              type="button"
+              class="viewport-device-button"
+              :class="{ active: canvasPreviewMode === 'desktop' }"
+              title="Desktop"
+              @click.stop="applyCanvasPreviewMode('desktop')"
+            >
+              <n-icon><DesktopOutline /></n-icon>
+            </button>
+            <button
+              type="button"
+              class="viewport-device-button"
+              :class="{ active: canvasPreviewMode === 'narrow' }"
+              title="Tablet"
+              @click.stop="applyCanvasPreviewMode('narrow')"
+            >
+              <n-icon><TabletLandscapeOutline /></n-icon>
+            </button>
+            <button
+              type="button"
+              class="viewport-device-button"
+              :class="{ active: canvasPreviewMode === 'mobile' }"
+              title="Mobile"
+              @click.stop="applyCanvasPreviewMode('mobile')"
+            >
+              <n-icon><PhonePortraitOutline /></n-icon>
+            </button>
+          </div>
+          <n-popover trigger="click" placement="bottom" :width="282" :to="false">
             <template #trigger>
               <n-button class="viewport-icon-button" circle secondary title="预览形态和设计宽度">
                 <template #icon>
@@ -299,7 +316,13 @@
               </label>
             </div>
           </n-popover>
-          <n-popover trigger="click" placement="top-end" :width="244" :to="false">
+          <span class="viewport-divider" />
+          <n-button class="viewport-icon-button" circle secondary title="缩小" @click.stop="updateCanvasZoom(canvasZoom - 0.1)">
+            <template #icon>
+              <n-icon><RemoveOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-popover trigger="click" placement="bottom" :width="244" :to="false">
             <template #trigger>
               <n-button class="viewport-zoom-button" secondary title="画布缩放">
                 <template #icon>
@@ -330,6 +353,25 @@
               </div>
             </div>
           </n-popover>
+          <n-button class="viewport-icon-button" circle secondary title="放大" @click.stop="updateCanvasZoom(canvasZoom + 0.1)">
+            <template #icon>
+              <n-icon><AddOutline /></n-icon>
+            </template>
+          </n-button>
+          <span class="viewport-divider" />
+          <n-button class="viewport-icon-button" circle secondary title="查看源码" @click.stop="openSourceModal">
+            <template #icon>
+              <n-icon><CodeSlashOutline /></n-icon>
+            </template>
+          </n-button>
+          <n-button class="viewport-icon-button" circle secondary :title="canvasFocusMode ? '退出专注' : '专注画布'" @click.stop="toggleCanvasFocus">
+            <template #icon>
+              <n-icon>
+                <ContractOutline v-if="canvasFocusMode" />
+                <ExpandOutline v-else />
+              </n-icon>
+            </template>
+          </n-button>
         </div>
       </div>
     </main>
@@ -367,6 +409,20 @@
           </template>
         </n-button>
       </div>
+      <div class="property-panel-tabs" aria-label="配置类型">
+        <button type="button" :class="{ active: propertyPanelTab === 'props' }" @click="selectPropertyPanelTab('props')">
+          <n-icon><SettingsOutline /></n-icon>
+          属性
+        </button>
+        <button type="button" :class="{ active: propertyPanelTab === 'style' }" @click="selectPropertyPanelTab('style')">
+          <n-icon><ColorPaletteOutline /></n-icon>
+          样式
+        </button>
+        <button type="button" :class="{ active: propertyPanelTab === 'interaction' }" @click="selectPropertyPanelTab('interaction')">
+          <n-icon><FlashOutline /></n-icon>
+          交互
+        </button>
+      </div>
       <div class="property-search designer-panel-search">
         <n-input
           v-model:value="propertyKeyword"
@@ -379,12 +435,12 @@
           </template>
         </n-input>
       </div>
-      <div class="property-panel">
+      <div ref="propertyPanelRef" class="property-panel">
         <div v-if="!selectedBlock" class="property-empty">
           <p>选中画布上的组件以编辑属性</p>
         </div>
         <div v-else class="property-body">
-          <div class="prop-head">
+          <div v-show="propertyPanelTab === 'props'" class="prop-head">
             <div>
               <div class="prop-title">
                 {{ selectedBlockMeta?.title || selectedBlock.blockType }}
@@ -396,1929 +452,2084 @@
           </div>
 
           <n-form size="small" label-placement="top" :show-feedback="false">
-            <n-form-item label="区块标题">
-              <n-input
-                :value="selectedBlock.label"
-                @update:value="patchBlock(selectedBlock.id, { label: $event })"
-              />
-            </n-form-item>
-
-            <template v-if="selectedBlock.blockType === 'grid-layout'">
-              <n-divider>栅格配置</n-divider>
-              <n-form-item label="栅格结构">
-                <div class="grid-config-grid three">
-                  <label class="grid-config-field">
-                    <span>总列数</span>
-                    <n-input-number
-                      :value="selectedBlock.props?.columns || 24"
-                      :min="1"
-                      :max="24"
-                      size="small"
-                      placeholder="24"
-                      @update:value="updateGridLayoutStructure({ columns: $event || 24 })"
-                    />
-                  </label>
-                  <label class="grid-config-field">
-                    <span>列间距</span>
-                    <n-input-number
-                      :value="selectedBlock.props?.gutter ?? selectedBlock.props?.gap ?? 16"
-                      :min="0"
-                      size="small"
-                      placeholder="16"
-                      @update:value="patchBlockProps(selectedBlock.id, { gutter: $event ?? 0 })"
-                    />
-                  </label>
-                  <label class="grid-config-field">
-                    <span>组件行距</span>
-                    <n-input-number
-                      :value="selectedBlock.props?.rowGap ?? 0"
-                      :min="0"
-                      size="small"
-                      placeholder="0"
-                      @update:value="patchBlockProps(selectedBlock.id, { rowGap: $event ?? 0 })"
-                    />
-                  </label>
-                </div>
-              </n-form-item>
-              <n-form-item label="格子样式">
-                <div class="grid-config-grid four">
-                  <label class="grid-config-field">
-                    <span>最小高度</span>
-                    <n-input-number
-                      :value="selectedBlock.props?.cellMinHeight || 120"
-                      :min="24"
-                      size="small"
-                      placeholder="120"
-                      @update:value="patchBlockProps(selectedBlock.id, { cellMinHeight: $event || 24 })"
-                    />
-                  </label>
-                  <label class="grid-config-field">
-                    <span>垂直位置</span>
-                    <n-select
-                      :value="selectedBlock.props?.alignItems || 'stretch'"
-                      :options="gridVerticalAlignOptions"
-                      size="small"
-                      @update:value="patchBlockProps(selectedBlock.id, { alignItems: $event })"
-                    />
-                  </label>
-                  <label class="grid-config-field">
-                    <span>水平位置</span>
-                    <n-select
-                      :value="selectedBlock.props?.justifyItems || 'stretch'"
-                      :options="gridHorizontalAlignOptions"
-                      size="small"
-                      @update:value="patchBlockProps(selectedBlock.id, { justifyItems: $event })"
-                    />
-                  </label>
-                  <label class="grid-config-switch">
-                    <span>显示格子边框</span>
-                    <n-switch
-                      :value="selectedBlock.props?.showCellBorder !== false"
-                      @update:value="patchBlockProps(selectedBlock.id, { showCellBorder: $event })"
-                    />
-                  </label>
-                </div>
-              </n-form-item>
-              <n-form-item label="格子背景">
-                <n-color-picker
-                  :value="selectedBlock.props?.cellBackground || 'transparent'"
-                  :show-alpha="true"
-                  size="small"
-                  @update:value="patchBlockProps(selectedBlock.id, { cellBackground: $event || 'transparent' })"
+            <div v-show="propertyPanelTab === 'props'" class="property-tab-content">
+              <div class="property-search-anchor" data-property-search="属性 区块标题 组件标题 默认排序 字段 行间距" />
+              <n-form-item label="区块标题">
+                <n-input
+                  :value="selectedBlock.label"
+                  @update:value="patchBlock(selectedBlock.id, { label: $event })"
                 />
               </n-form-item>
-              <n-form-item label="格子内容">
-                <div class="container-child-editor">
-                  <div
-                    v-for="(cell, idx) in selectedGridCells"
-                    :key="cell.key"
-                    class="grid-cell-editor"
-                  >
-                    <div class="grid-cell-editor-head">
-                      <n-input
-                        :value="cell.title"
-                        size="small"
-                        :placeholder="`栅格 ${idx + 1}`"
-                        @update:value="updateGridCell(idx, { title: $event })"
-                      />
+
+              <template v-if="selectedBlock.blockType === 'grid-layout'">
+                <n-divider>栅格配置</n-divider>
+                <n-form-item label="栅格结构">
+                  <div class="grid-config-grid three">
+                    <label class="grid-config-field">
+                      <span>总列数</span>
                       <n-input-number
-                        :value="cell.span || 6"
+                        :value="selectedBlock.props?.columns || 24"
                         :min="1"
-                        :max="selectedBlock.props?.columns || 24"
+                        :max="24"
                         size="small"
-                        class="grid-cell-span-input"
-                        placeholder="span"
-                        @update:value="updateGridCell(idx, { span: $event || 1 })"
+                        placeholder="24"
+                        @update:value="updateGridLayoutStructure({ columns: $event || 24 })"
                       />
-                      <n-button size="tiny" quaternary type="error" @click="removeGridCell(idx)">
-                        删格
-                      </n-button>
-                    </div>
-                    <div
-                      v-for="child in (cell.children || [])"
-                      :key="child.id"
-                      class="container-child-row"
-                    >
-                      <span>{{ child.label || child.blockType }}</span>
-                      <n-button size="tiny" quaternary type="error" @click="removeGridCellChild(selectedBlock.id, cell.key, child.id)">
-                        删除
-                      </n-button>
-                    </div>
-                    <n-select
-                      :options="childBlockTypeOptions"
-                      size="small"
-                      placeholder="添加组件到此格"
-                      clearable
-                      @update:value="value => value && appendGridCellChild(selectedBlock.id, cell.key, value)"
-                    />
+                    </label>
+                    <label class="grid-config-field">
+                      <span>列间距</span>
+                      <n-input-number
+                        :value="selectedBlock.props?.gutter ?? selectedBlock.props?.gap ?? 16"
+                        :min="0"
+                        size="small"
+                        placeholder="16"
+                        @update:value="patchBlockProps(selectedBlock.id, { gutter: $event ?? 0 })"
+                      />
+                    </label>
+                    <label class="grid-config-field">
+                      <span>组件行距</span>
+                      <n-input-number
+                        :value="selectedBlock.props?.rowGap ?? 0"
+                        :min="0"
+                        size="small"
+                        placeholder="0"
+                        @update:value="patchBlockProps(selectedBlock.id, { rowGap: $event ?? 0 })"
+                      />
+                    </label>
                   </div>
-                  <n-button size="small" dashed block @click="addGridCell">
-                    + 添加格子
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
-
-            <n-form-item label="位置与尺寸 px">
-              <div class="grid-pos-editor">
-                <div class="pos-cell">
-                  <span class="pos-label">左 X</span>
-                  <n-input-number
-                    :value="selectedBlockFrame.x"
-                    :min="0"
+                </n-form-item>
+                <n-form-item label="格子样式">
+                  <div class="grid-config-grid four">
+                    <label class="grid-config-field">
+                      <span>最小高度</span>
+                      <n-input-number
+                        :value="selectedBlock.props?.cellMinHeight || 120"
+                        :min="24"
+                        size="small"
+                        placeholder="120"
+                        @update:value="patchBlockProps(selectedBlock.id, { cellMinHeight: $event || 24 })"
+                      />
+                    </label>
+                    <label class="grid-config-field">
+                      <span>垂直位置</span>
+                      <n-select
+                        :value="selectedBlock.props?.alignItems || 'stretch'"
+                        :options="gridVerticalAlignOptions"
+                        size="small"
+                        @update:value="patchBlockProps(selectedBlock.id, { alignItems: $event })"
+                      />
+                    </label>
+                    <label class="grid-config-field">
+                      <span>水平位置</span>
+                      <n-select
+                        :value="selectedBlock.props?.justifyItems || 'stretch'"
+                        :options="gridHorizontalAlignOptions"
+                        size="small"
+                        @update:value="patchBlockProps(selectedBlock.id, { justifyItems: $event })"
+                      />
+                    </label>
+                    <label class="grid-config-switch">
+                      <span>显示格子边框</span>
+                      <n-switch
+                        :value="selectedBlock.props?.showCellBorder !== false"
+                        @update:value="patchBlockProps(selectedBlock.id, { showCellBorder: $event })"
+                      />
+                    </label>
+                  </div>
+                </n-form-item>
+                <n-form-item label="格子背景">
+                  <n-color-picker
+                    :value="selectedBlock.props?.cellBackground || 'transparent'"
+                    :show-alpha="true"
                     size="small"
-                    class="pos-input"
-                    @update:value="patchBlockFrame(selectedBlock.id, { x: $event ?? 0 })"
+                    @update:value="patchBlockProps(selectedBlock.id, { cellBackground: $event || 'transparent' })"
                   />
-                </div>
-                <div class="pos-cell">
-                  <span class="pos-label">上 Y</span>
-                  <n-input-number
-                    :value="selectedBlockFrame.y"
-                    :min="0"
-                    size="small"
-                    class="pos-input"
-                    @update:value="patchBlockFrame(selectedBlock.id, { y: $event ?? 0 })"
-                  />
-                </div>
-                <div class="pos-cell">
-                  <span class="pos-label">宽 W</span>
-                  <n-select
-                    :value="selectedBlockWidthMode"
-                    :options="blockWidthModeOptions"
-                    size="small"
-                    class="pos-input"
-                    @update:value="setBlockWidthMode(selectedBlock.id, $event)"
-                  />
-                </div>
-                <div class="pos-cell">
-                  <span class="pos-label">固定宽</span>
-                  <n-input-number
-                    :value="selectedBlockFixedWidth"
-                    :min="24"
-                    size="small"
-                    class="pos-input"
-                    :disabled="selectedBlockWidthMode !== 'fixed'"
-                    @update:value="patchBlockFrame(selectedBlock.id, { width: $event ?? 24 })"
-                  />
-                </div>
-                <div class="pos-cell">
-                  <span class="pos-label">高 H</span>
-                  <n-input-number
-                    :value="selectedBlockFrame.height"
-                    :min="24"
-                    size="small"
-                    class="pos-input"
-                    @update:value="patchBlockFrame(selectedBlock.id, { height: $event ?? 24 })"
-                  />
-                </div>
-              </div>
-            </n-form-item>
-
-            <n-divider>外观样式</n-divider>
-            <n-form-item label="运行时尺寸">
-              <div class="style-grid">
-                <n-select
-                  :value="selectedBlockWidthMode"
-                  :options="blockWidthModeOptions"
-                  size="small"
-                  @update:value="setBlockWidthMode(selectedBlock.id, $event)"
-                />
-                <n-input-number
-                  :value="toNumberOrNull(selectedBlockStyle.height)"
-                  size="small"
-                  :min="1"
-                  :show-button="false"
-                  placeholder="高 px"
-                  clearable
-                  @update:value="patchBlockStyle(selectedBlock.id, { height: $event ?? '' })"
-                />
-              </div>
-            </n-form-item>
-            <n-form-item label="临界值 px（最小 / 最大）">
-              <div class="style-grid four">
-                <n-input-number
-                  :value="toNumberOrNull(selectedBlockStyle.minWidth)"
-                  :min="0"
-                  :show-button="false"
-                  placeholder="最小宽"
-                  clearable
-                  @update:value="patchBlockStyle(selectedBlock.id, { minWidth: $event ?? '' })"
-                />
-                <n-input-number
-                  :value="toNumberOrNull(selectedBlockStyle.maxWidth)"
-                  :min="0"
-                  :show-button="false"
-                  placeholder="最大宽"
-                  clearable
-                  @update:value="patchBlockStyle(selectedBlock.id, { maxWidth: $event ?? '' })"
-                />
-                <n-input-number
-                  :value="toNumberOrNull(selectedBlockStyle.minHeight)"
-                  :min="0"
-                  :show-button="false"
-                  placeholder="最小高"
-                  clearable
-                  @update:value="patchBlockStyle(selectedBlock.id, { minHeight: $event ?? '' })"
-                />
-                <n-input-number
-                  :value="toNumberOrNull(selectedBlockStyle.maxHeight)"
-                  :min="0"
-                  :show-button="false"
-                  placeholder="最大高"
-                  clearable
-                  @update:value="patchBlockStyle(selectedBlock.id, { maxHeight: $event ?? '' })"
-                />
-              </div>
-            </n-form-item>
-            <n-form-item label="背景 / 边框颜色">
-              <div class="style-grid">
-                <n-color-picker
-                  :value="selectedBlockStyle.backgroundColor"
-                  size="small"
-                  :show-alpha="true"
-                  @update:value="patchBlockStyle(selectedBlock.id, { backgroundColor: $event || 'transparent' })"
-                />
-                <n-color-picker
-                  :value="selectedBlockStyle.borderColor"
-                  size="small"
-                  :show-alpha="true"
-                  @update:value="patchBlockStyle(selectedBlock.id, { borderColor: $event || 'transparent' })"
-                />
-              </div>
-            </n-form-item>
-            <n-form-item label="边框 / 圆角">
-              <div class="style-grid three">
-                <n-input-number
-                  :value="Number(selectedBlockStyle.borderWidth)"
-                  :min="0"
-                  :max="16"
-                  size="small"
-                  :show-button="false"
-                  placeholder="边框"
-                  @update:value="patchBlockStyle(selectedBlock.id, { borderWidth: $event ?? 0 })"
-                />
-                <n-select
-                  :value="selectedBlockStyle.borderStyle"
-                  :options="borderStyleOptions"
-                  size="small"
-                  @update:value="patchBlockStyle(selectedBlock.id, { borderStyle: $event || 'solid' })"
-                />
-                <n-input-number
-                  :value="Number(selectedBlockStyle.borderRadius)"
-                  :min="0"
-                  :max="48"
-                  size="small"
-                  :show-button="false"
-                  placeholder="圆角"
-                  @update:value="patchBlockStyle(selectedBlock.id, { borderRadius: $event ?? 0 })"
-                />
-              </div>
-            </n-form-item>
-            <n-form-item label="阴影">
-              <div class="style-grid">
-                <n-select
-                  :value="selectedBlockStyle.boxShadow"
-                  :options="shadowOptions"
-                  size="small"
-                  @update:value="patchBlockStyle(selectedBlock.id, { boxShadow: $event || 'none' })"
-                />
-              </div>
-            </n-form-item>
-            <n-form-item label="内边距 / 外边距">
-              <div class="style-grid">
-                <n-input
-                  :value="String(selectedBlockStyle.padding ?? 0)"
-                  size="small"
-                  placeholder="内边距，如 12 或 8px 12px"
-                  @update:value="patchBlockStyle(selectedBlock.id, { padding: normalizeSpacingValue($event) })"
-                />
-                <n-input
-                  :value="String(selectedBlockStyle.margin ?? 0)"
-                  size="small"
-                  placeholder="外边距，如 12 或 8px 12px"
-                  @update:value="patchBlockStyle(selectedBlock.id, { margin: normalizeSpacingValue($event) })"
-                />
-              </div>
-            </n-form-item>
-            <n-form-item label="自定义 style">
-              <n-input
-                :value="selectedBlockStyle.customStyle"
-                type="textarea"
-                :rows="3"
-                placeholder="例如：backdrop-filter: blur(8px);"
-                @update:value="patchBlockStyle(selectedBlock.id, { customStyle: $event })"
-              />
-            </n-form-item>
-
-            <n-divider>事件配置</n-divider>
-            <div class="event-editor">
-              <div
-                v-for="(eventItem, eventIdx) in selectedBlockEvents"
-                :key="eventItem.id || eventIdx"
-                class="event-row"
-              >
-                <div class="event-row-head">
-                  <span>{{ eventTriggerText(eventItem.trigger) }} · {{ eventActionText(eventItem.action) }}</span>
-                  <n-button size="tiny" quaternary type="error" @click="removeBlockEvent(eventIdx)">
-                    删除
-                  </n-button>
-                </div>
-                <div class="event-grid">
-                  <n-select
-                    :value="eventItem.trigger"
-                    :options="eventTriggerOptions"
-                    size="small"
-                    placeholder="触发时机"
-                    @update:value="updateBlockEvent(eventIdx, { trigger: $event })"
-                  />
-                  <n-select
-                    :value="eventItem.action"
-                    :options="blockEventActionOptions"
-                    size="small"
-                    placeholder="执行动作"
-                    @update:value="updateBlockEvent(eventIdx, { action: $event })"
-                  />
-                  <n-select
-                    :value="eventItem.targetBlockId"
-                    :options="blockTargetOptions"
-                    size="small"
-                    clearable
-                    placeholder="目标组件"
-                    @update:value="updateBlockEvent(eventIdx, { targetBlockId: $event || '' })"
-                  />
-                  <n-select
-                    :value="eventItem.targetPageKey"
-                    :options="pageTargetOptions"
-                    size="small"
-                    clearable
-                    placeholder="目标页面"
-                    @update:value="updateBlockEvent(eventIdx, { targetPageKey: $event || '' })"
-                  />
-                  <n-select
-                    v-if="formTargetOptions.length"
-                    :value="eventItem.targetFormKey"
-                    :options="formTargetOptions"
-                    size="small"
-                    clearable
-                    placeholder="目标表单"
-                    @update:value="updateBlockEvent(eventIdx, { targetFormKey: $event || '' })"
-                  />
-                  <n-input
-                    :value="eventItem.description"
-                    size="small"
-                    placeholder="说明"
-                    @update:value="updateBlockEvent(eventIdx, { description: $event })"
-                  />
-                </div>
-                <div class="event-param-list">
-                  <div
-                    v-for="(param, paramIdx) in (eventItem.params || [])"
-                    :key="paramIdx"
-                    class="event-param-row"
-                  >
-                    <n-input
-                      :value="param.name"
-                      size="tiny"
-                      placeholder="参数名"
-                      @update:value="updateBlockEventParam(eventIdx, paramIdx, { name: normalizeParamName($event) })"
-                    />
-                    <n-select
-                      :value="param.sourceType || 'static'"
-                      :options="paramSourceOptions"
-                      size="tiny"
-                      @update:value="updateBlockEventParam(eventIdx, paramIdx, normalizeParamSourcePatch($event, param))"
-                    />
-                    <n-select
-                      v-if="param.sourceType === 'rowField'"
-                      :value="param.sourceField || ''"
-                      :options="rowFieldOptions"
-                      size="tiny"
-                      filterable
-                      clearable
-                      placeholder="当前行字段"
-                      @update:value="updateBlockEventParam(eventIdx, paramIdx, buildParamValuePatch({ ...param, sourceType: 'rowField' }, $event))"
-                    />
-                    <n-select
-                      v-else-if="param.sourceType === 'routeQuery'"
-                      :value="param.sourceField || ''"
-                      :options="routeParamOptions"
-                      size="tiny"
-                      filterable
-                      tag
-                      clearable
-                      placeholder="路由参数"
-                      @update:value="updateBlockEventParam(eventIdx, paramIdx, buildParamValuePatch({ ...param, sourceType: 'routeQuery' }, $event))"
-                    />
-                    <n-select
-                      v-else-if="param.sourceType === 'system'"
-                      :value="param.sourceField || ''"
-                      :options="systemVariableOptions"
-                      size="tiny"
-                      clearable
-                      placeholder="系统变量"
-                      @update:value="updateBlockEventParam(eventIdx, paramIdx, buildParamValuePatch({ ...param, sourceType: 'system' }, $event))"
-                    />
-                    <n-input
-                      v-else
-                      :value="param.value"
-                      size="tiny"
-                      placeholder="固定值"
-                      @update:value="updateBlockEventParam(eventIdx, paramIdx, { value: $event })"
-                    />
-                    <n-button size="tiny" quaternary @click="removeBlockEventParam(eventIdx, paramIdx)">
-                      删
+                </n-form-item>
+                <n-form-item label="格子内容">
+                  <div class="container-child-editor">
+                    <div
+                      v-for="(cell, idx) in selectedGridCells"
+                      :key="cell.key"
+                      class="grid-cell-editor"
+                    >
+                      <div class="grid-cell-editor-head">
+                        <n-input
+                          :value="cell.title"
+                          size="small"
+                          :placeholder="`栅格 ${idx + 1}`"
+                          @update:value="updateGridCell(idx, { title: $event })"
+                        />
+                        <n-input-number
+                          :value="cell.span || 6"
+                          :min="1"
+                          :max="selectedBlock.props?.columns || 24"
+                          size="small"
+                          class="grid-cell-span-input"
+                          placeholder="span"
+                          @update:value="updateGridCell(idx, { span: $event || 1 })"
+                        />
+                        <n-button size="tiny" quaternary type="error" @click="removeGridCell(idx)">
+                          删格
+                        </n-button>
+                      </div>
+                      <div
+                        v-for="child in (cell.children || [])"
+                        :key="child.id"
+                        class="container-child-row"
+                      >
+                        <span>{{ child.label || child.blockType }}</span>
+                        <n-button size="tiny" quaternary type="error" @click="removeGridCellChild(selectedBlock.id, cell.key, child.id)">
+                          删除
+                        </n-button>
+                      </div>
+                      <n-select
+                        :options="childBlockTypeOptions"
+                        size="small"
+                        placeholder="添加组件到此格"
+                        clearable
+                        @update:value="value => value && appendGridCellChild(selectedBlock.id, cell.key, value)"
+                      />
+                    </div>
+                    <n-button size="small" dashed block @click="addGridCell">
+                      + 添加格子
                     </n-button>
                   </div>
-                  <n-button size="tiny" dashed block @click="addBlockEventParam(eventIdx)">
-                    + 添加参数
-                  </n-button>
-                </div>
-              </div>
-              <n-button size="small" dashed block @click="addBlockEvent">
-                + 添加事件
-              </n-button>
-            </div>
-
-            <!-- Search / Table 字段配置 -->
-            <template v-if="isFieldConfigurableBlock(selectedBlock.blockType)">
-              <n-form-item :label="resolveFieldConfigLabel(selectedBlock.blockType)">
-                <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
-                  配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
-                </n-button>
-              </n-form-item>
-              <n-form-item v-if="selectedBlock.blockType === 'search-form'" label="可折叠">
-                <n-switch
-                  :value="!!selectedBlock.props?.collapsible"
-                  size="small"
-                  @update:value="patchBlockProps(selectedBlock.id, { collapsible: $event })"
-                />
-              </n-form-item>
-              <template v-if="['data-table', 'AiCrudPage', 'AiTable'].includes(selectedBlock.blockType)">
-                <n-form-item label="默认排序字段">
-                  <n-select
-                    :value="selectedBlock.props?.defaultSortField || 'id'"
-                    :options="sortFieldOptions"
-                    filterable
-                    clearable
-                    @update:value="patchBlockProps(selectedBlock.id, { defaultSortField: $event || 'id' })"
-                  />
-                </n-form-item>
-                <n-form-item label="默认排序方式">
-                  <n-select
-                    :value="selectedBlock.props?.defaultSortOrder || 'desc'"
-                    :options="sortOrderOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { defaultSortOrder: $event || 'desc' })"
-                  />
-                </n-form-item>
-                <n-form-item label="全部列对齐">
-                  <n-select
-                    :value="selectedBlock.props?.globalAlign || 'left'"
-                    :options="alignOptions"
-                    @update:value="applySelectedTableGlobalAlign"
-                  />
-                </n-form-item>
-                <n-form-item label="行间距">
-                  <n-input-number
-                    :value="selectedBlock.props?.rowGap ?? 8"
-                    :min="0"
-                    :max="32"
-                    :step="2"
-                    :show-button="false"
-                    @update:value="patchBlockProps(selectedBlock.id, { rowGap: normalizeTableRowGap($event) })"
-                  />
                 </n-form-item>
               </template>
-            </template>
+            </div>
 
-            <!-- System Ai components -->
-            <template v-if="['AiCrudPage', 'AiForm', 'AiTable'].includes(selectedBlock.blockType)">
-              <n-form-item label="组件标题">
+            <div v-show="propertyPanelTab === 'style'" class="property-tab-content">
+              <div class="property-search-anchor" data-property-search="样式 位置 尺寸 坐标 左 上 x y 宽度 高度 背景 背景色 边框 边框色 圆角 阴影 内边距 外边距 padding margin 外观 装饰 颜色 自定义 style customStyle" />
+              <div class="position-control">
+                <div class="position-axis-grid">
+                  <label class="position-number-field">
+                    <span>左 X</span>
+                    <n-input-number
+                      :value="selectedBlockFrame.x"
+                      :min="0"
+                      size="small"
+                      :show-button="false"
+                      @update:value="patchBlockFrame(selectedBlock.id, { x: $event ?? 0 })"
+                    />
+                    <em>px</em>
+                  </label>
+                  <label class="position-number-field">
+                    <span>上 Y</span>
+                    <n-input-number
+                      :value="selectedBlockFrame.y"
+                      :min="0"
+                      size="small"
+                      :show-button="false"
+                      @update:value="patchBlockFrame(selectedBlock.id, { y: $event ?? 0 })"
+                    />
+                    <em>px</em>
+                  </label>
+                </div>
+
+                <div class="position-rule">
+                  <div class="position-rule-head">
+                    <span>宽度</span>
+                    <label v-if="selectedBlockWidthMode === 'fixed'" class="position-inline-number">
+                      <n-input-number
+                        :value="selectedBlockFixedWidth"
+                        :min="24"
+                        size="tiny"
+                        :show-button="false"
+                        @update:value="patchBlockFrame(selectedBlock.id, { width: $event ?? 24 })"
+                      />
+                      <em>px</em>
+                    </label>
+                  </div>
+                  <div class="segmented-mini">
+                    <button
+                      type="button"
+                      :class="{ active: selectedBlockWidthMode === 'auto' }"
+                      @click="setBlockWidthMode(selectedBlock.id, 'auto')"
+                    >
+                      内容
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: selectedBlockWidthMode === 'full' }"
+                      @click="setBlockWidthMode(selectedBlock.id, 'full')"
+                    >
+                      填充
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ active: selectedBlockWidthMode === 'fixed' }"
+                      @click="setBlockWidthMode(selectedBlock.id, 'fixed')"
+                    >
+                      固定
+                    </button>
+                  </div>
+                </div>
+
+                <div class="position-rule">
+                  <div class="position-rule-head">
+                    <span>高度</span>
+                    <label class="position-inline-number">
+                      <n-input-number
+                        :value="selectedBlockFrame.height"
+                        :min="24"
+                        size="tiny"
+                        :show-button="false"
+                        @update:value="patchBlockFrame(selectedBlock.id, { height: $event ?? 24 })"
+                      />
+                      <em>px</em>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <n-divider>外观样式</n-divider>
+              <n-form-item label="临界值 px（最小 / 最大）">
+                <div class="style-grid four">
+                  <n-input-number
+                    :value="toNumberOrNull(selectedBlockStyle.minWidth)"
+                    :min="0"
+                    :show-button="false"
+                    placeholder="最小宽"
+                    clearable
+                    @update:value="patchBlockStyle(selectedBlock.id, { minWidth: $event ?? '' })"
+                  />
+                  <n-input-number
+                    :value="toNumberOrNull(selectedBlockStyle.maxWidth)"
+                    :min="0"
+                    :show-button="false"
+                    placeholder="最大宽"
+                    clearable
+                    @update:value="patchBlockStyle(selectedBlock.id, { maxWidth: $event ?? '' })"
+                  />
+                  <n-input-number
+                    :value="toNumberOrNull(selectedBlockStyle.minHeight)"
+                    :min="0"
+                    :show-button="false"
+                    placeholder="最小高"
+                    clearable
+                    @update:value="patchBlockStyle(selectedBlock.id, { minHeight: $event ?? '' })"
+                  />
+                  <n-input-number
+                    :value="toNumberOrNull(selectedBlockStyle.maxHeight)"
+                    :min="0"
+                    :show-button="false"
+                    placeholder="最大高"
+                    clearable
+                    @update:value="patchBlockStyle(selectedBlock.id, { maxHeight: $event ?? '' })"
+                  />
+                </div>
+              </n-form-item>
+              <div class="appearance-control list-appearance-control">
+                <div class="appearance-field">
+                  <label>背景色</label>
+                  <div class="appearance-input-shell">
+                    <label class="appearance-swatch" :style="{ background: selectedBlockBackgroundPreview }" title="选择背景色">
+                      <input
+                        type="color"
+                        :value="selectedBlockBackgroundPreview"
+                        @input="updateSelectedBlockBackground($event.target.value)"
+                      >
+                    </label>
+                    <input
+                      :value="selectedBlockBackgroundHex"
+                      class="appearance-hex-input"
+                      placeholder="FFFFFF"
+                      @input="updateSelectedBlockBackground($event.target.value)"
+                    >
+                    <span class="appearance-percent">100%</span>
+                  </div>
+                </div>
+                <div class="appearance-field">
+                  <label>边框 (Border)</label>
+                  <div class="appearance-input-shell">
+                    <select
+                      :value="selectedBlockStyle.borderStyle"
+                      class="appearance-select"
+                      @change="updateSelectedBlockBorderStyle($event.target.value)"
+                    >
+                      <option value="solid">
+                        实线
+                      </option>
+                      <option value="dashed">
+                        虚线
+                      </option>
+                      <option value="none">
+                        无
+                      </option>
+                    </select>
+                    <label class="appearance-swatch" :style="{ background: selectedBlockBorderPreview }" title="选择边框颜色">
+                      <input
+                        type="color"
+                        :value="selectedBlockBorderPreview"
+                        @input="updateSelectedBlockBorderColor($event.target.value)"
+                      >
+                    </label>
+                    <input
+                      :value="selectedBlockBorderHex"
+                      class="appearance-hex-input"
+                      placeholder="E4E4E7"
+                      @input="updateSelectedBlockBorderColor($event.target.value)"
+                    >
+                  </div>
+                </div>
+                <div class="appearance-field">
+                  <label>圆角 (Border Radius)</label>
+                  <div class="appearance-radius-shell">
+                    <span>R</span>
+                    <input
+                      :value="Number(selectedBlockStyle.borderRadius)"
+                      type="number"
+                      min="0"
+                      max="48"
+                      @input="patchBlockStyle(selectedBlock.id, { borderRadius: Number($event.target.value || 0) })"
+                    >
+                  </div>
+                </div>
+                <div class="appearance-field">
+                  <label class="appearance-row-label">
+                    <span>阴影 (Shadow)</span>
+                    <select
+                      :value="selectedBlockStyle.boxShadow"
+                      class="appearance-plain-select"
+                      @change="patchBlockStyle(selectedBlock.id, { boxShadow: $event.target.value || 'none' })"
+                    >
+                      <option
+                        v-for="option in shadowOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <n-form-item label="内边距 / 外边距">
+                <div class="style-grid">
+                  <n-input
+                    :value="String(selectedBlockStyle.padding ?? 0)"
+                    size="small"
+                    placeholder="内边距，如 12 或 8px 12px"
+                    @update:value="patchBlockStyle(selectedBlock.id, { padding: normalizeSpacingValue($event) })"
+                  />
+                  <n-input
+                    :value="String(selectedBlockStyle.margin ?? 0)"
+                    size="small"
+                    placeholder="外边距，如 12 或 8px 12px"
+                    @update:value="patchBlockStyle(selectedBlock.id, { margin: normalizeSpacingValue($event) })"
+                  />
+                </div>
+              </n-form-item>
+              <n-form-item label="自定义 style">
                 <n-input
-                  :value="selectedBlock.props?.title"
-                  @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                  :value="selectedBlockStyle.customStyle"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="例如：backdrop-filter: blur(8px);"
+                  @update:value="patchBlockStyle(selectedBlock.id, { customStyle: $event })"
                 />
               </n-form-item>
-              <n-collapse class="advanced-config-collapse" :default-expanded-names="['base']">
-                <n-collapse-item v-if="propertySectionVisible(['基础配置', '接口', '基础路径', '行主键', '真实接口预览', '响应字段', '表单布局'])" name="base" title="基础配置">
-                  <template v-if="selectedBlock.blockType === 'AiCrudPage'">
-                    <n-form-item label="基础路径 / 行主键">
-                      <div class="style-grid">
-                        <n-input
-                          :value="selectedBlock.props?.api || defaultApiValues.api"
-                          :placeholder="defaultApiValues.api"
-                          @update:value="patchBlockProps(selectedBlock.id, { api: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.rowKey || 'id'"
-                          placeholder="id"
-                          @update:value="patchBlockProps(selectedBlock.id, { rowKey: $event || 'id' })"
-                        />
-                      </div>
-                    </n-form-item>
-                    <n-form-item label="真实接口预览">
-                      <div class="preview-config-panel">
-                        <div class="switch-line">
-                          <span>启用真实请求</span>
-                          <n-switch
-                            :value="selectedBlock.props?.previewLiveData === true"
-                            @update:value="patchBlockProps(selectedBlock.id, {
-                              previewLiveData: $event,
-                              previewMode: $event ? (selectedBlock.props?.previewMode === 'mock' ? 'realList' : (selectedBlock.props?.previewMode || 'realList')) : 'mock',
-                              lastPreviewStatus: $event ? 'loading' : 'idle',
-                              lastPreviewMessage: $event ? '正在请求真实接口预览' : '当前使用模拟预览，不请求接口',
-                              lastPreviewError: '',
-                            })"
-                          />
-                        </div>
-                        <div class="style-grid two">
-                          <n-select
-                            :value="selectedBlock.props?.previewMode || (selectedBlock.props?.previewLiveData === true ? 'realList' : 'mock')"
-                            :options="crudPreviewModeOptions"
-                            @update:value="patchBlockProps(selectedBlock.id, {
-                              previewMode: $event || 'mock',
-                              previewLiveData: $event !== 'mock',
-                              lastPreviewStatus: $event === 'mock' ? 'idle' : 'loading',
-                              lastPreviewMessage: $event === 'mock' ? '当前使用模拟预览，不请求接口' : '正在请求真实接口预览',
-                              lastPreviewError: '',
-                            })"
+            </div>
+
+            <div v-show="propertyPanelTab === 'interaction'" class="property-tab-content">
+              <div class="property-search-anchor" data-property-search="交互 事件 生命周期 回调 点击 加载完成 提交成功 行点击 跳转 刷新 过滤 接口请求 自定义脚本 参数 目标页面 目标表单" />
+              <n-divider>事件配置</n-divider>
+              <div class="event-editor">
+                <div v-if="!selectedBlockEvents.length" class="copy-empty-state">
+                  <span class="copy-empty-icon">+</span>
+                  <strong>暂未配置事件</strong>
+                  <small>可为点击、加载完成、行点击、提交成功等时机添加跳转、刷新、弹窗或接口请求动作。</small>
+                </div>
+                <div
+                  v-for="(eventItem, eventIdx) in selectedBlockEvents"
+                  :key="eventItem.id || eventIdx"
+                  class="event-row"
+                >
+                  <div class="event-row-head">
+                    <span>{{ eventTriggerText(eventItem.trigger) }} · {{ eventActionText(eventItem.action) }}</span>
+                    <n-button size="tiny" quaternary type="error" @click="removeBlockEvent(eventIdx)">
+                      删除
+                    </n-button>
+                  </div>
+                  <div class="event-grid">
+                    <label class="event-setting-field">
+                      <span>什么时候触发</span>
+                      <n-select
+                        :value="eventItem.trigger"
+                        :options="eventTriggerOptions"
+                        size="small"
+                        placeholder="触发时机"
+                        @update:value="updateBlockEvent(eventIdx, { trigger: $event })"
+                      />
+                    </label>
+                    <label class="event-setting-field">
+                      <span>触发后做什么</span>
+                      <n-select
+                        :value="eventItem.action"
+                        :options="blockEventActionOptions"
+                        size="small"
+                        placeholder="执行动作"
+                        @update:value="updateBlockEvent(eventIdx, { action: $event })"
+                      />
+                    </label>
+                    <label class="event-setting-field">
+                      <span>影响哪个区块</span>
+                      <n-select
+                        :value="eventItem.targetBlockId"
+                        :options="blockTargetOptions"
+                        size="small"
+                        clearable
+                        placeholder="可选"
+                        @update:value="updateBlockEvent(eventIdx, { targetBlockId: $event || '' })"
+                      />
+                    </label>
+                    <label class="event-setting-field">
+                      <span>跳转到页面</span>
+                      <n-select
+                        :value="eventItem.targetPageKey"
+                        :options="pageTargetOptions"
+                        size="small"
+                        clearable
+                        placeholder="可选"
+                        @update:value="updateBlockEvent(eventIdx, { targetPageKey: $event || '' })"
+                      />
+                    </label>
+                    <label v-if="formTargetOptions.length" class="event-setting-field">
+                      <span>打开哪个表单</span>
+                      <n-select
+                        :value="eventItem.targetFormKey"
+                        :options="formTargetOptions"
+                        size="small"
+                        clearable
+                        placeholder="可选"
+                        @update:value="updateBlockEvent(eventIdx, { targetFormKey: $event || '' })"
+                      />
+                    </label>
+                    <label class="event-setting-field">
+                      <span>备注说明</span>
+                      <n-input
+                        :value="eventItem.description"
+                        size="small"
+                        placeholder="例如点击行打开详情"
+                        @update:value="updateBlockEvent(eventIdx, { description: $event })"
+                      />
+                    </label>
+                  </div>
+                  <div class="event-param-list">
+                    <div
+                      v-for="(param, paramIdx) in (eventItem.params || [])"
+                      :key="paramIdx"
+                      class="event-param-row"
+                    >
+                      <n-input
+                        :value="param.name"
+                        size="tiny"
+                        placeholder="参数名"
+                        @update:value="updateBlockEventParam(eventIdx, paramIdx, { name: normalizeParamName($event) })"
+                      />
+                      <n-select
+                        :value="param.sourceType || 'static'"
+                        :options="paramSourceOptions"
+                        size="tiny"
+                        @update:value="updateBlockEventParam(eventIdx, paramIdx, normalizeParamSourcePatch($event, param))"
+                      />
+                      <n-select
+                        v-if="param.sourceType === 'rowField'"
+                        :value="param.sourceField || ''"
+                        :options="rowFieldOptions"
+                        size="tiny"
+                        filterable
+                        clearable
+                        placeholder="当前行字段"
+                        @update:value="updateBlockEventParam(eventIdx, paramIdx, buildParamValuePatch({ ...param, sourceType: 'rowField' }, $event))"
+                      />
+                      <n-select
+                        v-else-if="param.sourceType === 'routeQuery'"
+                        :value="param.sourceField || ''"
+                        :options="routeParamOptions"
+                        size="tiny"
+                        filterable
+                        tag
+                        clearable
+                        placeholder="路由参数"
+                        @update:value="updateBlockEventParam(eventIdx, paramIdx, buildParamValuePatch({ ...param, sourceType: 'routeQuery' }, $event))"
+                      />
+                      <n-select
+                        v-else-if="param.sourceType === 'system'"
+                        :value="param.sourceField || ''"
+                        :options="systemVariableOptions"
+                        size="tiny"
+                        clearable
+                        placeholder="系统变量"
+                        @update:value="updateBlockEventParam(eventIdx, paramIdx, buildParamValuePatch({ ...param, sourceType: 'system' }, $event))"
+                      />
+                      <n-input
+                        v-else
+                        :value="param.value"
+                        size="tiny"
+                        placeholder="固定值"
+                        @update:value="updateBlockEventParam(eventIdx, paramIdx, { value: $event })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeBlockEventParam(eventIdx, paramIdx)">
+                        删
+                      </n-button>
+                    </div>
+                    <n-button size="tiny" dashed block @click="addBlockEventParam(eventIdx)">
+                      + 添加参数
+                    </n-button>
+                  </div>
+                </div>
+                <n-button size="small" dashed block @click="addBlockEvent">
+                  + 添加事件
+                </n-button>
+              </div>
+            </div>
+
+            <div v-show="propertyPanelTab === 'props'" class="property-tab-content">
+              <!-- Search / Table 字段配置 -->
+              <template v-if="isFieldConfigurableBlock(selectedBlock.blockType)">
+                <n-form-item :label="resolveFieldConfigLabel(selectedBlock.blockType)">
+                  <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
+                    {{ selectedBlock.blockType === 'AiCrudPage' ? '配置列表字段' : '配置字段' }}（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
+                  </n-button>
+                </n-form-item>
+                <n-form-item v-if="selectedBlock.blockType === 'search-form'" label="可折叠">
+                  <n-switch
+                    :value="!!selectedBlock.props?.collapsible"
+                    size="small"
+                    @update:value="patchBlockProps(selectedBlock.id, { collapsible: $event })"
+                  />
+                </n-form-item>
+                <template v-if="['data-table', 'AiCrudPage', 'AiTable'].includes(selectedBlock.blockType)">
+                  <n-form-item label="默认排序字段">
+                    <n-select
+                      :value="selectedBlock.props?.defaultSortField || 'id'"
+                      :options="sortFieldOptions"
+                      filterable
+                      clearable
+                      @update:value="patchBlockProps(selectedBlock.id, { defaultSortField: $event || 'id' })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="默认排序方式">
+                    <n-select
+                      :value="selectedBlock.props?.defaultSortOrder || 'desc'"
+                      :options="sortOrderOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { defaultSortOrder: $event || 'desc' })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="全部列对齐">
+                    <n-select
+                      :value="selectedBlock.props?.globalAlign || 'left'"
+                      :options="alignOptions"
+                      @update:value="applySelectedTableGlobalAlign"
+                    />
+                  </n-form-item>
+                  <n-form-item label="行间距">
+                    <n-input-number
+                      :value="selectedBlock.props?.rowGap ?? 8"
+                      :min="0"
+                      :max="32"
+                      :step="2"
+                      :show-button="false"
+                      @update:value="patchBlockProps(selectedBlock.id, { rowGap: normalizeTableRowGap($event) })"
+                    />
+                  </n-form-item>
+                </template>
+              </template>
+
+              <!-- System Ai components -->
+              <template v-if="['AiCrudPage', 'AiForm', 'AiTable'].includes(selectedBlock.blockType)">
+                <n-form-item label="组件标题">
+                  <n-input
+                    :value="selectedBlock.props?.title"
+                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                  />
+                </n-form-item>
+                <n-collapse v-model:expanded-names="propertyCollapseExpandedNames" class="advanced-config-collapse">
+                  <n-collapse-item v-if="propertySectionVisible(['基础配置', '接口', '基础路径', '行主键', '真实接口预览', '响应字段', '表单布局'])" name="base" title="接口与数据源">
+                    <div class="property-search-anchor" data-property-search="基础配置 接口 数据源 基础路径 行主键 真实接口预览 响应字段 表单布局 api list detail create update delete import export" />
+                    <template v-if="selectedBlock.blockType === 'AiCrudPage'">
+                      <n-form-item label="基础路径 / 行主键" class="copy-form-item">
+                        <div class="api-base-row">
+                          <n-input
+                            class="api-base-input"
+                            :value="selectedBlock.props?.api || defaultApiValues.api"
+                            :placeholder="defaultApiValues.api"
+                            @update:value="patchBlockProps(selectedBlock.id, { api: $event })"
                           />
                           <n-input
-                            :value="selectedBlock.props?.previewRecordId || ''"
-                            :disabled="!['edit', 'detail'].includes(selectedBlock.props?.previewMode)"
-                            placeholder="编辑/详情记录 ID"
-                            @update:value="patchBlockProps(selectedBlock.id, { previewRecordId: $event || '' })"
+                            class="api-key-input"
+                            :value="selectedBlock.props?.rowKey || 'id'"
+                            placeholder="id"
+                            @update:value="patchBlockProps(selectedBlock.id, { rowKey: $event || 'id' })"
                           />
                         </div>
-                        <div
-                          class="preview-status"
-                          :class="`is-${selectedBlock.props?.lastPreviewStatus || 'idle'}`"
-                        >
-                          <strong>{{ crudPreviewStatusText(selectedBlock.props?.lastPreviewStatus) }}</strong>
-                          <span>{{ selectedBlock.props?.lastPreviewMessage || '默认使用模拟数据预览；打开真实请求后会显示接口请求状态。' }}</span>
-                          <em v-if="selectedBlock.props?.lastPreviewError">{{ selectedBlock.props.lastPreviewError }}</em>
+                      </n-form-item>
+                      <n-form-item label="真实接口预览" class="copy-form-item">
+                        <div class="preview-config-panel">
+                          <div class="preview-config-head">
+                            <span>启用真实请求</span>
+                            <n-switch
+                              :value="selectedBlock.props?.previewLiveData === true"
+                              @update:value="patchBlockProps(selectedBlock.id, {
+                                previewLiveData: $event,
+                                previewMode: $event ? (selectedBlock.props?.previewMode === 'mock' ? 'realList' : (selectedBlock.props?.previewMode || 'realList')) : 'mock',
+                                lastPreviewStatus: $event ? 'loading' : 'idle',
+                                lastPreviewMessage: $event ? '正在请求真实接口预览' : '当前使用模拟预览，不请求接口',
+                                lastPreviewError: '',
+                              })"
+                            />
+                          </div>
+                          <div class="preview-config-grid">
+                            <n-select
+                              :value="selectedBlock.props?.previewMode || (selectedBlock.props?.previewLiveData === true ? 'realList' : 'mock')"
+                              :options="crudPreviewModeOptions"
+                              @update:value="patchBlockProps(selectedBlock.id, {
+                                previewMode: $event || 'mock',
+                                previewLiveData: $event !== 'mock',
+                                lastPreviewStatus: $event === 'mock' ? 'idle' : 'loading',
+                                lastPreviewMessage: $event === 'mock' ? '当前使用模拟预览，不请求接口' : '正在请求真实接口预览',
+                                lastPreviewError: '',
+                              })"
+                            />
+                            <n-input
+                              :value="selectedBlock.props?.previewRecordId || ''"
+                              :disabled="!['edit', 'detail'].includes(selectedBlock.props?.previewMode)"
+                              placeholder="编辑/详情记录 ID"
+                              @update:value="patchBlockProps(selectedBlock.id, { previewRecordId: $event || '' })"
+                            />
+                          </div>
+                          <div
+                            class="preview-status"
+                            :class="`is-${selectedBlock.props?.lastPreviewStatus || 'idle'}`"
+                          >
+                            <strong>{{ crudPreviewStatusText(selectedBlock.props?.lastPreviewStatus) }}</strong>
+                            <span>{{ selectedBlock.props?.lastPreviewMessage || '默认使用模拟数据预览；打开真实请求后会显示接口请求状态。' }}</span>
+                            <em v-if="selectedBlock.props?.lastPreviewError">{{ selectedBlock.props.lastPreviewError }}</em>
+                          </div>
+                          <div class="field-help">
+                            默认 mock，不请求接口；选择列表/新增/编辑/详情真实预览后，中间画布会请求接口并打开对应状态。编辑和详情建议填写记录 ID。
+                          </div>
                         </div>
-                        <div class="field-help">
-                          默认 mock，不请求接口；选择列表/新增/编辑/详情真实预览后，中间画布会请求接口并打开对应状态。编辑和详情建议填写记录 ID。
+                      </n-form-item>
+                      <n-form-item label="接口地址" class="copy-form-item">
+                        <div class="api-config-grid">
+                          <div class="api-config-title">
+                            API 接口地址配置
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge get">GET</span>
+                            <n-input
+                              :value="selectedBlock.props?.listApi || defaultApiValues.listApi"
+                              :placeholder="defaultApiValues.listApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { listApi: $event })"
+                            />
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge get">GET</span>
+                            <n-input
+                              :value="selectedBlock.props?.detailApi || defaultApiValues.detailApi"
+                              :placeholder="defaultApiValues.detailApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { detailApi: $event })"
+                            />
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge post">POST</span>
+                            <n-input
+                              :value="selectedBlock.props?.createApi || defaultApiValues.createApi"
+                              :placeholder="defaultApiValues.createApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { createApi: $event })"
+                            />
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge put">PUT</span>
+                            <n-input
+                              :value="selectedBlock.props?.updateApi || defaultApiValues.updateApi"
+                              :placeholder="defaultApiValues.updateApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { updateApi: $event })"
+                            />
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge delete">DEL</span>
+                            <n-input
+                              :value="selectedBlock.props?.deleteApi || defaultApiValues.deleteApi"
+                              :placeholder="defaultApiValues.deleteApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { deleteApi: $event })"
+                            />
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge post">POST</span>
+                            <n-input
+                              :value="selectedBlock.props?.importApi || defaultApiValues.importApi"
+                              :placeholder="defaultApiValues.importApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { importApi: $event })"
+                            />
+                          </div>
+                          <div class="api-endpoint-row">
+                            <span class="api-method-badge get">GET</span>
+                            <n-input
+                              :value="selectedBlock.props?.exportApi || defaultApiValues.exportApi"
+                              :placeholder="defaultApiValues.exportApi"
+                              @update:value="patchBlockProps(selectedBlock.id, { exportApi: $event })"
+                            />
+                          </div>
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="响应字段">
+                        <div class="style-grid three">
+                          <n-select
+                            :value="selectedBlock.props?.listMethod || 'get'"
+                            :options="requestMethodOptions"
+                            @update:value="patchBlockProps(selectedBlock.id, { listMethod: $event || 'get' })"
+                          />
+                          <n-input
+                            :value="selectedBlock.props?.listDataField || 'records'"
+                            placeholder="records"
+                            @update:value="patchBlockProps(selectedBlock.id, { listDataField: $event || 'records' })"
+                          />
+                          <n-input
+                            :value="selectedBlock.props?.listTotalField || 'total'"
+                            placeholder="total"
+                            @update:value="patchBlockProps(selectedBlock.id, { listTotalField: $event || 'total' })"
+                          />
+                        </div>
+                      </n-form-item>
+                    </template>
+                    <template v-else-if="selectedBlock.blockType === 'AiTable'">
+                      <n-form-item label="行主键 / 尺寸 / 模式">
+                        <div class="style-grid three">
+                          <n-input
+                            :value="selectedBlock.props?.rowKey || 'id'"
+                            placeholder="id"
+                            @update:value="patchBlockProps(selectedBlock.id, { rowKey: $event || 'id' })"
+                          />
+                          <n-select
+                            :value="selectedBlock.props?.size || 'small'"
+                            :options="componentSizeOptions"
+                            @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'small' })"
+                          />
+                          <n-select
+                            :value="selectedBlock.props?.renderMode || 'table'"
+                            :options="renderModeOptions"
+                            @update:value="patchBlockProps(selectedBlock.id, { renderMode: $event || 'table' })"
+                          />
+                        </div>
+                      </n-form-item>
+                    </template>
+                    <template v-else>
+                      <n-form-item label="表单布局">
+                        <div class="style-grid three">
+                          <n-input-number
+                            :value="selectedBlock.props?.gridCols || 2"
+                            :min="1"
+                            :max="4"
+                            :show-button="false"
+                            @update:value="patchBlockProps(selectedBlock.id, { gridCols: $event || 2 })"
+                          />
+                          <n-select
+                            :value="selectedBlock.props?.labelPlacement || 'left'"
+                            :options="labelPlacementOptions"
+                            @update:value="patchBlockProps(selectedBlock.id, { labelPlacement: $event || 'left' })"
+                          />
+                          <n-select
+                            :value="selectedBlock.props?.labelAlign || 'right'"
+                            :options="labelAlignOptions"
+                            @update:value="patchBlockProps(selectedBlock.id, { labelAlign: $event || 'right' })"
+                          />
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="标签宽度 / 尺寸">
+                        <div class="style-grid three">
+                          <n-input-number
+                            :value="toNumberOrNull(selectedBlock.props?.labelWidth) ?? 100"
+                            :min="0"
+                            :max="260"
+                            :show-button="false"
+                            @update:value="patchBlockProps(selectedBlock.id, { labelWidth: $event ?? 100 })"
+                          />
+                          <n-select
+                            :value="selectedBlock.props?.size || 'medium'"
+                            :options="componentSizeOptions"
+                            @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'medium' })"
+                          />
+                          <n-input-number
+                            :value="selectedBlock.props?.maxVisibleFields || 6"
+                            :min="1"
+                            :max="40"
+                            :show-button="false"
+                            @update:value="patchBlockProps(selectedBlock.id, { maxVisibleFields: $event || 6 })"
+                          />
+                        </div>
+                      </n-form-item>
+                    </template>
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['查询与列表字段', '搜索与表格', '搜索', '查询区', '搜索布局', '搜索字段', '表格', '列表字段', '表格列', '列标题', '列宽', '对齐', '固定', '省略', '排序', '分页', '列数', '最大高度', '横向宽度', '边框', '斑马纹'])" name="search" title="查询与列表字段">
+                    <div class="property-search-anchor" data-property-search="查询与列表字段 搜索与表格 搜索 查询区 搜索布局 搜索字段 表格 列表字段 表格列 列标题 列宽 对齐 固定 省略 排序 分页 列数 最大高度 横向宽度 边框 斑马纹" />
+                    <n-form-item label="显示项">
+                      <n-checkbox-group
+                        :value="resolveAiCrudVisibleFlags(selectedBlock)"
+                        @update:value="updateAiCrudVisibleFlags"
+                      >
+                        <n-space>
+                          <n-checkbox value="showSearch" label="查询区" />
+                          <n-checkbox value="showPagination" label="分页" />
+                          <n-checkbox value="showToolbar" label="工具栏" />
+                          <n-checkbox value="showRenderModeSwitch" label="模式切换" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </n-form-item>
+                    <n-form-item label="搜索布局">
+                      <div class="search-layout-grid">
+                        <label class="mini-number-field">
+                          <span>每行字段</span>
+                          <n-input-number
+                            :value="selectedBlock.props?.searchGridCols || 4"
+                            :min="1"
+                            :max="6"
+                            :show-button="false"
+                            placeholder="4"
+                            @update:value="patchBlockProps(selectedBlock.id, { searchGridCols: $event || 4 })"
+                          />
+                        </label>
+                        <label class="mini-number-field">
+                          <span>标签宽</span>
+                          <n-input-number
+                            :value="toNumberOrNull(selectedBlock.props?.searchLabelWidth)"
+                            :min="0"
+                            :max="260"
+                            :show-button="false"
+                            placeholder="自动"
+                            @update:value="patchBlockProps(selectedBlock.id, { searchLabelWidth: $event ?? 'auto' })"
+                          />
+                          <em>px</em>
+                        </label>
+                        <label class="mini-number-field">
+                          <span>默认显示</span>
+                          <n-input-number
+                            :value="selectedBlock.props?.searchMaxVisibleFields || 3"
+                            :min="1"
+                            :max="30"
+                            :show-button="false"
+                            placeholder="3"
+                            @update:value="patchBlockProps(selectedBlock.id, { searchMaxVisibleFields: $event || 3 })"
+                          />
+                          <em>项</em>
+                        </label>
+                        <label class="mini-number-field">
+                          <span>行间距</span>
+                          <n-input-number
+                            :value="selectedBlock.props?.searchYGap ?? 16"
+                            :min="0"
+                            :max="48"
+                            :show-button="false"
+                            placeholder="16"
+                            @update:value="patchBlockProps(selectedBlock.id, { searchYGap: $event ?? 16 })"
+                          />
+                          <em>px</em>
+                        </label>
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="字段配置">
+                      <div class="field-config-card-list compact">
+                        <div class="field-config-entry compact">
+                          <div>
+                            <strong>{{ resolveBlockFieldCount(selectedBlock, 'search') }} 个搜索字段</strong>
+                            <span>查询字段、方式、控件和映射。</span>
+                          </div>
+                          <button type="button" class="field-config-icon-action" title="配置搜索字段" @click="openFieldDrawer('search')">
+                            <n-icon><SettingsOutline /></n-icon>
+                          </button>
+                        </div>
+                        <div class="field-config-entry compact">
+                          <div>
+                            <strong>{{ resolveBlockFieldCount(selectedBlock, 'table') }} 个列表字段</strong>
+                            <span>列标题、宽度、排序和固定列。</span>
+                          </div>
+                          <button type="button" class="field-config-icon-action" title="配置列表字段" @click="openFieldDrawer('table')">
+                            <n-icon><SettingsOutline /></n-icon>
+                          </button>
                         </div>
                       </div>
                     </n-form-item>
-                    <n-form-item label="接口地址">
-                      <div class="api-config-grid">
-                        <n-input
-                          :value="selectedBlock.props?.listApi || defaultApiValues.listApi"
-                          :placeholder="defaultApiValues.listApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { listApi: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.detailApi || defaultApiValues.detailApi"
-                          :placeholder="defaultApiValues.detailApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { detailApi: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.createApi || defaultApiValues.createApi"
-                          :placeholder="defaultApiValues.createApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { createApi: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.updateApi || defaultApiValues.updateApi"
-                          :placeholder="defaultApiValues.updateApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { updateApi: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.deleteApi || defaultApiValues.deleteApi"
-                          :placeholder="defaultApiValues.deleteApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { deleteApi: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.importApi || defaultApiValues.importApi"
-                          :placeholder="defaultApiValues.importApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { importApi: $event })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.exportApi || defaultApiValues.exportApi"
-                          :placeholder="defaultApiValues.exportApi"
-                          @update:value="patchBlockProps(selectedBlock.id, { exportApi: $event })"
-                        />
+                    <n-form-item label="自定义操作">
+                      <div class="custom-action-summary custom-action-featured">
+                        <div>
+                          <strong>已配置 {{ customActionList.length }} 个自定义操作</strong>
+                          <span>配置工具栏按钮或行按钮，例如审批、打开详情、调用接口、跳转页面。</span>
+                        </div>
+                        <n-button size="small" type="primary" secondary @click="openCustomActionModal">
+                          配置自定义操作
+                        </n-button>
                       </div>
                     </n-form-item>
-                    <n-form-item label="响应字段">
-                      <div class="style-grid three">
+                    <n-form-item label="表格展示">
+                      <div class="style-grid four">
                         <n-select
-                          :value="selectedBlock.props?.listMethod || 'get'"
-                          :options="requestMethodOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { listMethod: $event || 'get' })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.listDataField || 'records'"
-                          placeholder="records"
-                          @update:value="patchBlockProps(selectedBlock.id, { listDataField: $event || 'records' })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.listTotalField || 'total'"
-                          placeholder="total"
-                          @update:value="patchBlockProps(selectedBlock.id, { listTotalField: $event || 'total' })"
-                        />
-                      </div>
-                    </n-form-item>
-                  </template>
-                  <template v-else-if="selectedBlock.blockType === 'AiTable'">
-                    <n-form-item label="行主键 / 尺寸 / 模式">
-                      <div class="style-grid three">
-                        <n-input
-                          :value="selectedBlock.props?.rowKey || 'id'"
-                          placeholder="id"
-                          @update:value="patchBlockProps(selectedBlock.id, { rowKey: $event || 'id' })"
-                        />
-                        <n-select
-                          :value="selectedBlock.props?.size || 'small'"
+                          :value="selectedBlock.props?.tableSize || 'small'"
                           :options="componentSizeOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'small' })"
+                          @update:value="patchBlockProps(selectedBlock.id, { tableSize: $event || 'small' })"
                         />
                         <n-select
                           :value="selectedBlock.props?.renderMode || 'table'"
                           :options="renderModeOptions"
                           @update:value="patchBlockProps(selectedBlock.id, { renderMode: $event || 'table' })"
                         />
+                        <n-input-number
+                          :value="toNumberOrNull(selectedBlock.props?.maxHeight)"
+                          :min="0"
+                          :show-button="false"
+                          placeholder="最大高度"
+                          @update:value="patchBlockProps(selectedBlock.id, { maxHeight: $event || undefined })"
+                        />
+                        <n-input-number
+                          :value="toNumberOrNull(selectedBlock.props?.scrollX)"
+                          :min="0"
+                          :show-button="false"
+                          placeholder="横向宽度"
+                          @update:value="patchBlockProps(selectedBlock.id, { scrollX: $event || undefined })"
+                        />
                       </div>
                     </n-form-item>
-                  </template>
-                  <template v-else>
-                    <n-form-item label="表单布局">
-                      <div class="style-grid three">
+                    <n-form-item label="表格样式">
+                      <n-checkbox-group
+                        :value="resolveAiCrudTableFlags(selectedBlock)"
+                        @update:value="updateAiCrudTableFlags"
+                      >
+                        <n-space>
+                          <n-checkbox value="bordered" label="边框" />
+                          <n-checkbox value="striped" label="斑马纹" />
+                          <n-checkbox value="hideSelection" label="隐藏多选" />
+                          <n-checkbox value="searchEnableCollapse" label="搜索折叠" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </n-form-item>
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['表单与弹窗', '新增', '编辑', '表单', '弹窗', '抽屉', '详情', '页脚', '打开方式', '标签位置', '标签对齐', '标签宽度', '表单列数'])" name="edit" title="表单与弹窗">
+                    <div class="property-search-anchor" data-property-search="表单与弹窗 新增 编辑 表单 弹窗 抽屉 详情 页脚 打开方式 标签位置 标签对齐 标签宽度 表单列数" />
+                    <div class="form-modal-help">
+                      新增、编辑弹窗使用当前表单设计的字段与 AIForm 表单渲染；这里只调整弹窗方式、宽度和表单布局。
+                    </div>
+                    <n-form-item label="编辑表单布局">
+                      <div class="style-grid four">
                         <n-input-number
-                          :value="selectedBlock.props?.gridCols || 2"
+                          :value="selectedBlock.props?.editGridCols || 1"
                           :min="1"
                           :max="4"
                           :show-button="false"
-                          @update:value="patchBlockProps(selectedBlock.id, { gridCols: $event || 2 })"
+                          placeholder="列数"
+                          @update:value="patchBlockProps(selectedBlock.id, { editGridCols: $event || 1 })"
                         />
-                        <n-select
-                          :value="selectedBlock.props?.labelPlacement || 'left'"
-                          :options="labelPlacementOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { labelPlacement: $event || 'left' })"
-                        />
-                        <n-select
-                          :value="selectedBlock.props?.labelAlign || 'right'"
-                          :options="labelAlignOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { labelAlign: $event || 'right' })"
-                        />
-                      </div>
-                    </n-form-item>
-                    <n-form-item label="标签宽度 / 尺寸">
-                      <div class="style-grid three">
                         <n-input-number
-                          :value="toNumberOrNull(selectedBlock.props?.labelWidth) ?? 100"
+                          :value="toNumberOrNull(selectedBlock.props?.editLabelWidth)"
                           :min="0"
                           :max="260"
                           :show-button="false"
-                          @update:value="patchBlockProps(selectedBlock.id, { labelWidth: $event ?? 100 })"
+                          placeholder="标签宽"
+                          @update:value="patchBlockProps(selectedBlock.id, { editLabelWidth: $event ?? 'auto' })"
                         />
                         <n-select
-                          :value="selectedBlock.props?.size || 'medium'"
-                          :options="componentSizeOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'medium' })"
+                          :value="selectedBlock.props?.editLabelPlacement || 'left'"
+                          :options="labelPlacementOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { editLabelPlacement: $event || 'left' })"
                         />
-                        <n-input-number
-                          :value="selectedBlock.props?.maxVisibleFields || 6"
-                          :min="1"
-                          :max="40"
-                          :show-button="false"
-                          @update:value="patchBlockProps(selectedBlock.id, { maxVisibleFields: $event || 6 })"
+                        <n-select
+                          :value="selectedBlock.props?.editLabelAlign || 'right'"
+                          :options="labelAlignOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { editLabelAlign: $event || 'right' })"
                         />
                       </div>
                     </n-form-item>
-                  </template>
-                </n-collapse-item>
-
-                <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['搜索与表格', '搜索', '查询区', '表格', '分页', '列数', '最大高度', '横向宽度', '边框', '斑马纹'])" name="search" title="搜索与表格">
-                  <n-form-item label="显示项">
-                    <n-checkbox-group
-                      :value="resolveAiCrudVisibleFlags(selectedBlock)"
-                      @update:value="updateAiCrudVisibleFlags"
-                    >
-                      <n-space>
-                        <n-checkbox value="showSearch" label="查询区" />
-                        <n-checkbox value="showPagination" label="分页" />
-                        <n-checkbox value="showToolbar" label="工具栏" />
-                        <n-checkbox value="showRenderModeSwitch" label="模式切换" />
-                      </n-space>
-                    </n-checkbox-group>
-                  </n-form-item>
-                  <n-form-item label="搜索布局">
-                    <div class="style-grid four">
-                      <n-input-number
-                        :value="selectedBlock.props?.searchGridCols || 4"
-                        :min="1"
-                        :max="6"
-                        :show-button="false"
-                        placeholder="列数"
-                        @update:value="patchBlockProps(selectedBlock.id, { searchGridCols: $event || 4 })"
-                      />
-                      <n-input-number
-                        :value="toNumberOrNull(selectedBlock.props?.searchLabelWidth)"
-                        :min="0"
-                        :max="260"
-                        :show-button="false"
-                        placeholder="标签宽"
-                        @update:value="patchBlockProps(selectedBlock.id, { searchLabelWidth: $event ?? 'auto' })"
-                      />
-                      <n-input-number
-                        :value="selectedBlock.props?.searchMaxVisibleFields || 3"
-                        :min="1"
-                        :max="30"
-                        :show-button="false"
-                        placeholder="最大显示"
-                        @update:value="patchBlockProps(selectedBlock.id, { searchMaxVisibleFields: $event || 3 })"
-                      />
-                      <n-input-number
-                        :value="selectedBlock.props?.searchYGap ?? 16"
-                        :min="0"
-                        :max="48"
-                        :show-button="false"
-                        placeholder="行距"
-                        @update:value="patchBlockProps(selectedBlock.id, { searchYGap: $event ?? 16 })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="查询条件">
-                    <div class="field-config-entry">
-                      <div>
-                        <strong>{{ resolveBlockFieldCount(selectedBlock, 'search') }} 个查询字段</strong>
-                        <span>配置查询字段、查询方式、组件类型和映射字段。</span>
+                    <n-form-item label="表单尺寸 / 间距">
+                      <div class="style-grid three">
+                        <n-select
+                          :value="selectedBlock.props?.editSize || 'medium'"
+                          :options="componentSizeOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { editSize: $event || 'medium' })"
+                        />
+                        <n-input-number
+                          :value="selectedBlock.props?.editXGap ?? 16"
+                          :min="0"
+                          :max="48"
+                          :show-button="false"
+                          placeholder="列距"
+                          @update:value="patchBlockProps(selectedBlock.id, { editXGap: $event ?? 16 })"
+                        />
+                        <n-input-number
+                          :value="selectedBlock.props?.editYGap ?? 8"
+                          :min="0"
+                          :max="48"
+                          :show-button="false"
+                          placeholder="行距"
+                          @update:value="patchBlockProps(selectedBlock.id, { editYGap: $event ?? 8 })"
+                        />
                       </div>
-                      <n-button size="small" type="primary" secondary @click="openFieldDrawer('search')">
-                        配置查询条件
+                    </n-form-item>
+                    <n-form-item label="弹出方式">
+                      <div class="style-grid three">
+                        <n-select
+                          :value="selectedBlock.props?.formOpenMode || selectedBlock.props?.modalType || 'modal'"
+                          :options="formOpenModeOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, normalizeFormOpenModePatch($event))"
+                        />
+                        <n-select
+                          :value="selectedBlock.props?.drawerPlacement || 'right'"
+                          :options="drawerPlacementOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { drawerPlacement: $event || 'right' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.modalWidth || '800px'"
+                          placeholder="弹窗宽度"
+                          @update:value="patchBlockProps(selectedBlock.id, { modalWidth: $event || '800px' })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="详情与页脚">
+                      <div class="metrics-editor">
+                        <n-input
+                          :value="selectedBlock.props?.detailModalWidth || 'min(1080px, 92vw)'"
+                          placeholder="详情宽度"
+                          @update:value="patchBlockProps(selectedBlock.id, { detailModalWidth: $event || 'min(1080px, 92vw)' })"
+                        />
+                        <n-checkbox-group
+                          :value="resolveAiCrudEditFlags(selectedBlock)"
+                          @update:value="updateAiCrudEditFlags"
+                        >
+                          <n-space>
+                            <n-checkbox value="editShowFeedback" label="校验反馈" />
+                            <n-checkbox value="hideModalFooter" label="隐藏页脚" />
+                            <n-checkbox value="hideDefaultDetailContent" label="隐藏默认详情" />
+                          </n-space>
+                        </n-checkbox-group>
+                      </div>
+                    </n-form-item>
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['工具栏与导入导出', '工具栏', '导入', '导出', '导出任务', '自定义查询', '自定义操作', '按钮文案', '回调', '参数处理', '提交前', '搜索前', '加载列表前'])" name="toolbar" title="工具栏按钮与导入导出">
+                    <div class="property-search-anchor" data-property-search="工具栏与导入导出 工具栏 导入 导出 导出任务 自定义查询 自定义操作 按钮文案 回调 参数处理 提交前 搜索前 加载列表前" />
+                    <n-form-item label="工具栏显示项">
+                      <div class="toolbar-toggle-list">
+                        <div class="switch-line toolbar-toggle-row">
+                          <span class="switch-line-text">
+                            <strong>新增按钮</strong>
+                            <small>控制顶部工具栏里的“新增”按钮。</small>
+                          </span>
+                          <n-switch
+                            :value="isAiCrudToolbarSwitchOn(selectedBlock, 'add')"
+                            @update:value="updateAiCrudToolbarSwitch('add', $event)"
+                          />
+                        </div>
+                        <div class="switch-line toolbar-toggle-row">
+                          <span class="switch-line-text">
+                            <strong>批量删除按钮</strong>
+                            <small>控制勾选多行后使用的“批量删除”。</small>
+                          </span>
+                          <n-switch
+                            :value="isAiCrudToolbarSwitchOn(selectedBlock, 'batchDelete')"
+                            @update:value="updateAiCrudToolbarSwitch('batchDelete', $event)"
+                          />
+                        </div>
+                        <div class="switch-line toolbar-toggle-row">
+                          <span class="switch-line-text">
+                            <strong>导入按钮</strong>
+                            <small>控制顶部“导入”，需要下方导入接口地址可用。</small>
+                          </span>
+                          <n-switch
+                            :value="isAiCrudToolbarSwitchOn(selectedBlock, 'import')"
+                            @update:value="updateAiCrudToolbarSwitch('import', $event)"
+                          />
+                        </div>
+                        <div class="switch-line toolbar-toggle-row">
+                          <span class="switch-line-text">
+                            <strong>导出按钮</strong>
+                            <small>控制顶部“导出”，需要下方导出接口地址可用。</small>
+                          </span>
+                          <n-switch
+                            :value="isAiCrudToolbarSwitchOn(selectedBlock, 'export')"
+                            @update:value="updateAiCrudToolbarSwitch('export', $event)"
+                          />
+                        </div>
+                        <div class="switch-line toolbar-toggle-row">
+                          <span class="switch-line-text">
+                            <strong>自定义查询</strong>
+                            <small>控制工具栏里的自定义查询入口。</small>
+                          </span>
+                          <n-switch
+                            :value="isAiCrudToolbarSwitchOn(selectedBlock, 'customQuery')"
+                            @update:value="updateAiCrudToolbarSwitch('customQuery', $event)"
+                          />
+                        </div>
+                        <div class="switch-line toolbar-toggle-row">
+                          <span class="switch-line-text">
+                            <strong>导出任务入口</strong>
+                            <small>控制异步导出任务入口；未配置任务时预览不会显示。</small>
+                          </span>
+                          <n-switch
+                            :value="isAiCrudToolbarSwitchOn(selectedBlock, 'exportTasks')"
+                            @update:value="updateAiCrudToolbarSwitch('exportTasks', $event)"
+                          />
+                        </div>
+                        <div class="field-help">
+                          这些开关只控制当前 AiCrudPage 顶部工具栏的按钮。若“搜索与表格”里的“工具栏”关闭，整排工具按钮都会隐藏。
+                        </div>
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="按钮文案 / 导出文件名">
+                      <div class="style-grid three">
+                        <n-input
+                          :value="selectedBlock.props?.addButtonText || '新增'"
+                          placeholder="新增按钮"
+                          @update:value="patchBlockProps(selectedBlock.id, { addButtonText: $event || '新增' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.exportButtonText || '导出'"
+                          placeholder="导出按钮"
+                          @update:value="patchBlockProps(selectedBlock.id, { exportButtonText: $event || '导出' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.exportFileName"
+                          placeholder="导出文件名"
+                          @update:value="patchBlockProps(selectedBlock.id, { exportFileName: $event })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="自定义操作">
+                      <div class="custom-action-summary">
+                        <div v-if="customActionList.length" class="action-chip-list">
+                          <span
+                            v-for="action in customActionList"
+                            :key="action.key"
+                            class="action-chip"
+                          >
+                            {{ action.label || action.key }}
+                            <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
+                          </span>
+                        </div>
+                        <span v-else class="empty">暂未配置自定义操作</span>
+                        <n-button size="tiny" type="primary" secondary block @click="openCustomActionModal">
+                          配置自定义操作（{{ customActionList.length }}）
+                        </n-button>
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="树表操作">
+                      <div class="tree-action-compact">
+                        <div>
+                          <strong>添加下级</strong>
+                          <span>树形表行操作</span>
+                        </div>
+                        <n-switch
+                          size="small"
+                          :value="selectedBlock.props?.enableTreeAddChild === true"
+                          @update:value="patchBlockProps(selectedBlock.id, { enableTreeAddChild: $event })"
+                        />
+                      </div>
+                    </n-form-item>
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiTable' && propertySectionVisible(['表格功能', '工具栏', '分页', '刷新', '密度', '列设置', '搜索切换', '全屏', '滚动尺寸'])" name="table" title="表格功能">
+                    <div class="property-search-anchor" data-property-search="表格功能 工具栏 分页 刷新 密度 列设置 搜索切换 全屏 滚动尺寸 表格样式" />
+                    <n-form-item label="功能开关">
+                      <n-checkbox-group
+                        :value="resolveAiTableVisibleFlags(selectedBlock)"
+                        @update:value="updateAiTableVisibleFlags"
+                      >
+                        <n-space>
+                          <n-checkbox value="showToolbar" label="工具栏" />
+                          <n-checkbox value="showPagination" label="分页" />
+                          <n-checkbox value="showSelection" label="选择列" />
+                          <n-checkbox value="showRefresh" label="刷新" />
+                          <n-checkbox value="showDensity" label="密度" />
+                          <n-checkbox value="showColumnFilter" label="列设置" />
+                          <n-checkbox value="showSearchToggle" label="搜索切换" />
+                          <n-checkbox value="showFullscreen" label="全屏" />
+                          <n-checkbox value="showRenderModeSwitch" label="模式切换" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </n-form-item>
+                    <n-form-item label="表格样式">
+                      <n-checkbox-group
+                        :value="resolveAiTableStyleFlags(selectedBlock)"
+                        @update:value="updateAiTableStyleFlags"
+                      >
+                        <n-space>
+                          <n-checkbox value="bordered" label="边框" />
+                          <n-checkbox value="striped" label="斑马纹" />
+                          <n-checkbox value="singleLine" label="单线" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </n-form-item>
+                    <n-form-item label="滚动尺寸">
+                      <div class="style-grid">
+                        <n-input-number
+                          :value="toNumberOrNull(selectedBlock.props?.maxHeight)"
+                          :min="0"
+                          :show-button="false"
+                          placeholder="最大高度 px"
+                          @update:value="patchBlockProps(selectedBlock.id, { maxHeight: $event || undefined })"
+                        />
+                        <n-input-number
+                          :value="toNumberOrNull(selectedBlock.props?.scrollX)"
+                          :min="0"
+                          :show-button="false"
+                          placeholder="横向宽度 px"
+                          @update:value="patchBlockProps(selectedBlock.id, { scrollX: $event || undefined })"
+                        />
+                      </div>
+                    </n-form-item>
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiForm' && propertySectionVisible(['按钮与折叠', '按钮', '提交', '重置', '取消', '折叠', '校验'])" name="form-actions" title="按钮与折叠">
+                    <div class="property-search-anchor" data-property-search="按钮与折叠 按钮 提交 重置 取消 折叠 校验 操作区 字段折叠 校验反馈 按钮文案" />
+                    <n-form-item label="间距">
+                      <div class="style-grid">
+                        <n-input-number
+                          :value="selectedBlock.props?.xGap ?? 12"
+                          :min="0"
+                          :max="48"
+                          :show-button="false"
+                          placeholder="列距"
+                          @update:value="patchBlockProps(selectedBlock.id, { xGap: $event ?? 12 })"
+                        />
+                        <n-input-number
+                          :value="selectedBlock.props?.yGap ?? 0"
+                          :min="0"
+                          :max="48"
+                          :show-button="false"
+                          placeholder="行距"
+                          @update:value="patchBlockProps(selectedBlock.id, { yGap: $event ?? 0 })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="显示项">
+                      <n-checkbox-group
+                        :value="resolveAiFormFlags(selectedBlock)"
+                        @update:value="updateAiFormFlags"
+                      >
+                        <n-space>
+                          <n-checkbox value="showActions" label="操作区" />
+                          <n-checkbox value="showSubmit" label="提交" />
+                          <n-checkbox value="showReset" label="重置" />
+                          <n-checkbox value="showCancel" label="取消" />
+                          <n-checkbox value="enableCollapse" label="字段折叠" />
+                          <n-checkbox value="showFeedback" label="校验反馈" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </n-form-item>
+                    <n-form-item label="按钮文案">
+                      <div class="style-grid three">
+                        <n-input
+                          :value="selectedBlock.props?.submitText || '提交'"
+                          @update:value="patchBlockProps(selectedBlock.id, { submitText: $event || '提交' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.resetText || '重置'"
+                          @update:value="patchBlockProps(selectedBlock.id, { resetText: $event || '重置' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.cancelText || '取消'"
+                          @update:value="patchBlockProps(selectedBlock.id, { cancelText: $event || '取消' })"
+                        />
+                      </div>
+                    </n-form-item>
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['默认参数', '公共参数', 'publicParams', 'publicQuery', '表单默认值', '提交固定参数', '查询默认参数'])" name="default-params" title="默认参数与数据处理">
+                    <div class="property-search-anchor" data-property-search="默认参数 公共参数 publicParams publicQuery 表单默认值 提交固定参数 查询默认参数 数据处理" />
+                    <CrudDefaultParamsEditor
+                      :model-value="resolveSelectedBlockDefaultParams(selectedBlock)"
+                      :field-options="sortFieldOptions"
+                      @update:model-value="updateSelectedBlockDefaultParams"
+                    />
+                  </n-collapse-item>
+
+                  <n-collapse-item v-if="propertySectionVisible(['事件回调', '事件', '回调', '点击', '加载完成', '提交成功', '参数处理', '提交前', '搜索前', '加载列表前'])" name="event-help" title="生命周期回调">
+                    <div class="property-search-anchor" data-property-search="生命周期回调 事件回调 事件 回调 点击 加载完成 提交成功 参数处理 提交前 搜索前 加载列表前" />
+                    <template v-if="selectedBlock.blockType === 'AiCrudPage'">
+                      <CrudHookRulesEditor
+                        :model-value="selectedBlock.props?.crudHookRules || {}"
+                        :legacy-before-submit-rules="selectedBlock.props?.beforeSubmitRules || []"
+                        :field-options="sortFieldOptions"
+                        @update:model-value="updateSelectedBlockHookRules"
+                      />
+                    </template>
+                    <div v-else class="event-help">
+                      组件交互统一在上方“事件配置”里维护，可以配置点击、加载完成、行点击、提交成功等触发时机，并选择跳转、刷新、打开弹窗、接口请求等动作。
+                    </div>
+                  </n-collapse-item>
+                </n-collapse>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'back-button'">
+                <n-form-item label="按钮文字">
+                  <n-input
+                    :value="selectedBlock.props?.text"
+                    @update:value="patchBlockProps(selectedBlock.id, { text: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="按钮样式 / 动作">
+                  <div class="style-grid">
+                    <n-select
+                      :value="selectedBlock.props?.type || 'default'"
+                      :options="actionTypeOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'default' })"
+                    />
+                    <n-select
+                      :value="selectedBlock.props?.action || 'back'"
+                      :options="backButtonActionOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { action: $event || 'back' })"
+                    />
+                  </div>
+                </n-form-item>
+                <n-form-item v-if="selectedBlock.props?.action === 'navigate'" label="返回目标页面">
+                  <div class="style-grid">
+                    <n-select
+                      :value="selectedBlock.props?.targetPageKey"
+                      :options="pageTargetOptions"
+                      clearable
+                      placeholder="目标页面"
+                      @update:value="patchBlockProps(selectedBlock.id, { targetPageKey: $event || '' })"
+                    />
+                    <n-select
+                      v-if="formTargetOptions.length"
+                      :value="selectedBlock.props?.targetFormKey"
+                      :options="formTargetOptions"
+                      clearable
+                      placeholder="目标表单"
+                      @update:value="patchBlockProps(selectedBlock.id, { targetFormKey: $event || '' })"
+                    />
+                  </div>
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'page-title'">
+                <n-form-item label="标题 / 副标题">
+                  <div class="metrics-editor">
+                    <n-input
+                      :value="selectedBlock.props?.title"
+                      placeholder="标题"
+                      @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                    />
+                    <n-input
+                      :value="selectedBlock.props?.subtitle"
+                      placeholder="副标题"
+                      @update:value="patchBlockProps(selectedBlock.id, { subtitle: $event })"
+                    />
+                  </div>
+                </n-form-item>
+                <n-form-item label="状态 / 尺寸">
+                  <div class="style-grid three">
+                    <n-input
+                      :value="selectedBlock.props?.statusText"
+                      placeholder="状态文本"
+                      @update:value="patchBlockProps(selectedBlock.id, { statusText: $event })"
+                    />
+                    <n-select
+                      :value="selectedBlock.props?.statusType || 'info'"
+                      :options="tagTypeOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { statusType: $event || 'info' })"
+                    />
+                    <n-select
+                      :value="selectedBlock.props?.size || 'medium'"
+                      :options="componentSizeOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'medium' })"
+                    />
+                  </div>
+                </n-form-item>
+              </template>
+
+              <!-- Toolbar 动作 -->
+              <template v-if="selectedBlock.blockType === 'toolbar'">
+                <n-form-item label="按钮">
+                  <n-checkbox-group
+                    :value="selectedBlock.props?.actions || []"
+                    @update:value="patchBlockProps(selectedBlock.id, { actions: $event })"
+                  >
+                    <n-space vertical size="small">
+                      <n-checkbox value="add" label="新增" />
+                      <n-checkbox value="import" label="导入" />
+                      <n-checkbox value="export" label="导出" />
+                      <n-checkbox value="batch-delete" label="批量删除" />
+                      <n-checkbox value="custom-query" label="自定义查询" />
+                    </n-space>
+                  </n-checkbox-group>
+                </n-form-item>
+                <n-divider>自定义操作按钮</n-divider>
+                <div class="custom-action-summary">
+                  <div v-if="customActionList.length" class="action-chip-list">
+                    <span
+                      v-for="action in customActionList"
+                      :key="action.key"
+                      class="action-chip"
+                    >
+                      {{ action.label || action.key }}
+                      <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
+                    </span>
+                  </div>
+                  <span v-else class="empty">暂未配置自定义操作</span>
+                  <n-button size="small" type="primary" secondary block @click="openCustomActionModal">
+                    配置自定义操作（{{ customActionList.length }}）
+                  </n-button>
+                </div>
+              </template>
+
+              <!-- Tree panel -->
+              <template v-if="selectedBlock.blockType === 'tree-panel'">
+                <n-form-item label="树数据来源">
+                  <n-select
+                    :value="selectedBlock.props?.sourceModelCode"
+                    :options="treeSourceOptions"
+                    clearable
+                    @update:value="handleTreeSourceChange"
+                  />
+                </n-form-item>
+                <n-form-item label="树标题">
+                  <n-input
+                    :value="selectedBlock.props?.treeTitle"
+                    @update:value="patchBlockProps(selectedBlock.id, { treeTitle: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="树节点主键">
+                  <n-select
+                    :value="selectedBlock.props?.keyField"
+                    :options="treeFieldOptions"
+                    clearable
+                    @update:value="patchBlockProps(selectedBlock.id, { keyField: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="树父级字段">
+                  <n-select
+                    :value="selectedBlock.props?.parentField"
+                    :options="treeFieldOptions"
+                    clearable
+                    @update:value="patchBlockProps(selectedBlock.id, { parentField: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="树显示字段">
+                  <n-select
+                    :value="selectedBlock.props?.labelField"
+                    :options="treeFieldOptions"
+                    clearable
+                    @update:value="patchBlockProps(selectedBlock.id, { labelField: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="加载方式">
+                  <n-select
+                    :value="selectedBlock.props?.loadMode || 'full'"
+                    :options="treeLoadModeOptions"
+                    @update:value="patchBlockProps(selectedBlock.id, { loadMode: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="节点取值字段">
+                  <n-select
+                    :value="selectedBlock.props?.targetField"
+                    :options="treeFieldOptions"
+                    clearable
+                    @update:value="patchBlockProps(selectedBlock.id, { targetField: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="右表过滤字段">
+                  <n-select
+                    :value="selectedBlock.props?.filterField"
+                    :options="primaryFieldOptions"
+                    clearable
+                    @update:value="patchBlockProps(selectedBlock.id, { filterField: $event })"
+                  />
+                  <div class="field-help">
+                    树接口独立加载；点击节点只给右侧列表追加“{{ selectedBlock.props?.filterField || '列表过滤字段' }} = 节点的 {{ selectedBlock.props?.targetField || selectedBlock.props?.keyField || 'id' }}”过滤条件。
+                  </div>
+                </n-form-item>
+              </template>
+
+              <!-- Stats strip -->
+              <template v-if="selectedBlock.blockType === 'stats-strip'">
+                <n-form-item label="指标项">
+                  <div class="metrics-editor">
+                    <div
+                      v-for="(metric, idx) in (selectedBlock.props?.metrics || [])"
+                      :key="idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="metric.label"
+                        placeholder="标签"
+                        size="small"
+                        @update:value="updateMetric(idx, { label: $event })"
+                      />
+                      <n-input
+                        :value="metric.value"
+                        placeholder="数值"
+                        size="small"
+                        @update:value="updateMetric(idx, { value: $event })"
+                      />
+                      <n-input
+                        :value="metric.trend"
+                        placeholder="+5%"
+                        size="small"
+                        @update:value="updateMetric(idx, { trend: $event })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeMetric(idx)">
+                        删
                       </n-button>
                     </div>
-                  </n-form-item>
-                  <n-form-item label="表格展示">
-                    <div class="style-grid four">
-                      <n-select
-                        :value="selectedBlock.props?.tableSize || 'small'"
-                        :options="componentSizeOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, { tableSize: $event || 'small' })"
-                      />
-                      <n-select
-                        :value="selectedBlock.props?.renderMode || 'table'"
-                        :options="renderModeOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, { renderMode: $event || 'table' })"
-                      />
-                      <n-input-number
-                        :value="toNumberOrNull(selectedBlock.props?.maxHeight)"
-                        :min="0"
-                        :show-button="false"
-                        placeholder="最大高度"
-                        @update:value="patchBlockProps(selectedBlock.id, { maxHeight: $event || undefined })"
-                      />
-                      <n-input-number
-                        :value="toNumberOrNull(selectedBlock.props?.scrollX)"
-                        :min="0"
-                        :show-button="false"
-                        placeholder="横向宽度"
-                        @update:value="patchBlockProps(selectedBlock.id, { scrollX: $event || undefined })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="表格样式">
-                    <n-checkbox-group
-                      :value="resolveAiCrudTableFlags(selectedBlock)"
-                      @update:value="updateAiCrudTableFlags"
-                    >
-                      <n-space>
-                        <n-checkbox value="bordered" label="边框" />
-                        <n-checkbox value="striped" label="斑马纹" />
-                        <n-checkbox value="hideSelection" label="隐藏多选" />
-                        <n-checkbox value="searchEnableCollapse" label="搜索折叠" />
-                      </n-space>
-                    </n-checkbox-group>
-                  </n-form-item>
-                </n-collapse-item>
-
-                <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['表单与弹窗', '新增', '编辑', '表单', '弹窗', '抽屉', '详情', '页脚'])" name="edit" title="表单与弹窗">
-                  <div class="form-modal-help">
-                    新增、编辑弹窗使用当前表单设计的字段与 AIForm 表单渲染；这里只调整弹窗方式、宽度和表单布局。
+                    <n-button size="small" dashed block @click="addMetric">
+                      + 添加指标
+                    </n-button>
                   </div>
-                  <n-form-item label="编辑表单布局">
-                    <div class="style-grid four">
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'detail-info'">
+                <n-form-item label="详情字段">
+                  <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
+                    配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
+                  </n-button>
+                </n-form-item>
+                <n-form-item label="详情布局">
+                  <div class="detail-layout-grid">
+                    <label class="detail-layout-control">
+                      <span>列数</span>
                       <n-input-number
-                        :value="selectedBlock.props?.editGridCols || 1"
+                        :value="selectedBlock.props?.columnCount || 2"
                         :min="1"
                         :max="4"
                         :show-button="false"
-                        placeholder="列数"
-                        @update:value="patchBlockProps(selectedBlock.id, { editGridCols: $event || 1 })"
+                        @update:value="patchBlockProps(selectedBlock.id, { columnCount: $event || 2 })"
                       />
-                      <n-input-number
-                        :value="toNumberOrNull(selectedBlock.props?.editLabelWidth)"
-                        :min="0"
-                        :max="260"
-                        :show-button="false"
-                        placeholder="标签宽"
-                        @update:value="patchBlockProps(selectedBlock.id, { editLabelWidth: $event ?? 'auto' })"
-                      />
+                    </label>
+                    <label class="detail-layout-control">
+                      <span>标题位置</span>
                       <n-select
-                        :value="selectedBlock.props?.editLabelPlacement || 'left'"
+                        :value="selectedBlock.props?.labelPlacement || 'left'"
                         :options="labelPlacementOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, { editLabelPlacement: $event || 'left' })"
+                        @update:value="patchBlockProps(selectedBlock.id, { labelPlacement: $event || 'left' })"
                       />
-                      <n-select
-                        :value="selectedBlock.props?.editLabelAlign || 'right'"
-                        :options="labelAlignOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, { editLabelAlign: $event || 'right' })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="表单尺寸 / 间距">
-                    <div class="style-grid three">
-                      <n-select
-                        :value="selectedBlock.props?.editSize || 'medium'"
-                        :options="componentSizeOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, { editSize: $event || 'medium' })"
-                      />
-                      <n-input-number
-                        :value="selectedBlock.props?.editXGap ?? 16"
-                        :min="0"
-                        :max="48"
-                        :show-button="false"
-                        placeholder="列距"
-                        @update:value="patchBlockProps(selectedBlock.id, { editXGap: $event ?? 16 })"
-                      />
-                      <n-input-number
-                        :value="selectedBlock.props?.editYGap ?? 8"
-                        :min="0"
-                        :max="48"
-                        :show-button="false"
-                        placeholder="行距"
-                        @update:value="patchBlockProps(selectedBlock.id, { editYGap: $event ?? 8 })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="弹出方式">
-                    <div class="style-grid three">
-                      <n-select
-                        :value="selectedBlock.props?.formOpenMode || selectedBlock.props?.modalType || 'modal'"
-                        :options="formOpenModeOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, normalizeFormOpenModePatch($event))"
-                      />
-                      <n-select
-                        :value="selectedBlock.props?.drawerPlacement || 'right'"
-                        :options="drawerPlacementOptions"
-                        @update:value="patchBlockProps(selectedBlock.id, { drawerPlacement: $event || 'right' })"
-                      />
-                      <n-input
-                        :value="selectedBlock.props?.modalWidth || '800px'"
-                        placeholder="弹窗宽度"
-                        @update:value="patchBlockProps(selectedBlock.id, { modalWidth: $event || '800px' })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="详情与页脚">
-                    <div class="metrics-editor">
-                      <n-input
-                        :value="selectedBlock.props?.detailModalWidth || 'min(1080px, 92vw)'"
-                        placeholder="详情宽度"
-                        @update:value="patchBlockProps(selectedBlock.id, { detailModalWidth: $event || 'min(1080px, 92vw)' })"
-                      />
-                      <n-checkbox-group
-                        :value="resolveAiCrudEditFlags(selectedBlock)"
-                        @update:value="updateAiCrudEditFlags"
-                      >
-                        <n-space>
-                          <n-checkbox value="editShowFeedback" label="校验反馈" />
-                          <n-checkbox value="hideModalFooter" label="隐藏页脚" />
-                          <n-checkbox value="hideDefaultDetailContent" label="隐藏默认详情" />
-                        </n-space>
-                      </n-checkbox-group>
-                    </div>
-                  </n-form-item>
-                </n-collapse-item>
-
-                <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['工具栏与导入导出', '工具栏', '导入', '导出', '自定义查询', '自定义操作', '按钮文案', '回调', '参数处理', '提交前', '搜索前', '加载列表前'])" name="toolbar" title="工具栏与导入导出">
-                  <n-form-item label="工具栏显示项">
-                    <div class="toolbar-toggle-list">
-                      <div class="switch-line toolbar-toggle-row">
-                        <span class="switch-line-text">
-                          <strong>新增按钮</strong>
-                          <small>控制顶部工具栏里的“新增”按钮。</small>
-                        </span>
-                        <n-switch
-                          :value="isAiCrudToolbarSwitchOn(selectedBlock, 'add')"
-                          @update:value="updateAiCrudToolbarSwitch('add', $event)"
-                        />
-                      </div>
-                      <div class="switch-line toolbar-toggle-row">
-                        <span class="switch-line-text">
-                          <strong>批量删除按钮</strong>
-                          <small>控制勾选多行后使用的“批量删除”。</small>
-                        </span>
-                        <n-switch
-                          :value="isAiCrudToolbarSwitchOn(selectedBlock, 'batchDelete')"
-                          @update:value="updateAiCrudToolbarSwitch('batchDelete', $event)"
-                        />
-                      </div>
-                      <div class="switch-line toolbar-toggle-row">
-                        <span class="switch-line-text">
-                          <strong>导入按钮</strong>
-                          <small>控制顶部“导入”，需要下方导入接口地址可用。</small>
-                        </span>
-                        <n-switch
-                          :value="isAiCrudToolbarSwitchOn(selectedBlock, 'import')"
-                          @update:value="updateAiCrudToolbarSwitch('import', $event)"
-                        />
-                      </div>
-                      <div class="switch-line toolbar-toggle-row">
-                        <span class="switch-line-text">
-                          <strong>导出按钮</strong>
-                          <small>控制顶部“导出”，需要下方导出接口地址可用。</small>
-                        </span>
-                        <n-switch
-                          :value="isAiCrudToolbarSwitchOn(selectedBlock, 'export')"
-                          @update:value="updateAiCrudToolbarSwitch('export', $event)"
-                        />
-                      </div>
-                      <div class="switch-line toolbar-toggle-row">
-                        <span class="switch-line-text">
-                          <strong>自定义查询</strong>
-                          <small>控制工具栏里的自定义查询入口。</small>
-                        </span>
-                        <n-switch
-                          :value="isAiCrudToolbarSwitchOn(selectedBlock, 'customQuery')"
-                          @update:value="updateAiCrudToolbarSwitch('customQuery', $event)"
-                        />
-                      </div>
-                      <div class="switch-line toolbar-toggle-row">
-                        <span class="switch-line-text">
-                          <strong>导出任务入口</strong>
-                          <small>控制异步导出任务入口；未配置任务时预览不会显示。</small>
-                        </span>
-                        <n-switch
-                          :value="isAiCrudToolbarSwitchOn(selectedBlock, 'exportTasks')"
-                          @update:value="updateAiCrudToolbarSwitch('exportTasks', $event)"
-                        />
-                      </div>
-                      <div class="field-help">
-                        这些开关只控制当前 AiCrudPage 顶部工具栏的按钮。若“搜索与表格”里的“工具栏”关闭，整排工具按钮都会隐藏。
-                      </div>
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="按钮文案 / 导出文件名">
-                    <div class="style-grid three">
-                      <n-input
-                        :value="selectedBlock.props?.addButtonText || '新增'"
-                        placeholder="新增按钮"
-                        @update:value="patchBlockProps(selectedBlock.id, { addButtonText: $event || '新增' })"
-                      />
-                      <n-input
-                        :value="selectedBlock.props?.exportButtonText || '导出'"
-                        placeholder="导出按钮"
-                        @update:value="patchBlockProps(selectedBlock.id, { exportButtonText: $event || '导出' })"
-                      />
-                      <n-input
-                        :value="selectedBlock.props?.exportFileName"
-                        placeholder="导出文件名"
-                        @update:value="patchBlockProps(selectedBlock.id, { exportFileName: $event })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="自定义操作">
-                    <div class="custom-action-summary">
-                      <div v-if="customActionList.length" class="action-chip-list">
-                        <span
-                          v-for="action in customActionList"
-                          :key="action.key"
-                          class="action-chip"
-                        >
-                          {{ action.label || action.key }}
-                          <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
-                        </span>
-                      </div>
-                      <span v-else class="empty">暂未配置自定义操作</span>
-                      <n-button size="small" type="primary" secondary block @click="openCustomActionModal">
-                        配置自定义操作（{{ customActionList.length }}）
-                      </n-button>
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="树表操作">
-                    <div class="switch-line">
-                      <span>显示“添加下级”</span>
+                    </label>
+                    <label class="detail-layout-switch">
+                      <span>
+                        <strong>显示边框</strong>
+                        <small>控制详情字段之间是否显示分隔边框</small>
+                      </span>
                       <n-switch
-                        :value="selectedBlock.props?.enableTreeAddChild === true"
-                        @update:value="patchBlockProps(selectedBlock.id, { enableTreeAddChild: $event })"
+                        :value="!!selectedBlock.props?.bordered"
+                        @update:value="patchBlockProps(selectedBlock.id, { bordered: $event })"
+                      />
+                    </label>
+                  </div>
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'info-panel'">
+                <n-form-item label="提示内容">
+                  <div class="metrics-editor">
+                    <n-input
+                      :value="selectedBlock.props?.title"
+                      placeholder="标题"
+                      @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                    />
+                    <n-input
+                      :value="selectedBlock.props?.content"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="内容"
+                      @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
+                    />
+                  </div>
+                </n-form-item>
+                <n-form-item label="提示类型">
+                  <n-select
+                    :value="selectedBlock.props?.type || 'info'"
+                    :options="tagTypeOptions"
+                    @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'info' })"
+                  />
+                </n-form-item>
+              </template>
+
+              <!-- Custom html -->
+              <template v-if="selectedBlock.blockType === 'custom-html'">
+                <n-form-item label="标题">
+                  <n-input
+                    :value="selectedBlock.props?.title"
+                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="正文">
+                  <n-input
+                    :value="selectedBlock.props?.content"
+                    type="textarea"
+                    :rows="4"
+                    @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
+                  />
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'action-button'">
+                <n-form-item label="基础样式">
+                  <div class="style-grid three">
+                    <n-input
+                      :value="selectedBlock.props?.text"
+                      placeholder="按钮文本"
+                      @update:value="patchBlockProps(selectedBlock.id, { text: $event })"
+                    />
+                    <n-select
+                      :value="selectedBlock.props?.type || 'primary'"
+                      :options="actionTypeOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'primary' })"
+                    />
+                    <n-select
+                      :value="selectedBlock.props?.size || 'small'"
+                      :options="componentSizeOptions"
+                      @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'small' })"
+                    />
+                  </div>
+                </n-form-item>
+                <n-form-item label="点击动作">
+                  <div class="action-button-event-grid">
+                    <n-select
+                      :value="resolvePrimaryClickEvent(selectedBlock).action"
+                      :options="blockEventActionOptions"
+                      placeholder="点击后执行"
+                      @update:value="updatePrimaryClickEvent({ action: $event || 'none' })"
+                    />
+                    <n-select
+                      v-if="resolvePrimaryClickEvent(selectedBlock).action === 'navigate'"
+                      :value="resolvePrimaryClickEvent(selectedBlock).targetPageKey"
+                      :options="pageTargetOptions"
+                      clearable
+                      filterable
+                      placeholder="目标页面"
+                      @update:value="updatePrimaryClickEvent({ targetPageKey: $event || '' })"
+                    />
+                    <n-select
+                      v-if="resolvePrimaryClickEvent(selectedBlock).action === 'navigate' && formTargetOptions.length"
+                      :value="resolvePrimaryClickEvent(selectedBlock).targetFormKey"
+                      :options="formTargetOptions"
+                      clearable
+                      filterable
+                      placeholder="目标表单"
+                      @update:value="updatePrimaryClickEvent({ targetFormKey: $event || '' })"
+                    />
+                    <n-input
+                      v-if="resolvePrimaryClickEvent(selectedBlock).action === 'request'"
+                      :value="resolvePrimaryClickEvent(selectedBlock).requestUrl"
+                      clearable
+                      placeholder="接口地址，例如 post@/api/xxx"
+                      @update:value="updatePrimaryClickEvent({ requestUrl: $event || '' })"
+                    />
+                  </div>
+                  <div class="field-help">
+                    这里会写入按钮的 click 事件；参数、权限、确认提示可在“事件回调”里继续补充。
+                  </div>
+                </n-form-item>
+                <n-form-item label="权限与确认">
+                  <div class="action-button-event-grid">
+                    <n-input
+                      :value="resolvePrimaryClickEvent(selectedBlock).permissionCode"
+                      clearable
+                      placeholder="权限码，例如 ai:business:customer:edit"
+                      @update:value="updatePrimaryClickEvent({ permissionCode: $event || '' })"
+                    />
+                    <n-input
+                      :value="resolvePrimaryClickEvent(selectedBlock).confirmText"
+                      clearable
+                      placeholder="确认提示，留空则不弹窗"
+                      @update:value="updatePrimaryClickEvent({ confirmText: $event || '' })"
+                    />
+                    <n-input
+                      :value="resolvePrimaryClickEvent(selectedBlock).displayCondition || ''"
+                      clearable
+                      placeholder="显示条件，如 status=待处理"
+                      @update:value="updatePrimaryClickEvent({ displayCondition: $event || '' })"
+                    />
+                  </div>
+                </n-form-item>
+                <n-form-item label="成功后行为">
+                  <n-select
+                    :value="resolvePrimaryClickEvent(selectedBlock).successBehavior || 'none'"
+                    :options="successBehaviorOptions"
+                    @update:value="updatePrimaryClickEvent({ successBehavior: $event || 'none' })"
+                  />
+                </n-form-item>
+                <n-form-item label="按钮状态">
+                  <div class="toolbar-toggle-list">
+                    <div class="switch-line toolbar-toggle-row">
+                      <span class="switch-line-text">
+                        <strong>次要按钮</strong>
+                        <small>打开后使用浅色按钮样式，适合“取消、查看、次操作”。</small>
+                      </span>
+                      <n-switch
+                        :value="!!selectedBlock.props?.secondary"
+                        @update:value="patchBlockProps(selectedBlock.id, { secondary: $event })"
+                      />
+                    </div>
+                    <div class="switch-line toolbar-toggle-row">
+                      <span class="switch-line-text">
+                        <strong>撑满宽度</strong>
+                        <small>打开后按钮宽度撑满当前按钮组件区块。</small>
+                      </span>
+                      <n-switch
+                        :value="!!selectedBlock.props?.block"
+                        @update:value="patchBlockProps(selectedBlock.id, { block: $event })"
+                      />
+                    </div>
+                    <div class="switch-line toolbar-toggle-row">
+                      <span class="switch-line-text">
+                        <strong>禁用状态</strong>
+                        <small>打开后按钮不可点击，用来预览无权限或条件不满足状态。</small>
+                      </span>
+                      <n-switch
+                        :value="!!selectedBlock.props?.disabled"
+                        @update:value="patchBlockProps(selectedBlock.id, { disabled: $event })"
+                      />
+                    </div>
+                    <div class="switch-line toolbar-toggle-row">
+                      <span class="switch-line-text">
+                        <strong>加载状态</strong>
+                        <small>打开后显示加载中，用来预览提交中的按钮状态。</small>
+                      </span>
+                      <n-switch
+                        :value="!!selectedBlock.props?.loading"
+                        @update:value="patchBlockProps(selectedBlock.id, { loading: $event })"
                       />
                     </div>
                     <div class="field-help">
-                      仅树形表维护场景开启；左树右表筛选不需要这个行操作。
+                      这里的开关只改当前按钮的显示状态；点击后要跳转、刷新或调用接口，请在“事件回调”里配置点击事件。
                     </div>
-                  </n-form-item>
-                </n-collapse-item>
-
-                <n-collapse-item v-if="selectedBlock.blockType === 'AiTable' && propertySectionVisible(['表格功能', '工具栏', '分页', '刷新', '密度', '列设置', '搜索切换', '全屏', '滚动尺寸'])" name="table" title="表格功能">
-                  <n-form-item label="功能开关">
-                    <n-checkbox-group
-                      :value="resolveAiTableVisibleFlags(selectedBlock)"
-                      @update:value="updateAiTableVisibleFlags"
-                    >
-                      <n-space>
-                        <n-checkbox value="showToolbar" label="工具栏" />
-                        <n-checkbox value="showPagination" label="分页" />
-                        <n-checkbox value="showSelection" label="选择列" />
-                        <n-checkbox value="showRefresh" label="刷新" />
-                        <n-checkbox value="showDensity" label="密度" />
-                        <n-checkbox value="showColumnFilter" label="列设置" />
-                        <n-checkbox value="showSearchToggle" label="搜索切换" />
-                        <n-checkbox value="showFullscreen" label="全屏" />
-                        <n-checkbox value="showRenderModeSwitch" label="模式切换" />
-                      </n-space>
-                    </n-checkbox-group>
-                  </n-form-item>
-                  <n-form-item label="表格样式">
-                    <n-checkbox-group
-                      :value="resolveAiTableStyleFlags(selectedBlock)"
-                      @update:value="updateAiTableStyleFlags"
-                    >
-                      <n-space>
-                        <n-checkbox value="bordered" label="边框" />
-                        <n-checkbox value="striped" label="斑马纹" />
-                        <n-checkbox value="singleLine" label="单线" />
-                      </n-space>
-                    </n-checkbox-group>
-                  </n-form-item>
-                  <n-form-item label="滚动尺寸">
-                    <div class="style-grid">
-                      <n-input-number
-                        :value="toNumberOrNull(selectedBlock.props?.maxHeight)"
-                        :min="0"
-                        :show-button="false"
-                        placeholder="最大高度 px"
-                        @update:value="patchBlockProps(selectedBlock.id, { maxHeight: $event || undefined })"
-                      />
-                      <n-input-number
-                        :value="toNumberOrNull(selectedBlock.props?.scrollX)"
-                        :min="0"
-                        :show-button="false"
-                        placeholder="横向宽度 px"
-                        @update:value="patchBlockProps(selectedBlock.id, { scrollX: $event || undefined })"
-                      />
-                    </div>
-                  </n-form-item>
-                </n-collapse-item>
-
-                <n-collapse-item v-if="selectedBlock.blockType === 'AiForm' && propertySectionVisible(['按钮与折叠', '按钮', '提交', '重置', '取消', '折叠', '校验'])" name="form-actions" title="按钮与折叠">
-                  <n-form-item label="间距">
-                    <div class="style-grid">
-                      <n-input-number
-                        :value="selectedBlock.props?.xGap ?? 12"
-                        :min="0"
-                        :max="48"
-                        :show-button="false"
-                        placeholder="列距"
-                        @update:value="patchBlockProps(selectedBlock.id, { xGap: $event ?? 12 })"
-                      />
-                      <n-input-number
-                        :value="selectedBlock.props?.yGap ?? 0"
-                        :min="0"
-                        :max="48"
-                        :show-button="false"
-                        placeholder="行距"
-                        @update:value="patchBlockProps(selectedBlock.id, { yGap: $event ?? 0 })"
-                      />
-                    </div>
-                  </n-form-item>
-                  <n-form-item label="显示项">
-                    <n-checkbox-group
-                      :value="resolveAiFormFlags(selectedBlock)"
-                      @update:value="updateAiFormFlags"
-                    >
-                      <n-space>
-                        <n-checkbox value="showActions" label="操作区" />
-                        <n-checkbox value="showSubmit" label="提交" />
-                        <n-checkbox value="showReset" label="重置" />
-                        <n-checkbox value="showCancel" label="取消" />
-                        <n-checkbox value="enableCollapse" label="字段折叠" />
-                        <n-checkbox value="showFeedback" label="校验反馈" />
-                      </n-space>
-                    </n-checkbox-group>
-                  </n-form-item>
-                  <n-form-item label="按钮文案">
-                    <div class="style-grid three">
-                      <n-input
-                        :value="selectedBlock.props?.submitText || '提交'"
-                        @update:value="patchBlockProps(selectedBlock.id, { submitText: $event || '提交' })"
-                      />
-                      <n-input
-                        :value="selectedBlock.props?.resetText || '重置'"
-                        @update:value="patchBlockProps(selectedBlock.id, { resetText: $event || '重置' })"
-                      />
-                      <n-input
-                        :value="selectedBlock.props?.cancelText || '取消'"
-                        @update:value="patchBlockProps(selectedBlock.id, { cancelText: $event || '取消' })"
-                      />
-                    </div>
-                  </n-form-item>
-                </n-collapse-item>
-
-                <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['默认参数', '公共参数', 'publicParams', 'publicQuery', '表单默认值', '提交固定参数', '查询默认参数'])" name="default-params" title="默认参数">
-                  <CrudDefaultParamsEditor
-                    :model-value="resolveSelectedBlockDefaultParams(selectedBlock)"
-                    :field-options="sortFieldOptions"
-                    @update:model-value="updateSelectedBlockDefaultParams"
-                  />
-                </n-collapse-item>
-
-                <n-collapse-item v-if="propertySectionVisible(['事件回调', '事件', '回调', '点击', '加载完成', '提交成功', '参数处理', '提交前', '搜索前', '加载列表前'])" name="event-help" title="事件回调">
-                  <template v-if="selectedBlock.blockType === 'AiCrudPage'">
-                    <CrudHookRulesEditor
-                      :model-value="selectedBlock.props?.crudHookRules || {}"
-                      :legacy-before-submit-rules="selectedBlock.props?.beforeSubmitRules || []"
-                      :field-options="sortFieldOptions"
-                      @update:model-value="updateSelectedBlockHookRules"
-                    />
-                  </template>
-                  <div v-else class="event-help">
-                    组件交互统一在上方“事件配置”里维护，可以配置点击、加载完成、行点击、提交成功等触发时机，并选择跳转、刷新、打开弹窗、接口请求等动作。
                   </div>
-                </n-collapse-item>
-              </n-collapse>
-            </template>
+                </n-form-item>
+              </template>
 
-            <template v-if="selectedBlock.blockType === 'back-button'">
-              <n-form-item label="按钮文字">
-                <n-input
-                  :value="selectedBlock.props?.text"
-                  @update:value="patchBlockProps(selectedBlock.id, { text: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="按钮样式 / 动作">
-                <div class="style-grid">
-                  <n-select
-                    :value="selectedBlock.props?.type || 'default'"
-                    :options="actionTypeOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'default' })"
-                  />
-                  <n-select
-                    :value="selectedBlock.props?.action || 'back'"
-                    :options="backButtonActionOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { action: $event || 'back' })"
-                  />
-                </div>
-              </n-form-item>
-              <n-form-item v-if="selectedBlock.props?.action === 'navigate'" label="返回目标页面">
-                <div class="style-grid">
-                  <n-select
-                    :value="selectedBlock.props?.targetPageKey"
-                    :options="pageTargetOptions"
-                    clearable
-                    placeholder="目标页面"
-                    @update:value="patchBlockProps(selectedBlock.id, { targetPageKey: $event || '' })"
-                  />
-                  <n-select
-                    v-if="formTargetOptions.length"
-                    :value="selectedBlock.props?.targetFormKey"
-                    :options="formTargetOptions"
-                    clearable
-                    placeholder="目标表单"
-                    @update:value="patchBlockProps(selectedBlock.id, { targetFormKey: $event || '' })"
-                  />
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'page-title'">
-              <n-form-item label="标题 / 副标题">
-                <div class="metrics-editor">
-                  <n-input
-                    :value="selectedBlock.props?.title"
-                    placeholder="标题"
-                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                  />
-                  <n-input
-                    :value="selectedBlock.props?.subtitle"
-                    placeholder="副标题"
-                    @update:value="patchBlockProps(selectedBlock.id, { subtitle: $event })"
-                  />
-                </div>
-              </n-form-item>
-              <n-form-item label="状态 / 尺寸">
-                <div class="style-grid three">
-                  <n-input
-                    :value="selectedBlock.props?.statusText"
-                    placeholder="状态文本"
-                    @update:value="patchBlockProps(selectedBlock.id, { statusText: $event })"
-                  />
-                  <n-select
-                    :value="selectedBlock.props?.statusType || 'info'"
-                    :options="tagTypeOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { statusType: $event || 'info' })"
-                  />
-                  <n-select
-                    :value="selectedBlock.props?.size || 'medium'"
-                    :options="componentSizeOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'medium' })"
-                  />
-                </div>
-              </n-form-item>
-            </template>
-
-            <!-- Toolbar 动作 -->
-            <template v-if="selectedBlock.blockType === 'toolbar'">
-              <n-form-item label="按钮">
-                <n-checkbox-group
-                  :value="selectedBlock.props?.actions || []"
-                  @update:value="patchBlockProps(selectedBlock.id, { actions: $event })"
-                >
-                  <n-space vertical size="small">
-                    <n-checkbox value="add" label="新增" />
-                    <n-checkbox value="import" label="导入" />
-                    <n-checkbox value="export" label="导出" />
-                    <n-checkbox value="batch-delete" label="批量删除" />
-                    <n-checkbox value="custom-query" label="自定义查询" />
-                  </n-space>
-                </n-checkbox-group>
-              </n-form-item>
-              <n-divider>自定义操作按钮</n-divider>
-              <div class="custom-action-summary">
-                <div v-if="customActionList.length" class="action-chip-list">
-                  <span
-                    v-for="action in customActionList"
-                    :key="action.key"
-                    class="action-chip"
-                  >
-                    {{ action.label || action.key }}
-                    <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
-                  </span>
-                </div>
-                <span v-else class="empty">暂未配置自定义操作</span>
-                <n-button size="small" type="primary" secondary block @click="openCustomActionModal">
-                  配置自定义操作（{{ customActionList.length }}）
-                </n-button>
-              </div>
-            </template>
-
-            <!-- Tree panel -->
-            <template v-if="selectedBlock.blockType === 'tree-panel'">
-              <n-form-item label="树数据来源">
-                <n-select
-                  :value="selectedBlock.props?.sourceModelCode"
-                  :options="treeSourceOptions"
-                  clearable
-                  @update:value="handleTreeSourceChange"
-                />
-              </n-form-item>
-              <n-form-item label="树标题">
-                <n-input
-                  :value="selectedBlock.props?.treeTitle"
-                  @update:value="patchBlockProps(selectedBlock.id, { treeTitle: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="树节点主键">
-                <n-select
-                  :value="selectedBlock.props?.keyField"
-                  :options="treeFieldOptions"
-                  clearable
-                  @update:value="patchBlockProps(selectedBlock.id, { keyField: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="树父级字段">
-                <n-select
-                  :value="selectedBlock.props?.parentField"
-                  :options="treeFieldOptions"
-                  clearable
-                  @update:value="patchBlockProps(selectedBlock.id, { parentField: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="树显示字段">
-                <n-select
-                  :value="selectedBlock.props?.labelField"
-                  :options="treeFieldOptions"
-                  clearable
-                  @update:value="patchBlockProps(selectedBlock.id, { labelField: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="加载方式">
-                <n-select
-                  :value="selectedBlock.props?.loadMode || 'full'"
-                  :options="treeLoadModeOptions"
-                  @update:value="patchBlockProps(selectedBlock.id, { loadMode: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="节点取值字段">
-                <n-select
-                  :value="selectedBlock.props?.targetField"
-                  :options="treeFieldOptions"
-                  clearable
-                  @update:value="patchBlockProps(selectedBlock.id, { targetField: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="右表过滤字段">
-                <n-select
-                  :value="selectedBlock.props?.filterField"
-                  :options="primaryFieldOptions"
-                  clearable
-                  @update:value="patchBlockProps(selectedBlock.id, { filterField: $event })"
-                />
-                <div class="field-help">
-                  树接口独立加载；点击节点只给右侧列表追加“{{ selectedBlock.props?.filterField || '列表过滤字段' }} = 节点的 {{ selectedBlock.props?.targetField || selectedBlock.props?.keyField || 'id' }}”过滤条件。
-                </div>
-              </n-form-item>
-            </template>
-
-            <!-- Stats strip -->
-            <template v-if="selectedBlock.blockType === 'stats-strip'">
-              <n-form-item label="指标项">
-                <div class="metrics-editor">
-                  <div
-                    v-for="(metric, idx) in (selectedBlock.props?.metrics || [])"
-                    :key="idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="metric.label"
-                      placeholder="标签"
-                      size="small"
-                      @update:value="updateMetric(idx, { label: $event })"
-                    />
-                    <n-input
-                      :value="metric.value"
-                      placeholder="数值"
-                      size="small"
-                      @update:value="updateMetric(idx, { value: $event })"
-                    />
-                    <n-input
-                      :value="metric.trend"
-                      placeholder="+5%"
-                      size="small"
-                      @update:value="updateMetric(idx, { trend: $event })"
-                    />
-                    <n-button size="tiny" quaternary @click="removeMetric(idx)">
-                      删
+              <template v-if="selectedBlock.blockType === 'button-group'">
+                <n-form-item label="按钮组">
+                  <div class="metrics-editor">
+                    <div
+                      v-for="(button, idx) in (selectedBlock.props?.buttons || [])"
+                      :key="button.key || idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="button.text"
+                        placeholder="文本"
+                        size="small"
+                        @update:value="updateButtonGroupItem(idx, { text: $event })"
+                      />
+                      <n-select
+                        :value="button.type || 'default'"
+                        :options="actionTypeOptions"
+                        size="small"
+                        @update:value="updateButtonGroupItem(idx, { type: $event || 'default' })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeButtonGroupItem(idx)">
+                        删
+                      </n-button>
+                    </div>
+                    <n-button size="small" dashed block @click="addButtonGroupItem">
+                      + 添加按钮
                     </n-button>
                   </div>
-                  <n-button size="small" dashed block @click="addMetric">
-                    + 添加指标
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
+                </n-form-item>
+              </template>
 
-            <template v-if="selectedBlock.blockType === 'detail-info'">
-              <n-form-item label="详情字段">
-                <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
-                  配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
-                </n-button>
-              </n-form-item>
-              <n-form-item label="详情布局">
-                <div class="style-grid three">
-                  <n-input-number
-                    :value="selectedBlock.props?.columnCount || 2"
-                    :min="1"
-                    :max="4"
-                    :show-button="false"
-                    @update:value="patchBlockProps(selectedBlock.id, { columnCount: $event || 2 })"
-                  />
-                  <n-select
-                    :value="selectedBlock.props?.labelPlacement || 'left'"
-                    :options="labelPlacementOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { labelPlacement: $event || 'left' })"
-                  />
-                  <n-switch
-                    :value="!!selectedBlock.props?.bordered"
-                    @update:value="patchBlockProps(selectedBlock.id, { bordered: $event })"
-                  />
-                </div>
-              </n-form-item>
-            </template>
+              <template v-if="selectedBlock.blockType === 'tag-list'">
+                <n-form-item label="标签">
+                  <div class="metrics-editor">
+                    <div
+                      v-for="(tag, idx) in (selectedBlock.props?.tags || [])"
+                      :key="idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="tag.label"
+                        placeholder="标签"
+                        size="small"
+                        @update:value="updateTagItem(idx, { label: $event })"
+                      />
+                      <n-select
+                        :value="tag.type || 'default'"
+                        :options="tagTypeOptions"
+                        size="small"
+                        @update:value="updateTagItem(idx, { type: $event || 'default' })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeTagItem(idx)">
+                        删
+                      </n-button>
+                    </div>
+                    <n-button size="small" dashed block @click="addTagItem">
+                      + 添加标签
+                    </n-button>
+                  </div>
+                </n-form-item>
+              </template>
 
-            <template v-if="selectedBlock.blockType === 'info-panel'">
-              <n-form-item label="提示内容">
-                <div class="metrics-editor">
+              <template v-if="selectedBlock.blockType === 'steps'">
+                <n-form-item label="步骤">
+                  <div class="metrics-editor">
+                    <n-input-number
+                      :value="selectedBlock.props?.current || 1"
+                      :min="1"
+                      :max="10"
+                      :show-button="false"
+                      @update:value="patchBlockProps(selectedBlock.id, { current: $event || 1 })"
+                    />
+                    <div
+                      v-for="(step, idx) in (selectedBlock.props?.steps || [])"
+                      :key="idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="step.title"
+                        placeholder="标题"
+                        size="small"
+                        @update:value="updateStepItem(idx, { title: $event })"
+                      />
+                      <n-input
+                        :value="step.description"
+                        placeholder="描述"
+                        size="small"
+                        @update:value="updateStepItem(idx, { description: $event })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeStepItem(idx)">
+                        删
+                      </n-button>
+                    </div>
+                    <n-button size="small" dashed block @click="addStepItem">
+                      + 添加步骤
+                    </n-button>
+                  </div>
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'timeline'">
+                <n-form-item label="时间线">
+                  <div class="metrics-editor">
+                    <n-input
+                      :value="selectedBlock.props?.title"
+                      placeholder="标题"
+                      @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                    />
+                    <div
+                      v-for="(item, idx) in (selectedBlock.props?.items || [])"
+                      :key="idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="item.title"
+                        placeholder="节点"
+                        size="small"
+                        @update:value="updateTimelineItem(idx, { title: $event })"
+                      />
+                      <n-input
+                        :value="item.time"
+                        placeholder="时间"
+                        size="small"
+                        @update:value="updateTimelineItem(idx, { time: $event })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeTimelineItem(idx)">
+                        删
+                      </n-button>
+                      <n-input
+                        :value="item.content"
+                        placeholder="内容"
+                        size="small"
+                        @update:value="updateTimelineItem(idx, { content: $event })"
+                      />
+                    </div>
+                    <n-button size="small" dashed block @click="addTimelineItem">
+                      + 添加节点
+                    </n-button>
+                  </div>
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'empty-state'">
+                <n-form-item label="空状态">
+                  <div class="metrics-editor">
+                    <n-input
+                      :value="selectedBlock.props?.title"
+                      placeholder="标题"
+                      @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                    />
+                    <n-input
+                      :value="selectedBlock.props?.description"
+                      placeholder="描述"
+                      @update:value="patchBlockProps(selectedBlock.id, { description: $event })"
+                    />
+                    <n-input
+                      :value="selectedBlock.props?.actionText"
+                      placeholder="按钮文本"
+                      @update:value="patchBlockProps(selectedBlock.id, { actionText: $event })"
+                    />
+                  </div>
+                </n-form-item>
+              </template>
+
+              <!-- Sub table tabs -->
+              <template v-if="selectedBlock.blockType === 'sub-table-tabs'">
+                <n-form-item label="Tab 项">
+                  <div class="metrics-editor">
+                    <div
+                      v-for="(tab, idx) in (selectedBlock.props?.tabs || [])"
+                      :key="idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="tab.title"
+                        placeholder="标题"
+                        size="small"
+                        @update:value="updateTab(idx, { title: $event })"
+                      />
+                      <n-input
+                        :value="tab.key"
+                        placeholder="key"
+                        size="small"
+                        @update:value="updateTab(idx, { key: $event })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeTab(idx)">
+                        删
+                      </n-button>
+                    </div>
+                    <n-button size="small" dashed block @click="addTab">
+                      + 添加 Tab
+                    </n-button>
+                  </div>
+                </n-form-item>
+              </template>
+
+              <!-- Section divider -->
+              <template v-if="selectedBlock.blockType === 'section-divider'">
+                <n-form-item label="标题">
                   <n-input
                     :value="selectedBlock.props?.title"
-                    placeholder="标题"
                     @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
                   />
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'divider'">
+                <n-form-item label="方向">
+                  <n-radio-group
+                    :value="selectedBlock.props?.orientation || 'horizontal'"
+                    size="small"
+                    @update:value="patchBlockProps(selectedBlock.id, { orientation: $event })"
+                  >
+                    <n-radio-button value="horizontal">
+                      横向
+                    </n-radio-button>
+                    <n-radio-button value="vertical">
+                      竖向
+                    </n-radio-button>
+                  </n-radio-group>
+                </n-form-item>
+                <n-form-item label="标题">
+                  <n-input
+                    :value="selectedBlock.props?.title"
+                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                  />
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'card'">
+                <n-form-item label="卡片标题">
+                  <n-input
+                    :value="selectedBlock.props?.title"
+                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                  />
+                </n-form-item>
+                <n-form-item label="卡片内容">
                   <n-input
                     :value="selectedBlock.props?.content"
                     type="textarea"
                     :rows="3"
-                    placeholder="内容"
                     @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
                   />
-                </div>
-              </n-form-item>
-              <n-form-item label="提示类型">
-                <n-select
-                  :value="selectedBlock.props?.type || 'info'"
-                  :options="tagTypeOptions"
-                  @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'info' })"
-                />
-              </n-form-item>
-            </template>
-
-            <!-- Custom html -->
-            <template v-if="selectedBlock.blockType === 'custom-html'">
-              <n-form-item label="标题">
-                <n-input
-                  :value="selectedBlock.props?.title"
-                  @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="正文">
-                <n-input
-                  :value="selectedBlock.props?.content"
-                  type="textarea"
-                  :rows="4"
-                  @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
-                />
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'action-button'">
-              <n-form-item label="基础样式">
-                <div class="style-grid three">
-                  <n-input
-                    :value="selectedBlock.props?.text"
-                    placeholder="按钮文本"
-                    @update:value="patchBlockProps(selectedBlock.id, { text: $event })"
-                  />
-                  <n-select
-                    :value="selectedBlock.props?.type || 'primary'"
-                    :options="actionTypeOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'primary' })"
-                  />
-                  <n-select
-                    :value="selectedBlock.props?.size || 'small'"
-                    :options="componentSizeOptions"
-                    @update:value="patchBlockProps(selectedBlock.id, { size: $event || 'small' })"
-                  />
-                </div>
-              </n-form-item>
-              <n-form-item label="点击动作">
-                <div class="action-button-event-grid">
-                  <n-select
-                    :value="resolvePrimaryClickEvent(selectedBlock).action"
-                    :options="blockEventActionOptions"
-                    placeholder="点击后执行"
-                    @update:value="updatePrimaryClickEvent({ action: $event || 'none' })"
-                  />
-                  <n-select
-                    v-if="resolvePrimaryClickEvent(selectedBlock).action === 'navigate'"
-                    :value="resolvePrimaryClickEvent(selectedBlock).targetPageKey"
-                    :options="pageTargetOptions"
-                    clearable
-                    filterable
-                    placeholder="目标页面"
-                    @update:value="updatePrimaryClickEvent({ targetPageKey: $event || '' })"
-                  />
-                  <n-select
-                    v-if="resolvePrimaryClickEvent(selectedBlock).action === 'navigate' && formTargetOptions.length"
-                    :value="resolvePrimaryClickEvent(selectedBlock).targetFormKey"
-                    :options="formTargetOptions"
-                    clearable
-                    filterable
-                    placeholder="目标表单"
-                    @update:value="updatePrimaryClickEvent({ targetFormKey: $event || '' })"
-                  />
-                  <n-input
-                    v-if="resolvePrimaryClickEvent(selectedBlock).action === 'request'"
-                    :value="resolvePrimaryClickEvent(selectedBlock).requestUrl"
-                    clearable
-                    placeholder="接口地址，例如 post@/api/xxx"
-                    @update:value="updatePrimaryClickEvent({ requestUrl: $event || '' })"
-                  />
-                </div>
-                <div class="field-help">
-                  这里会写入按钮的 click 事件；参数、权限、确认提示可在“事件回调”里继续补充。
-                </div>
-              </n-form-item>
-              <n-form-item label="权限与确认">
-                <div class="action-button-event-grid">
-                  <n-input
-                    :value="resolvePrimaryClickEvent(selectedBlock).permissionCode"
-                    clearable
-                    placeholder="权限码，例如 ai:business:customer:edit"
-                    @update:value="updatePrimaryClickEvent({ permissionCode: $event || '' })"
-                  />
-                  <n-input
-                    :value="resolvePrimaryClickEvent(selectedBlock).confirmText"
-                    clearable
-                    placeholder="确认提示，留空则不弹窗"
-                    @update:value="updatePrimaryClickEvent({ confirmText: $event || '' })"
-                  />
-                  <n-input
-                    :value="resolvePrimaryClickEvent(selectedBlock).displayCondition || ''"
-                    clearable
-                    placeholder="显示条件，如 status=待处理"
-                    @update:value="updatePrimaryClickEvent({ displayCondition: $event || '' })"
-                  />
-                </div>
-              </n-form-item>
-              <n-form-item label="成功后行为">
-                <n-select
-                  :value="resolvePrimaryClickEvent(selectedBlock).successBehavior || 'none'"
-                  :options="successBehaviorOptions"
-                  @update:value="updatePrimaryClickEvent({ successBehavior: $event || 'none' })"
-                />
-              </n-form-item>
-              <n-form-item label="按钮状态">
-                <div class="toolbar-toggle-list">
-                  <div class="switch-line toolbar-toggle-row">
-                    <span class="switch-line-text">
-                      <strong>次要按钮</strong>
-                      <small>打开后使用浅色按钮样式，适合“取消、查看、次操作”。</small>
-                    </span>
-                    <n-switch
-                      :value="!!selectedBlock.props?.secondary"
-                      @update:value="patchBlockProps(selectedBlock.id, { secondary: $event })"
-                    />
-                  </div>
-                  <div class="switch-line toolbar-toggle-row">
-                    <span class="switch-line-text">
-                      <strong>撑满宽度</strong>
-                      <small>打开后按钮宽度撑满当前按钮组件区块。</small>
-                    </span>
-                    <n-switch
-                      :value="!!selectedBlock.props?.block"
-                      @update:value="patchBlockProps(selectedBlock.id, { block: $event })"
-                    />
-                  </div>
-                  <div class="switch-line toolbar-toggle-row">
-                    <span class="switch-line-text">
-                      <strong>禁用状态</strong>
-                      <small>打开后按钮不可点击，用来预览无权限或条件不满足状态。</small>
-                    </span>
-                    <n-switch
-                      :value="!!selectedBlock.props?.disabled"
-                      @update:value="patchBlockProps(selectedBlock.id, { disabled: $event })"
-                    />
-                  </div>
-                  <div class="switch-line toolbar-toggle-row">
-                    <span class="switch-line-text">
-                      <strong>加载状态</strong>
-                      <small>打开后显示加载中，用来预览提交中的按钮状态。</small>
-                    </span>
-                    <n-switch
-                      :value="!!selectedBlock.props?.loading"
-                      @update:value="patchBlockProps(selectedBlock.id, { loading: $event })"
-                    />
-                  </div>
-                  <div class="field-help">
-                    这里的开关只改当前按钮的显示状态；点击后要跳转、刷新或调用接口，请在“事件回调”里配置点击事件。
-                  </div>
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'button-group'">
-              <n-form-item label="按钮组">
-                <div class="metrics-editor">
-                  <div
-                    v-for="(button, idx) in (selectedBlock.props?.buttons || [])"
-                    :key="button.key || idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="button.text"
-                      placeholder="文本"
-                      size="small"
-                      @update:value="updateButtonGroupItem(idx, { text: $event })"
-                    />
+                </n-form-item>
+                <n-form-item label="卡片内组件">
+                  <div class="container-child-editor">
+                    <div
+                      v-for="child in (selectedBlock.children || [])"
+                      :key="child.id"
+                      class="container-child-row"
+                    >
+                      <span>{{ child.label || child.blockType }}</span>
+                      <n-button size="tiny" quaternary type="error" @click="removeContainerChild(selectedBlock.id, child.id)">
+                        删除
+                      </n-button>
+                    </div>
+                    <div v-if="!(selectedBlock.children || []).length" class="container-child-empty">
+                      可把左侧组件拖入卡片，也可以在这里添加。
+                    </div>
                     <n-select
-                      :value="button.type || 'default'"
-                      :options="actionTypeOptions"
+                      :options="childBlockTypeOptions"
                       size="small"
-                      @update:value="updateButtonGroupItem(idx, { type: $event || 'default' })"
+                      placeholder="添加组件到卡片"
+                      clearable
+                      @update:value="value => value && appendContainerChild(selectedBlock.id, value)"
                     />
-                    <n-button size="tiny" quaternary @click="removeButtonGroupItem(idx)">
-                      删
+                  </div>
+                </n-form-item>
+              </template>
+
+              <template v-if="selectedBlock.blockType === 'tabs'">
+                <n-form-item label="Tab 项">
+                  <div class="metrics-editor">
+                    <div
+                      v-for="(tab, idx) in (selectedBlock.props?.tabs || [])"
+                      :key="idx"
+                      class="metric-row"
+                    >
+                      <n-input
+                        :value="tab.title"
+                        placeholder="标题"
+                        size="small"
+                        @update:value="updateTab(idx, { title: $event })"
+                      />
+                      <n-input
+                        :value="tab.key"
+                        placeholder="key"
+                        size="small"
+                        @update:value="updateTab(idx, { key: $event })"
+                      />
+                      <n-button size="tiny" quaternary @click="removeTab(idx)">
+                        删
+                      </n-button>
+                    </div>
+                    <n-button size="small" dashed block @click="addTab">
+                      + 添加 Tab
                     </n-button>
                   </div>
-                  <n-button size="small" dashed block @click="addButtonGroupItem">
-                    + 添加按钮
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'tag-list'">
-              <n-form-item label="标签">
-                <div class="metrics-editor">
-                  <div
-                    v-for="(tag, idx) in (selectedBlock.props?.tags || [])"
-                    :key="idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="tag.label"
-                      placeholder="标签"
-                      size="small"
-                      @update:value="updateTagItem(idx, { label: $event })"
-                    />
+                </n-form-item>
+                <n-form-item label="当前 Tab 内容">
+                  <div class="container-child-editor">
                     <n-select
-                      :value="tag.type || 'default'"
-                      :options="tagTypeOptions"
+                      :value="activeTabKey"
+                      :options="tabPaneOptions"
                       size="small"
-                      @update:value="updateTagItem(idx, { type: $event || 'default' })"
+                      @update:value="activeTabKey = $event"
                     />
-                    <n-button size="tiny" quaternary @click="removeTagItem(idx)">
-                      删
-                    </n-button>
-                  </div>
-                  <n-button size="small" dashed block @click="addTagItem">
-                    + 添加标签
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'steps'">
-              <n-form-item label="步骤">
-                <div class="metrics-editor">
-                  <n-input-number
-                    :value="selectedBlock.props?.current || 1"
-                    :min="1"
-                    :max="10"
-                    :show-button="false"
-                    @update:value="patchBlockProps(selectedBlock.id, { current: $event || 1 })"
-                  />
-                  <div
-                    v-for="(step, idx) in (selectedBlock.props?.steps || [])"
-                    :key="idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="step.title"
-                      placeholder="标题"
+                    <div
+                      v-for="child in activeTabChildren"
+                      :key="child.id"
+                      class="container-child-row"
+                    >
+                      <span>{{ child.label || child.blockType }}</span>
+                      <n-button size="tiny" quaternary type="error" @click="removeTabChild(child.id)">
+                        删除
+                      </n-button>
+                    </div>
+                    <div v-if="!activeTabChildren.length" class="container-child-empty">
+                      可把左侧组件拖入当前 Tab，也可以在这里添加。
+                    </div>
+                    <n-select
+                      :options="childBlockTypeOptions"
                       size="small"
-                      @update:value="updateStepItem(idx, { title: $event })"
-                    />
-                    <n-input
-                      :value="step.description"
-                      placeholder="描述"
-                      size="small"
-                      @update:value="updateStepItem(idx, { description: $event })"
-                    />
-                    <n-button size="tiny" quaternary @click="removeStepItem(idx)">
-                      删
-                    </n-button>
-                  </div>
-                  <n-button size="small" dashed block @click="addStepItem">
-                    + 添加步骤
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'timeline'">
-              <n-form-item label="时间线">
-                <div class="metrics-editor">
-                  <n-input
-                    :value="selectedBlock.props?.title"
-                    placeholder="标题"
-                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                  />
-                  <div
-                    v-for="(item, idx) in (selectedBlock.props?.items || [])"
-                    :key="idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="item.title"
-                      placeholder="节点"
-                      size="small"
-                      @update:value="updateTimelineItem(idx, { title: $event })"
-                    />
-                    <n-input
-                      :value="item.time"
-                      placeholder="时间"
-                      size="small"
-                      @update:value="updateTimelineItem(idx, { time: $event })"
-                    />
-                    <n-button size="tiny" quaternary @click="removeTimelineItem(idx)">
-                      删
-                    </n-button>
-                    <n-input
-                      :value="item.content"
-                      placeholder="内容"
-                      size="small"
-                      @update:value="updateTimelineItem(idx, { content: $event })"
+                      placeholder="添加组件到当前 Tab"
+                      clearable
+                      @update:value="value => value && appendTabChild(value)"
                     />
                   </div>
-                  <n-button size="small" dashed block @click="addTimelineItem">
-                    + 添加节点
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'empty-state'">
-              <n-form-item label="空状态">
-                <div class="metrics-editor">
-                  <n-input
-                    :value="selectedBlock.props?.title"
-                    placeholder="标题"
-                    @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                  />
-                  <n-input
-                    :value="selectedBlock.props?.description"
-                    placeholder="描述"
-                    @update:value="patchBlockProps(selectedBlock.id, { description: $event })"
-                  />
-                  <n-input
-                    :value="selectedBlock.props?.actionText"
-                    placeholder="按钮文本"
-                    @update:value="patchBlockProps(selectedBlock.id, { actionText: $event })"
-                  />
-                </div>
-              </n-form-item>
-            </template>
-
-            <!-- Sub table tabs -->
-            <template v-if="selectedBlock.blockType === 'sub-table-tabs'">
-              <n-form-item label="Tab 项">
-                <div class="metrics-editor">
-                  <div
-                    v-for="(tab, idx) in (selectedBlock.props?.tabs || [])"
-                    :key="idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="tab.title"
-                      placeholder="标题"
-                      size="small"
-                      @update:value="updateTab(idx, { title: $event })"
-                    />
-                    <n-input
-                      :value="tab.key"
-                      placeholder="key"
-                      size="small"
-                      @update:value="updateTab(idx, { key: $event })"
-                    />
-                    <n-button size="tiny" quaternary @click="removeTab(idx)">
-                      删
-                    </n-button>
-                  </div>
-                  <n-button size="small" dashed block @click="addTab">
-                    + 添加 Tab
-                  </n-button>
-                </div>
-              </n-form-item>
-            </template>
-
-            <!-- Section divider -->
-            <template v-if="selectedBlock.blockType === 'section-divider'">
-              <n-form-item label="标题">
-                <n-input
-                  :value="selectedBlock.props?.title"
-                  @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                />
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'divider'">
-              <n-form-item label="方向">
-                <n-radio-group
-                  :value="selectedBlock.props?.orientation || 'horizontal'"
-                  size="small"
-                  @update:value="patchBlockProps(selectedBlock.id, { orientation: $event })"
-                >
-                  <n-radio-button value="horizontal">
-                    横向
-                  </n-radio-button>
-                  <n-radio-button value="vertical">
-                    竖向
-                  </n-radio-button>
-                </n-radio-group>
-              </n-form-item>
-              <n-form-item label="标题">
-                <n-input
-                  :value="selectedBlock.props?.title"
-                  @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                />
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'card'">
-              <n-form-item label="卡片标题">
-                <n-input
-                  :value="selectedBlock.props?.title"
-                  @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="卡片内容">
-                <n-input
-                  :value="selectedBlock.props?.content"
-                  type="textarea"
-                  :rows="3"
-                  @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="卡片内组件">
-                <div class="container-child-editor">
-                  <div
-                    v-for="child in (selectedBlock.children || [])"
-                    :key="child.id"
-                    class="container-child-row"
-                  >
-                    <span>{{ child.label || child.blockType }}</span>
-                    <n-button size="tiny" quaternary type="error" @click="removeContainerChild(selectedBlock.id, child.id)">
-                      删除
-                    </n-button>
-                  </div>
-                  <div v-if="!(selectedBlock.children || []).length" class="container-child-empty">
-                    可把左侧组件拖入卡片，也可以在这里添加。
-                  </div>
-                  <n-select
-                    :options="childBlockTypeOptions"
-                    size="small"
-                    placeholder="添加组件到卡片"
-                    clearable
-                    @update:value="value => value && appendContainerChild(selectedBlock.id, value)"
-                  />
-                </div>
-              </n-form-item>
-            </template>
-
-            <template v-if="selectedBlock.blockType === 'tabs'">
-              <n-form-item label="Tab 项">
-                <div class="metrics-editor">
-                  <div
-                    v-for="(tab, idx) in (selectedBlock.props?.tabs || [])"
-                    :key="idx"
-                    class="metric-row"
-                  >
-                    <n-input
-                      :value="tab.title"
-                      placeholder="标题"
-                      size="small"
-                      @update:value="updateTab(idx, { title: $event })"
-                    />
-                    <n-input
-                      :value="tab.key"
-                      placeholder="key"
-                      size="small"
-                      @update:value="updateTab(idx, { key: $event })"
-                    />
-                    <n-button size="tiny" quaternary @click="removeTab(idx)">
-                      删
-                    </n-button>
-                  </div>
-                  <n-button size="small" dashed block @click="addTab">
-                    + 添加 Tab
-                  </n-button>
-                </div>
-              </n-form-item>
-              <n-form-item label="当前 Tab 内容">
-                <div class="container-child-editor">
-                  <n-select
-                    :value="activeTabKey"
-                    :options="tabPaneOptions"
-                    size="small"
-                    @update:value="activeTabKey = $event"
-                  />
-                  <div
-                    v-for="child in activeTabChildren"
-                    :key="child.id"
-                    class="container-child-row"
-                  >
-                    <span>{{ child.label || child.blockType }}</span>
-                    <n-button size="tiny" quaternary type="error" @click="removeTabChild(child.id)">
-                      删除
-                    </n-button>
-                  </div>
-                  <div v-if="!activeTabChildren.length" class="container-child-empty">
-                    可把左侧组件拖入当前 Tab，也可以在这里添加。
-                  </div>
-                  <n-select
-                    :options="childBlockTypeOptions"
-                    size="small"
-                    placeholder="添加组件到当前 Tab"
-                    clearable
-                    @update:value="value => value && appendTabChild(value)"
-                  />
-                </div>
-              </n-form-item>
-            </template>
+                </n-form-item>
+              </template>
+            </div>
           </n-form>
         </div>
       </div>
@@ -2345,7 +2556,9 @@
                   :class="{
                     search: selectedBlockZoneKey === 'search',
                     table: selectedBlockZoneKey !== 'search',
+                    active: activeDrawerField?.field === element.field,
                   }"
+                  @click="selectDrawerField(element.field)"
                 >
                   <span class="f-handle">☰</span>
                   <span class="f-name">
@@ -2353,8 +2566,8 @@
                     <small v-if="element.sourceLabel || element.modelName">{{ element.sourceLabel || element.modelName }}</small>
                   </span>
                   <span class="f-code">{{ element.field }}</span>
-                  <button type="button" class="f-remove" @click="toggleField(element.field, false)">
-                    移除
+                  <button type="button" class="f-remove" title="移除字段" @click.stop="toggleField(element.field, false)">
+                    ×
                   </button>
                   <div v-if="selectedBlockZoneKey === 'search'" class="field-setting-row search-setting-row">
                     <n-select
@@ -2486,6 +2699,173 @@
             </draggable>
             <div v-if="!selectedFieldRefs.length" class="empty">
               当前没有选择字段
+            </div>
+            <div v-if="activeDrawerField" class="field-detail-card">
+              <div class="field-detail-head">
+                <div class="field-detail-title">
+                  <strong>{{ activeDrawerField.label || activeDrawerField.field }}</strong>
+                  <span>{{ activeDrawerField.sourceField || activeDrawerField.field }}</span>
+                </div>
+                <div class="field-role-switches">
+                  <label>
+                    <span>查询</span>
+                    <n-switch
+                      size="small"
+                      :value="resolveFieldRoleEnabled(activeDrawerField.field, 'search')"
+                      :disabled="selectedBlock.blockType !== 'AiCrudPage'"
+                      @update:value="updateFieldRole(activeDrawerField.field, 'search', $event)"
+                    />
+                  </label>
+                  <label>
+                    <span>表格列</span>
+                    <n-switch
+                      size="small"
+                      :value="resolveFieldRoleEnabled(activeDrawerField.field, 'table')"
+                      @update:value="updateFieldRole(activeDrawerField.field, 'table', $event)"
+                    />
+                  </label>
+                  <label>
+                    <span>编辑</span>
+                    <n-switch
+                      size="small"
+                      :value="resolveFieldRoleEnabled(activeDrawerField.field, 'edit')"
+                      @update:value="updateFieldRole(activeDrawerField.field, 'edit', $event)"
+                    />
+                  </label>
+                </div>
+              </div>
+              <div class="field-detail-grid">
+                <label class="field-detail-control">
+                  <span>列标题</span>
+                  <n-input
+                    :value="activeDrawerFieldSetting.title || activeDrawerField.label || activeDrawerField.field"
+                    size="small"
+                    @update:value="updateFieldSetting(activeDrawerField.field, { title: $event || '' })"
+                  />
+                </label>
+                <label class="field-detail-control">
+                  <span>列宽</span>
+                  <n-input
+                    :value="activeDrawerFieldSetting.width || ''"
+                    size="small"
+                    placeholder="auto / px"
+                    @update:value="updateFieldSetting(activeDrawerField.field, { width: $event || '' })"
+                  />
+                </label>
+                <label class="field-detail-control">
+                  <span>对齐</span>
+                  <n-select
+                    :value="activeDrawerFieldSetting.align || 'left'"
+                    size="small"
+                    :options="alignOptions"
+                    @update:value="updateFieldSetting(activeDrawerField.field, { align: $event || 'left' })"
+                  />
+                </label>
+                <label class="field-detail-control">
+                  <span>固定</span>
+                  <n-select
+                    :value="activeDrawerFieldSetting.fixed || ''"
+                    size="small"
+                    :options="fixedColumnOptions"
+                    @update:value="updateFieldSetting(activeDrawerField.field, { fixed: $event || '' })"
+                  />
+                </label>
+              </div>
+              <div class="field-detail-footer">
+                <div class="field-detail-toggles">
+                  <label>
+                    <span>省略</span>
+                    <n-switch
+                      size="small"
+                      :value="activeDrawerFieldSetting.ellipsis !== false"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { ellipsis: $event })"
+                    />
+                  </label>
+                  <label>
+                    <span>排序</span>
+                    <n-switch
+                      size="small"
+                      :value="!!activeDrawerFieldSetting.sortable"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { sortable: $event })"
+                    />
+                  </label>
+                </div>
+                <n-button size="tiny" secondary @click="fieldAdvancedOpen = !fieldAdvancedOpen">
+                  {{ fieldAdvancedOpen ? '收起配置' : '更多字段配置' }}
+                </n-button>
+              </div>
+              <div v-if="fieldAdvancedOpen" class="field-advanced-panel">
+                <template v-if="selectedBlockZoneKey === 'search'">
+                  <label class="field-detail-control">
+                    <span>查询方式</span>
+                    <n-select
+                      :value="activeDrawerFieldSetting.queryType || activeDrawerField.queryType || 'like'"
+                      size="small"
+                      :options="queryTypeOptions"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { queryType: $event })"
+                    />
+                  </label>
+                  <label class="field-detail-control">
+                    <span>查询组件</span>
+                    <n-select
+                      :value="activeDrawerFieldSetting.componentType || resolveDefaultSearchComponentType(activeDrawerField)"
+                      size="small"
+                      :options="searchComponentOptions"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { componentType: $event })"
+                    />
+                  </label>
+                  <label class="field-detail-control">
+                    <span>映射字段</span>
+                    <n-select
+                      :value="activeDrawerFieldSetting.queryField || activeDrawerField.field"
+                      size="small"
+                      :options="queryFieldOptions"
+                      filterable
+                      @update:value="updateFieldSetting(activeDrawerField.field, { queryField: $event })"
+                    />
+                  </label>
+                </template>
+                <template v-else>
+                  <label class="field-detail-control">
+                    <span>渲染方式</span>
+                    <n-select
+                      :value="activeDrawerFieldSetting.renderType || resolveDefaultTableRenderType(activeDrawerField)"
+                      size="small"
+                      :options="tableRenderOptions"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { renderType: $event })"
+                    />
+                  </label>
+                  <label v-if="isNameRenderType(activeDrawerFieldSetting.renderType || resolveDefaultTableRenderType(activeDrawerField))" class="field-detail-control">
+                    <span>名称字段</span>
+                    <n-select
+                      :value="activeDrawerFieldSetting.targetField || `${activeDrawerField.field}Name`"
+                      size="small"
+                      :options="renderTargetFieldOptions(activeDrawerField)"
+                      filterable
+                      tag
+                      @update:value="updateFieldSetting(activeDrawerField.field, { targetField: $event })"
+                    />
+                  </label>
+                  <label class="field-detail-control">
+                    <span>点击动作</span>
+                    <n-select
+                      :value="activeDrawerFieldSetting.clickAction || 'none'"
+                      size="small"
+                      :options="columnClickActionOptions"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { clickAction: $event || 'none' })"
+                    />
+                  </label>
+                  <label class="field-detail-control">
+                    <span>文字颜色</span>
+                    <n-color-picker
+                      :value="activeDrawerFieldSetting.textColor || ''"
+                      size="small"
+                      :show-alpha="true"
+                      @update:value="updateFieldSetting(activeDrawerField.field, { textColor: $event || '' })"
+                    />
+                  </label>
+                </template>
+              </div>
             </div>
           </div>
           <div class="field-config-section">
@@ -2906,41 +3286,67 @@
       </n-card>
     </n-modal>
 
-    <n-modal v-model:show="sourceModalOpen" preset="card" title="查看源码" class="list-source-modal" :bordered="false">
-      <n-tabs type="line" animated>
+    <n-modal v-model:show="sourceModalOpen" preset="card" title="源码编辑" class="list-source-modal" :bordered="false">
+      <div class="source-editor-hint">
+        支持实时编辑，并保存应用到画布
+      </div>
+      <n-tabs v-model:value="sourceModalTab" type="line" animated>
         <n-tab-pane name="layout" tab="画布布局 JSON">
           <n-input
-            :value="layoutCodeText"
+            v-model:value="layoutSourceDraft"
             type="textarea"
-            readonly
             :autosize="{ minRows: 18, maxRows: 28 }"
             class="source-code-textarea"
+            @update:value="sourceError = ''"
           />
         </n-tab-pane>
-        <n-tab-pane name="block" tab="当前区块 JSON">
+        <n-tab-pane name="block" tab="当前区块 JSON" :disabled="!selectedBlock">
           <n-input
-            :value="selectedBlockCodeText"
+            v-model:value="blockSourceDraft"
             type="textarea"
-            readonly
             :autosize="{ minRows: 18, maxRows: 28 }"
             class="source-code-textarea"
+            placeholder="请先选中一个区块"
+            @update:value="sourceError = ''"
           />
         </n-tab-pane>
       </n-tabs>
+      <div v-if="sourceError" class="source-error">
+        {{ sourceError }}
+      </div>
+      <template #footer>
+        <div class="source-modal-footer">
+          <n-button @click="cancelSourceModalEdit">
+            取消
+          </n-button>
+          <n-button type="primary" @click="applySourceModalCode">
+            保存并应用
+          </n-button>
+        </div>
+      </template>
     </n-modal>
   </div>
 </template>
 
 <script setup>
 import {
+  AddOutline,
   BrowsersOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
+  CodeSlashOutline,
+  ColorPaletteOutline,
   ContractOutline,
+  DesktopOutline,
   EllipsisHorizontalOutline,
   ExpandOutline,
+  FlashOutline,
+  PhonePortraitOutline,
+  RemoveOutline,
   ResizeOutline,
   SearchOutline,
+  SettingsOutline,
+  TabletLandscapeOutline,
 } from '@vicons/ionicons5'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
@@ -3048,11 +3454,6 @@ const crudPreviewModeOptions = [
   { label: '新增表单', value: 'create' },
   { label: '编辑表单', value: 'edit' },
   { label: '详情状态', value: 'detail' },
-]
-const blockWidthModeOptions = [
-  { label: '撑满 100%', value: 'full' },
-  { label: '内容 auto', value: 'auto' },
-  { label: '固定 px', value: 'fixed' },
 ]
 const actionPositionOptions = [
   { label: '工具栏', value: 'toolbar' },
@@ -3215,15 +3616,14 @@ const alignOptions = [
   { label: '居中', value: 'center' },
   { label: '右对齐', value: 'right' },
 ]
+const fixedColumnOptions = [
+  { label: '不固定', value: '' },
+  { label: '左侧固定', value: 'left' },
+  { label: '右侧固定', value: 'right' },
+]
 const columnClickActionOptions = [
   { label: '无', value: 'none' },
   { label: '跳转页面', value: 'navigate' },
-]
-const borderStyleOptions = [
-  { label: '实线', value: 'solid' },
-  { label: '虚线', value: 'dashed' },
-  { label: '点线', value: 'dotted' },
-  { label: '无边框', value: 'none' },
 ]
 const shadowOptions = [
   { label: '无阴影', value: 'none' },
@@ -3232,23 +3632,23 @@ const shadowOptions = [
   { label: '明显', value: '0 18px 42px rgba(15, 23, 42, 0.16)' },
 ]
 const eventTriggerOptions = [
-  { label: '点击', value: 'click' },
-  { label: '加载完成', value: 'load' },
-  { label: '值变化', value: 'change' },
-  { label: '节点选择', value: 'nodeSelect' },
-  { label: '行点击', value: 'rowClick' },
-  { label: '提交成功', value: 'submitSuccess' },
+  { label: '点击组件时', value: 'click' },
+  { label: '区块加载完成后', value: 'load' },
+  { label: '字段值变化时', value: 'change' },
+  { label: '选择树节点时', value: 'nodeSelect' },
+  { label: '点击表格行时', value: 'rowClick' },
+  { label: '表单提交成功后', value: 'submitSuccess' },
 ]
 const blockEventActionOptions = [
-  { label: '无动作', value: 'none' },
+  { label: '不执行动作', value: 'none' },
   { label: '返回上一页', value: 'back' },
-  { label: '页面跳转', value: 'navigate' },
-  { label: '刷新组件', value: 'refreshBlock' },
-  { label: '过滤组件', value: 'filterBlock' },
-  { label: '打开弹窗', value: 'openModal' },
-  { label: '打开抽屉', value: 'openDrawer' },
-  { label: '接口请求', value: 'request' },
-  { label: '自定义脚本', value: 'customScript' },
+  { label: '跳转到目标页面', value: 'navigate' },
+  { label: '刷新目标区块', value: 'refreshBlock' },
+  { label: '过滤目标区块', value: 'filterBlock' },
+  { label: '打开弹窗表单', value: 'openModal' },
+  { label: '打开抽屉表单', value: 'openDrawer' },
+  { label: '请求后端接口', value: 'request' },
+  { label: '执行自定义脚本', value: 'customScript' },
 ]
 const backButtonActionOptions = [
   { label: '浏览器返回', value: 'back' },
@@ -3263,11 +3663,145 @@ const canvasScrollRef = ref(null)
 const selectedBlockId = ref(null)
 const fieldDrawerOpen = ref(false)
 const fieldDrawerMode = ref('table')
+const activeDrawerFieldName = ref('')
+const fieldAdvancedOpen = ref(false)
 const customActionModalOpen = ref(false)
 const sourceModalOpen = ref(false)
+const sourceModalTab = ref('layout')
+const layoutSourceDraft = ref('')
+const blockSourceDraft = ref('')
+const sourceError = ref('')
 const activeActionIndex = ref(0)
+const propertyPanelTab = ref('props')
+const propertyPanelRef = ref(null)
 const paletteKeyword = ref('')
 const propertyKeyword = ref('')
+const propertyCollapseExpandedNames = ref(['base'])
+const allPropertyCollapseNames = ['base', 'search', 'edit', 'toolbar', 'table', 'form-actions', 'default-params', 'event-help']
+const propertySearchTabIndex = {
+  props: [
+    '属性',
+    '基础配置',
+    '接口',
+    '数据源',
+    '基础路径',
+    '行主键',
+    '真实接口预览',
+    '响应字段',
+    '表单布局',
+    '查询',
+    '列表',
+    '字段',
+    '搜索',
+    '搜索布局',
+    '搜索字段',
+    '表格',
+    '表格列',
+    '列标题',
+    '列宽',
+    '对齐',
+    '固定',
+    '省略',
+    '排序',
+    '分页',
+    '表单',
+    '弹窗',
+    '新增',
+    '编辑',
+    '详情',
+    '页脚',
+    '打开方式',
+    '标签位置',
+    '标签对齐',
+    '标签宽度',
+    '表单列数',
+    '抽屉',
+    '工具栏',
+    '导入',
+    '导出',
+    '自定义查询',
+    '自定义操作',
+    '按钮文案',
+    '默认参数',
+    '公共参数',
+    '表单默认值',
+    '查询默认参数',
+    '数据处理',
+    '组件标题',
+    '默认排序',
+    '行间距',
+    '显示项',
+    '多选',
+    '模式切换',
+    '斑马纹',
+    '边框',
+    'api',
+    'list',
+    'detail',
+    'create',
+    'update',
+    'delete',
+    'import',
+    'export',
+  ],
+  style: [
+    '样式',
+    '位置',
+    '尺寸',
+    '坐标',
+    '左',
+    '上',
+    'x',
+    'y',
+    '宽度',
+    '高度',
+    '固定宽',
+    '自适应',
+    '背景',
+    '背景色',
+    '边框色',
+    '圆角',
+    '阴影',
+    '内边距',
+    '外边距',
+    'padding',
+    'margin',
+    '外观',
+    '装饰',
+    '颜色',
+    '自定义 style',
+    'customStyle',
+  ],
+  interaction: [
+    '交互',
+    '事件',
+    '生命周期',
+    '回调',
+    '点击',
+    '加载完成',
+    '提交成功',
+    '行点击',
+    '跳转',
+    '刷新',
+    '过滤',
+    '接口请求',
+    '自定义脚本',
+    '参数',
+    '目标页面',
+    '目标表单',
+  ],
+}
+const propertySearchKeywordRegistry = [
+  '基础配置 接口 基础路径 行主键 真实接口预览 响应字段 表单布局 api list detail create update delete import export',
+  '查询与列表字段 搜索 查询区 搜索布局 搜索字段 表格 表格列 列标题 列宽 对齐 固定 省略 排序 分页 最大高度 横向宽度 边框 斑马纹',
+  '表单与弹窗 新增 编辑 表单 弹窗 抽屉 详情 页脚 打开方式 标签位置 标签对齐 标签宽度',
+  '工具栏 导入 导出 自定义查询 自定义操作 按钮文案 回调 参数处理 提交前 搜索前 加载列表前',
+  '默认参数 公共参数 publicParams publicQuery 表单默认值 提交固定参数 查询默认参数',
+  '事件 生命周期 回调 点击 加载完成 提交成功 行点击 跳转 弹窗 接口请求',
+  '样式 位置 尺寸 左 上 宽度 高度 背景 边框 圆角 阴影 内边距 外边距 自定义 style',
+  '树 左树右表 树接口 节点字段 过滤字段 展开 折叠',
+  Object.values(propertySearchTabIndex).flat().join(' '),
+].map(item => item.toLowerCase())
 const paletteCollapsed = ref(false)
 const propertyCollapsed = ref(false)
 const canvasFocusMode = ref(false)
@@ -3365,6 +3899,14 @@ const selectedBlockStyle = computed(() => ({
   ...createDefaultBlockStyle(),
   ...(selectedBlock.value?.props?.style || {}),
 }))
+const selectedBlockBackgroundHex = computed(() => colorToHexInput(selectedBlockStyle.value.backgroundColor, 'FFFFFF'))
+const selectedBlockBorderHex = computed(() => colorToHexInput(selectedBlockStyle.value.borderColor, 'E4E4E7'))
+const selectedBlockBackgroundPreview = computed(() => hexInputToColor(selectedBlockBackgroundHex.value, '#ffffff'))
+const selectedBlockBorderPreview = computed(() => {
+  if (selectedBlockStyle.value.borderStyle === 'none')
+    return '#e4e4e7'
+  return hexInputToColor(selectedBlockBorderHex.value, '#e4e4e7')
+})
 const selectedBlockFrame = computed(() => selectedBlock.value
   ? resolveBlockFrame(selectedBlock.value)
   : { x: 0, y: 0, width: 24, height: 24 })
@@ -3377,9 +3919,7 @@ const selectedBlockFixedWidth = computed(() => {
   return Math.max(24, resolveCssNumber(value, fallback))
 })
 const layoutCodeText = computed(() => JSON.stringify(localLayout.value || {}, null, 2))
-const selectedBlockCodeText = computed(() => selectedBlock.value
-  ? JSON.stringify(selectedBlock.value, null, 2)
-  : '请先选中一个区块')
+const selectedBlockCodeText = computed(() => selectedBlock.value ? JSON.stringify(selectedBlock.value, null, 2) : '')
 const externalCustomActionsEnabled = computed(() => Array.isArray(props.customActions))
 const customActionList = computed(() => externalCustomActionsEnabled.value ? (props.customActions || []) : (selectedBlock.value?.props?.customActions || []))
 const activeAction = computed(() => customActionList.value[activeActionIndex.value] || null)
@@ -3598,15 +4138,47 @@ const availableFields = computed(() => {
   const set = new Set(selectedFieldRefs.value)
   return props.fields.filter(f => isPageFieldVisible(f, selectedBlockZoneKey.value) && !set.has(f.field))
 })
+const activeDrawerField = computed(() => {
+  if (!selectedFieldsList.value.length)
+    return null
+  return selectedFieldsList.value.find(field => field.field === activeDrawerFieldName.value) || selectedFieldsList.value[0]
+})
+const activeDrawerFieldSetting = computed(() => activeDrawerField.value ? resolveFieldSetting(activeDrawerField.value.field) : {})
+
+watch(selectedFieldRefs, (refs) => {
+  if (!refs.length) {
+    activeDrawerFieldName.value = ''
+    return
+  }
+  if (!refs.includes(activeDrawerFieldName.value))
+    activeDrawerFieldName.value = refs[0]
+})
 
 watch(
-  selectedBlock,
-  (block) => {
+  selectedBlockId,
+  (blockId) => {
+    const block = findBlockInTree(blocks.value, blockId)
+    propertyCollapseExpandedNames.value = ['base']
     if (block?.blockType === 'tabs') {
       const firstKey = block.props?.tabs?.[0]?.key || ''
       if (!block.props?.tabs?.some(tab => tab.key === activeTabKey.value))
         activeTabKey.value = firstKey
     }
+  },
+)
+
+watch(
+  propertyKeyword,
+  (value) => {
+    const keyword = String(value || '').trim().toLowerCase()
+    if (!keyword)
+      return
+    propertyPanelTab.value = resolvePropertySearchTab(keyword)
+    propertyCollapseExpandedNames.value = [...allPropertyCollapseNames]
+    nextTick(() => {
+      scrollPropertySearchTarget(keyword)
+      setTimeout(() => scrollPropertySearchTarget(keyword), 80)
+    })
   },
 )
 
@@ -3662,6 +4234,73 @@ watch(
 
 function emitLayoutChange(value = localLayout.value) {
   emit('update:modelValue', JSON.parse(JSON.stringify(value)))
+}
+
+function openSourceModal() {
+  layoutSourceDraft.value = layoutCodeText.value
+  blockSourceDraft.value = selectedBlockCodeText.value
+  sourceModalTab.value = selectedBlock.value ? 'block' : 'layout'
+  sourceError.value = ''
+  sourceModalOpen.value = true
+}
+
+function cancelSourceModalEdit() {
+  layoutSourceDraft.value = ''
+  blockSourceDraft.value = ''
+  sourceError.value = ''
+  sourceModalOpen.value = false
+}
+
+function applySourceModalCode() {
+  const applied = sourceModalTab.value === 'block' && selectedBlock.value
+    ? applyBlockSourceCode()
+    : applyLayoutSourceCode()
+  if (applied)
+    cancelSourceModalEdit()
+}
+
+function applyLayoutSourceCode() {
+  try {
+    const parsed = JSON.parse(layoutSourceDraft.value || '{}')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error('画布布局 JSON 必须是对象')
+    localLayout.value = normalizeDesignerLayout(syncGridLayoutWithModel(parsed, props.modelSchema, { layoutType: props.layoutType }))
+    sourceError.value = ''
+    return true
+  }
+  catch (error) {
+    sourceError.value = error?.message || 'JSON 解析失败'
+    return false
+  }
+}
+
+function applyBlockSourceCode() {
+  if (!selectedBlock.value) {
+    sourceError.value = '请先选中一个区块'
+    return false
+  }
+  try {
+    const parsed = JSON.parse(blockSourceDraft.value || '{}')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error('当前区块 JSON 必须是对象')
+    const targetId = selectedBlock.value.id
+    if (parsed.id && parsed.id !== targetId)
+      throw new Error('当前区块 JSON 的 id 不能改成其他区块')
+    const replacement = {
+      ...parsed,
+      id: targetId,
+    }
+    localLayout.value = {
+      ...localLayout.value,
+      items: normalizeGridItems(mapBlocksInTree(blocks.value, block => block.id === targetId ? replacement : block)),
+    }
+    sourceError.value = ''
+    return true
+  }
+  catch (error) {
+    sourceError.value = error?.message || 'JSON 解析失败'
+    return false
+  }
 }
 
 function resolveBlockStyle(block) {
@@ -3814,6 +4453,56 @@ function normalizeSpacingValue(value) {
     .split(/\s+/)
     .map(part => (/^\d+(?:\.\d+)?$/.test(part) ? `${part}px` : part))
     .join(' ')
+}
+
+function colorToHexInput(value, fallback = '') {
+  const text = String(value || '').trim()
+  const match = text.match(/^#?([0-9a-f]{3}(?:[0-9a-f]{3})?)/i)
+  if (!match)
+    return fallback
+  const hex = match[1]
+  if (hex.length === 3)
+    return hex.split('').map(item => `${item}${item}`).join('').toUpperCase()
+  return hex.toUpperCase()
+}
+
+function hexInputToColor(value, fallback = '#ffffff') {
+  const text = String(value || '').trim().replace(/^#/, '')
+  if (!/^[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(text))
+    return fallback
+  return `#${text}`
+}
+
+function updateSelectedBlockBackground(value) {
+  if (!selectedBlock.value)
+    return
+  patchBlockStyle(selectedBlock.value.id, { backgroundColor: hexInputToColor(value, '#ffffff') })
+}
+
+function updateSelectedBlockBorderStyle(value) {
+  if (!selectedBlock.value)
+    return
+  patchBlockStyle(selectedBlock.value.id, {
+    borderStyle: value || 'solid',
+    borderColor: value === 'none'
+      ? 'transparent'
+      : selectedBlockStyle.value.borderColor === 'transparent'
+        ? '#e4e4e7'
+        : selectedBlockStyle.value.borderColor,
+    borderWidth: value === 'none' ? 0 : selectedBlockStyle.value.borderWidth || 1,
+  })
+}
+
+function updateSelectedBlockBorderColor(value) {
+  if (!selectedBlock.value)
+    return
+  patchBlockStyle(selectedBlock.value.id, {
+    borderColor: hexInputToColor(value, '#e4e4e7'),
+    borderStyle: selectedBlockStyle.value.borderStyle === 'none'
+      ? 'solid'
+      : selectedBlockStyle.value.borderStyle || 'solid',
+    borderWidth: selectedBlockStyle.value.borderWidth || 1,
+  })
 }
 
 function selectBlock(blockId) {
@@ -5098,7 +5787,14 @@ function normalizeFormOpenModePatch(value) {
 function handleCrudPreviewStateChange(payload = {}) {
   if (!payload.blockId || !payload.patch)
     return
-  patchBlockProps(payload.blockId, payload.patch)
+  const block = blocks.value.find(item => item.id === payload.blockId)
+  const currentProps = block?.props || {}
+  const changedPatch = Object.fromEntries(
+    Object.entries(payload.patch).filter(([key, value]) => currentProps[key] !== value),
+  )
+  if (!Object.keys(changedPatch).length)
+    return
+  patchBlockProps(payload.blockId, changedPatch)
 }
 
 function crudPreviewStatusText(status) {
@@ -5999,7 +6695,14 @@ onBeforeUnmount(() => {
 // Field config drawer
 function openFieldDrawer(mode = 'table') {
   fieldDrawerMode.value = mode === 'search' ? 'search' : 'table'
+  activeDrawerFieldName.value = resolveSelectedFieldRefs(selectedBlock.value, mode === 'search' ? 'search' : 'table')?.[0] || ''
+  fieldAdvancedOpen.value = false
   fieldDrawerOpen.value = true
+}
+
+function selectDrawerField(fieldName = '') {
+  activeDrawerFieldName.value = fieldName
+  fieldAdvancedOpen.value = false
 }
 
 function resolveSelectedFieldRefs(block = selectedBlock.value, zoneKey = selectedBlockZoneKey.value) {
@@ -6043,6 +6746,35 @@ function updateSelectedFieldRefs(fieldRefs = []) {
     return
   }
   patchBlock(selectedBlock.value.id, { fieldRefs })
+}
+
+function resolveFieldRoleEnabled(fieldName, role) {
+  if (!fieldName)
+    return false
+  if (role === 'search')
+    return resolveSelectedFieldRefs(selectedBlock.value, 'search').includes(fieldName)
+  if (role === 'table')
+    return resolveSelectedFieldRefs(selectedBlock.value, 'table').includes(fieldName)
+  return resolveFieldSetting(fieldName).editVisible !== false
+}
+
+function updateFieldRole(fieldName, role, enabled) {
+  if (!selectedBlock.value || !fieldName)
+    return
+  if (role === 'search' || role === 'table') {
+    const current = resolveSelectedFieldRefs(selectedBlock.value, role)
+    const next = enabled
+      ? Array.from(new Set([...current, fieldName]))
+      : current.filter(ref => ref !== fieldName)
+    if (role === 'search' && selectedBlock.value.blockType === 'AiCrudPage') {
+      patchBlockProps(selectedBlock.value.id, { searchFieldRefs: next })
+      return
+    }
+    if (role === 'table')
+      patchBlock(selectedBlock.value.id, { fieldRefs: next })
+    return
+  }
+  updateFieldSetting(fieldName, { editVisible: enabled })
 }
 
 function resolveFieldSetting(fieldName) {
@@ -6758,7 +7490,63 @@ function propertySectionVisible(keywords = []) {
   const keyword = String(propertyKeyword.value || '').trim().toLowerCase()
   if (!keyword)
     return true
-  return keywords.some(item => String(item || '').toLowerCase().includes(keyword))
+  const sectionMatched = keywords.some(item => String(item || '').toLowerCase().includes(keyword))
+  if (sectionMatched)
+    return true
+  const blockText = [
+    selectedBlock.value?.label,
+    selectedBlock.value?.blockType,
+    selectedBlock.value?.id,
+    JSON.stringify(selectedBlock.value?.props || {}),
+    JSON.stringify(selectedBlock.value?.fieldRefs || []),
+  ].join(' ').toLowerCase()
+  if (blockText.includes(keyword))
+    return true
+  const knownSectionMatched = propertySearchKeywordRegistry.some(item => item.includes(keyword))
+  return !knownSectionMatched
+}
+
+function resolvePropertySearchTab(keyword = '') {
+  const text = String(keyword || '').trim().toLowerCase()
+  if (!text)
+    return propertyPanelTab.value
+  if (isPropertySearchTabMatched('props', text))
+    return 'props'
+  if (isPropertySearchTabMatched('style', text))
+    return 'style'
+  if (isPropertySearchTabMatched('interaction', text))
+    return 'interaction'
+  return 'props'
+}
+
+function isPropertySearchTabMatched(tab, keyword) {
+  return (propertySearchTabIndex[tab] || []).some((item) => {
+    const text = String(item || '').toLowerCase()
+    return text === keyword || text.includes(keyword) || keyword.includes(text)
+  })
+}
+
+function scrollPropertySearchTarget(keyword = '') {
+  const panel = propertyPanelRef.value
+  const text = String(keyword || '').trim().toLowerCase()
+  if (!panel || !text)
+    return
+  const anchors = Array.from(panel.querySelectorAll('[data-property-search]'))
+    .filter(anchor => anchor.offsetParent !== null)
+  const target = anchors.find(anchor => isPropertyAnchorMatched(anchor, text)) || anchors[0]
+  if (!target)
+    return
+  const panelRect = panel.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+  panel.scrollTo({
+    top: Math.max(0, panel.scrollTop + targetRect.top - panelRect.top - 8),
+    behavior: 'smooth',
+  })
+}
+
+function isPropertyAnchorMatched(anchor, keyword = '') {
+  const text = String(anchor?.dataset?.propertySearch || '').toLowerCase()
+  return text === keyword || text.includes(keyword) || keyword.includes(text)
 }
 
 function toggleCanvasFocus() {
@@ -6780,25 +7568,30 @@ function centerCanvasViewport() {
     })
   })
 }
+
+function selectPropertyPanelTab(tab) {
+  propertyPanelTab.value = tab
+}
 </script>
 
 <style scoped>
 .list-grid-designer {
   position: relative;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 380px;
-  gap: 12px;
+  grid-template-columns: 256px minmax(0, 1fr) 320px;
+  gap: 0;
   height: 100%;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .list-grid-designer.left-collapsed {
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 320px;
 }
 
 .list-grid-designer.right-collapsed {
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 256px minmax(0, 1fr);
 }
 
 .list-grid-designer.left-collapsed.right-collapsed {
@@ -6821,7 +7614,7 @@ function centerCanvasViewport() {
   min-width: max-content;
   margin-right: auto;
   margin-left: auto;
-  padding: 12px;
+  padding: 64px 12px 24px;
 }
 
 .list-grid-designer.readonly,
@@ -6837,8 +7630,8 @@ function centerCanvasViewport() {
 .canvas-panel,
 .block-property-panel,
 .property-panel {
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   background: #fff;
   display: flex;
   flex-direction: column;
@@ -6848,7 +7641,14 @@ function centerCanvasViewport() {
 .palette-panel {
   min-height: 0;
   padding: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-right: 1px solid #e4e4e7;
+  background: #fcfcfc;
+}
+
+.block-property-panel,
+.property-panel {
+  border-left: 1px solid #e4e4e7;
+  background: #fafafa;
 }
 
 .palette-panel-head,
@@ -6860,15 +7660,16 @@ function centerCanvasViewport() {
 }
 
 .panel-collapse-button {
-  --n-color: #eef6ff !important;
-  --n-color-hover: #dbeafe !important;
-  --n-color-pressed: #bfdbfe !important;
-  --n-color-focus: #eef6ff !important;
-  --n-border: 1px solid #bfdbfe !important;
-  --n-border-hover: 1px solid #93c5fd !important;
-  --n-border-pressed: 1px solid #60a5fa !important;
-  --n-border-focus: 1px solid #93c5fd !important;
-  --n-text-color: #1d4ed8 !important;
+  --n-color: #fff !important;
+  --n-color-hover: #f4f6ff !important;
+  --n-color-pressed: #e8edff !important;
+  --n-color-focus: #fff !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-pressed: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #c7d2fe !important;
+  --n-text-color: #52525b !important;
+  --n-text-color-hover: #3153d8 !important;
 }
 
 .side-rail-toggle-button {
@@ -6903,15 +7704,15 @@ function centerCanvasViewport() {
 }
 
 .panel-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
+  color: #18181b;
 }
 
 .panel-desc {
   margin-top: 2px;
-  font-size: 12px;
-  color: #64748b;
+  font-size: 11px;
+  color: #71717a;
 }
 
 .palette-groups {
@@ -6942,7 +7743,7 @@ function centerCanvasViewport() {
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: #52525b;
   margin-bottom: 6px;
 }
 
@@ -6955,8 +7756,8 @@ function centerCanvasViewport() {
   height: 6px;
   margin-left: 3px;
   border-radius: 999px;
-  background: #2563eb;
-  outline: 3px solid #dbeafe;
+  background: #4266f7;
+  outline: 3px solid #e8edff;
 }
 
 .palette-list {
@@ -6968,8 +7769,8 @@ function centerCanvasViewport() {
 .palette-item {
   display: grid;
   gap: 2px;
-  padding: 10px 11px;
-  border: 1px solid #dbe3ee;
+  padding: 9px 10px;
+  border: 1px solid #e4e4e7;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.9);
   text-align: left;
@@ -6978,9 +7779,9 @@ function centerCanvasViewport() {
 }
 
 .palette-item:hover:not(.is-disabled) {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.1);
+  border-color: #c7d2fe;
+  background: #f8faff;
+  box-shadow: 0 8px 18px rgba(49, 83, 216, 0.08);
   transform: translateY(-1px);
 }
 
@@ -7008,15 +7809,15 @@ function centerCanvasViewport() {
 }
 
 .item-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: #0f172a;
+  color: #27272a;
 }
 
 .item-desc {
   min-height: 30px;
   font-size: 11px;
-  color: #64748b;
+  color: #71717a;
   line-height: 15px;
 }
 
@@ -7033,10 +7834,8 @@ function centerCanvasViewport() {
 
 .canvas-panel {
   position: relative;
-  background: radial-gradient(circle at 18px 18px, rgba(37, 99, 235, 0.08) 0 1px, transparent 1px 100%), #eef3f8;
-  background-size:
-    18px 18px,
-    auto;
+  background: radial-gradient(circle at 1px 1px, rgba(113, 113, 122, 0.22) 1px, transparent 0), #f8f9fa;
+  background-size: 20px 20px;
   min-width: 0;
   min-height: 0;
 }
@@ -7051,7 +7850,7 @@ function centerCanvasViewport() {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 12px 14px;
+  padding: 0 16px 16px;
   overscroll-behavior: contain;
 }
 
@@ -7062,18 +7861,19 @@ function centerCanvasViewport() {
   align-items: flex-start;
   min-width: 100%;
   box-sizing: content-box;
-  padding: 14px 1px 58px;
+  padding: 64px 1px 28px;
 }
 
 .canvas-toolbar {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
-  padding: 7px 10px;
-  border-bottom: 1px solid #e5e7eb;
-  background: #fff;
+  min-height: 42px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
 }
 
 .canvas-primary-actions {
@@ -7082,23 +7882,67 @@ function centerCanvasViewport() {
 }
 
 .canvas-viewport-dock {
-  position: sticky;
-  z-index: 18;
-  bottom: 12px;
+  position: absolute;
+  z-index: 8;
+  top: 14px;
+  left: 50%;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
   width: max-content;
-  max-width: calc(100% - 20px);
-  margin: -48px 8px 0 auto;
-  padding: 5px;
-  border: 1px solid #dbe3ee;
-  border-radius: 9px;
+  max-width: calc(100% - 28px);
+  margin: 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(228, 228, 231, 0.9);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
-  backdrop-filter: blur(10px);
-  color: #475569;
+  box-shadow:
+    0 4px 12px rgba(15, 23, 42, 0.06),
+    0 1px 3px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(12px);
+  color: #52525b;
+  transform: translateX(-50%);
+}
+
+.viewport-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: #e4e4e7;
+}
+
+.viewport-device-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  border-right: 1px solid #e4e4e7;
+}
+
+.viewport-device-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #a1a1aa;
+  font-size: 16px;
+  padding: 0;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.viewport-device-button:hover,
+.viewport-device-button.active {
+  background: #f4f4f5;
+  color: #3f3f46;
 }
 
 .canvas-viewport-popover {
@@ -7148,29 +7992,31 @@ function centerCanvasViewport() {
 .viewport-icon-button,
 .viewport-zoom-button {
   --n-color: #fff !important;
-  --n-color-hover: #eff6ff !important;
-  --n-color-pressed: #dbeafe !important;
+  --n-color-hover: #f4f6ff !important;
+  --n-color-pressed: #e8edff !important;
   --n-color-focus: #fff !important;
-  --n-border: 1px solid #dbe3ee !important;
-  --n-border-hover: 1px solid #93c5fd !important;
-  --n-border-pressed: 1px solid #60a5fa !important;
-  --n-border-focus: 1px solid #93c5fd !important;
-  --n-text-color: #334155 !important;
-  --n-text-color-hover: #1d4ed8 !important;
-  --n-text-color-pressed: #1e40af !important;
-  --n-text-color-focus: #1d4ed8 !important;
+  --n-border: 1px solid #e4e4e7 !important;
+  --n-border-hover: 1px solid #c7d2fe !important;
+  --n-border-pressed: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #c7d2fe !important;
+  --n-text-color: #52525b !important;
+  --n-text-color-hover: #3153d8 !important;
+  --n-text-color-pressed: #253fb2 !important;
+  --n-text-color-focus: #3153d8 !important;
   font-weight: 700;
 }
 
 .viewport-icon-button {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px !important;
 }
 
 .viewport-zoom-button {
-  min-width: 76px;
-  height: 30px;
-  padding: 0 9px !important;
+  min-width: 72px;
+  height: 28px;
+  padding: 0 8px !important;
+  border-radius: 999px !important;
 }
 
 .canvas-width-select,
@@ -7205,9 +8051,9 @@ function centerCanvasViewport() {
   box-sizing: content-box;
   padding: 0;
   border-radius: 8px;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(15, 23, 42, 0.04)) border-box;
+  border: 1px solid #e4e4e7;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
   will-change: transform;
 }
 
@@ -7506,11 +8352,55 @@ function centerCanvasViewport() {
 }
 
 .property-panel-head {
-  padding: 12px 14px;
-  border-bottom: 1px solid #eef2f7;
-  background:
-    linear-gradient(180deg, rgba(248, 251, 255, 0.96) 0%, #fff 100%),
-    linear-gradient(90deg, rgba(37, 99, 235, 0.12), transparent 58%);
+  padding: 10px 10px 6px;
+  border-bottom: 0;
+  background: #fafafa;
+}
+
+.property-panel-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0 8px 6px;
+  padding: 3px;
+  border: 1px solid #e4e4e7;
+  border-radius: 9px;
+  background: #f4f4f5;
+}
+
+.property-panel-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.property-panel-tabs button .n-icon {
+  color: #71717a;
+  font-size: 14px;
+}
+
+.property-panel-tabs button:hover {
+  background: rgba(228, 228, 231, 0.72);
+  color: #27272a;
+}
+
+.property-panel-tabs button.active {
+  background: #fff;
+  color: #27272a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.property-panel-tabs button.active .n-icon {
+  color: #27272a;
 }
 
 .property-search,
@@ -7518,23 +8408,23 @@ function centerCanvasViewport() {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  padding: 10px 12px;
-  border-bottom: 1px solid #eef2f7;
-  background: #fff;
-  box-shadow: 0 1px 0 rgba(226, 232, 240, 0.75);
+  padding: 8px 10px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fafafa;
+  box-shadow: none;
 }
 
 .property-panel-title {
-  color: #0f172a;
-  font-size: 14px;
+  color: #18181b;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .property-panel-desc {
   margin-top: 2px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .property-panel {
@@ -7542,8 +8432,8 @@ function centerCanvasViewport() {
   min-height: 0;
   border: 0;
   border-radius: 0;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef4fb 100%);
-  padding: 12px;
+  background: #fafafa;
+  padding: 8px;
   overflow: auto;
 }
 
@@ -7562,22 +8452,22 @@ function centerCanvasViewport() {
   gap: 10px;
   margin-bottom: 12px;
   padding: 12px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(228, 228, 231, 0.72);
   border-radius: 8px;
-  background: linear-gradient(135deg, #eff6ff 0%, #fff 74%), #fff;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .prop-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
+  color: #27272a;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .prop-meta {
   margin-top: 2px;
-  font-size: 12px;
-  color: #475569;
+  color: #71717a;
+  font-size: 11px;
 }
 
 .property-body {
@@ -7585,13 +8475,52 @@ function centerCanvasViewport() {
   gap: 12px;
 }
 
+.property-tab-content {
+  display: grid;
+  gap: 10px;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.property-search-anchor {
+  height: 0;
+  overflow: hidden;
+}
+
+.property-tab-content + .property-tab-content {
+  margin-top: 8px;
+}
+
+.property-tab-content :deep(.n-divider) {
+  justify-content: flex-start;
+  margin: 0 -8px 2px;
+  padding: 8px;
+  border-top: 1px solid #f4f4f5;
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.property-tab-content :deep(.n-divider .n-divider__title) {
+  padding: 0;
+}
+
+.property-tab-content :deep(.n-divider::before),
+.property-tab-content :deep(.n-divider::after) {
+  display: none;
+}
+
 .property-body :deep(.n-form-item) {
   margin-bottom: 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 10px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
 }
 
 .property-body :deep(.n-form-item-label) {
@@ -7599,14 +8528,15 @@ function centerCanvasViewport() {
   display: flex !important;
   align-items: center;
   align-self: flex-start;
-  min-height: 24px;
-  height: 24px;
-  padding-left: 10px;
+  min-height: 18px;
+  height: auto;
+  padding-left: 0;
   padding-top: 0;
-  padding-bottom: 0;
-  color: #334155;
+  padding-bottom: 5px;
+  color: #52525b;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 16px;
 }
 
 .property-body :deep(.n-form-item-label--right-mark) {
@@ -7619,24 +8549,82 @@ function centerCanvasViewport() {
   align-items: center;
   min-height: 20px;
   line-height: 20px;
+  font-size: 11px;
 }
 
 .property-body :deep(.n-form-item-label::before) {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 4px;
-  height: 12px;
-  border-radius: 999px;
-  background: #2563eb;
-  transform: translateY(-50%);
+  display: none;
+}
+
+.property-body :deep(.n-input),
+.property-body :deep(.n-input-number),
+.property-body :deep(.n-base-selection) {
+  --n-color: #f4f4f5 !important;
+  --n-color-focus: #fff !important;
+  --n-color-hover: #f4f4f5 !important;
+  --n-border: 1px solid transparent !important;
+  --n-border-hover: 1px solid #a5b4fc !important;
+  --n-border-focus: 1px solid #6366f1 !important;
+  --n-box-shadow-focus: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+  border-radius: 6px;
+}
+
+.property-body :deep(.n-input__input-el),
+.property-body :deep(.n-input__textarea-el),
+.property-body :deep(.n-base-selection-label) {
+  color: #27272a !important;
+  font-size: 12px !important;
+}
+
+.property-body :deep(.n-button) {
+  --n-border-radius: 6px !important;
+  font-size: 12px;
 }
 
 .event-editor,
 .container-child-editor {
   display: grid;
   gap: 8px;
+}
+
+.copy-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 18px 14px;
+  border: 1px dashed #d4d4d8;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #71717a;
+  text-align: center;
+}
+
+.copy-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e4e4e7;
+  border-radius: 999px;
+  background: #fff;
+  color: #a1a1aa;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.copy-empty-state strong {
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.copy-empty-state small {
+  max-width: 220px;
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 15px;
 }
 
 .form-modal-help {
@@ -7653,10 +8641,11 @@ function centerCanvasViewport() {
 .event-row {
   display: grid;
   gap: 8px;
-  padding: 8px;
-  border: 1px solid #dbeafe;
+  padding: 10px;
+  border: 1px solid rgba(228, 228, 231, 0.82);
   border-radius: 8px;
-  background: #f8fbff;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .event-row-head,
@@ -7672,9 +8661,9 @@ function centerCanvasViewport() {
 .container-child-row span {
   min-width: 0;
   overflow: hidden;
-  color: #0f172a;
+  color: #27272a;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -7682,7 +8671,28 @@ function centerCanvasViewport() {
 .event-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
+}
+
+.event-setting-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.event-setting-field > span {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.event-grid :deep(.n-select),
+.event-grid :deep(.n-input),
+.event-param-row :deep(.n-select),
+.event-param-row :deep(.n-input) {
+  min-width: 0;
+  width: 100%;
 }
 
 .grid-config-grid {
@@ -7704,17 +8714,17 @@ function centerCanvasViewport() {
   display: grid;
   gap: 5px;
   min-width: 0;
-  padding: 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
-  background: #f8fafc;
+  padding: 8px 9px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
 }
 
 .grid-config-field > span,
 .grid-config-switch > span {
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .grid-config-switch {
@@ -7731,10 +8741,10 @@ function centerCanvasViewport() {
 .grid-cell-editor {
   display: grid;
   gap: 6px;
-  padding: 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
-  background: #f8fafc;
+  padding: 9px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .grid-cell-editor-head {
@@ -7755,15 +8765,20 @@ function centerCanvasViewport() {
 
 .event-param-row {
   display: grid;
-  grid-template-columns: minmax(76px, 0.8fr) minmax(76px, 0.8fr) minmax(110px, 1.2fr) auto;
+  grid-template-columns: minmax(72px, 0.82fr) minmax(72px, 0.82fr) minmax(96px, 1.1fr) auto;
   gap: 6px;
   align-items: center;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
 }
 
 .container-child-row {
   padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
   background: #fff;
 }
 
@@ -7813,6 +8828,343 @@ function centerCanvasViewport() {
   min-width: 0;
 }
 
+.detail-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.detail-layout-control,
+.detail-layout-switch {
+  min-width: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 7px;
+  background: #fafafa;
+}
+
+.detail-layout-control {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+}
+
+.detail-layout-control > span {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.detail-layout-control :deep(.n-input-number),
+.detail-layout-control :deep(.n-select) {
+  width: 100%;
+  min-width: 0;
+}
+
+.detail-layout-switch {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.detail-layout-switch strong,
+.detail-layout-switch small {
+  display: block;
+}
+
+.detail-layout-switch strong {
+  color: #27272a;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.detail-layout-switch small {
+  margin-top: 1px;
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.search-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.mini-number-field {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mini-number-field > span {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.mini-number-field em {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-style: normal;
+  pointer-events: none;
+}
+
+.mini-number-field :deep(.n-input-number) {
+  width: 100%;
+  min-width: 0;
+}
+
+.mini-number-field :deep(.n-input__input-el) {
+  padding-right: 18px !important;
+}
+
+.position-control {
+  display: grid;
+  gap: 14px;
+}
+
+.position-axis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.position-number-field,
+.position-inline-number {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.position-number-field > span,
+.position-rule-head > span {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.position-number-field em,
+.position-inline-number em {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-style: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  pointer-events: none;
+}
+
+.position-rule {
+  display: grid;
+  gap: 8px;
+}
+
+.position-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.position-inline-number {
+  width: 76px;
+}
+
+.position-inline-number :deep(.n-input__input-el) {
+  padding-right: 18px !important;
+  text-align: right;
+}
+
+.segmented-mini {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: 6px;
+  background: rgba(244, 244, 245, 0.8);
+}
+
+.segmented-mini button {
+  min-width: 0;
+  height: 25px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.segmented-mini button:hover {
+  color: #3f3f46;
+  background: rgba(228, 228, 231, 0.5);
+}
+
+.segmented-mini button.active {
+  border-color: rgba(212, 212, 216, 0.72);
+  background: #fff;
+  color: #4f46e5;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.appearance-control {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.list-appearance-control {
+  padding: 0 0 2px;
+}
+
+.appearance-field {
+  display: grid;
+  gap: 6px;
+}
+
+.appearance-field > label,
+.appearance-row-label {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.appearance-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.appearance-input-shell,
+.appearance-radius-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #f4f4f5;
+  padding: 4px;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.appearance-input-shell:hover,
+.appearance-radius-shell:hover {
+  background: rgba(228, 228, 231, 0.5);
+}
+
+.appearance-input-shell:focus-within,
+.appearance-radius-shell:focus-within {
+  border-color: #6366f1;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.appearance-swatch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  cursor: pointer;
+  border: 1px solid rgba(212, 212, 216, 0.72);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.appearance-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: 0;
+  opacity: 0;
+}
+
+.appearance-hex-input,
+.appearance-radius-shell input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #3f3f46;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  text-transform: uppercase;
+}
+
+.appearance-percent {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  color: #a1a1aa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.appearance-select {
+  flex: 0 0 auto;
+  max-width: 70px;
+  border: 0;
+  border-right: 1px solid rgba(212, 212, 216, 0.72);
+  outline: 0;
+  background: transparent;
+  color: #3f3f46;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.appearance-plain-select {
+  max-width: 96px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.appearance-plain-select:hover,
+.appearance-select:hover {
+  color: #4f46e5;
+}
+
+.appearance-radius-shell span {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.appearance-radius-shell:focus-within span {
+  color: #6366f1;
+}
+
 .advanced-config-collapse {
   display: grid;
   gap: 8px;
@@ -7822,34 +9174,30 @@ function centerCanvasViewport() {
 .advanced-config-collapse :deep(.n-collapse-item) {
   margin: 0;
   overflow: hidden;
-  border: 1px solid #dbe3ee;
+  border: 1px solid rgba(228, 228, 231, 0.72);
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .advanced-config-collapse :deep(.n-collapse-item__header) {
-  min-height: 38px;
+  min-height: 35px;
   padding: 0 12px;
   border-bottom: 1px solid transparent;
-  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+  background: #fff;
 }
 
 .advanced-config-collapse :deep(.n-collapse-item__header-main) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #0f172a;
+  color: #3f3f46;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .advanced-config-collapse :deep(.n-collapse-item__header-main::before) {
-  content: '';
-  width: 4px;
-  height: 14px;
-  border-radius: 999px;
-  background: #2563eb;
+  display: none;
 }
 
 .advanced-config-collapse :deep(.n-collapse-item--active .n-collapse-item__header) {
@@ -7857,29 +9205,141 @@ function centerCanvasViewport() {
 }
 
 .advanced-config-collapse :deep(.n-collapse-item__content-inner) {
-  padding: 10px 12px 12px;
+  padding: 8px 12px 12px;
   background: #fff;
+}
+
+.advanced-config-collapse :deep(.n-form-item) {
+  margin-bottom: 12px;
+}
+
+.advanced-config-collapse :deep(.n-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.advanced-config-collapse :deep(.n-form-item-label) {
+  min-height: 16px;
+  padding-bottom: 5px;
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.copy-form-item :deep(.n-form-item-blank) {
+  min-width: 0;
+}
+
+.api-base-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.api-base-input {
+  flex: 2 1 0;
+  min-width: 0;
+}
+
+.api-key-input {
+  flex: 1 1 72px;
+  min-width: 72px;
 }
 
 .api-config-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: 6px;
   width: 100%;
 }
 
-.api-config-grid :deep(.n-input) {
+.api-config-title {
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.api-endpoint-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fff;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.api-endpoint-row:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.api-method-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  flex: 0 0 48px;
+  border-right: 1px solid currentColor;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.api-method-badge.get {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.api-method-badge.post {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.api-method-badge.put {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.api-method-badge.delete {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.api-config-grid :deep(.n-input),
+.api-endpoint-row :deep(.n-input) {
   width: 100%;
+}
+
+.api-endpoint-row :deep(.n-input) {
+  --n-border: 0 !important;
+  --n-border-hover: 0 !important;
+  --n-border-focus: 0 !important;
+  --n-box-shadow-focus: none !important;
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 0;
+}
+
+.api-endpoint-row :deep(.n-input__input-el) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px !important;
 }
 
 .event-help {
-  padding: 10px 12px;
-  border: 1px dashed #bfdbfe;
+  padding: 14px 12px;
+  border: 1px dashed #d4d4d8;
   border-radius: 8px;
-  background: #eff6ff;
-  color: #475569;
+  background: #fafafa;
+  color: #71717a;
   font-size: 12px;
   line-height: 1.6;
+  text-align: center;
 }
 
 .pos-cell {
@@ -7914,6 +9374,32 @@ function centerCanvasViewport() {
 .custom-action-summary {
   display: grid;
   gap: 10px;
+}
+
+.custom-action-featured {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+}
+
+.custom-action-featured > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.custom-action-featured strong {
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.custom-action-featured span {
+  color: #6366f1;
+  font-size: 10px;
+  line-height: 14px;
 }
 
 .action-chip-list {
@@ -8161,34 +9647,53 @@ function centerCanvasViewport() {
 }
 
 .selected-list {
-  display: grid;
-  gap: 8px;
-  max-height: 430px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 146px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .selected-row {
-  display: grid;
-  grid-template-columns: 18px minmax(150px, 1fr) minmax(112px, 0.8fr) auto;
-  align-items: start;
-  gap: 8px;
+  display: inline-grid;
+  grid-template-columns: 12px minmax(0, auto) auto;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
+  max-width: 210px;
+  padding: 5px 5px 5px 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
   background: #fff;
-  font-size: 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  color: #3f3f46;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
 }
 
 .selected-row.search,
 .selected-row.table {
-  grid-template-columns: 18px minmax(150px, 1fr) minmax(112px, 0.8fr) auto;
+  grid-template-columns: 12px minmax(0, auto) auto;
+}
+
+.selected-row:hover {
+  border-color: #a5b4fc;
+}
+
+.selected-row.active {
+  border-color: #6366f1;
+  background: #eef2ff;
+  color: #4338ca;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.18);
 }
 
 .field-setting-row {
-  display: grid;
+  display: none;
   grid-column: 1 / -1;
   gap: 8px;
   min-width: 0;
@@ -8209,14 +9714,133 @@ function centerCanvasViewport() {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.field-detail-card {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(228, 228, 231, 0.8);
+  border-radius: 8px;
+  background: rgba(250, 250, 250, 0.82);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.field-detail-card::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 18px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  border-top: 1px solid rgba(228, 228, 231, 0.8);
+  border-left: 1px solid rgba(228, 228, 231, 0.8);
+  background: rgba(250, 250, 250, 0.82);
+}
+
+.field-detail-head {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(228, 228, 231, 0.72);
+}
+
+.field-detail-title {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.field-detail-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #18181b;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-detail-title span {
+  min-width: 0;
+  overflow: hidden;
+  color: #a1a1aa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-role-switches,
+.field-detail-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.field-role-switches label,
+.field-detail-toggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #52525b;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.field-detail-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.field-detail-control {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field-detail-control > span {
+  color: #52525b;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.field-detail-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(228, 228, 231, 0.72);
+}
+
+.field-advanced-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(212, 212, 216, 0.9);
+}
+
 .field-help {
   grid-column: 1 / -1;
   padding: 7px 9px;
-  border: 1px dashed #bfdbfe;
+  border: 1px dashed #d4d4d8;
   border-radius: 6px;
-  background: #eff6ff;
-  color: #475569;
-  font-size: 12px;
+  background: #fff;
+  color: #71717a;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -8224,6 +9848,35 @@ function centerCanvasViewport() {
   width: 100%;
   display: grid;
   gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(228, 228, 231, 0.72);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.preview-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  color: #3f3f46;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.preview-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.preview-config-grid :deep(.n-select),
+.preview-config-grid :deep(.n-input) {
+  min-width: 0;
+  width: 100%;
 }
 
 .field-config-entry,
@@ -8233,10 +9886,72 @@ function centerCanvasViewport() {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e4e4e7;
   border-radius: 6px;
-  background: #f8fafc;
+  background: #fafafa;
   padding: 10px;
+}
+
+.field-config-card-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.field-config-card-list.compact {
+  gap: 6px;
+}
+
+.field-config-entry.compact {
+  gap: 8px;
+  padding: 7px 8px;
+  border-color: rgba(228, 228, 231, 0.76);
+  background: #fff;
+}
+
+.field-config-entry.compact strong {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.field-config-entry.compact span {
+  overflow: hidden;
+  margin-top: 1px;
+  color: #71717a;
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-config-entry.compact :deep(.n-button) {
+  flex: 0 0 auto;
+  min-width: 58px;
+}
+
+.field-config-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fff;
+  color: #71717a;
+  padding: 0;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.field-config-icon-action:hover {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .field-config-entry > div,
@@ -8272,11 +9987,11 @@ function centerCanvasViewport() {
   display: grid;
   gap: 3px;
   padding: 8px 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e4e4e7;
   border-radius: 6px;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 12px;
+  background: #fff;
+  color: #71717a;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -8313,23 +10028,57 @@ function centerCanvasViewport() {
   gap: 12px;
   width: 100%;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
+  padding: 9px 10px;
+  border: 1px solid #e4e4e7;
   border-radius: 6px;
-  background: #f8fafc;
-  color: #334155;
+  background: #fafafa;
+  color: #3f3f46;
   font-size: 12px;
   font-weight: 600;
 }
 
+.tree-action-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(228, 228, 231, 0.76);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.tree-action-compact > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tree-action-compact strong {
+  color: #3f3f46;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.tree-action-compact span {
+  color: #71717a;
+  font-size: 10px;
+  line-height: 14px;
+}
+
 .toolbar-toggle-list {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   width: 100%;
 }
 
 .toolbar-toggle-row {
   align-items: flex-start;
+  background: #fff;
 }
 
 .switch-line-text {
@@ -8380,20 +10129,26 @@ function centerCanvasViewport() {
 }
 
 .f-handle {
-  padding-top: 2px;
-  color: #94a3b8;
+  color: #d4d4d8;
+  font-size: 11px;
+  line-height: 1;
   cursor: grab;
 }
 
 .f-name {
-  display: grid;
-  gap: 2px;
+  display: block;
   min-width: 0;
-  color: #0f172a;
+  overflow: hidden;
+  color: inherit;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.f-name small,
+.f-name small {
+  display: none;
+}
+
 .available-item small {
   color: #64748b;
   font-size: 11px;
@@ -8401,20 +10156,36 @@ function centerCanvasViewport() {
 }
 
 .f-code {
-  min-width: 0;
-  overflow: hidden;
-  color: #94a3b8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .f-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   border: 0;
+  border-radius: 4px;
   background: transparent;
-  color: #ef4444;
-  font-size: 12px;
+  color: #d4d4d8;
+  font-size: 14px;
+  line-height: 1;
   cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.selected-row:hover .f-remove {
+  opacity: 1;
+}
+
+.f-remove:hover {
+  background: #fef2f2;
+  color: #ef4444;
 }
 
 .available-list {
@@ -8447,10 +10218,84 @@ function centerCanvasViewport() {
   width: min(980px, calc(100vw - 56px));
 }
 
+.list-source-modal :deep(.n-card) {
+  background: #09090b;
+  color: #f8fafc;
+}
+
+.list-source-modal :deep(.n-card-header),
+.list-source-modal :deep(.n-card__footer) {
+  border-color: #1f2937;
+}
+
+.list-source-modal :deep(.n-card-header__main) {
+  color: #f8fafc;
+}
+
+.list-source-modal :deep(.n-tabs-tab__label) {
+  color: #cbd5e1;
+}
+
+.list-source-modal :deep(.n-tabs-tab.n-tabs-tab--active .n-tabs-tab__label) {
+  color: #93c5fd;
+}
+
+.list-source-modal :deep(.n-tabs-nav-scroll-content) {
+  border-color: #1f2937;
+}
+
+.source-editor-hint {
+  margin-bottom: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #bfdbfe;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 7px 10px;
+}
+
+.source-code-textarea :deep(.n-input) {
+  --n-border: 1px solid #1f2937 !important;
+  --n-border-hover: 1px solid #334155 !important;
+  --n-border-focus: 1px solid #3b82f6 !important;
+  --n-box-shadow-focus: 0 0 0 2px rgba(59, 130, 246, 0.18) !important;
+  --n-color: #050816 !important;
+  --n-color-focus: #050816 !important;
+  --n-color-hover: #050816 !important;
+  --n-text-color: #f8fafc !important;
+  --n-placeholder-color: #64748b !important;
+  background: #050816;
+}
+
 .source-code-textarea :deep(.n-input__textarea-el) {
+  background: #050816;
+  caret-color: #f8fafc;
+  color: #f8fafc;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.source-code-textarea :deep(.n-input__textarea-el::selection) {
+  background: rgba(37, 99, 235, 0.48);
+}
+
+.source-error {
+  margin-top: 10px;
+  border: 1px solid #7f1d1d;
+  border-radius: 6px;
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 8px 10px;
+}
+
+.source-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .empty {
@@ -8508,12 +10353,12 @@ function centerCanvasViewport() {
   }
 
   .canvas-zoom-stage {
-    padding: 10px 1px 58px;
+    padding: 54px 1px 18px;
   }
 
   .canvas-viewport-dock {
-    margin-right: auto;
-    margin-left: auto;
+    top: 54px;
+    left: 50%;
   }
 
   .action-modal-layout,
