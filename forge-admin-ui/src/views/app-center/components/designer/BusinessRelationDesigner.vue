@@ -1208,7 +1208,9 @@ defineExpose({
 .business-relation-designer {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: calc(100vh - 106px);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .relation-designer-head {
@@ -1235,26 +1237,45 @@ defineExpose({
 .relation-designer-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .relation-tabs {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  overflow: hidden;
 }
 
 .relation-tabs :deep(.n-tabs-nav) {
   padding: 0 16px;
 }
 
+.relation-tabs :deep(.n-tabs-pane-wrapper),
 .relation-tabs :deep(.n-tab-pane) {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.relation-tabs :deep(.n-tab-pane) {
+  height: 100%;
   padding: 0;
 }
 
 .relation-list-pane {
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #f8fafc;
   padding: 14px;
+}
+
+.relation-list-pane :deep(.n-spin-container),
+.relation-list-pane :deep(.n-spin-content) {
+  min-height: 100%;
 }
 
 .relation-card-list {
@@ -1304,6 +1325,9 @@ defineExpose({
   display: grid;
   align-content: start;
   gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   border-left: 1px solid #e5e7eb;
   background: #fbfcfe;
   padding: 12px;
