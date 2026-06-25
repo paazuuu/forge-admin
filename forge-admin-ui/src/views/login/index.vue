@@ -15,7 +15,7 @@
       <div class="login-brand">
         <div class="brand-content">
           <div class="logo-wrapper">
-            <img src="@/assets/images/logo_text.png" class="logo-img" alt="Logo">
+            <img :src="brandLogoUrl" class="logo-img" alt="Logo" @error="handleBrandLogoError">
           </div>
           <h1 class="brand-title">
             {{ title }}
@@ -75,11 +75,29 @@
               欢迎回来
             </h2>
             <p class="form-subtitle">
-              请登录您的账户
+              {{ loginSubtitle }}
             </p>
           </div>
 
           <div class="form-body">
+            <!-- Tenant -->
+            <div v-if="tenantSelectOptions.length > 0" class="form-group tenant-form-group">
+              <label for="tenant" class="form-label">登录租户</label>
+              <div class="tenant-select-wrapper">
+                <n-select
+                  id="tenant"
+                  v-model:value="selectedTenantId"
+                  class="modern-select"
+                  :options="tenantSelectOptions"
+                  :loading="tenantConfigApplying"
+                  :disabled="tenantConfigApplying"
+                  filterable
+                  size="large"
+                  placeholder="请选择登录租户"
+                />
+              </div>
+            </div>
+
             <!-- Username -->
             <div class="form-group">
               <label for="username" class="form-label">用户名</label>
@@ -275,7 +293,8 @@
 
     <!-- ICP备案号 -->
     <div class="icp-record">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蒙ICP备2026004895号</a>
+      <span v-if="copyrightInfo">{{ copyrightInfo }}</span>
+      <a v-else href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蒙ICP备2026004895号</a>
     </div>
   </div>
 
@@ -334,15 +353,16 @@
 
 <script setup>
 import { useStorage } from '@vueuse/core'
-import { nextTick } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SlideVerify from 'vue3-slide-verify'
+import defaultLogoUrl from '@/assets/images/logo_text.png'
 import mainApi from '@/api'
 import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
-import { getDefaultPageTitle } from '@/utils/page-title'
-import { applyTenantConfig } from '@/utils/tenant-config'
+import { getDefaultPageTitle, normalizePageTitle } from '@/utils/page-title'
+import { applyTenantConfig, resolveTenantPublicAssetUrl } from '@/utils/tenant-config'
 import api from './api'
 import 'vue3-slide-verify/dist/style.css'
 
@@ -351,8 +371,29 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
-const title = getDefaultPageTitle()
+const defaultTitle = getDefaultPageTitle()
 const userClient = import.meta.env.VITE_USER_CLIENT || 'pc'
+const LOGIN_TENANT_STORAGE_KEY = 'login_selected_tenant_id'
+const SOCIAL_TENANT_MAP_KEY = 'login_social_tenant_map'
+
+const tenantOptions = ref([])
+const selectedTenantId = ref(null)
+const tenantConfigApplying = ref(false)
+const brandLogoUrl = ref(defaultLogoUrl)
+const loginConfig = ref(null)
+const tenantPageTitle = computed(() => normalizePageTitle(loginConfig.value?.browserTitle)
+  || normalizePageTitle(loginConfig.value?.systemName)
+  || defaultTitle)
+const title = computed(() => tenantPageTitle.value)
+const selectedTenantOption = computed(() => tenantOptions.value.find(item => String(item.value) === String(selectedTenantId.value)) || null)
+const loginSubtitle = computed(() => normalizePageTitle(loginConfig.value?.systemIntro)
+  || (selectedTenantOption.value?.tenantName ? `${selectedTenantOption.value.tenantName} 租户入口` : '请登录您的账户'))
+const copyrightInfo = computed(() => normalizePageTitle(loginConfig.value?.copyrightInfo))
+const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
+  label: item.label,
+  value: item.value,
+})))
+let tenantInitCompleted = false
 
 const loginInfo = ref({
   username: '',
@@ -367,7 +408,6 @@ const captchaExpires = ref(0) // 验证码过期时间
 
 // 验证码类型：graphical(图形验证码), slider(滑块验证码), sms(短信验证码)
 const captchaType = ref('graphical')
-const loginConfig = ref(null)
 const captchaEnabled = computed(() => loginConfig.value?.enableCaptcha !== false)
 
 // 滑块验证码相关 (vue3-slide-verify)
@@ -394,18 +434,114 @@ const loading = ref(false)
 const socialPlatforms = ref([])
 const socialLoading = ref(false)
 
+watch(selectedTenantId, (tenantId) => {
+  if (!tenantInitCompleted || tenantConfigApplying.value)
+    return
+  syncSelectedTenantToStorage(tenantId)
+  tenantConfigApplying.value = true
+  refreshLoginContext()
+    .finally(() => {
+      tenantConfigApplying.value = false
+    })
+})
+
 // 手机号验证
 const isValidPhone = computed(() => {
   const phone = loginInfo.value.phone
   return phone && /^1[3-9]\d{9}$/.test(phone)
 })
 
+function normalizeTenantId(value) {
+  if (Array.isArray(value)) {
+    const first = value.find(item => item !== null && item !== undefined && item !== '')
+    return normalizeTenantId(first)
+  }
+  if (value === null || value === undefined || value === '')
+    return null
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function syncSelectedTenantToStorage(tenantId) {
+  const normalizedTenantId = normalizeTenantId(tenantId)
+  if (normalizedTenantId === null) {
+    lStorage.remove(LOGIN_TENANT_STORAGE_KEY)
+    return
+  }
+  lStorage.set(LOGIN_TENANT_STORAGE_KEY, normalizedTenantId)
+}
+
+function getSelectedTenantFromStorage() {
+  return normalizeTenantId(lStorage.get(LOGIN_TENANT_STORAGE_KEY))
+}
+
+function getSocialTenantMap() {
+  return lStorage.get(SOCIAL_TENANT_MAP_KEY) || {}
+}
+
+function setSocialTenantMap(map) {
+  lStorage.set(SOCIAL_TENANT_MAP_KEY, map)
+}
+
+function rememberSocialTenant(state, tenantId) {
+  const normalizedTenantId = normalizeTenantId(tenantId)
+  if (!state || normalizedTenantId === null)
+    return
+  const map = getSocialTenantMap()
+  map[state] = normalizedTenantId
+  setSocialTenantMap(map)
+}
+
+function applyBrandLogo(config) {
+  brandLogoUrl.value = resolveTenantPublicAssetUrl(config, 'logo') || defaultLogoUrl
+}
+
+function handleBrandLogoError() {
+  if (brandLogoUrl.value !== defaultLogoUrl)
+    brandLogoUrl.value = defaultLogoUrl
+}
+
+async function applyLoginPageConfig(config) {
+  loginConfig.value = config || null
+  await applyTenantConfig(config, appStore)
+  applyBrandLogo(config)
+}
+
+async function loadLoginTenantOptions() {
+  try {
+    const res = await api.getLoginTenantOptions()
+    if (res.code !== 200) {
+      tenantOptions.value = []
+      return
+    }
+
+    tenantOptions.value = (res.data || []).map(item => ({
+      ...item,
+      value: normalizeTenantId(item.tenantId),
+      label: item.tenantName || item.systemName || item.browserTitle || String(item.tenantId),
+    })).filter(item => item.value !== null)
+
+    const storedTenantId = getSelectedTenantFromStorage()
+    const initialTenantId = tenantOptions.value.find(item => String(item.value) === String(storedTenantId))?.value
+      ?? tenantOptions.value[0]?.value
+      ?? null
+    if (initialTenantId !== null) {
+      selectedTenantId.value = initialTenantId
+      syncSelectedTenantToStorage(initialTenantId)
+    }
+  }
+  catch (error) {
+    console.error('获取登录租户列表失败:', error)
+  }
+}
+
 // 获取登录配置
 async function loadLoginConfig() {
+  const currentTenantId = normalizeTenantId(selectedTenantId.value)
   try {
-    const res = await api.getLoginConfig(userClient)
+    const res = await api.getLoginConfig(userClient, currentTenantId)
     if (res.code === 200 && res.data) {
-      loginConfig.value = res.data
+      await applyLoginPageConfig(res.data)
       captchaType.value = res.data.captchaType || 'graphical'
 
       // 根据验证码类型加载对应的验证码
@@ -422,6 +558,7 @@ async function loadLoginConfig() {
     console.error('获取登录配置失败:', error)
     // 使用默认配置
     captchaType.value = 'graphical'
+    await applyLoginPageConfig(null)
     await refreshCaptcha()
   }
 }
@@ -430,7 +567,7 @@ async function loadLoginConfig() {
 async function loadSocialPlatforms() {
   try {
     socialLoading.value = true
-    const res = await api.getSocialPlatforms()
+    const res = await api.getSocialPlatforms(normalizeTenantId(selectedTenantId.value))
     if (res.code === 200 && res.data) {
       socialPlatforms.value = res.data.filter(p => p.enabled)
     }
@@ -446,8 +583,10 @@ async function loadSocialPlatforms() {
 // 处理三方登录
 async function handleSocialLogin(platform) {
   try {
-    const res = await api.getSocialAuthUrl(platform)
+    const tenantId = normalizeTenantId(selectedTenantId.value)
+    const res = await api.getSocialAuthUrl(platform, tenantId)
     if (res.code === 200 && res.data) {
+      rememberSocialTenant(res.data.state, tenantId)
       // 打开授权窗口
       const width = 600
       const height = 500
@@ -663,10 +802,15 @@ function startSmsCountdown() {
 
 async function handleLogin() {
   const { username, password, code, codeKey, phone } = loginInfo.value
+  const tenantId = normalizeTenantId(selectedTenantId.value)
 
   // 基础验证
   if (!username || !password)
     return $message.warning('请输入用户名和密码')
+
+  if (tenantOptions.value.length > 0 && tenantId === null) {
+    return $message.warning('请选择登录租户')
+  }
 
   if (captchaEnabled.value) {
     // 根据验证码类型进行验证
@@ -703,6 +847,7 @@ async function handleLogin() {
       code,
       codeKey,
       phone, // 短信验证码时需要
+      tenantId,
       authType: captchaEnabled.value ? 'password_captcha' : 'password',
       encrypted: true, // 标记密码已加密
       userClient,
@@ -797,7 +942,7 @@ async function onLoginSuccess(data = {}) {
   $message.loading('登录中...', { key: 'login' })
   try {
     // 先获取菜单数据，再跳转
-    await loadAndSetMenuData()
+    await loadAndSetMenuData(data.userInfo?.tenantId || selectedTenantId.value)
 
     $message.success('登录成功', { key: 'login' })
     // 使用环境变量中的默认跳转路径
@@ -851,8 +996,17 @@ async function handleSocialLoginMessage(event) {
 
 // 页面加载时获取登录配置和验证码
 onMounted(() => {
-  loadLoginConfig()
-  loadSocialPlatforms()
+  ;(async () => {
+    try {
+      tenantConfigApplying.value = true
+      await loadLoginTenantOptions()
+      await refreshLoginContext()
+    }
+    finally {
+      tenantInitCompleted = true
+      tenantConfigApplying.value = false
+    }
+  })()
   // 监听三方登录消息
   window.addEventListener('message', handleSocialLoginMessage)
 })
@@ -867,11 +1021,18 @@ onUnmounted(() => {
 })
 
 // 获取并设置菜单数据
-async function loadAndSetMenuData() {
+async function refreshLoginContext() {
+  await Promise.all([
+    loadLoginConfig(),
+    loadSocialPlatforms(),
+  ])
+}
+
+async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   try {
     const permissionStore = usePermissionStore()
     const tenantStore = useTenantStore()
-    const tenantConfig = await tenantStore.loadTenantConfig(userStore.userInfo?.tenantId)
+    const tenantConfig = await tenantStore.loadTenantConfig(normalizeTenantId(loginTenantId) || userStore.userInfo?.tenantId)
     await applyTenantConfig(tenantConfig, appStore)
 
     // 获取菜单数据
@@ -1552,9 +1713,30 @@ async function loadAndSetMenuData() {
   width: 100%;
 }
 
+.tenant-select-wrapper {
+  width: 100%;
+}
+
+.modern-select {
+  width: 100%;
+}
+
 /* Override Naive UI input styles */
 :deep(.modern-input.n-input) {
   border-radius: 10px;
+}
+
+:deep(.modern-select .n-base-selection) {
+  border-radius: 10px;
+}
+
+:deep(.modern-select .n-base-selection:not(.n-base-selection--disabled):hover) {
+  border-color: #3b82f6;
+}
+
+:deep(.modern-select .n-base-selection:not(.n-base-selection--disabled).n-base-selection--active) {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 :deep(.modern-input .n-input__border),

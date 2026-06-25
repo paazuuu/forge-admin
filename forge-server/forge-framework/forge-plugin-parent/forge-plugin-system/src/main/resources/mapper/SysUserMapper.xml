@@ -58,14 +58,7 @@
         u.id_card, u.gender, u.password, u.salt, u.user_status, u.avatar, u.region_code,
         u.last_login_time, u.last_login_ip, u.login_count, u.force_password_change, u.remark, u.create_dept,
         u.create_by, u.create_time, u.update_by, u.update_time,
-        <choose>
-            <when test="query != null and query.tenantId != null">
-                t_current.tenant_name,
-            </when>
-            <otherwise>
-                t.tenant_name,
-            </otherwise>
-        </choose>
+        COALESCE(tenant_names.tenant_names, t.tenant_name) AS tenant_name,
         orgs.org_name, orgs.org_name AS dept_name
     </sql>
 
@@ -134,12 +127,20 @@
         FROM sys_user u
         LEFT JOIN sys_tenant t ON t.id = u.tenant_id
         <if test="query.tenantId != null">
-            LEFT JOIN sys_tenant t_current ON t_current.id = #{query.tenantId}
             LEFT JOIN sys_user_tenant sut_current
                 ON sut_current.user_id = u.id
                AND sut_current.tenant_id = #{query.tenantId}
                AND sut_current.status = 1
         </if>
+        LEFT JOIN (
+            SELECT sut.user_id,
+                   GROUP_CONCAT(tn.tenant_name ORDER BY sut.is_default DESC, tn.id ASC SEPARATOR ',') AS tenant_names
+            FROM sys_user_tenant sut
+            INNER JOIN sys_tenant tn ON tn.id = sut.tenant_id
+            WHERE sut.status = 1
+              AND tn.tenant_status = 1
+            GROUP BY sut.user_id
+        ) tenant_names ON tenant_names.user_id = u.id
         LEFT JOIN (
             SELECT uo.user_id, GROUP_CONCAT(o.org_name ORDER BY o.sort SEPARATOR ',') AS org_name
             FROM sys_user_org uo

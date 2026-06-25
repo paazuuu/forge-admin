@@ -53,7 +53,7 @@
               v-model:value="keyword"
               clearable
               placeholder="搜索应用 / 表名 / configKey"
-              @update:value="handleSearch"
+              @update:value="handleKeywordSearch"
             />
             <n-select
               v-model:value="publishStatus"
@@ -142,7 +142,7 @@
             :item-count="total"
             :page-sizes="[9, 18, 36]"
             show-size-picker
-            @update:page="loadApps"
+            @update:page="handlePageChange"
             @update:page-size="handlePageSizeChange"
           />
         </div>
@@ -781,7 +781,7 @@
 
 <script setup>
 import { EllipsisVertical, SaveOutline, SparklesOutline } from '@vicons/ionicons5'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { modelListByProvider, providerPage } from '@/api/ai'
 import {
@@ -855,6 +855,7 @@ const activePreviewModelCode = ref(null)
 const aiPreviewDetailVisible = ref(false)
 const aiPreviewDetailType = ref('er')
 const aiAppendInstruction = ref('')
+let appSearchTimer = null
 
 const statusOptions = computed(() => dict.value.lowcode_app_publish_status || [])
 const flatDomains = computed(() => flattenDomains(domains.value))
@@ -1008,8 +1009,14 @@ const pageSubtitle = computed(() => {
 const appScopeText = computed(() => selectedDomain.value ? `当前领域：${selectedDomain.value.domainName}` : '当前展示全部业务领域应用')
 
 onMounted(async () => {
-  await loadDomains()
-  await loadApps()
+  await Promise.all([
+    loadDomains(),
+    loadApps(),
+  ])
+})
+
+onBeforeUnmount(() => {
+  clearPendingAppSearch()
 })
 
 async function loadDomains() {
@@ -1031,6 +1038,7 @@ async function refreshDomains() {
 
 async function selectDomain(domain) {
   pageNum.value = 1
+  clearPendingAppSearch()
   if (!domain) {
     selectedDomainId.value = null
     selectedDomain.value = null
@@ -1092,19 +1100,43 @@ function buildApiRowsForTarget(target) {
 }
 
 async function refreshAll() {
+  clearPendingAppSearch()
   await Promise.all([
     loadDomains(),
     loadApps(),
   ])
 }
 
+function clearPendingAppSearch() {
+  if (!appSearchTimer)
+    return
+  window.clearTimeout(appSearchTimer)
+  appSearchTimer = null
+}
+
+function handleKeywordSearch() {
+  pageNum.value = 1
+  clearPendingAppSearch()
+  appSearchTimer = window.setTimeout(() => {
+    appSearchTimer = null
+    loadApps()
+  }, 300)
+}
+
 function handleSearch() {
   pageNum.value = 1
+  clearPendingAppSearch()
+  loadApps()
+}
+
+function handlePageChange() {
+  clearPendingAppSearch()
   loadApps()
 }
 
 function handlePageSizeChange() {
   pageNum.value = 1
+  clearPendingAppSearch()
   loadApps()
 }
 

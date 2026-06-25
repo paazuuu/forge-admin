@@ -42,7 +42,7 @@
 import { computed, defineAsyncComponent, h, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { crudConfigRender } from '@/api/ai'
-import { businessDocumentRuntime } from '@/api/business-app'
+import { businessDocumentRuntimeBatch } from '@/api/business-app'
 import catalog from '@/catalog'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import DictTag from '@/components/DictTag.vue'
@@ -1217,31 +1217,71 @@ async function prepareRuntimeList(list = [], options = {}) {
 }
 
 async function attachRuntimeActions(rows = [], objectCode, treeConfig = {}) {
-  const childrenField = treeConfig.childrenField || 'children'
-  await Promise.all(rows.map(async (row) => {
-    if (!row || typeof row !== 'object')
-      return
-    row._runtimeObjectCode = objectCode
-    const recordId = resolveRuntimeRecordId(row)
-    if (recordId) {
-      try {
-        const res = await businessDocumentRuntime(objectCode, recordId)
-        row._runtimeActions = res.data?.runtimeActions || []
-        row._documentRuntime = res.data || null
-      }
-      catch (error) {
-        row._runtimeActions = []
-        console.warn('[crud-page] 加载单据运行态失败', error.message)
-      }
-    }
-    if (Array.isArray(row[childrenField]) && row[childrenField].length)
-      await attachRuntimeActions(row[childrenField], objectCode, treeConfig)
-  }))
+  const items = collectRuntimeRows(rows, objectCode, treeConfig)
+  if (!items.length)
+    return
+
+  const recordIds = [...new Set(
+    items
+      .map(item => item.recordId)
+      .filter(recordId => recordId !== undefined && recordId !== null && recordId !== ''),
+  )]
+  if (!recordIds.length) {
+    items.forEach(({ row }) => {
+      row._runtimeActions = []
+      row._documentRuntime = null
+    })
+    return
+  }
+
+  try {
+    const res = await businessDocumentRuntimeBatch(objectCode, recordIds)
+    const runtimeMap = normalizeRuntimeBatchMap(res?.data)
+    items.forEach(({ row, recordId }) => {
+      const runtime = runtimeMap.get(String(recordId)) || runtimeMap.get(recordId)
+      row._runtimeActions = runtime?.runtimeActions || []
+      row._documentRuntime = runtime || null
+    })
+  }
+  catch (error) {
+    items.forEach(({ row }) => {
+      row._runtimeActions = []
+      row._documentRuntime = null
+    })
+    console.warn('[crud-page] 批量加载单据运行态失败', error.message)
+  }
 }
 
 function resolveRuntimeRecordId(row = {}) {
   const rowKey = renderConfig.value?.rowKey || 'id'
   return row[rowKey] ?? row.id ?? row.Id
+}
+
+function collectRuntimeRows(rows = [], objectCode, treeConfig = {}) {
+  const childrenField = treeConfig.childrenField || 'children'
+  const items = []
+  const visit = (nodes = []) => {
+    if (!Array.isArray(nodes))
+      return
+    nodes.forEach((row) => {
+      if (!row || typeof row !== 'object')
+        return
+      row._runtimeObjectCode = objectCode
+      const recordId = resolveRuntimeRecordId(row)
+      if (recordId !== undefined && recordId !== null && recordId !== '')
+        items.push({ row, recordId })
+      if (Array.isArray(row[childrenField]) && row[childrenField].length)
+        visit(row[childrenField])
+    })
+  }
+  visit(rows)
+  return items
+}
+
+function normalizeRuntimeBatchMap(data) {
+  if (!data || typeof data !== 'object')
+    return new Map()
+  return new Map(Object.entries(data))
 }
 
 function resolveBusinessObjectCode(cfg = {}) {

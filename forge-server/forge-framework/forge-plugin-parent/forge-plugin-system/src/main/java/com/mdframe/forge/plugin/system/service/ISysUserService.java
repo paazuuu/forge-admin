@@ -2,6 +2,8 @@ package com.mdframe.forge.plugin.system.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.mdframe.forge.plugin.system.dto.BatchUserRoleBindDTO;
+import com.mdframe.forge.plugin.system.dto.BatchUserTenantBindDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.dto.UserTenantBindDTO;
@@ -83,6 +85,11 @@ public interface ISysUserService extends IService<SysUser> {
     boolean bindUserRoles(Long userId, Long[] roleIds, Long tenantId);
 
     /**
+     * 批量给用户追加指定租户下的角色。
+     */
+    boolean batchBindUserRoles(BatchUserRoleBindDTO dto);
+
+    /**
      * 解除用户角色
      *
      * @param userId 用户ID
@@ -153,6 +160,11 @@ public interface ISysUserService extends IService<SysUser> {
      * 批量绑定用户租户
      */
     boolean bindUserTenants(Long userId, UserTenantBindDTO dto);
+
+    /**
+     * 批量将用户加入目标租户。
+     */
+    boolean batchBindUserTenant(BatchUserTenantBindDTO dto);
     
     /**
      * 批量绑定用户组织

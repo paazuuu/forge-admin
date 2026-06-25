@@ -16,9 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 业务单据运行态服务。
@@ -53,19 +51,18 @@ public class BusinessDocumentRuntimeService {
             return vo;
         }
         vo.setDocumentEnabled(true);
-        BusinessDocumentConfigVO configVO = documentConfigService.toVO(config);
-        fillDetailFlowDisplayOptions(vo, configVO);
-
+        BusinessDocumentConfigVO configVO = documentConfigService.toVO(config, context.runtimeConfig());
         Map<String, Object> recordData = loadRecordData(config, recordId);
         if (recordData == null) {
             vo.setMessage("记录不存在或无权限访问");
             vo.setNextAction("SAVE_RECORD");
             return vo;
         }
+        fillDetailFlowDisplayOptions(vo, configVO);
 
         String documentStatus = text(firstPresent(recordData, config.getStatusField(), snakeToCamel(config.getStatusField())));
         vo.setDocumentStatus(documentStatus);
-        vo.setDocumentStatusLabel(resolveStatusLabel(config, documentStatus));
+        vo.setDocumentStatusLabel(resolveStatusLabel(configVO, documentStatus));
 
         AiBusinessFlowInstanceLink link = flowInstanceLinkMapper.selectLatestByBusinessKey(tenantId, businessKey);
         if (link != null) {
@@ -75,15 +72,83 @@ public class BusinessDocumentRuntimeService {
 
         List<String> actions = permissionService.resolveAvailableActions(canonicalObjectCode, recordId, recordData);
         vo.setAvailableActions(actions);
-        fillNextAction(vo, config, link, actions);
-        fillRuntimeActions(vo, config, link, actions);
+        fillNextAction(vo, configVO, link, actions);
+        fillRuntimeActions(vo, config, configVO, link, actions);
         return vo;
+    }
+
+    public Map<Long, BusinessDocumentRuntimeVO> getRuntimeBatch(String objectCode, List<Long> recordIds) {
+        LinkedHashMap<Long, BusinessDocumentRuntimeVO> result = new LinkedHashMap<>();
+        List<Long> normalizedRecordIds = normalizeRecordIds(recordIds);
+        if (normalizedRecordIds.isEmpty() || StringUtils.isBlank(objectCode)) {
+            return result;
+        }
+
+        Long tenantId = resolveTenantId();
+        DocumentRuntimeContext context = resolveRuntimeContext(tenantId, objectCode);
+        AiBusinessDocumentConfig config = context.documentConfig();
+        BusinessDocumentConfigVO configVO = config == null ? null : documentConfigService.toVO(config, context.runtimeConfig());
+        Map<Long, Map<String, Object>> recordDataMap = config == null
+                ? Collections.emptyMap()
+                : loadRecordDataBatch(config, normalizedRecordIds);
+        Map<Long, AiBusinessFlowInstanceLink> linkMap = config == null
+                ? Collections.emptyMap()
+                : loadFlowLinks(tenantId, context.objectCode(), normalizedRecordIds);
+        List<String> documentActions = config == null
+                ? Collections.emptyList()
+                : permissionService.resolveDocumentActionPermissions(context.objectCode());
+
+        for (Long recordId : normalizedRecordIds) {
+            Map<String, Object> recordData = recordDataMap.get(recordId);
+            List<String> actions = recordData == null ? Collections.emptyList() : documentActions;
+            result.put(recordId, buildRuntimeVO(context, recordId, config, configVO, recordData, linkMap.get(recordId), actions));
+        }
+        return result;
     }
 
     private void fillDetailFlowDisplayOptions(BusinessDocumentRuntimeVO vo, BusinessDocumentConfigVO configVO) {
         Map<String, Object> options = configVO == null ? null : configVO.getOptions();
         vo.setDetailFlowTimelineVisible(readBoolean(options == null ? null : options.get("detailFlowTimelineVisible"), true));
         vo.setDetailFlowDiagramVisible(readBoolean(options == null ? null : options.get("detailFlowDiagramVisible"), true));
+    }
+
+    private BusinessDocumentRuntimeVO buildRuntimeVO(DocumentRuntimeContext context,
+                                                     Long recordId,
+                                                     AiBusinessDocumentConfig config,
+                                                     BusinessDocumentConfigVO configVO,
+                                                     Map<String, Object> recordData,
+                                                     AiBusinessFlowInstanceLink link,
+                                                     List<String> actions) {
+        BusinessDocumentRuntimeVO vo = new BusinessDocumentRuntimeVO();
+        vo.setDocumentEnabled(false);
+        vo.setBusinessKey(buildBusinessKey(context.objectCode(), recordId));
+
+        if (config == null) {
+            vo.setMessage("当前对象未启用单据模式");
+            return vo;
+        }
+        vo.setDocumentEnabled(true);
+        fillDetailFlowDisplayOptions(vo, configVO);
+        if (recordData == null) {
+            vo.setMessage("记录不存在或无权限访问");
+            vo.setNextAction("SAVE_RECORD");
+            return vo;
+        }
+
+        String documentStatus = text(firstPresent(recordData, config.getStatusField(), snakeToCamel(config.getStatusField())));
+        vo.setDocumentStatus(documentStatus);
+        vo.setDocumentStatusLabel(resolveStatusLabel(configVO, documentStatus));
+
+        if (link != null) {
+            vo.setFlowStatus(link.getFlowStatus());
+            vo.setProcessInstanceId(link.getProcessInstanceId());
+        }
+
+        List<String> effectiveActions = actions == null ? Collections.emptyList() : actions;
+        vo.setAvailableActions(effectiveActions);
+        fillNextAction(vo, configVO, link, effectiveActions);
+        fillRuntimeActions(vo, config, configVO, link, effectiveActions);
+        return vo;
     }
 
     public void validateStartAllowed(String objectCode, Long recordId, boolean checkPermission) {
@@ -126,9 +191,57 @@ public class BusinessDocumentRuntimeService {
         return dynamicCrudService.selectById(config.getConfigKey(), recordId);
     }
 
-    private void fillNextAction(BusinessDocumentRuntimeVO vo, AiBusinessDocumentConfig config,
+    private Map<Long, Map<String, Object>> loadRecordDataBatch(AiBusinessDocumentConfig config, List<Long> recordIds) {
+        if (config == null || recordIds == null || recordIds.isEmpty() || StringUtils.isBlank(config.getConfigKey())) {
+            return Collections.emptyMap();
+        }
+        Map<Object, Map<String, Object>> rawRecords = dynamicCrudService.selectByIds(config.getConfigKey(), recordIds);
+        if (rawRecords.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        LinkedHashMap<Long, Map<String, Object>> result = new LinkedHashMap<>();
+        rawRecords.forEach((key, value) -> {
+            Long recordId = toLong(key);
+            if (recordId != null) {
+                result.put(recordId, value);
+            }
+        });
+        return result;
+    }
+
+    private Map<Long, AiBusinessFlowInstanceLink> loadFlowLinks(Long tenantId,
+                                                                String objectCode,
+                                                                List<Long> recordIds) {
+        if (StringUtils.isBlank(objectCode) || recordIds == null || recordIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<String> businessKeys = recordIds.stream()
+                .filter(Objects::nonNull)
+                .map(recordId -> buildBusinessKey(objectCode, recordId))
+                .distinct()
+                .toList();
+        if (businessKeys.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<AiBusinessFlowInstanceLink> links = flowInstanceLinkMapper.selectLatestByBusinessKeys(tenantId, businessKeys);
+        if (links == null || links.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        LinkedHashMap<Long, AiBusinessFlowInstanceLink> result = new LinkedHashMap<>();
+        for (AiBusinessFlowInstanceLink link : links) {
+            Long recordId = link == null ? null : link.getRecordId();
+            if (recordId == null) {
+                recordId = parseRecordId(link == null ? null : link.getBusinessKey());
+            }
+            if (recordId != null) {
+                result.put(recordId, link);
+            }
+        }
+        return result;
+    }
+
+    private void fillNextAction(BusinessDocumentRuntimeVO vo, BusinessDocumentConfigVO configVO,
                                 AiBusinessFlowInstanceLink link, List<String> actions) {
-        BusinessDocumentConfigVO configVO = documentConfigService.toVO(config);
         Map<String, Object> mainFlowSummary = configVO.getMainFlowSummary();
         if (!isMainFlowConfigured(mainFlowSummary)) {
             vo.setNextAction("CONFIG_FLOW");
@@ -160,10 +273,11 @@ public class BusinessDocumentRuntimeService {
         vo.setMessage("缺少可执行的单据动作权限");
     }
 
-    private void fillRuntimeActions(BusinessDocumentRuntimeVO vo, AiBusinessDocumentConfig config,
+    private void fillRuntimeActions(BusinessDocumentRuntimeVO vo,
+                                    AiBusinessDocumentConfig config,
+                                    BusinessDocumentConfigVO configVO,
                                     AiBusinessFlowInstanceLink link, List<String> actions) {
         List<BusinessDocumentRuntimeVO.RuntimeActionVO> runtimeActions = new ArrayList<>();
-        BusinessDocumentConfigVO configVO = documentConfigService.toVO(config);
         Map<String, Object> mainFlowSummary = configVO.getMainFlowSummary();
         String startMode = mainFlowSummary == null ? "MANUAL" : text(mainFlowSummary.get("startMode"));
         if (!isManualStartMode(startMode)) {
@@ -269,11 +383,11 @@ public class BusinessDocumentRuntimeService {
         return "STARTED".equalsIgnoreCase(flowStatus) || "RUNNING".equalsIgnoreCase(flowStatus);
     }
 
-    private String resolveStatusLabel(AiBusinessDocumentConfig config, String documentStatus) {
+    private String resolveStatusLabel(BusinessDocumentConfigVO configVO, String documentStatus) {
         if (StringUtils.isBlank(documentStatus)) {
             return null;
         }
-        Map<String, String> mapping = documentConfigService.toVO(config).getStatusMapping();
+        Map<String, String> mapping = configVO == null ? Collections.emptyMap() : configVO.getStatusMapping();
         for (Map.Entry<String, String> entry : mapping.entrySet()) {
             if (documentStatus.equals(entry.getValue())) {
                 return switch (entry.getKey()) {
@@ -346,19 +460,30 @@ public class BusinessDocumentRuntimeService {
                                                                   String objectCodeOrConfigKey,
                                                                   AiCrudConfig runtimeConfig) {
         Long effectiveTenantId = tenantId != null ? tenantId : resolveTenantId();
-        AiBusinessDocumentConfig config = documentConfigService.selectEnabledByObjectCode(effectiveTenantId, objectCodeOrConfigKey);
-        if (config != null) {
-            return config;
+        LinkedHashSet<String> configKeys = new LinkedHashSet<>();
+        if (runtimeConfig != null) {
+            configKeys.add(runtimeConfig.getConfigKey());
         }
-        config = documentConfigService.selectEnabledByConfigKey(effectiveTenantId, objectCodeOrConfigKey);
-        if (config != null || runtimeConfig == null) {
-            return config;
+        configKeys.add(objectCodeOrConfigKey);
+        for (String configKey : configKeys) {
+            AiBusinessDocumentConfig config = documentConfigService.selectEnabledByConfigKey(effectiveTenantId, configKey);
+            if (config != null) {
+                return config;
+            }
         }
-        config = documentConfigService.selectEnabledByConfigKey(effectiveTenantId, runtimeConfig.getConfigKey());
-        if (config != null) {
-            return config;
+
+        LinkedHashSet<String> objectCodes = new LinkedHashSet<>();
+        if (runtimeConfig != null) {
+            objectCodes.add(runtimeConfig.getObjectCode());
         }
-        return documentConfigService.selectEnabledByObjectCode(effectiveTenantId, runtimeConfig.getObjectCode());
+        objectCodes.add(objectCodeOrConfigKey);
+        for (String objectCode : objectCodes) {
+            AiBusinessDocumentConfig config = documentConfigService.selectEnabledByObjectCode(effectiveTenantId, objectCode);
+            if (config != null) {
+                return config;
+            }
+        }
+        return null;
     }
 
     private AiBusinessObject resolveBusinessObject(Long tenantId,
@@ -377,6 +502,43 @@ public class BusinessDocumentRuntimeService {
             object = businessObjectMapper.selectByConfigKey(effectiveTenantId, objectCodeOrConfigKey);
         }
         return object;
+    }
+
+    private List<Long> normalizeRecordIds(List<Long> recordIds) {
+        if (recordIds == null || recordIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return recordIds.stream()
+                .filter(Objects::nonNull)
+                .filter(recordId -> StringUtils.isNotBlank(String.valueOf(recordId)))
+                .distinct()
+                .limit(200)
+                .toList();
+    }
+
+    private Long parseRecordId(String businessKey) {
+        if (StringUtils.isBlank(businessKey) || !businessKey.contains(":")) {
+            return null;
+        }
+        try {
+            return Long.valueOf(StringUtils.substringAfter(businessKey, ":"));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String text(Object value) {

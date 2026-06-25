@@ -1,6 +1,5 @@
 package com.mdframe.forge.plugin.generator.controller;
 
-import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudExportTask;
 import com.mdframe.forge.plugin.generator.dto.DynamicCrudExportResult;
@@ -42,7 +41,10 @@ public class DynamicCrudController {
                                                      @RequestParam Map<String, Object> requestParams) {
         Page<Map<String, Object>> data = dynamicCrudService.selectPage(
                 configKey, pageQuery, buildQuery(query, requestParams));
-        log.info("DynamicCrudController#page,返回数据:{}", JSONObject.toJSONString(data));
+        if (log.isDebugEnabled()) {
+            log.debug("DynamicCrudController#page configKey={}, pageNum={}, pageSize={}, total={}, records={}",
+                    configKey, pageQuery.getPageNum(), pageQuery.getPageSize(), data.getTotal(), data.getRecords().size());
+        }
         return RespInfo.success(data);
     }
 

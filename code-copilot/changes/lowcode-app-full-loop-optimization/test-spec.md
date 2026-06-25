@@ -238,6 +238,17 @@
 
 - 前端 dev server 可用时，在列表设计器结构化/自由布局两种模式下设置“全部列对齐”和“行间距”，期望所有已选列表字段同步为该对齐方式，预览表格行高变化，保存后运行态列表读取 `tableRowGap`。
 - 在表单设计器基础配置中选择已有字段作为组件字段 ID，期望保存后 `fieldBinding.fieldCode` 指向已存在字段，不再创建随机 `Fr...` 字段。
+
+## 21. 本轮增量验证：低代码应用列表查询与基础表格默认居中
+
+| 优先级 | 验证项 | 命令 | 期望 |
+|--------|--------|------|------|
+| P0 | Mapper XML 语法检查 | `xmllint --noout --nonet forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/resources/mapper/AiCrudConfigMapper.xml` | XML 语法通过 |
+| P0 | Flyway 索引脚本检查 | `sed -n '1,120p' forge-server/db/migration/V1.0.78__add_lowcode_app_page_summary_index.sql` | 幂等 SQL 脚本完整，无重复创建风险 |
+| P0 | 后端插件编译 | `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests` | `BUILD SUCCESS` |
+| P0 | 前端生产构建 | `cd forge-admin-ui && source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm build` | 构建通过，无新增阻断错误 |
+
+本轮聚焦低代码应用分页只返回摘要字段、关键词搜索防抖、初始加载并行、分页主路径索引，以及 `AiTable` 默认列对齐改为居中。未启动后端服务、前端 dev server 或数据库时，接口和浏览器点击验证记录为跳过。
 - 在新增组件后不点保存，直接切换到单据设置并点保存，期望前端先静默保存表单设计器草稿和自动创建字段，不再触发“页面区域引用了不存在的字段”。
 - 动态页点击“发起主流程”后，期望 loading 显示在当前页面遮罩上，行操作按钮只禁用不改成按钮 loading 文案。
 - `/app-center/object` 对象入口页导入模板/导入/导出只依赖运行配置 `configKey`，不再被 `canOpen` 阻断。
@@ -291,3 +302,18 @@
 - 前端 dev server 可用时，进入对象设计器保存，期望主设计器 payload 中的 `viewSchema` 会按当前字段资产过滤旧字段；列表自由布局的隐藏 `fieldSettings.queryField` 指向旧字段时会在保存前被清理或回退。
 
 本轮聚焦字段改名/删除后，旧随机字段码残留在 `viewSchema.search.fields[].fieldCode`、列表/查询布局 `fieldSettings.queryField` 等不可见 JSON 配置中，导致用户在查询条件 UI 找不到字段但发布检查仍报错。未启动后端服务、数据库或前端 dev server 时，真实落库和浏览器点击验证记录为跳过。
+
+## 24. 本轮增量验证：动态页面查询重复 DB 优化
+
+| 优先级 | 验证项 | 命令 | 期望 |
+|--------|--------|------|------|
+| P0 | 补丁空白检查 | `git diff --check -- forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/PermissionServiceImpl.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/SysResourceServiceImpl.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/AiCrudConfigService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/DynamicDataScopeService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/businessapp/BusinessDocumentConfigService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/businessapp/BusinessDocumentRuntimeService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/impl/GenDatasourceServiceImpl.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/runtime/LowcodeRuntimeDataSourceResolver.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/runtime/RuntimeJdbcTemplateProvider.java` | 无 trailing whitespace / conflict marker |
+| P0 | 后端插件编译 | `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-framework/forge-plugin-parent/forge-plugin-system -am compile -DskipTests` | 编译通过，退出码 0 |
+
+条件增强验证：
+
+- 后端服务和数据库可用时，登录后连续点击低代码动态页 `/ai/crud/crm_customer/page` 查询，观察日志中同一短时间窗口内 `SysResourceMapper.selectConfiguredApiUrls` 不再每个请求重复查询；资源管理新增/修改/删除 API 权限资源后，缓存应立即失效。
+- 查询 `crm_customer` 后触发 `/ai/business/document/crm_customer/runtime/batch`，观察 `GenDatasourceMapper.selectById` 在同一数据源短窗口内不再被运行时解析器和 JDBC provider 反复查询；数据源保存、更新、删除后缓存应立即失效。
+- 业务单据运行态批量查询应优先按发布态 `configKey` 查单据配置，并复用已解析的 `AiCrudConfig` 构建 VO，避免 `selectByObjectCode(crm_customer)` 这类必然 miss 和 `toVO` 内二次查询。
+
+本轮聚焦用户反馈“一次查询触发很多次 DB、耗时约 3s”的后端控制面重复查询。未启动后端服务和数据库时，真实请求日志对比记录为跳过；已完成相关模块编译验证。

@@ -102,6 +102,7 @@
           :edit-grid-cols="2"
           modal-width="900px"
           add-button-text="新增用户"
+          @selection-change="handleUserSelectionChange"
         >
           <!-- 自定义工具栏提示 -->
           <template #toolbar-start>
@@ -110,6 +111,33 @@
                 当前筛选：{{ selectedOrgNode.orgName }}
               </NTag>
             </div>
+          </template>
+          <template #toolbar-end>
+            <n-space size="small">
+              <n-button
+                size="small"
+                type="primary"
+                :disabled="selectedUserIds.length === 0"
+                @click="handleOpenBatchAuth"
+              >
+                <template #icon>
+                  <i class="i-material-symbols:verified-user-outline-rounded" />
+                </template>
+                批量授权
+              </n-button>
+              <n-button
+                v-if="userStore.isAdmin"
+                size="small"
+                type="info"
+                :disabled="selectedUserIds.length === 0"
+                @click="handleOpenBatchTenant"
+              >
+                <template #icon>
+                  <i class="i-material-symbols:group-add" />
+                </template>
+                加入租户
+              </n-button>
+            </n-space>
           </template>
         </AiCrudPage>
       </div>
@@ -232,6 +260,100 @@
       </template>
     </n-modal>
 
+    <!-- 批量授权弹窗 -->
+    <n-modal
+      v-model:show="batchAuthModalVisible"
+      title="批量用户授权"
+      preset="card"
+      style="width: 860px"
+      :mask-closable="false"
+    >
+      <div class="auth-modal-content">
+        <n-alert type="info" :bordered="false" class="batch-action-alert">
+          已选择 {{ selectedUserIds.length }} 个用户，提交后会给这些用户追加所选角色。
+        </n-alert>
+        <n-form label-placement="left" label-width="90" class="batch-action-form">
+          <n-form-item label="授权租户">
+            <n-select
+              v-model:value="batchAuthTenantId"
+              :options="tenantSelectOptions"
+              placeholder="请选择授权租户"
+              filterable
+            />
+          </n-form-item>
+        </n-form>
+
+        <div class="auth-toolbar">
+          <n-input
+            v-model:value="roleSearchKeyword"
+            class="auth-role-search"
+            clearable
+            size="small"
+            placeholder="按角色名称搜索"
+            @clear="handleRoleSearch"
+            @keyup.enter="handleRoleSearch"
+          >
+            <template #prefix>
+              <i class="i-material-symbols:search-rounded" />
+            </template>
+          </n-input>
+          <n-space size="small" class="auth-toolbar-actions">
+            <n-button size="small" @click="handleRoleSearch">
+              <template #icon>
+                <i class="i-material-symbols:search-rounded" />
+              </template>
+              查询
+            </n-button>
+            <n-button size="small" @click="handleCheckAll">
+              <template #icon>
+                <i class="i-material-symbols:check-box-outline" />
+              </template>
+              全选本页
+            </n-button>
+            <n-button size="small" @click="handleUncheckAll">
+              <template #icon>
+                <i class="i-material-symbols:check-box-outline-blank" />
+              </template>
+              清空选择
+            </n-button>
+          </n-space>
+        </div>
+
+        <div class="auth-tree-container">
+          <n-spin :show="authLoading">
+            <n-data-table
+              :columns="authRoleColumns"
+              :data="roleTableData"
+              :checked-row-keys="checkedRoleKeys"
+              :pagination="rolePaginationConfig"
+              :row-key="row => row.id"
+              remote
+              striped
+              size="small"
+              @update:checked-row-keys="handleCheckedKeysChange"
+              @update:page="handleRolePageChange"
+              @update:page-size="handleRolePageSizeChange"
+            />
+          </n-spin>
+        </div>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="batchAuthModalVisible = false">
+            取消
+          </n-button>
+          <n-button
+            type="primary"
+            :loading="batchAuthSubmitLoading"
+            @click="handleSubmitBatchAuth"
+          >
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 组织选择弹窗 -->
     <n-modal
       v-model:show="orgModalVisible"
@@ -347,6 +469,51 @@
       </template>
     </n-modal>
 
+    <!-- 批量加入租户弹窗 -->
+    <n-modal
+      v-model:show="batchTenantModalVisible"
+      title="批量加入租户"
+      preset="card"
+      style="width: 520px"
+      :mask-closable="false"
+    >
+      <n-alert type="info" :bordered="false" class="batch-action-alert">
+        已选择 {{ selectedUserIds.length }} 个用户，提交后会将这些用户加入目标租户。
+      </n-alert>
+      <n-form label-placement="left" label-width="90" class="batch-action-form">
+        <n-form-item label="目标租户">
+          <n-select
+            v-model:value="batchTenantForm.tenantId"
+            :options="tenantSelectOptions"
+            placeholder="请选择目标租户"
+            filterable
+          />
+        </n-form-item>
+        <n-form-item label="成员类型">
+          <n-select
+            v-model:value="batchTenantForm.memberType"
+            :options="tenantMemberTypeOptions"
+            placeholder="请选择成员类型"
+          />
+        </n-form-item>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="batchTenantModalVisible = false">
+            取消
+          </n-button>
+          <n-button
+            type="primary"
+            :loading="batchTenantSubmitLoading"
+            @click="handleSubmitBatchTenant"
+          >
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 岗位绑定弹窗 -->
     <n-modal
       v-model:show="postModalVisible"
@@ -426,6 +593,7 @@ const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 
 const crudRef = ref(null)
 const userStore = useUserStore()
+const selectedUserIds = ref([])
 
 // 左侧组织树相关
 const leftOrgTreeData = ref([])
@@ -441,6 +609,9 @@ const isShowAllUsers = ref(true)
 const authModalVisible = ref(false)
 const authLoading = ref(false)
 const authSubmitLoading = ref(false)
+const batchAuthModalVisible = ref(false)
+const batchAuthSubmitLoading = ref(false)
+const batchAuthTenantId = ref(null)
 const currentUser = ref({})
 const roleTableData = ref([])
 const roleSearchKeyword = ref('')
@@ -488,6 +659,12 @@ const tenantSubmitLoading = ref(false)
 const tenantOptions = ref([])
 const checkedTenantKeys = ref([])
 const defaultTenantId = ref(null)
+const batchTenantModalVisible = ref(false)
+const batchTenantSubmitLoading = ref(false)
+const batchTenantForm = ref({
+  tenantId: null,
+  memberType: 2,
+})
 
 // 行政区划选项（搜索用：虚拟节点可选；编辑用：虚拟节点不可选）
 const searchRegionOptions = ref([])
@@ -502,6 +679,7 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
+const tenantMemberTypeOptions = computed(() => userTypeOptions.value.filter(item => Number(item.value) !== 0))
 const rolePaginationConfig = computed(() => ({
   page: rolePagination.value.page,
   pageSize: rolePagination.value.pageSize,
@@ -555,6 +733,14 @@ watch(checkedTenantKeys, (keys) => {
   if (defaultTenantId.value && !keys.includes(defaultTenantId.value)) {
     defaultTenantId.value = keys[0] || null
   }
+})
+
+watch(batchAuthTenantId, (tenantId, previousTenantId) => {
+  if (!batchAuthModalVisible.value || isSameKey(tenantId, previousTenantId))
+    return
+  checkedRoleKeys.value = []
+  rolePagination.value.page = 1
+  loadRoleList(tenantId)
 })
 
 // 岗位选项（仅已勾选的岗位可选为主岗）
@@ -648,15 +834,15 @@ const tableColumns = computed(() => [
     label: '用户类型',
     width: 120,
     render: (row) => {
-      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small', forceTag: true })
+      return h(DictTag, { options: userTypeOptions.value, value: normalizeSingleNumber(row.userType), size: 'small', forceTag: true })
     },
   },
   ...(userStore.isAdmin
     ? [{
         prop: 'tenantName',
         label: '所属租户',
-        width: 150,
-        render: row => row.tenantName || row.tenantId || '-',
+        minWidth: 180,
+        render: row => renderTenantNames(row),
       }]
     : []),
   {
@@ -674,7 +860,7 @@ const tableColumns = computed(() => [
     label: '性别',
     width: 80,
     render: (row) => {
-      return h(DictTag, { dictType: USER_SEX_DICT, value: row.gender, size: 'small', forceTag: true })
+      return h(DictTag, { options: genderOptions.value, value: normalizeSingleNumber(row.gender), size: 'small', forceTag: true })
     },
   },
   {
@@ -693,7 +879,7 @@ const tableColumns = computed(() => [
     label: '状态',
     width: 80,
     render: (row) => {
-      return h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small', forceTag: true })
+      return h(DictTag, { options: userStatusOptions.value, value: normalizeSingleNumber(row.userStatus), size: 'small', forceTag: true })
     },
   },
   {
@@ -769,14 +955,39 @@ const editSchema = computed(() => [
     vIf: formData => !formData.id,
   },
   {
-    field: 'tenantId',
+    field: 'tenantIds',
     label: '所属租户',
     type: 'select',
-    defaultValue: userStore.userInfo?.tenantId,
-    rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
+    defaultValue: userStore.userInfo?.tenantId ? [userStore.userInfo.tenantId] : [],
+    multiple: true,
+    rules: [{ required: true, type: 'array', message: '请选择所属租户', trigger: 'change' }],
+    onChange: ({ value, formData, context }) => {
+      const tenantIds = normalizeNumberList(value)
+      const tenantId = normalizeSingleNumber(formData?.tenantId)
+      if (tenantIds.length === 0) {
+        context?.patchFormData?.({ tenantId: null })
+        return
+      }
+      if (tenantId === null || !tenantIds.includes(tenantId)) {
+        context?.patchFormData?.({ tenantId: tenantIds[0] })
+      }
+    },
     props: {
       placeholder: '请选择所属租户',
       options: tenantSelectOptions.value,
+      multiple: true,
+      disabled: !userStore.isAdmin,
+    },
+  },
+  {
+    field: 'tenantId',
+    label: '默认租户',
+    type: 'select',
+    defaultValue: userStore.userInfo?.tenantId,
+    rules: [{ required: true, type: 'number', message: '请选择默认租户', trigger: 'change' }],
+    options: ({ formData }) => resolveDefaultTenantOptions(formData),
+    props: {
+      placeholder: '请选择默认租户',
       disabled: !userStore.isAdmin,
     },
   },
@@ -935,8 +1146,80 @@ const editSchema = computed(() => [
 function toNumberOptions(options = []) {
   return options.map(item => ({
     ...item,
-    value: Number(item.value),
+    value: normalizeSingleNumber(item.value, item.value),
   }))
+}
+
+function normalizeSingleNumber(value, fallback = null) {
+  if (Array.isArray(value)) {
+    const first = value.find(item => item !== null && item !== undefined && item !== '')
+    return normalizeSingleNumber(first, fallback)
+  }
+  if (value === null || value === undefined || value === '')
+    return fallback
+  const numberValue = Number(value)
+  return Number.isNaN(numberValue) ? fallback : numberValue
+}
+
+function normalizeNumberList(value) {
+  const list = Array.isArray(value) ? value : (value === null || value === undefined || value === '' ? [] : [value])
+  return Array.from(new Set(list
+    .map(item => normalizeSingleNumber(item))
+    .filter(item => item !== null)))
+}
+
+function resolveTenantIds(data = {}, fallbackTenantId = null) {
+  const tenantIds = normalizeNumberList(data.tenantIds)
+  if (tenantIds.length > 0)
+    return tenantIds
+
+  const tenantId = normalizeSingleNumber(data.tenantId)
+  if (tenantId !== null)
+    return [tenantId]
+
+  const fallback = normalizeSingleNumber(fallbackTenantId)
+  return fallback !== null ? [fallback] : []
+}
+
+function resolveSingleTenantId(data = {}, fallbackTenantId = null) {
+  const tenantIds = resolveTenantIds(data, fallbackTenantId)
+  if (tenantIds.length === 0)
+    return normalizeSingleNumber(fallbackTenantId)
+
+  const tenantId = normalizeSingleNumber(data.tenantId)
+  if (tenantId !== null && tenantIds.includes(tenantId))
+    return tenantId
+
+  const preferredTenantId = normalizeSingleNumber(fallbackTenantId)
+  if (preferredTenantId !== null && tenantIds.includes(preferredTenantId))
+    return preferredTenantId
+
+  const currentTenantId = normalizeSingleNumber(userStore.userInfo?.tenantId)
+  if (currentTenantId !== null && tenantIds.includes(currentTenantId))
+    return currentTenantId
+
+  return tenantIds[0]
+}
+
+function resolveDefaultTenantOptions(formData = {}) {
+  const tenantIds = resolveTenantIds(formData, userStore.userInfo?.tenantId)
+  if (tenantIds.length === 0)
+    return tenantSelectOptions.value
+  return tenantSelectOptions.value.filter(option => tenantIds.includes(normalizeSingleNumber(option.value)))
+}
+
+function normalizeUserFormData(data = {}, fallbackTenantId = null) {
+  const next = { ...(data || {}) }
+  next.tenantIds = resolveTenantIds(next, fallbackTenantId)
+  next.tenantId = resolveSingleTenantId(next, fallbackTenantId)
+  next.userType = normalizeSingleNumber(next.userType, 2)
+  next.gender = normalizeSingleNumber(next.gender, 0)
+  next.userStatus = normalizeSingleNumber(next.userStatus, 1)
+  if (next.roleIds !== null && next.roleIds !== undefined)
+    next.roleIds = normalizeNumberList(next.roleIds)
+  if (next.postIds !== null && next.postIds !== undefined)
+    next.postIds = normalizeNumberList(next.postIds)
+  return next
 }
 
 // 组件挂载时加载左侧组织树
@@ -981,6 +1264,62 @@ function isSameKey(left, right) {
 
 function isCurrentLoginUser(targetUserId) {
   return targetUserId != null && isSameKey(targetUserId, userStore.userId)
+}
+
+function handleUserSelectionChange(payload = {}) {
+  const keys = Array.isArray(payload) ? payload : payload.keys
+  selectedUserIds.value = normalizeNumberList(keys || [])
+}
+
+function getSelectedBatchUserIds() {
+  const ids = normalizeNumberList(selectedUserIds.value.length > 0 ? selectedUserIds.value : crudRef.value?.getSelectedKeys?.())
+  if (ids.length === 0) {
+    window.$message.warning('请先选择用户')
+    return []
+  }
+  if (ids.some(id => isCurrentLoginUser(id))) {
+    window.$message.warning('批量操作不能包含当前登录用户')
+    return []
+  }
+  return ids
+}
+
+function resolveDefaultBatchTenantId() {
+  const searchTenantId = normalizeSingleNumber(crudRef.value?.getSearchParams?.()?.tenantId)
+  if (userStore.isAdmin && searchTenantId !== null)
+    return searchTenantId
+
+  const currentTenantId = normalizeSingleNumber(userStore.userInfo?.tenantId)
+  if (currentTenantId !== null)
+    return currentTenantId
+
+  return tenantSelectOptions.value[0]?.value || null
+}
+
+function clearBatchSelection() {
+  selectedUserIds.value = []
+  crudRef.value?.clearSelection?.()
+}
+
+function formatTenantNameList(row = {}) {
+  const tenantNames = String(row.tenantName || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+  if (tenantNames.length > 0)
+    return Array.from(new Set(tenantNames))
+  if (row.tenantId)
+    return [String(row.tenantId)]
+  return []
+}
+
+function renderTenantNames(row = {}) {
+  const names = formatTenantNameList(row)
+  if (names.length === 0)
+    return '-'
+  return h('div', { class: 'tenant-name-list' }, names.map(name =>
+    h(NTag, { size: 'small', type: 'info', bordered: false, class: 'tenant-name-tag' }, { default: () => name }),
+  ))
 }
 
 function resolveOptionLabel(options = [], value) {
@@ -1106,7 +1445,12 @@ async function loadTenantOptions() {
   try {
     const res = await request.get('/system/tenant/assignable/options')
     if (res.code === 200) {
-      tenantOptions.value = res.data || []
+      tenantOptions.value = (res.data || [])
+        .map(item => ({
+          ...item,
+          id: normalizeSingleNumber(item.id),
+        }))
+        .filter(item => item.id !== null)
     }
   }
   catch (error) {
@@ -1243,21 +1587,23 @@ async function beforeSearch(params) {
 }
 
 function beforeRenderUserForm(row) {
-  editingUserTenantId.value = row?.tenantId || null
-  return row
+  const normalized = normalizeUserFormData(row || {}, userStore.userInfo?.tenantId)
+  editingUserTenantId.value = normalized.tenantId || null
+  return normalized
 }
 
 async function beforeRenderUserDetail(data) {
   if (!data?.id) {
-    return data
+    return normalizeUserFormData(data || {}, userStore.userInfo?.tenantId)
   }
-  const tenantId = editingUserTenantId.value || data.tenantId || userStore.userInfo?.tenantId
+  const normalizedData = normalizeUserFormData(data, editingUserTenantId.value || userStore.userInfo?.tenantId)
+  const tenantId = normalizedData.tenantId
   const next = {
-    ...data,
+    ...normalizedData,
     tenantId,
-    userTypeLabel: resolveOptionLabel(userTypeOptions.value, data.userType),
-    genderLabel: resolveOptionLabel(genderOptions.value, data.gender),
-    userStatusLabel: resolveOptionLabel(userStatusOptions.value, data.userStatus),
+    userTypeLabel: resolveOptionLabel(userTypeOptions.value, normalizeSingleNumber(data.userType)),
+    genderLabel: resolveOptionLabel(genderOptions.value, normalizeSingleNumber(data.gender)),
+    userStatusLabel: resolveOptionLabel(userStatusOptions.value, normalizeSingleNumber(data.userStatus)),
   }
   if (!userStore.isAdmin && isCurrentLoginUser(data.id)) {
     return next
@@ -1272,9 +1618,9 @@ async function beforeRenderUserDetail(data) {
       request.get(`/system/user/${data.id}/posts`, { params }),
     ])
     if (roleRes.code === 200)
-      next.roleIds = roleRes.data || []
+      next.roleIds = normalizeNumberList(roleRes.data || [])
     if (postRes.code === 200)
-      next.postIds = postRes.data || []
+      next.postIds = normalizeNumberList(postRes.data || [])
   }
   catch (error) {
     console.error('加载用户租户关联信息失败:', error)
@@ -1360,12 +1706,20 @@ async function handleUntieDisable(row) {
 
 // 表单提交前处理
 function beforeSubmit(formData) {
+  Object.assign(formData, normalizeUserFormData(formData, userStore.userInfo?.tenantId))
   if (!userStore.isAdmin) {
     formData.tenantId = userStore.userInfo?.tenantId
+    formData.tenantIds = [userStore.userInfo?.tenantId].filter(Boolean)
     formData.userType = 2
   }
+  else if (!formData.tenantIds || formData.tenantIds.length === 0) {
+    formData.tenantIds = formData.tenantId ? [formData.tenantId] : [userStore.userInfo?.tenantId].filter(Boolean)
+  }
+  if (formData.tenantIds.length > 0 && !formData.tenantIds.includes(formData.tenantId)) {
+    formData.tenantId = formData.tenantIds[0]
+  }
   else if (!formData.tenantId) {
-    formData.tenantId = userStore.userInfo?.tenantId
+    formData.tenantId = formData.tenantIds[0] || userStore.userInfo?.tenantId
   }
   return formData
 }
@@ -1398,9 +1752,31 @@ function handleDelete(row) {
 }
 
 // 授权
+async function handleOpenBatchAuth() {
+  const userIds = getSelectedBatchUserIds()
+  if (userIds.length === 0)
+    return
+
+  if (tenantOptions.value.length === 0)
+    await loadTenantOptions()
+
+  batchAuthTenantId.value = resolveDefaultBatchTenantId()
+  if (!batchAuthTenantId.value) {
+    window.$message.warning('请选择授权租户')
+    return
+  }
+
+  batchAuthModalVisible.value = true
+  roleSearchKeyword.value = ''
+  checkedRoleKeys.value = []
+  rolePagination.value.page = 1
+  await loadRoleList(batchAuthTenantId.value)
+}
+
 async function handleAuth(row) {
   currentUser.value = row
   authModalVisible.value = true
+  batchAuthModalVisible.value = false
   roleSearchKeyword.value = ''
   rolePagination.value.page = 1
 
@@ -1409,10 +1785,9 @@ async function handleAuth(row) {
 }
 
 // 加载角色列表
-async function loadRoleList() {
+async function loadRoleList(tenantId = resolveOperationTenantId()) {
   try {
     authLoading.value = true
-    const tenantId = resolveOperationTenantId()
     const res = await request.get('/system/role/page', {
       params: {
         pageNum: rolePagination.value.page,
@@ -1443,7 +1818,7 @@ async function loadUserRoles(userId) {
       params: buildTenantParams(resolveOperationTenantId()),
     })
     if (res.code === 200) {
-      checkedRoleKeys.value = res.data || []
+      checkedRoleKeys.value = normalizeNumberList(res.data || [])
     }
   }
   catch (error) {
@@ -1457,28 +1832,28 @@ async function loadUserRoles(userId) {
 
 // 选中的角色变化
 function handleCheckedKeysChange(keys) {
-  checkedRoleKeys.value = keys
+  checkedRoleKeys.value = normalizeNumberList(keys || [])
 }
 
 function handleRoleSearch() {
   rolePagination.value.page = 1
-  loadRoleList()
+  loadRoleList(batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId())
 }
 
 function handleRolePageChange(page) {
   rolePagination.value.page = page
-  loadRoleList()
+  loadRoleList(batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId())
 }
 
 function handleRolePageSizeChange(pageSize) {
   rolePagination.value.pageSize = pageSize
   rolePagination.value.page = 1
-  loadRoleList()
+  loadRoleList(batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId())
 }
 
 // 全选
 function handleCheckAll() {
-  const currentPageKeys = roleTableData.value.map(role => role.id)
+  const currentPageKeys = normalizeNumberList(roleTableData.value.map(role => role.id))
   checkedRoleKeys.value = Array.from(new Set([...checkedRoleKeys.value, ...currentPageKeys]))
 }
 
@@ -1507,6 +1882,45 @@ async function handleSubmitAuth() {
   }
   finally {
     authSubmitLoading.value = false
+  }
+}
+
+async function handleSubmitBatchAuth() {
+  const userIds = getSelectedBatchUserIds()
+  if (userIds.length === 0)
+    return
+  const tenantId = normalizeSingleNumber(batchAuthTenantId.value)
+  if (tenantId === null) {
+    window.$message.warning('请选择授权租户')
+    return
+  }
+  const roleIds = normalizeNumberList(checkedRoleKeys.value)
+  if (roleIds.length === 0) {
+    window.$message.warning('请至少选择一个角色')
+    return
+  }
+
+  try {
+    batchAuthSubmitLoading.value = true
+    const res = await request.post('/system/user/batch/roles', {
+      userIds,
+      roleIds,
+      tenantId,
+    })
+    if (res.code === 200) {
+      window.$message.success('批量授权成功')
+      batchAuthModalVisible.value = false
+      checkedRoleKeys.value = []
+      clearBatchSelection()
+      crudRef.value?.refresh()
+    }
+  }
+  catch (error) {
+    console.error('批量授权失败:', error)
+    window.$message.error('批量授权失败')
+  }
+  finally {
+    batchAuthSubmitLoading.value = false
   }
 }
 
@@ -1545,7 +1959,7 @@ async function loadUserOrgs(userId) {
       params: buildTenantParams(resolveOperationTenantId()),
     })
     if (res.code === 200) {
-      mainOrgId.value = (res.data || [])[0] || null
+      mainOrgId.value = normalizeNumberList(res.data || [])[0] || null
     }
   }
   catch (error) {
@@ -1564,7 +1978,7 @@ function handleOrgExpandedKeysChange(keys) {
 
 // 组织选中的变化
 function handleOrgSelectedKeysChange(keys) {
-  mainOrgId.value = keys?.[0] ?? null
+  mainOrgId.value = normalizeNumberList(keys || [])[0] ?? null
 }
 
 // 提交组织绑定
@@ -1638,7 +2052,7 @@ async function loadUserPosts(userId) {
       params: buildTenantParams(resolveOperationTenantId()),
     })
     if (res.code === 200) {
-      checkedPostKeys.value = res.data || []
+      checkedPostKeys.value = normalizeNumberList(res.data || [])
       mainPostId.value = checkedPostKeys.value.length > 0 ? checkedPostKeys.value[0] : null
     }
   }
@@ -1684,6 +2098,25 @@ async function handleSubmitPost() {
 }
 
 // 租户管理
+async function handleOpenBatchTenant() {
+  if (!userStore.isAdmin) {
+    window.$message.warning('只有超级管理员可以批量加入租户')
+    return
+  }
+  const userIds = getSelectedBatchUserIds()
+  if (userIds.length === 0)
+    return
+
+  if (tenantOptions.value.length === 0)
+    await loadTenantOptions()
+
+  batchTenantForm.value = {
+    tenantId: resolveDefaultBatchTenantId(),
+    memberType: 2,
+  }
+  batchTenantModalVisible.value = true
+}
+
 async function handleTenant(row) {
   currentUser.value = row
   tenantModalVisible.value = true
@@ -1704,9 +2137,10 @@ async function loadUserTenants(userId) {
       const list = res.data || []
       checkedTenantKeys.value = list
         .filter(item => item.status !== 0)
-        .map(item => item.tenantId)
+        .map(item => normalizeSingleNumber(item.tenantId))
+        .filter(item => item !== null)
       const defaultTenant = list.find(item => item.isDefault === 1)
-      defaultTenantId.value = defaultTenant?.tenantId || checkedTenantKeys.value[0] || null
+      defaultTenantId.value = normalizeSingleNumber(defaultTenant?.tenantId) || checkedTenantKeys.value[0] || null
     }
   }
   catch (error) {
@@ -1731,12 +2165,12 @@ async function handleSubmitTenant() {
     tenantSubmitLoading.value = true
     const res = await request.post(
       `/system/user/${currentUser.value.id}/tenants`,
-      {
-        tenantIds: checkedTenantKeys.value,
-        defaultTenantId: defaultTenantId.value,
-        memberType: currentUser.value.userType === 1 ? 1 : 2,
-      },
-    )
+        {
+          tenantIds: checkedTenantKeys.value,
+          defaultTenantId: defaultTenantId.value,
+          memberType: normalizeSingleNumber(currentUser.value.userType, 2) === 1 ? 1 : 2,
+        },
+      )
     if (res.code === 200) {
       window.$message.success('租户绑定成功')
       tenantModalVisible.value = false
@@ -1749,6 +2183,40 @@ async function handleSubmitTenant() {
   }
   finally {
     tenantSubmitLoading.value = false
+  }
+}
+
+async function handleSubmitBatchTenant() {
+  const userIds = getSelectedBatchUserIds()
+  if (userIds.length === 0)
+    return
+
+  const tenantId = normalizeSingleNumber(batchTenantForm.value.tenantId)
+  if (tenantId === null) {
+    window.$message.warning('请选择目标租户')
+    return
+  }
+
+  try {
+    batchTenantSubmitLoading.value = true
+    const res = await request.post('/system/user/batch/tenants', {
+      userIds,
+      tenantId,
+      memberType: normalizeSingleNumber(batchTenantForm.value.memberType, 2),
+    })
+    if (res.code === 200) {
+      window.$message.success('批量加入租户成功')
+      batchTenantModalVisible.value = false
+      clearBatchSelection()
+      crudRef.value?.refresh()
+    }
+  }
+  catch (error) {
+    console.error('批量加入租户失败:', error)
+    window.$message.error('批量加入租户失败')
+  }
+  finally {
+    batchTenantSubmitLoading.value = false
   }
 }
 </script>
@@ -2004,12 +2472,37 @@ async function handleSubmitTenant() {
   font-size: 13px;
 }
 
+.tenant-name-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tenant-name-tag {
+  max-width: 128px;
+}
+
+.tenant-name-tag :deep(.n-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 授权弹窗样式 */
 .auth-modal-content {
   display: flex;
   flex-direction: column;
   height: 100%;
   max-height: 600px;
+}
+
+.batch-action-alert {
+  margin-bottom: 12px;
+}
+
+.batch-action-form {
+  margin-bottom: 12px;
 }
 
 .auth-toolbar {

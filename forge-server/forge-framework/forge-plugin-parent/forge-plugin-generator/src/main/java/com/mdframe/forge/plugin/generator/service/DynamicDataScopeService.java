@@ -207,7 +207,7 @@ public class DynamicDataScopeService {
     }
 
     private void logSkip(AiCrudConfig config, String tableName, String reason) {
-        log.info("[DynamicDataScope] skip configKey={}, table={}, buildMode={}, publishStatus={}, reason={}",
+        log.debug("[DynamicDataScope] skip configKey={}, table={}, buildMode={}, publishStatus={}, reason={}",
                 config == null ? null : config.getConfigKey(),
                 tableName,
                 config == null ? null : config.getBuildMode(),
@@ -226,7 +226,7 @@ public class DynamicDataScopeService {
             logSkip(config, tableName, "数据范围未生成 SQL 条件: scopeType=" + scopeType);
             return;
         }
-        log.info("[DynamicDataScope] apply configKey={}, table={}, alias={}, scopeType={}, roleDataScope={}, "
+        log.debug("[DynamicDataScope] apply configKey={}, table={}, alias={}, scopeType={}, roleDataScope={}, "
                         + "tenantColumn={}, userColumn={}, orgColumn={}, regionColumn={}, sql={}, paramKeys={}",
                 config == null ? null : config.getConfigKey(),
                 tableName,

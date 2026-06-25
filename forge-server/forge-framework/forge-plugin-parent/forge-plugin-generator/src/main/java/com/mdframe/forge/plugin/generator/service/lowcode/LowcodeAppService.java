@@ -52,7 +52,7 @@ public class LowcodeAppService {
 
     public Page<LowcodeAppDetailVO> page(PageQuery pageQuery, String keyword, String publishStatus,
                                          Long domainId, String domainCode, Boolean generalDomain) {
-        Page<AiCrudConfig> configPage = configMapper.selectLowcodePage(
+        return configMapper.selectLowcodePage(
                 new Page<>(pageQuery.getPageNum(), pageQuery.getPageSize()),
                 resolveTenantId(),
                 StringUtils.trimToNull(keyword),
@@ -60,9 +60,6 @@ public class LowcodeAppService {
                 domainId,
                 StringUtils.trimToNull(domainCode),
                 generalDomain);
-        Page<LowcodeAppDetailVO> result = new Page<>(configPage.getCurrent(), configPage.getSize(), configPage.getTotal());
-        result.setRecords(configPage.getRecords().stream().map(this::toDetailVO).toList());
-        return result;
     }
 
     @Transactional(rollbackFor = Exception.class)

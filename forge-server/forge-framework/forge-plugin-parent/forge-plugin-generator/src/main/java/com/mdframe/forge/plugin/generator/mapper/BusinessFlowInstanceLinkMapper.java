@@ -5,11 +5,17 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessFlowInstanceLi
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
+import java.util.List;
+
 @Mapper
 public interface BusinessFlowInstanceLinkMapper extends BaseMapper<AiBusinessFlowInstanceLink> {
 
     AiBusinessFlowInstanceLink selectLatestByBusinessKey(@Param("tenantId") Long tenantId,
                                                          @Param("businessKey") String businessKey);
+
+    List<AiBusinessFlowInstanceLink> selectLatestByBusinessKeys(@Param("tenantId") Long tenantId,
+                                                                @Param("businessKeys") Collection<String> businessKeys);
 
     AiBusinessFlowInstanceLink selectRunningByBusinessKey(@Param("tenantId") Long tenantId,
                                                           @Param("businessKey") String businessKey);

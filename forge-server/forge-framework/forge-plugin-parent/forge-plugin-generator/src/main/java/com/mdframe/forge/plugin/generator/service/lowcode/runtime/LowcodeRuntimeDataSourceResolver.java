@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.generator.service.lowcode.runtime;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import cn.hutool.core.bean.BeanUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.GenDatasource;
@@ -17,6 +18,10 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
 /**
  * 低代码运行时数据源解析器。
  */
@@ -24,6 +29,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class LowcodeRuntimeDataSourceResolver {
 
+    private static final long DATASOURCE_CACHE_TTL_MILLIS = TimeUnit.SECONDS.toMillis(30);
+    private static final int DATASOURCE_CACHE_MAX_SIZE = 512;
     private static final String DEFAULT_DB_TYPE = "MySQL";
     private static final String DEFAULT_PRIMARY_KEY = "id";
     private static final String TENANT_MODE_FORGE = "FORGE_TENANT_ID";
@@ -32,6 +39,8 @@ public class LowcodeRuntimeDataSourceResolver {
 
     private final ObjectMapper objectMapper;
     private final GenDatasourceMapper datasourceMapper;
+    private final Map<Long, CacheEntry<GenDatasource>> datasourceByIdCache = new ConcurrentHashMap<>();
+    private final Map<String, CacheEntry<GenDatasource>> datasourceByCodeCache = new ConcurrentHashMap<>();
 
     public LowcodeRuntimeDataSourceContext resolve(LowcodeModelSchema modelSchema) {
         if (modelSchema == null) {
@@ -109,6 +118,28 @@ public class LowcodeRuntimeDataSourceResolver {
         return snapshot;
     }
 
+    public GenDatasource getDatasourceById(Long datasourceId) {
+        if (datasourceId == null) {
+            return null;
+        }
+        return getCachedDatasourceById(datasourceId);
+    }
+
+    public void evictDatasource(Long datasourceId, String datasourceCode) {
+        if (datasourceId != null) {
+            datasourceByIdCache.remove(datasourceId);
+        }
+        String codeKey = normalizeDatasourceCode(datasourceCode);
+        if (StringUtils.isNotBlank(codeKey)) {
+            datasourceByCodeCache.remove(codeKey);
+        }
+    }
+
+    public void clearDatasourceCache() {
+        datasourceByIdCache.clear();
+        datasourceByCodeCache.clear();
+    }
+
     private LowcodeRuntimeDatasourceSnapshot resolveModelSnapshot(LowcodeModelSchema modelSchema) {
         if (modelSchema.getRuntimeDatasource() != null) {
             return modelSchema.getRuntimeDatasource();
@@ -169,14 +200,73 @@ public class LowcodeRuntimeDataSourceResolver {
 
     private GenDatasource findDatasource(LowcodeRuntimeDatasourceSnapshot snapshot) {
         if (snapshot.getDatasourceId() != null) {
-            return datasourceMapper.selectById(snapshot.getDatasourceId());
+            return getCachedDatasourceById(snapshot.getDatasourceId());
         }
         if (StringUtils.isBlank(snapshot.getDatasourceCode())) {
             return null;
         }
-        return datasourceMapper.selectOne(new LambdaQueryWrapper<GenDatasource>()
-            .eq(GenDatasource::getDatasourceCode, snapshot.getDatasourceCode())
+        return getCachedDatasourceByCode(snapshot.getDatasourceCode());
+    }
+
+    private GenDatasource getCachedDatasourceById(Long datasourceId) {
+        long now = System.currentTimeMillis();
+        CacheEntry<GenDatasource> cached = datasourceByIdCache.get(datasourceId);
+        if (cached != null && cached.expiresAt() > now) {
+            return copyDatasource(cached.value());
+        }
+        GenDatasource datasource = datasourceMapper.selectById(datasourceId);
+        cacheDatasource(datasource, now);
+        return copyDatasource(datasource);
+    }
+
+    private GenDatasource getCachedDatasourceByCode(String datasourceCode) {
+        String codeKey = normalizeDatasourceCode(datasourceCode);
+        if (StringUtils.isBlank(codeKey)) {
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        CacheEntry<GenDatasource> cached = datasourceByCodeCache.get(codeKey);
+        if (cached != null && cached.expiresAt() > now) {
+            return copyDatasource(cached.value());
+        }
+        GenDatasource datasource = datasourceMapper.selectOne(new LambdaQueryWrapper<GenDatasource>()
+            .eq(GenDatasource::getDatasourceCode, datasourceCode)
             .last("LIMIT 1"));
+        cacheDatasource(datasource, now);
+        return copyDatasource(datasource);
+    }
+
+    private void cacheDatasource(GenDatasource datasource, long now) {
+        if (datasource == null) {
+            return;
+        }
+        trimExpiredCacheIfNeeded(now);
+        CacheEntry<GenDatasource> entry = new CacheEntry<>(
+            copyDatasource(datasource), now + DATASOURCE_CACHE_TTL_MILLIS);
+        if (datasource.getDatasourceId() != null) {
+            datasourceByIdCache.put(datasource.getDatasourceId(), entry);
+        }
+        String codeKey = normalizeDatasourceCode(datasource.getDatasourceCode());
+        if (StringUtils.isNotBlank(codeKey)) {
+            datasourceByCodeCache.put(codeKey, entry);
+        }
+    }
+
+    private void trimExpiredCacheIfNeeded(long now) {
+        if (datasourceByIdCache.size() > DATASOURCE_CACHE_MAX_SIZE) {
+            datasourceByIdCache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
+        }
+        if (datasourceByCodeCache.size() > DATASOURCE_CACHE_MAX_SIZE) {
+            datasourceByCodeCache.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
+        }
+    }
+
+    private GenDatasource copyDatasource(GenDatasource datasource) {
+        return datasource == null ? null : BeanUtil.copyProperties(datasource, GenDatasource.class);
+    }
+
+    private String normalizeDatasourceCode(String datasourceCode) {
+        return StringUtils.trimToEmpty(datasourceCode);
     }
 
     private LowcodeModelSchema readModelSchema(AiCrudConfig config) {
@@ -247,5 +337,8 @@ public class LowcodeRuntimeDataSourceResolver {
         } catch (Exception e) {
             throw new BusinessException(fieldName + "格式不正确");
         }
+    }
+
+    private record CacheEntry<T>(T value, long expiresAt) {
     }
 }

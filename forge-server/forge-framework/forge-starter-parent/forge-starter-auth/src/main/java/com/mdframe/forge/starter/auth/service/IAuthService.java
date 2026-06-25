@@ -3,6 +3,8 @@ package com.mdframe.forge.starter.auth.service;
 import com.mdframe.forge.starter.auth.domain.*;
 import com.mdframe.forge.starter.core.session.LoginUser;
 
+import java.util.List;
+
 /**
  * 认证服务接口
  */
@@ -188,6 +190,26 @@ public interface IAuthService {
      */
     default LoginConfigResult getLoginConfig(String userClient) {
         return getLoginConfig();
+    }
+
+    /**
+     * 获取指定客户端和租户最终生效的登录配置。
+     *
+     * @param userClient 客户端编码
+     * @param tenantId   租户ID
+     * @return 登录配置
+     */
+    default LoginConfigResult getLoginConfig(String userClient, Long tenantId) {
+        return getLoginConfig(userClient);
+    }
+
+    /**
+     * 查询登录页可选租户。
+     *
+     * @return 启用租户选项
+     */
+    default List<LoginTenantOption> listLoginTenantOptions() {
+        throw new UnsupportedOperationException("不支持查询登录租户选项");
     }
 
     /**

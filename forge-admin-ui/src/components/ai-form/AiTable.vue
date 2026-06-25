@@ -357,6 +357,8 @@ const currentSize = ref(props.size)
 const currentRenderMode = ref(props.renderMode)
 const visibleColumns = ref([])
 
+const DEFAULT_COLUMN_ALIGN = 'center'
+
 const RenderCell = props => props.render?.() ?? null
 
 watch(
@@ -407,13 +409,17 @@ const tableColumns = computed(() => {
       return
     }
 
+    const columnAlign = col.align || DEFAULT_COLUMN_ALIGN
+    const columnTitleAlign = col.titleAlign || col.headerAlign || columnAlign
+
     const column = {
       key: col.prop || col.key,
       title: col.label || col.title,
       width: col.width,
       minWidth: col.minWidth,
       maxWidth: col.maxWidth,
-      align: col.align || 'left',
+      align: columnAlign,
+      titleAlign: columnTitleAlign,
       fixed: col.fixed,
       ellipsis: col.ellipsis !== false ? { tooltip: true } : false,
       sorter: col.sortable

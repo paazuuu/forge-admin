@@ -17,10 +17,16 @@ export default {
   }),
 
   // 获取登录配置
-  getLoginConfig: userClient => request.get('/auth/loginConfig', {
+  getLoginConfig: (userClient, tenantId) => request.get('/auth/loginConfig', {
     needToken: false,
-    params: userClient ? { userClient } : {},
+    params: {
+      ...(userClient ? { userClient } : {}),
+      ...(tenantId ? { tenantId } : {}),
+    },
   }),
+
+  // 获取登录页可选租户
+  getLoginTenantOptions: () => request.get('/auth/tenant/options', { needToken: false }),
 
   // 获取用户信息
   getUser: () => request.get('/auth/userInfo'),
