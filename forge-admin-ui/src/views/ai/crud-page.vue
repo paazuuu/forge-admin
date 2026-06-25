@@ -45,9 +45,9 @@ import { crudConfigRender } from '@/api/ai'
 import { businessDocumentRuntime } from '@/api/business-app'
 import catalog from '@/catalog'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
-import DictTag from '@/components/DictTag.vue'
 import { applyCrudHookRules, CRUD_HOOK_RULE_TARGETS, normalizeCrudHookRules } from '@/components/lowcode-builder/page/crud-hook-rules'
 import ListPageGridDesigner from '@/components/lowcode-builder/page/ListPageGridDesigner.vue'
+import FieldValueRenderer from '@/components/lowcode-builder/shared/FieldValueRenderer.vue'
 import { getDictData } from '@/composables/useDict'
 import { useTabStore } from '@/store'
 import { postEncrypt, request } from '@/utils'
@@ -255,30 +255,27 @@ function transformColumns(columns, transConfig, options = {}) {
       delete newCol.maxWidth
     }
 
-    let baseRender = null
+    const renderConfig = {
+      ...(newCol.renderConfig || {}),
+      ...(columnSetting.renderConfig || {}),
+    }
     // dictTag 渲染
     if (col.render && typeof col.render === 'object' && col.render.type === 'dictTag') {
-      baseRender = row => h(DictTag, {
-        dictType: col.render.dictType,
-        value: row[key],
-        size: 'small',
-      })
+      renderConfig.renderType = 'dictTag'
+      renderConfig.dictType = col.render.dictType
     }
     else if (col.render && typeof col.render === 'object' && col.render.type === 'relationName') {
-      const targetField = col.render.targetField || `${key}Name`
-      baseRender = row => row[targetField] ?? row[key] ?? '-'
+      renderConfig.textField = col.render.targetField || `${key}Name`
     }
     else if (col.render && typeof col.render === 'object' && ['orgName', 'userName', 'regionName', 'fileUpload'].includes(col.render.type)) {
-      const targetField = col.render.targetField || `${key}Name`
-      baseRender = row => row[targetField] ?? row[key] ?? '-'
+      renderConfig.textField = col.render.targetField || `${key}Name`
     }
     // 如果该字段有翻译配置，优先显示翻译后的值，没有则显示原字段值
     else if (transMap[key]) {
-      const targetField = transMap[key]
-      baseRender = row => row[targetField] ?? row[key]
+      renderConfig.textField = transMap[key]
     }
-    if (baseRender)
-      newCol.render = baseRender
+    if (Object.keys(renderConfig).length)
+      newCol.renderConfig = renderConfig
     applyRuntimeColumnPresentation(newCol, newCol, key)
     return newCol
   })
@@ -305,30 +302,43 @@ function transformColumns(columns, transConfig, options = {}) {
 }
 
 function applyRuntimeColumnPresentation(targetCol, sourceCol = {}, key = '') {
-  const hasTextColor = !!sourceCol.textColor
-  const isNavigable = sourceCol.clickAction === 'navigate'
-  if (!hasTextColor && !isNavigable)
+  if (!key)
     return
-  const baseRender = typeof targetCol.render === 'function'
-    ? targetCol.render
-    : row => row[key] ?? '-'
+  if (['actions', 'action', 'operations', 'operation'].includes(String(key || '')))
+    return
   targetCol.render = (row) => {
-    const content = baseRender(row)
-    const style = hasTextColor ? { color: sourceCol.textColor } : {}
-    if (!isNavigable)
-      return h('span', { style }, content)
-    const children = Array.isArray(content) ? content : [content]
-    return h('a', {
-      class: 'runtime-column-link',
-      style,
-      href: buildRuntimeColumnTarget(sourceCol, row),
-      onClick: (event) => {
-        event.preventDefault()
+    return h(FieldValueRenderer, {
+      value: row[key],
+      row,
+      field: {
+        ...sourceCol,
+        field: key,
+        dictType: sourceCol.dictType || sourceCol.render?.dictType,
+      },
+      setting: {
+        ...(sourceCol.render || {}),
+        ...(sourceCol.renderConfig || {}),
+        ...sourceCol,
+      },
+      context: {
+        record: row,
+        row,
+        data: row,
+        route: {
+          query: route.query || {},
+          params: route.params || {},
+          path: route.path,
+          fullPath: route.fullPath,
+          name: route.name,
+        },
+      },
+      onNavigate: ({ event }) => {
         const target = buildRuntimeColumnRoute(sourceCol, row)
         if (target)
           router.push(target)
+        event?.preventDefault?.()
       },
-    }, children)
+    })
   }
 }
 
@@ -355,13 +365,6 @@ function buildRuntimeColumnRoute(col = {}, row = {}) {
     path: `/ai/crud-page/${encodeURIComponent(configKey)}`,
     query,
   }
-}
-
-function buildRuntimeColumnTarget(col = {}, row = {}) {
-  const target = buildRuntimeColumnRoute(col, row)
-  if (!target)
-    return '#'
-  return router.resolve(target).href
 }
 
 function mergeRowActions(baseActions = [], extraActions = []) {

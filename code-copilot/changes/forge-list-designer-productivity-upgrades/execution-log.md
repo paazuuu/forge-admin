@@ -1,5 +1,384 @@
 # 执行日志：forge-list-designer-productivity-upgrades
 
+## 2026-06-25 23:05:03 CST
+
+### 变更范围
+
+- 修复 `RuntimeRulesEditor` 中“数据来源”下拉选择后仍回到旧值的问题。
+- 原因是 `patchFirstCondition` 合并条件时最后又用旧 `conditions[0].source` 覆盖了本次选择的新 `source`。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/RuntimeRulesEditor.vue`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/RuntimeRulesEditor.vue`：通过。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 22:58:57 CST
+
+### 变更范围
+
+- `RuntimeRulesEditor` 增加“数据来源”配置，支持当前记录/详情、当前行数据、当前表单数据、URL 查询参数、URL 路由参数和当前用户。
+- `runtime-rules.js` 补充 `query/params` 来源解析，URL 查询参数直接按参数名取值，不要求用户写 `query.xxx`。
+- `GridBlockRenderer`、发布运行页 `crud-page.vue`、`AiForm`、`AiFormLayoutNodes`、`AiFormItem` 统一注入 `route.query/route.params`。
+- 表单规则上下文补齐 `row`，优先取 `context.currentRow`。列表操作列打开编辑/详情弹窗后，弹窗表单可以按当前行字段控制显示隐藏、只读、禁用、必填和样式。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/runtime-rules.js src/components/lowcode-builder/shared/RuntimeRulesEditor.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/views/ai/crud-page.vue src/components/ai-form/AiForm.vue src/components/ai-form/AiFormLayoutNodes.vue src/components/ai-form/AiFormItem.vue`：通过，0 error；保留既有 warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/runtime-rules.js forge-admin-ui/src/components/lowcode-builder/shared/RuntimeRulesEditor.vue forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/views/ai/crud-page.vue forge-admin-ui/src/components/ai-form/AiForm.vue forge-admin-ui/src/components/ai-form/AiFormLayoutNodes.vue forge-admin-ui/src/components/ai-form/AiFormItem.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- `AiForm.vue` 保留既有 `vue/no-required-prop-with-default` warning。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态和静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 浏览器手工验证待补：本轮未启动 Vite/后端服务。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 22:36:26 CST
+
+### 变更范围
+
+- 新增 `runtime-rules.js` 作为低代码运行规则唯一共享解析器，统一承接字段、模块和区块的显示隐藏、只读、禁用、必填、颜色和样式规则。
+- 新增 `RuntimeRulesEditor.vue`，列表设计器和表单设计器右侧属性面板复用同一个规则编辑组件。
+- 新增 `FieldValueRenderer.vue`，列表列、详情字段和表单只读展示统一支持文本、字典标签、状态 Tag、链接、金额、颜色规则和旧 render 配置兼容。
+- `AiForm`、`AiFormLayoutNodes`、`AiFormItem` 接入运行规则上下文，表单新增/编辑/详情中的字段和模块可按状态或动态数据控制显示、隐藏、只读、禁用和必填。
+- `GridBlockRenderer` 接入运行规则和统一字段渲染，详情信息区块、只读画布区块和表格列展示使用同一套渲染器。
+- 应用运行页 `crud-page.vue` 接入统一字段渲染，发布后列表列的字典标签、颜色和链接跳转能力不再单独散落实现。
+- 列表设计器和表单设计器“数据来源”里的请求方式、响应路径改为各占一行。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/runtime-rules.js src/components/lowcode-builder/shared/FieldValueRenderer.vue src/components/lowcode-builder/shared/RuntimeRulesEditor.vue src/components/ai-form/AiForm.vue src/components/ai-form/AiFormItem.vue src/components/ai-form/AiFormLayoutNodes.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/ai/crud-page.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过，0 error；保留既有 warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/runtime-rules.js forge-admin-ui/src/components/lowcode-builder/shared/FieldValueRenderer.vue forge-admin-ui/src/components/lowcode-builder/shared/RuntimeRulesEditor.vue forge-admin-ui/src/components/ai-form/AiForm.vue forge-admin-ui/src/components/ai-form/AiFormItem.vue forge-admin-ui/src/components/ai-form/AiFormLayoutNodes.vue forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/ai/crud-page.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- `AiForm.vue` 保留既有 `vue/no-required-prop-with-default` warning。
+- `ListPageGridDesigner.vue` 保留既有 `vue/singleline-html-element-content-newline` warning，均为现有按钮单行文本格式提示。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态和静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务，运行规则组合需在真实设计器页面补充验收。
+- 未执行后端编译：本轮只改前端 Vue 设计器、表单/列表运行态和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 17:58:00 CST Naive 页面组件扩展与预览编辑修正
+
+### 变更范围
+
+- `page-widget-schema.js` 新增共享页面组件：日历、代码、倒计时、描述、公示、列表、日志、数值动画、面包屑、菜单、分页和面板分隔。
+- `PageWidgetRenderer.vue` 统一使用 Naive UI 组件渲染上述新增组件，并补齐 JSON 数据解析、布局约束和滚动约束。
+- 富文本和 Markdown 的预览编辑状态改为只受组件自身 `readonly` 控制，列表预览弹窗的只读画布状态不再强行禁用编辑器。
+- `page-schema.js` 移除旧手写描述列表来源，描述组件改为共享 Naive `NDescriptions`。
+- `ListPageGridDesigner.vue` 左侧组件分组补充导航组件，右侧属性面板补齐新增 Naive 组件的基础配置入口。
+- `ForgePropertyPanel.vue` 补齐表单设计器新增 Naive 组件属性入口。
+- `formDesignerSchema.js` 将新增 Naive 页面组件标记为虚拟组件和全行组件，避免进入业务字段注册、DDL 和字段绑定校验。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue src/views/app-center/components/designer/form-first/formDesignerSchema.js src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue src/components/ai-form/AiFormItem.vue`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue forge-admin-ui/src/views/app-center/components/designer/form-first/formDesignerSchema.js code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大。
+- 新增组件通过共享 `PageWidgetRenderer` 接入，未做浏览器手工交互截图；复杂组件如日历、菜单、分隔面板后续可按实际业务需求继续扩展事件和数据源配置。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 组件和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 22:09:36 CST
+
+### 变更范围
+
+- 列表设计器右侧动态展示组件“数据来源”配置从压缩多列改为纵向说明式配置。
+- 表单设计器右侧共享页面组件“数据来源”配置同步改为同一套表达。
+- “当前详情/表单数据”和“远程接口”按来源类型条件显示不同字段，避免用户看到无关输入项。
+- 字段映射改为中文标签单列展示，减少窄面板下拉和输入框展示不全的问题。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过；保留 `ListPageGridDesigner.vue` 既有按钮单行文本 warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过，耗时约 1m44s。
+
+### 警告
+
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释。
+- 构建保留项目既有 warning：`src/store/index.js` 同时被动态和静态导入，Rollup 不会将其移动到单独 chunk。
+- 构建保留 chunk size warning，不阻断本轮变更。
+
+### 跳过项
+
+- 未启动 Vite 和浏览器截图验证：本轮先以静态检查和生产构建覆盖，具体面板展示宽度需在本地设计器页面中手工确认。
+- 未执行后端编译：本轮只改前端 Vue 设计器属性面板。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 17:10:00 CST 列表预览和组件库重复修正
+
+### 变更范围
+
+- `PageWidgetRenderer.vue` 中条形码改为用外部 `jsbarcode` 渲染当前组件自己的 SVG，避开 `vue3-barcode` 内部固定 `document.querySelector('.vue3-barcode-element')` 导致主画布和预览弹窗多实例互相抢占的问题。
+- `PageWidgetRenderer.vue` 补齐富文本、Markdown、二维码、条形码容器的 `min-width: 0`、`max-width: 100%` 和 overflow 约束，避免内部编辑器撑开父容器。
+- `page-schema.js` 移除旧二维码/条形码 catalog/default props，只保留共享 `pageWidgetCatalog` 作为列表组件库来源。
+- `BusinessListDesigner.vue` 修复列表预览弹窗只读设计器使用 `width: max-content`、`overflow: visible` 导致富文本/Markdown 预览横向无限扩大问题，改为弹窗固定在视口内、内部滚动。
+- `package.json` / `pnpm-lock.yaml` 新增直接依赖 `jsbarcode`。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui add jsbarcode`：通过。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/page/page-schema.js src/views/app-center/components/designer/BusinessListDesigner.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+- `git diff --check -- forge-admin-ui/package.json forge-admin-ui/pnpm-lock.yaml forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/views/app-center/components/designer/BusinessListDesigner.vue code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+- `rg -n "blockType: 'barcode'|blockType: 'qrcode'|title: '条形码'|title: '二维码'" forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js`：确认二维码/条形码只在共享 `page-widget-schema.js` 中定义。
+
+### 警告
+
+- `vue3-barcode` 仍保留在依赖中，但其组件实现对多实例不可靠；本轮运行渲染改为直接使用外部 `jsbarcode` 引擎。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 组件、依赖和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 16:42:00 CST 表单运行态页面组件预览修正
+
+### 变更范围
+
+- `AiFormItem.vue` 增加虚拟页面组件统一分流：当字段 `componentKey/type` 属于共享页面组件且 `fieldBinding.mode === 'virtual'` 时，直接复用 `PageWidgetRenderer`。
+- 修复表单预览弹窗和应用页把二维码等页面组件当普通 `NInput` 渲染的问题，避免 `props.size` 等页面组件配置透传给 Naive 输入框触发 `suffix.replace is not a function`。
+- 运行态富文本、Markdown、穿梭框更新时按组件语义回写表单值；二维码、条形码、水印、HTML、Vue 组件等展示组件保持只读展示语义。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/ai-form/AiFormItem.vue src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/page/page-schema.js src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue src/views/app-center/components/designer/form-first/formDesignerSchema.js`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+- `git diff --check -- forge-admin-ui/src/components/ai-form/AiFormItem.vue forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- 本轮修复覆盖的是 `AiForm` 运行态路径；设计画布路径此前已复用 `PageWidgetRenderer`。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 组件和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 16:20:00 CST 外部组件运行时补丁
+
+### 变更范围
+
+- `PageWidgetRenderer.vue` 为 `@kangc/v-md-editor` vuepress 主题显式注入 `Prism`，修复表单/列表预览中 `Cannot read properties of undefined (reading 'languages')` 的运行时异常。
+- `package.json` / `pnpm-lock.yaml` 新增直接依赖 `prismjs`，避免依赖树变化时 Markdown 主题缺少高亮语言对象。
+- `page-widget-schema.js` 将二维码、条形码纳入共享页面组件 key、catalog 和默认 props，表单与列表预览统一走外部组件渲染。
+- `ForgePropertyPanel.vue`、`formDesignerSchema.js` 补齐二维码/条形码表单属性和虚拟组件标记，避免预览组件参与业务字段注册。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui add prismjs`：通过。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue src/views/app-center/components/designer/form-first/formDesignerSchema.js`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+- `git diff --check -- forge-admin-ui/package.json forge-admin-ui/pnpm-lock.yaml forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue forge-admin-ui/src/views/app-center/components/designer/form-first/formDesignerSchema.js code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- `@kangc/v-md-editor` vuepress 主题需要 Prism 对象，缺失时会在组件更新阶段抛出 `languages` undefined，并级联触发 Vue runtime 的 `emitsOptions/type` null 错误。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大；外部富文本/Markdown/二维码/条形码组件会继续增加 `PageWidgetRenderer` chunk 体积。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 组件、依赖和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 16:05:00 CST 外部组件接入修正
+
+### 变更范围
+
+- `package.json` / `pnpm-lock.yaml` 新增外部组件依赖：`@wangeditor/editor`、`@wangeditor/editor-for-vue@5.1.12`、`@kangc/v-md-editor`、`qrcode-vue3`、`vue3-barcode`。
+- `PageWidgetRenderer.vue` 中富文本改为 WangEditor Vue3 组件，Markdown 改为 `@kangc/v-md-editor`，水印继续使用真实 `n-watermark` 并按 Naive UI API 透传属性。
+- `GridBlockRenderer.vue` 中水印改为 `n-watermark`，二维码改为 `qrcode-vue3`，条形码改为 `vue3-barcode`，移除手写二维码/条形码占位绘制逻辑。
+- `page-widget-schema.js`、`page-schema.js`、`ListPageGridDesigner.vue`、`ForgePropertyPanel.vue` 补齐外部组件默认 props 和结构化属性配置。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui add @wangeditor/editor @wangeditor/editor-for-vue @kangc/v-md-editor@next qrcode-vue3 vue3-barcode`：通过；`vue3-barcode-qrcode` 在当前 registry 返回 404，因此使用 `qrcode-vue3` / `vue3-barcode` 两个外部生成组件替代。
+- `pnpm --dir forge-admin-ui add @wangeditor/editor-for-vue@5.1.12`：通过；修正默认安装到 Vue2 peer 版本的问题。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/page/page-schema.js src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/package.json forge-admin-ui/pnpm-lock.yaml forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- `vue3-barcode-qrcode` 当前公开 registry 404，未能安装该精确包名。
+- `vue3-barcode` 声明的间接 peer `@vitejs/plugin-vue@1.10.2` 期望 Vite 2，当前项目 Vite 7；生产构建已通过。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大；外部富文本/Markdown 组件使 `PageWidgetRenderer` chunk 明显增大。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 组件、依赖和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 15:10:00 CST Vue 组件 runtime-only 预览修正
+
+### 变更范围
+
+- 修复 `PageWidgetRenderer.vue` 中 Vue 组件预览依赖运行时 `compile()` 的问题，避免 runtime-only Vue 构建触发 `Runtime compilation is not supported` 和后续 `__vnode` 异常。
+- Vue 组件预览改为安全模板插值 + Props 展示 + 代码视图，不在设计器内执行用户输入的 `template/script`。
+- 列表设计器和表单属性面板将 Vue 组件预览模式文案调整为 `Props 模板预览`，与实际安全边界一致。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- 定向 ESLint 保留既有/格式类 `vue/singleline-html-element-content-newline` warning，不阻断构建。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器共享组件和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 14:41:25 CST 组件可用性补充修正
+
+### 变更范围
+
+- `shared/page-widget-schema.js` 将水印、穿梭框纳入共享组件 catalog/default props；穿梭框默认保留静态选项和远程接口 `optionSource` 结构。
+- `shared/PageWidgetRenderer.vue` 补齐富文本工具栏编辑与内容回写、水印渲染、穿梭框静态/远程选项加载、Vue template 动态预览。
+- 列表设计器 `GridBlockRenderer` / `ListPageGridDesigner` 接通共享组件更新事件，并补齐穿梭框远程接口配置项。
+- 表单设计器 `ForgeFieldShelf` / `designerLayoutFactory` / `ForgeFormCanvasNode` / `ForgePropertyPanel` 复用共享组件，并补齐水印、Vue 动态预览属性入口；穿梭框按字段组件接入，支持业务字段绑定和远程接口选项。
+- `AiFormItem.vue` 远程选项加载支持 `paramsText`，穿梭框动态接口参数配置可在运行态生效。
+- `formDesignerSchema.js` 将水印等展示组件作为虚拟组件处理，避免进入字段注册和 DDL，同时保留穿梭框字段组件能力。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/ai-form/AiFormItem.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue src/views/app-center/components/designer/forge-form-designer/ForgeFormCanvasNode.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue src/views/app-center/components/designer/forge-form-designer/designerLayoutFactory.js src/views/app-center/components/designer/form-first/formDesignerSchema.js`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/components/ai-form/AiFormItem.vue forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgeFormCanvasNode.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/designerLayoutFactory.js forge-admin-ui/src/views/app-center/components/designer/form-first/formDesignerSchema.js`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过；二次构建覆盖字段型穿梭框和 `AiFormItem` 参数解析补丁。
+
+### 警告
+
+- 首次按偏好执行 `nvm use v20.19.0` 返回 N/A，本轮后续直接使用当前可用 Node 执行 pnpm 命令。
+- 定向 ESLint 保留既有/格式类 `vue/singleline-html-element-content-newline` warning，不阻断构建。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器、共享组件和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 页面组件真实能力与表单复用修正
+
+### 变更范围
+
+- 抽取 `shared/page-widget-schema.js` 和 `shared/PageWidgetRenderer.vue`，统一维护富文本、Markdown、HTML 标签、Vue 组件的默认配置、安全渲染和预览逻辑。
+- 列表设计器 `GridBlockRenderer` 改为复用共享 `PageWidgetRenderer`，不再在列表内维护一套富文本/Markdown/HTML/Vue 预览实现。
+- 表单设计器左侧组件库接入共享页面组件，`designerLayoutFactory` 使用共享默认配置创建组件，`ForgeFormCanvasNode` 使用共享渲染器展示组件。
+- 表单属性面板为共享组件补充基础代码配置入口；列表右侧属性面板为富文本、Markdown、HTML 和 Vue 组件补充源码/模板/脚本/样式/props 等配置。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue src/views/app-center/components/designer/forge-form-designer/ForgeFormCanvasNode.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue src/views/app-center/components/designer/forge-form-designer/designerLayoutFactory.js src/views/app-center/components/designer/form-first/formDesignerSchema.js`：通过；保留单行模板换行 warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgeFormCanvasNode.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/designerLayoutFactory.js forge-admin-ui/src/views/app-center/components/designer/form-first/formDesignerSchema.js code-copilot/changes/forge-list-designer-productivity-upgrades/spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- 定向 ESLint 保留既有/格式类 `vue/singleline-html-element-content-newline` warning，不阻断构建。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、部分 chunk 体积较大、`src/store/index.js` 同时动态/静态导入导致 chunk 提示。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 页面组件库扩展
+
+### 变更范围
+
+- 左侧页面组件库新增手写签名、富文本框、穿梭框、分步表单、Vue 组件占位、HTML 标签、标题、段落、统计数值、链接、文字提示、水印、音频播放器、视频播放器、头像框、条形码、内嵌页面、二维码、Markdown、盒子布局、间距和描述列表。
+- `page-schema.js` 补齐新增组件 catalog、默认 props、默认 fieldRefs 和最小高度规则。
+- `GridBlockRenderer.vue` 补齐新增组件设计态/运行态预览；签名复用现有 `SignaturePad`，二维码/条形码使用无新增依赖的安全预览占位。
+- `ListPageGridDesigner.vue` 补齐左侧分组、子组件可选项、右侧结构化属性配置和栅格布局子组件自动撑高逻辑。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过；保留单行模板换行 warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue code-copilot/changes/forge-list-designer-productivity-upgrades/spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- 定向 ESLint 保留既有/格式类 `vue/singleline-html-element-content-newline` warning，不阻断构建。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、部分 chunk 体积较大、`src/store/index.js` 同时动态/静态导入导致 chunk 提示。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器和 code-copilot 记录。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
 ## 2026-06-21 12:20:52 CST
 
 ### 变更范围
@@ -457,6 +836,121 @@
 
 - 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
 - 未执行后端编译：本轮只改前端 Vue 设计器和预览样式。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 17:16:33 CST
+
+### 变更范围
+
+- 表单设计器左侧组件库补充语义化图标映射，新增共享页面组件和常用字段组件不再大量复用相同图标。
+- 列表设计器左侧页面组件面板增加组件统计，展示总数、搜索匹配数、分组数和分组内组件数量。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过。
+- `git diff --check -- forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- `ListPageGridDesigner.vue` 保留既有 `vue/singleline-html-element-content-newline` warning，均为现有按钮单行文本格式提示，本轮未引入错误。
+
+### 跳过项
+
+- 未重新执行生产构建：本轮只调整组件面板展示图标、统计文案和样式，不涉及运行态渲染或依赖变更。
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器面板。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 17:26:39 CST
+
+### 变更范围
+
+- 列表设计器右侧配置面板调整为和表单设计器一致的结构顺序：标题头部、搜索、配置类型 Tab、滚动内容。
+- 列表设计器右侧配置面板补齐 48px 头部高度、分割线、标题截断、折叠区块密度等样式，和表单设计器右侧面板保持一致。
+- 表单设计器右侧收起按钮改为和列表设计器一致的轻量边框按钮样式。
+- 记录后续能力缺口：Naive UI 新增组件需要补齐官方 Props/Slots/Events 结构化配置，并支持页面详情接口、已有列表接口或自定义接口取数。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- `ListPageGridDesigner.vue` 保留既有 `vue/singleline-html-element-content-newline` warning，均为现有按钮单行文本格式提示，本轮未引入错误。
+
+### 跳过项
+
+- 未重新执行生产构建：本轮只调整右侧配置面板展示结构和 CSS，不涉及运行态渲染、依赖或构建配置。
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器面板。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 17:38:47 CST
+
+### 变更范围
+
+- 列表设计器左侧页面组件卡片补充语义图标，组件库展示结构改为图标 + 主体信息，和表单设计器左侧组件卡片一致。
+- 表单设计器左侧组件面板补充统计胶囊，搜索组件时展示匹配数量，组件库展示当前分组数，字段资产展示字段数量。
+- 统一列表/表单左侧面板的头部、搜索框、分组标题圆点、计数胶囊、组件卡片高度、图标底色、hover 反馈和字段列表密度。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgeFieldShelf.vue code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- `ListPageGridDesigner.vue` 保留既有 `vue/singleline-html-element-content-newline` warning，均为现有按钮单行文本格式提示，本轮未引入错误。
+
+### 跳过项
+
+- 未重新执行生产构建：本轮只调整左侧组件面板模板和 CSS，不涉及运行态渲染、依赖或构建配置。
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务。
+- 未执行后端编译：本轮只改前端 Vue 设计器面板。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-25 18:01:17 CST
+
+### 变更范围
+
+- 列表设计器左侧页面组件图标按组件语义细分，新增 Naive UI 组件不再大量使用兜底图标。
+- 共享页面组件默认 props 增加 `dataBinding`，统一描述静态配置、当前详情/表单上下文和远程接口三类数据来源。
+- `PageWidgetRenderer` 接入 `dataBinding`，描述、列表、日志、代码、数值动画、面包屑、菜单、分页、公示、日历和倒计时等组件优先使用绑定数据。
+- 列表设计器和表单设计器右侧属性面板补充数据来源配置，包括接口地址、请求方法、参数 JSON、响应路径和字段映射。
+- `GridBlockRenderer` 为 `detail-info` 增加数据来源配置和远程详情接口加载能力；运行态按当前详情数据、字段路径或远程接口返回值渲染详情字段。
+- `AiFormItem` 和 `GridBlockRenderer` 向共享页面组件传递当前 `formData/runtimeRecord`，支持“从当前页面详情/表单数据取值”。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/ai-form/AiFormItem.vue src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/components/ai-form/AiFormItem.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/components/ai-form/AiFormItem.vue forge-admin-ui/src/views/app-center/components/designer/forge-form-designer/ForgePropertyPanel.vue code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+
+### 警告
+
+- `ListPageGridDesigner.vue` 保留既有 `vue/singleline-html-element-content-newline` warning，均为现有按钮单行文本格式提示，本轮未引入错误。
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释。
+- 构建保留项目既有 warning：`src/store/index.js` 同时被动态和静态导入，Rollup 不会将其移动到单独 chunk。
+- 构建保留 chunk size warning，不阻断本轮变更。
+
+### 跳过项
+
+- 未进行浏览器手工验证或 Playwright 截图：本轮未启动 Vite/后端服务，远程接口取数需在真实设计器页面中补充验收。
+- 未执行后端编译：本轮只改前端 Vue 设计器、共享渲染器和 schema。
 
 ### 服务清理
 

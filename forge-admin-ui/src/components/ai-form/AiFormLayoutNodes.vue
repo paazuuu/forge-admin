@@ -1,7 +1,7 @@
 <template>
   <n-grid :cols="gridCols" :x-gap="xGap" :y-gap="yGap" class="af-layout-grid">
     <n-gi
-      v-for="node in nodes"
+      v-for="node in visibleNodes"
       :key="resolveNodeKey(node)"
       :span="resolveNodeSpan(node)"
       :style="node.gridStyle"
@@ -175,7 +175,7 @@
           :dashed="!!node.props?.dashed"
           :round="!!node.props?.round"
           :block="!!node.props?.block"
-          :disabled="!!node.props?.disabled"
+          :disabled="resolveNodeDisabled(node)"
           @click="handleButtonClick(node)"
         >
           {{ node.props?.text || node.label || '按钮' }}
@@ -256,6 +256,8 @@
 
 <script setup>
 import { computed, defineAsyncComponent, useSlots } from 'vue'
+import { useRoute } from 'vue-router'
+import { applyRuntimeControl, resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import AiFormGroupTitle from './AiFormGroupTitle.vue'
 import AiFormItem from './AiFormItem.vue'
 import AiFormSectionTitle from './AiFormSectionTitle.vue'
@@ -297,9 +299,31 @@ const props = defineProps({
 
 const emit = defineEmits(['fieldChange', 'nodeAction'])
 const slots = useSlots()
+const route = useRoute()
 const AiCrudPage = defineAsyncComponent(() => import('./AiCrudPage.vue'))
 
 const forwardedSlotNames = computed(() => Object.keys(slots).filter(name => name !== 'gridAppend'))
+const visibleNodes = computed(() => (Array.isArray(props.nodes) ? props.nodes : [])
+  .map(node => applyRuntimeControl(node, buildNodeRuleContext()))
+  .filter(Boolean))
+
+function buildNodeRuleContext(extra = {}) {
+  return {
+    ...(props.itemContext || {}),
+    record: props.formValue || {},
+    row: props.itemContext?.currentRow || props.itemContext?.row || props.formValue || {},
+    formData: props.formValue || {},
+    data: props.formValue || {},
+    route: {
+      query: route.query || {},
+      params: route.params || {},
+      path: route.path,
+      fullPath: route.fullPath,
+      name: route.name,
+    },
+    ...extra,
+  }
+}
 
 function isFieldNode(node = {}) {
   return (!node.nodeType && !isKnownLayoutNode(node)) || node.nodeType === 'field'
@@ -421,6 +445,8 @@ function resolveButtonSize(node = {}) {
 }
 
 function handleButtonClick(node = {}) {
+  if (resolveNodeDisabled(node))
+    return
   const events = Array.isArray(node.props?.__events) ? node.props.__events : []
   const clickEvents = events.filter(event => !event?.trigger || event.trigger === 'click')
   if (!clickEvents.length) {
@@ -428,6 +454,11 @@ function handleButtonClick(node = {}) {
     return
   }
   clickEvents.forEach(event => emit('nodeAction', { node, event, action: event.action || 'click' }))
+}
+
+function resolveNodeDisabled(node = {}) {
+  const control = node.__runtimeControl || resolveRuntimeControl(node, buildNodeRuleContext())
+  return control.disabled === true || control.readonly === true || node.props?.disabled === true
 }
 
 function resolveTableColumns(node = {}) {

@@ -258,7 +258,7 @@
       title="预览当前列表"
       class="list-preview-modal"
       :bordered="false"
-      :style="{ width: 'calc(100vw - 32px)', maxWidth: 'calc(100vw - 32px)', height: 'calc(100vh - 32px)' }"
+      :style="{ width: 'calc(100vw - 32px)', maxWidth: 'calc(100vw - 32px)', minWidth: 0, height: 'calc(100vh - 32px)' }"
     >
       <ListPageGridDesigner
         :model-value="previewGridLayout"
@@ -2614,6 +2614,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   flex: 1 1 auto;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   width: 100%;
   height: auto;
@@ -2639,12 +2640,13 @@ onBeforeUnmount(() => {
 }
 
 :global(.list-preview-modal .list-grid-designer.readonly) {
-  flex: 0 0 auto;
-  width: max-content;
-  min-width: 100%;
-  min-height: 100%;
-  height: auto;
-  overflow: visible;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   background: #fff;
 }
 
@@ -2657,10 +2659,11 @@ onBeforeUnmount(() => {
 }
 
 :global(.list-preview-modal .list-grid-designer.readonly .canvas-panel) {
-  width: max-content;
-  min-width: 100%;
-  min-height: 100%;
-  overflow: visible;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border: 0;
   background: #fff;
 }
@@ -2676,11 +2679,12 @@ onBeforeUnmount(() => {
 }
 
 :global(.list-preview-modal .list-grid-designer.readonly .canvas-scroll) {
-  width: max-content;
+  width: 100%;
+  max-width: 100%;
   min-width: 100%;
   min-height: 100%;
-  height: auto;
-  overflow: visible !important;
+  height: 100%;
+  overflow: auto !important;
   background: #fff;
 }
 
@@ -2690,9 +2694,11 @@ onBeforeUnmount(() => {
 }
 
 :global(.list-preview-modal .list-grid-designer.readonly .canvas-zoom-stage) {
-  width: max-content;
+  width: 100%;
+  max-width: 100%;
   min-width: 100%;
   min-height: 100%;
+  overflow: visible;
   background: #fff;
 }
 
@@ -2704,6 +2710,7 @@ onBeforeUnmount(() => {
 }
 
 :global(.list-preview-modal .list-grid-designer.readonly .canvas-grid) {
+  max-width: 100%;
   min-height: 100%;
   margin: 0;
   background: #fff;

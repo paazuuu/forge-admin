@@ -85,3 +85,13 @@ Forge 代码生成模板不能按通用 REST 风格生成 `PUT` 更新或 `DELET
 租户业务数据源切换只影响业务 Mapper 查询的主业务表。数据权限控制面元数据，包括 `sys_data_scope_config`、`sys_role`、`sys_role_data_scope`、`sys_org` 和 `sys_region_code`，必须固定由 Forge 平台主库提供，不能要求租户业务库复制这些平台表。
 
 `forge-starter-datascope` 运行时应先从 `forge.datascope.metadata-datasource`（默认 `master`）加载控制面快照，再在业务 SQL 拦截时只读取内存快照。行政区划权限等需要平台字典/树数据的规则，必须提前解析成业务库可执行的字面量条件，禁止在业务库 SQL 中拼接 `sys_region_code` 等平台表子查询。
+
+## 10. 低代码运行规则和字段展示统一走共享封装
+
+**记录日期**: 2026-06-25
+
+列表设计器、表单设计器、发布运行页和详情页中，涉及组件/字段/模块的显示隐藏、只读、禁用、必填、颜色和样式控制，统一通过 `forge-admin-ui/src/components/lowcode-builder/shared/runtime-rules.js` 解析。
+
+字段展示不再在列表列、详情字段、表单只读态中分别实现。文本、字典标签、状态 Tag、链接、金额和颜色规则统一走 `FieldValueRenderer.vue`；运行规则配置入口统一走 `RuntimeRulesEditor.vue`。后续新增动态展示组件或复杂字段渲染时必须优先扩展这三个共享封装，避免列表和表单再次分叉。
+
+运行规则的数据来源统一使用 `source` 表达：`record` 表示当前记录/详情，`row` 表示当前行数据，`formData` 表示当前表单数据，`query` 表示 URL 查询参数，`params` 表示路由参数，`user` 表示当前用户。列表行操作打开的编辑/详情弹窗必须把当前行放入 `context.currentRow`，运行规则上下文再统一映射为 `row`。

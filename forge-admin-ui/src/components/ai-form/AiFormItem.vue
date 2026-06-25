@@ -5,7 +5,7 @@
 <template>
   <!-- 表单分隔线 -->
   <AiFormSectionTitle
-    v-if="isSectionTitleField"
+    v-if="fieldRuntimeVisible && isSectionTitleField"
     :title="field.label"
     :anchor-id="field.__sectionId"
     :description="field.props?.description || field.description"
@@ -16,7 +16,7 @@
 
   <!-- 分组标题 -->
   <AiFormGroupTitle
-    v-else-if="isGroupTitleField"
+    v-else-if="fieldRuntimeVisible && isGroupTitleField"
     :label="field.label"
     :title="field.props?.title || field.title"
     :style="field.style || field.formItemStyle"
@@ -25,7 +25,7 @@
 
   <!-- 普通表单项 -->
   <n-form-item
-    v-else
+    v-else-if="fieldRuntimeVisible"
     :label="field.label"
     :path="field.field"
     :label-width="field.labelWidth"
@@ -56,6 +56,16 @@
         >
           {{ resolveReadonlySelectionText(field) }}
         </div>
+
+        <!-- 低代码页面展示组件 -->
+        <PageWidgetRenderer
+          v-else-if="isRuntimePageWidgetField"
+          :component-key="runtimePageWidgetKey"
+          :props-data="runtimePageWidgetProps"
+          :data-context="formData || {}"
+          :readonly="disabledHandler(field) || field.visibility?.readonly === true || field.readonly === true"
+          @update:props-data="handleRuntimePageWidgetUpdate"
+        />
 
         <!-- 输入框 -->
         <n-input
@@ -622,9 +632,14 @@
           <span v-if="field.formatter">
             {{ field.formatter(value, field, formData) }}
           </span>
-          <span v-else>
-            {{ value }}
-          </span>
+          <FieldValueRenderer
+            v-else
+            :value="value"
+            :row="formData"
+            :field="field"
+            :setting="field.renderConfig || field.props?.renderConfig || {}"
+            :context="context"
+          />
           <n-button
             v-if="field.copy"
             text
@@ -671,10 +686,15 @@
 import { CopyOutline } from '@vicons/ionicons5'
 import { useClipboard } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictSelect from '@/components/DictSelect.vue'
 import FileUpload from '@/components/file-upload/index.vue'
 import ImageUpload from '@/components/image-upload/index.vue'
+import FieldValueRenderer from '@/components/lowcode-builder/shared/FieldValueRenderer.vue'
+import { isPageWidgetComponentKey } from '@/components/lowcode-builder/shared/page-widget-schema'
+import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRenderer.vue'
+import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
 import { getDictData } from '@/composables/useDict'
 import { request } from '@/utils'
@@ -703,6 +723,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:value'])
 
+const route = useRoute()
 const { copy } = useClipboard()
 const remoteOptions = ref([])
 const remoteLoading = ref(false)
@@ -745,6 +766,22 @@ const READONLY_SELECTION_TYPES = new Set([
   'objectReference',
 ])
 
+const fieldRuntimeControl = computed(() => resolveRuntimeControl(props.field || {}, {
+  ...(props.context || {}),
+  record: props.formData || {},
+  row: props.context?.currentRow || props.context?.row || props.formData || {},
+  formData: props.formData || {},
+  data: props.formData || {},
+  route: {
+    query: route.query || {},
+    params: route.params || {},
+    path: route.path,
+    fullPath: route.fullPath,
+    name: route.name,
+  },
+}))
+const fieldRuntimeVisible = computed(() => fieldRuntimeControl.value.visible !== false)
+
 /**
  * 获取占位符文本
  */
@@ -763,6 +800,8 @@ function getPlaceholder(field) {
  */
 function disabledHandler(field) {
   if (isCascadeDisabledByEmptyParent())
+    return true
+  if (fieldRuntimeControl.value.readonly || fieldRuntimeControl.value.disabled)
     return true
   if (typeof field.disabled === 'boolean') {
     return field.disabled
@@ -802,6 +841,8 @@ const isGroupTitleField = computed(() => {
     .includes(props.field?.type || props.field?.componentKey || props.field?.nodeType)
 })
 const isFieldRequired = computed(() => {
+  if (Object.prototype.hasOwnProperty.call(fieldRuntimeControl.value, 'required') && fieldRuntimeControl.value.required !== undefined)
+    return fieldRuntimeControl.value.required === true
   if (props.field?.required === true)
     return true
   const rules = props.field?.rules
@@ -820,6 +861,39 @@ const dictCascadeConfig = computed(() => {
   }
 })
 const remoteOptionSource = computed(() => resolveDynamicOptionSource(props.field))
+const runtimePageWidgetKey = computed(() => {
+  const field = props.field || {}
+  const componentKey = String(field.componentKey || '').trim()
+  if (componentKey && isPageWidgetComponentKey(componentKey))
+    return componentKey
+  const type = String(field.type || '').trim()
+  return isPageWidgetComponentKey(type) ? type : ''
+})
+const isRuntimePageWidgetField = computed(() => {
+  if (!runtimePageWidgetKey.value)
+    return false
+  const bindingMode = props.field?.fieldBinding?.mode
+  return bindingMode === 'virtual' || props.field?.virtual === true || props.field?.isVirtual === true
+})
+const runtimePageWidgetProps = computed(() => {
+  const field = props.field || {}
+  const widgetKey = runtimePageWidgetKey.value
+  const fieldProps = field.props && typeof field.props === 'object' ? field.props : {}
+  const next = {
+    ...fieldProps,
+  }
+  if (field.label && !next.title && ['rich-text', 'markdown', 'barcode', 'qrcode', 'transfer'].includes(widgetKey))
+    next.title = field.label
+  if (isFilledValue(props.value)) {
+    if (widgetKey === 'rich-text' || widgetKey === 'markdown')
+      next.content = props.value
+    else if (widgetKey === 'transfer')
+      next.value = Array.isArray(props.value) ? props.value : String(props.value).split(',').map(item => item.trim()).filter(Boolean)
+    else if (widgetKey === 'barcode' || widgetKey === 'qrcode')
+      next.value = props.value
+  }
+  return next
+})
 
 function isLegacyGroupTitleField(field = {}) {
   const fieldProps = field?.props || {}
@@ -1016,7 +1090,19 @@ function normalizeOptionSource(source) {
   const next = { ...(source || {}) }
   if (!next.api && next.url)
     next.api = next.url
+  if (!next.params && typeof next.paramsText === 'string')
+    next.params = safeParseObject(next.paramsText)
   return next
+}
+
+function safeParseObject(value = '') {
+  try {
+    const parsed = JSON.parse(value || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
 }
 
 function resolveDynamicOptionSource(field = {}) {
@@ -1571,6 +1657,17 @@ function getComponentEvents(field) {
  */
 function handleUpdate(newValue) {
   emit('update:value', newValue)
+}
+
+function handleRuntimePageWidgetUpdate(nextProps = {}) {
+  const widgetKey = runtimePageWidgetKey.value
+  if (widgetKey === 'rich-text' || widgetKey === 'markdown') {
+    emit('update:value', nextProps.content || '')
+    return
+  }
+  if (widgetKey === 'transfer') {
+    emit('update:value', Array.isArray(nextProps.value) ? nextProps.value : [])
+  }
 }
 
 function resolveRangeValue(value, index) {

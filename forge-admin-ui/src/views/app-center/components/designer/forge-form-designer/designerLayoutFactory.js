@@ -1,3 +1,4 @@
+import { createPageWidgetComponent, isPageWidgetComponentKey } from '@/components/lowcode-builder/shared/page-widget-schema'
 import {
   camelToSnake,
   generateFieldCode,
@@ -10,6 +11,12 @@ const DEFAULT_ROW_CELL_COUNT = 4
 export function createForgeLayoutComponent(componentKey = 'title', schema = {}) {
   const gridColumns = clampGridColumns(schema?.layout?.gridColumns, 2)
   const id = `cmp_${componentKey || 'layout'}_${Date.now()}`
+  if (isPageWidgetComponentKey(componentKey)) {
+    return createPageWidgetComponent(componentKey, {
+      id,
+      gridColumns,
+    })
+  }
   if (componentKey === 'card') {
     return {
       id,
@@ -277,6 +284,26 @@ function buildTemplateDefaultProps(componentKey = '') {
     checkbox: {
       options: buildDefaultOptions(),
     },
+    transfer: {
+      sourceTitle: '可选项',
+      targetTitle: '已选项',
+      filterable: true,
+      dataSourceType: 'static',
+      options: [
+        { label: '选项一', value: 'option1' },
+        { label: '选项二', value: 'option2' },
+        { label: '选项三', value: 'option3' },
+      ],
+      optionSource: {
+        api: '',
+        method: 'get',
+        paramsText: '{}',
+        recordsField: 'records',
+        labelField: 'label',
+        valueField: 'value',
+        disabledField: 'disabled',
+      },
+    },
     cascader: {
       options: [
         {
@@ -378,7 +405,7 @@ function isGenericDesignerFieldCode(value = '') {
 }
 
 function buildTemplatePlaceholder(componentKey, label) {
-  if (['select', 'dictSelect', 'radio', 'radioButton', 'checkbox', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'userSelect', 'orgTreeSelect', 'regionTreeSelect', 'treeSelect', 'customSelect', 'color'].includes(componentKey))
+  if (['select', 'dictSelect', 'radio', 'radioButton', 'checkbox', 'transfer', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'userSelect', 'orgTreeSelect', 'regionTreeSelect', 'treeSelect', 'customSelect', 'color'].includes(componentKey))
     return `请选择${label}`
   return `请输入${label}`
 }

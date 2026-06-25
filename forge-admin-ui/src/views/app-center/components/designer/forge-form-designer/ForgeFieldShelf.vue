@@ -4,6 +4,18 @@
       <div class="shelf-head-main">
         <h3>字段与布局</h3>
         <p>拖入画布或点击添加。</p>
+        <div class="shelf-stats">
+          <template v-if="activeShelfTab === 'components'">
+            <span>共 {{ allComponentTotal }} 个</span>
+            <span v-if="keyword && componentTotal !== allComponentTotal">匹配 {{ componentTotal }} 个</span>
+            <span>{{ componentGroupTotal }} 组</span>
+          </template>
+          <template v-else>
+            <span>共 {{ props.fields.length }} 个</span>
+            <span v-if="keyword && visibleFields.length !== props.fields.length">匹配 {{ visibleFields.length }} 个</span>
+            <span>未用 {{ unusedFields.length }}</span>
+          </template>
+        </div>
       </div>
       <slot name="actions" />
     </div>
@@ -14,7 +26,11 @@
       clearable
       :placeholder="activeShelfTab === 'components' ? '搜索组件' : '搜索字段'"
       class="shelf-search"
-    />
+    >
+      <template #prefix>
+        <n-icon><SearchOutline /></n-icon>
+      </template>
+    </n-input>
 
     <div class="shelf-mode-tabs">
       <button type="button" :class="{ active: activeShelfTab === 'components' }" @click="activeShelfTab = 'components'">
@@ -128,21 +144,48 @@
 <script setup>
 import {
   AlbumsOutline,
+  AlertCircleOutline,
+  AnalyticsOutline,
   BrowsersOutline,
+  BusinessOutline,
+  CalculatorOutline,
+  CalendarOutline,
+  CashOutline,
   CheckboxOutline,
   ChevronDownCircleOutline,
+  CloudOutline,
   CloudUploadOutline,
+  CodeSlashOutline,
+  ColorPaletteOutline,
+  DocumentTextOutline,
   GridOutline,
+  HomeOutline,
   ImageOutline,
+  KeypadOutline,
   ListOutline,
+  LocationOutline,
+  MenuOutline,
+  NavigateOutline,
+  OptionsOutline,
   PersonOutline,
+  PricetagOutline,
+  QrCodeOutline,
+  ReaderOutline,
   ReorderThreeOutline,
+  ResizeOutline,
+  SearchOutline,
+  StarOutline,
+  StatsChartOutline,
+  SwapHorizontalOutline,
+  TerminalOutline,
   TextOutline,
   TimeOutline,
+  TimerOutline,
   ToggleOutline,
 } from '@vicons/ionicons5'
 import { computed, ref } from 'vue'
 import { isReadonlySystemField } from '@/components/lowcode-builder/page/page-schema'
+import { pageWidgetCatalog } from '@/components/lowcode-builder/shared/page-widget-schema'
 import { clearDesignerDragPreview, clearDesignerDragSource, clearDesignerDropKey, setDesignerDragPreview } from './designerDragState'
 
 const props = defineProps({
@@ -167,32 +210,33 @@ const fieldTemplateGroups = [
     title: '输入',
     items: [
       { componentKey: 'input', label: '输入框', icon: TextOutline },
-      { componentKey: 'textarea', label: '多行文本', icon: TextOutline },
-      { componentKey: 'number', label: '数字', icon: ReorderThreeOutline },
-      { componentKey: 'money', label: '金额', icon: ReorderThreeOutline },
-      { componentKey: 'slider', label: '滑块', icon: ReorderThreeOutline },
-      { componentKey: 'rate', label: '评分', icon: ReorderThreeOutline },
-      { componentKey: 'color', label: '颜色选择', icon: ToggleOutline },
+      { componentKey: 'textarea', label: '多行文本', icon: DocumentTextOutline },
+      { componentKey: 'number', label: '数字', icon: CalculatorOutline },
+      { componentKey: 'money', label: '金额', icon: CashOutline },
+      { componentKey: 'slider', label: '滑块', icon: OptionsOutline },
+      { componentKey: 'rate', label: '评分', icon: StarOutline },
+      { componentKey: 'color', label: '颜色选择', icon: ColorPaletteOutline },
     ],
   },
   {
     title: '选择',
     items: [
       { componentKey: 'select', label: '静态下拉', icon: ListOutline },
-      { componentKey: 'dictSelect', label: '字典下拉', icon: ListOutline },
+      { componentKey: 'dictSelect', label: '字典下拉', icon: PricetagOutline },
       { componentKey: 'radio', label: '单选', icon: CheckboxOutline },
       { componentKey: 'radioButton', label: '按钮单选', icon: CheckboxOutline },
       { componentKey: 'checkbox', label: '多选', icon: CheckboxOutline },
+      { componentKey: 'transfer', label: '穿梭框', icon: SwapHorizontalOutline },
       { componentKey: 'cascader', label: '级联选择', icon: ChevronDownCircleOutline },
       { componentKey: 'treeSelect', label: '树形选择', icon: GridOutline },
-      { componentKey: 'customSelect', label: '远程选择', icon: ListOutline },
-      { componentKey: 'date', label: '日期', icon: TimeOutline },
+      { componentKey: 'customSelect', label: '远程选择', icon: CloudOutline },
+      { componentKey: 'date', label: '日期', icon: CalendarOutline },
       { componentKey: 'datetime', label: '日期时间', icon: TimeOutline },
-      { componentKey: 'daterange', label: '日期范围', icon: TimeOutline },
+      { componentKey: 'daterange', label: '日期范围', icon: CalendarOutline },
       { componentKey: 'datetimerange', label: '日期时间范围', icon: TimeOutline },
-      { componentKey: 'month', label: '月份', icon: TimeOutline },
-      { componentKey: 'year', label: '年份', icon: TimeOutline },
-      { componentKey: 'timerange', label: '时间范围', icon: TimeOutline },
+      { componentKey: 'month', label: '月份', icon: CalendarOutline },
+      { componentKey: 'year', label: '年份', icon: CalendarOutline },
+      { componentKey: 'timerange', label: '时间范围', icon: TimerOutline },
       { componentKey: 'switch', label: '开关', icon: ToggleOutline },
     ],
   },
@@ -200,8 +244,8 @@ const fieldTemplateGroups = [
     title: '业务',
     items: [
       { componentKey: 'userSelect', label: '人员选择', icon: PersonOutline },
-      { componentKey: 'orgTreeSelect', label: '部门选择', icon: GridOutline },
-      { componentKey: 'regionTreeSelect', label: '行政区划', icon: GridOutline },
+      { componentKey: 'orgTreeSelect', label: '部门选择', icon: BusinessOutline },
+      { componentKey: 'regionTreeSelect', label: '行政区划', icon: LocationOutline },
       { componentKey: 'objectReference', label: '对象引用', icon: BrowsersOutline },
       { componentKey: 'fileUpload', label: '文件上传', icon: CloudUploadOutline },
       { componentKey: 'imageUpload', label: '图片上传', icon: ImageOutline },
@@ -209,9 +253,16 @@ const fieldTemplateGroups = [
     ],
   },
 ]
+const widgetLayoutItems = pageWidgetCatalog
+  .filter(item => item.componentKey !== 'transfer')
+  .map(item => ({
+    componentKey: item.componentKey,
+    label: item.label || item.title,
+    icon: resolveWidgetIcon(item.componentKey),
+  }))
 const layoutItems = [
   { componentKey: 'row', label: '栅格布局', icon: GridOutline },
-  { componentKey: 'table', label: '表格布局', icon: GridOutline },
+  { componentKey: 'table', label: '表格布局', icon: KeypadOutline },
   { componentKey: 'AiCrudPage', label: 'CRUD区块', icon: ListOutline },
   { componentKey: 'button', label: '按钮', icon: ToggleOutline },
   { componentKey: 'title', label: '分组标题', icon: ReorderThreeOutline },
@@ -219,6 +270,7 @@ const layoutItems = [
   { componentKey: 'card', label: '卡片分组', icon: AlbumsOutline },
   { componentKey: 'tabs', label: '标签页', icon: BrowsersOutline },
   { componentKey: 'collapse', label: '折叠面板', icon: ChevronDownCircleOutline },
+  ...widgetLayoutItems,
 ]
 
 const normalizedKeyword = computed(() => keyword.value.trim().toLowerCase())
@@ -241,6 +293,12 @@ const visibleLayoutItems = computed(() => {
 })
 const componentTotal = computed(() => {
   return visibleTemplateGroups.value.reduce((total, group) => total + group.items.length, 0) + visibleLayoutItems.value.length
+})
+const allComponentTotal = computed(() => {
+  return fieldTemplateGroups.reduce((total, group) => total + group.items.length, 0) + layoutItems.length
+})
+const componentGroupTotal = computed(() => {
+  return visibleTemplateGroups.value.length + (visibleLayoutItems.value.length ? 1 : 0)
 })
 const filteredFields = computed(() => {
   const text = normalizedKeyword.value
@@ -269,6 +327,31 @@ function isUsed(field = {}) {
 
 function isLocked(field = {}) {
   return isReadonlySystemField(field)
+}
+
+function resolveWidgetIcon(componentKey = '') {
+  const iconMap = {
+    'rich-text': DocumentTextOutline,
+    'watermark': TextOutline,
+    'vue-component': BrowsersOutline,
+    'html-tag': CodeSlashOutline,
+    'markdown': ReorderThreeOutline,
+    'barcode': StatsChartOutline,
+    'qrcode': QrCodeOutline,
+    'calendar': CalendarOutline,
+    'code': CodeSlashOutline,
+    'countdown': TimerOutline,
+    'descriptions': ReaderOutline,
+    'announcement': AlertCircleOutline,
+    'list': ListOutline,
+    'log': TerminalOutline,
+    'number-animation': AnalyticsOutline,
+    'breadcrumb': NavigateOutline,
+    'menu': MenuOutline,
+    'pagination': ReorderThreeOutline,
+    'split': ResizeOutline,
+  }
+  return iconMap[componentKey] || HomeOutline
 }
 
 function handleFieldDragStart(event, field) {
@@ -319,6 +402,7 @@ function finishDragging() {
   grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+  padding: 12px;
   background: #fcfcfc;
 }
 
@@ -327,8 +411,8 @@ function finishDragging() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px;
-  border-bottom: 1px solid #e4e4e7;
+  padding: 0;
+  border-bottom: 0;
   background: #fcfcfc;
 }
 
@@ -345,35 +429,60 @@ function finishDragging() {
   color: #18181b;
   font-size: 13px;
   font-weight: 700;
+  line-height: 18px;
 }
 
 .shelf-head p {
   margin-top: 2px;
   color: #71717a;
   font-size: 11px;
+  line-height: 16px;
+}
+
+.shelf-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.shelf-stats span,
+.palette-section h4 em {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 16px;
 }
 
 .shelf-search {
-  margin: 8px 10px 6px;
-  width: calc(100% - 20px);
+  margin-top: 12px;
+  width: 100%;
 }
 
 .shelf-mode-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
-  margin: 0 10px 8px;
+  gap: 3px;
+  margin: 8px 0 10px;
   padding: 3px;
   border: 1px solid #e4e4e7;
-  border-radius: 8px;
+  border-radius: 9px;
   background: #f4f4f5;
 }
 
 .shelf-mode-tabs button {
   cursor: pointer;
-  height: 26px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
   background: transparent;
   color: #71717a;
   font-size: 12px;
@@ -386,13 +495,11 @@ function finishDragging() {
 }
 
 .shelf-mode-tabs button:hover {
-  border-color: transparent;
-  background: #e4e4e7;
+  background: rgba(228, 228, 231, 0.72);
   color: #27272a;
 }
 
 .shelf-mode-tabs button.active {
-  border-color: #fff;
   background: #fff;
   color: #27272a;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
@@ -401,7 +508,7 @@ function finishDragging() {
 .component-palette {
   min-height: 0;
   overflow: auto;
-  padding: 2px 10px 12px;
+  padding: 2px 0 0;
   background: #fcfcfc;
 }
 
@@ -412,28 +519,34 @@ function finishDragging() {
 .palette-section h4 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   margin: 2px 0 8px;
   color: #52525b;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.palette-section h4 em {
+.palette-section h4 span {
+  min-width: 0;
+}
+
+.palette-section h4::before {
+  content: '';
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-left: 3px;
   border-radius: 999px;
-  background: #f4f4f5;
-  color: #71717a;
-  font-size: 11px;
-  font-style: normal;
-  line-height: 18px;
-  padding: 0 7px;
+  background: #4266f7;
+  outline: 3px solid #e8edff;
 }
 
 .palette-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .palette-item,
@@ -468,13 +581,13 @@ function finishDragging() {
 }
 
 .palette-item {
-  min-height: 40px;
+  min-height: 48px;
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   border-radius: 7px;
-  padding: 0 10px;
+  padding: 7px 8px;
   color: #3f3f46;
   font-size: 12px;
   font-weight: 600;
@@ -483,12 +596,22 @@ function finishDragging() {
 }
 
 .palette-item :deep(.n-icon) {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #f4f4f5;
   color: #64748b;
-  font-size: 18px;
+  font-size: 16px;
   flex: 0 0 auto;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .palette-item:hover :deep(.n-icon) {
+  background: #eff6ff;
   color: #2563eb;
 }
 
@@ -496,31 +619,39 @@ function finishDragging() {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
-  border-top: 1px solid #e4e4e7;
-  background: #fcfcfc;
+  border-top: 0;
+  background: transparent;
 }
 
 .field-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 8px 10px 7px;
-  border-bottom: 1px solid #e4e4e7;
-  background: #fcfcfc;
+  gap: 3px;
+  margin-bottom: 8px;
+  padding: 3px;
+  border: 1px solid #e4e4e7;
+  border-radius: 9px;
+  background: #f4f4f5;
 }
 
 .field-tabs button {
   cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: #f4f4f5;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: #71717a;
   font-size: 12px;
-  line-height: 26px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.field-tabs button:hover {
+  background: rgba(228, 228, 231, 0.72);
+  color: #27272a;
 }
 
 .field-tabs button.active {
-  border-color: #fff;
   background: #fff;
   color: #27272a;
   font-weight: 600;
@@ -533,8 +664,8 @@ function finishDragging() {
   gap: 5px;
   min-height: 0;
   overflow: auto;
-  background: #fcfcfc;
-  padding: 8px 10px 12px;
+  background: transparent;
+  padding: 0;
 }
 
 .field-item {
@@ -542,9 +673,9 @@ function finishDragging() {
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  border-radius: 6px;
-  padding: 5px 8px;
+  min-height: 42px;
+  border-radius: 7px;
+  padding: 6px 8px;
   text-align: left;
 }
 

@@ -22,6 +22,11 @@
           <div class="panel-desc">
             拖拽组件到画布，右侧可调整样式
           </div>
+          <div class="palette-stats">
+            <span>共 {{ paletteStats.total }} 个</span>
+            <span v-if="paletteStats.filtered !== paletteStats.total">匹配 {{ paletteStats.filtered }} 个</span>
+            <span>{{ groupedBlocks.length }} 组</span>
+          </div>
         </div>
         <n-button
           class="panel-collapse-button"
@@ -50,7 +55,8 @@
       <div class="palette-groups">
         <section v-for="group in groupedBlocks" :key="group.key" class="palette-group">
           <div class="group-title">
-            {{ group.title }}
+            <span>{{ group.title }}</span>
+            <em>{{ group.items.length }}</em>
           </div>
           <div class="palette-list">
             <button
@@ -70,8 +76,13 @@
               @dragend="resetCanvasDragState"
               @click="handlePaletteClick(item)"
             >
-              <span class="item-title">{{ item.title }}</span>
-              <span class="item-desc">{{ item.desc }}</span>
+              <span class="item-icon">
+                <n-icon><component :is="resolvePaletteItemIcon(item)" /></n-icon>
+              </span>
+              <span class="item-main">
+                <span class="item-title">{{ item.title }}</span>
+                <span class="item-desc">{{ item.desc }}</span>
+              </span>
               <span v-if="resolveBlockDisabledReason(item)" class="item-lock-reason">
                 {{ resolveBlockDisabledReason(item) }}
               </span>
@@ -216,6 +227,7 @@
                 :nested-moving-block-id="nestedMovingBlockId"
                 @child-block-select="handleBlockClick"
                 @child-block-menu-select="handleNestedBlockMenuSelect"
+                @block-props-update="handleBlockPropsUpdate"
                 @child-block-drag-start="handleNestedBlockDragStart"
                 @child-block-move-start="payload => startNestedMove(payload.block, payload.event)"
                 @child-block-drag-end="resetCanvasDragState"
@@ -409,6 +421,18 @@
           </template>
         </n-button>
       </div>
+      <div class="property-search designer-panel-search">
+        <n-input
+          v-model:value="propertyKeyword"
+          clearable
+          size="small"
+          placeholder="搜索配置项，例如：接口、弹窗、工具栏、树、字段"
+        >
+          <template #prefix>
+            <n-icon><SearchOutline /></n-icon>
+          </template>
+        </n-input>
+      </div>
       <div class="property-panel-tabs" aria-label="配置类型">
         <button type="button" :class="{ active: propertyPanelTab === 'props' }" @click="selectPropertyPanelTab('props')">
           <n-icon><SettingsOutline /></n-icon>
@@ -422,18 +446,6 @@
           <n-icon><FlashOutline /></n-icon>
           交互
         </button>
-      </div>
-      <div class="property-search designer-panel-search">
-        <n-input
-          v-model:value="propertyKeyword"
-          clearable
-          size="small"
-          placeholder="搜索配置项，例如：接口、弹窗、工具栏、树、字段"
-        >
-          <template #prefix>
-            <n-icon><SearchOutline /></n-icon>
-          </template>
-        </n-input>
       </div>
       <div ref="propertyPanelRef" class="property-panel">
         <div v-if="!selectedBlock" class="property-empty">
@@ -983,6 +995,14 @@
                   + 添加事件
                 </n-button>
               </div>
+
+              <n-divider>运行规则</n-divider>
+              <RuntimeRulesEditor
+                title="区块运行规则"
+                :rules="selectedBlock.props?.runtimeRules || []"
+                :field-options="runtimeRuleFieldOptions"
+                @update:rules="patchBlockProps(selectedBlock.id, { runtimeRules: $event })"
+              />
             </div>
 
             <div v-show="propertyPanelTab === 'props'" class="property-tab-content">
@@ -1941,6 +1961,108 @@
                 </n-form-item>
               </template>
 
+              <template v-if="localDataBindableBlockTypes.includes(selectedBlock.blockType)">
+                <n-form-item label="数据来源">
+                  <div class="data-source-editor">
+                    <div class="field-help">
+                      选择组件内容从哪里来。静态配置使用当前属性；当前详情数据从页面已有记录取值；远程接口会请求接口后再按字段映射渲染。
+                    </div>
+                    <div class="data-source-row">
+                      <span>来源类型</span>
+                      <n-select
+                        :value="selectedBlock.props?.dataBinding?.sourceType || 'static'"
+                        :options="widgetDataSourceOptions"
+                        @update:value="updateWidgetDataBinding({ enabled: $event !== 'static', sourceType: $event || 'static' })"
+                      />
+                    </div>
+                    <div v-if="selectedBlock.props?.dataBinding?.sourceType === 'context'" class="data-source-row">
+                      <span>取值路径</span>
+                      <n-input
+                        :value="selectedBlock.props?.dataBinding?.contextPath || ''"
+                        clearable
+                        placeholder="不填表示整条当前记录；例如 customer.name"
+                        @update:value="updateWidgetDataBinding({ contextPath: $event || '' })"
+                      />
+                    </div>
+                    <template v-if="selectedBlock.props?.dataBinding?.sourceType === 'remote'">
+                      <div class="data-source-row">
+                        <span>接口地址</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.api || ''"
+                          clearable
+                          placeholder="例如 /api/order/detail/{{ id }}"
+                          @update:value="updateWidgetDataBinding({ api: $event || '' })"
+                        />
+                      </div>
+                      <div class="data-source-row">
+                        <span>请求方式</span>
+                        <n-select
+                          :value="selectedBlock.props?.dataBinding?.method || 'get'"
+                          :options="requestMethodOptions"
+                          @update:value="updateWidgetDataBinding({ method: $event || 'get' })"
+                        />
+                      </div>
+                      <div class="data-source-row">
+                        <span>响应路径</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.dataPath || 'data'"
+                          clearable
+                          placeholder="如 data、data.records"
+                          @update:value="updateWidgetDataBinding({ dataPath: $event || 'data' })"
+                        />
+                      </div>
+                      <div class="data-source-row">
+                        <span>请求参数</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.paramsText || '{}'"
+                          type="textarea"
+                          :rows="3"
+                          placeholder="{ &quot;id&quot;: &quot;{{ id }}&quot; }，可引用当前详情数据"
+                          @update:value="updateWidgetDataBinding({ paramsText: $event || '{}' })"
+                        />
+                      </div>
+                    </template>
+                    <div v-if="selectedBlock.props?.dataBinding?.sourceType !== 'static'" class="field-help">
+                      字段映射用于告诉组件接口返回的字段含义。列表/标签/步骤类组件常用“显示文本、值、标题、描述”；单值组件通常只需要“值字段”或“内容字段”。
+                    </div>
+                    <div v-if="selectedBlock.props?.dataBinding?.sourceType !== 'static'" class="data-source-mapping-grid">
+                      <div class="data-source-row">
+                        <span>显示文本</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.labelField || 'label'"
+                          placeholder="label / name"
+                          @update:value="updateWidgetDataBinding({ labelField: $event || 'label' })"
+                        />
+                      </div>
+                      <div class="data-source-row">
+                        <span>值字段</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.valueField || 'value'"
+                          placeholder="value / id / src"
+                          @update:value="updateWidgetDataBinding({ valueField: $event || 'value' })"
+                        />
+                      </div>
+                      <div class="data-source-row">
+                        <span>标题字段</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.titleField || 'title'"
+                          placeholder="title / text"
+                          @update:value="updateWidgetDataBinding({ titleField: $event || 'title' })"
+                        />
+                      </div>
+                      <div class="data-source-row">
+                        <span>描述字段</span>
+                        <n-input
+                          :value="selectedBlock.props?.dataBinding?.descriptionField || 'description'"
+                          placeholder="description / content"
+                          @update:value="updateWidgetDataBinding({ descriptionField: $event || 'description' })"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </n-form-item>
+              </template>
+
               <!-- Stats strip -->
               <template v-if="selectedBlock.blockType === 'stats-strip'">
                 <n-form-item label="指标项">
@@ -1984,6 +2106,51 @@
                   <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
                     配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
                   </n-button>
+                </n-form-item>
+                <n-form-item label="数据来源">
+                  <div class="metrics-editor">
+                    <div class="style-grid three">
+                      <n-select
+                        :value="selectedBlock.props?.dataSourceType || 'current'"
+                        :options="detailInfoDataSourceOptions"
+                        @update:value="patchBlockProps(selectedBlock.id, { dataSourceType: $event || 'current' })"
+                      />
+                      <n-input
+                        :value="selectedBlock.props?.contextPath || ''"
+                        clearable
+                        placeholder="当前详情数据路径，如 detail"
+                        @update:value="patchBlockProps(selectedBlock.id, { contextPath: $event || '' })"
+                      />
+                      <n-input
+                        :value="selectedBlock.props?.dataPath || 'data'"
+                        clearable
+                        placeholder="接口响应路径，如 data"
+                        @update:value="patchBlockProps(selectedBlock.id, { dataPath: $event || 'data' })"
+                      />
+                    </div>
+                    <template v-if="selectedBlock.props?.dataSourceType === 'remote'">
+                      <div class="style-grid two">
+                        <n-input
+                          :value="selectedBlock.props?.detailApi || ''"
+                          clearable
+                          placeholder="详情接口，如 get@/api/order/{{ id }}"
+                          @update:value="patchBlockProps(selectedBlock.id, { detailApi: $event || '' })"
+                        />
+                        <n-select
+                          :value="selectedBlock.props?.detailMethod || 'get'"
+                          :options="requestMethodOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { detailMethod: $event || 'get' })"
+                        />
+                      </div>
+                      <n-input
+                        :value="selectedBlock.props?.paramsText || '{}'"
+                        type="textarea"
+                        :rows="3"
+                        placeholder="{ &quot;id&quot;: &quot;{{ id }}&quot; }，可引用当前详情数据"
+                        @update:value="patchBlockProps(selectedBlock.id, { paramsText: $event || '{}' })"
+                      />
+                    </template>
+                  </div>
                 </n-form-item>
                 <n-form-item label="详情布局">
                   <div class="detail-layout-grid">
@@ -2529,6 +2696,668 @@
                   </div>
                 </n-form-item>
               </template>
+              <template v-if="simpleConfigBlockTypes.includes(selectedBlock.blockType)">
+                <div class="property-search-anchor" data-property-search="内容 文本 标题 段落 富文本 签名 穿梭框 分步表单 Vue HTML 统计 链接 提示 水印 音频 视频 头像 条码 二维码 Markdown 日历 代码 倒计时 描述 公示 列表 日志 数值动画 面包屑 菜单 分页 面板分隔 盒子 间距 iframe" />
+                <n-divider>组件内容</n-divider>
+                <template v-if="pageWidgetComponentKeys.includes(selectedBlock.blockType)">
+                  <n-form-item label="组件标题">
+                    <n-input
+                      :value="selectedBlock.props?.title || selectedBlock.label"
+                      clearable
+                      placeholder="请输入标题"
+                      @update:value="patchBlockProps(selectedBlock.id, { title: $event })"
+                    />
+                  </n-form-item>
+                  <template v-if="dataBindablePageWidgetKeys.includes(selectedBlock.blockType)">
+                    <n-form-item label="数据来源">
+                      <div class="data-source-editor">
+                        <div class="field-help">
+                          选择组件内容从哪里来。静态配置使用当前属性；当前详情数据从页面已有记录取值；远程接口会请求接口后再按字段映射渲染。
+                        </div>
+                        <div class="data-source-row">
+                          <span>来源类型</span>
+                          <n-select
+                            :value="selectedBlock.props?.dataBinding?.sourceType || 'static'"
+                            :options="widgetDataSourceOptions"
+                            @update:value="updateWidgetDataBinding({ enabled: $event !== 'static', sourceType: $event || 'static' })"
+                          />
+                        </div>
+                        <div v-if="selectedBlock.props?.dataBinding?.sourceType === 'context'" class="data-source-row">
+                          <span>取值路径</span>
+                          <n-input
+                            :value="selectedBlock.props?.dataBinding?.contextPath || ''"
+                            clearable
+                            placeholder="不填表示整条当前记录；例如 customer.name"
+                            @update:value="updateWidgetDataBinding({ contextPath: $event || '' })"
+                          />
+                        </div>
+                        <template v-if="selectedBlock.props?.dataBinding?.sourceType === 'remote'">
+                          <div class="data-source-row">
+                            <span>接口地址</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.api || ''"
+                              clearable
+                              placeholder="例如 /api/order/detail/{{ id }}"
+                              @update:value="updateWidgetDataBinding({ api: $event || '' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>请求方式</span>
+                            <n-select
+                              :value="selectedBlock.props?.dataBinding?.method || 'get'"
+                              :options="requestMethodOptions"
+                              @update:value="updateWidgetDataBinding({ method: $event || 'get' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>响应路径</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.dataPath || 'data'"
+                              clearable
+                              placeholder="如 data、data.records"
+                              @update:value="updateWidgetDataBinding({ dataPath: $event || 'data' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>请求参数</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.paramsText || '{}'"
+                              type="textarea"
+                              :rows="3"
+                              placeholder="{ &quot;id&quot;: &quot;{{ id }}&quot; }，可引用当前详情数据"
+                              @update:value="updateWidgetDataBinding({ paramsText: $event || '{}' })"
+                            />
+                          </div>
+                        </template>
+                        <div v-if="selectedBlock.props?.dataBinding?.sourceType !== 'static'" class="field-help">
+                          字段映射用于告诉组件接口返回的字段含义。列表/标签/步骤类组件常用“显示文本、值、标题、描述”；单值组件通常只需要“值字段”或“内容字段”。
+                        </div>
+                        <div v-if="selectedBlock.props?.dataBinding?.sourceType !== 'static'" class="data-source-mapping-grid">
+                          <div class="data-source-row">
+                            <span>显示文本</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.labelField || 'label'"
+                              placeholder="label / name"
+                              @update:value="updateWidgetDataBinding({ labelField: $event || 'label' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>值字段</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.valueField || 'value'"
+                              placeholder="value / id / src"
+                              @update:value="updateWidgetDataBinding({ valueField: $event || 'value' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>标题字段</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.titleField || 'title'"
+                              placeholder="title / text"
+                              @update:value="updateWidgetDataBinding({ titleField: $event || 'title' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>描述字段</span>
+                            <n-input
+                              :value="selectedBlock.props?.dataBinding?.descriptionField || 'description'"
+                              placeholder="description / content"
+                              @update:value="updateWidgetDataBinding({ descriptionField: $event || 'description' })"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </n-form-item>
+                  </template>
+                  <template v-if="selectedBlock.blockType === 'rich-text'">
+                    <n-form-item label="编辑模式 / 工具栏模式">
+                      <div class="style-grid two">
+                        <n-select
+                          :value="selectedBlock.props?.editorMode || 'visual'"
+                          :options="richEditorModeOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { editorMode: $event || 'visual' })"
+                        />
+                        <n-select
+                          :value="selectedBlock.props?.toolbarMode || 'default'"
+                          :options="wangEditorModeOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { toolbarMode: $event || 'default', editorModeName: $event || 'default' })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="富文本 HTML / 源码">
+                      <n-input
+                        :value="selectedBlock.props?.content"
+                        type="textarea"
+                        :rows="8"
+                        placeholder="输入富文本 HTML 内容"
+                        @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="字号 / 行高 / 最小高度">
+                      <div class="style-grid three">
+                        <n-input-number :value="selectedBlock.props?.fontSize || 14" :min="10" :max="48" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { fontSize: $event || 14 })" />
+                        <n-input-number :value="selectedBlock.props?.lineHeight || 1.7" :min="1" :max="3" :step="0.1" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { lineHeight: $event || 1.7 })" />
+                        <n-input-number :value="selectedBlock.props?.minHeight || 180" :min="80" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { minHeight: $event || 180 })" />
+                      </div>
+                    </n-form-item>
+                  </template>
+                  <template v-if="selectedBlock.blockType === 'markdown'">
+                    <n-form-item label="预览模式">
+                      <n-select
+                        :value="selectedBlock.props?.previewMode || 'split'"
+                        :options="markdownPreviewModeOptions"
+                        @update:value="patchBlockProps(selectedBlock.id, { previewMode: $event || 'split' })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="编辑器高度">
+                      <n-input-number
+                        :value="selectedBlock.props?.height || 320"
+                        :min="180"
+                        :max="900"
+                        :show-button="false"
+                        @update:value="patchBlockProps(selectedBlock.id, { height: $event || 320 })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="Markdown 源码">
+                      <n-input
+                        :value="selectedBlock.props?.content"
+                        type="textarea"
+                        :rows="10"
+                        placeholder="输入 Markdown 源码"
+                        @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
+                      />
+                    </n-form-item>
+                  </template>
+                  <template v-if="selectedBlock.blockType === 'watermark'">
+                    <n-form-item label="水印文字">
+                      <n-input
+                        :value="selectedBlock.props?.content || ''"
+                        type="textarea"
+                        :rows="3"
+                        placeholder="支持多行文本"
+                        @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="字体 / 行高 / 字重">
+                      <div class="style-grid three">
+                        <n-input-number :value="selectedBlock.props?.fontSize || 14" :min="8" :max="72" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { fontSize: $event || 14 })" />
+                        <n-input-number :value="selectedBlock.props?.lineHeight || 14" :min="8" :max="96" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { lineHeight: $event || 14 })" />
+                        <n-input-number :value="selectedBlock.props?.fontWeight || 400" :min="100" :max="900" :step="100" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { fontWeight: $event || 400 })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="颜色 / 样式 / 对齐">
+                      <div class="style-grid three">
+                        <n-color-picker :value="selectedBlock.props?.fontColor || 'rgba(128, 128, 128, .3)'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { fontColor: $event || 'rgba(128, 128, 128, .3)' })" />
+                        <n-select :value="selectedBlock.props?.fontStyle || 'normal'" :options="watermarkFontStyleOptions" @update:value="patchBlockProps(selectedBlock.id, { fontStyle: $event || 'normal' })" />
+                        <n-select :value="selectedBlock.props?.textAlign || 'left'" :options="watermarkTextAlignOptions" @update:value="patchBlockProps(selectedBlock.id, { textAlign: $event || 'left' })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="宽高 / 旋转">
+                      <div class="style-grid four">
+                        <n-input-number :value="selectedBlock.props?.width || 32" :min="1" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { width: $event || 32 })" />
+                        <n-input-number :value="selectedBlock.props?.height || 32" :min="1" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { height: $event || 32 })" />
+                        <n-input-number :value="selectedBlock.props?.rotate || 0" :min="-180" :max="180" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { rotate: $event || 0 })" />
+                        <n-input-number :value="selectedBlock.props?.globalRotate || 0" :min="-180" :max="180" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { globalRotate: $event || 0 })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="间隔 / 偏移">
+                      <div class="style-grid four">
+                        <n-input-number :value="selectedBlock.props?.xGap || 0" :min="0" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { xGap: $event || 0 })" />
+                        <n-input-number :value="selectedBlock.props?.yGap || 0" :min="0" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { yGap: $event || 0 })" />
+                        <n-input-number :value="selectedBlock.props?.xOffset || 0" :min="-600" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { xOffset: $event || 0 })" />
+                        <n-input-number :value="selectedBlock.props?.yOffset || 0" :min="-600" :max="600" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { yOffset: $event || 0 })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="图片水印">
+                      <div class="style-grid three">
+                        <n-input :value="selectedBlock.props?.image || ''" clearable placeholder="图片 URL" @update:value="patchBlockProps(selectedBlock.id, { image: $event })" />
+                        <n-input-number :value="selectedBlock.props?.imageWidth" :min="1" :max="600" :show-button="false" placeholder="图片宽" @update:value="patchBlockProps(selectedBlock.id, { imageWidth: $event || undefined })" />
+                        <n-input-number :value="selectedBlock.props?.imageHeight" :min="1" :max="600" :show-button="false" placeholder="图片高" @update:value="patchBlockProps(selectedBlock.id, { imageHeight: $event || undefined })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="开关">
+                      <n-checkbox-group :value="resolveBooleanKeys(selectedBlock.props, ['cross', 'debug', 'fullscreen', 'selectable'])" @update:value="values => patchBlockProps(selectedBlock.id, { cross: values.includes('cross'), debug: values.includes('debug'), fullscreen: values.includes('fullscreen'), selectable: values.includes('selectable') })">
+                        <n-space size="small">
+                          <n-checkbox value="cross" label="跨边界" />
+                          <n-checkbox value="debug" label="调试" />
+                          <n-checkbox value="fullscreen" label="全屏" />
+                          <n-checkbox value="selectable" label="内容可选中" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </n-form-item>
+                  </template>
+                  <template v-if="selectedBlock.blockType === 'html-tag'">
+                    <n-form-item label="标签 / 角色 / 渲染模式">
+                      <div class="style-grid three">
+                        <n-select
+                          :value="selectedBlock.props?.tagName || 'section'"
+                          :options="htmlTagOptions"
+                          filterable
+                          tag
+                          @update:value="patchBlockProps(selectedBlock.id, { tagName: $event || 'section' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.semanticRole || ''"
+                          clearable
+                          placeholder="role"
+                          @update:value="patchBlockProps(selectedBlock.id, { semanticRole: $event || '' })"
+                        />
+                        <n-select
+                          :value="selectedBlock.props?.renderMode || 'html'"
+                          :options="htmlRenderModeOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { renderMode: $event || 'html' })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="属性 JSON">
+                      <n-input
+                        :value="selectedBlock.props?.attributesText || '{}'"
+                        type="textarea"
+                        :rows="4"
+                        placeholder="{ &quot;class&quot;: &quot;notice&quot; }"
+                        @update:value="patchBlockProps(selectedBlock.id, { attributesText: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="文本 / HTML 内容">
+                      <div class="metrics-editor">
+                        <n-input
+                          :value="selectedBlock.props?.textContent || ''"
+                          clearable
+                          placeholder="纯文本内容"
+                          @update:value="patchBlockProps(selectedBlock.id, { textContent: $event })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.htmlContent || ''"
+                          type="textarea"
+                          :rows="6"
+                          placeholder="HTML 内容"
+                          @update:value="patchBlockProps(selectedBlock.id, { htmlContent: $event })"
+                        />
+                      </div>
+                    </n-form-item>
+                  </template>
+                  <template v-if="selectedBlock.blockType === 'vue-component'">
+                    <n-form-item label="组件名 / 预览模式">
+                      <div class="style-grid two">
+                        <n-input
+                          :value="selectedBlock.props?.componentName || ''"
+                          placeholder="组件名"
+                          @update:value="patchBlockProps(selectedBlock.id, { componentName: $event })"
+                        />
+                        <n-select
+                          :value="selectedBlock.props?.previewMode || 'safe-template'"
+                          :options="vuePreviewModeOptions"
+                          @update:value="patchBlockProps(selectedBlock.id, { previewMode: $event || 'safe-template', safeMode: $event === 'live' ? false : selectedBlock.props?.safeMode !== false })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="Template 代码">
+                      <n-input
+                        :value="selectedBlock.props?.templateCode || ''"
+                        type="textarea"
+                        :rows="7"
+                        placeholder="<template>...</template>"
+                        @update:value="patchBlockProps(selectedBlock.id, { templateCode: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="Script 代码">
+                      <n-input
+                        :value="selectedBlock.props?.scriptCode || ''"
+                        type="textarea"
+                        :rows="6"
+                        placeholder="export default { ... }"
+                        @update:value="patchBlockProps(selectedBlock.id, { scriptCode: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="Style 代码">
+                      <n-input
+                        :value="selectedBlock.props?.styleCode || ''"
+                        type="textarea"
+                        :rows="5"
+                        placeholder=".custom-widget { ... }"
+                        @update:value="patchBlockProps(selectedBlock.id, { styleCode: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="Props JSON">
+                      <n-input
+                        :value="selectedBlock.props?.propsJson || '{}'"
+                        type="textarea"
+                        :rows="5"
+                        placeholder="{ &quot;title&quot;: &quot;标题&quot; }"
+                        @update:value="patchBlockProps(selectedBlock.id, { propsJson: $event })"
+                      />
+                    </n-form-item>
+                  </template>
+                  <template v-if="['calendar', 'code', 'countdown', 'descriptions', 'announcement', 'list', 'log', 'number-animation', 'breadcrumb', 'menu', 'pagination', 'split'].includes(selectedBlock.blockType)">
+                    <n-form-item v-if="['code', 'log'].includes(selectedBlock.blockType)" label="内容">
+                      <n-input
+                        :value="selectedBlock.props?.code || selectedBlock.props?.log || ''"
+                        type="textarea"
+                        :rows="8"
+                        placeholder="请输入内容"
+                        @update:value="patchBlockProps(selectedBlock.id, selectedBlock.blockType === 'code' ? { code: $event } : { log: $event })"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="['descriptions', 'list', 'breadcrumb'].includes(selectedBlock.blockType)" label="数据 JSON">
+                      <n-input
+                        :value="selectedBlock.props?.itemsText || '[]'"
+                        type="textarea"
+                        :rows="8"
+                        placeholder="数组 JSON"
+                        @update:value="patchBlockProps(selectedBlock.id, { itemsText: $event || '[]' })"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="selectedBlock.blockType === 'menu'" label="菜单配置">
+                      <div class="metrics-editor">
+                        <n-input
+                          :value="selectedBlock.props?.optionsText || '[]'"
+                          type="textarea"
+                          :rows="8"
+                          placeholder="菜单 options JSON"
+                          @update:value="patchBlockProps(selectedBlock.id, { optionsText: $event || '[]' })"
+                        />
+                        <div class="style-grid two">
+                          <n-select :value="selectedBlock.props?.mode || 'vertical'" :options="menuModeOptions" @update:value="patchBlockProps(selectedBlock.id, { mode: $event || 'vertical' })" />
+                          <n-input :value="selectedBlock.props?.value || ''" placeholder="当前 key" @update:value="patchBlockProps(selectedBlock.id, { value: $event || '' })" />
+                        </div>
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedBlock.blockType === 'announcement'" label="公示内容">
+                      <div class="metrics-editor">
+                        <n-input :value="selectedBlock.props?.content || ''" type="textarea" :rows="5" placeholder="公示内容" @update:value="patchBlockProps(selectedBlock.id, { content: $event })" />
+                        <div class="style-grid three">
+                          <n-select :value="selectedBlock.props?.type || 'info'" :options="alertTypeOptions" @update:value="patchBlockProps(selectedBlock.id, { type: $event || 'info' })" />
+                          <n-switch :value="selectedBlock.props?.showIcon !== false" @update:value="patchBlockProps(selectedBlock.id, { showIcon: $event })" />
+                          <n-switch :value="selectedBlock.props?.bordered !== false" @update:value="patchBlockProps(selectedBlock.id, { bordered: $event })" />
+                        </div>
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedBlock.blockType === 'countdown'" label="倒计时">
+                      <div class="style-grid three">
+                        <n-input-number :value="selectedBlock.props?.duration || 3600000" :min="1000" :max="86400000" :step="1000" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { duration: $event || 3600000 })" />
+                        <n-input-number :value="selectedBlock.props?.precision || 0" :min="0" :max="3" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { precision: $event || 0 })" />
+                        <n-switch :value="selectedBlock.props?.active !== false" @update:value="patchBlockProps(selectedBlock.id, { active: $event })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedBlock.blockType === 'number-animation'" label="数值动画">
+                      <div class="style-grid four">
+                        <n-input-number :value="selectedBlock.props?.from || 0" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { from: $event || 0 })" />
+                        <n-input-number :value="selectedBlock.props?.to || 0" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { to: $event || 0 })" />
+                        <n-input-number :value="selectedBlock.props?.duration || 1200" :min="100" :max="10000" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { duration: $event || 1200 })" />
+                        <n-color-picker :value="selectedBlock.props?.color || '#2563eb'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { color: $event || '#2563eb' })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedBlock.blockType === 'pagination'" label="分页">
+                      <div class="style-grid four">
+                        <n-input-number :value="selectedBlock.props?.page || 1" :min="1" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { page: $event || 1 })" />
+                        <n-input-number :value="selectedBlock.props?.pageSize || 10" :min="1" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { pageSize: $event || 10 })" />
+                        <n-input-number :value="selectedBlock.props?.itemCount || 0" :min="0" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { itemCount: $event || 0 })" />
+                        <n-switch :value="selectedBlock.props?.simple === true" @update:value="patchBlockProps(selectedBlock.id, { simple: $event })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedBlock.blockType === 'split'" label="面板分隔">
+                      <div class="metrics-editor">
+                        <div class="style-grid four">
+                          <n-select :value="selectedBlock.props?.direction || 'horizontal'" :options="splitDirectionOptions" @update:value="patchBlockProps(selectedBlock.id, { direction: $event || 'horizontal' })" />
+                          <n-input-number :value="selectedBlock.props?.defaultSize || 0.38" :min="0.1" :max="0.9" :step="0.01" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { defaultSize: $event || 0.38 })" />
+                          <n-input-number :value="selectedBlock.props?.min || 0.2" :min="0" :max="0.9" :step="0.01" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { min: $event || 0.2 })" />
+                          <n-input-number :value="selectedBlock.props?.max || 0.8" :min="0.1" :max="1" :step="0.01" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { max: $event || 0.8 })" />
+                        </div>
+                        <n-input :value="selectedBlock.props?.pane1Content || ''" placeholder="面板 1 内容" @update:value="patchBlockProps(selectedBlock.id, { pane1Content: $event })" />
+                        <n-input :value="selectedBlock.props?.pane2Content || ''" placeholder="面板 2 内容" @update:value="patchBlockProps(selectedBlock.id, { pane2Content: $event })" />
+                      </div>
+                    </n-form-item>
+                  </template>
+                </template>
+                <template v-if="selectedBlock.blockType === 'signature-pad'">
+                  <n-form-item label="签名配置">
+                    <div class="style-grid three">
+                      <n-input :value="selectedBlock.props?.title" placeholder="标题" @update:value="patchBlockProps(selectedBlock.id, { title: $event })" />
+                      <n-input-number :value="selectedBlock.props?.height || 160" :min="80" :max="360" :show-button="false" placeholder="高度" @update:value="patchBlockProps(selectedBlock.id, { height: $event || 160 })" />
+                      <n-input-number :value="selectedBlock.props?.strokeWidth || 2.6" :min="1" :max="8" :step="0.2" :show-button="false" placeholder="笔画" @update:value="patchBlockProps(selectedBlock.id, { strokeWidth: $event || 2.6 })" />
+                    </div>
+                  </n-form-item>
+                  <n-form-item label="状态">
+                    <n-checkbox-group :value="resolveBooleanKeys(selectedBlock.props, ['required', 'disabled'])" @update:value="values => patchBlockProps(selectedBlock.id, { required: values.includes('required'), disabled: values.includes('disabled') })">
+                      <n-space vertical size="small">
+                        <n-checkbox value="required" label="必填" />
+                        <n-checkbox value="disabled" label="禁用签名" />
+                      </n-space>
+                    </n-checkbox-group>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'transfer'">
+                  <n-form-item label="标题 / 分栏">
+                    <div class="style-grid three">
+                      <n-input :value="selectedBlock.props?.title" placeholder="标题" @update:value="patchBlockProps(selectedBlock.id, { title: $event })" />
+                      <n-input :value="selectedBlock.props?.sourceTitle" placeholder="左侧标题" @update:value="patchBlockProps(selectedBlock.id, { sourceTitle: $event })" />
+                      <n-input :value="selectedBlock.props?.targetTitle" placeholder="右侧标题" @update:value="patchBlockProps(selectedBlock.id, { targetTitle: $event })" />
+                    </div>
+                  </n-form-item>
+                  <n-form-item label="数据来源">
+                    <div class="style-grid two">
+                      <n-select
+                        :value="selectedBlock.props?.dataSourceType || 'static'"
+                        :options="transferDataSourceOptions"
+                        @update:value="patchBlockProps(selectedBlock.id, { dataSourceType: $event || 'static' })"
+                      />
+                      <n-checkbox-group
+                        :value="resolveBooleanKeys(selectedBlock.props, ['filterable', 'virtualScroll', 'disabled'])"
+                        @update:value="values => patchBlockProps(selectedBlock.id, { filterable: values.includes('filterable'), virtualScroll: values.includes('virtualScroll'), disabled: values.includes('disabled') })"
+                      >
+                        <n-space size="small">
+                          <n-checkbox value="filterable" label="可搜索" />
+                          <n-checkbox value="virtualScroll" label="虚拟滚动" />
+                          <n-checkbox value="disabled" label="禁用" />
+                        </n-space>
+                      </n-checkbox-group>
+                    </div>
+                  </n-form-item>
+                  <n-form-item v-if="selectedBlock.props?.dataSourceType === 'remote'" label="远程接口">
+                    <div class="metrics-editor">
+                      <div class="style-grid two">
+                        <n-input
+                          :value="selectedBlock.props?.optionSource?.api || ''"
+                          placeholder="例如 get@/api/system/user/options"
+                          @update:value="updateOptionSource({ api: $event })"
+                        />
+                        <n-select
+                          :value="selectedBlock.props?.optionSource?.method || 'get'"
+                          :options="requestMethodOptions"
+                          @update:value="updateOptionSource({ method: $event || 'get' })"
+                        />
+                      </div>
+                      <div class="style-grid three">
+                        <n-input
+                          :value="selectedBlock.props?.optionSource?.recordsField || 'records'"
+                          placeholder="列表路径"
+                          @update:value="updateOptionSource({ recordsField: $event || 'records' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.optionSource?.labelField || 'label'"
+                          placeholder="显示字段"
+                          @update:value="updateOptionSource({ labelField: $event || 'label' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.optionSource?.valueField || 'value'"
+                          placeholder="值字段"
+                          @update:value="updateOptionSource({ valueField: $event || 'value' })"
+                        />
+                      </div>
+                      <div class="style-grid two">
+                        <n-input
+                          :value="selectedBlock.props?.optionSource?.disabledField || 'disabled'"
+                          placeholder="禁用字段"
+                          @update:value="updateOptionSource({ disabledField: $event || 'disabled' })"
+                        />
+                        <n-input
+                          :value="selectedBlock.props?.optionSource?.paramsText || '{}'"
+                          placeholder="请求参数 JSON"
+                          @update:value="updateOptionSource({ paramsText: $event || '{}' })"
+                        />
+                      </div>
+                    </div>
+                  </n-form-item>
+                  <n-form-item v-else label="静态选项">
+                    <div class="metrics-editor">
+                      <div v-for="(option, idx) in (selectedBlock.props?.options || [])" :key="idx" class="metric-row">
+                        <n-input :value="option.label" size="small" placeholder="显示名" @update:value="updateOptionItem('options', idx, { label: $event })" />
+                        <n-input :value="option.value" size="small" placeholder="值" @update:value="updateOptionItem('options', idx, { value: $event })" />
+                        <n-button size="tiny" quaternary @click="removeOptionItem('options', idx)">删</n-button>
+                      </div>
+                      <n-button size="small" dashed block @click="addOptionItem('options')">+ 添加选项</n-button>
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'step-form'">
+                  <n-form-item label="标题 / 当前步骤 / 方向">
+                    <div class="style-grid three">
+                      <n-input :value="selectedBlock.props?.title" placeholder="标题" @update:value="patchBlockProps(selectedBlock.id, { title: $event })" />
+                      <n-input-number :value="selectedBlock.props?.current || 1" :min="1" :max="10" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { current: $event || 1 })" />
+                      <n-select :value="selectedBlock.props?.direction || 'horizontal'" :options="directionOptions" @update:value="patchBlockProps(selectedBlock.id, { direction: $event || 'horizontal' })" />
+                    </div>
+                  </n-form-item>
+                  <n-form-item label="表单字段">
+                    <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）</n-button>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'paragraph'">
+                  <n-form-item label="段落内容">
+                    <n-input
+                      :value="selectedBlock.props?.content"
+                      type="textarea"
+                      :rows="5"
+                      placeholder="输入段落文字"
+                      @update:value="patchBlockProps(selectedBlock.id, { content: $event })"
+                    />
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'text-title'">
+                  <n-form-item label="标题文本">
+                    <div class="metrics-editor">
+                      <n-input :value="selectedBlock.props?.text" placeholder="标题" @update:value="patchBlockProps(selectedBlock.id, { text: $event })" />
+                      <n-input :value="selectedBlock.props?.subtitle" placeholder="副标题" @update:value="patchBlockProps(selectedBlock.id, { subtitle: $event })" />
+                    </div>
+                  </n-form-item>
+                  <n-form-item label="层级 / 字重 / 对齐 / 颜色">
+                    <div class="style-grid four">
+                      <n-input-number :value="selectedBlock.props?.level || 2" :min="1" :max="6" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { level: $event || 2 })" />
+                      <n-input-number :value="selectedBlock.props?.weight || 800" :min="300" :max="900" :step="100" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { weight: $event || 800 })" />
+                      <n-select :value="selectedBlock.props?.align || 'left'" :options="alignOptions" @update:value="patchBlockProps(selectedBlock.id, { align: $event || 'left' })" />
+                      <n-color-picker :value="selectedBlock.props?.color || '#0f172a'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { color: $event || '#0f172a' })" />
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'statistic'">
+                  <n-form-item label="统计内容">
+                    <div class="style-grid two">
+                      <n-input :value="selectedBlock.props?.title" placeholder="标题" @update:value="patchBlockProps(selectedBlock.id, { title: $event })" />
+                      <n-input :value="selectedBlock.props?.value" placeholder="数值" @update:value="patchBlockProps(selectedBlock.id, { value: $event })" />
+                      <n-input :value="selectedBlock.props?.prefix" placeholder="前缀" @update:value="patchBlockProps(selectedBlock.id, { prefix: $event })" />
+                      <n-input :value="selectedBlock.props?.suffix" placeholder="后缀" @update:value="patchBlockProps(selectedBlock.id, { suffix: $event })" />
+                      <n-input :value="selectedBlock.props?.trend" placeholder="趋势" @update:value="patchBlockProps(selectedBlock.id, { trend: $event })" />
+                      <n-color-picker :value="selectedBlock.props?.color || '#2563eb'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { color: $event || '#2563eb' })" />
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="['link', 'audio-player', 'video-player', 'iframe'].includes(selectedBlock.blockType)">
+                  <n-form-item label="地址配置">
+                    <div class="metrics-editor">
+                      <n-input :value="selectedBlock.props?.title || selectedBlock.props?.text" placeholder="标题/文本" @update:value="updateLinkLikeTitle($event)" />
+                      <n-input :value="selectedBlock.props?.src || selectedBlock.props?.href" placeholder="URL 地址" @update:value="updateLinkLikeUrl($event)" />
+                      <n-input v-if="selectedBlock.blockType === 'video-player'" :value="selectedBlock.props?.poster" placeholder="封面 poster" @update:value="patchBlockProps(selectedBlock.id, { poster: $event })" />
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'avatar'">
+                  <n-form-item label="头像信息">
+                    <div class="style-grid two">
+                      <n-input :value="selectedBlock.props?.name" placeholder="名称" @update:value="patchBlockProps(selectedBlock.id, { name: $event })" />
+                      <n-input :value="selectedBlock.props?.description" placeholder="描述" @update:value="patchBlockProps(selectedBlock.id, { description: $event })" />
+                      <n-input :value="selectedBlock.props?.src" placeholder="头像 URL" @update:value="patchBlockProps(selectedBlock.id, { src: $event })" />
+                      <n-input-number :value="selectedBlock.props?.size || 48" :min="24" :max="120" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { size: $event || 48 })" />
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="['barcode', 'qrcode'].includes(selectedBlock.blockType)">
+                  <n-form-item label="编码内容">
+                    <div class="style-grid two">
+                      <n-input :value="selectedBlock.props?.value" placeholder="编码内容" @update:value="patchBlockProps(selectedBlock.id, { value: $event })" />
+                      <n-color-picker :value="selectedBlock.props?.foreground || selectedBlock.props?.lineColor || '#0f172a'" :show-alpha="true" @update:value="updateCodeColor($event)" />
+                    </div>
+                  </n-form-item>
+                  <template v-if="selectedBlock.blockType === 'barcode'">
+                    <n-form-item label="条码格式 / 尺寸">
+                      <div class="style-grid four">
+                        <n-select :value="selectedBlock.props?.format || 'CODE128'" :options="barcodeFormatOptions" @update:value="patchBlockProps(selectedBlock.id, { format: $event || 'CODE128' })" />
+                        <n-input-number :value="selectedBlock.props?.barWidth || 2" :min="1" :max="8" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { barWidth: $event || 2 })" />
+                        <n-input-number :value="selectedBlock.props?.barHeight || 72" :min="24" :max="240" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { barHeight: $event || 72 })" />
+                        <n-input-number :value="selectedBlock.props?.margin ?? 8" :min="0" :max="80" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { margin: $event ?? 8 })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="文字">
+                      <div class="style-grid two">
+                        <n-input-number :value="selectedBlock.props?.fontSize || 14" :min="8" :max="36" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { fontSize: $event || 14 })" />
+                        <n-switch :value="selectedBlock.props?.showText !== false" @update:value="patchBlockProps(selectedBlock.id, { showText: $event })" />
+                      </div>
+                    </n-form-item>
+                  </template>
+                  <template v-if="selectedBlock.blockType === 'qrcode'">
+                    <n-form-item label="二维码尺寸 / 纠错">
+                      <div class="style-grid three">
+                        <n-input-number :value="selectedBlock.props?.size || 132" :min="64" :max="480" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { size: $event || 132 })" />
+                        <n-input-number :value="selectedBlock.props?.margin || 0" :min="0" :max="80" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { margin: $event || 0 })" />
+                        <n-select :value="selectedBlock.props?.errorCorrectionLevel || 'Q'" :options="qrcodeErrorCorrectionOptions" @update:value="patchBlockProps(selectedBlock.id, { errorCorrectionLevel: $event || 'Q' })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="点样式 / 角样式">
+                      <div class="style-grid three">
+                        <n-select :value="selectedBlock.props?.dotsType || 'square'" :options="qrcodeDotsTypeOptions" @update:value="patchBlockProps(selectedBlock.id, { dotsType: $event || 'square' })" />
+                        <n-select :value="selectedBlock.props?.cornersSquareType || 'square'" :options="qrcodeCornerTypeOptions" @update:value="patchBlockProps(selectedBlock.id, { cornersSquareType: $event || 'square' })" />
+                        <n-select :value="selectedBlock.props?.cornersDotType || 'square'" :options="qrcodeCornerTypeOptions" @update:value="patchBlockProps(selectedBlock.id, { cornersDotType: $event || 'square' })" />
+                      </div>
+                    </n-form-item>
+                    <n-form-item label="背景 / 角颜色 / 显示文本">
+                      <div class="style-grid three">
+                        <n-color-picker :value="selectedBlock.props?.background || '#ffffff'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { background: $event || '#ffffff' })" />
+                        <n-color-picker :value="selectedBlock.props?.cornerColor || selectedBlock.props?.foreground || '#0f172a'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { cornerColor: $event || '#0f172a' })" />
+                        <n-switch :value="selectedBlock.props?.showText !== false" @update:value="patchBlockProps(selectedBlock.id, { showText: $event })" />
+                      </div>
+                    </n-form-item>
+                  </template>
+                </template>
+                <template v-if="selectedBlock.blockType === 'descriptions'">
+                  <n-form-item label="描述项">
+                    <div class="metrics-editor">
+                      <div v-for="(item, idx) in (selectedBlock.props?.items || [])" :key="idx" class="metric-row">
+                        <n-input :value="item.label" size="small" placeholder="标签" @update:value="updateOptionItem('items', idx, { label: $event })" />
+                        <n-input :value="item.value" size="small" placeholder="内容" @update:value="updateOptionItem('items', idx, { value: $event })" />
+                        <n-button size="tiny" quaternary @click="removeOptionItem('items', idx)">删</n-button>
+                      </div>
+                      <n-button size="small" dashed block @click="addOptionItem('items')">+ 添加描述项</n-button>
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'box-layout'">
+                  <n-form-item label="盒子布局">
+                    <div class="style-grid two">
+                      <n-select :value="selectedBlock.props?.direction || 'row'" :options="directionOptions" @update:value="patchBlockProps(selectedBlock.id, { direction: $event || 'row' })" />
+                      <n-input-number :value="selectedBlock.props?.gap ?? 12" :min="0" :max="80" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { gap: $event ?? 12 })" />
+                      <n-select :value="selectedBlock.props?.alignItems || 'stretch'" :options="gridVerticalAlignOptions" @update:value="patchBlockProps(selectedBlock.id, { alignItems: $event || 'stretch' })" />
+                      <n-select :value="selectedBlock.props?.justifyContent || 'flex-start'" :options="justifyContentOptions" @update:value="patchBlockProps(selectedBlock.id, { justifyContent: $event || 'flex-start' })" />
+                    </div>
+                  </n-form-item>
+                </template>
+                <template v-if="selectedBlock.blockType === 'space'">
+                  <n-form-item label="间距设置">
+                    <div class="style-grid three">
+                      <n-select :value="selectedBlock.props?.direction || 'vertical'" :options="directionOptions" @update:value="patchBlockProps(selectedBlock.id, { direction: $event || 'vertical' })" />
+                      <n-input-number :value="selectedBlock.props?.size || 24" :min="1" :max="200" :show-button="false" @update:value="patchBlockProps(selectedBlock.id, { size: $event || 24 })" />
+                      <n-switch :value="!!selectedBlock.props?.lineVisible" @update:value="patchBlockProps(selectedBlock.id, { lineVisible: $event })" />
+                    </div>
+                  </n-form-item>
+                </template>
+              </template>
             </div>
           </n-form>
         </div>
@@ -2931,286 +3760,308 @@
               </n-button>
             </div>
 
-            <n-form size="small" label-placement="top" :show-feedback="false">
-              <div class="action-form-grid">
-                <n-form-item label="按钮名称">
-                  <n-input
-                    :value="activeAction.label"
-                    placeholder="例如：查看详情"
-                    @update:value="updateActiveCustomAction({ label: $event })"
-                  />
-                </n-form-item>
-                <n-form-item label="唯一编码">
-                  <n-input
-                    :value="activeAction.key"
-                    placeholder="view_detail"
-                    @update:value="updateActiveCustomAction({ key: normalizeActionKey($event) })"
-                  />
-                </n-form-item>
-                <n-form-item label="显示位置">
-                  <n-select
-                    :value="activeAction.position || 'toolbar'"
-                    :options="actionPositionOptions"
-                    @update:value="updateActiveCustomAction({ position: $event })"
-                  />
-                </n-form-item>
-                <n-form-item label="按钮样式">
-                  <n-select
-                    :value="activeAction.type || 'default'"
-                    :options="actionTypeOptions"
-                    @update:value="updateActiveCustomAction({ type: $event })"
-                  />
-                </n-form-item>
-              </div>
-
-              <div class="action-form-grid">
-                <n-form-item label="交互方式">
-                  <n-select
-                    :value="resolveActionBehaviorValue(activeAction.actionType)"
-                    :options="actionBehaviorOptions"
-                    @update:value="updateActiveCustomActionType"
-                  />
-                </n-form-item>
-                <n-form-item label="打开方式">
-                  <n-select
-                    :value="activeAction.openTarget || '_self'"
-                    :disabled="['refresh', 'CALL_API', 'START_FLOW', 'TRIGGER'].includes(resolveActionBehaviorValue(activeAction.actionType))"
-                    :options="actionOpenTargetOptions"
-                    @update:value="updateActiveCustomAction({ openTarget: $event })"
-                  />
-                </n-form-item>
-              </div>
-
-              <n-form-item v-if="isStartFlowCustomAction(activeAction)" label="主流程">
-                <div class="main-flow-action-hint">
-                  <strong>使用“流程与自动化”中配置的主流程</strong>
-                  <span>这里只维护按钮名称、位置、权限、确认提示和成功失败文案。</span>
+            <n-form class="action-editor-form" size="small" label-placement="top" :show-feedback="false">
+              <section class="action-form-section action-form-section--compact">
+                <div class="action-section-head">
+                  <strong>基础信息</strong>
+                  <span>控制按钮显示、位置和视觉类型。</span>
                 </div>
-              </n-form-item>
-
-              <n-form-item v-else-if="isTriggerCustomAction(activeAction)" label="触发器标识">
-                <n-input
-                  :value="activeAction.actionConfig?.triggerCode || activeAction.routePath || ''"
-                  placeholder="例如：customer_notify"
-                  @update:value="updateActiveGenericActionConfig({ triggerCode: $event || '' })"
-                />
-              </n-form-item>
-
-              <n-form-item v-else-if="!isApiCustomAction(activeAction)" label="目标地址 / 表单">
-                <div class="action-route-panel">
-                  <div v-if="isRouteCustomAction(activeAction)" class="action-config-tip">
-                    <strong>站内跳转</strong>
-                    <span>优先选择系统菜单中已经配置的页面，会自动填入目标地址；未配置菜单时可以直接手工输入路由。</span>
-                  </div>
-                  <div class="action-form-grid">
-                    <div v-if="isRouteCustomAction(activeAction)" class="action-field">
-                      <span class="action-field-label">系统菜单页面</span>
-                      <n-select
-                        :value="resolveSystemMenuPageTargetValue(activeAction)"
-                        :options="systemMenuPageTargetOptions"
-                        :loading="systemMenuPageLoading"
-                        clearable
-                        filterable
-                        placeholder="选择系统菜单页面"
-                        @focus="loadSystemMenuPages"
-                        @update:value="applySystemMenuPageTarget"
-                      />
-                      <small>来源于系统管理 / 菜单管理，只列出菜单类型资源。</small>
-                    </div>
-                    <div class="action-field">
-                      <span class="action-field-label">目标地址</span>
-                      <n-input
-                        :value="activeAction.routePath"
-                        :disabled="(activeAction.actionType || 'route') === 'refresh'"
-                        :placeholder="actionPathPlaceholder(activeAction)"
-                        @update:value="updateActiveCustomAction({ routePath: $event })"
-                      />
-                      <small v-if="isRouteCustomAction(activeAction)">例如 /system/user、/app/customer/detail/:id，:id 可由参数映射替换。</small>
-                      <small v-else-if="normalizeCustomActionType(activeAction.actionType) === 'external'">填写完整外部地址，例如 https://example.com/detail/:id。</small>
-                    </div>
-                    <div v-if="formTargetOptions.length" class="action-field">
-                      <span class="action-field-label">目标表单</span>
-                      <n-select
-                        :value="activeAction.targetFormKey || ''"
-                        :disabled="(activeAction.actionType || 'route') === 'refresh'"
-                        :options="formTargetOptions"
-                        clearable
-                        filterable
-                        placeholder="目标表单"
-                        @update:value="updateActiveCustomAction({ targetFormKey: $event || '' })"
-                      />
-                      <small>用于当前业务对象内的表单页、弹窗页或抽屉页。</small>
-                    </div>
-                  </div>
+                <div class="action-form-grid">
+                  <n-form-item label="按钮名称">
+                    <n-input
+                      :value="activeAction.label"
+                      placeholder="例如：查看详情"
+                      @update:value="updateActiveCustomAction({ label: $event })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="唯一编码">
+                    <n-input
+                      :value="activeAction.key"
+                      placeholder="view_detail"
+                      @update:value="updateActiveCustomAction({ key: normalizeActionKey($event) })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="显示位置">
+                    <n-select
+                      :value="activeAction.position || 'toolbar'"
+                      :options="actionPositionOptions"
+                      @update:value="updateActiveCustomAction({ position: $event })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="按钮样式">
+                    <n-select
+                      :value="activeAction.type || 'default'"
+                      :options="actionTypeOptions"
+                      @update:value="updateActiveCustomAction({ type: $event })"
+                    />
+                  </n-form-item>
                 </div>
-              </n-form-item>
+              </section>
 
-              <n-form-item v-else label="API 调用">
-                <div class="api-action-panel">
-                  <div class="action-config-tip">
-                    <strong>API 调用</strong>
-                    <span>接口地址填写后端路径，Path 参数使用 :id 这类占位；GET 默认走 Query，POST/PUT/PATCH 默认走 Body。</span>
-                  </div>
-                  <div class="action-form-grid">
-                    <div class="action-field">
-                      <span class="action-field-label">已登记 API</span>
-                      <n-select
-                        :value="activeAction.actionConfig?.apiConfigId || null"
-                        :options="apiConfigOptions"
-                        :loading="apiConfigLoading"
-                        clearable
-                        filterable
-                        placeholder="选择 API 配置；关闭时可留空"
-                        @focus="loadEnabledApiConfigs"
-                        @update:value="applyCustomActionApiConfig"
-                      />
-                      <small>选择后会带出请求方式和接口地址，也可以不选直接手工填写。</small>
-                    </div>
-                    <div class="action-field">
-                      <span class="action-field-label">请求方式</span>
-                      <n-select
-                        :value="activeAction.actionConfig?.method || 'POST'"
-                        :options="apiMethodOptions"
-                        @update:value="updateActiveActionConfig({ method: normalizeCustomApiMethod($event) })"
-                      />
-                      <small>POST 加密会走前端加密请求链路。</small>
-                    </div>
-                    <div class="action-field">
-                      <span class="action-field-label">能力标识</span>
-                      <n-input
-                        :value="activeAction.actionConfig?.capabilityCode || ''"
-                        placeholder="例如 customer_audit，可选"
-                        @update:value="updateActiveActionConfig({ capabilityCode: $event || '' })"
-                      />
-                      <small>业务模块存在统一能力处理器时填写；普通接口可不填。</small>
-                    </div>
-                    <div class="action-field">
-                      <span class="action-field-label">接口地址</span>
-                      <n-input
-                        :value="resolveCustomApiUrl(activeAction)"
-                        placeholder="/business/customer/audit/:id"
-                        @update:value="updateActiveActionConfig({ url: $event || '' })"
-                      />
-                      <small>Path 占位写成 :id、:code，参数映射位置选择 Path。</small>
-                    </div>
-                    <div class="action-field">
-                      <span class="action-field-label">成功提示</span>
-                      <n-input
-                        :value="activeAction.successMessage || activeAction.actionConfig?.successMessage || ''"
-                        placeholder="例如 审核成功；留空默认操作成功"
-                        @update:value="updateActiveCustomAction({ successMessage: $event || '' })"
-                      />
-                      <small>接口返回成功后展示，失败提示可在下方单独配置。</small>
-                    </div>
-                  </div>
+              <section class="action-form-section">
+                <div class="action-section-head">
+                  <strong>交互配置</strong>
+                  <span>选择点击后的动作，并配置目标页面、接口或流程。</span>
+                </div>
+                <div class="action-form-grid">
+                  <n-form-item label="交互方式">
+                    <n-select
+                      :value="resolveActionBehaviorValue(activeAction.actionType)"
+                      :options="actionBehaviorOptions"
+                      @update:value="updateActiveCustomActionType"
+                    />
+                  </n-form-item>
+                  <n-form-item label="打开方式">
+                    <n-select
+                      :value="activeAction.openTarget || '_self'"
+                      :disabled="['refresh', 'CALL_API', 'START_FLOW', 'TRIGGER'].includes(resolveActionBehaviorValue(activeAction.actionType))"
+                      :options="actionOpenTargetOptions"
+                      @update:value="updateActiveCustomAction({ openTarget: $event })"
+                    />
+                  </n-form-item>
+                </div>
 
-                  <div class="api-param-head">
-                    <span>API 参数映射</span>
-                    <n-button size="small" secondary @click="addApiActionParam">
-                      添加参数
-                    </n-button>
+                <n-form-item v-if="isStartFlowCustomAction(activeAction)" label="主流程">
+                  <div class="main-flow-action-hint">
+                    <strong>使用“流程与自动化”中配置的主流程</strong>
+                    <span>这里只维护按钮名称、位置、权限、确认提示和成功失败文案。</span>
                   </div>
-                  <div v-if="activeAction.actionConfig?.params?.length" class="api-param-list">
-                    <div class="api-param-columns">
-                      <span>参数名</span>
-                      <span>位置</span>
-                      <span>来源</span>
-                      <span>来源值</span>
-                      <span />
+                </n-form-item>
+
+                <n-form-item v-else-if="isTriggerCustomAction(activeAction)" label="触发器标识">
+                  <n-input
+                    :value="activeAction.actionConfig?.triggerCode || activeAction.routePath || ''"
+                    placeholder="例如：customer_notify"
+                    @update:value="updateActiveGenericActionConfig({ triggerCode: $event || '' })"
+                  />
+                </n-form-item>
+
+                <n-form-item v-else-if="!isApiCustomAction(activeAction)" label="目标地址 / 表单">
+                  <div class="action-route-panel">
+                    <div v-if="isRouteCustomAction(activeAction)" class="action-config-tip">
+                      <strong>站内跳转</strong>
+                      <span>优先选择系统菜单中已经配置的页面，会自动填入目标地址；未配置菜单时可以直接手工输入路由。</span>
                     </div>
-                    <div
-                      v-for="(param, paramIdx) in activeAction.actionConfig.params"
-                      :key="param.clientKey || paramIdx"
-                      class="api-param-row"
-                    >
-                      <n-input
-                        :value="param.name"
-                        placeholder="参数名"
-                        @update:value="updateApiActionParam(paramIdx, { name: normalizeParamName($event) })"
-                      />
-                      <n-select
-                        :value="param.target || ''"
-                        :options="apiParamTargetOptions"
-                        placeholder="自动"
-                        clearable
-                        @update:value="updateApiActionParam(paramIdx, { target: $event || '' })"
-                      />
-                      <n-select
-                        :value="param.sourceType || 'rowField'"
-                        :options="paramSourceOptions"
-                        @update:value="updateApiActionParam(paramIdx, normalizeApiParamSourcePatch($event, param))"
-                      />
-                      <n-select
-                        v-if="param.sourceType === 'rowField'"
-                        :value="param.sourceField || ''"
-                        :options="rowFieldOptions"
-                        filterable
-                        clearable
-                        placeholder="当前行字段"
-                        @update:value="updateApiActionParam(paramIdx, { sourceField: $event || '' })"
-                      />
-                      <n-select
-                        v-else-if="param.sourceType === 'system'"
-                        :value="param.sourceField || ''"
-                        :options="systemVariableOptions"
-                        clearable
-                        placeholder="系统变量"
-                        @update:value="updateApiActionParam(paramIdx, { sourceField: $event || '' })"
-                      />
-                      <n-input
-                        v-else-if="param.sourceType === 'routeQuery'"
-                        :value="param.sourceField || ''"
-                        placeholder="路由参数名"
-                        @update:value="updateApiActionParam(paramIdx, { sourceField: normalizeParamName($event) })"
-                      />
-                      <n-input
-                        v-else
-                        :value="param.value || ''"
-                        placeholder="固定值，支持 :id / ${field}"
-                        @update:value="updateApiActionParam(paramIdx, { value: $event })"
-                      />
-                      <n-button quaternary type="error" @click="removeApiActionParam(paramIdx)">
-                        删除
+                    <div class="action-form-grid">
+                      <div v-if="isRouteCustomAction(activeAction)" class="action-field">
+                        <span class="action-field-label">系统菜单页面</span>
+                        <n-select
+                          :value="resolveSystemMenuPageTargetValue(activeAction)"
+                          :options="systemMenuPageTargetOptions"
+                          :loading="systemMenuPageLoading"
+                          clearable
+                          filterable
+                          placeholder="选择系统菜单页面"
+                          @focus="loadSystemMenuPages"
+                          @update:value="applySystemMenuPageTarget"
+                        />
+                        <small>来源于系统管理 / 菜单管理，只列出菜单类型资源。</small>
+                      </div>
+                      <div class="action-field">
+                        <span class="action-field-label">目标地址</span>
+                        <n-input
+                          :value="activeAction.routePath"
+                          :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                          :placeholder="actionPathPlaceholder(activeAction)"
+                          @update:value="updateActiveCustomAction({ routePath: $event })"
+                        />
+                        <small v-if="isRouteCustomAction(activeAction)">例如 /system/user、/app/customer/detail/:id，:id 可由参数映射替换。</small>
+                        <small v-else-if="normalizeCustomActionType(activeAction.actionType) === 'external'">填写完整外部地址，例如 https://example.com/detail/:id。</small>
+                      </div>
+                      <div v-if="formTargetOptions.length" class="action-field">
+                        <span class="action-field-label">目标表单</span>
+                        <n-select
+                          :value="activeAction.targetFormKey || ''"
+                          :disabled="(activeAction.actionType || 'route') === 'refresh'"
+                          :options="formTargetOptions"
+                          clearable
+                          filterable
+                          placeholder="目标表单"
+                          @update:value="updateActiveCustomAction({ targetFormKey: $event || '' })"
+                        />
+                        <small>用于当前业务对象内的表单页、弹窗页或抽屉页。</small>
+                      </div>
+                    </div>
+                  </div>
+                </n-form-item>
+
+                <n-form-item v-else label="API 调用">
+                  <div class="api-action-panel">
+                    <div class="action-config-tip">
+                      <strong>API 调用</strong>
+                      <span>接口地址填写后端路径，Path 参数使用 :id 这类占位；GET 默认走 Query，POST/PUT/PATCH 默认走 Body。</span>
+                    </div>
+                    <div class="action-form-grid">
+                      <div class="action-field">
+                        <span class="action-field-label">已登记 API</span>
+                        <n-select
+                          :value="activeAction.actionConfig?.apiConfigId || null"
+                          :options="apiConfigOptions"
+                          :loading="apiConfigLoading"
+                          clearable
+                          filterable
+                          placeholder="选择 API 配置；关闭时可留空"
+                          @focus="loadEnabledApiConfigs"
+                          @update:value="applyCustomActionApiConfig"
+                        />
+                        <small>选择后会带出请求方式和接口地址，也可以不选直接手工填写。</small>
+                      </div>
+                      <div class="action-field">
+                        <span class="action-field-label">请求方式</span>
+                        <n-select
+                          :value="activeAction.actionConfig?.method || 'POST'"
+                          :options="apiMethodOptions"
+                          @update:value="updateActiveActionConfig({ method: normalizeCustomApiMethod($event) })"
+                        />
+                        <small>POST 加密会走前端加密请求链路。</small>
+                      </div>
+                      <div class="action-field">
+                        <span class="action-field-label">能力标识</span>
+                        <n-input
+                          :value="activeAction.actionConfig?.capabilityCode || ''"
+                          placeholder="例如 customer_audit，可选"
+                          @update:value="updateActiveActionConfig({ capabilityCode: $event || '' })"
+                        />
+                        <small>业务模块存在统一能力处理器时填写；普通接口可不填。</small>
+                      </div>
+                      <div class="action-field">
+                        <span class="action-field-label">接口地址</span>
+                        <n-input
+                          :value="resolveCustomApiUrl(activeAction)"
+                          placeholder="/business/customer/audit/:id"
+                          @update:value="updateActiveActionConfig({ url: $event || '' })"
+                        />
+                        <small>Path 占位写成 :id、:code，参数映射位置选择 Path。</small>
+                      </div>
+                      <div class="action-field">
+                        <span class="action-field-label">成功提示</span>
+                        <n-input
+                          :value="activeAction.successMessage || activeAction.actionConfig?.successMessage || ''"
+                          placeholder="例如 审核成功；留空默认操作成功"
+                          @update:value="updateActiveCustomAction({ successMessage: $event || '' })"
+                        />
+                        <small>接口返回成功后展示，失败提示可在下方单独配置。</small>
+                      </div>
+                    </div>
+
+                    <div class="api-param-head">
+                      <span>API 参数映射</span>
+                      <n-button size="small" secondary @click="addApiActionParam">
+                        添加参数
                       </n-button>
                     </div>
+                    <div v-if="activeAction.actionConfig?.params?.length" class="api-param-list">
+                      <div class="api-param-columns">
+                        <span>参数名</span>
+                        <span>位置</span>
+                        <span>来源</span>
+                        <span>来源值</span>
+                        <span />
+                      </div>
+                      <div
+                        v-for="(param, paramIdx) in activeAction.actionConfig.params"
+                        :key="param.clientKey || paramIdx"
+                        class="api-param-row"
+                      >
+                        <n-input
+                          :value="param.name"
+                          placeholder="参数名"
+                          @update:value="updateApiActionParam(paramIdx, { name: normalizeParamName($event) })"
+                        />
+                        <n-select
+                          :value="param.target || ''"
+                          :options="apiParamTargetOptions"
+                          placeholder="自动"
+                          clearable
+                          @update:value="updateApiActionParam(paramIdx, { target: $event || '' })"
+                        />
+                        <n-select
+                          :value="param.sourceType || 'rowField'"
+                          :options="paramSourceOptions"
+                          @update:value="updateApiActionParam(paramIdx, normalizeApiParamSourcePatch($event, param))"
+                        />
+                        <n-select
+                          v-if="param.sourceType === 'rowField'"
+                          :value="param.sourceField || ''"
+                          :options="rowFieldOptions"
+                          filterable
+                          clearable
+                          placeholder="当前行字段"
+                          @update:value="updateApiActionParam(paramIdx, { sourceField: $event || '' })"
+                        />
+                        <n-select
+                          v-else-if="param.sourceType === 'system'"
+                          :value="param.sourceField || ''"
+                          :options="systemVariableOptions"
+                          clearable
+                          placeholder="系统变量"
+                          @update:value="updateApiActionParam(paramIdx, { sourceField: $event || '' })"
+                        />
+                        <n-input
+                          v-else-if="param.sourceType === 'routeQuery'"
+                          :value="param.sourceField || ''"
+                          placeholder="路由参数名"
+                          @update:value="updateApiActionParam(paramIdx, { sourceField: normalizeParamName($event) })"
+                        />
+                        <n-input
+                          v-else
+                          :value="param.value || ''"
+                          placeholder="固定值，支持 :id / ${field}"
+                          @update:value="updateApiActionParam(paramIdx, { value: $event })"
+                        />
+                        <n-button quaternary type="error" @click="removeApiActionParam(paramIdx)">
+                          删除
+                        </n-button>
+                      </div>
+                    </div>
+                    <span v-else class="empty">暂无 API 参数映射</span>
                   </div>
-                  <span v-else class="empty">暂无 API 参数映射</span>
+                </n-form-item>
+              </section>
+
+              <section class="action-form-section">
+                <div class="action-section-head">
+                  <strong>权限与反馈</strong>
+                  <span>控制是否展示、是否二次确认以及执行后的反馈。</span>
                 </div>
-              </n-form-item>
+                <div class="action-form-grid">
+                  <n-form-item label="确认提示">
+                    <n-input
+                      :value="activeAction.confirmText"
+                      placeholder="例如：确认处理 :id 吗？留空则不提示"
+                      @update:value="updateActiveCustomAction({ confirmText: $event })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="显示条件">
+                    <n-input
+                      :value="activeAction.displayCondition || ''"
+                      placeholder="例如 status=待处理、status!=已关闭、type in A,B"
+                      @update:value="updateActiveCustomAction({ displayCondition: $event || '' })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="权限码">
+                    <n-input
+                      :value="activeAction.permissionCode || ''"
+                      clearable
+                      placeholder="例如 ai:business:customer:detail"
+                      @update:value="updateActiveCustomAction({ permissionCode: $event || '' })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="成功后行为">
+                    <n-select
+                      :value="activeAction.successBehavior || 'none'"
+                      :options="successBehaviorOptions"
+                      @update:value="updateActiveCustomAction({ successBehavior: $event || 'none' })"
+                    />
+                  </n-form-item>
+                </div>
+              </section>
 
-              <n-form-item label="确认提示">
-                <n-input
-                  :value="activeAction.confirmText"
-                  placeholder="例如：确认处理 :id 吗？留空则不提示"
-                  @update:value="updateActiveCustomAction({ confirmText: $event })"
-                />
-              </n-form-item>
-              <n-form-item label="显示条件">
-                <n-input
-                  :value="activeAction.displayCondition || ''"
-                  placeholder="例如 status=待处理、status!=已关闭、type in A,B"
-                  @update:value="updateActiveCustomAction({ displayCondition: $event || '' })"
-                />
-              </n-form-item>
-              <div class="action-form-grid">
-                <n-form-item label="权限码">
-                  <n-input
-                    :value="activeAction.permissionCode || ''"
-                    clearable
-                    placeholder="例如 ai:business:customer:detail"
-                    @update:value="updateActiveCustomAction({ permissionCode: $event || '' })"
-                  />
-                </n-form-item>
-                <n-form-item label="成功后行为">
-                  <n-select
-                    :value="activeAction.successBehavior || 'none'"
-                    :options="successBehaviorOptions"
-                    @update:value="updateActiveCustomAction({ successBehavior: $event || 'none' })"
-                  />
-                </n-form-item>
-              </div>
-
-              <n-form-item v-if="isParamConfigurableAction(activeAction)" label="参数映射">
+              <section v-if="isParamConfigurableAction(activeAction)" class="action-form-section">
+                <div class="action-section-head">
+                  <strong>参数映射</strong>
+                  <span>用于把当前行、路由或系统变量填入目标地址。</span>
+                </div>
                 <div class="action-param-editor">
                   <div
                     v-for="(param, paramIdx) in (activeAction.params || [])"
@@ -3268,7 +4119,7 @@
                     + 添加参数
                   </n-button>
                 </div>
-              </n-form-item>
+              </section>
             </n-form>
           </div>
           <div v-else class="action-empty-panel">
@@ -3331,26 +4182,47 @@
 <script setup>
 import {
   AddOutline,
+  AlbumsOutline,
+  AlertCircleOutline,
+  AnalyticsOutline,
   BrowsersOutline,
+  CalendarOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
   CodeSlashOutline,
   ColorPaletteOutline,
   ContractOutline,
   DesktopOutline,
+  DocumentTextOutline,
   EllipsisHorizontalOutline,
   ExpandOutline,
   FlashOutline,
+  GridOutline,
+  ListOutline,
+  MenuOutline,
+  NavigateOutline,
   PhonePortraitOutline,
+  PricetagOutline,
+  QrCodeOutline,
+  ReaderOutline,
   RemoveOutline,
+  ReorderThreeOutline,
   ResizeOutline,
   SearchOutline,
   SettingsOutline,
+  StatsChartOutline,
+  SwapHorizontalOutline,
   TabletLandscapeOutline,
+  TerminalOutline,
+  TextOutline,
+  TimerOutline,
+  ToggleOutline,
 } from '@vicons/ionicons5'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { enabledApiConfigs } from '@/api/business-app'
+import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
+import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
 import { request } from '@/utils/http'
 import CrudDefaultParamsEditor from './CrudDefaultParamsEditor.vue'
 import CrudHookRulesEditor from './CrudHookRulesEditor.vue'
@@ -3537,6 +4409,182 @@ const gridHorizontalAlignOptions = [
   { label: '靠左', value: 'start' },
   { label: '水平居中', value: 'center' },
   { label: '靠右', value: 'end' },
+]
+const directionOptions = [
+  { label: '横向', value: 'row' },
+  { label: '纵向', value: 'vertical' },
+  { label: '纵向 CSS', value: 'column' },
+]
+const splitDirectionOptions = [
+  { label: '横向', value: 'horizontal' },
+  { label: '纵向', value: 'vertical' },
+]
+const menuModeOptions = [
+  { label: '纵向', value: 'vertical' },
+  { label: '横向', value: 'horizontal' },
+]
+const alertTypeOptions = [
+  { label: '信息', value: 'info' },
+  { label: '成功', value: 'success' },
+  { label: '警告', value: 'warning' },
+  { label: '错误', value: 'error' },
+]
+const richEditorModeOptions = [
+  { label: '可视编辑', value: 'visual' },
+  { label: '源码模式', value: 'source' },
+]
+const wangEditorModeOptions = [
+  { label: '默认', value: 'default' },
+  { label: '简洁', value: 'simple' },
+]
+const watermarkFontStyleOptions = [
+  { label: 'normal', value: 'normal' },
+  { label: 'italic', value: 'italic' },
+  { label: 'oblique 12deg', value: 'oblique 12deg' },
+]
+const watermarkTextAlignOptions = [
+  { label: '左对齐', value: 'left' },
+  { label: '居中', value: 'center' },
+  { label: '右对齐', value: 'right' },
+]
+const barcodeFormatOptions = [
+  'CODE128',
+  'CODE39',
+  'EAN13',
+  'EAN8',
+  'UPC',
+  'ITF14',
+  'MSI',
+  'pharmacode',
+  'codabar',
+].map(value => ({ label: value, value }))
+const qrcodeErrorCorrectionOptions = [
+  { label: 'L', value: 'L' },
+  { label: 'M', value: 'M' },
+  { label: 'Q', value: 'Q' },
+  { label: 'H', value: 'H' },
+]
+const qrcodeDotsTypeOptions = [
+  'square',
+  'dots',
+  'rounded',
+  'classy',
+  'classy-rounded',
+  'extra-rounded',
+].map(value => ({ label: value, value }))
+const qrcodeCornerTypeOptions = [
+  'square',
+  'dot',
+  'extra-rounded',
+].map(value => ({ label: value, value }))
+const transferDataSourceOptions = [
+  { label: '静态选项', value: 'static' },
+  { label: '远程接口', value: 'remote' },
+]
+const widgetDataSourceOptions = [
+  { label: '静态配置', value: 'static' },
+  { label: '当前详情/表单数据', value: 'context' },
+  { label: '远程接口', value: 'remote' },
+]
+const detailInfoDataSourceOptions = [
+  { label: '当前详情数据', value: 'current' },
+  { label: '当前详情字段路径', value: 'context' },
+  { label: '远程详情接口', value: 'remote' },
+]
+const dataBindablePageWidgetKeys = [
+  'rich-text',
+  'watermark',
+  'vue-component',
+  'html-tag',
+  'markdown',
+  'barcode',
+  'qrcode',
+  'calendar',
+  'code',
+  'countdown',
+  'descriptions',
+  'announcement',
+  'list',
+  'log',
+  'number-animation',
+  'breadcrumb',
+  'menu',
+  'pagination',
+  'split',
+]
+const localDataBindableBlockTypes = [
+  'stats-strip',
+  'info-panel',
+  'custom-html',
+  'tag-list',
+  'steps',
+  'timeline',
+  'empty-state',
+  'text-title',
+  'paragraph',
+  'statistic',
+  'link',
+  'text-tip',
+  'audio-player',
+  'video-player',
+  'avatar',
+]
+const markdownPreviewModeOptions = [
+  { label: '源码 + 预览', value: 'split' },
+  { label: '仅源码', value: 'source' },
+  { label: '仅预览', value: 'preview' },
+]
+const htmlTagOptions = ['div', 'section', 'article', 'aside', 'header', 'footer', 'main', 'span', 'p', 'strong', 'em', 'small', 'label'].map(value => ({ label: value, value }))
+const htmlRenderModeOptions = [
+  { label: 'HTML 安全渲染', value: 'html' },
+  { label: '纯文本', value: 'text' },
+]
+const vuePreviewModeOptions = [
+  { label: '安全模板预览', value: 'safe-template' },
+  { label: 'Props 模板预览', value: 'live' },
+  { label: '代码视图', value: 'code' },
+]
+const justifyContentOptions = [
+  { label: '靠左', value: 'flex-start' },
+  { label: '居中', value: 'center' },
+  { label: '靠右', value: 'flex-end' },
+  { label: '两端', value: 'space-between' },
+  { label: '环绕', value: 'space-around' },
+]
+const simpleConfigBlockTypes = [
+  'rich-text',
+  'signature-pad',
+  'transfer',
+  'step-form',
+  'vue-component',
+  'html-tag',
+  'text-title',
+  'paragraph',
+  'statistic',
+  'link',
+  'text-tip',
+  'watermark',
+  'audio-player',
+  'video-player',
+  'avatar',
+  'barcode',
+  'iframe',
+  'qrcode',
+  'markdown',
+  'calendar',
+  'code',
+  'countdown',
+  'announcement',
+  'list',
+  'log',
+  'number-animation',
+  'breadcrumb',
+  'menu',
+  'pagination',
+  'split',
+  'box-layout',
+  'space',
+  'descriptions',
 ]
 const componentSizeOptions = [
   { label: '小', value: 'small' },
@@ -3735,6 +4783,28 @@ const propertySearchTabIndex = {
     '模式切换',
     '斑马纹',
     '边框',
+    '富文本',
+    '签名',
+    '穿梭框',
+    '分步表单',
+    'Vue',
+    'HTML',
+    '标题',
+    '段落',
+    '统计',
+    '链接',
+    '提示',
+    '水印',
+    '音频',
+    '视频',
+    '头像',
+    '条码',
+    '二维码',
+    'Markdown',
+    '盒子',
+    '间距',
+    '描述列表',
+    'iframe',
     'api',
     'list',
     'detail',
@@ -4029,9 +5099,10 @@ const rowFieldOptions = computed(() => props.fields
     label: `${field.label || field.field}（${field.field}）`,
     value: field.field,
   })))
+const runtimeRuleFieldOptions = computed(() => rowFieldOptions.value)
 const childBlockTypeOptions = computed(() => listPageBlockCatalog
   .filter(item => !item.unique)
-  .filter(item => !['card', 'tabs', 'grid-layout'].includes(item.blockType))
+  .filter(item => !['card', 'tabs', 'grid-layout', 'box-layout'].includes(item.blockType))
   .filter(item => !item.onlyFor || item.onlyFor.includes(props.layoutType))
   .map(item => ({
     label: `${item.title}（${item.blockType}）`,
@@ -4097,7 +5168,11 @@ const groupedBlocks = computed(() => {
     { key: 'page', title: '页面组件', items: [] },
     { key: 'data', title: '数据区块', items: [] },
     { key: 'action', title: '动作区块', items: [] },
+    { key: 'navigation', title: '导航组件', items: [] },
     { key: 'layout', title: '布局组件', items: [] },
+    { key: 'content', title: '文本内容', items: [] },
+    { key: 'media', title: '媒体展示', items: [] },
+    { key: 'advanced', title: '高级嵌入', items: [] },
     { key: 'extra', title: '辅助区块', items: [] },
   ]
   for (const item of listPageBlockCatalog) {
@@ -4110,6 +5185,85 @@ const groupedBlocks = computed(() => {
     target.items.push(item)
   }
   return groups.filter(group => group.items.length)
+})
+
+function resolvePaletteItemIcon(item = {}) {
+  const iconMap = {
+    'search-form': SearchOutline,
+    'toolbar': FlashOutline,
+    'back-button': ChevronBackOutline,
+    'page-title': DocumentTextOutline,
+    'grid-layout': ResizeOutline,
+    'detail-info': ReaderOutline,
+    'AiCrudPage': DesktopOutline,
+    'AiTable': GridOutline,
+    'AiForm': DocumentTextOutline,
+    'data-table': ListOutline,
+    'tree-panel': ContractOutline,
+    'stats-strip': AnalyticsOutline,
+    'info-panel': AlertCircleOutline,
+    'custom-html': CodeSlashOutline,
+    'action-button': FlashOutline,
+    'button-group': ToggleOutline,
+    'tag-list': PricetagOutline,
+    'steps': ReorderThreeOutline,
+    'timeline': TimerOutline,
+    'empty-state': RemoveOutline,
+    'card': AlbumsOutline,
+    'tabs': BrowsersOutline,
+    'divider': RemoveOutline,
+    'spacer': ResizeOutline,
+    'rich-text': DocumentTextOutline,
+    'transfer': SwapHorizontalOutline,
+    'watermark': TextOutline,
+    'vue-component': BrowsersOutline,
+    'html-tag': CodeSlashOutline,
+    'markdown': ReorderThreeOutline,
+    'barcode': StatsChartOutline,
+    'qrcode': QrCodeOutline,
+    'calendar': CalendarOutline,
+    'code': CodeSlashOutline,
+    'countdown': TimerOutline,
+    'descriptions': ReaderOutline,
+    'announcement': AlertCircleOutline,
+    'list': ListOutline,
+    'log': TerminalOutline,
+    'number-animation': AnalyticsOutline,
+    'breadcrumb': NavigateOutline,
+    'menu': MenuOutline,
+    'pagination': ReorderThreeOutline,
+    'split': ResizeOutline,
+    'signature-pad': TextOutline,
+    'step-form': ExpandOutline,
+    'text-title': DesktopOutline,
+    'paragraph': DocumentTextOutline,
+    'statistic': StatsChartOutline,
+    'link': FlashOutline,
+    'text-tip': AlertCircleOutline,
+    'audio-player': PhonePortraitOutline,
+    'video-player': TabletLandscapeOutline,
+    'avatar': PhonePortraitOutline,
+    'iframe': BrowsersOutline,
+    'page': DesktopOutline,
+    'data': GridOutline,
+    'action': FlashOutline,
+    'navigation': ChevronForwardOutline,
+    'layout': ResizeOutline,
+    'content': CodeSlashOutline,
+    'media': PhonePortraitOutline,
+    'advanced': BrowsersOutline,
+    'extra': ExpandOutline,
+  }
+  return iconMap[item.blockType] || iconMap[item.group] || DesktopOutline
+}
+
+const paletteStats = computed(() => {
+  const total = listPageBlockCatalog.length
+  const filtered = groupedBlocks.value.reduce((sum, group) => sum + group.items.length, 0)
+  return {
+    total,
+    filtered,
+  }
 })
 
 const fieldMap = computed(() => new Map(props.fields.map(f => [f.field, f])))
@@ -5187,7 +6341,7 @@ function resolveClosestContainerBlock(target) {
 }
 
 function isContainerBlock(block = {}) {
-  return ['card', 'tabs', 'grid-layout'].includes(block?.blockType)
+  return ['card', 'tabs', 'grid-layout', 'box-layout'].includes(block?.blockType)
 }
 
 function appendContainerChild(containerId, blockType, cellKey = '') {
@@ -5197,6 +6351,19 @@ function appendContainerChild(containerId, blockType, cellKey = '') {
   if (container.blockType === 'tabs') {
     appendTabChild(blockType, containerId)
     selectBlock(containerId)
+    return
+  }
+  if (container.blockType === 'box-layout') {
+    const child = createContainerChildBlock(blockType)
+    if (!child)
+      return
+    localLayout.value = {
+      ...localLayout.value,
+      items: normalizeGridItems(mapBlocksInTree(blocks.value, block => block.id === containerId
+        ? { ...block, children: [...(block.children || []), child] }
+        : block)),
+    }
+    selectBlock(child.id)
     return
   }
   if (container.blockType === 'grid-layout') {
@@ -5220,6 +6387,7 @@ function createContainerChildBlock(blockType) {
   const child = createGridBlock(blockType, props.modelSchema, { gridX: 0, gridY: 0 })
   if (!child)
     return null
+  const childHeight = resolveNestedChildHeight(child)
   return {
     ...child,
     id: `${child.id}_child_${Date.now()}`,
@@ -5236,7 +6404,7 @@ function createContainerChildBlock(blockType) {
         y: 0,
         widthMode: 'full',
         width: '100%',
-        height: child.props?.style?.height || gridHeightToPixels(child.gridH || 2),
+        height: child.props?.style?.height || childHeight,
       },
     },
   }
@@ -5258,13 +6426,28 @@ function normalizeGridLayoutCells(block = {}) {
   const cells = Array.isArray(block.props?.cells) ? block.props.cells : []
   const sourceCells = cells.length ? cells : [{ key: 'cell_1', title: '栅格 1', span: columns, children: [] }]
   return sourceCells.map((cell, index) => {
+    const children = Array.isArray(cell.children) ? cell.children : []
     return {
       key: cell.key || `cell_${index + 1}`,
       title: cell.title ?? `栅格 ${index + 1}`,
       span: clamp(Number(cell.span) || 6, 1, columns),
-      children: Array.isArray(cell.children) ? cell.children : [],
+      children,
+      minHeight: Math.max(Number(cell.minHeight || 0), resolveGridCellAutoMinHeight(children)),
     }
   })
+}
+
+function resolveNestedChildHeight(child = {}) {
+  const styleHeight = resolveCssNumber(child.props?.style?.height, 0)
+  if (styleHeight)
+    return styleHeight
+  return Math.max(72, gridHeightToPixels(child.gridH || 2))
+}
+
+function resolveGridCellAutoMinHeight(children = []) {
+  if (!children.length)
+    return 120
+  return children.reduce((sum, child) => sum + resolveNestedChildHeight(child), 0) + Math.max(0, children.length - 1) * 8 + 16
 }
 
 function patchGridLayoutCells(containerId, updater) {
@@ -5776,6 +6959,12 @@ function patchBlockProps(id, patch) {
   }
 }
 
+function handleBlockPropsUpdate(payload = {}) {
+  if (!payload.blockId || !payload.propsData)
+    return
+  patchBlockProps(payload.blockId, payload.propsData)
+}
+
 function normalizeFormOpenModePatch(value) {
   const formOpenMode = value === 'tabWorkspace' ? 'tabWorkspace' : (['modal', 'drawer', 'flat'].includes(value) ? value : 'modal')
   return {
@@ -6248,14 +7437,35 @@ function normalizeGridItems(items = []) {
   return items.map((item) => {
     const gridW = clamp(item.gridW, 1, LIST_PAGE_GRID_COLS)
     const gridX = clamp(item.gridX, 0, LIST_PAGE_GRID_COLS - gridW)
-    return {
+    const autoGridH = resolveAutoGridH(item, gridW)
+    const gridH = Math.max(autoGridH, Number(item.gridH) || 1)
+    return normalizeGridItemFrame({
       ...item,
       gridX,
       gridW,
       gridY: Math.max(0, Number(item.gridY) || 0),
-      gridH: Math.max(resolveAutoGridH(item, gridW), Number(item.gridH) || 1),
-    }
+      gridH,
+    }, gridH)
   })
+}
+
+function normalizeGridItemFrame(item = {}, gridH = item.gridH) {
+  const autoHeight = gridHeightToPixels(gridH || item.gridH || 1)
+  const style = item.props?.style || {}
+  const currentHeight = resolveCssNumber(style.height, 0)
+  if (currentHeight >= autoHeight)
+    return item
+  return {
+    ...item,
+    props: {
+      ...(item.props || {}),
+      style: {
+        ...createDefaultBlockStyle(),
+        ...style,
+        height: autoHeight,
+      },
+    },
+  }
 }
 
 function resolveAutoGridH(block = {}, normalizedGridW = block.gridW) {
@@ -6287,6 +7497,18 @@ function resolveAutoGridH(block = {}, normalizedGridW = block.gridW) {
   if (block.blockType === 'tree-panel') {
     return Math.max(12, gridRowsForPixels(360))
   }
+  if (block.blockType === 'grid-layout') {
+    const cells = normalizeGridLayoutCells(block)
+    const maxCellHeight = cells.reduce((max, cell) => Math.max(max, Number(cell.minHeight || 0)), 0)
+    return Math.max(4, gridRowsForPixels(maxCellHeight + 16))
+  }
+  if (block.blockType === 'box-layout') {
+    const childrenHeight = (block.children || []).reduce((sum, child) => sum + resolveNestedChildHeight(child), 0)
+    const gapValue = Math.max(0, Number(block.props?.gap ?? 12))
+    return Math.max(4, gridRowsForPixels(childrenHeight + Math.max(0, (block.children || []).length - 1) * gapValue + 24))
+  }
+  if (['rich-text', 'transfer', 'step-form', 'video-player', 'iframe', 'markdown', 'descriptions', 'signature-pad'].includes(block.blockType))
+    return Math.max(4, gridRowsForPixels(resolveCssNumber(block.props?.style?.height, 180)))
   return 1
 }
 
@@ -6944,6 +8166,79 @@ function removeTimelineItem(idx) {
   const list = [...(selectedBlock.value?.props?.items || [])]
   list.splice(idx, 1)
   patchBlockProps(selectedBlock.value.id, { items: list })
+}
+
+function updateOptionItem(propName = 'items', idx, patch) {
+  const list = [...(selectedBlock.value?.props?.[propName] || [])]
+  list[idx] = { ...(list[idx] || {}), ...patch }
+  patchBlockProps(selectedBlock.value.id, { [propName]: list })
+}
+
+function updateOptionSource(patch = {}) {
+  if (!selectedBlock.value)
+    return
+  patchBlockProps(selectedBlock.value.id, {
+    optionSource: {
+      ...(selectedBlock.value.props?.optionSource || {}),
+      ...patch,
+    },
+  })
+}
+
+function updateWidgetDataBinding(patch = {}) {
+  if (!selectedBlock.value)
+    return
+  const next = {
+    ...(selectedBlock.value.props?.dataBinding || {}),
+    ...patch,
+  }
+  if (next.sourceType === 'static')
+    next.enabled = false
+  else
+    next.enabled = true
+  patchBlockProps(selectedBlock.value.id, { dataBinding: next })
+}
+
+function addOptionItem(propName = 'items') {
+  const fallback = propName === 'options'
+    ? { label: '新选项', value: `option_${Date.now()}` }
+    : { label: '标签', value: '内容' }
+  const list = [...(selectedBlock.value?.props?.[propName] || []), fallback]
+  patchBlockProps(selectedBlock.value.id, { [propName]: list })
+}
+
+function removeOptionItem(propName = 'items', idx) {
+  const list = [...(selectedBlock.value?.props?.[propName] || [])]
+  list.splice(idx, 1)
+  patchBlockProps(selectedBlock.value.id, { [propName]: list })
+}
+
+function resolveBooleanKeys(source = {}, keys = []) {
+  return keys.filter(key => source?.[key] === true)
+}
+
+function updateLinkLikeTitle(value = '') {
+  if (!selectedBlock.value)
+    return
+  const key = selectedBlock.value.blockType === 'link' ? 'text' : 'title'
+  patchBlockProps(selectedBlock.value.id, { [key]: value })
+}
+
+function updateLinkLikeUrl(value = '') {
+  if (!selectedBlock.value)
+    return
+  const key = selectedBlock.value.blockType === 'link' ? 'href' : 'src'
+  patchBlockProps(selectedBlock.value.id, { [key]: value })
+}
+
+function updateCodeColor(value = '') {
+  if (!selectedBlock.value)
+    return
+  if (selectedBlock.value.blockType === 'barcode') {
+    patchBlockProps(selectedBlock.value.id, { lineColor: value || '#0f172a' })
+    return
+  }
+  patchBlockProps(selectedBlock.value.id, { foreground: value || '#0f172a' })
 }
 
 function addCustomAction() {
@@ -7715,6 +9010,29 @@ function selectPropertyPanelTab(tab) {
   color: #71717a;
 }
 
+.palette-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.palette-stats span,
+.group-title em {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 16px;
+}
+
 .palette-groups {
   margin-top: 12px;
   display: flex;
@@ -7747,6 +9065,10 @@ function selectPropertyPanelTab(tab) {
   margin-bottom: 6px;
 }
 
+.group-title span {
+  min-width: 0;
+}
+
 .group-title::before {
   content: '';
   position: relative;
@@ -7768,8 +9090,11 @@ function selectPropertyPanelTab(tab) {
 
 .palette-item {
   display: grid;
-  gap: 2px;
-  padding: 9px 10px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 8px;
   border: 1px solid #e4e4e7;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.9);
@@ -7783,6 +9108,34 @@ function selectPropertyPanelTab(tab) {
   background: #f8faff;
   box-shadow: 0 8px 18px rgba(49, 83, 216, 0.08);
   transform: translateY(-1px);
+}
+
+.item-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #f4f4f5;
+  color: #64748b;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.item-icon :deep(.n-icon) {
+  font-size: 16px;
+}
+
+.palette-item:hover:not(.is-disabled) .item-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.item-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .palette-item.is-disabled {
@@ -7799,7 +9152,8 @@ function selectPropertyPanelTab(tab) {
 }
 
 .palette-item.is-disabled .item-title,
-.palette-item.is-disabled .item-desc {
+.palette-item.is-disabled .item-desc,
+.palette-item.is-disabled .item-icon {
   color: #94a3b8;
 }
 
@@ -7809,19 +9163,25 @@ function selectPropertyPanelTab(tab) {
 }
 
 .item-title {
+  overflow: hidden;
   font-size: 12px;
   font-weight: 600;
   color: #27272a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-desc {
   min-height: 30px;
+  overflow: hidden;
   font-size: 11px;
   color: #71717a;
   line-height: 15px;
+  text-overflow: ellipsis;
 }
 
 .item-lock-reason {
+  grid-column: 2;
   justify-self: start;
   padding: 1px 6px;
   border-radius: 999px;
@@ -8352,16 +9712,23 @@ function selectPropertyPanelTab(tab) {
 }
 
 .property-panel-head {
-  padding: 10px 10px 6px;
-  border-bottom: 0;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid #e4e4e7;
   background: #fafafa;
+}
+
+.property-panel-head > div:first-child {
+  min-width: 0;
 }
 
 .property-panel-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 3px;
-  margin: 0 8px 6px;
+  flex: 0 0 auto;
+  margin: 6px 8px;
   padding: 3px;
   border: 1px solid #e4e4e7;
   border-radius: 9px;
@@ -8417,7 +9784,8 @@ function selectPropertyPanelTab(tab) {
 .property-panel-title {
   color: #18181b;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 20px;
 }
 
 .property-panel-desc {
@@ -8425,6 +9793,9 @@ function selectPropertyPanelTab(tab) {
   color: #71717a;
   font-size: 11px;
   line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .property-panel {
@@ -9167,7 +10538,7 @@ function selectPropertyPanelTab(tab) {
 
 .advanced-config-collapse {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   margin: 2px 0 12px;
 }
 
@@ -9205,7 +10576,7 @@ function selectPropertyPanelTab(tab) {
 }
 
 .advanced-config-collapse :deep(.n-collapse-item__content-inner) {
-  padding: 8px 12px 12px;
+  padding: 2px 10px 10px;
   background: #fff;
 }
 
@@ -9371,6 +10742,46 @@ function selectPropertyPanelTab(tab) {
   gap: 6px;
 }
 
+.data-source-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.data-source-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 86px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.data-source-row > span {
+  overflow: hidden;
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-source-row :deep(.n-input),
+.data-source-row :deep(.n-select),
+.data-source-row :deep(.n-input-number) {
+  width: 100%;
+  min-width: 0;
+}
+
+.data-source-mapping-grid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-source-mapping-grid .data-source-row {
+  grid-template-columns: minmax(64px, 74px) minmax(0, 1fr);
+}
+
 .custom-action-summary {
   display: grid;
   gap: 10px;
@@ -9427,18 +10838,37 @@ function selectPropertyPanelTab(tab) {
 }
 
 .custom-action-modal {
-  width: min(1040px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  width: min(1160px, calc(100vw - 40px));
+  height: min(86vh, 920px);
+  max-height: min(86vh, 920px);
+}
+
+.custom-action-modal :deep(.n-card-header),
+.custom-action-modal :deep(.n-card__footer) {
+  flex: 0 0 auto;
+}
+
+.custom-action-modal :deep(.n-card-content) {
+  display: grid;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .action-modal-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: 16px;
-  min-height: 520px;
+  min-height: 0;
+  height: 100%;
 }
 
 .action-modal-list {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
   align-content: start;
   gap: 8px;
   padding-right: 12px;
@@ -9483,6 +10913,9 @@ function selectPropertyPanelTab(tab) {
 
 .action-editor-panel {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .action-editor-head {
@@ -9509,6 +10942,54 @@ function selectPropertyPanelTab(tab) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.action-editor-form {
+  display: grid;
+  gap: 16px;
+}
+
+.action-form-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fcfdff;
+}
+
+.action-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.action-section-head strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.action-section-head span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.action-form-section .action-form-grid {
+  gap: 10px;
+}
+
+.action-form-section--compact .action-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.action-form-section :deep(.n-form-item) {
+  margin-bottom: 0;
+}
+
+.action-form-section :deep(.n-form-item .n-form-item-label) {
+  padding-bottom: 5px;
 }
 
 .action-route-panel {
@@ -10363,10 +11844,16 @@ function selectPropertyPanelTab(tab) {
 
   .action-modal-layout,
   .action-form-grid,
+  .action-section-head,
   .action-param-row,
   .api-param-columns,
   .api-param-row {
     grid-template-columns: 1fr;
+  }
+
+  .action-section-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

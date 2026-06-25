@@ -1,5 +1,5 @@
 <template>
-  <div class="grid-block" :class="[`block-${block.blockType}`, { selected }]" :style="blockStyle" :data-block-id="block.id">
+  <div v-if="blockRuntimeVisible" class="grid-block" :class="[`block-${block.blockType}`, { selected }]" :style="blockStyle" :data-block-id="block.id">
     <!-- 查询表单 -->
     <template v-if="block.blockType === 'search-form'">
       <div class="block-header">
@@ -157,12 +157,24 @@
               {{ field.label || field.field }}
             </div>
             <div class="detail-value">
-              {{ detailValue(field, 0) }}
+              <FieldValueRenderer
+                :value="detailValue(field, 0)"
+                :row="detailInfoRecord"
+                :field="field"
+                :setting="fieldSetting(field.field)"
+                :context="runtimeRuleContext"
+              />
             </div>
           </div>
         </div>
         <div v-else class="block-empty">
           点击右侧"配置字段"按钮添加详情字段
+        </div>
+        <div v-if="detailInfoLoading" class="detail-info-state">
+          正在加载详情数据...
+        </div>
+        <div v-else-if="detailInfoError" class="detail-info-state error">
+          {{ detailInfoError }}
         </div>
       </div>
     </template>
@@ -253,6 +265,7 @@
                 :nested-moving-block-id="nestedMovingBlockId"
                 @child-block-select="emit('childBlockSelect', $event)"
                 @child-block-menu-select="emit('childBlockMenuSelect', $event)"
+                @block-props-update="emit('blockPropsUpdate', $event)"
                 @child-block-drag-start="emit('childBlockDragStart', $event)"
                 @child-block-move-start="emit('childBlockMoveStart', $event)"
                 @child-block-drag-end="emit('childBlockDragEnd')"
@@ -508,7 +521,7 @@
     <template v-else-if="block.blockType === 'stats-strip'">
       <div class="stats-grid">
         <div
-          v-for="(metric, idx) in (block.props?.metrics || [])"
+          v-for="(metric, idx) in statsMetrics"
           :key="idx"
           class="stats-card"
         >
@@ -522,7 +535,7 @@
             {{ metric.trend }}
           </div>
         </div>
-        <div v-if="!(block.props?.metrics?.length)" class="block-empty">
+        <div v-if="!statsMetrics.length" class="block-empty">
           点击右侧添加指标项
         </div>
       </div>
@@ -530,20 +543,20 @@
 
     <!-- 提示面板 -->
     <template v-else-if="block.blockType === 'info-panel'">
-      <div class="info-panel-preview" :class="`type-${block.props?.type || 'info'}`">
-        <strong>{{ block.props?.title || '提示信息' }}</strong>
-        <span>{{ block.props?.content || '在右侧填写提示内容' }}</span>
+      <div class="info-panel-preview" :class="`type-${boundInfoType || 'info'}`">
+        <strong>{{ boundInfoTitle || '提示信息' }}</strong>
+        <span>{{ boundInfoContent || '在右侧填写提示内容' }}</span>
       </div>
     </template>
 
     <!-- 说明文本 -->
     <template v-else-if="block.blockType === 'custom-html'">
       <div class="custom-html">
-        <div v-if="block.props?.title" class="custom-title">
-          {{ block.props.title }}
+        <div v-if="boundCustomTitle" class="custom-title">
+          {{ boundCustomTitle }}
         </div>
         <div class="custom-body">
-          {{ block.props?.content || '在右侧填写说明内容' }}
+          {{ boundCustomContent || '在右侧填写说明内容' }}
         </div>
       </div>
     </template>
@@ -587,7 +600,7 @@
     <template v-else-if="block.blockType === 'tag-list'">
       <div class="tag-list-preview">
         <n-tag
-          v-for="tag in (block.props?.tags || [])"
+          v-for="tag in boundTags"
           :key="tag.label"
           :type="tag.type || 'default'"
           size="small"
@@ -602,7 +615,7 @@
     <template v-else-if="block.blockType === 'steps'">
       <n-steps size="small" :current="Number(block.props?.current || 1)" class="steps-preview">
         <n-step
-          v-for="step in (block.props?.steps || [])"
+          v-for="step in boundSteps"
           :key="step.title"
           :title="step.title"
           :description="step.description"
@@ -613,11 +626,11 @@
     <!-- 时间线 -->
     <template v-else-if="block.blockType === 'timeline'">
       <div class="timeline-preview">
-        <div v-if="block.props?.title" class="custom-title">
-          {{ block.props.title }}
+        <div v-if="boundTimelineTitle" class="custom-title">
+          {{ boundTimelineTitle }}
         </div>
         <div
-          v-for="item in (block.props?.items || [])"
+          v-for="item in boundTimelineItems"
           :key="`${item.title}-${item.time}`"
           class="timeline-item"
         >
@@ -637,11 +650,271 @@
         <div class="empty-state-icon">
           ∅
         </div>
-        <strong>{{ block.props?.title || '暂无数据' }}</strong>
-        <span>{{ block.props?.description || '当前没有可展示的数据' }}</span>
-        <n-button v-if="block.props?.actionText" size="small" secondary disabled>
-          {{ block.props.actionText }}
+        <strong>{{ boundEmptyTitle || '暂无数据' }}</strong>
+        <span>{{ boundEmptyDescription || '当前没有可展示的数据' }}</span>
+        <n-button v-if="boundEmptyActionText" size="small" secondary disabled>
+          {{ boundEmptyActionText }}
         </n-button>
+      </div>
+    </template>
+
+    <template v-else-if="pageWidgetComponentKeys.includes(block.blockType)">
+      <PageWidgetRenderer
+        :component-key="block.blockType"
+        :props-data="block.props || {}"
+        :data-context="runtimeRecord || {}"
+        :readonly="readonly"
+        @update:props-data="emit('blockPropsUpdate', { blockId: block.id, propsData: $event })"
+      />
+    </template>
+
+    <!-- 手写签名 -->
+    <template v-else-if="block.blockType === 'signature-pad'">
+      <div class="signature-block-preview">
+        <div class="block-header">
+          <strong>{{ block.props?.title || '手写签名' }}</strong>
+          <span class="block-meta">{{ block.props?.required ? '必填' : '可选' }}</span>
+        </div>
+        <SignaturePad
+          v-model="signaturePreviewValue"
+          :height="Number(block.props?.height || 160)"
+          :stroke-width="Number(block.props?.strokeWidth || 2.6)"
+          :disabled="readonly || block.props?.disabled === true"
+          :business-type="block.props?.businessType || 'lowcode_signature'"
+        />
+      </div>
+    </template>
+
+    <!-- 穿梭框 -->
+    <template v-else-if="block.blockType === 'transfer'">
+      <div class="transfer-preview">
+        <div class="block-header">
+          <strong>{{ block.props?.title || '穿梭框' }}</strong>
+          <span class="block-meta">{{ transferSelectedOptions.length }}/{{ transferOptions.length }}</span>
+        </div>
+        <n-transfer
+          :value="transferValue"
+          :options="transferOptions"
+          :source-title="block.props?.sourceTitle || '可选项'"
+          :target-title="block.props?.targetTitle || '已选项'"
+          :filterable="block.props?.filterable !== false"
+          :virtual-scroll="block.props?.virtualScroll === true"
+          disabled
+          size="small"
+        />
+      </div>
+    </template>
+
+    <!-- 分步表单 -->
+    <template v-else-if="block.blockType === 'step-form'">
+      <div class="step-form-preview">
+        <div class="block-header">
+          <strong>{{ block.props?.title || '分步表单' }}</strong>
+          <span class="block-meta">第 {{ block.props?.current || 1 }} 步</span>
+        </div>
+        <n-steps size="small" :current="Number(block.props?.current || 1)" :vertical="block.props?.direction === 'vertical'">
+          <n-step
+            v-for="step in (block.props?.steps || [])"
+            :key="step.title"
+            :title="step.title"
+            :description="step.description"
+          />
+        </n-steps>
+        <div class="step-form-fields">
+          <div v-for="field in resolvedFields.slice(0, 4)" :key="field.field" class="step-form-field">
+            <span>{{ field.label || field.field }}</span>
+            <em>待填写</em>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- 标题 -->
+    <template v-else-if="block.blockType === 'text-title'">
+      <div class="text-title-preview" :style="textTitleStyle">
+        {{ boundTextTitle || '页面标题' }}
+        <small v-if="boundTextSubtitle">{{ boundTextSubtitle }}</small>
+      </div>
+    </template>
+
+    <!-- 段落 -->
+    <template v-else-if="block.blockType === 'paragraph'">
+      <p class="paragraph-preview" :style="paragraphStyle">
+        {{ boundParagraphContent || '段落内容' }}
+      </p>
+    </template>
+
+    <!-- 统计数值 -->
+    <template v-else-if="block.blockType === 'statistic'">
+      <div class="single-stat-preview" :style="{ '--stat-color': block.props?.color || '#2563eb' }">
+        <span>{{ boundStatisticTitle || '统计指标' }}</span>
+        <strong>{{ block.props?.prefix }}{{ boundStatisticValue || '0' }}{{ block.props?.suffix }}</strong>
+        <small>{{ boundStatisticTrend || '' }} {{ boundStatisticDescription || '' }}</small>
+      </div>
+    </template>
+
+    <!-- 链接 -->
+    <template v-else-if="block.blockType === 'link'">
+      <a class="link-preview" :class="`type-${block.props?.type || 'primary'}`" :href="boundLinkHref || '#'" :target="block.props?.target || '_self'" @click.prevent>
+        {{ boundLinkText || '链接文本' }}
+      </a>
+    </template>
+
+    <!-- 文字提示 -->
+    <template v-else-if="block.blockType === 'text-tip'">
+      <div class="text-tip-preview" :class="`type-${boundTextTipType || 'info'}`">
+        <span v-if="block.props?.showIcon !== false" class="tip-icon">i</span>
+        <div>
+          <strong>{{ boundTextTipTitle || '提示' }}</strong>
+          <p>{{ boundTextTipContent || '提示内容' }}</p>
+        </div>
+      </div>
+    </template>
+
+    <!-- 水印 -->
+    <template v-else-if="block.blockType === 'watermark'">
+      <n-watermark class="watermark-preview" v-bind="watermarkProps">
+        <div class="watermark-preview-inner">
+          <strong>{{ block.props?.previewText || '水印覆盖区域' }}</strong>
+          <span>{{ block.props?.content || '水印文字' }}</span>
+        </div>
+      </n-watermark>
+    </template>
+
+    <!-- 音频播放器 -->
+    <template v-else-if="block.blockType === 'audio-player'">
+      <div class="media-preview audio-preview">
+        <strong>{{ boundMediaTitle || '音频播放器' }}</strong>
+        <audio :src="boundMediaSrc || undefined" :controls="block.props?.controls !== false" :autoplay="false" :loop="block.props?.loop === true" />
+        <span v-if="!boundMediaSrc">未配置音频地址</span>
+      </div>
+    </template>
+
+    <!-- 视频播放器 -->
+    <template v-else-if="block.blockType === 'video-player'">
+      <div class="media-preview video-preview">
+        <video :src="boundMediaSrc || undefined" :poster="boundVideoPoster || undefined" :controls="block.props?.controls !== false" :autoplay="false" :loop="block.props?.loop === true" :muted="block.props?.muted === true" />
+        <span v-if="!boundMediaSrc">{{ boundMediaTitle || '视频播放器' }} · 未配置视频地址</span>
+      </div>
+    </template>
+
+    <!-- 头像框 -->
+    <template v-else-if="block.blockType === 'avatar'">
+      <div class="avatar-preview">
+        <n-avatar :src="boundAvatarSrc || undefined" :size="Number(block.props?.size || 48)" :round="block.props?.shape !== 'square'">
+          {{ avatarInitial }}
+        </n-avatar>
+        <div v-if="block.props?.showInfo !== false">
+          <strong>{{ boundAvatarName || '用户名称' }}</strong>
+          <span>{{ boundAvatarDescription || '角色 / 部门' }}</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- 条形码 -->
+    <template v-else-if="block.blockType === 'barcode'">
+      <div class="barcode-preview" :style="{ background: block.props?.background || '#fff' }">
+        <Vue3Barcode
+          :key="`${block.id}_${block.props?.value || ''}_${block.props?.format || ''}`"
+          :value="String(block.props?.value || 'FORGE-2026-0001')"
+          :format="block.props?.format || 'CODE128'"
+          :width="Number(block.props?.barWidth || 2)"
+          :height="Number(block.props?.barHeight || 72)"
+          :display-value="block.props?.showText !== false"
+          :line-color="block.props?.lineColor || '#0f172a'"
+          :background="block.props?.background || '#ffffff'"
+          :font-size="Number(block.props?.fontSize || 14)"
+          :margin="Number(block.props?.margin ?? 8)"
+          element-tag="svg"
+        >
+          <span class="code-invalid">条形码内容无效</span>
+        </Vue3Barcode>
+      </div>
+    </template>
+
+    <!-- 内嵌页面 -->
+    <template v-else-if="block.blockType === 'iframe'">
+      <div class="iframe-preview">
+        <iframe
+          v-if="safeIframeSrc"
+          :src="safeIframeSrc"
+          :title="block.props?.title || '内嵌页面'"
+          :sandbox="block.props?.sandbox || 'allow-same-origin allow-forms'"
+          :loading="block.props?.loading || 'lazy'"
+          :allowfullscreen="block.props?.allowFullscreen === true"
+        />
+        <div v-else class="block-empty">
+          请配置 http(s) 内嵌页面地址
+        </div>
+      </div>
+    </template>
+
+    <!-- 二维码 -->
+    <template v-else-if="block.blockType === 'qrcode'">
+      <div class="qrcode-preview">
+        <QRCodeVue3
+          :key="`${block.id}_${block.props?.value || ''}`"
+          :width="Number(block.props?.size || 132)"
+          :height="Number(block.props?.size || 132)"
+          :value="String(block.props?.value || 'https://forge.local')"
+          :margin="Number(block.props?.margin || 0)"
+          :qr-options="qrcodeQrOptions"
+          :dots-options="qrcodeDotsOptions"
+          :background-options="qrcodeBackgroundOptions"
+          :corners-square-options="qrcodeCornersSquareOptions"
+          :corners-dot-options="qrcodeCornersDotOptions"
+        />
+        <strong v-if="block.props?.title">{{ block.props.title }}</strong>
+        <small v-if="block.props?.showText !== false">{{ block.props?.value }}</small>
+      </div>
+    </template>
+
+    <!-- 盒子布局 -->
+    <template v-else-if="block.blockType === 'box-layout'">
+      <div class="box-layout-preview" :style="boxLayoutStyle">
+        <GridBlockRenderer
+          v-for="child in (block.children || [])"
+          :key="child.id"
+          :block="child"
+          :fields="fields"
+          :selected="child.id === selectedBlockId"
+          :selected-block-id="selectedBlockId"
+          :readonly="readonly"
+          :runtime-crud-props="runtimeCrudProps"
+          :runtime-record="runtimeRecord"
+          @click.stop="emit('childBlockSelect', child.id)"
+          @child-block-select="emit('childBlockSelect', $event)"
+          @child-block-menu-select="emit('childBlockMenuSelect', $event)"
+          @block-props-update="emit('blockPropsUpdate', $event)"
+          @child-block-move-start="emit('childBlockMoveStart', $event)"
+          @child-block-drag-end="emit('childBlockDragEnd')"
+          @child-block-resize-start="emit('childBlockResizeStart', $event)"
+        />
+        <div v-if="!(block.children || []).length" class="container-empty">
+          拖入组件到盒子中
+        </div>
+      </div>
+    </template>
+
+    <!-- 间距 -->
+    <template v-else-if="block.blockType === 'space'">
+      <div class="space-preview" :class="block.props?.direction === 'horizontal' ? 'horizontal' : 'vertical'" :style="spacePreviewStyle">
+        <span v-if="block.props?.lineVisible" />
+      </div>
+    </template>
+
+    <!-- 描述列表 -->
+    <template v-else-if="block.blockType === 'descriptions'">
+      <div class="descriptions-preview">
+        <div v-if="block.props?.title" class="custom-title">
+          {{ block.props.title }}
+        </div>
+        <div class="description-grid" :class="{ bordered: block.props?.bordered }" :style="descriptionGridStyle">
+          <div v-for="item in (block.props?.items || [])" :key="item.label" class="description-item">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+        </div>
       </div>
     </template>
 
@@ -705,6 +978,7 @@
               @click.stop="emit('childBlockSelect', child.id)"
               @child-block-select="emit('childBlockSelect', $event)"
               @child-block-menu-select="emit('childBlockMenuSelect', $event)"
+              @block-props-update="emit('blockPropsUpdate', $event)"
               @child-block-move-start="emit('childBlockMoveStart', $event)"
               @child-block-drag-end="emit('childBlockDragEnd')"
               @child-block-resize-start="emit('childBlockResizeStart', $event)"
@@ -742,6 +1016,7 @@
               @click.stop="emit('childBlockSelect', child.id)"
               @child-block-select="emit('childBlockSelect', $event)"
               @child-block-menu-select="emit('childBlockMenuSelect', $event)"
+              @block-props-update="emit('blockPropsUpdate', $event)"
               @child-block-move-start="emit('childBlockMoveStart', $event)"
               @child-block-drag-end="emit('childBlockDragEnd')"
               @child-block-resize-start="emit('childBlockResizeStart', $event)"
@@ -764,16 +1039,26 @@
         未知区块类型：{{ block.blockType }}
       </div>
     </template>
+    <div v-if="showBlockBindingState" class="block-binding-state" :class="{ error: !!blockBindingError }">
+      {{ blockBindingError || '正在加载数据...' }}
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ChevronBackOutline } from '@vicons/ionicons5'
+import QRCodeVue3 from 'qrcode-vue3'
 import { computed, h, onMounted, ref, watch } from 'vue'
+import Vue3Barcode from 'vue3-barcode'
 import { useRoute, useRouter } from 'vue-router'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import AiForm from '@/components/ai-form/AiForm.vue'
 import AiTable from '@/components/ai-form/AiTable.vue'
+import SignaturePad from '@/components/flow/SignaturePad.vue'
+import FieldValueRenderer from '@/components/lowcode-builder/shared/FieldValueRenderer.vue'
+import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
+import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRenderer.vue'
+import { matchSimpleExpression, resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
 import { applyCrudHookRules, CRUD_HOOK_RULE_TARGETS, normalizeCrudHookRules } from './crud-hook-rules'
@@ -825,12 +1110,31 @@ const emit = defineEmits([
   'runtimeTreeSelect',
   'treePanelCollapseChange',
   'crudPreviewStateChange',
+  'blockPropsUpdate',
   'childBlockSelect',
   'childBlockMenuSelect',
   'childBlockDragStart',
   'childBlockMoveStart',
   'childBlockDragEnd',
   'childBlockResizeStart',
+])
+
+const localDataBindableBlockTypes = new Set([
+  'stats-strip',
+  'info-panel',
+  'custom-html',
+  'tag-list',
+  'steps',
+  'timeline',
+  'empty-state',
+  'text-title',
+  'paragraph',
+  'statistic',
+  'link',
+  'text-tip',
+  'audio-player',
+  'video-player',
+  'avatar',
 ])
 
 const route = useRoute()
@@ -841,15 +1145,108 @@ const resolvedFields = computed(() => (props.block.fieldRefs || [])
   .map(ref => fieldMap.value.get(ref))
   .filter(Boolean))
 const previewFormValue = ref({})
+const signaturePreviewValue = ref('')
 const runtimeCrudRef = ref(null)
 const runtimeTreeLoading = ref(false)
 const runtimeTreeNodes = ref([])
 const runtimeTreeNodeMap = ref(new Map())
 const runtimeExpandedTreeKeys = ref([])
+const detailInfoLoading = ref(false)
+const detailInfoError = ref('')
+const remoteDetailInfoRecord = ref({})
+const blockBindingLoading = ref(false)
+const blockBindingError = ref('')
+const remoteBlockBindingData = ref(null)
 const previewTreeExpanded = ref(true)
 const treePanelCollapsed = ref(false)
 const runtimeTreeChildrenField = computed(() => props.block.props?.childrenField || 'children')
 const runtimeSelectedTreeKeys = computed(() => props.runtimeTreeActiveKey === '__all__' ? [] : [props.runtimeTreeActiveKey])
+const runtimeRuleContext = computed(() => ({
+  record: props.runtimeRecord || {},
+  row: props.runtimeRecord || {},
+  data: props.runtimeRecord || {},
+  route: {
+    query: route.query || {},
+    params: route.params || {},
+    path: route.path,
+    fullPath: route.fullPath,
+    name: route.name,
+  },
+  user: userStore.userInfo || userStore.user || {},
+}))
+const blockRuntimeControl = computed(() => resolveRuntimeControl(props.block || {}, runtimeRuleContext.value))
+const blockRuntimeVisible = computed(() => !props.readonly || blockRuntimeControl.value.visible !== false)
+const detailInfoRecord = computed(() => {
+  if (props.block.blockType !== 'detail-info')
+    return props.runtimeRecord || {}
+  const sourceType = props.block.props?.dataSourceType || 'current'
+  if (sourceType === 'remote')
+    return remoteDetailInfoRecord.value || {}
+  const path = props.block.props?.contextPath || ''
+  if (path)
+    return getNestedRecordValue(props.runtimeRecord || {}, path) || {}
+  return props.runtimeRecord || {}
+})
+const blockBoundData = computed(() => {
+  const binding = props.block.props?.dataBinding || {}
+  if (binding.enabled !== true || binding.sourceType === 'static')
+    return null
+  const source = binding.sourceType === 'remote' ? remoteBlockBindingData.value : props.runtimeRecord
+  if (!source)
+    return null
+  const dataPath = binding.sourceType === 'context' ? binding.contextPath : binding.dataPath
+  if (!dataPath)
+    return source
+  const nested = getNestedRecordValue(source, dataPath)
+  return nested === undefined || nested === null ? source : nested
+})
+const isLocalDataBindableBlock = computed(() => localDataBindableBlockTypes.has(props.block.blockType))
+const showBlockBindingState = computed(() => isLocalDataBindableBlock.value && (blockBindingLoading.value || blockBindingError.value))
+const statsMetrics = computed(() => normalizeBlockBoundRows(props.block.props?.metrics || []).map((row, index) => ({
+  label: boundRowField(row, 'labelField', 'label', `指标${index + 1}`),
+  value: boundRowField(row, 'valueField', 'value', '-'),
+  trend: boundRowField(row, 'metaField', 'trend', ''),
+})))
+const boundInfoTitle = computed(() => boundContentValue(props.block.props?.title || '提示信息', 'titleField', 'title'))
+const boundInfoContent = computed(() => boundContentValue(props.block.props?.content || '在右侧填写提示内容', 'contentField', 'content'))
+const boundInfoType = computed(() => boundContentValue(props.block.props?.type || 'info', 'valueField', 'type'))
+const boundCustomTitle = computed(() => boundContentValue(props.block.props?.title || '', 'titleField', 'title'))
+const boundCustomContent = computed(() => boundContentValue(props.block.props?.content || '', 'contentField', 'content'))
+const boundTags = computed(() => normalizeBlockBoundRows(props.block.props?.tags || []).map((row, index) => ({
+  label: boundRowField(row, 'labelField', 'label', `标签${index + 1}`),
+  type: boundRowField(row, 'valueField', 'type', 'default'),
+})))
+const boundSteps = computed(() => normalizeBlockBoundRows(props.block.props?.steps || []).map((row, index) => ({
+  title: boundRowField(row, 'titleField', 'title', `步骤${index + 1}`),
+  description: boundRowField(row, 'descriptionField', 'description', ''),
+})))
+const boundTimelineTitle = computed(() => boundContentValue(props.block.props?.title || '', 'titleField', 'title'))
+const boundTimelineItems = computed(() => normalizeBlockBoundRows(props.block.props?.items || []).map((row, index) => ({
+  title: boundRowField(row, 'titleField', 'title', `节点${index + 1}`),
+  content: boundRowField(row, 'descriptionField', 'content', ''),
+  time: boundRowField(row, 'metaField', 'time', ''),
+})))
+const boundEmptyTitle = computed(() => boundContentValue(props.block.props?.title || '暂无数据', 'titleField', 'title'))
+const boundEmptyDescription = computed(() => boundContentValue(props.block.props?.description || '当前没有可展示的数据', 'descriptionField', 'description'))
+const boundEmptyActionText = computed(() => boundContentValue(props.block.props?.actionText || '', 'valueField', 'actionText'))
+const boundTextTitle = computed(() => boundContentValue(props.block.props?.text || '页面标题', 'titleField', 'text'))
+const boundTextSubtitle = computed(() => boundContentValue(props.block.props?.subtitle || '', 'descriptionField', 'subtitle'))
+const boundParagraphContent = computed(() => boundContentValue(props.block.props?.content || '段落内容', 'contentField', 'content'))
+const boundStatisticTitle = computed(() => boundContentValue(props.block.props?.title || '统计指标', 'titleField', 'title'))
+const boundStatisticValue = computed(() => boundContentValue(props.block.props?.value || '0', 'valueField', 'value'))
+const boundStatisticDescription = computed(() => boundContentValue(props.block.props?.description || '', 'descriptionField', 'description'))
+const boundStatisticTrend = computed(() => boundContentValue(props.block.props?.trend || '', 'metaField', 'trend'))
+const boundLinkText = computed(() => boundContentValue(props.block.props?.text || '链接文本', 'titleField', 'text'))
+const boundLinkHref = computed(() => boundContentValue(props.block.props?.href || '#', 'valueField', 'href'))
+const boundTextTipTitle = computed(() => boundContentValue(props.block.props?.title || '提示', 'titleField', 'title'))
+const boundTextTipContent = computed(() => boundContentValue(props.block.props?.content || '提示内容', 'contentField', 'content'))
+const boundTextTipType = computed(() => boundContentValue(props.block.props?.type || 'info', 'valueField', 'type'))
+const boundMediaTitle = computed(() => boundContentValue(props.block.props?.title || '', 'titleField', 'title'))
+const boundMediaSrc = computed(() => boundContentValue(props.block.props?.src || '', 'valueField', 'src'))
+const boundVideoPoster = computed(() => boundContentValue(props.block.props?.poster || '', 'metaField', 'poster'))
+const boundAvatarName = computed(() => boundContentValue(props.block.props?.name || '用户名称', 'titleField', 'name'))
+const boundAvatarDescription = computed(() => boundContentValue(props.block.props?.description || '角色 / 部门', 'descriptionField', 'description'))
+const boundAvatarSrc = computed(() => boundContentValue(props.block.props?.src || '', 'valueField', 'src'))
 const runtimeTreeTotal = computed(() => countTreeNodes(runtimeTreeNodes.value, runtimeTreeChildrenField.value))
 const resizeAnchors = ['top-left', 'top', 'top-right', 'right', 'bottom-right', 'bottom', 'bottom-left', 'left']
 const nestedBlockMenuOptions = [
@@ -861,11 +1258,13 @@ const gridLayoutCells = computed(() => {
   const rawCells = Array.isArray(props.block.props?.cells) ? props.block.props.cells : []
   const sourceCells = rawCells.length ? rawCells : [{ key: 'cell_1', title: '栅格 1', span: 24, children: [] }]
   return sourceCells.map((cell, index) => {
+    const children = Array.isArray(cell.children) ? cell.children : []
     return {
       key: cell.key || `cell_${index + 1}`,
       title: cell.title ?? `栅格 ${index + 1}`,
       span: clampGridSpan(cell.span, 6),
-      children: Array.isArray(cell.children) ? cell.children : [],
+      children,
+      minHeight: Number(cell.minHeight || 0) || resolveGridCellPreviewMinHeight(children),
     }
   })
 })
@@ -874,13 +1273,37 @@ const gridLayoutStyle = computed(() => ({
   gap: `${Math.max(0, Number(props.block.props?.rowGap ?? 0))}px ${Math.max(0, Number(props.block.props?.gutter ?? props.block.props?.gap ?? 16))}px`,
   alignItems: props.block.props?.alignItems || 'stretch',
   justifyItems: props.block.props?.justifyItems || 'stretch',
+  height: 'auto',
+  minHeight: '100%',
 }))
 function gridCellStyle(cell = {}) {
   return {
     gridColumn: `span ${clampGridSpan(cell.span, 6)}`,
-    minHeight: `${Math.max(24, Number(props.block.props?.cellMinHeight || 120))}px`,
+    minHeight: `${Math.max(24, Number(cell.minHeight || props.block.props?.cellMinHeight || 120))}px`,
     backgroundColor: props.block.props?.cellBackground || 'transparent',
   }
+}
+function resolveGridCellPreviewMinHeight(children = []) {
+  if (!children.length)
+    return Math.max(24, Number(props.block.props?.cellMinHeight || 120))
+  return children.reduce((sum, child) => sum + resolvePreviewChildHeight(child), 0) + Math.max(0, children.length - 1) * 8 + 16
+}
+function resolvePreviewChildHeight(child = {}) {
+  const height = normalizeCssNumber(child.props?.style?.height)
+  if (height)
+    return height
+  return Math.max(72, Number(child.gridH || 2) * 32 + Math.max(0, Number(child.gridH || 2) - 1) * 8)
+}
+function normalizeCssNumberValue(value) {
+  if (value === null || value === undefined || value === '' || value === '100%' || value === 'auto')
+    return 0
+  if (typeof value === 'number')
+    return value
+  const num = Number(String(value).trim().replace('px', ''))
+  return Number.isFinite(num) ? num : 0
+}
+function normalizeCssNumber(value) {
+  return normalizeCssNumberValue(value)
 }
 function isActiveDropCell(cell = {}) {
   return props.activeDropCell?.containerId === props.block.id && props.activeDropCell?.cellKey === cell.key
@@ -1162,6 +1585,91 @@ const previewPagination = {
 }
 const toolbarCustomActions = computed(() => (props.block.props?.customActions || [])
   .filter(action => (action.position || 'toolbar') === 'toolbar'))
+const transferOptions = computed(() => normalizeOptionItems(props.block.props?.options))
+const transferValue = computed(() => Array.isArray(props.block.props?.value) ? props.block.props.value : [])
+const transferSelectedOptions = computed(() => transferOptions.value.filter(item => transferValue.value.includes(item.value)))
+const textTitleStyle = computed(() => ({
+  color: props.block.props?.color || '#0f172a',
+  fontSize: `${resolveTitleFontSize(props.block.props?.level || 2)}px`,
+  fontWeight: Number(props.block.props?.weight || 800),
+  textAlign: props.block.props?.align || 'left',
+}))
+const paragraphStyle = computed(() => ({
+  color: props.block.props?.color || '#475569',
+  textAlign: props.block.props?.align || 'left',
+  lineHeight: Number(props.block.props?.lineHeight || 1.7),
+  WebkitLineClamp: Number(props.block.props?.clamp || 0) || undefined,
+}))
+const watermarkContent = computed(() => {
+  if (Array.isArray(props.block.props?.content))
+    return props.block.props.content
+  const text = String(props.block.props?.content || '内部资料')
+  return text.includes('\n') ? text.split('\n') : text
+})
+const watermarkProps = computed(() => ({
+  content: watermarkContent.value,
+  cross: props.block.props?.cross === true,
+  debug: props.block.props?.debug === true,
+  fontSize: Number(props.block.props?.fontSize || 14),
+  fontFamily: props.block.props?.fontFamily || undefined,
+  fontStyle: props.block.props?.fontStyle || 'normal',
+  fontVariant: props.block.props?.fontVariant || '',
+  fontWeight: Number(props.block.props?.fontWeight || 400),
+  fontColor: props.block.props?.fontColor || 'rgba(128, 128, 128, .3)',
+  fullscreen: props.block.props?.fullscreen === true,
+  globalRotate: Number(props.block.props?.globalRotate || 0),
+  lineHeight: Number(props.block.props?.lineHeight || 14),
+  height: Number(props.block.props?.height || 32),
+  image: props.block.props?.image || undefined,
+  imageHeight: toOptionalNumber(props.block.props?.imageHeight),
+  imageOpacity: Number(props.block.props?.imageOpacity ?? 1),
+  imageWidth: toOptionalNumber(props.block.props?.imageWidth),
+  rotate: Number(props.block.props?.rotate || 0),
+  selectable: props.block.props?.selectable !== false,
+  textAlign: props.block.props?.textAlign || 'left',
+  width: Number(props.block.props?.width || 32),
+  xGap: Number(props.block.props?.xGap || 0),
+  xOffset: Number(props.block.props?.xOffset || 0),
+  yGap: Number(props.block.props?.yGap || 0),
+  yOffset: Number(props.block.props?.yOffset || 0),
+  zIndex: Number(props.block.props?.zIndex || 10),
+}))
+const avatarInitial = computed(() => String(boundAvatarName.value || '用户').trim().slice(0, 1) || 'U')
+const safeIframeSrc = computed(() => sanitizeIframeSrc(props.block.props?.src || ''))
+const qrcodeQrOptions = computed(() => ({
+  typeNumber: 0,
+  mode: 'Byte',
+  errorCorrectionLevel: props.block.props?.errorCorrectionLevel || 'Q',
+}))
+const qrcodeDotsOptions = computed(() => ({
+  type: props.block.props?.dotsType || 'square',
+  color: props.block.props?.foreground || '#0f172a',
+}))
+const qrcodeBackgroundOptions = computed(() => ({
+  color: props.block.props?.background || '#ffffff',
+}))
+const qrcodeCornersSquareOptions = computed(() => ({
+  type: props.block.props?.cornersSquareType || 'square',
+  color: props.block.props?.cornerColor || props.block.props?.foreground || '#0f172a',
+}))
+const qrcodeCornersDotOptions = computed(() => ({
+  type: props.block.props?.cornersDotType || 'square',
+  color: props.block.props?.cornerColor || props.block.props?.foreground || '#0f172a',
+}))
+const boxLayoutStyle = computed(() => ({
+  display: 'flex',
+  flexDirection: props.block.props?.direction || 'row',
+  flexWrap: props.block.props?.wrap === false ? 'nowrap' : 'wrap',
+  alignItems: props.block.props?.alignItems || 'stretch',
+  justifyContent: props.block.props?.justifyContent || 'flex-start',
+  gap: `${Number(props.block.props?.gap ?? 12)}px`,
+}))
+const spacePreviewStyle = computed(() => ({
+  '--space-size': `${Number(props.block.props?.size || 24)}px`,
+}))
+const descriptionGridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, Number(props.block.props?.columnCount || 2)))}, minmax(0, 1fr))`,
+}))
 
 const sampleRows = computed(() => Array.from({ length: 3 }).map((_, idx) => {
   const row = { id: idx + 1, __actions: '编辑' }
@@ -1175,6 +1683,30 @@ function componentType(field) {
   return field?.componentType || field?.dataType || 'input'
 }
 
+function normalizeOptionItems(options = []) {
+  return (Array.isArray(options) ? options : []).map((item, index) => {
+    if (typeof item === 'string')
+      return { label: item, value: item }
+    return {
+      label: item?.label || item?.value || `选项${index + 1}`,
+      value: item?.value || item?.label || `option${index + 1}`,
+      disabled: item?.disabled === true,
+    }
+  })
+}
+
+function resolveTitleFontSize(level = 2) {
+  const map = { 1: 28, 2: 22, 3: 18, 4: 16, 5: 14, 6: 13 }
+  return map[Number(level)] || 22
+}
+
+function sanitizeIframeSrc(value = '') {
+  const text = String(value || '').trim()
+  if (!/^https?:\/\//i.test(text))
+    return ''
+  return text
+}
+
 function hasAction(key) {
   return Array.isArray(props.block.props?.actions) && props.block.props.actions.includes(key)
 }
@@ -1184,48 +1716,24 @@ function fieldAlign(fieldName) {
   return ['left', 'center', 'right'].includes(align) ? align : 'left'
 }
 
+function toOptionalNumber(value) {
+  const number = Number(value)
+  return Number.isFinite(number) && value !== '' && value !== undefined && value !== null ? number : undefined
+}
+
 function fieldSetting(fieldName) {
   return props.block.props?.fieldSettings?.[fieldName] || {}
 }
 
 function renderTableCell(field, row = {}) {
   const setting = fieldSetting(field.field)
-  const text = row[field.field] ?? ''
-  const style = {}
-  if (setting.textColor)
-    style.color = setting.textColor
-  const renderType = setting.renderType || (field.dictType ? 'dictTag' : '')
-  if (renderType === 'dictTag') {
-    return h('span', {
-      class: 'designer-dict-tag',
-      style,
-      title: field.dictType ? `字典：${field.dictType}` : '枚举标签',
-    }, resolveDictLabel(field, text))
-  }
-  const isLink = setting.renderType === 'link' || setting.clickAction === 'navigate'
-  if (isLink) {
-    const targetTip = setting.targetPageKey
-      ? `跳转到：${setting.targetPageKey}${setting.targetFormKey ? ` / ${setting.targetFormKey}` : ''}，参数 ${setting.targetParamName || 'id'} = ${setting.targetParamField || 'id'}`
-      : '跳转页面'
-    return h('a', {
-      href: '#',
-      class: 'designer-table-link',
-      style,
-      title: targetTip,
-      onClick: event => event.preventDefault(),
-    }, String(text || '-'))
-  }
-  return h('span', { style }, String(text || '-'))
-}
-
-function resolveDictLabel(field, value) {
-  const options = Array.isArray(field.options) ? field.options : []
-  const match = options.find(option => String(option.value) === String(value))
-  if (match)
-    return match.label || match.value || '-'
-  if (value && value !== '字典')
-    return String(value)
-  return field.dictType || '字典标签'
+  return h(FieldValueRenderer, {
+    value: row[field.field],
+    row,
+    field,
+    setting,
+    context: runtimeRuleContext.value,
+  })
 }
 
 function toAiFormField(field, mode = 'form') {
@@ -1281,7 +1789,7 @@ function sampleValue(field, idx) {
 }
 
 function detailValue(field, idx) {
-  const record = props.runtimeRecord || {}
+  const record = detailInfoRecord.value || {}
   const candidates = [
     field?.field,
     field?.sourceField,
@@ -1296,6 +1804,190 @@ function detailValue(field, idx) {
   if (Object.keys(record).length)
     return '-'
   return sampleValue(field, idx)
+}
+
+function normalizeBlockBoundRows(fallbackRows = []) {
+  const rows = extractBlockBoundRows(blockBoundData.value)
+  const sourceRows = rows.length ? rows : (Array.isArray(fallbackRows) ? fallbackRows : [])
+  return sourceRows.map((row, index) => normalizeBlockRow(row, index))
+}
+
+function extractBlockBoundRows(data) {
+  if (Array.isArray(data))
+    return data
+  if (!data || typeof data !== 'object')
+    return []
+  const candidates = [
+    data.records,
+    data.list,
+    data.rows,
+    data.items,
+    data.children,
+    data.data,
+  ]
+  const rows = candidates.find(Array.isArray)
+  return rows || []
+}
+
+function normalizeBlockRow(row, index = 0) {
+  if (row && typeof row === 'object')
+    return row
+  return {
+    label: String(row ?? `项目${index + 1}`),
+    title: String(row ?? `项目${index + 1}`),
+    value: row,
+    content: String(row ?? ''),
+  }
+}
+
+function boundContentValue(fallback = '', fieldKey = 'contentField', defaultField = 'content') {
+  const data = blockBoundData.value
+  if (data === undefined || data === null)
+    return fallback
+  if (Array.isArray(data))
+    return fallback
+  if (typeof data !== 'object')
+    return fieldKey === 'valueField' || fieldKey === 'contentField' ? data : fallback
+  return readBoundField(data, fieldKey, defaultField, fallback)
+}
+
+function boundRowField(row = {}, fieldKey = 'valueField', defaultField = 'value', fallback = '') {
+  if (row === undefined || row === null)
+    return fallback
+  if (typeof row !== 'object')
+    return fieldKey === 'valueField' || fieldKey === 'contentField' ? row : fallback
+  return readBoundField(row, fieldKey, defaultField, fallback)
+}
+
+function readBoundField(source = {}, fieldKey = 'valueField', defaultField = 'value', fallback = '') {
+  const binding = props.block.props?.dataBinding || {}
+  const fieldName = binding[fieldKey] || defaultField
+  const candidates = Array.from(new Set([fieldName, defaultField].filter(Boolean)))
+  for (const key of candidates) {
+    const value = getNestedRecordValue(source, key)
+    if (value !== undefined && value !== null && value !== '')
+      return value
+  }
+  return fallback
+}
+
+async function loadBlockBindingData() {
+  const binding = props.block.props?.dataBinding || {}
+  if (!isLocalDataBindableBlock.value || binding.enabled !== true || binding.sourceType !== 'remote') {
+    remoteBlockBindingData.value = null
+    blockBindingError.value = ''
+    blockBindingLoading.value = false
+    return
+  }
+  if (!binding.api) {
+    remoteBlockBindingData.value = null
+    blockBindingError.value = '未配置数据接口'
+    blockBindingLoading.value = false
+    return
+  }
+  blockBindingLoading.value = true
+  blockBindingError.value = ''
+  try {
+    const apiConfig = String(binding.api).includes('@') ? binding.api : `${binding.method || 'get'}@${binding.api}`
+    const { method, url } = parseApiConfigValue(apiConfig)
+    const params = normalizeBlockBindingParams(binding.paramsText || '{}')
+    const response = await request({
+      method,
+      url: interpolateText(url, props.runtimeRecord || {}),
+      params: method === 'get' ? params : undefined,
+      data: method === 'get' ? undefined : params,
+      needTip: false,
+    })
+    remoteBlockBindingData.value = response?.data ?? response
+  }
+  catch (error) {
+    remoteBlockBindingData.value = null
+    blockBindingError.value = `数据加载失败：${error?.message || '请检查接口配置'}`
+  }
+  finally {
+    blockBindingLoading.value = false
+  }
+}
+
+function normalizeBlockBindingParams(value = '{}') {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : value
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return {}
+    return Object.fromEntries(Object.entries(parsed).map(([key, item]) => [
+      key,
+      typeof item === 'string' ? interpolateText(item, props.runtimeRecord || {}) : item,
+    ]))
+  }
+  catch {
+    return {}
+  }
+}
+
+async function loadDetailInfoRecord() {
+  if (props.block.blockType !== 'detail-info' || props.block.props?.dataSourceType !== 'remote') {
+    remoteDetailInfoRecord.value = {}
+    detailInfoError.value = ''
+    return
+  }
+  const api = props.block.props?.detailApi || ''
+  if (!api) {
+    remoteDetailInfoRecord.value = {}
+    detailInfoError.value = '未配置详情接口'
+    return
+  }
+  detailInfoLoading.value = true
+  detailInfoError.value = ''
+  try {
+    const apiConfig = String(api).includes('@') ? api : `${props.block.props?.detailMethod || 'get'}@${api}`
+    const { method, url } = parseApiConfigValue(apiConfig)
+    const params = normalizeDetailInfoParams(props.block.props?.paramsText || '{}')
+    const response = await request({
+      method,
+      url: interpolateText(url, props.runtimeRecord || {}),
+      params: method === 'get' ? params : undefined,
+      data: method === 'get' ? undefined : params,
+      needTip: false,
+    })
+    const data = response?.data ?? response
+    remoteDetailInfoRecord.value = props.block.props?.dataPath ? getNestedRecordValue(data, props.block.props.dataPath) || {} : data || {}
+  }
+  catch (error) {
+    remoteDetailInfoRecord.value = {}
+    detailInfoError.value = `详情加载失败：${error?.message || '请检查接口配置'}`
+  }
+  finally {
+    detailInfoLoading.value = false
+  }
+}
+
+function normalizeDetailInfoParams(value = '{}') {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : value
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return {}
+    return Object.fromEntries(Object.entries(parsed).map(([key, item]) => [
+      key,
+      typeof item === 'string' ? interpolateText(item, props.runtimeRecord || {}) : item,
+    ]))
+  }
+  catch {
+    return {}
+  }
+}
+
+function interpolateText(value = '', data = {}) {
+  return String(value || '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
+    const result = getNestedRecordValue(data, key)
+    return result === undefined || result === null ? '' : String(result)
+  })
+}
+
+function getNestedRecordValue(source = {}, path = '') {
+  return String(path || '')
+    .split('.')
+    .filter(Boolean)
+    .reduce((value, key) => value?.[key], source)
 }
 
 async function loadRuntimeTree() {
@@ -1668,27 +2360,7 @@ function hasRuntimePermission(permissionCode = '') {
 }
 
 function matchDisplayCondition(expression = '', row = {}) {
-  const text = String(expression || '').trim()
-  if (!text)
-    return true
-  const lowerText = text.toLowerCase()
-  const inIndex = lowerText.indexOf(' in ')
-  if (inIndex > 0) {
-    const actual = resolveConditionValue(row, text.slice(0, inIndex).trim())
-    return text.slice(inIndex + 4).split(',').map(item => item.trim()).filter(Boolean).includes(String(actual ?? ''))
-  }
-  const operator = text.includes('!=') ? '!=' : text.includes('==') ? '==' : text.includes('=') ? '=' : ''
-  if (operator) {
-    const [fieldName, ...expectedParts] = text.split(operator)
-    const actual = String(resolveConditionValue(row, fieldName.trim()) ?? '')
-    const expected = String(expectedParts.join(operator) || '').trim().replace(/^['"]|['"]$/g, '')
-    return operator === '!=' ? actual !== expected : actual === expected
-  }
-  return true
-}
-
-function resolveConditionValue(row = {}, path = '') {
-  return String(path || '').split('.').filter(Boolean).reduce((value, key) => value?.[key], row)
+  return matchSimpleExpression(expression, row)
 }
 
 function parseRuntimeApiConfig(value = '') {
@@ -1760,7 +2432,11 @@ defineExpose({
   getRuntimeCrudRef: () => runtimeCrudRef.value,
 })
 
-onMounted(loadRuntimeTree)
+onMounted(() => {
+  loadRuntimeTree()
+  loadDetailInfoRecord()
+  loadBlockBindingData()
+})
 
 watch(
   () => [
@@ -1773,6 +2449,34 @@ watch(
     props.runtimeCrudProps?.apiConfig?.tree,
   ],
   () => loadRuntimeTree(),
+)
+
+watch(
+  () => [
+    props.block.blockType,
+    props.block.props?.dataSourceType,
+    props.block.props?.detailApi,
+    props.block.props?.detailMethod,
+    props.block.props?.paramsText,
+    props.block.props?.dataPath,
+    props.runtimeRecord,
+  ],
+  () => loadDetailInfoRecord(),
+)
+
+watch(
+  () => [
+    props.block.blockType,
+    props.block.props?.dataBinding?.enabled,
+    props.block.props?.dataBinding?.sourceType,
+    props.block.props?.dataBinding?.api,
+    props.block.props?.dataBinding?.method,
+    props.block.props?.dataBinding?.paramsText,
+    props.block.props?.dataBinding?.dataPath,
+    props.block.props?.dataBinding?.contextPath,
+    props.runtimeRecord,
+  ],
+  () => loadBlockBindingData(),
 )
 
 watch(
@@ -2037,6 +2741,45 @@ watch(
   white-space: nowrap;
 }
 
+.detail-info-state {
+  border: 1px dashed #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 8px 10px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.detail-info-state.error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.block-binding-state {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 12;
+  max-width: calc(100% - 16px);
+  padding: 3px 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(239, 246, 255, 0.94);
+  color: #2563eb;
+  font-size: 11px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.block-binding-state.error {
+  background: rgba(254, 242, 242, 0.96);
+  color: #dc2626;
+}
+
 .block-table :deep(.n-data-table-tr) {
   height: var(--block-table-row-height, 40px);
 }
@@ -2044,15 +2787,15 @@ watch(
 .layout-grid-preview {
   display: grid;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-width: 0;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .layout-grid-cell {
   position: relative;
   min-width: 0;
-  min-height: 0;
+  min-height: var(--grid-cell-min-height, 120px);
   padding: 8px;
   border-radius: 6px;
   transition:
@@ -2104,15 +2847,16 @@ watch(
 }
 
 .layout-grid-cell-body {
-  position: absolute;
-  inset: 8px;
+  position: relative;
   z-index: 2;
+  display: grid;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
 }
 
 .layout-grid-cell-child {
-  position: absolute;
+  position: relative;
   min-width: 0;
   min-height: 0;
   border: 1px solid transparent;
@@ -2958,6 +3702,284 @@ watch(
 
 .container-child-list > :deep(.grid-block) {
   min-height: 72px;
+}
+
+.signature-block-preview,
+.transfer-preview,
+.step-form-preview,
+.descriptions-preview,
+.media-preview,
+.iframe-preview,
+.qrcode-preview,
+.barcode-preview,
+.box-layout-preview {
+  min-height: 0;
+  height: 100%;
+}
+
+.signature-block-preview,
+.transfer-preview,
+.step-form-preview,
+.descriptions-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.transfer-preview :deep(.n-transfer) {
+  min-height: 0;
+}
+
+.step-form-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.step-form-field {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.step-form-field span {
+  color: #475569;
+  font-size: 12px;
+}
+
+.step-form-field em {
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.single-stat-preview,
+.text-tip-preview,
+.watermark-preview,
+.audio-preview,
+.video-preview,
+.avatar-preview,
+.barcode-preview,
+.qrcode-preview {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.text-title-preview {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  height: 100%;
+}
+
+.text-title-preview small {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.paragraph-preview {
+  display: -webkit-box;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+}
+
+.single-stat-preview {
+  border-color: color-mix(in srgb, var(--stat-color) 28%, #e2e8f0);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--stat-color) 10%, #fff), #fff);
+}
+
+.single-stat-preview span,
+.single-stat-preview small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.single-stat-preview strong {
+  color: var(--stat-color);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.link-preview {
+  display: inline-flex;
+  align-items: center;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.link-preview:hover {
+  text-decoration: underline;
+}
+
+.text-tip-preview {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+}
+
+.text-tip-preview p {
+  margin: 3px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.text-tip-preview.type-success .tip-icon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.text-tip-preview.type-warning .tip-icon {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.text-tip-preview.type-error .tip-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.watermark-preview {
+  position: relative;
+  overflow: hidden;
+}
+
+.watermark-preview-inner {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 100%;
+}
+
+.media-preview audio,
+.media-preview video,
+.iframe-preview iframe {
+  width: 100%;
+}
+
+.media-preview video,
+.iframe-preview iframe {
+  height: 100%;
+  min-height: 180px;
+  border: 0;
+  border-radius: 8px;
+  background: #0f172a;
+}
+
+.avatar-preview {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.avatar-preview strong,
+.avatar-preview span {
+  display: block;
+}
+
+.avatar-preview span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.barcode-preview small,
+.qrcode-preview small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barcode-preview :deep(svg),
+.qrcode-preview :deep(svg),
+.qrcode-preview :deep(canvas),
+.qrcode-preview :deep(img) {
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  display: block;
+}
+
+.code-invalid {
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.box-layout-preview {
+  min-height: 100%;
+}
+
+.box-layout-preview > :deep(.grid-block) {
+  min-width: 120px;
+  min-height: 72px;
+}
+
+.space-preview {
+  display: grid;
+  place-items: center;
+  min-height: var(--space-size);
+}
+
+.space-preview.horizontal {
+  min-width: var(--space-size);
+  min-height: 100%;
+}
+
+.space-preview span {
+  width: 100%;
+  height: 1px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.space-preview.horizontal span {
+  width: 1px;
+  height: 100%;
+  border-top: 0;
+  border-left: 1px dashed #cbd5e1;
+}
+
+.description-grid {
+  display: grid;
+  gap: 8px 16px;
+}
+
+.description-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.description-grid.bordered .description-item {
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.description-item span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.description-item strong {
+  color: #0f172a;
+  font-size: 13px;
 }
 
 .container-empty {

@@ -309,6 +309,12 @@
           </div>
         </n-collapse-item>
       </n-collapse>
+      <PageWidgetRenderer
+        v-else-if="isPageWidget"
+        :component-key="component.componentKey"
+        :props-data="component.props || {}"
+        @update:props-data="handlePageWidgetPropsUpdate"
+      />
       <div
         v-else
         class="layout-children"
@@ -353,6 +359,8 @@ import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import AiFormGroupTitle from '@/components/ai-form/AiFormGroupTitle.vue'
 import AiFormItem from '@/components/ai-form/AiFormItem.vue'
 import AiFormSectionTitle from '@/components/ai-form/AiFormSectionTitle.vue'
+import { isPageWidgetComponentKey } from '@/components/lowcode-builder/shared/page-widget-schema'
+import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRenderer.vue'
 import {
   canAcceptDesignerChild,
   createComponentFromField,
@@ -452,6 +460,7 @@ const isTableLayout = computed(() => ['table', 'fcTable'].includes(props.compone
 const isCardLayout = computed(() => ['card', 'elCard'].includes(props.component.componentKey))
 const isTabsLayout = computed(() => ['tabs', 'elTabs'].includes(props.component.componentKey))
 const isCollapseLayout = computed(() => ['collapse', 'elCollapse'].includes(props.component.componentKey))
+const isPageWidget = computed(() => isPageWidgetComponentKey(props.component.componentKey))
 const isStructuralSlot = computed(() => ['col', 'tableGrid', 'fcTableGrid', 'tabPane', 'elTabPane', 'collapseItem', 'elCollapseItem'].includes(props.component.componentKey))
 const selectedDesignerStyle = computed(() => props.component.props?.__designerStyle || {})
 const designerBorderHidden = computed(() => selectedDesignerStyle.value.hideInnerBorder || selectedDesignerStyle.value.borderStyle === 'none')
@@ -1589,6 +1598,12 @@ function updateNodeDesignerStyle(stylePatch = {}) {
   }))
 }
 
+function handlePageWidgetPropsUpdate(propsData = {}) {
+  emit('update:schema', updateDesignerComponent(props.schema, props.component.id, {
+    props: propsData,
+  }))
+}
+
 function resolveBackgroundStyle(key) {
   const map = {
     'bg-default': { backgroundColor: undefined },
@@ -1639,14 +1654,21 @@ function normalizePreviewFieldType(componentKey = '') {
 }
 
 function buildPreviewPlaceholder(componentKey = '', label = '') {
-  if (['select', 'dictSelect', 'radio', 'radioButton', 'checkbox', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'userSelect', 'orgTreeSelect', 'regionTreeSelect', 'treeSelect', 'customSelect', 'color'].includes(componentKey))
+  if (['select', 'dictSelect', 'radio', 'radioButton', 'checkbox', 'transfer', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'userSelect', 'orgTreeSelect', 'regionTreeSelect', 'treeSelect', 'customSelect', 'color'].includes(componentKey))
     return `请选择${label}`
   return `请输入${label}`
 }
 
 function buildPreviewOptions(componentKey = '') {
-  if (!['select', 'radio', 'radioButton', 'checkbox'].includes(componentKey))
+  if (!['select', 'radio', 'radioButton', 'checkbox', 'transfer'].includes(componentKey))
     return undefined
+  if (componentKey === 'transfer') {
+    return [
+      { label: '选项一', value: 'option1' },
+      { label: '选项二', value: 'option2' },
+      { label: '选项三', value: 'option3' },
+    ]
+  }
   return [
     { label: '选项一', value: '1' },
     { label: '选项二', value: '2' },

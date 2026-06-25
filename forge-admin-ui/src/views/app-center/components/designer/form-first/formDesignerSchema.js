@@ -1,3 +1,4 @@
+import { isPageWidgetComponentKey } from '@/components/lowcode-builder/shared/page-widget-schema'
 import {
   camelToSnake,
   generateFieldCode,
@@ -33,6 +34,7 @@ const FIELD_COMPONENT_KEYS = new Set([
   'radio',
   'radioButton',
   'checkbox',
+  'transfer',
   'slider',
   'rate',
   'color',
@@ -100,6 +102,25 @@ export const VIRTUAL_COMPONENT_KEYS = new Set([
   'tag',
   'elImage',
   'image',
+  'rich-text',
+  'watermark',
+  'vue-component',
+  'html-tag',
+  'markdown',
+  'barcode',
+  'qrcode',
+  'calendar',
+  'code',
+  'countdown',
+  'descriptions',
+  'announcement',
+  'list',
+  'log',
+  'number-animation',
+  'breadcrumb',
+  'menu',
+  'pagination',
+  'split',
 ])
 
 const GENERIC_COMPONENT_ID_SUFFIXES = new Set([
@@ -180,6 +201,25 @@ const GENERIC_COMPONENT_ID_SUFFIXES = new Set([
   'tag',
   'elimage',
   'image',
+  'richtext',
+  'watermark',
+  'vuecomponent',
+  'htmltag',
+  'markdown',
+  'barcode',
+  'qrcode',
+  'calendar',
+  'code',
+  'countdown',
+  'descriptions',
+  'announcement',
+  'list',
+  'log',
+  'numberanimation',
+  'breadcrumb',
+  'menu',
+  'pagination',
+  'split',
 ])
 
 const FULL_ROW_COMPONENT_KEYS = new Set([
@@ -198,6 +238,25 @@ const FULL_ROW_COMPONENT_KEYS = new Set([
   'tableGrid',
   'AiCrudPage',
   'crudBlock',
+  'rich-text',
+  'watermark',
+  'vue-component',
+  'html-tag',
+  'markdown',
+  'barcode',
+  'qrcode',
+  'calendar',
+  'code',
+  'countdown',
+  'descriptions',
+  'announcement',
+  'list',
+  'log',
+  'number-animation',
+  'breadcrumb',
+  'menu',
+  'pagination',
+  'split',
 ])
 
 const FULL_ROW_LAYOUT_COMPONENT_KEYS = new Set([
@@ -215,7 +274,7 @@ const FULL_ROW_LAYOUT_COMPONENT_KEYS = new Set([
   'collapseItem',
 ])
 
-const LAYOUT_COMPONENT_LABELS = {
+const LAYOUT_COMPONENT_LABELS = Object.assign({
   fcRow: '栅格布局',
   row: '栅格布局',
   col: '栅格列',
@@ -240,7 +299,27 @@ const LAYOUT_COMPONENT_LABELS = {
   tableGrid: '表格单元格',
   AiCrudPage: 'CRUD区块',
   crudBlock: 'CRUD区块',
-}
+  watermark: '水印',
+  markdown: 'Markdown',
+  barcode: '条形码',
+  qrcode: '二维码',
+  calendar: '日历',
+  code: '代码',
+  countdown: '倒计时',
+  descriptions: '描述',
+  announcement: '公示',
+  list: '列表',
+  log: '日志',
+  breadcrumb: '面包屑',
+  menu: '菜单',
+  pagination: '分页',
+  split: '面板分隔',
+}, {
+  'rich-text': '富文本框',
+  'vue-component': 'Vue组件',
+  'html-tag': 'HTML标签',
+  'number-animation': '数值动画',
+})
 
 const RAW_LAYOUT_LABELS = new Set([
   '',
@@ -546,11 +625,15 @@ export function createFieldBindingFromLabel(label, options = {}) {
 }
 
 export function isFieldComponent(component = {}) {
+  if (FIELD_COMPONENT_KEYS.has(component.componentKey) && component.fieldBinding?.mode !== 'virtual')
+    return true
+  if (isPageWidgetComponentKey(component.componentKey))
+    return false
   return FIELD_COMPONENT_KEYS.has(component.componentKey)
 }
 
 export function isLayoutComponent(component = {}) {
-  return LAYOUT_COMPONENT_KEYS.has(component.componentKey)
+  return LAYOUT_COMPONENT_KEYS.has(component.componentKey) || isPageWidgetComponentKey(component.componentKey)
 }
 
 export function isVirtualComponent(component = {}) {

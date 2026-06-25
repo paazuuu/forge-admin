@@ -126,6 +126,8 @@
 <script setup>
 import { ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5'
 import { computed, nextTick, ref, useSlots, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import AiFormLayoutNodes from './AiFormLayoutNodes.vue'
 
 const props = defineProps({
@@ -229,6 +231,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:value', 'submit', 'reset', 'cancel', 'nodeAction'])
 const slots = useSlots()
+const route = useRoute()
 
 const formRef = ref(null)
 const formValue = ref({})
@@ -246,6 +249,22 @@ watch(() => props.value, (newVal) => {
 }, { immediate: true, deep: true })
 
 function isFieldVisible(field) {
+  const control = resolveRuntimeControl(field || {}, {
+    ...props.context,
+    record: formValue.value,
+    row: props.context?.currentRow || props.context?.row || formValue.value,
+    formData: formValue.value,
+    data: formValue.value,
+    route: {
+      query: route.query || {},
+      params: route.params || {},
+      path: route.path,
+      fullPath: route.fullPath,
+      name: route.name,
+    },
+  })
+  if (control.visible === false)
+    return false
   if (field.hidden || field.visible === false) {
     return false
   }
@@ -381,6 +400,17 @@ const visibleSchema = computed(() => {
 
 const itemContext = computed(() => ({
   ...props.context,
+  row: props.context?.currentRow || props.context?.row || formValue.value,
+  record: formValue.value,
+  formData: formValue.value,
+  data: formValue.value,
+  route: {
+    query: route.query || {},
+    params: route.params || {},
+    path: route.path,
+    fullPath: route.fullPath,
+    name: route.name,
+  },
   schema: visibleFieldSchema.value,
   allSchema: allFieldSchema.value,
   formAssets: resolveFormAssets(),

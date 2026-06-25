@@ -60,6 +60,474 @@
                       @update:value="updateComponent({ props: { description: $event } })"
                     />
                   </n-form-item>
+                  <template v-if="isPageWidget">
+                    <n-form-item label="组件标题">
+                      <n-input
+                        :value="selectedComponent.props?.title || selectedComponent.label"
+                        clearable
+                        @update:value="updateComponent({ props: { title: $event } })"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="dataBindablePageWidgetKeys.includes(selectedComponent.componentKey)" label="数据来源">
+                      <div class="data-source-editor">
+                        <div class="property-help">
+                          选择组件内容从哪里来。静态配置使用当前属性；当前表单/详情数据从已加载记录取值；远程接口会请求接口后再按字段映射渲染。
+                        </div>
+                        <div class="data-source-row">
+                          <span>来源类型</span>
+                          <n-select
+                            :value="selectedComponent.props?.dataBinding?.sourceType || 'static'"
+                            :options="widgetDataSourceOptions"
+                            @update:value="updatePageWidgetDataBinding({ enabled: $event !== 'static', sourceType: $event || 'static' })"
+                          />
+                        </div>
+                        <div v-if="selectedComponent.props?.dataBinding?.sourceType === 'context'" class="data-source-row">
+                          <span>取值路径</span>
+                          <n-input
+                            :value="selectedComponent.props?.dataBinding?.contextPath || ''"
+                            clearable
+                            placeholder="不填表示整条当前记录；例如 customer.name"
+                            @update:value="updatePageWidgetDataBinding({ contextPath: $event || '' })"
+                          />
+                        </div>
+                        <template v-if="selectedComponent.props?.dataBinding?.sourceType === 'remote'">
+                          <div class="data-source-row">
+                            <span>接口地址</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.api || ''"
+                              clearable
+                              placeholder="例如 /api/order/detail/{{ id }}"
+                              @update:value="updatePageWidgetDataBinding({ api: $event || '' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>请求方式</span>
+                            <n-select
+                              :value="selectedComponent.props?.dataBinding?.method || 'get'"
+                              :options="requestMethodOptions"
+                              @update:value="updatePageWidgetDataBinding({ method: $event || 'get' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>响应路径</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.dataPath || 'data'"
+                              clearable
+                              placeholder="如 data、data.records"
+                              @update:value="updatePageWidgetDataBinding({ dataPath: $event || 'data' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>请求参数</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.paramsText || '{}'"
+                              type="textarea"
+                              :rows="3"
+                              placeholder="{ &quot;id&quot;: &quot;{{ id }}&quot; }，可引用当前表单/详情数据"
+                              @update:value="updatePageWidgetDataBinding({ paramsText: $event || '{}' })"
+                            />
+                          </div>
+                        </template>
+                        <div v-if="selectedComponent.props?.dataBinding?.sourceType !== 'static'" class="property-help">
+                          字段映射用于告诉组件接口返回的字段含义。列表/标签/步骤类组件常用“显示文本、值、标题、描述”；单值组件通常只需要“值字段”或“内容字段”。
+                        </div>
+                        <div v-if="selectedComponent.props?.dataBinding?.sourceType !== 'static'" class="data-source-mapping-grid">
+                          <div class="data-source-row">
+                            <span>显示文本</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.labelField || 'label'"
+                              placeholder="label / name"
+                              @update:value="updatePageWidgetDataBinding({ labelField: $event || 'label' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>值字段</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.valueField || 'value'"
+                              placeholder="value / id / src"
+                              @update:value="updatePageWidgetDataBinding({ valueField: $event || 'value' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>标题字段</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.titleField || 'title'"
+                              placeholder="title / text"
+                              @update:value="updatePageWidgetDataBinding({ titleField: $event || 'title' })"
+                            />
+                          </div>
+                          <div class="data-source-row">
+                            <span>描述字段</span>
+                            <n-input
+                              :value="selectedComponent.props?.dataBinding?.descriptionField || 'description'"
+                              placeholder="description / content"
+                              @update:value="updatePageWidgetDataBinding({ descriptionField: $event || 'description' })"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </n-form-item>
+                    <template v-if="selectedComponent.componentKey === 'transfer'">
+                      <n-form-item label="数据来源">
+                        <n-select
+                          :value="selectedComponent.props?.dataSourceType || 'static'"
+                          :options="transferDataSourceOptions"
+                          @update:value="updateComponent({ props: { dataSourceType: $event || 'static' } })"
+                        />
+                      </n-form-item>
+                      <n-form-item label="分栏标题">
+                        <div class="option-editor-row two-columns">
+                          <n-input
+                            :value="selectedComponent.props?.sourceTitle || '可选项'"
+                            size="small"
+                            placeholder="左侧标题"
+                            @update:value="updateComponent({ props: { sourceTitle: $event || '可选项' } })"
+                          />
+                          <n-input
+                            :value="selectedComponent.props?.targetTitle || '已选项'"
+                            size="small"
+                            placeholder="右侧标题"
+                            @update:value="updateComponent({ props: { targetTitle: $event || '已选项' } })"
+                          />
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.props?.dataSourceType === 'remote'" label="远程接口">
+                        <div class="page-widget-config-stack">
+                          <n-input
+                            :value="selectedComponent.props?.optionSource?.api || ''"
+                            placeholder="例如 get@/api/system/user/options"
+                            @update:value="updatePageWidgetOptionSource({ api: $event })"
+                          />
+                          <div class="option-editor-row two-columns">
+                            <n-select
+                              :value="selectedComponent.props?.optionSource?.method || 'get'"
+                              :options="requestMethodOptions"
+                              @update:value="updatePageWidgetOptionSource({ method: $event || 'get' })"
+                            />
+                            <n-input
+                              :value="selectedComponent.props?.optionSource?.recordsField || 'records'"
+                              placeholder="列表路径"
+                              @update:value="updatePageWidgetOptionSource({ recordsField: $event || 'records' })"
+                            />
+                          </div>
+                          <div class="option-editor-row two-columns">
+                            <n-input
+                              :value="selectedComponent.props?.optionSource?.labelField || 'label'"
+                              placeholder="显示字段"
+                              @update:value="updatePageWidgetOptionSource({ labelField: $event || 'label' })"
+                            />
+                            <n-input
+                              :value="selectedComponent.props?.optionSource?.valueField || 'value'"
+                              placeholder="值字段"
+                              @update:value="updatePageWidgetOptionSource({ valueField: $event || 'value' })"
+                            />
+                          </div>
+                          <n-input
+                            :value="selectedComponent.props?.optionSource?.paramsText || '{}'"
+                            placeholder="请求参数 JSON"
+                            @update:value="updatePageWidgetOptionSource({ paramsText: $event || '{}' })"
+                          />
+                        </div>
+                      </n-form-item>
+                    </template>
+                    <template v-if="selectedComponent.componentKey === 'watermark'">
+                      <n-form-item label="水印文字">
+                        <n-input
+                          :value="selectedComponent.props?.content || ''"
+                          type="textarea"
+                          :autosize="{ minRows: 2, maxRows: 4 }"
+                          placeholder="支持多行文本"
+                          @update:value="updateComponent({ props: { content: $event } })"
+                        />
+                      </n-form-item>
+                      <n-form-item label="字体 / 行高 / 字重">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number
+                            :value="selectedComponent.props?.fontSize || 14"
+                            size="small"
+                            :min="8"
+                            :max="72"
+                            :show-button="false"
+                            @update:value="updateComponent({ props: { fontSize: $event || 14 } })"
+                          />
+                          <n-input-number
+                            :value="selectedComponent.props?.lineHeight || 14"
+                            size="small"
+                            :min="8"
+                            :max="96"
+                            :show-button="false"
+                            @update:value="updateComponent({ props: { lineHeight: $event || 14 } })"
+                          />
+                          <n-input-number
+                            :value="selectedComponent.props?.fontWeight || 400"
+                            size="small"
+                            :min="100"
+                            :max="900"
+                            :step="100"
+                            :show-button="false"
+                            @update:value="updateComponent({ props: { fontWeight: $event || 400 } })"
+                          />
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="颜色 / 样式 / 对齐">
+                        <div class="option-editor-row three-columns">
+                          <n-color-picker
+                            :value="selectedComponent.props?.fontColor || 'rgba(128, 128, 128, .3)'"
+                            :show-alpha="true"
+                            @update:value="updateComponent({ props: { fontColor: $event || 'rgba(128, 128, 128, .3)' } })"
+                          />
+                          <n-select
+                            :value="selectedComponent.props?.fontStyle || 'normal'"
+                            :options="watermarkFontStyleOptions"
+                            @update:value="updateComponent({ props: { fontStyle: $event || 'normal' } })"
+                          />
+                          <n-select
+                            :value="selectedComponent.props?.textAlign || 'left'"
+                            :options="watermarkTextAlignOptions"
+                            @update:value="updateComponent({ props: { textAlign: $event || 'left' } })"
+                          />
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="宽高 / 旋转">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number :value="selectedComponent.props?.width || 32" size="small" :min="1" :max="600" :show-button="false" @update:value="updateComponent({ props: { width: $event || 32 } })" />
+                          <n-input-number :value="selectedComponent.props?.height || 32" size="small" :min="1" :max="600" :show-button="false" @update:value="updateComponent({ props: { height: $event || 32 } })" />
+                          <n-input-number :value="selectedComponent.props?.rotate || 0" size="small" :min="-180" :max="180" :show-button="false" @update:value="updateComponent({ props: { rotate: $event || 0 } })" />
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="间隔 / 偏移">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number :value="selectedComponent.props?.xGap || 0" size="small" :min="0" :max="600" :show-button="false" @update:value="updateComponent({ props: { xGap: $event || 0 } })" />
+                          <n-input-number :value="selectedComponent.props?.yGap || 0" size="small" :min="0" :max="600" :show-button="false" @update:value="updateComponent({ props: { yGap: $event || 0 } })" />
+                          <n-input-number :value="selectedComponent.props?.zIndex || 10" size="small" :min="0" :max="9999" :show-button="false" @update:value="updateComponent({ props: { zIndex: $event || 10 } })" />
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="图片水印">
+                        <div class="page-widget-config-stack">
+                          <n-input :value="selectedComponent.props?.image || ''" clearable placeholder="图片 URL" @update:value="updateComponent({ props: { image: $event } })" />
+                          <div class="option-editor-row three-columns">
+                            <n-input-number :value="selectedComponent.props?.imageWidth" size="small" :min="1" :max="600" :show-button="false" placeholder="图片宽" @update:value="updateComponent({ props: { imageWidth: $event || undefined } })" />
+                            <n-input-number :value="selectedComponent.props?.imageHeight" size="small" :min="1" :max="600" :show-button="false" placeholder="图片高" @update:value="updateComponent({ props: { imageHeight: $event || undefined } })" />
+                            <n-input-number :value="selectedComponent.props?.imageOpacity ?? 1" size="small" :min="0" :max="1" :step="0.1" :show-button="false" @update:value="updateComponent({ props: { imageOpacity: $event ?? 1 } })" />
+                          </div>
+                        </div>
+                      </n-form-item>
+                      <n-form-item label="开关">
+                        <n-checkbox-group :value="resolveBooleanKeys(selectedComponent.props, ['cross', 'debug', 'fullscreen', 'selectable'])" @update:value="values => updateComponent({ props: { cross: values.includes('cross'), debug: values.includes('debug'), fullscreen: values.includes('fullscreen'), selectable: values.includes('selectable') } })">
+                          <n-space size="small">
+                            <n-checkbox value="cross" label="跨边界" />
+                            <n-checkbox value="debug" label="调试" />
+                            <n-checkbox value="fullscreen" label="全屏" />
+                            <n-checkbox value="selectable" label="内容可选" />
+                          </n-space>
+                        </n-checkbox-group>
+                      </n-form-item>
+                    </template>
+                    <n-form-item v-if="selectedComponent.componentKey === 'rich-text'" label="富文本 HTML">
+                      <n-input
+                        :value="selectedComponent.props?.content"
+                        type="textarea"
+                        :autosize="{ minRows: 5, maxRows: 10 }"
+                        @update:value="updateComponent({ props: { content: $event } })"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="selectedComponent.componentKey === 'markdown'" label="Markdown 源码">
+                      <n-input
+                        :value="selectedComponent.props?.content"
+                        type="textarea"
+                        :autosize="{ minRows: 6, maxRows: 12 }"
+                        @update:value="updateComponent({ props: { content: $event } })"
+                      />
+                    </n-form-item>
+                    <template v-if="['barcode', 'qrcode'].includes(selectedComponent.componentKey)">
+                      <n-form-item label="编码内容">
+                        <div class="option-editor-row two-columns">
+                          <n-input
+                            :value="selectedComponent.props?.value || ''"
+                            size="small"
+                            placeholder="编码内容"
+                            @update:value="updateComponent({ props: { value: $event } })"
+                          />
+                          <n-color-picker
+                            :value="selectedComponent.props?.foreground || selectedComponent.props?.lineColor || '#0f172a'"
+                            :show-alpha="true"
+                            @update:value="updateCodeColor($event)"
+                          />
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'barcode'" label="条码格式 / 尺寸">
+                        <div class="option-editor-row three-columns">
+                          <n-select
+                            :value="selectedComponent.props?.format || 'CODE128'"
+                            :options="barcodeFormatOptions"
+                            @update:value="updateComponent({ props: { format: $event || 'CODE128' } })"
+                          />
+                          <n-input-number
+                            :value="selectedComponent.props?.barHeight || 72"
+                            size="small"
+                            :min="24"
+                            :max="240"
+                            :show-button="false"
+                            @update:value="updateComponent({ props: { barHeight: $event || 72 } })"
+                          />
+                          <n-switch
+                            :value="selectedComponent.props?.showText !== false"
+                            @update:value="updateComponent({ props: { showText: $event } })"
+                          />
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'qrcode'" label="二维码样式">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number
+                            :value="selectedComponent.props?.size || 132"
+                            size="small"
+                            :min="64"
+                            :max="480"
+                            :show-button="false"
+                            @update:value="updateComponent({ props: { size: $event || 132 } })"
+                          />
+                          <n-select
+                            :value="selectedComponent.props?.errorCorrectionLevel || 'Q'"
+                            :options="qrcodeErrorCorrectionOptions"
+                            @update:value="updateComponent({ props: { errorCorrectionLevel: $event || 'Q' } })"
+                          />
+                          <n-switch
+                            :value="selectedComponent.props?.showText !== false"
+                            @update:value="updateComponent({ props: { showText: $event } })"
+                          />
+                        </div>
+                      </n-form-item>
+                    </template>
+                    <n-form-item v-if="selectedComponent.componentKey === 'html-tag'" label="HTML 内容">
+                      <n-input
+                        :value="selectedComponent.props?.htmlContent || selectedComponent.props?.textContent"
+                        type="textarea"
+                        :autosize="{ minRows: 5, maxRows: 10 }"
+                        @update:value="updateComponent({ props: { htmlContent: $event } })"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="selectedComponent.componentKey === 'vue-component'" label="Vue Template">
+                      <n-input
+                        :value="selectedComponent.props?.templateCode"
+                        type="textarea"
+                        :autosize="{ minRows: 5, maxRows: 10 }"
+                        @update:value="updateComponent({ props: { templateCode: $event } })"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="selectedComponent.componentKey === 'vue-component'" label="预览模式">
+                      <div class="option-editor-row two-columns">
+                        <n-select
+                          :value="selectedComponent.props?.previewMode || 'safe-template'"
+                          :options="vuePreviewModeOptions"
+                          @update:value="updateComponent({ props: { previewMode: $event || 'safe-template', safeMode: $event === 'live' ? false : selectedComponent.props?.safeMode !== false } })"
+                        />
+                        <n-switch
+                          :value="selectedComponent.props?.safeMode !== false"
+                          @update:value="updateComponent({ props: { safeMode: $event, previewMode: $event ? 'safe-template' : selectedComponent.props?.previewMode || 'live' } })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedComponent.componentKey === 'vue-component'" label="Script / Style">
+                      <div class="page-widget-config-stack">
+                        <n-input
+                          :value="selectedComponent.props?.scriptCode"
+                          type="textarea"
+                          :autosize="{ minRows: 3, maxRows: 8 }"
+                          @update:value="updateComponent({ props: { scriptCode: $event } })"
+                        />
+                        <n-input
+                          :value="selectedComponent.props?.styleCode"
+                          type="textarea"
+                          :autosize="{ minRows: 3, maxRows: 8 }"
+                          @update:value="updateComponent({ props: { styleCode: $event } })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedComponent.componentKey === 'vue-component'" label="Props JSON">
+                      <n-input
+                        :value="selectedComponent.props?.propsJson"
+                        type="textarea"
+                        :autosize="{ minRows: 3, maxRows: 8 }"
+                        @update:value="updateComponent({ props: { propsJson: $event } })"
+                      />
+                    </n-form-item>
+                    <template v-if="['calendar', 'code', 'countdown', 'descriptions', 'announcement', 'list', 'log', 'number-animation', 'breadcrumb', 'menu', 'pagination', 'split'].includes(selectedComponent.componentKey)">
+                      <n-form-item v-if="['code', 'log'].includes(selectedComponent.componentKey)" label="内容">
+                        <n-input
+                          :value="selectedComponent.props?.code || selectedComponent.props?.log || ''"
+                          type="textarea"
+                          :autosize="{ minRows: 5, maxRows: 10 }"
+                          @update:value="updateComponent({ props: selectedComponent.componentKey === 'code' ? { code: $event } : { log: $event } })"
+                        />
+                      </n-form-item>
+                      <n-form-item v-if="['descriptions', 'list', 'breadcrumb'].includes(selectedComponent.componentKey)" label="数据 JSON">
+                        <n-input
+                          :value="selectedComponent.props?.itemsText || '[]'"
+                          type="textarea"
+                          :autosize="{ minRows: 5, maxRows: 10 }"
+                          placeholder="数组 JSON"
+                          @update:value="updateComponent({ props: { itemsText: $event || '[]' } })"
+                        />
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'menu'" label="菜单配置">
+                        <div class="page-widget-config-stack">
+                          <n-input
+                            :value="selectedComponent.props?.optionsText || '[]'"
+                            type="textarea"
+                            :autosize="{ minRows: 5, maxRows: 10 }"
+                            placeholder="菜单 options JSON"
+                            @update:value="updateComponent({ props: { optionsText: $event || '[]' } })"
+                          />
+                          <div class="option-editor-row two-columns">
+                            <n-select :value="selectedComponent.props?.mode || 'vertical'" :options="menuModeOptions" @update:value="updateComponent({ props: { mode: $event || 'vertical' } })" />
+                            <n-input :value="selectedComponent.props?.value || ''" placeholder="当前 key" @update:value="updateComponent({ props: { value: $event || '' } })" />
+                          </div>
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'announcement'" label="公示内容">
+                        <div class="page-widget-config-stack">
+                          <n-input :value="selectedComponent.props?.content || ''" type="textarea" :autosize="{ minRows: 4, maxRows: 8 }" @update:value="updateComponent({ props: { content: $event } })" />
+                          <div class="option-editor-row three-columns">
+                            <n-select :value="selectedComponent.props?.type || 'info'" :options="alertTypeOptions" @update:value="updateComponent({ props: { type: $event || 'info' } })" />
+                            <n-switch :value="selectedComponent.props?.showIcon !== false" @update:value="updateComponent({ props: { showIcon: $event } })" />
+                            <n-switch :value="selectedComponent.props?.bordered !== false" @update:value="updateComponent({ props: { bordered: $event } })" />
+                          </div>
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'countdown'" label="倒计时">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number :value="selectedComponent.props?.duration || 3600000" size="small" :min="1000" :max="86400000" :step="1000" :show-button="false" @update:value="updateComponent({ props: { duration: $event || 3600000 } })" />
+                          <n-input-number :value="selectedComponent.props?.precision || 0" size="small" :min="0" :max="3" :show-button="false" @update:value="updateComponent({ props: { precision: $event || 0 } })" />
+                          <n-switch :value="selectedComponent.props?.active !== false" @update:value="updateComponent({ props: { active: $event } })" />
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'number-animation'" label="数值动画">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number :value="selectedComponent.props?.from || 0" size="small" :show-button="false" @update:value="updateComponent({ props: { from: $event || 0 } })" />
+                          <n-input-number :value="selectedComponent.props?.to || 0" size="small" :show-button="false" @update:value="updateComponent({ props: { to: $event || 0 } })" />
+                          <n-input-number :value="selectedComponent.props?.duration || 1200" size="small" :min="100" :max="10000" :show-button="false" @update:value="updateComponent({ props: { duration: $event || 1200 } })" />
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'pagination'" label="分页">
+                        <div class="option-editor-row three-columns">
+                          <n-input-number :value="selectedComponent.props?.page || 1" size="small" :min="1" :show-button="false" @update:value="updateComponent({ props: { page: $event || 1 } })" />
+                          <n-input-number :value="selectedComponent.props?.pageSize || 10" size="small" :min="1" :show-button="false" @update:value="updateComponent({ props: { pageSize: $event || 10 } })" />
+                          <n-input-number :value="selectedComponent.props?.itemCount || 0" size="small" :min="0" :show-button="false" @update:value="updateComponent({ props: { itemCount: $event || 0 } })" />
+                        </div>
+                      </n-form-item>
+                      <n-form-item v-if="selectedComponent.componentKey === 'split'" label="面板分隔">
+                        <div class="page-widget-config-stack">
+                          <div class="option-editor-row three-columns">
+                            <n-select :value="selectedComponent.props?.direction || 'horizontal'" :options="splitDirectionOptions" @update:value="updateComponent({ props: { direction: $event || 'horizontal' } })" />
+                            <n-input-number :value="selectedComponent.props?.defaultSize || 0.38" size="small" :min="0.1" :max="0.9" :step="0.01" :show-button="false" @update:value="updateComponent({ props: { defaultSize: $event || 0.38 } })" />
+                            <n-input-number :value="selectedComponent.props?.max || 0.8" size="small" :min="0.1" :max="1" :step="0.01" :show-button="false" @update:value="updateComponent({ props: { max: $event || 0.8 } })" />
+                          </div>
+                          <n-input :value="selectedComponent.props?.pane1Content || ''" placeholder="面板 1 内容" @update:value="updateComponent({ props: { pane1Content: $event } })" />
+                          <n-input :value="selectedComponent.props?.pane2Content || ''" placeholder="面板 2 内容" @update:value="updateComponent({ props: { pane2Content: $event } })" />
+                        </div>
+                      </n-form-item>
+                    </template>
+                  </template>
                 </section>
               </n-collapse-item>
 
@@ -172,6 +640,69 @@
                       @update:value="updateComponent({ props: { size: $event || undefined } })"
                     />
                   </n-form-item>
+                  <template v-if="selectedComponent.componentKey === 'transfer'">
+                    <n-form-item label="数据来源">
+                      <n-select
+                        :value="selectedComponent.props?.dataSourceType || 'static'"
+                        :options="transferDataSourceOptions"
+                        @update:value="updateComponent({ props: { dataSourceType: $event || 'static' } })"
+                      />
+                    </n-form-item>
+                    <n-form-item label="分栏标题">
+                      <div class="option-editor-row two-columns">
+                        <n-input
+                          :value="selectedComponent.props?.sourceTitle || '可选项'"
+                          size="small"
+                          placeholder="左侧标题"
+                          @update:value="updateComponent({ props: { sourceTitle: $event || '可选项' } })"
+                        />
+                        <n-input
+                          :value="selectedComponent.props?.targetTitle || '已选项'"
+                          size="small"
+                          placeholder="右侧标题"
+                          @update:value="updateComponent({ props: { targetTitle: $event || '已选项' } })"
+                        />
+                      </div>
+                    </n-form-item>
+                    <n-form-item v-if="selectedComponent.props?.dataSourceType === 'remote'" label="远程接口">
+                      <div class="page-widget-config-stack">
+                        <n-input
+                          :value="selectedComponent.props?.optionSource?.api || ''"
+                          placeholder="例如 get@/api/system/user/options"
+                          @update:value="updatePageWidgetOptionSource({ api: $event })"
+                        />
+                        <div class="option-editor-row two-columns">
+                          <n-select
+                            :value="selectedComponent.props?.optionSource?.method || 'get'"
+                            :options="requestMethodOptions"
+                            @update:value="updatePageWidgetOptionSource({ method: $event || 'get' })"
+                          />
+                          <n-input
+                            :value="selectedComponent.props?.optionSource?.recordsField || 'records'"
+                            placeholder="列表路径"
+                            @update:value="updatePageWidgetOptionSource({ recordsField: $event || 'records' })"
+                          />
+                        </div>
+                        <div class="option-editor-row two-columns">
+                          <n-input
+                            :value="selectedComponent.props?.optionSource?.labelField || 'label'"
+                            placeholder="显示字段"
+                            @update:value="updatePageWidgetOptionSource({ labelField: $event || 'label' })"
+                          />
+                          <n-input
+                            :value="selectedComponent.props?.optionSource?.valueField || 'value'"
+                            placeholder="值字段"
+                            @update:value="updatePageWidgetOptionSource({ valueField: $event || 'value' })"
+                          />
+                        </div>
+                        <n-input
+                          :value="selectedComponent.props?.optionSource?.paramsText || '{}'"
+                          placeholder="请求参数 JSON"
+                          @update:value="updatePageWidgetOptionSource({ paramsText: $event || '{}' })"
+                        />
+                      </div>
+                    </n-form-item>
+                  </template>
                   <n-form-item v-if="isDictLikeField" label="字典类型">
                     <DictTypeSelect
                       :value="selectedComponent.props?.dictType || ''"
@@ -1547,6 +2078,15 @@
             </span>
           </template>
           <n-form label-placement="top" :show-feedback="false" class="property-form">
+            <section class="panel-item">
+              <RuntimeRulesEditor
+                title="组件运行规则"
+                :rules="selectedComponent.props?.runtimeRules || []"
+                :field-options="runtimeRuleFieldOptions"
+                @update:rules="updateComponent({ props: { runtimeRules: $event } })"
+              />
+            </section>
+
             <section class="panel-item">
               <div class="panel-title-row">
                 <div class="panel-item-title">
@@ -3119,6 +3659,8 @@ import {
 } from '@vicons/ionicons5'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
+import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
+import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
 import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
 
@@ -3166,6 +3708,7 @@ const isCardLayout = computed(() => ['card', 'elCard'].includes(selectedComponen
 const isTabsLayout = computed(() => ['tabs', 'elTabs'].includes(selectedComponent.value?.componentKey))
 const isCollapseLayout = computed(() => ['collapse', 'elCollapse'].includes(selectedComponent.value?.componentKey))
 const isButtonComponent = computed(() => ['button', 'elButton'].includes(selectedComponent.value?.componentKey))
+const isPageWidget = computed(() => pageWidgetComponentKeys.includes(selectedComponent.value?.componentKey))
 const selectedLabel = computed(() => selectedComponent.value?.label || selectedComponent.value?.props?.header || selectedComponent.value?.props?.title || '未命名组件')
 const componentTypeLabel = computed(() => isCrudBlock.value ? '系统 AiCrudPage 组件' : isField.value ? 'AiForm 字段组件' : isLayout.value ? '布局组件' : selectedComponent.value?.componentKey || '组件')
 const panelDescription = computed(() => selectedComponent.value ? componentTypeLabel.value : 'AiForm / AiCrudPage 通用配置')
@@ -3268,6 +3811,86 @@ const componentSizeOptions = [
   { label: '小', value: 'small' },
   { label: '中', value: 'medium' },
   { label: '大', value: 'large' },
+]
+const requestMethodOptions = [
+  { label: 'GET', value: 'get' },
+  { label: 'POST', value: 'post' },
+]
+const transferDataSourceOptions = [
+  { label: '静态选项', value: 'static' },
+  { label: '远程接口', value: 'remote' },
+]
+const widgetDataSourceOptions = [
+  { label: '静态配置', value: 'static' },
+  { label: '当前表单/详情数据', value: 'context' },
+  { label: '远程接口', value: 'remote' },
+]
+const dataBindablePageWidgetKeys = [
+  'rich-text',
+  'watermark',
+  'vue-component',
+  'html-tag',
+  'markdown',
+  'barcode',
+  'qrcode',
+  'calendar',
+  'code',
+  'countdown',
+  'descriptions',
+  'announcement',
+  'list',
+  'log',
+  'number-animation',
+  'breadcrumb',
+  'menu',
+  'pagination',
+  'split',
+]
+const menuModeOptions = [
+  { label: '纵向', value: 'vertical' },
+  { label: '横向', value: 'horizontal' },
+]
+const alertTypeOptions = [
+  { label: '信息', value: 'info' },
+  { label: '成功', value: 'success' },
+  { label: '警告', value: 'warning' },
+  { label: '错误', value: 'error' },
+]
+const splitDirectionOptions = [
+  { label: '横向', value: 'horizontal' },
+  { label: '纵向', value: 'vertical' },
+]
+const watermarkFontStyleOptions = [
+  { label: 'normal', value: 'normal' },
+  { label: 'italic', value: 'italic' },
+  { label: 'oblique 12deg', value: 'oblique 12deg' },
+]
+const watermarkTextAlignOptions = [
+  { label: '左对齐', value: 'left' },
+  { label: '居中', value: 'center' },
+  { label: '右对齐', value: 'right' },
+]
+const barcodeFormatOptions = [
+  'CODE128',
+  'CODE39',
+  'EAN13',
+  'EAN8',
+  'UPC',
+  'ITF14',
+  'MSI',
+  'pharmacode',
+  'codabar',
+].map(value => ({ label: value, value }))
+const qrcodeErrorCorrectionOptions = [
+  { label: 'L', value: 'L' },
+  { label: 'M', value: 'M' },
+  { label: 'Q', value: 'Q' },
+  { label: 'H', value: 'H' },
+]
+const vuePreviewModeOptions = [
+  { label: '安全模板预览', value: 'safe-template' },
+  { label: 'Props 模板预览', value: 'live' },
+  { label: '代码视图', value: 'code' },
 ]
 const buttonTypeOptions = [
   { label: '默认 default', value: 'default' },
@@ -3570,18 +4193,77 @@ const editingCrudConfig = computed(() => editingCrudField.value?.props?.__crudCo
 const selectedOptions = computed(() => selectedComponent.value?.props?.options || [])
 const isFieldInsideCrud = computed(() => isField.value && hasAncestorComponent(props.schema, props.selectedId, ['AiCrudPage', 'crudBlock']))
 const selectedCrudFieldConfig = computed(() => isFieldInsideCrud.value ? selectedComponent.value?.props?.__crudConfig || {} : null)
-const isOptionField = computed(() => ['select', 'radio', 'radioButton', 'checkbox', 'cascader', 'treeSelect'].includes(selectedComponent.value?.componentKey || ''))
-const isManualOptionField = computed(() => isOptionField.value && !selectedComponent.value?.props?.dictType)
+const isOptionField = computed(() => ['select', 'radio', 'radioButton', 'checkbox', 'transfer', 'cascader', 'treeSelect'].includes(selectedComponent.value?.componentKey || ''))
+const isManualOptionField = computed(() => isOptionField.value && !selectedComponent.value?.props?.dictType && selectedComponent.value?.props?.dataSourceType !== 'remote')
 const activePropGroups = computed(() => buildNaivePropGroups(selectedComponent.value?.componentKey || ''))
+const runtimeRuleFieldOptions = computed(() => collectRuntimeRuleFieldOptions(props.schema?.components || []))
 const isDictLikeField = computed(() => {
   const key = selectedComponent.value?.componentKey || ''
   return ['select', 'dictSelect', 'radio', 'checkbox', 'cascader'].includes(key)
 })
 
+function collectRuntimeRuleFieldOptions(components = []) {
+  const options = []
+  const seen = new Set()
+  const walk = (items = []) => {
+    ;(Array.isArray(items) ? items : []).forEach((component) => {
+      if (!component || typeof component !== 'object')
+        return
+      const field = component.fieldBinding?.fieldCode || component.field || component.props?.field
+      if (field && !seen.has(field)) {
+        seen.add(field)
+        options.push({
+          label: `${component.label || component.props?.label || field}（${field}）`,
+          value: field,
+        })
+      }
+      walk(component.children || [])
+    })
+  }
+  walk(components)
+  return options
+}
+
 function updateComponent(patch) {
   if (!props.selectedId)
     return
   emit('update:schema', updateDesignerComponent(props.schema, props.selectedId, patch))
+}
+
+function updatePageWidgetOptionSource(patch = {}) {
+  updateComponent({
+    props: {
+      optionSource: {
+        ...(selectedComponent.value?.props?.optionSource || {}),
+        ...patch,
+      },
+    },
+  })
+}
+
+function updatePageWidgetDataBinding(patch = {}) {
+  const next = {
+    ...(selectedComponent.value?.props?.dataBinding || {}),
+    ...patch,
+  }
+  next.enabled = next.sourceType !== 'static'
+  updateComponent({
+    props: {
+      dataBinding: next,
+    },
+  })
+}
+
+function resolveBooleanKeys(source = {}, keys = []) {
+  return keys.filter(key => source?.[key] === true)
+}
+
+function updateCodeColor(value = '') {
+  if (selectedComponent.value?.componentKey === 'barcode') {
+    updateComponent({ props: { lineColor: value || '#0f172a' } })
+    return
+  }
+  updateComponent({ props: { foreground: value || '#0f172a' } })
 }
 
 function updateDictType(value = '') {
@@ -5331,16 +6013,17 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   cursor: pointer;
-  border: 0;
+  border: 1px solid #e4e4e7;
   border-radius: 6px;
-  background: transparent;
-  color: #646a73;
+  background: #fff;
+  color: #52525b;
   font-size: 14px;
 }
 
 .panel-close-button:hover {
-  background: #f2f3f5;
-  color: #1f2329;
+  border-color: #c7d2fe;
+  background: #f4f6ff;
+  color: #3153d8;
 }
 
 .property-search-box {
@@ -6960,6 +7643,80 @@ button.form-asset-card,
   border-radius: 6px;
   background: #fff;
   padding: 7px;
+}
+
+.option-editor-row.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.option-editor-row.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.option-editor-row.four-columns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.page-widget-config-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.property-help {
+  padding: 7px 9px;
+  border: 1px dashed #d4d4d8;
+  border-radius: 6px;
+  background: #fff;
+  color: #71717a;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.data-source-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.data-source-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 86px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.data-source-row > span {
+  overflow: hidden;
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-source-row :deep(.n-input),
+.data-source-row :deep(.n-select),
+.data-source-row :deep(.n-input-number) {
+  width: 100%;
+  min-width: 0;
+}
+
+.data-source-inline-row {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.data-source-mapping-grid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-source-mapping-grid .data-source-row {
+  grid-template-columns: minmax(64px, 74px) minmax(0, 1fr);
 }
 
 .option-editor-row > .n-switch:nth-last-child(-n + 2) {

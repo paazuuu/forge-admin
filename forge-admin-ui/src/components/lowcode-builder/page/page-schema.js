@@ -1,3 +1,5 @@
+import { createPageWidgetDefaultProps, createWidgetDataBinding, pageWidgetCatalog } from '@/components/lowcode-builder/shared/page-widget-schema'
+
 export const pageZoneCatalog = [
   {
     zoneKey: 'search',
@@ -739,6 +741,119 @@ export const listPageBlockCatalog = [
     desc: '调整页面间距',
     defaultW: 12,
     defaultH: 1,
+  },
+  ...pageWidgetCatalog.map(item => ({
+    blockType: item.blockType,
+    group: item.group,
+    title: item.title,
+    desc: item.desc,
+    defaultW: item.defaultW,
+    defaultH: item.defaultH,
+  })),
+  {
+    blockType: 'signature-pad',
+    group: 'data',
+    title: '手写签名',
+    desc: '签名采集画布',
+    defaultW: 6,
+    defaultH: 5,
+  },
+  {
+    blockType: 'step-form',
+    group: 'data',
+    title: '分步表单',
+    desc: '按步骤组织表单字段',
+    defaultW: 10,
+    defaultH: 7,
+  },
+  {
+    blockType: 'text-title',
+    group: 'content',
+    title: '标题',
+    desc: '页面标题文本',
+    defaultW: 6,
+    defaultH: 2,
+  },
+  {
+    blockType: 'paragraph',
+    group: 'content',
+    title: '段落',
+    desc: '多行说明文字',
+    defaultW: 6,
+    defaultH: 3,
+  },
+  {
+    blockType: 'statistic',
+    group: 'data',
+    title: '统计数值',
+    desc: '单个指标数值',
+    defaultW: 3,
+    defaultH: 3,
+  },
+  {
+    blockType: 'link',
+    group: 'action',
+    title: '链接',
+    desc: '页面跳转或外部链接',
+    defaultW: 3,
+    defaultH: 1,
+  },
+  {
+    blockType: 'text-tip',
+    group: 'content',
+    title: '文字提示',
+    desc: '轻量提示文本',
+    defaultW: 5,
+    defaultH: 2,
+  },
+  {
+    blockType: 'audio-player',
+    group: 'media',
+    title: '音频播放器',
+    desc: '音频播放控件',
+    defaultW: 6,
+    defaultH: 2,
+  },
+  {
+    blockType: 'video-player',
+    group: 'media',
+    title: '视频播放器',
+    desc: '视频播放控件',
+    defaultW: 8,
+    defaultH: 7,
+  },
+  {
+    blockType: 'avatar',
+    group: 'media',
+    title: '头像框',
+    desc: '头像和用户信息',
+    defaultW: 4,
+    defaultH: 3,
+  },
+  {
+    blockType: 'iframe',
+    group: 'advanced',
+    title: '内嵌页面',
+    desc: 'iframe 外部页面',
+    defaultW: 10,
+    defaultH: 8,
+  },
+  {
+    blockType: 'box-layout',
+    group: 'layout',
+    title: '盒子布局',
+    desc: 'Flex 容器布局',
+    defaultW: 8,
+    defaultH: 5,
+    container: true,
+  },
+  {
+    blockType: 'space',
+    group: 'layout',
+    title: '间距',
+    desc: '横向或纵向间隔',
+    defaultW: 4,
+    defaultH: 2,
   },
   {
     blockType: 'sub-table-tabs',
@@ -1706,6 +1821,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'stats-strip') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('items', { labelField: 'label', valueField: 'value', metaField: 'trend' }),
       metrics: [
         { label: '总数', value: '128', trend: '+8%' },
         { label: '活跃', value: '92', trend: '+3%' },
@@ -1717,6 +1833,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'info-panel') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'title', contentField: 'content', valueField: 'type' }),
       title: '提示信息',
       content: '在这里展示当前页面的说明、风险提醒或操作结果。',
       type: 'info',
@@ -1725,6 +1842,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'custom-html') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'title', contentField: 'content' }),
       title: '说明',
       content: '在此填写业务说明、操作指引或链接。',
     }
@@ -1753,6 +1871,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'tag-list') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('items', { labelField: 'label', valueField: 'type' }),
       tags: [
         { label: '启用', type: 'success' },
         { label: '重点', type: 'warning' },
@@ -1763,6 +1882,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'steps') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('items', { titleField: 'title', descriptionField: 'description' }),
       current: 1,
       steps: [
         { title: '提交', description: '创建业务记录' },
@@ -1774,6 +1894,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'timeline') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('items', { titleField: 'title', descriptionField: 'content', metaField: 'time' }),
       title: '操作记录',
       items: [
         { title: '创建记录', time: '2026-06-18 09:00', content: '系统创建业务数据' },
@@ -1784,9 +1905,165 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (blockType === 'empty-state') {
     base.props = {
       ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'title', descriptionField: 'description', valueField: 'actionText' }),
       title: '暂无数据',
       description: '当前条件下没有可展示的数据',
       actionText: '新建数据',
+    }
+  }
+  if (pageWidgetCatalog.some(item => item.blockType === blockType)) {
+    base.props = {
+      ...base.props,
+      ...createPageWidgetDefaultProps(blockType),
+    }
+  }
+  if (blockType === 'signature-pad') {
+    base.props = {
+      ...base.props,
+      title: '手写签名',
+      height: 160,
+      strokeWidth: 2.6,
+      disabled: false,
+      businessType: 'lowcode_signature',
+      required: false,
+    }
+  }
+  if (blockType === 'step-form') {
+    base.props = {
+      ...base.props,
+      title: '分步表单',
+      current: 1,
+      direction: 'horizontal',
+      steps: [
+        { title: '基础信息', description: '填写基础字段' },
+        { title: '业务配置', description: '补充业务信息' },
+        { title: '确认提交', description: '检查并提交' },
+      ],
+    }
+    base.fieldRefs = filterPageFields(fields, 'table').slice(0, 6).map(f => f.field)
+  }
+  if (blockType === 'text-title') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'text', descriptionField: 'subtitle' }),
+      text: '页面标题',
+      level: 2,
+      weight: 800,
+      align: 'left',
+      color: '#0f172a',
+      subtitle: '',
+    }
+  }
+  if (blockType === 'paragraph') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { contentField: 'content' }),
+      content: '这里是一段页面说明文字，可用于介绍当前业务页面、操作规则或注意事项。',
+      align: 'left',
+      color: '#475569',
+      lineHeight: 1.7,
+      clamp: 0,
+    }
+  }
+  if (blockType === 'statistic') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('value', { titleField: 'title', valueField: 'value', descriptionField: 'description', metaField: 'trend' }),
+      title: '统计指标',
+      value: '12,836',
+      prefix: '',
+      suffix: '条',
+      trend: '+12.5%',
+      color: '#2563eb',
+      description: '较上月增长',
+    }
+  }
+  if (blockType === 'link') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'text', valueField: 'href' }),
+      text: '查看详情',
+      href: '',
+      target: '_self',
+      type: 'primary',
+      underline: false,
+    }
+  }
+  if (blockType === 'text-tip') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'title', contentField: 'content', valueField: 'type' }),
+      title: '提示',
+      content: '请先选择左侧数据，再查看右侧明细。',
+      type: 'info',
+      showIcon: true,
+      closable: false,
+    }
+  }
+  if (blockType === 'audio-player') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'title', valueField: 'src' }),
+      title: '音频播放器',
+      src: '',
+      controls: true,
+      autoplay: false,
+      loop: false,
+    }
+  }
+  if (blockType === 'video-player') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'title', valueField: 'src', metaField: 'poster' }),
+      title: '视频播放器',
+      src: '',
+      poster: '',
+      controls: true,
+      autoplay: false,
+      loop: false,
+      muted: false,
+    }
+  }
+  if (blockType === 'avatar') {
+    base.props = {
+      ...base.props,
+      dataBinding: createWidgetDataBinding('content', { titleField: 'name', descriptionField: 'description', valueField: 'src' }),
+      name: '用户名称',
+      description: '角色 / 部门',
+      src: '',
+      size: 48,
+      shape: 'circle',
+      showInfo: true,
+    }
+  }
+  if (blockType === 'iframe') {
+    base.props = {
+      ...base.props,
+      title: '内嵌页面',
+      src: '',
+      allowFullscreen: false,
+      sandbox: 'allow-same-origin allow-forms',
+      loading: 'lazy',
+    }
+  }
+  if (blockType === 'box-layout') {
+    base.props = {
+      ...base.props,
+      title: '盒子布局',
+      direction: 'row',
+      gap: 12,
+      alignItems: 'stretch',
+      justifyContent: 'flex-start',
+      wrap: true,
+    }
+    base.children = []
+  }
+  if (blockType === 'space') {
+    base.props = {
+      ...base.props,
+      direction: 'vertical',
+      size: 24,
+      lineVisible: false,
     }
   }
   if (blockType === 'sub-table-tabs') {
@@ -1984,6 +2261,10 @@ function resolveBlockMinGridH(blockType, meta = {}) {
     return Math.max(5, Number(meta.defaultH) || 5)
   if (blockType === 'detail-info')
     return Math.max(5, Number(meta.defaultH) || 5)
+  if (blockType === 'box-layout')
+    return Math.max(5, Number(meta.defaultH) || 5)
+  if (['rich-text', 'transfer', 'step-form', 'video-player', 'iframe', 'markdown', 'descriptions', 'signature-pad'].includes(blockType))
+    return Math.max(4, Number(meta.defaultH) || 4)
   return 1
 }
 
