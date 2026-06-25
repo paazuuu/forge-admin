@@ -54,6 +54,34 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
+    <resultMap id="LowcodeAppDetailResultMap" type="com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeAppDetailVO">
+        <id column="id" property="id"/>
+        <result column="config_key" property="configKey"/>
+        <result column="table_name" property="tableName"/>
+        <result column="table_comment" property="tableComment"/>
+        <result column="app_name" property="appName"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="domain_name" property="domainName"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="object_name" property="objectName"/>
+        <result column="mode" property="mode"/>
+        <result column="build_mode" property="buildMode"/>
+        <result column="status" property="status"/>
+        <result column="publish_status" property="publishStatus"/>
+        <result column="menu_name" property="menuName"/>
+        <result column="menu_parent_id" property="menuParentId"/>
+        <result column="menu_sort" property="menuSort"/>
+        <result column="menu_resource_id" property="menuResourceId"/>
+        <result column="layout_type" property="layoutType"/>
+        <result column="draft_version" property="draftVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="publish_by" property="publishBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
     <sql id="Base_Columns">
         id,
         tenant_id,
@@ -143,37 +171,65 @@
         LIMIT 1
     </select>
 
-    <select id="selectLowcodePage" resultMap="BaseResultMap">
+    <select id="selectLowcodePage" resultMap="LowcodeAppDetailResultMap">
         SELECT
-        <include refid="Base_Columns"/>
-        FROM ai_crud_config
-        WHERE tenant_id = #{tenantId}
-          AND mode = 'CONFIG'
-          AND build_mode = 'LOWCODE'
+          c.id,
+          c.config_key,
+          c.table_name,
+          c.table_comment,
+          c.app_name,
+          c.domain_id,
+          c.domain_code,
+          COALESCE(d.domain_name, c.domain_code) AS domain_name,
+          c.object_code,
+          c.object_name,
+          c.mode,
+          c.build_mode,
+          c.status,
+          c.publish_status,
+          c.menu_name,
+          c.menu_parent_id,
+          c.menu_sort,
+          c.menu_resource_id,
+          c.layout_type,
+          c.draft_version,
+          c.published_version,
+          c.publish_time,
+          c.publish_by,
+          c.create_time,
+          c.update_time
+        FROM ai_crud_config c
+        LEFT JOIN ai_lowcode_domain d
+          ON d.tenant_id = c.tenant_id
+         AND d.id = c.domain_id
+        WHERE c.tenant_id = #{tenantId}
+          AND c.mode = 'CONFIG'
+          AND c.build_mode = 'LOWCODE'
         <if test="keyword != null and keyword != ''">
           AND (
-            config_key LIKE CONCAT('%', #{keyword}, '%')
-            OR app_name LIKE CONCAT('%', #{keyword}, '%')
-            OR table_name LIKE CONCAT('%', #{keyword}, '%')
-            OR table_comment LIKE CONCAT('%', #{keyword}, '%')
-            OR domain_code LIKE CONCAT('%', #{keyword}, '%')
-            OR object_code LIKE CONCAT('%', #{keyword}, '%')
-            OR object_name LIKE CONCAT('%', #{keyword}, '%')
+            c.config_key LIKE CONCAT('%', #{keyword}, '%')
+            OR c.app_name LIKE CONCAT('%', #{keyword}, '%')
+            OR c.table_name LIKE CONCAT('%', #{keyword}, '%')
+            OR c.table_comment LIKE CONCAT('%', #{keyword}, '%')
+            OR c.domain_code LIKE CONCAT('%', #{keyword}, '%')
+            OR d.domain_name LIKE CONCAT('%', #{keyword}, '%')
+            OR c.object_code LIKE CONCAT('%', #{keyword}, '%')
+            OR c.object_name LIKE CONCAT('%', #{keyword}, '%')
           )
         </if>
         <if test="publishStatus != null and publishStatus != ''">
-          AND publish_status = #{publishStatus}
+          AND c.publish_status = #{publishStatus}
         </if>
         <if test="domainId != null">
-          AND domain_id = #{domainId}
+          AND c.domain_id = #{domainId}
         </if>
         <if test="domainCode != null and domainCode != ''">
-          AND domain_code = #{domainCode}
+          AND c.domain_code = #{domainCode}
         </if>
         <if test="generalDomain != null and generalDomain">
-          AND domain_code = 'general'
+          AND c.domain_code = 'general'
         </if>
-        ORDER BY update_time DESC, id DESC
+        ORDER BY c.update_time DESC, c.id DESC
     </select>
 
     <select id="selectPublishedLowcodeConfigs" resultMap="BaseResultMap">

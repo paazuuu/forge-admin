@@ -165,9 +165,19 @@ public class AuthController {
      */
     @GetMapping("/loginConfig")
     @IgnoreTenant
-    public RespInfo<LoginConfigResult> getLoginConfig(@RequestParam(required = false) String userClient) {
-        LoginConfigResult result = authService.getLoginConfig(userClient);
+    public RespInfo<LoginConfigResult> getLoginConfig(@RequestParam(required = false) String userClient,
+                                                      @RequestParam(required = false) Long tenantId) {
+        LoginConfigResult result = authService.getLoginConfig(userClient, tenantId);
         return RespInfo.success(result);
+    }
+
+    /**
+     * 查询登录页可选租户。
+     */
+    @GetMapping("/tenant/options")
+    @IgnoreTenant
+    public RespInfo<List<LoginTenantOption>> loginTenantOptions() {
+        return RespInfo.success(authService.listLoginTenantOptions());
     }
 
     /**

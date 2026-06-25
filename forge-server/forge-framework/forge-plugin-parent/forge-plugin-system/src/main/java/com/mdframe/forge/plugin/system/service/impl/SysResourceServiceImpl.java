@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,28 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
     private final SysResourceMapper resourceMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final SysRoleResourceMapper roleResourceMapper;
+    private final PermissionServiceImpl permissionService;
+
+    @Override
+    public boolean save(SysResource entity) {
+        boolean saved = super.save(entity);
+        clearApiPermissionCacheIfChanged(saved);
+        return saved;
+    }
+
+    @Override
+    public boolean updateById(SysResource entity) {
+        boolean updated = super.updateById(entity);
+        clearApiPermissionCacheIfChanged(updated);
+        return updated;
+    }
+
+    @Override
+    public boolean removeById(Serializable id) {
+        boolean removed = super.removeById(id);
+        clearApiPermissionCacheIfChanged(removed);
+        return removed;
+    }
 
     @Override
     public IPage<SysResource> selectResourcePage(SysResourceQuery query) {
@@ -89,7 +112,9 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
         BeanUtil.copyProperties(dto, resource);
         resource.setMinUserType(normalizeMinUserType(resource.getMinUserType()));
         validateParentUserTypeBoundary(resource.getParentId(), resource.getMinUserType());
-        return resourceMapper.insert(resource) > 0;
+        boolean inserted = resourceMapper.insert(resource) > 0;
+        clearApiPermissionCacheIfChanged(inserted);
+        return inserted;
     }
 
     @Override
@@ -107,13 +132,17 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
         resource.setMinUserType(dto.getMinUserType() != null ? minUserType : null);
         Long parentId = dto.getParentId() != null ? dto.getParentId() : existing.getParentId();
         validateParentUserTypeBoundary(parentId, minUserType);
-        return resourceMapper.updateById(resource) > 0;
+        boolean updated = resourceMapper.updateById(resource) > 0;
+        clearApiPermissionCacheIfChanged(updated);
+        return updated;
     }
 
     @Override
     public boolean deleteResourceById(Long id) {
         assertSystemAdmin();
-        return resourceMapper.deleteById(id) > 0;
+        boolean deleted = resourceMapper.deleteById(id) > 0;
+        clearApiPermissionCacheIfChanged(deleted);
+        return deleted;
     }
 
     @Override
@@ -323,6 +352,12 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
 
     private void assertSystemAdmin() {
         SessionHelper.assertAdmin("只有超级管理员可以维护菜单和资源配置");
+    }
+
+    private void clearApiPermissionCacheIfChanged(boolean changed) {
+        if (changed) {
+            permissionService.clearConfiguredApiUrlCache();
+        }
     }
 
     private void applyUserTypeScope(LambdaQueryWrapper<SysResource> wrapper, LoginUser loginUser) {

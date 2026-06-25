@@ -8,6 +8,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.system.constant.SystemConstants;
+import com.mdframe.forge.plugin.system.dto.BatchUserRoleBindDTO;
+import com.mdframe.forge.plugin.system.dto.BatchUserTenantBindDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.entity.SysUser;
@@ -43,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -83,7 +86,11 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Transactional(rollbackFor = Exception.class)
     public boolean insertUser(SysUserDTO dto) {
         assertUserManagementAllowed();
-        Long tenantId = resolveWriteTenantId(dto.getTenantId());
+        LoginUser loginUser = requireLoginUser();
+        List<Long> tenantIds = dto.getTenantIds() == null
+                ? List.of(resolveWriteTenantId(dto.getTenantId()))
+                : resolveWriteTenantIds(dto.getTenantIds(), dto.getTenantId(), loginUser);
+        Long tenantId = resolveDefaultTenantId(tenantIds, dto.getTenantId());
         validateUserTypeForWrite(dto);
         SysUser user = new SysUser();
         BeanUtil.copyProperties(dto, user);
@@ -93,7 +100,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setForcePasswordChange(true);
         boolean inserted = userMapper.insert(user) > 0;
         if (inserted) {
-            upsertUserTenant(user.getId(), tenantId, user.getUserType(), true);
+            for (Long bindTenantId : tenantIds) {
+                upsertUserTenant(user.getId(), bindTenantId, user.getUserType(), Objects.equals(bindTenantId, tenantId));
+            }
             // 同步绑定角色
             if (dto.getRoleIds() != null) {
                 syncUserRoles(user.getId(), dto.getRoleIds(), tenantId);
@@ -122,8 +131,14 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setPassword(null);
 
         Long tenantId = null;
+        List<Long> tenantIds = null;
         if (loginUser.isAdmin()) {
-            tenantId = resolveWriteTenantId(dto.getTenantId());
+            if (dto.getTenantIds() != null) {
+                tenantIds = resolveWriteTenantIds(dto.getTenantIds(), dto.getTenantId(), loginUser);
+                tenantId = resolveDefaultTenantId(tenantIds, dto.getTenantId());
+            } else {
+                tenantId = resolveWriteTenantId(dto.getTenantId());
+            }
             user.setTenantId(tenantId);
             user.setUserType(resolveWriteUserType(dto.getUserType()));
         } else {
@@ -134,7 +149,15 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
         boolean updated = TenantContextHolder.executeIgnore(() -> userMapper.updateById(user) > 0);
         if (updated && loginUser.isAdmin()) {
-            upsertUserTenant(user.getId(), tenantId, user.getUserType(), true);
+            if (tenantIds != null) {
+                UserTenantBindDTO tenantBindDTO = new UserTenantBindDTO();
+                tenantBindDTO.setTenantIds(tenantIds);
+                tenantBindDTO.setDefaultTenantId(tenantId);
+                tenantBindDTO.setMemberType(user.getUserType());
+                bindUserTenants(user.getId(), tenantBindDTO);
+            } else {
+                upsertUserTenant(user.getId(), tenantId, user.getUserType(), true);
+            }
         }
         // 同步绑定角色。roleIds 传空数组表示清空当前可管理范围内的角色。
         if (updated && dto.getRoleIds() != null) {
@@ -181,6 +204,35 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             return false;
         }
         return syncUserRoles(userId, Arrays.asList(roleIds), tenantId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean batchBindUserRoles(BatchUserRoleBindDTO dto) {
+        if (dto == null || dto.getUserIds() == null || dto.getUserIds().isEmpty()
+                || dto.getRoleIds() == null || dto.getRoleIds().isEmpty()) {
+            return false;
+        }
+        List<Long> userIds = dto.getUserIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        List<Long> roleIds = dto.getRoleIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (userIds.isEmpty() || roleIds.isEmpty()) {
+            return false;
+        }
+
+        Long tenantId = dto.getTenantId();
+        for (Long userId : userIds) {
+            assertNotSelfManagement(userId);
+            Set<Long> mergedRoleIds = new HashSet<>(selectUserRoleIds(userId, tenantId));
+            mergedRoleIds.addAll(roleIds);
+            syncUserRoles(userId, new ArrayList<>(mergedRoleIds), tenantId);
+        }
+        return true;
     }
 
     @Override
@@ -330,12 +382,16 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (userId == null || dto == null || dto.getTenantIds() == null || dto.getTenantIds().isEmpty()) {
             return false;
         }
-        Set<Long> tenantIds = new HashSet<>(dto.getTenantIds());
+        List<Long> tenantIds = normalizeTenantIdList(dto.getTenantIds());
+        if (tenantIds.isEmpty()) {
+            return false;
+        }
         Long defaultTenantId = dto.getDefaultTenantId();
         if (defaultTenantId == null || !tenantIds.contains(defaultTenantId)) {
-            defaultTenantId = dto.getTenantIds().get(0);
+            defaultTenantId = tenantIds.get(0);
         }
         Integer memberType = normalizeMemberType(dto.getMemberType());
+        tenantIds.forEach(this::validateTenantEnabled);
 
         LambdaQueryWrapper<SysUserTenant> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(SysUserTenant::getUserId, userId)
@@ -352,6 +408,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 userOrgMapper.delete(new LambdaQueryWrapper<SysUserOrg>()
                         .eq(SysUserOrg::getUserId, userId)
                         .in(SysUserOrg::getTenantId, removedTenantIds));
+                userPostMapper.delete(new LambdaQueryWrapper<SysUserPost>()
+                        .eq(SysUserPost::getUserId, userId)
+                        .in(SysUserPost::getTenantId, removedTenantIds));
             });
         }
         TenantContextHolder.executeIgnore(() -> userTenantMapper.delete(deleteWrapper));
@@ -364,6 +423,45 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setId(userId);
         user.setTenantId(defaultTenantId);
         TenantContextHolder.executeIgnore(() -> userMapper.updateById(user));
+        return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean batchBindUserTenant(BatchUserTenantBindDTO dto) {
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null || !loginUser.isAdmin()) {
+            throw new RuntimeException("只有超级管理员可以批量加入用户租户");
+        }
+        if (dto == null || dto.getUserIds() == null || dto.getUserIds().isEmpty() || dto.getTenantId() == null) {
+            return false;
+        }
+        Long tenantId = dto.getTenantId();
+        validateTenantEnabled(tenantId);
+        Integer memberType = normalizeMemberType(dto.getMemberType());
+        List<Long> userIds = dto.getUserIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (userIds.isEmpty()) {
+            return false;
+        }
+
+        for (Long userId : userIds) {
+            assertNotSelfManagement(userId);
+            SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
+            if (user == null) {
+                throw new RuntimeException("用户不存在");
+            }
+            boolean defaultTenant = user.getTenantId() == null || !hasEnabledTenantMembership(userId);
+            upsertUserTenant(userId, tenantId, memberType, defaultTenant);
+            if (defaultTenant) {
+                SysUser updateUser = new SysUser();
+                updateUser.setId(userId);
+                updateUser.setTenantId(tenantId);
+                TenantContextHolder.executeIgnore(() -> userMapper.updateById(updateUser));
+            }
+        }
         return true;
     }
     
@@ -564,6 +662,46 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         return loginUser.getTenantId();
     }
 
+    private List<Long> resolveWriteTenantIds(List<Long> requestedTenantIds, Long defaultTenantId, LoginUser loginUser) {
+        if (loginUser == null) {
+            throw new RuntimeException("用户未登录");
+        }
+        if (!loginUser.isAdmin()) {
+            return List.of(resolveCurrentTenantIdForNonAdmin());
+        }
+        List<Long> tenantIds = normalizeTenantIdList(requestedTenantIds);
+        if (tenantIds.isEmpty()) {
+            tenantIds.add(defaultTenantId != null ? defaultTenantId : loginUser.getTenantId());
+        }
+        if (defaultTenantId != null && !tenantIds.contains(defaultTenantId)) {
+            throw new RuntimeException("默认租户必须包含在所属租户中");
+        }
+        tenantIds.forEach(this::validateTenantEnabled);
+        return tenantIds;
+    }
+
+    private List<Long> normalizeTenantIdList(List<Long> tenantIds) {
+        if (tenantIds == null) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(tenantIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new)));
+    }
+
+    private Long resolveDefaultTenantId(List<Long> tenantIds, Long requestedDefaultTenantId) {
+        if (tenantIds == null || tenantIds.isEmpty()) {
+            throw new RuntimeException("租户不能为空");
+        }
+        if (requestedDefaultTenantId != null) {
+            if (!tenantIds.contains(requestedDefaultTenantId)) {
+                throw new RuntimeException("默认租户必须包含在所属租户中");
+            }
+            return requestedDefaultTenantId;
+        }
+        return tenantIds.get(0);
+    }
+
     private Long resolveRoleBindTenantId(SysUser user) {
         return resolveRoleBindTenantId(user, null);
     }
@@ -699,6 +837,17 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 userTenantMapper.selectCount(new LambdaQueryWrapper<SysUserTenant>()
                         .eq(SysUserTenant::getUserId, userId)
                         .eq(SysUserTenant::getTenantId, tenantId)
+                        .eq(SysUserTenant::getStatus, 1)));
+        return count != null && count > 0;
+    }
+
+    private boolean hasEnabledTenantMembership(Long userId) {
+        if (userId == null) {
+            return false;
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                userTenantMapper.selectCount(new LambdaQueryWrapper<SysUserTenant>()
+                        .eq(SysUserTenant::getUserId, userId)
                         .eq(SysUserTenant::getStatus, 1)));
         return count != null && count > 0;
     }

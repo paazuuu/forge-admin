@@ -28,6 +28,7 @@ import com.mdframe.forge.starter.auth.strategy.AuthStrategyFactory;
 import com.mdframe.forge.starter.auth.strategy.IAuthStrategy;
 import com.mdframe.forge.starter.auth.util.PasswordUtil;
 import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,7 @@ public class SystemAuthServiceImpl implements IAuthService {
     private final IClientService clientService;
     private final ICacheService cacheService;
     private final LoginCaptchaPolicyResolver captchaPolicyResolver;
+    private final SysTenantMapper tenantMapper;
 
     // ==================== 核心认证方法 ====================
 
@@ -444,6 +446,11 @@ public class SystemAuthServiceImpl implements IAuthService {
 
     @Override
     public LoginConfigResult getLoginConfig(String userClient) {
+        return getLoginConfig(userClient, null);
+    }
+
+    @Override
+    public LoginConfigResult getLoginConfig(String userClient, Long tenantId) {
         // 从配置中心获取全局登录配置，并叠加客户端覆盖项
         LoginConfig config = configManagerService.getLoginConfig();
         if (config == null) {
@@ -451,6 +458,7 @@ public class SystemAuthServiceImpl implements IAuthService {
         }
 
         LoginCaptchaPolicy captchaPolicy = captchaPolicyResolver.resolve(userClient);
+        SysTenant tenant = selectLoginTenantConfig(tenantId);
 
         return LoginConfigResult.builder()
                 .enableCaptcha(captchaPolicy.getEnableCaptcha())
@@ -462,7 +470,36 @@ public class SystemAuthServiceImpl implements IAuthService {
                 .enableRememberMe(config.getEnableRememberMe())
                 .enableLoginLog(config.getEnableLoginLog())
                 .enableIpLimit(config.getEnableIpLimit())
+                .tenantId(tenant == null ? null : tenant.getId())
+                .tenantName(tenant == null ? null : tenant.getTenantName())
+                .browserIcon(tenant == null ? null : tenant.getBrowserIcon())
+                .browserTitle(tenant == null ? null : tenant.getBrowserTitle())
+                .systemName(tenant == null ? null : tenant.getSystemName())
+                .systemLogo(tenant == null ? null : tenant.getSystemLogo())
+                .systemIntro(tenant == null ? null : tenant.getSystemIntro())
+                .copyrightInfo(tenant == null ? null : tenant.getCopyrightInfo())
+                .systemLayout(tenant == null ? null : tenant.getSystemLayout())
+                .systemTheme(tenant == null ? null : tenant.getSystemTheme())
+                .themeConfig(tenant == null ? null : tenant.getThemeConfig())
                 .build();
+    }
+
+    @Override
+    public List<LoginTenantOption> listLoginTenantOptions() {
+        return TenantContextHolder.executeIgnore(() ->
+                tenantMapper.selectList(new LambdaQueryWrapper<SysTenant>()
+                                .eq(SysTenant::getTenantStatus, 1)
+                                .orderByAsc(SysTenant::getId)
+                                .select(SysTenant::getId, SysTenant::getTenantName,
+                                        SysTenant::getSystemName, SysTenant::getBrowserTitle))
+                        .stream()
+                        .map(tenant -> LoginTenantOption.builder()
+                                .tenantId(tenant.getId())
+                                .tenantName(tenant.getTenantName())
+                                .systemName(tenant.getSystemName())
+                                .browserTitle(tenant.getBrowserTitle())
+                                .build())
+                        .toList());
     }
 
     @Override
@@ -635,6 +672,17 @@ public class SystemAuthServiceImpl implements IAuthService {
         return onlineUserService.getUserTokens(userId).stream()
                 .filter(token -> isTokenBelongsToClient(token, resolvedClient))
                 .toList();
+    }
+
+    private SysTenant selectLoginTenantConfig(Long tenantId) {
+        if (tenantId == null) {
+            return null;
+        }
+        return TenantContextHolder.executeIgnore(() ->
+                tenantMapper.selectOne(new LambdaQueryWrapper<SysTenant>()
+                        .eq(SysTenant::getId, tenantId)
+                        .eq(SysTenant::getTenantStatus, 1)
+                        .last("LIMIT 1")));
     }
 
     private boolean isTokenBelongsToClient(String token, String userClient) {

@@ -15,11 +15,11 @@ export const cryptoConfig = {
   // 防重放包含路径
   replayIncludePaths: [],
   // 防重放排除路径（支持通配符 ** 匹配多级路径）
-  replayExcludePaths: ['/auth/captcha', '/auth/captcha/**', '/auth/loginConfig', '/crypto/public-key'],
+  replayExcludePaths: ['/auth/captcha', '/auth/captcha/**', '/auth/loginConfig', '/auth/tenant/options', '/auth/tenant/assets/**', '/social/callback', '/crypto/public-key'],
   // 需要加密的路径（支持通配符）
   includePaths: [],
   // 排除加密的路径
-  excludePaths: ['/auth/captcha', '/auth/captcha/**', '/auth/login', '/auth/loginConfig', '/crypto/public-key', '/crypto/exchange'],
+  excludePaths: ['/auth/captcha', '/auth/captcha/**', '/auth/login', '/auth/loginConfig', '/auth/tenant/options', '/auth/tenant/assets/**', '/social/callback', '/crypto/public-key', '/crypto/exchange'],
 }
 
 /**

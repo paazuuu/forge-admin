@@ -212,6 +212,10 @@ public class BusinessDocumentConfigService {
     }
 
     public BusinessDocumentConfigVO toVO(AiBusinessDocumentConfig config) {
+        return toVO(config, null);
+    }
+
+    public BusinessDocumentConfigVO toVO(AiBusinessDocumentConfig config, AiCrudConfig runtimeConfig) {
         Map<String, Object> options = readObjectMap(config.getOptions());
         Long tenantId = config.getTenantId() != null ? config.getTenantId() : resolveTenantId();
         Map<String, Object> mainFlowSummary = buildMainFlowSummary(tenantId, config.getObjectCode(), config.getDefaultFlowKey());
@@ -241,9 +245,11 @@ public class BusinessDocumentConfigService {
         vo.setStatusMappingRows(readStatusRows(options, vo.getStatusMapping()));
         vo.setStatusActionPolicy(readObjectMap(options.get("statusActionPolicy")));
         vo.setMainFlowSummary(mainFlowSummary);
-        String documentNoField = StringUtils.defaultIfBlank(
-                text(options.get("documentNoField")),
-                resolveDocumentNoField(config, selectRuntimeConfig(tenantId, config)));
+        String documentNoField = text(options.get("documentNoField"));
+        if (StringUtils.isBlank(documentNoField)) {
+            documentNoField = resolveDocumentNoField(config,
+                    runtimeConfig != null ? runtimeConfig : selectRuntimeConfig(tenantId, config));
+        }
         if (StringUtils.isNotBlank(documentNoField)) {
             options.put("documentNoField", documentNoField);
         }

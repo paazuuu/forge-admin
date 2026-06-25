@@ -9,6 +9,7 @@ import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
 import com.mdframe.forge.plugin.generator.mapper.GenDatasourceMapper;
 import com.mdframe.forge.plugin.generator.service.IGenDatasourceService;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialect;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDatabaseDialectFactory;
 import com.mdframe.forge.plugin.generator.util.DynamicDataSourceUtil;
@@ -35,6 +36,7 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
 
     private final GenDatasourceMapper genDatasourceMapper;
     private final RuntimeDatabaseDialectFactory dialectFactory;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
 
     @Override
     public boolean save(GenDatasource entity) {
@@ -43,7 +45,11 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
         if (StrUtil.isNotBlank(entity.getPassword())) {
             entity.setPassword(GenDatasourcePasswordCodec.encrypt(entity.getPassword()));
         }
-        return super.save(entity);
+        boolean saved = super.save(entity);
+        if (saved) {
+            runtimeDataSourceResolver.evictDatasource(entity.getDatasourceId(), entity.getDatasourceCode());
+        }
+        return saved;
     }
 
     @Override
@@ -57,16 +63,21 @@ public class GenDatasourceServiceImpl extends ServiceImpl<GenDatasourceMapper, G
         boolean updated = super.updateById(entity);
         if (updated && entity.getDatasourceId() != null) {
             DynamicDataSourceUtil.removeDataSource(entity.getDatasourceId());
+            runtimeDataSourceResolver.evictDatasource(entity.getDatasourceId(),
+                    existing == null ? null : existing.getDatasourceCode());
+            runtimeDataSourceResolver.evictDatasource(entity.getDatasourceId(), entity.getDatasourceCode());
         }
         return updated;
     }
 
     @Override
     public boolean removeById(Serializable id) {
+        GenDatasource existing = id == null ? null : genDatasourceMapper.selectById(id);
         boolean removed = super.removeById(id);
         if (removed && id != null) {
             Long datasourceId = Long.valueOf(String.valueOf(id));
             DynamicDataSourceUtil.removeDataSource(datasourceId);
+            runtimeDataSourceResolver.evictDatasource(datasourceId, existing == null ? null : existing.getDatasourceCode());
         }
         return removed;
     }

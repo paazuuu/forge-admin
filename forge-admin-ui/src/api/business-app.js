@@ -363,6 +363,10 @@ export function businessDocumentRuntime(objectCode, recordId) {
   return request.get(`/ai/business/document/${objectCode}/${recordId}/runtime`)
 }
 
+export function businessDocumentRuntimeBatch(objectCode, recordIds = []) {
+  return request.post(`/ai/business/document/${objectCode}/runtime/batch`, { recordIds })
+}
+
 export function businessFlowBinding(objectCode) {
   return request.get(`/ai/business/flow/binding/${objectCode}`)
 }

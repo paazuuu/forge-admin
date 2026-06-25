@@ -1,6 +1,8 @@
 package com.mdframe.forge.plugin.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.mdframe.forge.plugin.system.dto.BatchUserRoleBindDTO;
+import com.mdframe.forge.plugin.system.dto.BatchUserTenantBindDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.dto.UserOrgBindDTO;
@@ -13,6 +15,7 @@ import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +53,25 @@ public class SysUserController {
     public RespInfo<SysUser> getById(@RequestParam Long id) {
         SysUser user = userService.selectUserById(id);
         clearAuthFields(user);
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser != null && loginUser.isAdmin()) {
+            List<SysUserTenantVO> userTenants = userService.selectUserTenants(id);
+            List<SysUserTenantVO> enabledUserTenants = userTenants.stream()
+                    .filter(item -> item.getStatus() == null || item.getStatus() != 0)
+                    .toList();
+            user.setTenantIds(enabledUserTenants.stream()
+                    .map(SysUserTenantVO::getTenantId)
+                    .toList());
+            user.setTenantName(enabledUserTenants.stream()
+                    .map(SysUserTenantVO::getTenantName)
+                    .filter(name -> name != null && !name.isBlank())
+                    .distinct()
+                    .collect(java.util.stream.Collectors.joining(",")));
+        } else if (loginUser != null) {
+            Long tenantId = loginUser.getTenantId();
+            user.setTenantId(tenantId);
+            user.setTenantIds(tenantId == null ? List.of() : List.of(tenantId));
+        }
         // 填充用户岗位ID列表
         user.setPostIds(userService.selectUserPostIds(id));
         // 填充用户角色ID列表，支持新增/编辑表单直接维护角色
@@ -108,6 +130,15 @@ public class SysUserController {
                                     @RequestParam(required = false) Long tenantId) {
         boolean result = userService.bindUserRoles(userId, roleIds, tenantId);
         return result ? RespInfo.success() : RespInfo.error("绑定角色失败");
+    }
+
+    /**
+     * 批量给用户追加角色。
+     */
+    @PostMapping("/batch/roles")
+    public RespInfo<Void> batchBindRoles(@RequestBody BatchUserRoleBindDTO dto) {
+        boolean result = userService.batchBindUserRoles(dto);
+        return result ? RespInfo.success() : RespInfo.error("批量授权失败");
     }
 
     /**
@@ -172,6 +203,15 @@ public class SysUserController {
     public RespInfo<Void> bindTenants(@PathVariable Long userId, @RequestBody UserTenantBindDTO dto) {
         boolean result = userService.bindUserTenants(userId, dto);
         return result ? RespInfo.success() : RespInfo.error("绑定租户失败");
+    }
+
+    /**
+     * 批量将用户加入租户。
+     */
+    @PostMapping("/batch/tenants")
+    public RespInfo<Void> batchBindTenant(@RequestBody BatchUserTenantBindDTO dto) {
+        boolean result = userService.batchBindUserTenant(dto);
+        return result ? RespInfo.success() : RespInfo.error("批量加入租户失败");
     }
 
     /**

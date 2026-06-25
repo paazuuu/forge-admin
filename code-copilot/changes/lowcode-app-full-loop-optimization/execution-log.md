@@ -832,3 +832,74 @@ Flow 服务现在不会把同一租户同一 `businessKey` 的重复启动直接
 ## 5. 结论
 
 旧字段 `frpjmpzgzlc1hfc` 这类 form-create 临时字段现在会在字段改名/删除、设计器读取、发布检查和前端保存 payload 四个入口被清理或过滤。用户即使在查询条件 UI 找不到该字段，也不会再被隐藏 `viewSchema.search.fields[].fieldCode` 阻断。
+
+---
+
+# 本轮增量执行日志：低代码应用列表查询与基础表格默认居中
+
+> 执行时间：2026-06-25 09:38 CST
+> 范围：低代码应用分页摘要查询、关键词搜索防抖、首屏并行加载、列表主路径索引、基础表格默认列居中。
+
+## 1. 本轮改动
+
+- `AiCrudConfigMapper.xml` 的低代码应用分页查询改为摘要字段，新增 `LowcodeAppDetailResultMap`，不再读取 `modelSchema/pageSchema`。
+- `LowcodeAppService.page` 直接返回分页 VO，删除列表态 `toDetailVO` 反序列化成本。
+- `lowcode-apps.vue` 首屏改为并行加载领域树和应用列表，关键词输入增加 300ms 防抖，分页切换会清理待执行搜索。
+- `AiTable.vue` 默认列对齐改为 `center`，并补充 `titleAlign` 透传，保留单列显式对齐覆盖。
+- 新增 `V1.0.78__add_lowcode_app_page_summary_index.sql`，为低代码应用列表默认查询补上 `tenant_id + mode + build_mode + update_time + id` 索引。
+
+## 2. 验证命令
+
+- `xmllint --noout --nonet forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/resources/mapper/AiCrudConfigMapper.xml`：通过。
+- `sed -n '1,120p' forge-server/db/migration/V1.0.78__add_lowcode_app_page_summary_index.sql`：脚本内容检查通过，幂等创建逻辑完整。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests`：首次在沙箱内因写 `~/.m2` 失败，重新放开权限后 `BUILD SUCCESS`。
+- `cd forge-admin-ui && source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm build`：构建通过。
+
+## 3. 警告和跳过项
+
+- Maven 保留既有 deprecation / unchecked 提示，未阻断。
+- 前端构建保留既有 CSS `//` 注释警告、动态/静态导入混用警告和 chunk size 提示，未阻断。
+- 本轮未启动后端、前端 dev server 或数据库，未执行浏览器点击验证，也未执行 Flyway 实跑。
+
+## 4. 结论
+
+本轮优化已完成代码和构建验证。低代码应用列表不再携带详情级 JSON 反序列化成本，基础表格默认展示改为居中对齐。
+
+---
+
+# 本轮增量执行日志：动态页面查询重复 DB 优化
+
+> 执行时间：2026-06-25 20:49 CST
+> 范围：低代码动态页 `/ai/crud/{configKey}/page` 与业务单据运行态 `/ai/business/document/{objectCode}/runtime/batch` 查询链路的控制面重复 DB 优化。
+
+## 1. 本轮定位
+
+- 用户日志显示一次查询会先调用 `GET /ai/crud/crm_customer/page`，随后调用 `POST /ai/business/document/crm_customer/runtime/batch`；两条请求合计后端约 1.3s，前端体感约 3s。
+- 热点重复 DB 主要来自控制面元数据：每个请求都查 `SysResourceMapper.selectConfiguredApiUrls`，低代码运行数据源在同一链路反复 `GenDatasourceMapper.selectById`，动态 CRUD 反复读取 `AiCrudConfigMapper.selectByConfigKey`。
+- `runtime/batch` 已经批量读取业务记录和流程实例，但单据配置解析仍会先按 `objectCode=crm_customer` miss，再按 `configKey=crm_customer` 命中，并在 `toVO` 内二次补查运行态配置。
+- `DynamicDataScopeService` 在热路径用 info 打印 skip/apply 日志，虽然不是 DB，但会放大查询日志量和 I/O 成本。
+
+## 2. 本轮改动
+
+- `PermissionServiceImpl` 对已配置 API 资源 URL 做 HTTP method 维度 30s 本地缓存；`SysResourceServiceImpl` 在资源保存、更新、删除和资源管理显式增删改后立即清空缓存，避免权限配置长期陈旧。
+- `LowcodeRuntimeDataSourceResolver` 对 `GenDatasource` 做 datasourceId / datasourceCode 维度 30s 本地缓存，并返回对象拷贝，避免调用方解密密码或修改字段污染缓存。
+- `RuntimeJdbcTemplateProvider` 改为复用 `LowcodeRuntimeDataSourceResolver` 缓存，不再每次构造运行态 `JdbcTemplate` 时重复查 `gen_datasource`。
+- `GenDatasourceServiceImpl` 在数据源保存、更新、删除后清理运行数据源缓存和动态数据源连接池；更新时同时清旧 code 和新 code。
+- `AiCrudConfigService.getByConfigKey` 增加 10s 短缓存，并在 `save/updateById/removeById` 和配置增删改路径失效；返回配置拷贝，避免动态 CRUD 修改运行表名污染缓存。
+- `BusinessDocumentRuntimeService` 优先按发布态 `configKey` 查启用单据配置，再按对象编码兜底；构建运行态 VO 时把已解析的 `AiCrudConfig` 传给 `BusinessDocumentConfigService.toVO`，减少二次配置查询。
+- `DynamicDataScopeService` 将热路径 skip/apply 日志从 info 降到 debug，减少普通查询日志 I/O。
+
+## 3. 验证命令
+
+- `git diff --check -- forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/PermissionServiceImpl.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/SysResourceServiceImpl.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/AiCrudConfigService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/DynamicDataScopeService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/businessapp/BusinessDocumentConfigService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/businessapp/BusinessDocumentRuntimeService.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/impl/GenDatasourceServiceImpl.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/runtime/LowcodeRuntimeDataSourceResolver.java forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/runtime/RuntimeJdbcTemplateProvider.java`：通过，无输出。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-framework/forge-plugin-parent/forge-plugin-system -am compile -DskipTests`：通过，退出码 0。
+
+## 4. 警告和跳过项
+
+- 本轮未启动后端服务和数据库，未执行真实 `crm_customer` 查询日志前后对比；原因是先完成后端热路径代码优化和模块编译验证。
+- 本轮未执行前端构建；原因是本轮没有前端代码变更。
+- 本轮未新启动长期服务，无需停止服务。
+
+## 5. 结论
+
+动态页面查询链路已减少控制面重复 DB：权限资源配置、低代码配置、运行数据源解析和运行态 JDBC provider 都有短缓存与配置变更失效；业务单据运行态也减少了无效配置查询和二次运行配置读取。

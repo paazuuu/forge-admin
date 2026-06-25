@@ -12,7 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 权限服务实现类
@@ -23,7 +27,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PermissionServiceImpl implements IPermissionService {
 
+    private static final long CONFIGURED_API_CACHE_TTL_MILLIS = TimeUnit.SECONDS.toMillis(30);
+    private static final String METHOD_ALL = "*";
+
     private final SysResourceMapper resourceMapper;
+    private final Map<String, CacheEntry<List<String>>> configuredApiUrlCache = new ConcurrentHashMap<>();
 
     @Override
     public List<String> getCurrentUserApiPermissions() {
@@ -54,13 +62,40 @@ public class PermissionServiceImpl implements IPermissionService {
             return false;
         }
 
-        List<String> configuredApiUrls = resourceMapper.selectConfiguredApiUrls(method);
+        List<String> configuredApiUrls = getConfiguredApiUrls(method);
         boolean configured = CollUtil.isNotEmpty(configuredApiUrls)
                 && PathMatcher.matchAny(configuredApiUrls, apiUrl);
         if (!configured) {
             log.debug("接口未配置API权限资源: method={}, apiUrl={}", method, apiUrl);
         }
         return configured;
+    }
+
+    public void clearConfiguredApiUrlCache() {
+        configuredApiUrlCache.clear();
+        log.debug("已清空API权限资源配置缓存");
+    }
+
+    private List<String> getConfiguredApiUrls(String method) {
+        String cacheKey = normalizeMethod(method);
+        long now = System.currentTimeMillis();
+        CacheEntry<List<String>> cached = configuredApiUrlCache.get(cacheKey);
+        if (cached != null && cached.expiresAt() > now) {
+            return cached.value();
+        }
+        List<String> configuredApiUrls = resourceMapper.selectConfiguredApiUrls(method);
+        List<String> safeUrls = configuredApiUrls == null
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(configuredApiUrls));
+        configuredApiUrlCache.put(cacheKey, new CacheEntry<>(safeUrls, now + CONFIGURED_API_CACHE_TTL_MILLIS));
+        return safeUrls;
+    }
+
+    private String normalizeMethod(String method) {
+        if (StrUtil.isBlank(method)) {
+            return METHOD_ALL;
+        }
+        return method.trim().toUpperCase();
     }
 
     @Override
@@ -100,5 +135,8 @@ public class PermissionServiceImpl implements IPermissionService {
         }
 
         return hasPermission;
+    }
+
+    private record CacheEntry<T>(T value, long expiresAt) {
     }
 }

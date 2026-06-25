@@ -74,8 +74,15 @@ public class BusinessPermissionService {
     public List<String> resolveAvailableActions(String objectCode,
                                                 Long recordId,
                                                 Map<String, Object> recordData) {
-        List<String> actions = new ArrayList<>();
         if (objectCode == null || objectCode.isBlank() || recordId == null || recordData == null) {
+            return new ArrayList<>();
+        }
+        return resolveDocumentActionPermissions(objectCode);
+    }
+
+    public List<String> resolveDocumentActionPermissions(String objectCode) {
+        List<String> actions = new ArrayList<>();
+        if (objectCode == null || objectCode.isBlank()) {
             return actions;
         }
         if (hasDocumentActionPermission(objectCode, "VIEW")) {

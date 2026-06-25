@@ -30,11 +30,43 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
+const userClient = import.meta.env.VITE_USER_CLIENT || 'pc'
+const LOGIN_TENANT_STORAGE_KEY = 'login_selected_tenant_id'
+const SOCIAL_TENANT_MAP_KEY = 'login_social_tenant_map'
 
 const loading = ref(true)
 const success = ref(false)
 const message = ref('正在处理授权...')
 const detailMessage = ref('请稍候...')
+
+function normalizeTenantId(value) {
+  if (Array.isArray(value)) {
+    const first = value.find(item => item !== null && item !== undefined && item !== '')
+    return normalizeTenantId(first)
+  }
+  if (value === null || value === undefined || value === '')
+    return null
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function getSocialTenantMap() {
+  return lStorage.get(SOCIAL_TENANT_MAP_KEY) || {}
+}
+
+function setSocialTenantMap(map) {
+  lStorage.set(SOCIAL_TENANT_MAP_KEY, map)
+}
+
+function resolveSocialTenantId(state) {
+  const map = getSocialTenantMap()
+  const mappedTenantId = normalizeTenantId(map[state])
+  if (state && Object.prototype.hasOwnProperty.call(map, state)) {
+    delete map[state]
+    setSocialTenantMap(map)
+  }
+  return mappedTenantId ?? normalizeTenantId(lStorage.get(LOGIN_TENANT_STORAGE_KEY)) ?? null
+}
 
 async function handleCallback() {
   const { code, state } = route.query
@@ -110,10 +142,13 @@ async function handleCallback() {
 
   // 登录流程
   try {
+    const tenantId = resolveSocialTenantId(stateCode)
     const callbackRes = await api.socialCallback({
       platform,
       code,
       state: stateCode,
+      tenantId,
+      userClient,
     })
 
     if (callbackRes.code !== 200 || !callbackRes.data) {
@@ -137,6 +172,10 @@ async function handleCallback() {
       socialNickname: authUser.nickname,
       socialAvatar: authUser.avatar,
       socialEmail: authUser.email,
+      tenantId,
+      userClient,
+      appId: import.meta.env.VITE_APP_ID || 'forge_pc_001',
+      appSecret: import.meta.env.VITE_APP_SECRET || undefined,
     }
 
     const loginRes = await api.login(loginParams)

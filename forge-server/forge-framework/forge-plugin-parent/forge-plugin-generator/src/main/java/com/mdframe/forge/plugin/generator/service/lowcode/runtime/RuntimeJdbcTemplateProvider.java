@@ -1,7 +1,6 @@
 package com.mdframe.forge.plugin.generator.service.lowcode.runtime;
 
 import com.mdframe.forge.plugin.generator.domain.entity.GenDatasource;
-import com.mdframe.forge.plugin.generator.mapper.GenDatasourceMapper;
 import com.mdframe.forge.plugin.generator.util.DynamicDataSourceUtil;
 import com.mdframe.forge.plugin.generator.util.GenDatasourcePasswordCodec;
 import com.mdframe.forge.starter.core.exception.BusinessException;
@@ -21,7 +20,7 @@ public class RuntimeJdbcTemplateProvider {
 
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
-    private final GenDatasourceMapper datasourceMapper;
+    private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
 
     public JdbcTemplate jdbcTemplate(LowcodeRuntimeDataSourceContext context) {
         if (context == null || context.isMaster()) {
@@ -44,7 +43,7 @@ public class RuntimeJdbcTemplateProvider {
         if (context.getDatasourceId() == null) {
             throw new BusinessException("运行数据源ID不能为空");
         }
-        GenDatasource datasource = datasourceMapper.selectById(context.getDatasourceId());
+        GenDatasource datasource = runtimeDataSourceResolver.getDatasourceById(context.getDatasourceId());
         if (datasource == null) {
             throw new BusinessException("运行数据源不存在: " + context.getDatasourceId());
         }

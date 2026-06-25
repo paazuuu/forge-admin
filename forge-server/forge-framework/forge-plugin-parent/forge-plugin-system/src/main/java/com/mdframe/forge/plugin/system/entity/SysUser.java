@@ -138,6 +138,12 @@ public class SysUser extends TenantEntity {
     private String tenantName;
 
     /**
+     * 所属租户ID列表（查询详情时填充）
+     */
+    @TableField(exist = false)
+    private List<Long> tenantIds;
+
+    /**
      * 所属部门名称（前端选择器兼容字段）
      */
     @TableField(exist = false)

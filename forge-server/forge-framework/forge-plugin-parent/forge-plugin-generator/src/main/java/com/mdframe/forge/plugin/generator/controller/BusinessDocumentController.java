@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessDocumentConfigDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessDocumentNoRulePreviewDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessDocumentRuntimeBatchDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessDocumentConfigService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessDocumentRuntimeService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentConfigVO;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 业务单据配置和运行态接口。
@@ -76,5 +78,14 @@ public class BusinessDocumentController {
     public RespInfo<BusinessDocumentRuntimeVO> runtime(@PathVariable String objectCode,
                                                        @PathVariable Long recordId) {
         return RespInfo.success(documentRuntimeService.getRuntime(objectCode, recordId));
+    }
+
+    @PostMapping("/{objectCode}/runtime/batch")
+    @SaCheckPermission("ai:businessDocument:view")
+    @OperationLog(module = "业务单据", type = OperationType.QUERY, desc = "批量查询单据运行态")
+    public RespInfo<Map<Long, BusinessDocumentRuntimeVO>> runtimeBatch(@PathVariable String objectCode,
+                                                                       @RequestBody(required = false) BusinessDocumentRuntimeBatchDTO dto) {
+        List<Long> recordIds = dto == null ? List.of() : dto.getRecordIds();
+        return RespInfo.success(documentRuntimeService.getRuntimeBatch(objectCode, recordIds));
     }
 }

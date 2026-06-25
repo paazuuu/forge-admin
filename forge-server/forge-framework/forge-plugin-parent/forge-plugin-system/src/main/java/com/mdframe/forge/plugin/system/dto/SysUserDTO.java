@@ -24,6 +24,11 @@ public class SysUserDTO implements Serializable {
     private Long tenantId;
 
     /**
+     * 所属租户编号列表
+     */
+    private List<Long> tenantIds;
+
+    /**
      * 用户名（租户内唯一）
      */
     private String username;

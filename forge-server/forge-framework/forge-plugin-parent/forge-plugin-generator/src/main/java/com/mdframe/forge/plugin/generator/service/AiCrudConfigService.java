@@ -1,5 +1,6 @@
 package com.mdframe.forge.plugin.generator.service;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -28,16 +29,21 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudConfig> {
+
+    private static final long CONFIG_CACHE_TTL_MILLIS = TimeUnit.SECONDS.toMillis(10);
 
     private final ObjectMapper objectMapper;
     private final MenuRegisterAdapter menuRegisterAdapter;
@@ -46,14 +52,55 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
     private final AiCrudConfigVersionMapper versionMapper;
     @Lazy
     private final AiPageTemplateService pageTemplateService;
+    private final Map<String, CacheEntry<AiCrudConfig>> configCache = new ConcurrentHashMap<>();
+
+    @Override
+    public boolean save(AiCrudConfig entity) {
+        boolean saved = super.save(entity);
+        if (saved) {
+            clearConfigCache(entity == null ? null : entity.getTenantId(), entity == null ? null : entity.getConfigKey());
+        }
+        return saved;
+    }
+
+    @Override
+    public boolean updateById(AiCrudConfig entity) {
+        AiCrudConfig existing = entity == null || entity.getId() == null ? null : getById(entity.getId());
+        boolean updated = super.updateById(entity);
+        if (updated) {
+            clearConfigCache(existing == null ? null : existing.getTenantId(), existing == null ? null : existing.getConfigKey());
+            clearConfigCache(entity == null ? null : entity.getTenantId(), entity == null ? null : entity.getConfigKey());
+        }
+        return updated;
+    }
+
+    @Override
+    public boolean removeById(Serializable id) {
+        AiCrudConfig existing = id == null ? null : getById(id);
+        boolean removed = super.removeById(id);
+        if (removed) {
+            clearConfigCache(existing == null ? null : existing.getTenantId(), existing == null ? null : existing.getConfigKey());
+        }
+        return removed;
+    }
 
     public AiCrudConfig getByConfigKey(String configKey) {
         Long tenantId = getCurrentTenantId();
-        if (tenantId != null) {
-            return baseMapper.selectByConfigKey(tenantId, configKey);
+        if (tenantId == null) {
+            return getOne(new LambdaQueryWrapper<AiCrudConfig>()
+                    .eq(AiCrudConfig::getConfigKey, configKey));
         }
-        return getOne(new LambdaQueryWrapper<AiCrudConfig>()
-                .eq(AiCrudConfig::getConfigKey, configKey));
+        String cacheKey = buildCacheKey(tenantId, configKey);
+        long now = System.currentTimeMillis();
+        CacheEntry<AiCrudConfig> cached = configCache.get(cacheKey);
+        if (cached != null && cached.expiresAt() > now) {
+            return copyConfig(cached.value());
+        }
+        AiCrudConfig config = baseMapper.selectByConfigKey(tenantId, configKey);
+        if (config != null) {
+            configCache.put(cacheKey, new CacheEntry<>(copyConfig(config), now + CONFIG_CACHE_TTL_MILLIS));
+        }
+        return copyConfig(config);
     }
 
     public Page<AiCrudConfig> listPage(PageQuery pageQuery, String configKey, String tableName) {
@@ -101,6 +148,7 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             config.setAppName(StringUtils.defaultIfBlank(dto.getMenuName(), config.getTableComment()));
         }
         save(config);
+        clearConfigCache(config.getTenantId(), config.getConfigKey());
 
         if ("CONFIG".equals(config.getMode())) {
             String menuName = StringUtils.isNotBlank(dto.getMenuName()) ? dto.getMenuName() : config.getTableComment();
@@ -110,6 +158,7 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
                 Long menuResourceId = menuRegisterAdapter.registerMenu(menuName, parentId, config.getConfigKey(), sort);
                 config.setMenuResourceId(menuResourceId);
                 updateById(config);
+                clearConfigCache(config.getTenantId(), config.getConfigKey());
             } catch (Exception e) {
                 log.warn("[AiCrudConfigService] 菜单注册失败, configKey={}, 将继续保存配置", config.getConfigKey(), e);
             }
@@ -125,9 +174,13 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         if (config == null) {
             throw new BusinessException("配置不存在");
         }
+        String originalConfigKey = config.getConfigKey();
+        Long originalTenantId = config.getTenantId();
         validateJsonFields(dto);
         copyDtoToEntity(dto, config);
         updateById(config);
+        clearConfigCache(originalTenantId, originalConfigKey);
+        clearConfigCache(config.getTenantId(), config.getConfigKey());
 
         if (config.getMenuResourceId() != null) {
             try {
@@ -158,6 +211,7 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             }
         }
         removeById(id);
+        clearConfigCache(config.getTenantId(), config.getConfigKey());
     }
 
     public AiCrudConfigRenderVO getRenderConfig(String configKey) {
@@ -631,5 +685,23 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private void clearConfigCache(Long tenantId, String configKey) {
+        if (tenantId == null || StringUtils.isBlank(configKey)) {
+            return;
+        }
+        configCache.remove(buildCacheKey(tenantId, configKey));
+    }
+
+    private String buildCacheKey(Long tenantId, String configKey) {
+        return tenantId + ":" + StringUtils.trimToEmpty(configKey);
+    }
+
+    private AiCrudConfig copyConfig(AiCrudConfig config) {
+        return config == null ? null : BeanUtil.copyProperties(config, AiCrudConfig.class);
+    }
+
+    private record CacheEntry<T>(T value, long expiresAt) {
     }
 }

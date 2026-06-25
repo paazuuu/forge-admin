@@ -852,6 +852,13 @@ public class DynamicCrudRepository {
     public List<Map<String, Object>> selectListByColumnIn(String tableName,
                                                           String columnName,
                                                           Collection<?> values) {
+        return selectListByColumnIn(tableName, columnName, values, null);
+    }
+
+    public List<Map<String, Object>> selectListByColumnIn(String tableName,
+                                                          String columnName,
+                                                          Collection<?> values,
+                                                          SqlCondition dataScopeCondition) {
         validateTableName(tableName);
         validateIdentifier(columnName);
         if (values == null || values.isEmpty()) {
@@ -871,6 +878,7 @@ public class DynamicCrudRepository {
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
         params.addValue("values", nonNullValues);
+        appendSqlCondition(whereClause, params, dataScopeCondition);
         String orderColumn = getTableColumns(tableName).contains(primaryKeyColumn()) ? primaryKeyColumn() : columnName;
         String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
         return jdbc().queryForList(sql, params);

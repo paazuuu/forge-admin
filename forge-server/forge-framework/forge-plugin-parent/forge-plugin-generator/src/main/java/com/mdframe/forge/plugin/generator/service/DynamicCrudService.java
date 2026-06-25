@@ -507,6 +507,60 @@ public class DynamicCrudService {
         }
     }
 
+    /**
+     * 按运行时主键批量读取记录，供运行态批量能力复用动态 CRUD 的数据源、数据权限和读取后处理链路。
+     */
+    public Map<Object, Map<String, Object>> selectByIds(String configKey, Collection<?> ids) {
+        List<Object> normalizedIds = normalizeBatchIds(ids);
+        Map<Object, Map<String, Object>> result = new LinkedHashMap<>();
+        if (normalizedIds.isEmpty()) {
+            return result;
+        }
+        AiCrudConfig config = getConfig(configKey);
+        try (LowcodeRuntimeDataSourceContextHolder.Scope ignored = useRuntimeContext(config)) {
+            String tableName = config.getTableName();
+            LowcodePrimaryKeyStrategy primaryKey = currentPrimaryKey();
+            String primaryColumn = primaryKeyColumn(primaryKey);
+            List<Map<String, Object>> rows = repository.selectListByColumnIn(
+                    tableName,
+                    primaryColumn,
+                    normalizedIds,
+                    buildDataScopeCondition(config, tableName, null)
+            );
+            List<Map<String, Object>> camelCaseRows = DynamicQueryGenerator.convertListToCamelCase(rows);
+            applyReadPipeline(camelCaseRows, config);
+            for (Map<String, Object> row : camelCaseRows) {
+                Object key = resolveBatchRowKey(row, primaryKey);
+                if (key != null) {
+                    result.put(key, row);
+                }
+            }
+            return result;
+        }
+    }
+
+    private List<Object> normalizeBatchIds(Collection<?> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(Objects::nonNull)
+                .filter(id -> StringUtils.isNotBlank(String.valueOf(id)))
+                .distinct()
+                .map(Object.class::cast)
+                .toList();
+    }
+
+    private Object resolveBatchRowKey(Map<String, Object> row, LowcodePrimaryKeyStrategy primaryKey) {
+        return firstPresent(
+                row,
+                primaryKeyField(primaryKey),
+                DynamicQueryGenerator.snakeToCamel(primaryKeyColumn(primaryKey)),
+                primaryKeyColumn(primaryKey),
+                "id"
+        );
+    }
+
     // ==================== 新增操作 ====================
 
     /**

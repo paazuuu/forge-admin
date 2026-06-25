@@ -65,6 +65,61 @@ public class LoginConfigResult implements Serializable {
     private Boolean enableIpLimit;
 
     /**
+     * 当前登录页所选租户ID。
+     */
+    private Long tenantId;
+
+    /**
+     * 当前登录页所选租户名称。
+     */
+    private String tenantName;
+
+    /**
+     * 浏览器icon。
+     */
+    private String browserIcon;
+
+    /**
+     * 浏览器标签名称。
+     */
+    private String browserTitle;
+
+    /**
+     * 系统名称。
+     */
+    private String systemName;
+
+    /**
+     * 系统logo。
+     */
+    private String systemLogo;
+
+    /**
+     * 系统介绍。
+     */
+    private String systemIntro;
+
+    /**
+     * 版权显示文本。
+     */
+    private String copyrightInfo;
+
+    /**
+     * 系统布局。
+     */
+    private String systemLayout;
+
+    /**
+     * 系统主题。
+     */
+    private String systemTheme;
+
+    /**
+     * 主题配置。
+     */
+    private String themeConfig;
+
+    /**
      * 已启用的三方登录平台列表
      */
     private List<SocialPlatformInfo> socialPlatforms;
