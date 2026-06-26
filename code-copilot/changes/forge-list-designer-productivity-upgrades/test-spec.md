@@ -175,3 +175,21 @@
 
 - 未启动 Vite 和浏览器截图验证：本轮先用静态检查和生产构建覆盖，运行规则组合需要在设计器真实页面中补充手工验收。
 - 未执行后端编译：本轮只改前端设计器、表单运行态、列表运行态和 code-copilot 记录。
+
+## 本轮增量验证（2026-06-26 CRUD 字段快捷配置补充）
+
+### 范围
+
+- CRUD 组件右侧属性面板新增“字段快捷配置”。
+- 字段快捷配置支持搜索字段、导入字段、导出字段开关。
+- 开关结果写入 `props.fieldSettings`，并同步 `searchFields/importFields/exportFields`。
+
+### P0 命令
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`
+
+### 当前跳过项
+
+- 当前 shell 命令通道对 `pwd`、`date`、`eslint` 等命令均返回 137，本轮先完成代码修改和 code-copilot 记录，待命令通道恢复后补跑验证。

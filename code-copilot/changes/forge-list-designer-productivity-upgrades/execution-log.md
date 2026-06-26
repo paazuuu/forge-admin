@@ -1,5 +1,25 @@
 # 执行日志：forge-list-designer-productivity-upgrades
 
+## 2026-06-26 CRUD 字段快捷配置补充
+
+### 变更范围
+
+- `ListPageGridDesigner.vue` 的 AiCrudPage 右侧属性面板新增“字段快捷配置”折叠区。
+- 字段快捷配置按当前对象字段列出字段名、字段编码，并提供搜索、导入、导出三个开关。
+- 开关写入当前 CRUD 区块 `props.fieldSettings[field]`，并同步维护 `searchFields`、`importFields`、`exportFields` 字段列表。
+
+### 命令与结果
+
+- 当前 shell 命令通道异常：`pwd`、`date`、`pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue` 均直接返回 137，未能完成自动化验证。
+
+### 跳过项
+
+- 待命令通道恢复后补跑定向 eslint、`git diff --check` 和前端构建。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
 ## 2026-06-25 23:05:03 CST
 
 ### 变更范围

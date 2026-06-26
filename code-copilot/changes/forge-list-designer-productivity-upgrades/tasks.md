@@ -214,6 +214,14 @@
 - [x] 列表画布、详情画布、发布运行页和表单运行态统一注入 `route.query/route.params`，进入详情页后可按 URL 参数控制组件规则。
 - [x] 执行定向 eslint、`git diff --check` 和前端构建验证。
 
+## 2026-06-26 CRUD 字段快捷配置补充
+
+- [x] 在列表设计器 CRUD 组件右侧属性面板新增“字段快捷配置”折叠区。
+- [x] 字段快捷配置按当前对象字段展示字段名和字段编码。
+- [x] 字段快捷配置补充“搜索”“导入”“导出”三类开关，方便在 CRUD 组件内直接配置查询条件和 Excel 字段范围。
+- [x] 快捷配置写入当前 CRUD 区块 `props.fieldSettings`，并同步维护 `searchFields`、`importFields`、`exportFields` 字段列表，避免只改 UI 不落 schema。
+- [ ] 待命令通道恢复后执行定向 eslint、`git diff --check` 和前端构建验证；当前 shell 命令被环境返回 137。
+
 ## 验证记录
 
 - `pnpm --dir forge-admin-ui exec eslint src/views/app-center/components/designer/BusinessListDesigner.vue src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过。

@@ -1526,6 +1526,52 @@
                     </n-form-item>
                   </n-collapse-item>
 
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['字段快捷配置', '搜索字段', '导入导出字段', '导入字段', '导出字段', '查询条件'])" name="field-quick-config" title="字段快捷配置">
+                    <div class="property-search-anchor" data-property-search="字段快捷配置 搜索字段 导入导出字段 导入字段 导出字段 查询条件 searchable importable exportable" />
+                    <n-form-item label="搜索 / 导入 / 导出字段">
+                      <div class="crud-field-quick-panel">
+                        <div class="field-help">
+                          这里配置当前 CRUD 组件使用的字段能力。搜索字段会作为查询条件，导入/导出字段会随当前组件配置保存。
+                        </div>
+                        <div class="crud-field-quick-head">
+                          <span>字段</span>
+                          <span>搜索</span>
+                          <span>导入</span>
+                          <span>导出</span>
+                        </div>
+                        <div v-if="crudFieldQuickRows.length" class="crud-field-quick-list">
+                          <div
+                            v-for="field in crudFieldQuickRows"
+                            :key="field.field"
+                            class="crud-field-quick-row"
+                          >
+                            <div class="crud-field-quick-meta">
+                              <strong>{{ field.label }}</strong>
+                              <small>{{ field.field }}</small>
+                            </div>
+                            <n-switch
+                              size="small"
+                              :value="resolveCrudFieldQuickValue(selectedBlock, field.field, 'searchable', field.searchable)"
+                              @update:value="updateCrudFieldQuickSetting(field.field, 'searchable', $event)"
+                            />
+                            <n-switch
+                              size="small"
+                              :value="resolveCrudFieldQuickValue(selectedBlock, field.field, 'importable', field.importable)"
+                              :disabled="field.systemField"
+                              @update:value="updateCrudFieldQuickSetting(field.field, 'importable', $event)"
+                            />
+                            <n-switch
+                              size="small"
+                              :value="resolveCrudFieldQuickValue(selectedBlock, field.field, 'exportable', field.exportable)"
+                              @update:value="updateCrudFieldQuickSetting(field.field, 'exportable', $event)"
+                            />
+                          </div>
+                        </div>
+                        <n-empty v-else size="small" description="暂无可配置字段" />
+                      </div>
+                    </n-form-item>
+                  </n-collapse-item>
+
                   <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['工具栏与导入导出', '工具栏', '导入', '导出', '导出任务', '自定义查询', '自定义操作', '按钮文案', '回调', '参数处理', '提交前', '搜索前', '加载列表前'])" name="toolbar" title="工具栏按钮与导入导出">
                     <div class="property-search-anchor" data-property-search="工具栏与导入导出 工具栏 导入 导出 导出任务 自定义查询 自定义操作 按钮文案 回调 参数处理 提交前 搜索前 加载列表前" />
                     <n-form-item label="工具栏显示项">
@@ -5100,6 +5146,23 @@ const rowFieldOptions = computed(() => props.fields
     value: field.field,
   })))
 const runtimeRuleFieldOptions = computed(() => rowFieldOptions.value)
+const crudFieldQuickRows = computed(() => {
+  return (props.fields || [])
+    .map((field) => {
+      const fieldCode = resolveCrudFieldKey(field)
+      if (!fieldCode)
+        return null
+      return {
+        field: fieldCode,
+        label: resolveCrudFieldLabel(field),
+        searchable: field.searchable === true,
+        importable: field.importable !== false,
+        exportable: field.exportable !== false,
+        systemField: field.systemField === true,
+      }
+    })
+    .filter(Boolean)
+})
 const childBlockTypeOptions = computed(() => listPageBlockCatalog
   .filter(item => !item.unique)
   .filter(item => !['card', 'tabs', 'grid-layout', 'box-layout'].includes(item.blockType))
@@ -8867,6 +8930,59 @@ function centerCanvasViewport() {
 function selectPropertyPanelTab(tab) {
   propertyPanelTab.value = tab
 }
+function resolveCrudFieldKey(field = {}) {
+  return String(field.field || field.fieldCode || field.code || field.prop || field.key || field.id || '').trim()
+}
+
+function resolveCrudFieldLabel(field = {}) {
+  return field.label || field.fieldName || field.name || field.title || resolveCrudFieldKey(field)
+}
+
+function resolveCrudFieldQuickValue(block = {}, fieldKey = '', settingKey = '', fallback = false) {
+  const setting = block.props?.fieldSettings?.[fieldKey] || {}
+  if (Object.prototype.hasOwnProperty.call(setting, settingKey))
+    return setting[settingKey] === true
+  if (settingKey === 'searchable' && Object.prototype.hasOwnProperty.call(setting, 'showInSearch'))
+    return setting.showInSearch === true
+  return fallback === true
+}
+
+function updateCrudFieldQuickSetting(fieldKey = '', settingKey = '', value = false) {
+  if (!selectedBlock.value?.id || !fieldKey || !settingKey)
+    return
+  const blockProps = selectedBlock.value.props || {}
+  const fieldSettings = { ...(blockProps.fieldSettings || {}) }
+  const previous = { ...(fieldSettings[fieldKey] || {}) }
+  fieldSettings[fieldKey] = {
+    ...previous,
+    field: fieldKey,
+    [settingKey]: value === true,
+  }
+  if (settingKey === 'searchable')
+    fieldSettings[fieldKey].showInSearch = value === true
+
+  patchBlockProps(selectedBlock.value.id, {
+    fieldSettings,
+    ...buildCrudFieldListPatch(blockProps, fieldKey, settingKey, value === true),
+  })
+}
+
+function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = '', enabled = false) {
+  const propName = {
+    searchable: 'searchFields',
+    importable: 'importFields',
+    exportable: 'exportFields',
+  }[settingKey]
+  if (!propName)
+    return {}
+  const currentList = Array.isArray(blockProps[propName]) ? blockProps[propName] : []
+  const nextSet = new Set(currentList.map(item => String(item || '').trim()).filter(Boolean))
+  if (enabled)
+    nextSet.add(fieldKey)
+  else
+    nextSet.delete(fieldKey)
+  return { [propName]: Array.from(nextSet) }
+}
 </script>
 
 <style scoped>
@@ -11855,5 +11971,119 @@ function selectPropertyPanelTab(tab) {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+.crud-field-quick-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.crud-field-quick-head,
+.crud-field-quick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 48px 48px;
+  gap: 8px;
+  align-items: center;
+}
+
+.crud-field-quick-head {
+  padding: 0 8px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.crud-field-quick-list {
+  display: grid;
+  gap: 6px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.crud-field-quick-row {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.crud-field-quick-meta {
+  display: grid;
+  min-width: 0;
+}
+
+.crud-field-quick-meta strong,
+.crud-field-quick-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crud-field-quick-meta strong {
+  color: #27272a;
+  font-size: 12px;
+}
+
+.crud-field-quick-meta small {
+  color: #71717a;
+  font-size: 11px;
+}
+.crud-field-quick-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.crud-field-quick-head,
+.crud-field-quick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px 42px 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.crud-field-quick-head {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.crud-field-quick-list {
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.crud-field-quick-row {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.crud-field-quick-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.crud-field-quick-meta strong,
+.crud-field-quick-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crud-field-quick-meta strong {
+  color: #27272a;
+  font-size: 12px;
+}
+
+.crud-field-quick-meta small {
+  color: #71717a;
+  font-size: 11px;
 }
 </style>
