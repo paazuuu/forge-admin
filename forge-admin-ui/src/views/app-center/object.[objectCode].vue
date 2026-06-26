@@ -188,7 +188,7 @@ import {
   TrashOutline,
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   businessObjectList,
@@ -202,10 +202,11 @@ import {
 import DictTag from '@/components/DictTag.vue'
 import { useTabStore, useUserStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
-import BusinessBindingPanel from './components/BusinessBindingPanel.vue'
-import ObjectRelationPanel from './components/ObjectRelationPanel.vue'
-import ReadinessPanel from './components/ReadinessPanel.vue'
-import BusinessObjectDesignerPage from './object-designer.[objectCode].vue'
+
+const BusinessBindingPanel = defineAsyncComponent(() => import('./components/BusinessBindingPanel.vue'))
+const ObjectRelationPanel = defineAsyncComponent(() => import('./components/ObjectRelationPanel.vue'))
+const ReadinessPanel = defineAsyncComponent(() => import('./components/ReadinessPanel.vue'))
+const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
 
 const route = useRoute()
 const router = useRouter()

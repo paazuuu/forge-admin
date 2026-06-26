@@ -186,7 +186,7 @@
 <script setup>
 import { CreateOutline, PowerOutline, TrashOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   businessAppDetail,
@@ -206,13 +206,14 @@ import IconRenderer from '@/components/IconRenderer.vue'
 import { useTabStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
 import AppCard from './components/AppCard.vue'
-import AppCodePanel from './components/AppCodePanel.vue'
-import AppEditorDrawer from './components/AppEditorDrawer.vue'
-import BusinessObjectWizardDrawer from './components/BusinessObjectWizardDrawer.vue'
 import ObjectCard from './components/ObjectCard.vue'
-import SuiteAcceptancePanel from './components/SuiteAcceptancePanel.vue'
-import SuiteEditorDrawer from './components/SuiteEditorDrawer.vue'
-import BusinessObjectDesignerPage from './object-designer.[objectCode].vue'
+
+const AppCodePanel = defineAsyncComponent(() => import('./components/AppCodePanel.vue'))
+const AppEditorDrawer = defineAsyncComponent(() => import('./components/AppEditorDrawer.vue'))
+const BusinessObjectWizardDrawer = defineAsyncComponent(() => import('./components/BusinessObjectWizardDrawer.vue'))
+const SuiteAcceptancePanel = defineAsyncComponent(() => import('./components/SuiteAcceptancePanel.vue'))
+const SuiteEditorDrawer = defineAsyncComponent(() => import('./components/SuiteEditorDrawer.vue'))
+const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
 
 const route = useRoute()
 const router = useRouter()

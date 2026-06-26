@@ -1318,17 +1318,17 @@
                   <div class="appearance-field">
                     <label>背景色</label>
                     <div class="appearance-input-shell">
-                      <label class="appearance-swatch" :style="{ background: selectedAppearanceBackgroundPreview }" title="选择背景色">
+                      <label class="appearance-swatch" :style="{ backgroundColor: selectedAppearanceBackgroundPreview }" title="选择背景色">
                         <input
                           type="color"
-                          :value="selectedAppearanceBackgroundPreview"
+                          :value="selectedAppearanceBackgroundColorInput"
                           @input="updateSelectedAppearanceBackground($event.target.value)"
                         >
                       </label>
                       <input
                         :value="selectedAppearanceBackgroundHex"
                         class="appearance-hex-input"
-                        placeholder="FFFFFF"
+                        placeholder="透明"
                         @input="updateSelectedAppearanceBackground($event.target.value)"
                       >
                       <span class="appearance-percent">{{ selectedOpacityPercent }}%</span>
@@ -1352,7 +1352,7 @@
                           无
                         </option>
                       </select>
-                      <label class="appearance-swatch" :style="{ background: selectedAppearanceBorderPreview }" title="选择边框颜色">
+                      <label class="appearance-swatch" :style="{ backgroundColor: selectedAppearanceBorderPreview }" title="选择边框颜色">
                         <input
                           type="color"
                           :value="selectedAppearanceBorderPreview"
@@ -3434,17 +3434,17 @@
                 <div class="appearance-field">
                   <label>背景色</label>
                   <div class="appearance-input-shell">
-                    <label class="appearance-swatch" :style="{ background: formAppearanceBackgroundPreview }" title="选择背景色">
+                    <label class="appearance-swatch" :style="{ backgroundColor: formAppearanceBackgroundPreview }" title="选择背景色">
                       <input
                         type="color"
-                        :value="formAppearanceBackgroundPreview"
+                        :value="formAppearanceBackgroundColorInput"
                         @input="updateFormAppearanceBackground($event.target.value)"
                       >
                     </label>
                     <input
                       :value="formAppearanceBackgroundHex"
                       class="appearance-hex-input"
-                      placeholder="FFFFFF"
+                      placeholder="透明"
                       @input="updateFormAppearanceBackground($event.target.value)"
                     >
                     <span class="appearance-percent">{{ formOpacityPercent }}%</span>
@@ -3468,7 +3468,7 @@
                         无
                       </option>
                     </select>
-                    <label class="appearance-swatch" :style="{ background: formAppearanceBorderPreview }" title="选择边框颜色">
+                    <label class="appearance-swatch" :style="{ backgroundColor: formAppearanceBorderPreview }" title="选择边框颜色">
                       <input
                         type="color"
                         :value="formAppearanceBorderPreview"
@@ -3759,17 +3759,19 @@ const selectedOpacityPercent = computed(() => Math.round(Number(selectedDesigner
 const formOpacityPercent = computed(() => Math.round(Number(formStyle.value.opacity ?? 1) * 100))
 const selectedDesignerTranslate = computed(() => parseTranslateStyle(selectedDesignerStyle.value.customStyle?.transform))
 const formTranslate = computed(() => parseTranslateStyle(formStyle.value.transform))
-const selectedAppearanceBackgroundHex = computed(() => colorToHexInput(selectedDesignerStyle.value.backgroundColor, 'FFFFFF'))
+const selectedAppearanceBackgroundHex = computed(() => colorToHexInput(selectedDesignerStyle.value.backgroundColor, ''))
 const selectedAppearanceBorderHex = computed(() => colorToHexInput(selectedDesignerStyle.value.borderColor, 'E4E4E7'))
-const selectedAppearanceBackgroundPreview = computed(() => hexInputToColor(selectedAppearanceBackgroundHex.value, '#ffffff'))
+const selectedAppearanceBackgroundPreview = computed(() => hexInputToColor(selectedAppearanceBackgroundHex.value, 'transparent'))
+const selectedAppearanceBackgroundColorInput = computed(() => hexInputToColor(selectedAppearanceBackgroundHex.value, '#ffffff'))
 const selectedAppearanceBorderPreview = computed(() => {
   if (selectedDesignerStyle.value.borderStyle === 'none')
     return '#e4e4e7'
   return hexInputToColor(selectedAppearanceBorderHex.value, '#e4e4e7')
 })
-const formAppearanceBackgroundHex = computed(() => colorToHexInput(formStyle.value.backgroundColor, 'FFFFFF'))
+const formAppearanceBackgroundHex = computed(() => colorToHexInput(formStyle.value.backgroundColor, ''))
 const formAppearanceBorderHex = computed(() => colorToHexInput(formStyle.value.borderColor, 'E4E4E7'))
-const formAppearanceBackgroundPreview = computed(() => hexInputToColor(formAppearanceBackgroundHex.value, '#ffffff'))
+const formAppearanceBackgroundPreview = computed(() => hexInputToColor(formAppearanceBackgroundHex.value, 'transparent'))
+const formAppearanceBackgroundColorInput = computed(() => hexInputToColor(formAppearanceBackgroundHex.value, '#ffffff'))
 const formAppearanceBorderPreview = computed(() => {
   if (formStyle.value.borderStyle === 'none')
     return '#e4e4e7'
@@ -4991,7 +4993,7 @@ function normalizeOpacityPercent(value, fallback = 100) {
 }
 
 function updateSelectedAppearanceBackground(value) {
-  updateDesignerStyle({ backgroundColor: normalizeAppearanceColor(value, '#ffffff') })
+  updateDesignerStyle({ backgroundColor: normalizeAppearanceColor(value, 'transparent') })
 }
 
 function updateSelectedAppearanceBorder(value) {
@@ -5104,7 +5106,7 @@ function updateFormStyle(stylePatch = {}) {
 }
 
 function updateFormAppearanceBackground(value) {
-  updateFormStyle({ backgroundColor: normalizeAppearanceColor(value, '#ffffff') })
+  updateFormStyle({ backgroundColor: normalizeAppearanceColor(value, 'transparent') })
 }
 
 function updateFormAppearanceBorder(value) {
@@ -6481,7 +6483,16 @@ onBeforeUnmount(() => {
   cursor: pointer;
   border: 1px solid rgba(212, 212, 216, 0.72);
   border-radius: 3px;
-  background: #fff;
+  background-color: transparent;
+  background-image:
+    linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+  background-position:
+    0 0,
+    0 5px,
+    5px -5px,
+    -5px 0;
+  background-size: 10px 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   overflow: hidden;
 }

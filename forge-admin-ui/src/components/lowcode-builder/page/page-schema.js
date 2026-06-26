@@ -1674,6 +1674,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   if (!meta)
     return null
   const fields = modelSchema?.fields || []
+  const defaultWidthMode = resolveDefaultBlockWidthMode(blockType)
   const base = {
     id: createBlockId(blockType),
     blockType,
@@ -1683,7 +1684,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
     gridW: Math.min(meta.defaultW || 6, LIST_PAGE_GRID_COLS),
     gridH: meta.defaultH || 2,
     props: {
-      style: createDefaultBlockStyle(),
+      style: createDefaultBlockStyle(defaultWidthMode),
       events: [],
     },
     fieldRefs: [],
@@ -2117,12 +2118,42 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
   return base
 }
 
-export function createDefaultBlockStyle() {
+function resolveDefaultBlockWidthMode(blockType = '') {
+  const autoWidthBlockTypes = [
+    'back-button',
+    'action-button',
+    'button-group',
+    'tag-list',
+    'link',
+    'statistic',
+    'countdown',
+    'number-animation',
+    'breadcrumb',
+    'pagination',
+    'qrcode',
+    'barcode',
+    'avatar',
+    'space',
+    'divider',
+    'section-divider',
+  ]
+  if (autoWidthBlockTypes.includes(blockType))
+    return 'auto'
+  return 'full'
+}
+
+export function createDefaultBlockStyle(widthMode = 'full') {
+  const normalizedWidthMode = ['full', 'auto', 'fixed'].includes(widthMode) ? widthMode : 'full'
+  let normalizedWidth = 320
+  if (normalizedWidthMode === 'full')
+    normalizedWidth = '100%'
+  if (normalizedWidthMode === 'auto')
+    normalizedWidth = 'auto'
   return {
     x: '',
     y: '',
-    widthMode: 'full',
-    width: '100%',
+    widthMode: normalizedWidthMode,
+    width: normalizedWidth,
     heightMode: 'fixed',
     height: '100%',
     backgroundColor: 'transparent',
@@ -2254,7 +2285,7 @@ function resolveBlockMinGridH(blockType, meta = {}) {
   if (blockType === 'toolbar')
     return Math.max(2, Number(meta.defaultH) || 2)
   if (blockType === 'AiCrudPage')
-    return Math.max(10, Number(meta.defaultH) || 10)
+    return 5
   if (blockType === 'AiTable')
     return Math.max(8, Number(meta.defaultH) || 8)
   if (blockType === 'AiForm')

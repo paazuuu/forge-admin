@@ -220,7 +220,32 @@
 - [x] 字段快捷配置按当前对象字段展示字段名和字段编码。
 - [x] 字段快捷配置补充“搜索”“导入”“导出”三类开关，方便在 CRUD 组件内直接配置查询条件和 Excel 字段范围。
 - [x] 快捷配置写入当前 CRUD 区块 `props.fieldSettings`，并同步维护 `searchFields`、`importFields`、`exportFields` 字段列表，避免只改 UI 不落 schema。
-- [ ] 待命令通道恢复后执行定向 eslint、`git diff --check` 和前端构建验证；当前 shell 命令被环境返回 137。
+- [x] 命令通道恢复后已补跑定向 eslint、`git diff --check` 和前端构建验证。
+
+## 2026-06-26 App Center 首屏资源优化
+
+- [x] `app-center/index.vue` 中对象设计页改为 `defineAsyncComponent`，避免进入应用中心首页时同步加载完整对象设计器。
+- [x] `suite.[suiteCode].vue`、`object.[objectCode].vue` 中对象设计页和非首屏抽屉/面板改为异步组件。
+- [x] `object-designer.[objectCode].vue` 中字段、表单、列表、关系、文书、流程、权限、发布、开发者配置等设计面板改为按 active panel 懒加载，只保留设计器 shell 同步加载。
+- [x] 新增 `DesignerAsyncLoader.vue`，对象设计器异步面板加载时展示类似 Figma 的细分进度条和加载提示。
+- [x] 表单设计、列表设计等对象设计器面板统一使用异步组件 loading 配置，首次进入不再出现无反馈白屏。
+- [x] `BusinessObjectDesignerShell.vue` 顶层配置加载遮罩也统一使用 `DesignerAsyncLoader`，避免原 `n-spin` 覆盖在上方导致进度条被挤到下面不可见。
+- [x] 顶层配置加载期间不渲染下面的 panel slot，避免配置 loading 和表单/列表异步面板 loading 同时出现两个进度条。
+- [x] `PageWidgetRenderer.vue` 中 WangEditor、VMdEditor、Prism/vuepress theme、QRCode、JsBarcode 由同步 import 改为按组件类型动态加载。
+- [x] 富文本、Markdown、二维码、条形码相关样式和依赖拆为独立异步 chunk，减少 app-center 首屏同步资源。
+- [x] 执行定向 eslint、`git diff --check` 和前端构建验证。
+
+## 2026-06-26 列表画布交互修正
+
+- [x] 列表设计器 `AiCrudPage` 区块预览改为严格服从外层区块高度，内部内容滚动，不再因 CRUD 内部最小高度把区块底部撑出一截。
+- [x] 降低 `AiCrudPage` 区块最小高度归一化限制，用户在右侧改高度或拖拽缩放后不再被自动拉回大高度。
+- [x] 列表画布拖拽时命中非容器组件不再显示投放预览，释放时直接拒绝投放，避免普通组件被误当成可嵌套容器。
+- [x] 命中非容器组件时增加红色不可投放提示，明确说明“该组件不支持嵌套”，避免用户误以为拖拽失效。
+- [x] 画布内已有组件拖拽命中非容器组件时同样显示不可投放提示，并在释放时取消移动。
+- [x] 列表设计器中间画布改为浅灰蓝设计底色和细网格，区块默认显示浅边界，白色组件放上去更容易看清范围；只读/运行态仍保持白底。
+- [x] 弱化中间画布标线：移除密集网格和横向行线，仅保留极淡列参考线，降低视觉噪音。
+- [x] 新增组件或嵌套组件移出到画布时，如果目标框会压住已有区块，自动落到画布底部空白处，并同步最终 `gridX/gridY/gridW/gridH` 和 style 坐标。
+- [x] 执行定向 eslint、`git diff --check` 和前端构建验证。
 
 ## 验证记录
 
@@ -263,6 +288,14 @@
 - `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/page-schema.js src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/views/app-center/components/designer/BusinessListDesigner.vue`：通过。
 - `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/page-schema.js forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/views/app-center/components/designer/BusinessListDesigner.vue code-copilot/changes/forge-list-designer-productivity-upgrades/spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md`：通过。
 - `pnpm --dir forge-admin-ui build`：通过。保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入导致 chunk 提示。
+
+## 2026-06-26 组件默认外观与宽度策略修正
+
+- [x] 页面组件默认外观不再自带白底、边框和圆角，右侧样式面板显式配置后才展示对应背景、边框、圆角。
+- [x] 共享 Naive 页面组件 shell 改为透明无边框，避免内部白底覆盖区块样式面板配置的背景色。
+- [x] 富文本、Markdown、HTML、Vue 组件、水印、面板分隔、二维码、条形码等预览容器去掉默认装饰，条形码/二维码图形背景默认透明。
+- [x] 列表设计器新增区块默认宽度策略统一：大多数组件默认填充宽度，按钮、链接、标签、面包屑、分页、二维码、条形码、头像等内容型组件默认内容宽度。
+- [x] 列表和表单右侧外观面板的背景色默认展示改为透明，清空输入写回 `transparent`，色块用棋盘格提示透明状态。
 
 ## 2026-06-20 补充处理
 

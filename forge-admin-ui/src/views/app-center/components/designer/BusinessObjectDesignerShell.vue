@@ -121,13 +121,13 @@
       <main class="designer-main">
         <div class="designer-main-content">
           <div v-if="loading" class="designer-loading-mask">
-            <n-spin size="large">
-              <template #description>
-                正在加载设计器配置...
-              </template>
-            </n-spin>
+            <DesignerAsyncLoader
+              title="正在加载设计器配置"
+              description="正在准备业务对象、字段和页面 Schema"
+              overlay
+            />
           </div>
-          <div class="panel-frame" :class="{ dirty }">
+          <div v-else class="panel-frame" :class="{ dirty }">
             <slot />
           </div>
         </div>
@@ -140,6 +140,7 @@
 import {
   AlertCircleOutline,
   ArrowBackOutline,
+  CaretForward,
   CheckmarkCircleOutline,
   CheckmarkDoneOutline,
   ChevronBackOutline,
@@ -151,14 +152,13 @@ import {
   KeyOutline,
   ListOutline,
   OptionsOutline,
-  PlayCircleOutline,
   ReaderOutline,
   SaveOutline,
   SettingsOutline,
   TextOutline,
-  CaretForward,
 } from '@vicons/ionicons5'
 import { computed, ref } from 'vue'
+import DesignerAsyncLoader from './DesignerAsyncLoader.vue'
 
 const props = defineProps({
   designer: {
@@ -462,9 +462,9 @@ function handleTopbarActionsClick(event) {
   min-width: 52px;
   padding: 0 12px;
   cursor: pointer;
-  border: 1px solid #2944CC;
+  border: 1px solid #2944cc;
   border-radius: 6px;
-  background: #2944CC;
+  background: #2944cc;
   color: #fff;
   font-size: 12px;
   font-weight: 650;

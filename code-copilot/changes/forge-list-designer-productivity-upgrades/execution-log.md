@@ -1,5 +1,87 @@
 # 执行日志：forge-list-designer-productivity-upgrades
 
+## 2026-06-26 11:06:31 CST
+
+### 变更范围
+
+- `app-center/index.vue`、`suite.[suiteCode].vue`、`object.[objectCode].vue` 中对象设计器改为异步组件，避免应用中心首屏同步加载完整对象设计器。
+- `app-center/index.vue`、`suite.[suiteCode].vue` 中代码预览、应用编辑、对象向导、套件编辑、验收面板等非首屏抽屉/面板改为异步组件。
+- `object.[objectCode].vue` 中绑定、关系、就绪检查等面板改为异步组件。
+- `object-designer.[objectCode].vue` 中字段管理、表单设计、列表设计、详情设置、关系设计、文书、流程、权限、发布检查、开发者配置、函数市场等大组件改为按 active panel 懒加载。
+- 新增 `DesignerAsyncLoader.vue`，表单设计、列表设计等异步面板首次加载时展示进度条和加载提示，避免用户看到无反馈白屏。
+- `object-designer.[objectCode].vue` 的设计面板异步组件统一配置 `loadingComponent`、`delay` 和 `timeout`。
+- 2026-06-26 14:48:08 CST 修正：`BusinessObjectDesignerShell.vue` 顶层配置加载遮罩从 `n-spin` 改为复用 `DesignerAsyncLoader`，避免上方 loading 遮住/挤开异步面板进度条。
+- 2026-06-26 14:48:08 CST 修正：`DesignerAsyncLoader.vue` 支持自定义标题、描述和 overlay 模式，配置加载与面板懒加载共用同一视觉反馈。
+- 2026-06-26 后续修正：`BusinessObjectDesignerShell.vue` 的 `panel-frame` 改为 `v-else`，顶层配置加载期间不渲染下面的表单/列表异步面板，避免出现两个进度条。
+- `PageWidgetRenderer.vue` 移除 WangEditor、VMdEditor、vuepress theme、Prism、QRCode、JsBarcode 的同步 import，改为富文本、Markdown、二维码、条形码真实渲染时动态加载。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/views/app-center/index.vue 'src/views/app-center/suite.[suiteCode].vue' 'src/views/app-center/object.[objectCode].vue' 'src/views/app-center/object-designer.[objectCode].vue' src/components/lowcode-builder/shared/PageWidgetRenderer.vue`：通过。
+- `pnpm --dir forge-admin-ui exec eslint 'src/views/app-center/object-designer.[objectCode].vue' src/views/app-center/components/designer/DesignerAsyncLoader.vue`：通过。
+- `pnpm --dir forge-admin-ui exec eslint src/views/app-center/components/designer/BusinessObjectDesignerShell.vue src/views/app-center/components/designer/DesignerAsyncLoader.vue 'src/views/app-center/object-designer.[objectCode].vue'`：通过；同步修复该 shell 文件既有未使用图标导入、导入顺序和颜色大小写格式问题。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过，保留既有 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/views/app-center/index.vue 'forge-admin-ui/src/views/app-center/suite.[suiteCode].vue' 'forge-admin-ui/src/views/app-center/object.[objectCode].vue' 'forge-admin-ui/src/views/app-center/object-designer.[objectCode].vue' forge-admin-ui/src/views/app-center/components/designer/BusinessObjectDesignerShell.vue forge-admin-ui/src/views/app-center/components/designer/DesignerAsyncLoader.vue forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 构建观察
+
+- 构建产物中 `JsBarcode`、`base-editor`、`vuepress`、`index.esm` 等富文本/Markdown/条形码相关资源已成为独立 chunk，说明外部重组件从同步路径拆出。
+- `object-designer.[objectCode]` 页面 chunk 变小，对象设计器子面板拆为独立 chunk。
+- 构建产物包含独立 `DesignerAsyncLoader` 资源，说明异步面板加载态已进入生产包。
+
+### 警告
+
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态和静态导入、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未启动浏览器做 Network/Performance 面板复测：本轮以静态检查和生产构建验证为主。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-26 15:05:44 CST
+
+### 变更范围
+
+- `GridBlockRenderer.vue` 中 `AiCrudPage` 设计态预览限制在区块高度内，内部 `ai-crud-page` 滚动，并覆盖 CRUD 内部表格、详情 Tabs、内联工作区的最小高度。
+- `ListPageGridDesigner.vue` 中 `AiCrudPage` 自动高度最小值从大表格高度降低到可编辑的小高度，避免用户改高度后被归一化逻辑拉回。
+- `page-schema.js` 中 `AiCrudPage` 的 schema 最小高度改为 5 行，保存/同步布局时不再强制回到默认大高度。
+- 列表画布拖拽新增 `dragBlockedBlockId` 和非容器命中判断，普通组件不再接收子组件投放。
+- 列表画布补充不可投放预览层，命中非容器组件时覆盖红色虚线提示“该组件不支持嵌套”。
+- 画布内已有组件移动时复用非容器不可投放提示，释放在非容器组件上会取消移动，避免用户以为可以重叠放置。
+- 列表设计器中间画布设计态背景改为浅灰蓝和细网格，区块默认显示浅边界；只读/运行态仍恢复白底和无设计边界。
+- 根据体验反馈弱化中间画布标线：移除密集背景网格和横向行线，仅保留极淡列参考线，保留浅灰蓝底色和区块边界。
+- 新增区块、嵌套区块移出到画布时，若目标 frame 与已有区块重叠，自动使用画布底部空白位置，并同步最终 grid 坐标。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/components/lowcode-builder/page/GridBlockRenderer.vue src/components/lowcode-builder/page/page-schema.js`：通过；保留既有 `vue/singleline-html-element-content-newline` warning。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过；不可投放提示补丁验证，保留既有 `vue/singleline-html-element-content-newline` warning。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过；画布内拖拽不可投放提示和设计态背景样式补丁验证，保留既有 `vue/singleline-html-element-content-newline` warning。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过；弱化画布标线补丁验证，保留既有 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/components/lowcode-builder/page/GridBlockRenderer.vue forge-admin-ui/src/components/lowcode-builder/page/page-schema.js`：通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释。
+- 构建保留项目既有 warning：`src/store/index.js` 同时被动态和静态导入，Rollup 不会将其移动到单独 chunk。
+- 构建保留 chunk size warning，不阻断本轮变更。
+- 画布背景补丁未重新执行生产构建：本轮只改设计态样式和已有组件拖拽提示路径，上一轮同文件变更已完成生产构建；已执行定向 eslint 和 `git diff --check`。
+- 弱化画布标线补丁未重新执行生产构建：本轮只改设计态 CSS，已执行定向 eslint 和 `git diff --check`。
+
+### 跳过项
+
+- 未启动 Vite 和浏览器手工拖拽验证：本轮未启动前后端服务，需在列表设计器真实页面中复验拖拽命中和高度调整手感。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
 ## 2026-06-26 CRUD 字段快捷配置补充
 
 ### 变更范围
@@ -10,11 +92,37 @@
 
 ### 命令与结果
 
-- 当前 shell 命令通道异常：`pwd`、`date`、`pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue` 均直接返回 137，未能完成自动化验证。
+- 初始 shell 命令通道异常：`pwd`、`date`、`pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue` 均直接返回 137。
+- 2026-06-26 11:06:31 CST 后续补跑 `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过，保留既有 `vue/singleline-html-element-content-newline` warning。
+- 2026-06-26 11:06:31 CST 后续补跑相关 `git diff --check` 和 `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-26 组件默认外观与宽度策略修正
+
+### 变更范围
+
+- `page-schema.js` 新增区块默认宽度策略：大多数组件默认填充，按钮、链接、标签、面包屑、分页、二维码、条形码、头像等内容型组件默认内容宽度。
+- `PageWidgetRenderer.vue` 中共享 Naive 页面组件 shell 默认透明、无边框、无圆角，描述、公示、列表只有显式 `bordered=true` 才渲染边框。
+- 富文本、Markdown、HTML、Vue 组件、水印、面板分隔、二维码、条形码等内部容器去掉默认白底/边框/圆角，避免覆盖区块样式面板配置的背景色。
+- `page-widget-schema.js` 同步默认 props：富文本、描述、公示、列表、二维码、条形码默认不带白底/边框。
+- 列表和表单右侧外观面板的背景色默认展示改为透明，清空输入写回 `transparent`，色块使用棋盘格提示透明状态。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/shared/PageWidgetRenderer.vue src/components/lowcode-builder/shared/page-widget-schema.js src/components/lowcode-builder/page/page-schema.js`：首次失败于新增三元表达式格式；修正为显式 helper 后通过。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/shared/PageWidgetRenderer.vue forge-admin-ui/src/components/lowcode-builder/shared/page-widget-schema.js forge-admin-ui/src/components/lowcode-builder/page/page-schema.js code-copilot/changes/forge-list-designer-productivity-upgrades/tasks.md code-copilot/changes/forge-list-designer-productivity-upgrades/test-spec.md code-copilot/changes/forge-list-designer-productivity-upgrades/execution-log.md`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+
+### 警告
+
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入导致 chunk 提示、部分 chunk 体积较大。
 
 ### 跳过项
 
-- 待命令通道恢复后补跑定向 eslint、`git diff --check` 和前端构建。
+- 未启动 Vite 和浏览器截图验证：本轮以静态检查和生产构建覆盖，背景色透出效果需在列表设计器真实页面中手工确认。
 
 ### 服务清理
 

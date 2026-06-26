@@ -246,8 +246,8 @@ export function createPageWidgetDefaultProps(componentKey = '') {
       menuConfigText: '{}',
       readonly: false,
       minHeight: 180,
-      backgroundColor: '#ffffff',
-      bordered: true,
+      backgroundColor: 'transparent',
+      bordered: false,
       dataBinding: createWidgetDataBinding('content', { contentField: 'content', titleField: 'title' }),
     }
   }
@@ -360,7 +360,7 @@ export function createPageWidgetDefaultProps(componentKey = '') {
       fontSize: 14,
       margin: 8,
       lineColor: '#0f172a',
-      background: '#ffffff',
+      background: 'transparent',
       dataBinding: createWidgetDataBinding('value', { valueField: 'value', titleField: 'title' }),
     }
   }
@@ -371,7 +371,7 @@ export function createPageWidgetDefaultProps(componentKey = '') {
       size: 132,
       margin: 0,
       foreground: '#0f172a',
-      background: '#ffffff',
+      background: 'transparent',
       cornerColor: '#0f172a',
       errorCorrectionLevel: 'Q',
       dotsType: 'square',
@@ -415,7 +415,7 @@ export function createPageWidgetDefaultProps(componentKey = '') {
     return {
       title: '描述',
       column: 2,
-      bordered: true,
+      bordered: false,
       labelPlacement: 'left',
       size: 'small',
       itemsText: '[\n  { "label": "业务对象", "value": "订单管理" },\n  { "label": "状态", "value": "启用" },\n  { "label": "负责人", "value": "管理员" },\n  { "label": "更新时间", "value": "2026-06-25" }\n]',
@@ -427,7 +427,7 @@ export function createPageWidgetDefaultProps(componentKey = '') {
       title: '公示标题',
       content: '这里展示公告、公示、提示或业务说明内容。',
       type: 'info',
-      bordered: true,
+      bordered: false,
       showIcon: true,
       closable: false,
       dataBinding: createWidgetDataBinding('content', { contentField: 'content', titleField: 'title' }),
@@ -436,7 +436,7 @@ export function createPageWidgetDefaultProps(componentKey = '') {
   if (componentKey === 'list') {
     return {
       title: '列表',
-      bordered: true,
+      bordered: false,
       hoverable: true,
       size: 'small',
       itemsText: '[\n  { "title": "审批待办", "description": "等待业务负责人处理", "meta": "刚刚" },\n  { "title": "数据同步", "description": "订单数据已完成同步", "meta": "10 分钟前" },\n  { "title": "系统通知", "description": "低代码页面配置已更新", "meta": "今天" }\n]',

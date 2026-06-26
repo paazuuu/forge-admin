@@ -323,7 +323,7 @@ import {
   SearchOutline,
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   businessAppDetail,
@@ -339,13 +339,14 @@ import {
   updateBusinessSuiteStatus,
 } from '@/api/business-app'
 import IconRenderer from '@/components/IconRenderer.vue'
-import AppCodePanel from './components/AppCodePanel.vue'
-import AppEditorDrawer from './components/AppEditorDrawer.vue'
 import AppFilterBar from './components/AppFilterBar.vue'
-import BusinessObjectWizardDrawer from './components/BusinessObjectWizardDrawer.vue'
 import BusinessUnitCard from './components/BusinessUnitCard.vue'
-import SuiteEditorDrawer from './components/SuiteEditorDrawer.vue'
-import BusinessObjectDesignerPage from './object-designer.[objectCode].vue'
+
+const AppCodePanel = defineAsyncComponent(() => import('./components/AppCodePanel.vue'))
+const AppEditorDrawer = defineAsyncComponent(() => import('./components/AppEditorDrawer.vue'))
+const BusinessObjectWizardDrawer = defineAsyncComponent(() => import('./components/BusinessObjectWizardDrawer.vue'))
+const SuiteEditorDrawer = defineAsyncComponent(() => import('./components/SuiteEditorDrawer.vue'))
+const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
 
 const router = useRouter()
 const route = useRoute()
