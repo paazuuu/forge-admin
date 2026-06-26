@@ -5,6 +5,7 @@
     <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessSuite">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
+        <result column="parent_id" property="parentId"/>
         <result column="suite_code" property="suiteCode"/>
         <result column="suite_name" property="suiteName"/>
         <result column="icon" property="icon"/>
@@ -22,6 +23,7 @@
     <sql id="Base_Columns">
         id,
         tenant_id,
+        parent_id,
         suite_code,
         suite_name,
         icon,
@@ -56,6 +58,7 @@
     <sql id="Suite_VO_Select">
         SELECT
           s.id AS id,
+          s.parent_id AS parentId,
           s.suite_code AS suiteCode,
           s.suite_name AS suiteName,
           s.icon AS icon,
@@ -140,9 +143,17 @@
           AND suite_code = #{suiteCode}
     </select>
 
+    <select id="countChildrenBySuite" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM ai_business_suite
+        WHERE tenant_id = #{tenantId}
+          AND parent_id = #{parentId}
+    </select>
+
     <select id="selectSuiteSummary" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessSuiteSummaryVO">
         SELECT
           s.id AS id,
+          s.parent_id AS parentId,
           s.suite_code AS suiteCode,
           s.suite_name AS suiteName,
           s.icon AS icon,

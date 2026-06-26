@@ -10,6 +10,8 @@ public class BusinessSuiteDTO {
 
     private Long id;
 
+    private Long parentId;
+
     private String suiteCode;
 
     private String suiteName;

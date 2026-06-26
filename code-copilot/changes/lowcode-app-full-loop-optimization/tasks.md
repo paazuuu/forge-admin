@@ -1233,3 +1233,65 @@ cd forge-admin-ui && source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build
 - `git diff --check` 通过。
 - 后端 `forge-plugin-generator` 及依赖模块 compile 通过。
 - 前端 `pnpm --dir forge-admin-ui build` 通过；既有 UnoCSS 图标、CSS 注释、动态/静态导入和 chunk size 警告不阻断。
+
+### Task 35: 业务域三级目录与子树应用展示
+
+**状态**: completed
+
+**目标**: 让应用总览的业务域树支持继续新增子目录，并让低代码发布菜单按业务域父链递归挂载，父业务域列表能看到子树应用。
+
+**涉及文件**:
+- 修改 `forge-admin-ui/src/components/lowcode-builder/domain/DomainTreePanel.vue` — 节点菜单增加“新增子目录”和“编辑领域”。
+- 修改 `forge-admin-ui/src/components/lowcode-builder/domain/DomainEditorDrawer.vue` — 新建子目录时显示更明确的标题并自动回填父级。
+- 修改 `forge-admin-ui/src/views/ai/lowcode-apps.vue` — 新增子目录/编辑领域入口，编辑时先拉详情并在保存后刷新当前选中节点。
+- 修改 `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/LowcodeDomainService.java` — 增加循环父级校验和子树 ID 收集。
+- 修改 `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/LowcodeAppService.java` — 应用总览按当前领域子树查询。
+- 修改 `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/lowcode/LowcodePublishService.java` — 发布时递归解析领域目录父级。
+- 修改 `forge-server/forge-admin-server/src/main/java/com/mdframe/forge/admin/bridge/MenuRegisterAdapterImpl.java` — 支持领域目录按指定父级创建和迁移。
+- 修改 `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/mapper/AiCrudConfigMapper.java`、`forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/resources/mapper/AiCrudConfigMapper.xml` — 低代码应用分页按领域子树 `IN (...)` 查询。
+- 修改 `code-copilot/changes/lowcode-app-full-loop-optimization/test-spec.md`、`execution-log.md`、`spec.md` — 追加本轮增量验证和结论。
+
+**关键改动**:
+- 业务域树现在可以从任意父节点继续新增子目录，不会把父级保存到自身或后代。
+- 低代码发布菜单会按业务域父链递归挂载，最终形成 `低代码根目录 -> 父业务域目录 -> 子业务域目录 -> 应用菜单`。
+- 应用总览选择父业务域时，列表会展示该领域及所有子领域的应用。
+- 节点菜单的“编辑领域”通过详情接口回填，避免树节点轻量数据导致回填不全。
+
+**验收标准**:
+- 父业务域下可以直接新建子目录，并在左侧树上看到层级关系。
+- 选中父业务域后，父域和子域的应用都会出现在总览列表里。
+- 发布后的菜单目录会保持原有 `sys_resource.id`，不破坏已有角色授权。
+- 后端编译、前端构建和 `git diff --check` 通过，真实菜单落库和浏览器回显验证按环境条件补跑。
+
+**执行结果**:
+- `LowcodePublishService` 已改为递归解析业务域目录父级，领域目录按业务域父链挂载。
+- `MenuRegisterAdapterImpl` 支持领域目录按指定父级创建和更新，已有目录会迁移到正确父级。
+- `LowcodeAppService` 的分页查询已改为按领域子树取数，父域视图可直接看到子域应用。
+- `DomainTreePanel.vue`、`DomainEditorDrawer.vue` 和 `lowcode-apps.vue` 已补齐新增子目录和编辑入口。
+- 已完成 `git diff --check`、后端编译和前端 `pnpm build` 验证。
+
+### Task 36: 应用总览业务套件树纠偏
+
+**状态**: completed
+
+**背景**: 用户截图指向的是 `应用总览` 页面左侧业务域列表，而不是低代码构建器里的业务域树。上一轮 Task 35 的主要实现落在 `ai_lowcode_domain` 链路，本任务补齐应用总览实际使用的 `ai_business_suite` 链路。
+
+**涉及文件**:
+- 新增 `forge-server/db/migration/V1.0.80__add_business_suite_hierarchy.sql` — 给 `ai_business_suite` 增加 `parent_id` 和父级索引。
+- 修改 `forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/domain/entity/AiBusinessSuite.java`、`dto/businessapp/BusinessSuiteDTO.java`、`vo/businessapp/BusinessSuiteVO.java`、`vo/businessapp/BusinessSuiteSummaryVO.java` — 增加业务套件父级字段。
+- 修改 `BusinessSuiteService.java`、`BusinessSuiteMapper.java`、`BusinessSuiteMapper.xml` — 增加父级校验、子域删除拦截、业务套件菜单目录递归解析。
+- 修改 `BusinessObjectQueryDTO.java`、`BusinessAppQueryDTO.java`、`BusinessObjectService.java`、`BusinessAppService.java`、`BusinessObjectMapper.xml`、`BusinessAppMapper.xml` — 支持父业务域选中后按子树 `suiteCodes IN (...)` 查询对象和入口。
+- 修改 `forge-admin-ui/src/views/app-center/index.vue` — 左侧业务域列表按 `parentId` 渲染为树，节点三点菜单提供“新增子目录”，父域查询聚合子树。
+- 修改 `forge-admin-ui/src/views/app-center/components/SuiteEditorDrawer.vue` — 新增“上级业务域”选择并过滤自身/后代。
+
+**关键改动**:
+- 应用总览左侧现在基于 `ai_business_suite.parent_id` 渲染业务域树，而不是继续使用低代码域模型。
+- 新增/编辑业务域可以设置上级业务域，后端禁止选择自身或后代，删除父业务域时会拦截已有子域。
+- 选中父业务域时，前端会计算当前节点及所有子节点 `suiteCode`，对象和入口接口按 `suiteCodes` 聚合查询。
+- 管理端访问入口同步菜单时，会先递归解析父业务域目录，再把子业务域目录和应用菜单挂到正确层级；目录资源按 `ai:business:suite-menu:{suiteCode}` 复用已有 `sys_resource.id`。
+
+**验证结果**:
+- `git diff --check` 通过。
+- `pnpm --dir forge-admin-ui exec eslint src/views/app-center/index.vue src/views/app-center/components/SuiteEditorDrawer.vue` 通过。
+- `mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-admin-server -am compile -DskipTests` 通过。
+- 未启动后端服务、数据库或前端 dev server，真实 Flyway 执行、菜单落库和浏览器点击验证记录为跳过项。

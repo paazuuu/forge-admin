@@ -33,10 +33,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 低代码应用发布、版本和回滚服务。
@@ -220,9 +222,6 @@ public class LowcodePublishService {
         }
         if (StringUtils.isNotBlank(dto.getMenuName())) {
             config.setMenuName(dto.getMenuName());
-        }
-        if (dto.getMenuParentId() != null) {
-            config.setMenuParentId(dto.getMenuParentId());
         }
         if (dto.getMenuSort() != null) {
             config.setMenuSort(dto.getMenuSort());
@@ -696,28 +695,45 @@ public class LowcodePublishService {
     }
 
     private void applyPublishMenuParent(AiCrudConfig config, LowcodePublishDTO dto, AiLowcodeDomain domain) {
-        if (dto != null && dto.getMenuParentId() != null) {
-            config.setMenuParentId(dto.getMenuParentId());
+        Long domainParentId = resolveDomainMenuParentId(domain);
+        Long requestParentId = dto == null ? null : dto.getMenuParentId();
+        if (requestParentId != null && !requestParentId.equals(domainParentId)) {
+            config.setMenuParentId(requestParentId);
             return;
         }
-        Long parentId = resolveDomainMenuParentId(domain);
-        config.setMenuParentId(parentId != null ? parentId : menuRegisterAdapter.resolveDefaultLowcodeParentId());
+        config.setMenuParentId(domainParentId != null ? domainParentId : menuRegisterAdapter.resolveDefaultLowcodeParentId());
     }
 
     private Long resolveDomainMenuParentId(AiLowcodeDomain domain) {
+        return resolveDomainMenuParentId(domain, new HashSet<>());
+    }
+
+    private Long resolveDomainMenuParentId(AiLowcodeDomain domain, Set<Long> resolvingDomainIds) {
         if (domain == null) {
             return null;
         }
-        if (domain.getMenuParentId() != null) {
-            return domain.getMenuParentId();
+        Long domainId = domain.getId();
+        if (domainId != null && !resolvingDomainIds.add(domainId)) {
+            throw new BusinessException("业务领域层级存在循环引用，请先调整领域父级");
         }
-        Long parentId = menuRegisterAdapter.resolveOrCreateDomainParentId(
-                domain.getDomainCode(), domain.getDomainName(), domain.getSort());
-        if (parentId != null) {
-            domain.setMenuParentId(parentId);
-            domainService.updateById(domain);
+        try {
+            Long parentMenuId = menuRegisterAdapter.resolveDefaultLowcodeParentId();
+            Long parentDomainId = domain.getParentId();
+            if (parentDomainId != null && parentDomainId > 0) {
+                AiLowcodeDomain parentDomain = domainService.requireDomain(parentDomainId);
+                Long resolvedParentMenuId = resolveDomainMenuParentId(parentDomain, resolvingDomainIds);
+                if (resolvedParentMenuId != null) {
+                    parentMenuId = resolvedParentMenuId;
+                }
+            }
+            Long menuParentId = menuRegisterAdapter.resolveOrCreateDomainParentId(
+                    domain.getDomainCode(), domain.getDomainName(), domain.getSort(), parentMenuId);
+            return menuParentId;
+        } finally {
+            if (domainId != null) {
+                resolvingDomainIds.remove(domainId);
+            }
         }
-        return parentId;
     }
 
     private Map<String, Object> buildDomainSnapshot(AiCrudConfig config) {

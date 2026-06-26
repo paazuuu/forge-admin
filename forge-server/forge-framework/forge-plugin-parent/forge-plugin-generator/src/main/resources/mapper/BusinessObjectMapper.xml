@@ -66,7 +66,13 @@
             OR o.model_code LIKE CONCAT('%', #{query.keyword}, '%')
           )
         </if>
-        <if test="query != null and query.suiteCode != null and query.suiteCode != ''">
+        <if test="query != null and query.suiteCodes != null and query.suiteCodes.size() > 0">
+          AND o.suite_code IN
+          <foreach collection="query.suiteCodes" item="suiteCode" open="(" close=")" separator=",">
+            #{suiteCode}
+          </foreach>
+        </if>
+        <if test="query != null and (query.suiteCodes == null or query.suiteCodes.size() == 0) and query.suiteCode != null and query.suiteCode != ''">
           AND o.suite_code = #{query.suiteCode}
         </if>
         <if test="query != null and query.objectCode != null and query.objectCode != ''">

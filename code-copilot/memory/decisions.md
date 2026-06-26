@@ -86,6 +86,14 @@ Forge 代码生成模板不能按通用 REST 风格生成 `PUT` 更新或 `DELET
 
 `forge-starter-datascope` 运行时应先从 `forge.datascope.metadata-datasource`（默认 `master`）加载控制面快照，再在业务 SQL 拦截时只读取内存快照。行政区划权限等需要平台字典/树数据的规则，必须提前解析成业务库可执行的字面量条件，禁止在业务库 SQL 中拼接 `sys_region_code` 等平台表子查询。
 
+## 10. 低代码业务域目录按资源权限解析，不覆写领域默认菜单父级
+
+**记录日期**: 2026-06-25
+
+低代码业务域的自动生成目录不再写回 `ai_lowcode_domain.menu_parent_id` 作为唯一真相。领域目录应通过 `sys_resource.perms=ai:lowcode:domain-menu:{domainCode}` 解析或创建，并按业务域父链递归挂载到管理端菜单；`ai_lowcode_domain.menu_parent_id` 仅保留用户在领域上配置的默认应用菜单父级，不能被自动生成目录 ID 覆盖。
+
+应用总览的领域筛选应按当前领域及其子树查询，而不是只看直系 `domain_id`。这样父业务域既能作为目录节点继续挂子目录，也能在列表页查看整个子树下的应用。
+
 ## 10. 低代码运行规则和字段展示统一走共享封装
 
 **记录日期**: 2026-06-25

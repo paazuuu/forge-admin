@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.generator.constant.BusinessAppMode;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
-import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessSuite;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessAppDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessAppQueryDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
@@ -243,9 +242,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         Long parentId = originalParentId;
         Integer sort = readInteger(firstNonNull(adminMenu.get("sort"), options.get("menuSort")), app.getSortOrder());
         if (suiteAsParent) {
-            AiBusinessSuite suite = suiteService.requireByCode(app.getSuiteCode());
-            parentId = menuRegisterAdapter.resolveOrCreateBusinessSuiteParentId(
-                    parentId, app.getSuiteCode(), suite.getSuiteName(), suite.getIcon(), app.getSortOrder());
+            parentId = suiteService.resolveOrCreateSuiteMenuDirectory(app.getSuiteCode(), parentId);
         }
         Long actualParentId = parentId;
 
@@ -502,10 +499,25 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         BusinessAppQueryDTO result = query == null ? new BusinessAppQueryDTO() : query;
         result.setKeyword(StringUtils.trimToNull(result.getKeyword()));
         result.setSuiteCode(StringUtils.trimToNull(result.getSuiteCode()));
+        result.setSuiteCodes(normalizeSuiteCodes(result.getSuiteCodes()));
         result.setObjectCode(StringUtils.trimToNull(result.getObjectCode()));
         result.setAppType(StringUtils.trimToNull(result.getAppType()));
         result.setEntryMode(StringUtils.trimToNull(result.getEntryMode()));
         return result;
+    }
+
+    private List<String> normalizeSuiteCodes(List<String> suiteCodes) {
+        if (suiteCodes == null || suiteCodes.isEmpty()) {
+            return null;
+        }
+        List<String> normalized = suiteCodes.stream()
+                .filter(StringUtils::isNotBlank)
+                .flatMap(item -> Arrays.stream(item.split(",")))
+                .map(StringUtils::trimToNull)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private void validateNoSensitiveEntryConfig(String entryUrl, String options) {

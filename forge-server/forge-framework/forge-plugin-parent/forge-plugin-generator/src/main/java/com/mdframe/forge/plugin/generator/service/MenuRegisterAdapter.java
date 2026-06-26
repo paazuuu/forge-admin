@@ -54,6 +54,13 @@ public interface MenuRegisterAdapter {
     }
 
     /**
+     * 解析或创建某个业务领域下低代码应用默认挂载的菜单目录，并指定领域目录自身的父级菜单。
+     */
+    default Long resolveOrCreateDomainParentId(String domainCode, String domainName, Integer sort, Long parentMenuId) {
+        return resolveOrCreateDomainParentId(domainCode, domainName, sort);
+    }
+
+    /**
      * 解析或创建业务套件目录，用于业务应用入口挂载到管理端菜单。
      */
     default Long resolveOrCreateBusinessSuiteParentId(Long parentId, String suiteCode, String suiteName,

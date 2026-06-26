@@ -12,6 +12,8 @@ public class BusinessSuiteSummaryVO {
 
     private Long id;
 
+    private Long parentId;
+
     private String suiteCode;
 
     private String suiteName;

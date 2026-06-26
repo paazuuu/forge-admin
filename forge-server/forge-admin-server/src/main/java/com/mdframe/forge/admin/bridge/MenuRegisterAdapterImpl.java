@@ -158,6 +158,11 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
 
     @Override
     public Long resolveOrCreateDomainParentId(String domainCode, String domainName, Integer sort) {
+        return resolveOrCreateDomainParentId(domainCode, domainName, sort, resolveDefaultLowcodeParentId());
+    }
+
+    @Override
+    public Long resolveOrCreateDomainParentId(String domainCode, String domainName, Integer sort, Long parentMenuId) {
         String normalizedCode = StringUtils.trimToNull(domainCode);
         if (normalizedCode == null) {
             return null;
@@ -165,16 +170,16 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         Long tenantId = resolveTenantId();
         String perms = DOMAIN_MENU_PERMS_PREFIX + normalizedCode;
         SysResource existing = resourceMapper.selectOneByPerms(tenantId, 1, perms);
+        Long resolvedParentId = normalizeDomainParentId(existing == null ? null : existing.getId(), parentMenuId);
         if (existing != null && existing.getId() != null) {
-            updateDomainParentIfNeeded(existing, domainName, sort);
+            updateDomainParentIfNeeded(existing, resolvedParentId, domainName, sort);
             return existing.getId();
         }
 
-        Long parentId = resolveDefaultLowcodeParentId();
         SysResource resource = new SysResource();
         resource.setTenantId(tenantId);
         resource.setResourceName(StringUtils.defaultIfBlank(domainName, normalizedCode));
-        resource.setParentId(parentId);
+        resource.setParentId(resolvedParentId);
         resource.setResourceType(1);
         resource.setSort(sort != null ? sort : 0);
         resource.setPath("/ai/lowcode-domain/" + normalizedCode);
@@ -189,7 +194,8 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         resource.setAlwaysShow(1);
         resource.setClientCode(DEFAULT_CLIENT_CODE);
         resourceService.save(resource);
-        log.info("[MenuRegisterAdapter] 创建领域菜单目录成功: domainCode={}, menuId={}", normalizedCode, resource.getId());
+        log.info("[MenuRegisterAdapter] 创建领域菜单目录成功: domainCode={}, parentId={}, menuId={}",
+                normalizedCode, resolvedParentId, resource.getId());
         return resource.getId();
     }
 
@@ -233,10 +239,14 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         return resource.getId();
     }
 
-    private void updateDomainParentIfNeeded(SysResource existing, String domainName, Integer sort) {
+    private void updateDomainParentIfNeeded(SysResource existing, Long parentId, String domainName, Integer sort) {
         SysResource resource = new SysResource();
         resource.setId(existing.getId());
         boolean changed = false;
+        if (parentId != null && !parentId.equals(existing.getParentId())) {
+            resource.setParentId(parentId);
+            changed = true;
+        }
         if (StringUtils.isNotBlank(domainName) && !domainName.equals(existing.getResourceName())) {
             resource.setResourceName(domainName);
             changed = true;
@@ -248,6 +258,16 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         if (changed) {
             resourceService.updateById(resource);
         }
+    }
+
+    private Long normalizeDomainParentId(Long resourceId, Long parentId) {
+        Long fallbackParentId = resolveDefaultLowcodeParentId();
+        Long resolvedParentId = parentId != null ? parentId : fallbackParentId;
+        if (resourceId != null && resourceId.equals(resolvedParentId)) {
+            log.warn("[MenuRegisterAdapter] 检测到领域目录自父级配置，已自动挂载到低代码根目录: menuId={}", resourceId);
+            return fallbackParentId;
+        }
+        return resolvedParentId;
     }
 
     private void updateBusinessSuiteParentIfNeeded(SysResource existing, Long parentId, String suiteName,

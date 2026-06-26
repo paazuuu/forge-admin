@@ -9,6 +9,8 @@
       @search="loadDomains"
       @refresh="refreshDomains"
       @create="openDomainEditor(null)"
+      @create-child="openChildDomainEditor"
+      @edit="editDomain"
       @delete="deleteDomain"
     />
 
@@ -792,6 +794,7 @@ import {
   lowcodeCreateModel,
   lowcodeDeleteApp,
   lowcodeDeleteDomain,
+  lowcodeDomainDetail,
   lowcodeDomainTree,
   lowcodeDownloadAppCode,
   lowcodeModelList,
@@ -1006,7 +1009,7 @@ const pageSubtitle = computed(() => {
     return '按业务领域组织低代码应用，统一管理对象、规则和发布入口'
   return selectedDomain.value.domainDesc || `领域编码：${selectedDomain.value.domainCode}`
 })
-const appScopeText = computed(() => selectedDomain.value ? `当前领域：${selectedDomain.value.domainName}` : '当前展示全部业务领域应用')
+const appScopeText = computed(() => selectedDomain.value ? `当前领域及子目录：${selectedDomain.value.domainName}` : '当前展示全部业务领域应用')
 
 onMounted(async () => {
   await Promise.all([
@@ -1796,8 +1799,34 @@ function openDomainEditor(domain) {
   domainEditorVisible.value = true
 }
 
+function openChildDomainEditor(domain) {
+  if (!domain?.id)
+    return
+  editingDomain.value = {
+    parentId: domain.id,
+    status: 'ENABLED',
+    sort: 0,
+  }
+  domainEditorVisible.value = true
+}
+
+async function editDomain(domain) {
+  if (!domain?.id)
+    return
+  try {
+    const res = await lowcodeDomainDetail(domain.id)
+    editingDomain.value = res.data || { ...domain }
+    domainEditorVisible.value = true
+  }
+  catch (error) {
+    window.$message?.error(error?.message || '加载业务领域详情失败')
+  }
+}
+
 async function handleDomainSaved() {
   await refreshDomains()
+  if (selectedDomainId.value)
+    selectedDomain.value = findDomainById(domains.value, selectedDomainId.value) || selectedDomain.value
 }
 
 function deleteDomain(domain) {
@@ -1824,6 +1853,17 @@ function deleteDomain(domain) {
       }
     },
   })
+}
+
+function findDomainById(nodes, id) {
+  for (const node of nodes || []) {
+    if (node.id === id)
+      return node
+    const found = findDomainById(node.children, id)
+    if (found)
+      return found
+  }
+  return null
 }
 
 function openMoveDomain(app) {
