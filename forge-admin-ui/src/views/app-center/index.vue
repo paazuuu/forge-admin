@@ -30,16 +30,38 @@
             <strong>业务域</strong>
             <span>{{ suites.length }} 个业务域</span>
           </div>
-          <n-tooltip trigger="hover">
-            <template #trigger>
-              <n-button quaternary circle size="small" @click="loadAll">
-                <template #icon>
-                  <n-icon><RefreshOutline /></n-icon>
-                </template>
-              </n-button>
-            </template>
-            刷新
-          </n-tooltip>
+          <div class="suite-nav-actions">
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small" :disabled="!hasExpandableSuites" @click="expandAllSuites">
+                  <template #icon>
+                    <n-icon><ChevronDownOutline /></n-icon>
+                  </template>
+                </n-button>
+              </template>
+              展开全部
+            </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small" :disabled="!hasExpandableSuites" @click="collapseAllSuites">
+                  <template #icon>
+                    <n-icon><ChevronForwardOutline /></n-icon>
+                  </template>
+                </n-button>
+              </template>
+              收起全部
+            </n-tooltip>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button quaternary circle size="small" @click="loadAll">
+                  <template #icon>
+                    <n-icon><RefreshOutline /></n-icon>
+                  </template>
+                </n-button>
+              </template>
+              刷新
+            </n-tooltip>
+          </div>
         </div>
 
         <n-input
@@ -66,12 +88,16 @@
               </div>
             </template>
             <template v-else>
-              <button
+              <div
                 class="suite-nav-item"
                 :class="{ active: !suiteCode }"
-                type="button"
+                role="button"
+                tabindex="0"
                 @click="selectSuite(null)"
+                @keydown.enter.prevent="selectSuite(null)"
+                @keydown.space.prevent="selectSuite(null)"
               >
+                <span class="suite-tree-control" />
                 <span class="suite-mark all">
                   <n-icon><GridOutline /></n-icon>
                 </span>
@@ -79,28 +105,64 @@
                   <strong>全部业务域</strong>
                   <small>{{ suiteObjectTotal }} 个业务单元 · {{ suiteAppTotal }} 个入口</small>
                 </span>
-              </button>
+              </div>
 
-              <button
-                v-for="suite in filteredSuites"
-                :key="suite.id"
+              <div
+                v-for="suiteRow in filteredSuiteRows"
+                :key="suiteRow.suite.id"
                 class="suite-nav-item"
-                :class="{ active: suiteCode === suite.suiteCode }"
-                type="button"
-                @click="selectSuite(suite)"
+                :class="{
+                  'active': suiteCode === suiteRow.suite.suiteCode,
+                  'child': suiteRow.level > 0,
+                  'has-children': suiteRow.hasChildren,
+                }"
+                :style="{ '--suite-indent': `${suiteRow.level * 18}px` }"
+                role="button"
+                tabindex="0"
+                @click="selectSuite(suiteRow.suite)"
+                @keydown.enter.prevent="selectSuite(suiteRow.suite)"
+                @keydown.space.prevent="selectSuite(suiteRow.suite)"
               >
-                <span class="suite-mark" :class="{ 'has-icon': suite.icon }">
-                  <IconRenderer v-if="suite.icon" :icon="suite.icon" :size="22" />
-                  <template v-else>{{ suiteInitial(suite) }}</template>
+                <button
+                  v-if="suiteRow.hasChildren"
+                  class="suite-tree-toggle"
+                  type="button"
+                  :aria-label="isSuiteTreeExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
+                  @click.stop="toggleSuiteExpanded(suiteRow.suite)"
+                  @keydown.enter.stop.prevent="toggleSuiteExpanded(suiteRow.suite)"
+                  @keydown.space.stop.prevent="toggleSuiteExpanded(suiteRow.suite)"
+                >
+                  <n-icon>
+                    <ChevronDownOutline v-if="isSuiteTreeExpanded(suiteRow.suite)" />
+                    <ChevronForwardOutline v-else />
+                  </n-icon>
+                </button>
+                <span v-else class="suite-tree-control" />
+                <span class="suite-mark" :class="{ 'has-icon': suiteRow.suite.icon }">
+                  <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="22" />
+                  <template v-else>{{ suiteInitial(suiteRow.suite) }}</template>
                 </span>
                 <span class="suite-nav-copy">
-                  <strong>{{ suite.suiteName || suite.suiteCode }}</strong>
-                  <small>{{ suite.objectCount || 0 }} 个业务单元 · {{ suite.appCount || 0 }} 个入口</small>
+                  <strong>{{ suiteRow.suite.suiteName || suiteRow.suite.suiteCode }}</strong>
+                  <small>{{ suiteMetaText(suiteRow) }}</small>
                 </span>
-              </button>
+                <div class="suite-item-actions" @click.stop>
+                  <n-dropdown
+                    trigger="click"
+                    :options="getSuiteActionOptions(suiteRow.suite)"
+                    @select="key => handleSuiteAction(key, suiteRow.suite)"
+                  >
+                    <n-button quaternary circle size="small" class="suite-item-more" aria-label="业务域操作">
+                      <template #icon>
+                        <n-icon><EllipsisVertical /></n-icon>
+                      </template>
+                    </n-button>
+                  </n-dropdown>
+                </div>
+              </div>
 
               <n-empty
-                v-if="suiteKeyword && !filteredSuites.length && !loadingSuites"
+                v-if="suiteKeyword && !filteredSuiteRows.length && !loadingSuites"
                 size="small"
                 description="没有匹配的业务域"
               />
@@ -121,21 +183,6 @@
               <p>{{ activeSuiteDescription }}</p>
             </div>
           </div>
-          <n-space class="workspace-actions" :wrap="true">
-            <n-dropdown
-              trigger="click"
-              :disabled="!activeSuite"
-              :options="suiteActionOptions"
-              @select="handleSuiteAction"
-            >
-              <n-button secondary :disabled="!activeSuite">
-                <template #icon>
-                  <n-icon><EllipsisVertical /></n-icon>
-                </template>
-                业务域操作
-              </n-button>
-            </n-dropdown>
-          </n-space>
         </section>
 
         <section class="metric-grid">
@@ -247,6 +294,7 @@
     <SuiteEditorDrawer
       v-model:show="suiteEditorVisible"
       :suite="editingSuite"
+      :suites="suites"
       @saved="handleSuiteSaved"
     />
     <BusinessObjectDesignerPage
@@ -266,6 +314,8 @@
 <script setup>
 import {
   AddOutline,
+  ChevronDownOutline,
+  ChevronForwardOutline,
   EllipsisVertical,
   GridOutline,
   HardwareChipOutline,
@@ -306,6 +356,7 @@ const suiteKeyword = ref('')
 const suiteCode = ref(null)
 const appType = ref(null)
 const suites = ref([])
+const collapsedSuiteIds = ref(new Set())
 const objects = ref([])
 const apps = ref([])
 const loadingSuites = ref(false)
@@ -344,14 +395,59 @@ const createOptions = [
 ]
 
 const activeSuite = computed(() => suites.value.find(item => item.suiteCode === suiteCode.value) || null)
-const filteredSuites = computed(() => {
+const suiteById = computed(() => {
+  const map = new Map()
+  suites.value.forEach((suite) => {
+    if (suite?.id != null)
+      map.set(String(suite.id), suite)
+  })
+  return map
+})
+const suiteChildrenMap = computed(() => {
+  const map = new Map()
+  const sortedSuites = [...suites.value].sort(compareSuites)
+  sortedSuites.forEach((suite) => {
+    const parentKey = normalizeSuiteParentKey(suite)
+    if (!map.has(parentKey))
+      map.set(parentKey, [])
+    map.get(parentKey).push(suite)
+  })
+  return map
+})
+const suiteTreeRows = computed(() => flattenSuiteRows('__root__', 0, new Set()))
+const expandableSuiteIds = computed(() => suites.value
+  .filter((suite) => {
+    if (suite?.id == null)
+      return false
+    return (suiteChildrenMap.value.get(String(suite.id)) || []).length > 0
+  })
+  .map(suite => String(suite.id)))
+const hasExpandableSuites = computed(() => expandableSuiteIds.value.length > 0)
+const filteredSuiteRows = computed(() => {
   const word = suiteKeyword.value.trim().toLowerCase()
   if (!word)
-    return suites.value
-  return suites.value.filter((item) => {
-    const name = `${item.suiteName || ''} ${item.suiteCode || ''} ${item.description || ''}`.toLowerCase()
-    return name.includes(word)
+    return suiteTreeRows.value
+  const includedIds = new Set()
+  suites.value.forEach((suite) => {
+    if (!suiteMatchesKeyword(suite, word))
+      return
+    let cursor = suite
+    const visited = new Set()
+    while (cursor?.id != null && !visited.has(String(cursor.id))) {
+      const cursorId = String(cursor.id)
+      includedIds.add(cursorId)
+      visited.add(cursorId)
+      cursor = suiteById.value.get(String(cursor.parentId))
+    }
   })
+  return suiteTreeRows.value.filter(row => includedIds.has(String(row.suite.id)))
+})
+const selectedSuiteCodes = computed(() => {
+  if (!activeSuite.value)
+    return suiteCode.value ? [suiteCode.value] : []
+  const codes = []
+  collectSuiteCodes(activeSuite.value, codes, new Set())
+  return codes
 })
 const suiteObjectTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.objectCount || 0), 0))
 const suiteAppTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.appCount || 0), 0))
@@ -375,28 +471,6 @@ const metrics = computed(() => [
   { label: '访问入口', value: appTotal.value },
   { label: '可直接打开', value: openableAppCount.value },
   { label: '已启用入口', value: enabledAppCount.value },
-])
-const suiteActionOptions = computed(() => [
-  {
-    label: '进入业务域',
-    key: 'open',
-  },
-  {
-    label: '编辑信息',
-    key: 'edit',
-  },
-  {
-    label: suiteStatusActionText(activeSuite.value),
-    key: 'toggle',
-  },
-  {
-    type: 'divider',
-    key: 'divider',
-  },
-  {
-    label: '删除业务域',
-    key: 'delete',
-  },
 ])
 const appGroups = computed(() => {
   const groups = new Map()
@@ -510,6 +584,7 @@ async function loadSuites() {
   try {
     const res = await businessSuiteSummary()
     suites.value = res.data || []
+    collapseAllSuites()
   }
   finally {
     loadingSuites.value = false
@@ -521,7 +596,7 @@ async function loadObjects() {
   try {
     const res = await businessObjectList({
       keyword: keyword.value,
-      suiteCode: suiteCode.value,
+      ...workspaceSuiteParams(),
     })
     objects.value = res.data || []
   }
@@ -535,7 +610,7 @@ async function loadApps() {
   try {
     const res = await businessAppList({
       keyword: keyword.value,
-      suiteCode: suiteCode.value,
+      ...workspaceSuiteParams(),
       appType: appType.value,
     })
     apps.value = res.data || []
@@ -543,6 +618,121 @@ async function loadApps() {
   finally {
     loadingApps.value = false
   }
+}
+
+function workspaceSuiteParams() {
+  if (!suiteCode.value)
+    return {}
+  if (selectedSuiteCodes.value.length > 1)
+    return { suiteCodes: selectedSuiteCodes.value.join(',') }
+  return { suiteCode: suiteCode.value }
+}
+
+function compareSuites(left, right) {
+  const sortCompare = Number(left?.sortOrder || 0) - Number(right?.sortOrder || 0)
+  if (sortCompare !== 0)
+    return sortCompare
+  return String(left?.suiteName || left?.suiteCode || '')
+    .localeCompare(String(right?.suiteName || right?.suiteCode || ''), 'zh-CN')
+}
+
+function normalizeSuiteParentKey(suite) {
+  if (!suite?.parentId)
+    return '__root__'
+  const parentKey = String(suite.parentId)
+  return suiteById.value.has(parentKey) ? parentKey : '__root__'
+}
+
+function flattenSuiteRows(parentKey, level, visited) {
+  const children = suiteChildrenMap.value.get(parentKey) || []
+  return children.flatMap((suite) => {
+    if (suite?.id == null)
+      return []
+    const suiteKey = String(suite.id)
+    if (visited.has(suiteKey))
+      return []
+    const nextVisited = new Set(visited)
+    nextVisited.add(suiteKey)
+    const hasChildren = (suiteChildrenMap.value.get(suiteKey) || []).length > 0
+    const childCount = countSuiteDescendants(suiteKey, nextVisited)
+    const forceExpanded = Boolean(suiteKeyword.value.trim())
+    const childRows = forceExpanded || isSuiteExpanded(suite)
+      ? flattenSuiteRows(suiteKey, level + 1, nextVisited)
+      : []
+    return [{
+      suite,
+      level,
+      hasChildren,
+      childCount,
+    }, ...childRows]
+  })
+}
+
+function countSuiteDescendants(parentKey, visited) {
+  return (suiteChildrenMap.value.get(parentKey) || []).reduce((count, suite) => {
+    if (suite?.id == null)
+      return count
+    const suiteKey = String(suite.id)
+    if (visited.has(suiteKey))
+      return count
+    const nextVisited = new Set(visited)
+    nextVisited.add(suiteKey)
+    return count + 1 + countSuiteDescendants(suiteKey, nextVisited)
+  }, 0)
+}
+
+function isSuiteExpanded(suite) {
+  if (!suite?.id)
+    return true
+  return !collapsedSuiteIds.value.has(String(suite.id))
+}
+
+function isSuiteTreeExpanded(suite) {
+  if (suiteKeyword.value.trim())
+    return true
+  return isSuiteExpanded(suite)
+}
+
+function expandAllSuites() {
+  collapsedSuiteIds.value = new Set()
+}
+
+function collapseAllSuites() {
+  collapsedSuiteIds.value = new Set(expandableSuiteIds.value)
+}
+
+function toggleSuiteExpanded(suite) {
+  if (!suite?.id)
+    return
+  const suiteId = String(suite.id)
+  const next = new Set(collapsedSuiteIds.value)
+  if (next.has(suiteId))
+    next.delete(suiteId)
+  else
+    next.add(suiteId)
+  collapsedSuiteIds.value = next
+}
+
+function suiteMatchesKeyword(suite, word) {
+  const name = `${suite?.suiteName || ''} ${suite?.suiteCode || ''} ${suite?.description || ''}`.toLowerCase()
+  return name.includes(word)
+}
+
+function collectSuiteCodes(suite, codes, visited) {
+  if (!suite?.suiteCode || suite?.id == null)
+    return
+  const suiteKey = String(suite.id)
+  if (visited.has(suiteKey))
+    return
+  visited.add(suiteKey)
+  codes.push(suite.suiteCode)
+  ;(suiteChildrenMap.value.get(suiteKey) || []).forEach(child => collectSuiteCodes(child, codes, visited))
+}
+
+function suiteMetaText(suiteRow) {
+  const suite = suiteRow?.suite || {}
+  const childText = suiteRow?.childCount ? ` · ${suiteRow.childCount} 个子域` : ''
+  return `${suite.objectCount || 0} 个业务单元 · ${suite.appCount || 0} 个入口${childText}`
 }
 
 function suiteInitial(suite) {
@@ -614,23 +804,56 @@ function handleCreateSelect(key) {
     openEditor(null)
 }
 
-function handleSuiteAction(key) {
-  if (!activeSuite.value)
+function getSuiteActionOptions(suite) {
+  return [
+    {
+      label: '进入业务域',
+      key: 'open',
+    },
+    {
+      label: '新增子目录',
+      key: 'create-child',
+    },
+    {
+      label: '编辑信息',
+      key: 'edit',
+    },
+    {
+      label: suiteStatusActionText(suite),
+      key: 'toggle',
+    },
+    {
+      type: 'divider',
+      key: 'divider',
+    },
+    {
+      label: '删除业务域',
+      key: 'delete',
+    },
+  ]
+}
+
+function handleSuiteAction(key, suite = activeSuite.value) {
+  if (!suite)
     return
   if (key === 'open') {
-    openSuite(activeSuite.value)
+    openSuite(suite)
+    return
+  }
+  if (key === 'create-child') {
+    openSuiteEditor({ parentId: suite.id })
     return
   }
   if (key === 'edit') {
-    openSuiteEditor(activeSuite.value)
+    openSuiteEditor(suite)
     return
   }
   if (key === 'toggle') {
-    toggleSuite(activeSuite.value)
+    toggleSuite(suite)
     return
   }
   if (key === 'delete')
-    deleteSuite(activeSuite.value)
+    deleteSuite(suite)
 }
 
 function openSuite(suite) {
@@ -813,7 +1036,7 @@ function deleteSuite(suite) {
     return
   window.$dialog?.warning({
     title: '删除业务域',
-    content: `确定删除“${suite.suiteName || suite.suiteCode}”吗？已存在业务单元或访问入口的业务域会被后端拦截。`,
+    content: `确定删除“${suite.suiteName || suite.suiteCode}”吗？已存在子业务域、业务单元或访问入口的业务域会被后端拦截。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -946,6 +1169,13 @@ function deleteApp(app) {
   align-items: center;
 }
 
+.suite-nav-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  align-items: center;
+}
+
 .suite-nav-head strong,
 .suite-nav-head span {
   display: block;
@@ -968,26 +1198,59 @@ function deleteApp(app) {
 
 .suite-nav-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .suite-nav-item {
+  position: relative;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 22px 32px minmax(0, 1fr) 28px;
+  gap: 7px;
   align-items: center;
   width: 100%;
-  min-height: 56px;
+  min-height: 48px;
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #f9fafb;
-  padding: 8px;
+  padding: 6px 7px 6px calc(7px + var(--suite-indent, 0px));
   text-align: left;
   transition:
     background 160ms ease,
     border-color 160ms ease,
     box-shadow 160ms ease;
+}
+
+.suite-nav-item.child {
+  background: #fbfdff;
+}
+
+.suite-nav-item.has-children {
+  background: #f8fafc;
+}
+
+.suite-nav-item.child::before {
+  position: absolute;
+  z-index: 0;
+  top: -5px;
+  bottom: -5px;
+  left: calc(17px + var(--suite-indent, 0px));
+  width: 1px;
+  background: #dbe4f0;
+  content: '';
+  pointer-events: none;
+}
+
+.suite-nav-item.child::after {
+  position: absolute;
+  z-index: 0;
+  top: 23px;
+  left: calc(17px + var(--suite-indent, 0px));
+  width: 12px;
+  height: 1px;
+  background: #dbe4f0;
+  content: '';
+  pointer-events: none;
 }
 
 .suite-nav-item:hover {
@@ -1001,15 +1264,69 @@ function deleteApp(app) {
   box-shadow: inset 3px 0 0 #2f6feb;
 }
 
-.suite-mark {
+.suite-item-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.suite-nav-item:hover .suite-item-actions,
+.suite-nav-item.active .suite-item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.suite-item-more {
+  color: #64748b;
+}
+
+.suite-tree-control,
+.suite-tree-toggle {
+  position: relative;
+  z-index: 1;
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 22px;
+  height: 22px;
   place-items: center;
-  border-radius: 8px;
+}
+
+.suite-tree-toggle {
+  cursor: pointer;
+  border: 1px solid #d7e0ec;
+  border-radius: 5px;
+  background: #fff;
+  color: #64748b;
+  padding: 0;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.suite-tree-toggle:hover {
+  border-color: #2f6feb;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.suite-mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 7px;
   background: #eef2ff;
   color: #3730a3;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1021,7 +1338,7 @@ function deleteApp(app) {
 .suite-mark.all {
   background: #ecfdf5;
   color: #15803d;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .suite-mark.large {
@@ -1031,6 +1348,8 @@ function deleteApp(app) {
 }
 
 .suite-nav-copy {
+  position: relative;
+  z-index: 1;
   min-width: 0;
 }
 
@@ -1045,13 +1364,13 @@ function deleteApp(app) {
 .suite-nav-copy strong {
   color: #111827;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .suite-nav-copy small {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #6b7280;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .workspace {
@@ -1062,15 +1381,10 @@ function deleteApp(app) {
 
 .workspace-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   padding: 12px;
-}
-
-.workspace-actions {
-  justify-content: flex-end;
-  max-width: 620px;
 }
 
 .selected-suite-title {
@@ -1261,8 +1575,7 @@ function deleteApp(app) {
     align-items: stretch;
   }
 
-  .head-actions,
-  .workspace-actions {
+  .head-actions {
     justify-content: flex-start;
     max-width: none;
   }

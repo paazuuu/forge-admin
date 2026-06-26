@@ -19,6 +19,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -205,6 +206,9 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
         if (parentId > ROOT_PARENT_ID && baseMapper.selectDomainById(tenantId, parentId) == null) {
             throw new BusinessException("父级业务领域不存在");
         }
+        if (!create && parentId > ROOT_PARENT_ID && isDescendantDomain(tenantId, parentId, domain.getId())) {
+            throw new BusinessException("父级领域不能选择自身或下级领域");
+        }
         Long excludeId = create ? null : domain.getId();
         if (baseMapper.countByCode(tenantId, domainCode, excludeId) > 0) {
             throw new BusinessException("领域编码已存在: " + domainCode);
@@ -366,6 +370,55 @@ public class LowcodeDomainService extends ServiceImpl<AiLowcodeDomainMapper, AiL
 
     private Long normalizeParentId(Long parentId) {
         return parentId == null ? ROOT_PARENT_ID : parentId;
+    }
+
+    public List<Long> collectDescendantIds(Long id) {
+        AiLowcodeDomain domain = requireDomain(id);
+        Long tenantId = resolveTenantId();
+        List<AiLowcodeDomain> domains = baseMapper.selectDomainList(tenantId, null, null);
+        Map<Long, List<Long>> childrenMap = new LinkedHashMap<>();
+        for (AiLowcodeDomain node : domains) {
+            Long parentId = normalizeParentId(node.getParentId());
+            childrenMap.computeIfAbsent(parentId, key -> new ArrayList<>()).add(node.getId());
+        }
+        List<Long> collected = new ArrayList<>();
+        ArrayDeque<Long> stack = new ArrayDeque<>();
+        stack.push(domain.getId());
+        Set<Long> visited = new HashSet<>();
+        while (!stack.isEmpty()) {
+            Long currentId = stack.pop();
+            if (currentId == null || !visited.add(currentId)) {
+                continue;
+            }
+            collected.add(currentId);
+            List<Long> children = childrenMap.get(currentId);
+            if (children == null || children.isEmpty()) {
+                continue;
+            }
+            for (int i = children.size() - 1; i >= 0; i--) {
+                stack.push(children.get(i));
+            }
+        }
+        return collected;
+    }
+
+    private boolean isDescendantDomain(Long tenantId, Long candidateParentId, Long domainId) {
+        Long currentId = candidateParentId;
+        Set<Long> visited = new HashSet<>();
+        while (currentId != null && currentId > ROOT_PARENT_ID) {
+            if (!visited.add(currentId)) {
+                return true;
+            }
+            if (currentId.equals(domainId)) {
+                return true;
+            }
+            AiLowcodeDomain currentDomain = baseMapper.selectDomainById(tenantId, currentId);
+            if (currentDomain == null) {
+                return false;
+            }
+            currentId = normalizeParentId(currentDomain.getParentId());
+        }
+        return false;
     }
 
     private Long resolveTenantId() {

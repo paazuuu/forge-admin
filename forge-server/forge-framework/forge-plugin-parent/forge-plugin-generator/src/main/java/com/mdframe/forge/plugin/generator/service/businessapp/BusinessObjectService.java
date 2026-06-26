@@ -17,6 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -233,10 +234,25 @@ public class BusinessObjectService extends ServiceImpl<BusinessObjectMapper, AiB
         BusinessObjectQueryDTO result = query == null ? new BusinessObjectQueryDTO() : query;
         result.setKeyword(StringUtils.trimToNull(result.getKeyword()));
         result.setSuiteCode(StringUtils.trimToNull(result.getSuiteCode()));
+        result.setSuiteCodes(normalizeSuiteCodes(result.getSuiteCodes()));
         result.setObjectCode(StringUtils.trimToNull(result.getObjectCode()));
         result.setObjectType(StringUtils.trimToNull(result.getObjectType()));
         result.setModelCode(StringUtils.trimToNull(result.getModelCode()));
         return result;
+    }
+
+    private List<String> normalizeSuiteCodes(List<String> suiteCodes) {
+        if (suiteCodes == null || suiteCodes.isEmpty()) {
+            return null;
+        }
+        List<String> normalized = suiteCodes.stream()
+                .filter(StringUtils::isNotBlank)
+                .flatMap(item -> Arrays.stream(item.split(",")))
+                .map(StringUtils::trimToNull)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .toList();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private Integer normalizeStatus(Integer status) {

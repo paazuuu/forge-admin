@@ -25,7 +25,7 @@ public interface AiCrudConfigMapper extends BaseMapper<AiCrudConfig> {
                                                @Param("tenantId") Long tenantId,
                                                @Param("keyword") String keyword,
                                                @Param("publishStatus") String publishStatus,
-                                               @Param("domainId") Long domainId,
+                                               @Param("domainIds") List<Long> domainIds,
                                                @Param("domainCode") String domainCode,
                                                @Param("generalDomain") Boolean generalDomain);
 

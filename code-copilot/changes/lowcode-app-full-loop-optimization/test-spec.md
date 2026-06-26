@@ -317,3 +317,35 @@
 - 业务单据运行态批量查询应优先按发布态 `configKey` 查单据配置，并复用已解析的 `AiCrudConfig` 构建 VO，避免 `selectByObjectCode(crm_customer)` 这类必然 miss 和 `toVO` 内二次查询。
 
 本轮聚焦用户反馈“一次查询触发很多次 DB、耗时约 3s”的后端控制面重复查询。未启动后端服务和数据库时，真实请求日志对比记录为跳过；已完成相关模块编译验证。
+
+## 25. 本轮增量验证：业务域三级目录与子树应用展示
+
+| 优先级 | 验证项 | 命令 | 期望 |
+|--------|--------|------|------|
+| P0 | 补丁空白检查 | `git diff --check` | 无 trailing whitespace / conflict marker |
+| P0 | 后端主应用编译 | `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-admin-server -am compile -DskipTests` | 编译通过，退出码 0 |
+| P0 | 前端生产构建 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build` | 构建通过，无新增阻断错误 |
+
+条件增强验证：
+
+- 后端服务和数据库可用时，新建“父业务域 -> 子业务域”，在子业务域下发布低代码应用，检查 `sys_resource` 层级为 `/ai -> 父业务域目录 -> 子业务域目录 -> 应用菜单`。
+- 前端 dev server 可用时，在应用总览左侧领域树节点菜单点击“新增子目录”，确认抽屉父级自动回填；点击“编辑领域”确认从详情接口完整回填父级、默认菜单父级和领域协议。
+- 有父子业务域数据时，选中父业务域，期望应用列表展示父领域及所有子领域应用。
+
+本轮聚焦用户反馈“应用总览左侧业务域存在树形结构，能否建三级目录：业务域下面再挂目录，目录下挂菜单”。未启动后端服务、数据库或前端 dev server 时，真实菜单落库、浏览器点击和侧边栏回显验证记录为跳过；已完成编译构建验证。
+
+## 26. 本轮增量验证：应用总览业务套件树纠偏
+
+| 优先级 | 验证项 | 命令 | 期望 |
+|--------|--------|------|------|
+| P0 | 补丁空白检查 | `git diff --check` | 无 trailing whitespace / conflict marker |
+| P0 | 应用总览前端 ESLint | `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/views/app-center/index.vue src/views/app-center/components/SuiteEditorDrawer.vue` | ESLint 通过，退出码 0 |
+| P0 | 后端主应用编译 | `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-admin-server -am compile -DskipTests` | 编译通过，退出码 0 |
+
+条件增强验证：
+
+- 后端服务和数据库可用时，执行 Flyway 后检查 `ai_business_suite.parent_id` 和 `idx_ai_business_suite_parent` 已存在。
+- 在应用总览新建父业务域和子业务域，选中父业务域后，右侧对象和入口请求应携带 `suiteCodes` 并返回父子业务域合并结果。
+- 在子业务域下保存管理端访问入口，期望菜单层级为“父业务域目录 -> 子业务域目录 -> 应用菜单”，且已存在菜单通过原 `sys_resource.id` 更新。
+
+本轮纠偏范围是截图页面 `forge-admin-ui/src/views/app-center/index.vue` 和后端 `ai_business_suite` 业务套件模型；上一轮低代码构建器 `ai_lowcode_domain` 相关改动不作为本页面功能完成依据。

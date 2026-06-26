@@ -1,6 +1,6 @@
 <template>
   <n-drawer v-model:show="drawerShow" :width="680" placement="right">
-    <n-drawer-content :title="form.id ? '编辑业务领域' : '新增业务领域'">
+    <n-drawer-content :title="drawerTitle">
       <n-form label-placement="left" label-width="104" size="small">
         <div class="form-section">
           <div class="section-title">
@@ -130,6 +130,12 @@ const schema = reactive(createBlankSchema())
 const drawerShow = computed({
   get: () => props.show,
   set: value => emit('update:show', value),
+})
+
+const drawerTitle = computed(() => {
+  if (form.id)
+    return '编辑业务领域'
+  return form.parentId ? '新增子目录' : '新增业务领域'
 })
 
 const parentOptions = computed(() => flattenDomains(props.domains)

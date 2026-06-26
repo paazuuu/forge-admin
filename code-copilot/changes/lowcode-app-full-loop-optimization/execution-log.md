@@ -903,3 +903,121 @@ Flow 服务现在不会把同一租户同一 `businessKey` 的重复启动直接
 ## 5. 结论
 
 动态页面查询链路已减少控制面重复 DB：权限资源配置、低代码配置、运行数据源解析和运行态 JDBC provider 都有短缓存与配置变更失效；业务单据运行态也减少了无效配置查询和二次运行配置读取。
+
+---
+
+# 本轮增量执行日志：业务域三级目录与子树应用展示
+
+> 执行时间：2026-06-25 22:02 CST
+> 范围：应用总览业务域树子目录入口、父域子树应用列表、低代码发布菜单递归挂载。
+
+## 1. 本轮改动
+
+- `DomainTreePanel.vue` 节点菜单新增“新增子目录”和“编辑领域”；`lowcode-apps.vue` 编辑时先调用领域详情接口，新增子目录时自动回填父级。
+- `DomainEditorDrawer.vue` 在从父领域新建时显示“新增子目录”，降低业务域/目录层级理解成本。
+- `LowcodeDomainService` 增加父级循环检测，禁止领域挂到自身或下级领域；新增子树 ID 收集方法。
+- `LowcodeAppService` 和 `AiCrudConfigMapper.xml` 将应用总览的领域筛选从单个 `domain_id = ?` 改为当前领域及所有子领域 `IN (...)`。
+- `LowcodePublishService` 发布时递归解析父业务域目录，应用菜单默认挂到当前业务域生成目录；`MenuRegisterAdapterImpl` 支持创建/更新领域目录时指定父菜单，并移动已有领域目录到正确层级。
+- 发布时不再把自动生成的领域目录 ID 写回 `ai_lowcode_domain.menu_parent_id`，避免覆盖用户在业务域上配置的默认菜单父级。
+
+## 2. 验证命令
+
+- `git diff --check`：通过，无输出。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-admin-server -am compile -DskipTests`：通过，退出码 0。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 && NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：构建通过，输出 `✓ built in 9m 11s`。
+
+## 3. 警告和跳过项
+
+- 前端构建保留既有 `UserSelectModal` 组件命名冲突提示、CSS `//` 注释警告、动态/静态导入混用警告和 chunk size 提示，未阻断。
+- 本轮未启动后端服务、前端 dev server 或数据库，未执行真实 `sys_resource` 层级落库检查、侧边栏菜单回显和浏览器点击验证。
+- 本轮未新启动长期服务，无需停止服务。
+
+## 4. 结论
+
+低代码应用总览现在可以从父业务域直接新增子目录，选中父业务域时可看到子树应用；发布应用时，默认菜单层级按“低代码根目录 -> 父业务域目录 -> 子业务域目录 -> 应用菜单”递归生成和纠正。
+
+---
+
+# 本轮补充执行日志：业务域节点操作位左移
+
+> 执行时间：2026-06-25 22:16 CST
+> 范围：应用总览左侧业务域树节点操作入口位置优化。
+
+## 1. 本轮改动
+
+- 将业务域节点的三点操作入口从每行最右侧移动到折叠箭头旁边，靠近左侧树结构和领域名称。
+- 保留原菜单能力不变：新增子目录、编辑领域、删除领域。
+- 将新增子目录事件名从 `create-child` 调整为 `createChild`，符合前端 ESLint 事件命名规则；父组件模板继续用 `@create-child` 监听。
+
+## 2. 验证命令
+
+- `git diff --check`：通过。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/domain/DomainTreePanel.vue`：通过，退出码 0。
+
+## 3. 跳过项
+
+- 本轮仅调整单个 Vue 组件布局与事件名，未重新跑整站前端 build；上一轮完整 `pnpm --dir forge-admin-ui build` 已通过。
+- 未启动前端 dev server，未做浏览器截图验证。
+
+---
+
+# 本轮补充执行日志：应用总览左侧业务域卡片操作位
+
+> 执行时间：2026-06-26 06:56 CST
+> 范围：`app-center/index.vue` 左侧业务域列表三点菜单位置调整。
+
+## 1. 本轮改动
+
+- 将应用总览右侧标题栏的“业务域操作”按钮移除。
+- 将三点菜单下沉到左侧每个业务域卡片右侧，和业务域树本身放在一起。
+- 每个业务域条目现在都可以直接展开操作菜单，支持进入、编辑、启停和删除。
+
+## 2. 验证命令
+
+- `git diff --check`：通过。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/views/app-center/index.vue`：通过，退出码 0。
+
+## 3. 跳过项
+
+- 未重新跑整站前端 build；上一轮构建已通过，本轮只改组件布局。
+- 未启动前端 dev server，未做浏览器截图验证。
+
+---
+
+# 本轮增量执行日志：应用总览业务套件树纠偏
+
+> 执行时间：2026-06-26 07:23 CST
+> 范围：截图所示 `应用总览` 页面左侧业务域树、`ai_business_suite` 父级模型、父业务域子树查询和业务套件菜单递归挂载。
+
+## 1. 本轮纠偏结论
+
+- 上一轮“业务域三级目录”主要落在低代码构建器 `ai_lowcode_domain` 链路，不是用户截图中的应用总览页面。
+- 本轮改为对齐 `forge-admin-ui/src/views/app-center/index.vue` 和后端 `ai_business_suite` 业务套件模型。
+- 保留上一轮低代码域相关改动，不在本轮回滚，避免误删用户已有变更。
+
+## 2. 本轮改动
+
+- 新增 Flyway 脚本 `V1.0.80__add_business_suite_hierarchy.sql`，给 `ai_business_suite` 增加 `parent_id` 和父级索引。
+- `AiBusinessSuite`、`BusinessSuiteDTO`、`BusinessSuiteVO`、`BusinessSuiteSummaryVO` 增加 `parentId`。
+- `BusinessSuiteService` 增加父级校验，禁止上级选择自身或后代；删除父业务域时先拦截已有子业务域。
+- `BusinessSuiteService` 新增业务套件菜单目录递归解析，访问入口同步菜单时按“父业务域目录 -> 子业务域目录 -> 应用菜单”挂载，并复用已有 `sys_resource.id`。
+- `BusinessObjectQueryDTO`、`BusinessAppQueryDTO` 和对应 Mapper XML 支持 `suiteCodes IN (...)`，用于父业务域聚合子树数据。
+- 应用总览左侧业务域列表按 `parentId` 渲染树形层级，节点三点菜单增加“新增子目录”。
+- `SuiteEditorDrawer` 增加“上级业务域”选择，并在前端过滤自身和后代。
+
+## 3. 验证命令
+
+- `git diff --check`：通过，无输出。
+- `source ~/.nvm/nvm.sh && nvm use v20.19.0 >/dev/null && pnpm --dir forge-admin-ui exec eslint src/views/app-center/index.vue src/views/app-center/components/SuiteEditorDrawer.vue`：通过，退出码 0。
+- `cd forge-server && JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -q -pl forge-framework/forge-plugin-parent/forge-plugin-generator,forge-admin-server -am compile -DskipTests`：通过，退出码 0。
+
+## 4. 警告和跳过项
+
+- 未启动后端服务和数据库，未执行 Flyway 实跑、`ai_business_suite.parent_id` 落库检查和 `sys_resource` 菜单层级检查。
+- 未启动前端 dev server，未做浏览器点击和截图验证。
+- 未执行整站前端 build；本轮前端增量验证覆盖了改动的两个 Vue 文件 ESLint，后续如做发布验收建议补跑 `pnpm --dir forge-admin-ui build`。
+- 本轮未新启动长期服务，无需停止服务。
+
+## 5. 结论
+
+应用总览业务域树功能已从低代码域链路纠偏到 `ai_business_suite` 链路：左侧可以新增子目录，编辑业务域可以设置父级，父业务域查询会聚合子树对象和入口，业务入口菜单会递归挂载到父/子业务域目录下。

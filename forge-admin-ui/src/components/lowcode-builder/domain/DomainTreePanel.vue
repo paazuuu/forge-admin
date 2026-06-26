@@ -81,6 +81,15 @@
               <ChevronForwardOutline v-else />
             </n-icon>
           </span>
+          <n-dropdown
+            trigger="click"
+            :options="domainActionOptions"
+            @select="key => handleDomainAction(key, item)"
+          >
+            <span class="node-action" @click.stop>
+              <n-icon><EllipsisVertical /></n-icon>
+            </span>
+          </n-dropdown>
           <span class="node-icon">
             <n-icon><FolderOpenOutline /></n-icon>
           </span>
@@ -96,15 +105,6 @@
           >
             停用
           </n-tag>
-          <n-dropdown
-            trigger="click"
-            :options="domainActionOptions"
-            @select="key => handleDomainAction(key, item)"
-          >
-            <span class="node-action" @click.stop>
-              <n-icon><EllipsisVertical /></n-icon>
-            </span>
-          </n-dropdown>
         </button>
       </div>
 
@@ -146,9 +146,12 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['select', 'create', 'refresh', 'search', 'update:keyword', 'delete'])
+const emit = defineEmits(['select', 'create', 'createChild', 'edit', 'refresh', 'search', 'update:keyword', 'delete'])
 
 const domainActionOptions = [
+  { label: '新增子目录', key: 'create-child' },
+  { label: '编辑领域', key: 'edit' },
+  { type: 'divider', key: 'divider' },
   { label: '删除领域', key: 'delete' },
 ]
 
@@ -210,6 +213,14 @@ function toggleExpanded(item) {
 }
 
 function handleDomainAction(key, item) {
+  if (key === 'create-child') {
+    emit('createChild', item)
+    return
+  }
+  if (key === 'edit') {
+    emit('edit', item)
+    return
+  }
   if (key === 'delete')
     emit('delete', item)
 }
@@ -265,7 +276,7 @@ function handleDomainAction(key, item) {
   display: grid;
   width: 100%;
   min-height: 48px;
-  grid-template-columns: calc(var(--indent, 0) * 16px) 20px 28px minmax(0, 1fr) auto 24px;
+  grid-template-columns: calc(var(--indent, 0) * 16px) 20px 24px 28px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   border: 1px solid transparent;
@@ -303,6 +314,7 @@ function handleDomainAction(key, item) {
   display: inline-flex;
   width: 24px;
   height: 24px;
+  justify-self: center;
   align-items: center;
   justify-content: center;
   border-radius: 6px;

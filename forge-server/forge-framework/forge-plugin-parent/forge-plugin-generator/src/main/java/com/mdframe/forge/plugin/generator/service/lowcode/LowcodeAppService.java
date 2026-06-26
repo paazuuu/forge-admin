@@ -52,12 +52,13 @@ public class LowcodeAppService {
 
     public Page<LowcodeAppDetailVO> page(PageQuery pageQuery, String keyword, String publishStatus,
                                          Long domainId, String domainCode, Boolean generalDomain) {
+        List<Long> domainIds = domainId == null ? null : domainService.collectDescendantIds(domainId);
         return configMapper.selectLowcodePage(
                 new Page<>(pageQuery.getPageNum(), pageQuery.getPageSize()),
                 resolveTenantId(),
                 StringUtils.trimToNull(keyword),
                 StringUtils.trimToNull(publishStatus),
-                domainId,
+                domainIds,
                 StringUtils.trimToNull(domainCode),
                 generalDomain);
     }

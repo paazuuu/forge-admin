@@ -18,8 +18,14 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 业务应用平台业务套件服务。
@@ -88,6 +94,9 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
     public void delete(Long id) {
         AiBusinessSuite suite = requireEntity(id);
         Long tenantId = resolveTenantId();
+        if (baseMapper.countChildrenBySuite(tenantId, suite.getId()) > 0) {
+            throw new BusinessException("该业务域已存在子业务域，不能删除");
+        }
         if (baseMapper.countObjectsBySuite(tenantId, suite.getSuiteCode()) > 0) {
             throw new BusinessException("该业务套件已存在业务对象，不能删除");
         }
@@ -133,7 +142,9 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
         if (baseMapper.countBySuiteCode(resolveTenantId(), suiteCode, excludeId) > 0) {
             throw new BusinessException("套件编码已存在: " + suiteCode);
         }
+        Long parentId = normalizeParentId(dto.getParentId(), excludeId);
         suite.setTenantId(resolveTenantId());
+        suite.setParentId(parentId);
         suite.setSuiteCode(suiteCode);
         suite.setSuiteName(suiteName);
         suite.setIcon(StringUtils.trimToNull(dto.getIcon()));
@@ -153,15 +164,136 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
 
         Long parentId = readLong(adminMenu.get("parentId"));
         Integer sort = readInteger(adminMenu.get("sort"), suite.getSortOrder());
-        Long menuResourceId = menuRegisterAdapter.resolveOrCreateBusinessSuiteParentId(
-                parentId, suite.getSuiteCode(), suite.getSuiteName(), suite.getIcon(), sort);
         adminMenu.put("syncEnabled", true);
         adminMenu.put("parentId", parentId == null ? null : String.valueOf(parentId));
         adminMenu.put("sort", sort);
-        adminMenu.put("menuResourceId", menuResourceId == null ? null : String.valueOf(menuResourceId));
         options.put("adminMenu", adminMenu);
         suite.setOptions(writeOptions(options));
-        updateById(suite);
+        resolveOrCreateSuiteMenuDirectory(suite, parentId, new HashSet<>());
+    }
+
+    public Long resolveOrCreateSuiteMenuDirectory(String suiteCode, Long rootParentId) {
+        AiBusinessSuite suite = requireByCode(suiteCode);
+        return resolveOrCreateSuiteMenuDirectory(suite, rootParentId, new HashSet<>());
+    }
+
+    private Long resolveOrCreateSuiteMenuDirectory(AiBusinessSuite suite, Long rootParentId, Set<Long> resolvingIds) {
+        if (suite == null) {
+            return rootParentId;
+        }
+        if (suite.getId() != null && !resolvingIds.add(suite.getId())) {
+            throw new BusinessException("业务域父级存在循环配置");
+        }
+        Long parentMenuId = rootParentId;
+        if (suite.getParentId() != null) {
+            AiBusinessSuite parent = requireEntity(suite.getParentId());
+            Long parentRootMenuId = rootParentId != null ? rootParentId : readConfiguredMenuParentId(parent);
+            parentMenuId = resolveOrCreateSuiteMenuDirectory(parent, parentRootMenuId, resolvingIds);
+        } else if (parentMenuId == null) {
+            parentMenuId = readConfiguredMenuParentId(suite);
+        }
+        Integer sort = readConfiguredMenuSort(suite);
+        Long menuResourceId = menuRegisterAdapter.resolveOrCreateBusinessSuiteParentId(
+                parentMenuId, suite.getSuiteCode(), suite.getSuiteName(), suite.getIcon(), sort);
+        rememberSuiteMenuResource(suite, readConfiguredMenuParentId(suite), parentMenuId, menuResourceId, sort);
+        if (suite.getId() != null) {
+            resolvingIds.remove(suite.getId());
+        }
+        return menuResourceId;
+    }
+
+    private Long normalizeParentId(Long parentId, Long currentId) {
+        if (parentId == null) {
+            return null;
+        }
+        Long tenantId = resolveTenantId();
+        AiBusinessSuite parent = requireEntity(parentId);
+        if (!Objects.equals(parent.getTenantId(), tenantId)) {
+            throw new BusinessException("上级业务域不存在");
+        }
+        if (currentId == null) {
+            return parentId;
+        }
+        if (Objects.equals(parentId, currentId)) {
+            throw new BusinessException("上级业务域不能选择自己");
+        }
+        Map<Long, AiBusinessSuite> suiteMap = baseMapper.selectSuiteList(tenantId, new BusinessSuiteQueryDTO())
+                .stream()
+                .filter(item -> item.getId() != null)
+                .map(this::toEntity)
+                .collect(Collectors.toMap(AiBusinessSuite::getId, Function.identity(), (left, right) -> left));
+        Long cursor = parentId;
+        Set<Long> visited = new HashSet<>();
+        while (cursor != null && visited.add(cursor)) {
+            if (Objects.equals(cursor, currentId)) {
+                throw new BusinessException("上级业务域不能选择自己的下级");
+            }
+            AiBusinessSuite cursorSuite = suiteMap.get(cursor);
+            cursor = cursorSuite == null ? null : cursorSuite.getParentId();
+        }
+        return parentId;
+    }
+
+    private AiBusinessSuite toEntity(BusinessSuiteVO vo) {
+        AiBusinessSuite suite = new AiBusinessSuite();
+        suite.setId(vo.getId());
+        suite.setTenantId(resolveTenantId());
+        suite.setParentId(vo.getParentId());
+        suite.setSuiteCode(vo.getSuiteCode());
+        suite.setSuiteName(vo.getSuiteName());
+        suite.setIcon(vo.getIcon());
+        suite.setDescription(vo.getDescription());
+        suite.setStatus(vo.getStatus());
+        suite.setSortOrder(vo.getSortOrder());
+        suite.setOptions(vo.getOptions());
+        return suite;
+    }
+
+    private Long readConfiguredMenuParentId(AiBusinessSuite suite) {
+        if (suite == null) {
+            return null;
+        }
+        JSONObject options = readOptions(suite.getOptions());
+        JSONObject adminMenu = readAdminMenu(options);
+        return readLong(adminMenu.get("parentId"));
+    }
+
+    private Integer readConfiguredMenuSort(AiBusinessSuite suite) {
+        if (suite == null) {
+            return 0;
+        }
+        JSONObject options = readOptions(suite.getOptions());
+        JSONObject adminMenu = readAdminMenu(options);
+        return readInteger(adminMenu.get("sort"), suite.getSortOrder());
+    }
+
+    private void rememberSuiteMenuResource(AiBusinessSuite suite, Long originalParentId, Long actualParentId,
+                                           Long menuResourceId, Integer sort) {
+        if (suite == null || suite.getId() == null || menuResourceId == null) {
+            return;
+        }
+        JSONObject options = readOptions(suite.getOptions());
+        JSONObject adminMenu = readAdminMenu(options);
+        adminMenu.put("parentId", originalParentId == null ? null : String.valueOf(originalParentId));
+        if (actualParentId == null) {
+            adminMenu.remove("actualParentId");
+        } else {
+            adminMenu.put("actualParentId", String.valueOf(actualParentId));
+        }
+        adminMenu.put("sort", sort == null ? 0 : sort);
+        adminMenu.put("menuResourceId", String.valueOf(menuResourceId));
+        if (!adminMenu.containsKey("syncEnabled")) {
+            adminMenu.put("syncEnabled", true);
+        }
+        options.put("adminMenu", adminMenu);
+        String nextOptions = writeOptions(options);
+        if (!StringUtils.equals(nextOptions, suite.getOptions())) {
+            AiBusinessSuite update = new AiBusinessSuite();
+            update.setId(suite.getId());
+            update.setOptions(nextOptions);
+            updateById(update);
+            suite.setOptions(nextOptions);
+        }
     }
 
     private JSONObject readOptions(String options) {

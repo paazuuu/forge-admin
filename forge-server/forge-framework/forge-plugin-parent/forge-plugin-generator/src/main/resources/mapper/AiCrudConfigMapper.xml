@@ -220,8 +220,11 @@
         <if test="publishStatus != null and publishStatus != ''">
           AND c.publish_status = #{publishStatus}
         </if>
-        <if test="domainId != null">
-          AND c.domain_id = #{domainId}
+        <if test="domainIds != null and domainIds.size > 0">
+          AND c.domain_id IN
+          <foreach collection="domainIds" item="domainId" open="(" separator="," close=")">
+            #{domainId}
+          </foreach>
         </if>
         <if test="domainCode != null and domainCode != ''">
           AND c.domain_code = #{domainCode}
