@@ -693,6 +693,12 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
                     .collect(Collectors.joining("; "));
             log.warn("{}：已自动清理 BPMN 重复连线，{}", operation, repairSummary);
         }
-        return result.getBpmnXml();
+        BpmnXmlUtils.LegacyMultiInstanceNormalizationResult multiInstanceResult =
+                BpmnXmlUtils.normalizeLegacyMultiInstanceExpressions(result.getBpmnXml());
+        if (multiInstanceResult.hasRepairs()) {
+            log.warn("{}：已自动清理 BPMN 旧版会签表达式，节点={}",
+                    operation, multiInstanceResult.getNormalizedNodeIds());
+        }
+        return multiInstanceResult.getBpmnXml();
     }
 }

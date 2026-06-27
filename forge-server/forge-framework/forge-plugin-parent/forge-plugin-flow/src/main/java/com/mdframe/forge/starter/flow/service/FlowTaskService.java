@@ -154,4 +154,16 @@ public interface FlowTaskService {
      * @return 任务表单信息
      */
     TaskFormInfo getTaskFormInfo(String taskId);
+
+    /**
+     * 获取流程关联表单信息。
+     * 用于抄送、已完成流程等没有运行中任务的只读场景。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param businessKey 业务Key
+     * @param processDefKey 流程定义Key
+     * @param taskId 任务ID（可选）
+     * @return 表单信息
+     */
+    TaskFormInfo getProcessFormInfo(String processInstanceId, String businessKey, String processDefKey, String taskId);
 }

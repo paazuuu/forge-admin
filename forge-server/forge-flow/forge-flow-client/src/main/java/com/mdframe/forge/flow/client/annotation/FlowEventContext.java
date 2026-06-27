@@ -65,6 +65,9 @@ public class FlowEventContext {
     /** 任务名称（审批节点名），兼容 FlowEventMessage.taskName */
     private String taskName;
 
+    /** 任务定义 Key，兼容 FlowEventMessage.taskDefKey */
+    private String taskDefKey;
+
     /** 任务处理人 ID，兼容 FlowEventMessage.assigneeId */
     @JsonAlias("assigneeId")
     private String assigneeId;
@@ -77,4 +80,7 @@ public class FlowEventContext {
 
     /** 流程变量（可选） */
     private Map<String, Object> variables;
+
+    /** 租户 ID，兼容 FlowEventMessage.tenantId */
+    private Long tenantId;
 }

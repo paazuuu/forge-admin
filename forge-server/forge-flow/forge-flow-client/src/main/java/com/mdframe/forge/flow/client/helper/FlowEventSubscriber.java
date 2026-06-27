@@ -6,15 +6,23 @@ import com.mdframe.forge.flow.client.annotation.FlowBind;
 import com.mdframe.forge.flow.client.annotation.FlowCallback;
 import com.mdframe.forge.flow.client.annotation.FlowComplete;
 import com.mdframe.forge.flow.client.annotation.FlowEventContext;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.framework.Advised;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.StringUtils;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Map;
+import java.util.List;
 
 /**
  * 流程事件分发器（业务侧）
@@ -64,24 +72,89 @@ public class FlowEventSubscriber {
         if (ctx == null || ctx.getProcessDefKey() == null) {
             return;
         }
+        Long tenantId = ctx.getTenantId();
+        if (tenantId != null) {
+            TenantContextHolder.executeWithTenant(tenantId, () -> doDispatch(ctx));
+            return;
+        }
+        log.warn("[FlowCallback] 流程事件缺少 tenantId，按当前线程租户上下文分发: event={} processDefKey={} businessKey={}",
+                ctx.getEvent(), ctx.getProcessDefKey(), ctx.getBusinessKey());
+        doDispatch(ctx);
+    }
 
-        Map<String, Object> beans = applicationContext.getBeansWithAnnotation(FlowBind.class);
-        for (Map.Entry<String, Object> entry : beans.entrySet()) {
-            Object bean = entry.getValue();
-            // 获取目标类（处理 CGLIB/JDK 代理）
-            Class<?> targetClass = AopUtils.getTargetClass(bean);
-            FlowBind bind = targetClass.getAnnotation(FlowBind.class);
-            if (bind == null || !bind.modelKey().equals(ctx.getProcessDefKey())) {
+    private void doDispatch(FlowEventContext ctx) {
+        boolean matchedBean = false;
+        for (FlowBindBean flowBindBean : findFlowBindBeans()) {
+            if (!flowBindBean.bind().modelKey().equals(ctx.getProcessDefKey())) {
                 continue;
             }
-            invokeCallbacks(bean, targetClass, ctx);
+            matchedBean = true;
+            invokeCallbacks(flowBindBean.bean(), flowBindBean.targetClass(), ctx);
         }
+        if (!matchedBean) {
+            log.warn("[FlowCallback] 未找到匹配的 @FlowBind Bean: event={} processDefKey={} businessKey={}",
+                    ctx.getEvent(), ctx.getProcessDefKey(), ctx.getBusinessKey());
+        }
+    }
+
+    private List<FlowBindBean> findFlowBindBeans() {
+        List<FlowBindBean> flowBindBeans = new ArrayList<>();
+        for (String beanName : applicationContext.getBeanDefinitionNames()) {
+            if (shouldSkipBean(beanName)) {
+                continue;
+            }
+            FlowBindBean flowBindBean = resolveFlowBindBean(beanName);
+            if (flowBindBean != null) {
+                flowBindBeans.add(flowBindBean);
+            }
+        }
+        return flowBindBeans;
+    }
+
+    private boolean shouldSkipBean(String beanName) {
+        if (!(applicationContext instanceof ConfigurableApplicationContext configurableApplicationContext)) {
+            return false;
+        }
+        var beanFactory = configurableApplicationContext.getBeanFactory();
+        if (!beanFactory.containsBeanDefinition(beanName)) {
+            return false;
+        }
+        BeanDefinition beanDefinition = beanFactory.getBeanDefinition(beanName);
+        return beanDefinition.getRole() != BeanDefinition.ROLE_APPLICATION;
+    }
+
+    private FlowBindBean resolveFlowBindBean(String beanName) {
+        try {
+            Object bean = applicationContext.getBean(beanName);
+            Class<?> targetClass = AopUtils.getTargetClass(bean);
+            FlowBind bind = findFlowBind(targetClass);
+            if (bind == null) {
+                bind = findFlowBind(applicationContext.getType(beanName));
+            }
+            if (bind == null) {
+                return null;
+            }
+            return new FlowBindBean(bean, targetClass, bind);
+        } catch (BeansException e) {
+            log.debug("[FlowCallback] 跳过无法解析的 Bean: beanName={} reason={}", beanName, e.getMessage());
+            return null;
+        } catch (RuntimeException e) {
+            log.debug("[FlowCallback] 跳过扫描异常的 Bean: beanName={} reason={}", beanName, e.getMessage(), e);
+            return null;
+        }
+    }
+
+    private FlowBind findFlowBind(Class<?> clazz) {
+        if (clazz == null) {
+            return null;
+        }
+        return AnnotatedElementUtils.findMergedAnnotation(clazz, FlowBind.class);
     }
 
     private void invokeCallbacks(Object bean, Class<?> targetClass, FlowEventContext ctx) {
         // 处理 @FlowCallback 注解（方法级别，逐事件匹配）
         for (Method method : targetClass.getDeclaredMethods()) {
-            FlowCallback callback = method.getAnnotation(FlowCallback.class);
+            FlowCallback callback = AnnotatedElementUtils.findMergedAnnotation(method, FlowCallback.class);
             if (callback == null) {
                 continue;
             }
@@ -93,7 +166,7 @@ public class FlowEventSubscriber {
         }
 
         // 处理 @FlowComplete 注解（类级别，按事件类型路由到独立方法）
-        FlowComplete complete = targetClass.getAnnotation(FlowComplete.class);
+        FlowComplete complete = AnnotatedElementUtils.findMergedAnnotation(targetClass, FlowComplete.class);
         if (complete != null) {
             String targetMethodName = resolveFlowCompleteMethod(complete, ctx.getEvent());
             if (StringUtils.hasText(targetMethodName)) {
@@ -131,12 +204,13 @@ public class FlowEventSubscriber {
     private void invokeMethod(Object bean, Class<?> targetClass, Method method,
                               FlowEventContext ctx, String annotationName) {
         try {
+            Object invocationTarget = resolveInvocationTarget(bean, targetClass, method, annotationName);
             method.setAccessible(true);
             if (method.getParameterCount() == 0) {
-                method.invoke(bean);
+                method.invoke(invocationTarget);
             } else if (method.getParameterCount() == 1
                     && method.getParameterTypes()[0].isAssignableFrom(FlowEventContext.class)) {
-                method.invoke(bean, ctx);
+                method.invoke(invocationTarget, ctx);
             } else {
                 log.warn("[{}] 方法签名不符合规范（须无参或接收 FlowEventContext）: {}.{}",
                         annotationName, targetClass.getSimpleName(), method.getName());
@@ -146,8 +220,30 @@ public class FlowEventSubscriber {
                     annotationName, targetClass.getSimpleName(), method.getName(),
                     ctx.getEvent(), ctx.getBusinessKey());
         } catch (Exception e) {
+            Throwable root = e instanceof InvocationTargetException && e.getCause() != null ? e.getCause() : e;
             log.error("[{}] 回调执行失败 {}.{}: {}",
-                    annotationName, targetClass.getSimpleName(), method.getName(), e.getMessage(), e);
+                    annotationName, targetClass.getSimpleName(), method.getName(), root.getMessage(), root);
         }
+    }
+
+    private Object resolveInvocationTarget(Object bean, Class<?> targetClass, Method method, String annotationName) {
+        if (method.getDeclaringClass().isInstance(bean)) {
+            return bean;
+        }
+        if (bean instanceof Advised advised) {
+            try {
+                Object target = advised.getTargetSource().getTarget();
+                if (target != null && method.getDeclaringClass().isInstance(target)) {
+                    return target;
+                }
+            } catch (Exception e) {
+                log.warn("[{}] 获取代理目标对象失败 {}.{}: {}",
+                        annotationName, targetClass.getSimpleName(), method.getName(), e.getMessage());
+            }
+        }
+        return bean;
+    }
+
+    private record FlowBindBean(Object bean, Class<?> targetClass, FlowBind bind) {
     }
 }

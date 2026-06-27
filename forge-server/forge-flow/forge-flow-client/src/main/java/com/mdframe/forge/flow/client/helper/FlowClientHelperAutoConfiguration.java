@@ -9,7 +9,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.listener.PatternTopic;
+import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -45,13 +45,10 @@ public class FlowClientHelperAutoConfiguration {
     // ==================== Redis 事件订阅（可选，引入 spring-data-redis 时自动生效） ====================
 
     /**
-     * Redis 消息监听容器，订阅 flow-server 发布的所有流程事件频道
+     * Redis 消息监听容器，订阅 flow-server 发布的全量流程事件频道
      * <p>
-     * 订阅两个频道：
-     * <ul>
-     *   <li>{@code flow:event:all} — 全量事件</li>
-     *   <li>{@code flow:event:*}  — 精准频道（按 processDefKey 过滤）</li>
-     * </ul>
+     * flow-server 会同时发布到 {@code flow:event:{processDefKey}} 和 {@code flow:event:all}。
+     * 这里默认只订阅全量频道，避免同一事件被自动回调多次。
      * 仅在以下条件同时满足时生效：
      * <ol>
      *   <li>类路径中存在 {@code spring-data-redis}</li>
@@ -75,9 +72,7 @@ public class FlowClientHelperAutoConfiguration {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(factory);
         // 订阅全量频道
-        container.addMessageListener(adapter, new PatternTopic("flow:event:all"));
-        // 订阅精准频道（按 processDefKey）
-        container.addMessageListener(adapter, new PatternTopic("flow:event:*"));
+        container.addMessageListener(adapter, new ChannelTopic("flow:event:all"));
         return container;
     }
 }

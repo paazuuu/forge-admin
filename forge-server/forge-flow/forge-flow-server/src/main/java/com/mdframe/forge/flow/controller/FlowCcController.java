@@ -6,8 +6,10 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.tenant.IgnoreTenant;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.flow.dto.TaskFormInfo;
 import com.mdframe.forge.starter.flow.entity.FlowCc;
 import com.mdframe.forge.starter.flow.service.FlowCcService;
+import com.mdframe.forge.starter.flow.service.FlowTaskService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +29,7 @@ import java.util.Map;
 public class FlowCcController {
 
     private final FlowCcService flowCcService;
+    private final FlowTaskService flowTaskService;
 
     /**
      * 发送抄送
@@ -79,6 +82,23 @@ public class FlowCcController {
         Page<FlowCc> page = new Page<>(pageNum, pageSize);
         IPage<FlowCc> result = flowCcService.sentCc(page, userId);
         return RespInfo.success(result);
+    }
+
+    /**
+     * 获取抄送关联的业务表单信息
+     */
+    @GetMapping("/form/{id}")
+    public RespInfo<TaskFormInfo> getCcFormInfo(@PathVariable String id) {
+        FlowCc cc = flowCcService.getById(id);
+        if (cc == null) {
+            return RespInfo.error("抄送记录不存在");
+        }
+        TaskFormInfo formInfo = flowTaskService.getProcessFormInfo(
+                cc.getProcessInstanceId(),
+                cc.getBusinessKey(),
+                cc.getProcessDefKey(),
+                cc.getTaskId());
+        return RespInfo.success(formInfo);
     }
 
     /**

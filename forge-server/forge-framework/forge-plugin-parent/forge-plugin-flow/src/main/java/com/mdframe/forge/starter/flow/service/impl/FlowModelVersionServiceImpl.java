@@ -468,7 +468,13 @@ public class FlowModelVersionServiceImpl extends ServiceImpl<FlowModelVersionMap
                     .collect(Collectors.joining("; "));
             log.warn("{}：已自动清理 BPMN 重复连线，{}", operation, repairSummary);
         }
-        return result.getBpmnXml();
+        BpmnXmlUtils.LegacyMultiInstanceNormalizationResult multiInstanceResult =
+                BpmnXmlUtils.normalizeLegacyMultiInstanceExpressions(result.getBpmnXml());
+        if (multiInstanceResult.hasRepairs()) {
+            log.warn("{}：已自动清理 BPMN 旧版会签表达式，节点={}",
+                    operation, multiInstanceResult.getNormalizedNodeIds());
+        }
+        return multiInstanceResult.getBpmnXml();
     }
 
     private static class XmlNodeInfo {
