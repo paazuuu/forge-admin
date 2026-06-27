@@ -8,6 +8,7 @@ import com.mdframe.forge.plugin.message.domain.vo.MessageVO;
 import com.mdframe.forge.plugin.message.domain.vo.ReceiverVO;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver> {
@@ -25,4 +26,8 @@ public interface SysMessageReceiverMapper extends BaseMapper<SysMessageReceiver>
                                             @Param("endTime") String endTime);
 
     List<String> selectUnreadWebMessageTypes(@Param("userId") Long userId);
+
+    int markWebMessagesReadByBiz(@Param("bizType") String bizType,
+                                 @Param("bizKey") String bizKey,
+                                 @Param("readTime") LocalDateTime readTime);
 }

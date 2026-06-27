@@ -2082,3 +2082,47 @@ Forge 后端升级到 Spring Boot 3.5.x 后，Spring Data Redis 3.5 的 `RedisKe
 - `/auth/login`
 - `forge-starter-cache`
 - 所有通过 Redisson/Spring Data Redis 执行 Redis 过期时间命令的链路
+
+## 75. 流程待办消息完成后必须自动置已读
+
+**发现日期**: 2026-06-26
+
+**问题描述**:
+流程审批通过后，任务已经从待办流转到已办，但任务创建时推送的站内信仍保持未读，导致消息中心未读数和实际待办状态不一致。
+
+**根本原因**:
+流程任务创建事件通过消息模块发送 `bizType=FLOW_TODO`、`bizKey=taskId` 的待办站内信，但任务完成事件只更新 `flow_task` 状态，没有回调消息模块更新 `sys_message_receiver.read_flag/read_time`。
+
+**解决方案**:
+消息模块提供按业务类型和业务键标记站内信已读的能力，流程 `TASK_COMPLETED` 事件必须调用：
+
+```java
+messageService.markWebReadByBiz("FLOW_TODO", taskId);
+```
+
+对应 SQL 必须写在 `SysMessageReceiverMapper.xml` 中，通过 `sys_message.biz_type + biz_key` 定位消息并更新接收人已读状态。
+
+**影响范围**:
+- 流程待办站内信
+- 消息中心未读数
+- 任何新增流程通知类型时，都要同步设计消息生命周期回写逻辑
+
+## 76. 外部审批表单按钮 loading 必须绑定父级提交状态
+
+**发现日期**: 2026-06-26
+
+**问题描述**:
+流程节点使用外部业务表单时，表单内部“同意/驳回”按钮只在本地签名上传阶段短暂 loading，触发 `emit('submit')` 后父级真正调用审批接口，子表单 loading 已经结束，用户会误以为没有提交中状态。
+
+**根本原因**:
+Vue `emit` 不会等待父组件异步处理。外部表单如果只维护本地 `submitting`，无法覆盖父级 `approveTask/rejectTask` 请求期间。
+
+**解决方案**:
+- `FlowBusinessForm` 必须向动态业务表单透传父级 `submitting` 和 `submittingAction`。
+- 业务表单按钮 loading 使用“本地提交状态 OR 父级提交状态”，并按 action 精准显示。
+- 父级审批方法进入接口调用前设置当前 action，finally 中同时清理 loading 和 action。
+
+**影响范围**:
+- `FlowBusinessForm`
+- `/views/*/*ApproveForm.vue` 这类外部流程审批表单
+- 流程待办详情里的同意、驳回、退回、终结、签收等异步操作按钮

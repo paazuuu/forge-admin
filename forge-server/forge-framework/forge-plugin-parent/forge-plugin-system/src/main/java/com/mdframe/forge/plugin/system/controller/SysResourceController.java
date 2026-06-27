@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.mdframe.forge.plugin.system.dto.SysResourceBatchMigrateDTO;
 import com.mdframe.forge.plugin.system.dto.SysResourceDTO;
 import com.mdframe.forge.plugin.system.dto.SysResourceQuery;
 import com.mdframe.forge.plugin.system.entity.SysResource;
@@ -93,6 +94,29 @@ public class SysResourceController {
     public RespInfo<Void> remove(@RequestParam Long id) {
         boolean result = resourceService.deleteResourceById(id);
         return result ? RespInfo.success() : RespInfo.error("删除失败");
+    }
+
+    /**
+     * 批量删除资源
+     */
+    @PostMapping("/removeBatch")
+    @OperationLog(module = "资源管理", type = OperationType.DELETE, desc = "批量删除资源")
+    public RespInfo<Void> removeBatch(@RequestBody Long[] ids) {
+        boolean result = resourceService.deleteResourceByIds(ids);
+        return result ? RespInfo.success() : RespInfo.error("批量删除失败");
+    }
+
+    /**
+     * 批量迁移资源归属
+     */
+    @PostMapping("/migrateBatch")
+    @OperationLog(module = "资源管理", type = OperationType.UPDATE, desc = "批量迁移资源归属")
+    public RespInfo<Void> migrateBatch(@RequestBody SysResourceBatchMigrateDTO dto) {
+        if (dto == null) {
+            return RespInfo.error("请求参数不能为空");
+        }
+        boolean result = resourceService.batchMigrateResources(dto.getIds(), dto.getParentId());
+        return result ? RespInfo.success() : RespInfo.error("批量迁移失败");
     }
 
 }

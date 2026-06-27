@@ -337,6 +337,15 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int markWebReadByBiz(String bizType, String bizKey) {
+        if (StrUtil.isBlank(bizType) || StrUtil.isBlank(bizKey)) {
+            return 0;
+        }
+        return receiverMapper.markWebMessagesReadByBiz(bizType, bizKey, LocalDateTime.now());
+    }
+
+    @Override
     public IPage<MessageVO> pageUserMessages(Long userId, MessageQueryDTO query, Integer pageNum, Integer pageSize) {
         Page<MessageVO> page = new Page<>(pageNum, pageSize);
         MessageQueryDTO safeQuery = query == null ? new MessageQueryDTO() : query;

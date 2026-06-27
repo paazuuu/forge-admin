@@ -34,4 +34,15 @@
           AND r.read_flag = 0
           AND m.send_channel = 'WEB'
     </select>
+
+    <update id="markWebMessagesReadByBiz">
+        UPDATE sys_message_receiver r
+        INNER JOIN sys_message m ON r.message_id = m.id
+        SET r.read_flag = 1,
+            r.read_time = #{readTime}
+        WHERE m.biz_type = #{bizType}
+          AND m.biz_key = #{bizKey}
+          AND m.send_channel = 'WEB'
+          AND r.read_flag = 0
+    </update>
 </mapper>

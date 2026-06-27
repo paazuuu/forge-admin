@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 public class FlowTaskEventListener implements FlowableEventListener {
 
     private static final String PHYSICAL_CLEANUP_REASON_KEYWORD = "删除流程数据";
+    private static final String FLOW_TODO_MESSAGE_BIZ_TYPE = "FLOW_TODO";
 
     @Autowired
     @Lazy
@@ -284,6 +285,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 flowTaskMapper.insert(flowTask);
                 log.info("创建已完成任务记录：taskId={}", task.getId());
             }
+            markTaskTodoMessageRead(task.getId());
 
             // 发布 TASK_COMPLETED 事件，业务侧可监听具体节点完成情况（如：更新业务表审批节点状态等）
             FlowBusiness completedBusiness = getFlowBusiness(task.getProcessInstanceId());
@@ -318,6 +320,20 @@ public class FlowTaskEventListener implements FlowableEventListener {
         } catch (Exception e) {
             log.error("处理任务完成事件失败", e);
             recordEventListenerError(event, "EVENT_TASK_COMPLETED", e);
+        }
+    }
+
+    private void markTaskTodoMessageRead(String taskId) {
+        if (messageService == null || taskId == null || taskId.isBlank()) {
+            return;
+        }
+        try {
+            int updated = messageService.markWebReadByBiz(FLOW_TODO_MESSAGE_BIZ_TYPE, taskId);
+            if (updated > 0) {
+                log.info("待办站内信已自动置为已读: taskId={}, updated={}", taskId, updated);
+            }
+        } catch (Exception e) {
+            log.warn("待办站内信自动置已读失败，不阻断流程: taskId={}", taskId, e);
         }
     }
 
@@ -652,7 +668,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 "jumpUrl", "/flow/todo?taskId=" + flowTask.getTaskId()
         ));
         try {
-            messageService.sendIfAbsent(request, "FLOW_TODO", flowTask.getTaskId());
+            messageService.sendIfAbsent(request, FLOW_TODO_MESSAGE_BIZ_TYPE, flowTask.getTaskId());
             log.info("待办站内信已推送: taskId={}, receivers={}", flowTask.getTaskId(), receiverIds);
         } catch (Exception e) {
             log.warn("待办站内信推送失败，不阻断流程: taskId={}", flowTask.getTaskId(), e);

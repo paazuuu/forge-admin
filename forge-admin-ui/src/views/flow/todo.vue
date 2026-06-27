@@ -214,11 +214,13 @@
               :variables="taskFormInfo.variables || {}"
               :approval-policy="approvalPolicy"
               :read-only="false"
+              :submitting="approveLoading"
+              :submitting-action="approveForm.action"
               @submit="handleExternalFormSubmit"
               @cancel="showDrawer = false"
             >
               <template #actions>
-                <NButton v-if="canDelegate" size="large" :disabled="approveLoading" @click="handleDelegate">
+                <NButton v-if="canDelegate" size="large" :disabled="isApprovalBusy" @click="handleDelegate">
                   <i class="i-material-symbols:person-add mr-2" />
                   转办
                 </NButton>
@@ -227,7 +229,8 @@
                   v-if="currentTask.status === 0 && !currentTask.assignee"
                   type="info"
                   size="large"
-                  :disabled="approveLoading"
+                  :loading="isClaimingTask(currentTask)"
+                  :disabled="isApprovalBusy"
                   @click="handleClaim(currentTask)"
                 >
                   <i class="i-material-symbols:assignment-ind mr-2" />
@@ -274,7 +277,7 @@
             <div class="action-buttons">
               <n-popconfirm v-if="canApprove" @positive-click="() => submitApprove('approve')">
                 <template #trigger>
-                  <NButton type="success" size="large" :loading="approveLoading && approveForm.action === 'approve'" :disabled="approveLoading">
+                  <NButton type="success" size="large" :loading="isActionLoading('approve')" :disabled="isApprovalBusy">
                     <i class="i-material-symbols:check-circle mr-2" />
                     同意
                   </NButton>
@@ -284,7 +287,7 @@
 
               <n-popconfirm v-if="canReject" @positive-click="() => submitApprove('reject')">
                 <template #trigger>
-                  <NButton type="error" size="large" :loading="approveLoading && approveForm.action === 'reject'" :disabled="approveLoading">
+                  <NButton type="error" size="large" :loading="isActionLoading('reject')" :disabled="isApprovalBusy">
                     <i class="i-material-symbols:cancel mr-2" />
                     驳回
                   </NButton>
@@ -294,7 +297,7 @@
 
               <n-popconfirm v-if="canReturn" @positive-click="() => submitApprove('return')">
                 <template #trigger>
-                  <NButton type="warning" size="large" :loading="approveLoading && approveForm.action === 'return'" :disabled="approveLoading">
+                  <NButton type="warning" size="large" :loading="isActionLoading('return')" :disabled="isApprovalBusy">
                     <i class="i-material-symbols:keyboard-return mr-2" />
                     退回
                   </NButton>
@@ -304,7 +307,7 @@
 
               <n-popconfirm v-if="canTerminate" @positive-click="() => submitApprove('terminate')">
                 <template #trigger>
-                  <NButton type="error" ghost size="large" :loading="approveLoading && approveForm.action === 'terminate'" :disabled="approveLoading">
+                  <NButton type="error" ghost size="large" :loading="isActionLoading('terminate')" :disabled="isApprovalBusy">
                     <i class="i-material-symbols:stop-circle mr-2" />
                     终结
                   </NButton>
@@ -312,7 +315,7 @@
                 确认终结该流程？
               </n-popconfirm>
 
-              <NButton v-if="canDelegate" size="large" :disabled="approveLoading" @click="handleDelegate">
+              <NButton v-if="canDelegate" size="large" :disabled="isApprovalBusy" @click="handleDelegate">
                 <i class="i-material-symbols:person-add mr-2" />
                 转办
               </NButton>
@@ -321,7 +324,8 @@
                 v-if="currentTask.status === 0 && !currentTask.assignee"
                 type="info"
                 size="large"
-                :disabled="approveLoading"
+                :loading="isClaimingTask(currentTask)"
+                :disabled="isApprovalBusy"
                 @click="handleClaim(currentTask)"
               >
                 <i class="i-material-symbols:assignment-ind mr-2" />
@@ -481,6 +485,7 @@ const approveLoading = ref(false)
 const approveForm = reactive({ action: '', comment: '', signature: '' })
 const approveSignatureRef = ref(null)
 const approveSignatureKey = ref(0)
+const claimLoadingTaskId = ref('')
 const quickActionVisible = ref(false)
 const quickActionLoading = ref(false)
 const quickActionType = ref('approve')
@@ -499,6 +504,7 @@ const delegateSignatureKey = ref(0)
 const routeTaskOpening = ref(false)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_todo_status))
+const isApprovalBusy = computed(() => approveLoading.value || delegateLoading.value || Boolean(claimLoadingTaskId.value))
 
 // 优先级
 function getPriorityClass(p) {
@@ -572,6 +578,7 @@ async function handleExternalFormSubmit({ action, comment, signature, variables 
   if (!validateApprovalInput(comment, approvalSignature))
     return
 
+  approveForm.action = action
   approveLoading.value = true
   try {
     const api = resolveActionApi(action)
@@ -596,6 +603,7 @@ async function handleExternalFormSubmit({ action, comment, signature, variables 
   }
   finally {
     approveLoading.value = false
+    approveForm.action = ''
   }
 }
 
@@ -697,7 +705,12 @@ async function submitApprove(action) {
   }
   finally {
     approveLoading.value = false
+    approveForm.action = ''
   }
+}
+
+function isActionLoading(action) {
+  return approveLoading.value && approveForm.action === action
 }
 
 function resolveQuickActionTargets(targets = []) {
@@ -883,11 +896,15 @@ async function submitDelegate() {
 }
 
 async function handleClaim(row) {
+  const taskId = row?.taskId || row?.id
+  if (!taskId || claimLoadingTaskId.value)
+    return
+  claimLoadingTaskId.value = String(taskId)
   try {
-    const res = await flowApi.claimTask(row.taskId, userStore.userId)
+    const res = await flowApi.claimTask(taskId, userStore.userId)
     if (res.code === 200) {
       window.$message.success('签收成功')
-      if (currentTask.value && currentTask.value.taskId === row.taskId) {
+      if (currentTask.value && (currentTask.value.taskId === taskId || currentTask.value.id === taskId)) {
         currentTask.value.status = 1
         currentTask.value.assignee = userStore.userId
       }
@@ -900,6 +917,14 @@ async function handleClaim(row) {
   catch {
     window.$message.error('签收失败')
   }
+  finally {
+    claimLoadingTaskId.value = ''
+  }
+}
+
+function isClaimingTask(row) {
+  const taskId = row?.taskId || row?.id
+  return Boolean(taskId) && claimLoadingTaskId.value === String(taskId)
 }
 
 async function loadData() {

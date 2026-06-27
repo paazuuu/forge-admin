@@ -71,6 +71,23 @@ public interface ISysResourceService extends IService<SysResource> {
     boolean deleteResourceById(Long id);
 
     /**
+     * 批量删除资源
+     *
+     * @param ids 资源ID列表
+     * @return 是否成功
+     */
+    boolean deleteResourceByIds(Long[] ids);
+
+    /**
+     * 批量迁移资源归属
+     *
+     * @param ids 资源ID列表
+     * @param parentId 目标父级资源ID
+     * @return 是否成功
+     */
+    boolean batchMigrateResources(List<Long> ids, Long parentId);
+
+    /**
      * 查询当前用户的资源树（包含菜单和按钮权限）
      *
      * @return 用户资源树列表

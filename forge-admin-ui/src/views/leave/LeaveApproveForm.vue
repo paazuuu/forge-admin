@@ -127,7 +127,7 @@
           @positive-click="handleApprove"
         >
           <template #trigger>
-            <n-button type="primary" :loading="submitting" size="large">
+            <n-button type="primary" :loading="isActionSubmitting('approve')" :disabled="isSubmitting" size="large">
               <template #icon>
                 <i class="i-material-symbols:check-circle" />
               </template>
@@ -144,7 +144,7 @@
           @positive-click="handleReject"
         >
           <template #trigger>
-            <n-button type="error" :loading="submitting" size="large">
+            <n-button type="error" :loading="isActionSubmitting('reject')" :disabled="isSubmitting" size="large">
               <template #icon>
                 <i class="i-material-symbols:cancel" />
               </template>
@@ -195,12 +195,17 @@ const props = defineProps({
   approvalPolicy: { type: Object, default: () => ({}) },
   /** 是否只读 */
   readOnly: { type: Boolean, default: false },
+  /** 父级审批提交中 */
+  submitting: { type: Boolean, default: false },
+  /** 父级正在提交的审批动作 */
+  submittingAction: { type: String, default: '' },
 })
 
 const emit = defineEmits(['submit', 'cancel'])
 
 const detailLoading = ref(false)
 const submitting = ref(false)
+const submittingAction = ref('')
 const approveFileList = ref([])
 const signaturePadRef = ref(null)
 
@@ -223,6 +228,7 @@ const canApprove = computed(() => props.approvalPolicy?.allowApprove !== false)
 const canReject = computed(() => props.approvalPolicy?.allowReject !== false)
 const requireComment = computed(() => props.approvalPolicy?.requireComment !== false)
 const requireSignature = computed(() => props.approvalPolicy?.requireSignature === true)
+const isSubmitting = computed(() => submitting.value || props.submitting)
 
 // 附件解析
 const attachments = computed(() => {
@@ -301,8 +307,11 @@ async function resolveApprovalSignature() {
 
 // 同意
 async function handleApprove() {
+  if (isSubmitting.value)
+    return
   if (!validateApprovalInput('approve'))
     return
+  submittingAction.value = 'approve'
   submitting.value = true
   try {
     const signature = await resolveApprovalSignature()
@@ -323,7 +332,13 @@ async function handleApprove() {
   }
   finally {
     submitting.value = false
+    submittingAction.value = ''
   }
+}
+
+function isActionSubmitting(action) {
+  return (submitting.value && submittingAction.value === action)
+    || (props.submitting && props.submittingAction === action)
 }
 
 function validateApprovalInput(action) {
@@ -348,8 +363,11 @@ function validateApprovalInput(action) {
 
 // 驳回
 async function handleReject() {
+  if (isSubmitting.value)
+    return
   if (!validateApprovalInput('reject'))
     return
+  submittingAction.value = 'reject'
   submitting.value = true
   try {
     const signature = await resolveApprovalSignature()
@@ -370,6 +388,7 @@ async function handleReject() {
   }
   finally {
     submitting.value = false
+    submittingAction.value = ''
   }
 }
 
