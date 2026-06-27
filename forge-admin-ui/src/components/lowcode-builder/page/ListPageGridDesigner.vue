@@ -159,6 +159,13 @@
               {{ dropPreviewLabel }}
             </div>
             <div
+              v-if="blockedDropPreviewStyle"
+              class="drop-preview drop-preview-blocked"
+              :style="blockedDropPreviewStyle"
+            >
+              该组件不支持嵌套
+            </div>
+            <div
               v-if="movePlaceholderStyle"
               class="move-placeholder"
               :style="movePlaceholderStyle"
@@ -735,17 +742,17 @@
                 <div class="appearance-field">
                   <label>背景色</label>
                   <div class="appearance-input-shell">
-                    <label class="appearance-swatch" :style="{ background: selectedBlockBackgroundPreview }" title="选择背景色">
+                    <label class="appearance-swatch" :style="{ backgroundColor: selectedBlockBackgroundPreview }" title="选择背景色">
                       <input
                         type="color"
-                        :value="selectedBlockBackgroundPreview"
+                        :value="selectedBlockBackgroundColorInput"
                         @input="updateSelectedBlockBackground($event.target.value)"
                       >
                     </label>
                     <input
                       :value="selectedBlockBackgroundHex"
                       class="appearance-hex-input"
-                      placeholder="FFFFFF"
+                      placeholder="透明"
                       @input="updateSelectedBlockBackground($event.target.value)"
                     >
                     <span class="appearance-percent">100%</span>
@@ -769,7 +776,7 @@
                         无
                       </option>
                     </select>
-                    <label class="appearance-swatch" :style="{ background: selectedBlockBorderPreview }" title="选择边框颜色">
+                    <label class="appearance-swatch" :style="{ backgroundColor: selectedBlockBorderPreview }" title="选择边框颜色">
                       <input
                         type="color"
                         :value="selectedBlockBorderPreview"
@@ -3365,7 +3372,7 @@
                     </n-form-item>
                     <n-form-item label="背景 / 角颜色 / 显示文本">
                       <div class="style-grid three">
-                        <n-color-picker :value="selectedBlock.props?.background || '#ffffff'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { background: $event || '#ffffff' })" />
+                        <n-color-picker :value="selectedBlock.props?.background || 'transparent'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { background: $event || 'transparent' })" />
                         <n-color-picker :value="selectedBlock.props?.cornerColor || selectedBlock.props?.foreground || '#0f172a'" :show-alpha="true" @update:value="patchBlockProps(selectedBlock.id, { cornerColor: $event || '#0f172a' })" />
                         <n-switch :value="selectedBlock.props?.showText !== false" @update:value="patchBlockProps(selectedBlock.id, { showText: $event })" />
                       </div>
@@ -4928,6 +4935,7 @@ const draggedBlockType = ref('')
 const draggedExistingBlockId = ref('')
 const dragOverCell = ref(null)
 const dragOverPoint = ref(null)
+const dragBlockedBlockId = ref('')
 const activeDropCell = ref(null)
 const deferLayoutEmit = ref(false)
 const movingBlockId = ref('')
@@ -5015,9 +5023,10 @@ const selectedBlockStyle = computed(() => ({
   ...createDefaultBlockStyle(),
   ...(selectedBlock.value?.props?.style || {}),
 }))
-const selectedBlockBackgroundHex = computed(() => colorToHexInput(selectedBlockStyle.value.backgroundColor, 'FFFFFF'))
+const selectedBlockBackgroundHex = computed(() => colorToHexInput(selectedBlockStyle.value.backgroundColor, ''))
 const selectedBlockBorderHex = computed(() => colorToHexInput(selectedBlockStyle.value.borderColor, 'E4E4E7'))
-const selectedBlockBackgroundPreview = computed(() => hexInputToColor(selectedBlockBackgroundHex.value, '#ffffff'))
+const selectedBlockBackgroundPreview = computed(() => hexInputToColor(selectedBlockBackgroundHex.value, 'transparent'))
+const selectedBlockBackgroundColorInput = computed(() => hexInputToColor(selectedBlockBackgroundHex.value, '#ffffff'))
 const selectedBlockBorderPreview = computed(() => {
   if (selectedBlockStyle.value.borderStyle === 'none')
     return '#e4e4e7'
@@ -5059,6 +5068,8 @@ const dropPreviewStyle = computed(() => {
     return null
   if (activeDropCell.value)
     return null
+  if (dragBlockedBlockId.value)
+    return null
   const meta = resolveListPageBlockMeta(resolveDraggedPreviewBlockType())
   if (!meta)
     return null
@@ -5069,13 +5080,31 @@ const dropPreviewStyle = computed(() => {
     canvasGridWidth.value,
   )
   const height = sourceFrame?.height || gridHeightToPixels(Math.max(1, meta.defaultH || 2))
-  const x = clamp(dragOverPoint.value.x, 0, Math.max(0, canvasGridWidth.value - width))
-  const y = Math.max(0, dragOverPoint.value.y)
+  const frame = resolveCanvasDropFrame(source?.id || '', {
+    x: clamp(dragOverPoint.value.x, 0, Math.max(0, canvasGridWidth.value - width)),
+    y: Math.max(0, dragOverPoint.value.y),
+    width,
+    height,
+  })
   return {
-    left: `${x}px`,
-    top: `${y}px`,
+    left: `${frame.x}px`,
+    top: `${frame.y}px`,
     width: `${width}px`,
     height: `${height}px`,
+  }
+})
+const blockedDropPreviewStyle = computed(() => {
+  if (!canvasDragActive.value || !dragBlockedBlockId.value)
+    return null
+  const block = findBlockInTree(blocks.value, dragBlockedBlockId.value)
+  if (!block)
+    return null
+  const rect = resolveBlockFrame(block)
+  return {
+    left: `${rect.x}px`,
+    top: `${rect.y}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
   }
 })
 const movePlaceholderStyle = computed(() => {
@@ -5693,7 +5722,7 @@ function hexInputToColor(value, fallback = '#ffffff') {
 function updateSelectedBlockBackground(value) {
   if (!selectedBlock.value)
     return
-  patchBlockStyle(selectedBlock.value.id, { backgroundColor: hexInputToColor(value, '#ffffff') })
+  patchBlockStyle(selectedBlock.value.id, { backgroundColor: hexInputToColor(value, 'transparent') })
 }
 
 function updateSelectedBlockBorderStyle(value) {
@@ -6188,6 +6217,10 @@ function handleCanvasDrop(event) {
   const blockType = event.dataTransfer?.getData('application/x-list-block')
   if (existingBlockId) {
     const container = resolveDropContainer(event)
+    if (!container && resolveNonContainerDropBlock(event, existingBlockId)) {
+      resetCanvasDragState()
+      return
+    }
     if (container?.block?.blockType === 'grid-layout' && container.cellKey) {
       resetCanvasDragState()
       moveExistingBlockToGridCell(existingBlockId, container.id, container.cellKey)
@@ -6214,6 +6247,10 @@ function handleCanvasDrop(event) {
   const container = resolveDropContainer(event)
   if (container) {
     appendContainerChild(container.id, blockType, container.cellKey)
+    return
+  }
+  if (resolveNonContainerDropBlock(event)) {
+    resetCanvasDragState()
     return
   }
   const point = pixelToPoint(event.clientX, event.clientY)
@@ -6244,10 +6281,11 @@ function handleCanvasDragOver(event) {
   draggedBlockType.value = blockType || findBlockInTree(blocks.value, existingBlockId)?.blockType || ''
   autoScrollCanvasOnPointer(event)
   const container = resolveDropContainer(event)
+  dragBlockedBlockId.value = !container ? resolveNonContainerDropBlock(event, existingBlockId)?.id || '' : ''
   activeDropCell.value = container?.block?.blockType === 'grid-layout' && container.cellKey
     ? { containerId: container.id, cellKey: container.cellKey }
     : null
-  dragOverCell.value = activeDropCell.value ? null : pixelToCell(event.clientX, event.clientY)
+  dragOverCell.value = activeDropCell.value || dragBlockedBlockId.value ? null : pixelToCell(event.clientX, event.clientY)
   dragOverPoint.value = pixelToPoint(event.clientX, event.clientY)
 }
 
@@ -6265,6 +6303,7 @@ function resetCanvasDragState() {
   draggedExistingBlockId.value = ''
   dragOverCell.value = null
   dragOverPoint.value = null
+  dragBlockedBlockId.value = ''
   activeDropCell.value = null
 }
 
@@ -6319,12 +6358,13 @@ function appendBlock(blockType, position) {
   const block = createGridBlock(blockType, props.modelSchema, gridPatch)
   if (!block)
     return
-  const frame = {
+  const frame = resolveCanvasDropFrame('', {
     x: clamp(Number(point.x) || 0, 0, Math.max(0, canvasGridWidth.value - gridWidthToPixels(block.gridW))),
     y: Math.max(0, Number(point.y) || 0),
     width: gridWidthToPixels(block.gridW),
     height: gridHeightToPixels(block.gridH),
-  }
+  })
+  Object.assign(block, frameToGridPatch(frame))
   block.props = {
     ...(block.props || {}),
     style: {
@@ -6390,6 +6430,17 @@ function resolveDropContainerFromPoint(clientX, clientY) {
     }
   }
   return null
+}
+
+function resolveNonContainerDropBlock(event, sourceId = '') {
+  const target = document.elementFromPoint(event.clientX, event.clientY) || event.target
+  const node = target?.closest?.('[data-block-id]')
+  if (!node)
+    return null
+  const block = findBlockInTree(blocks.value, node.dataset?.blockId || '')
+  if (!block || block.id === sourceId || isContainerBlock(block))
+    return null
+  return block
 }
 
 function resolveClosestContainerBlock(target) {
@@ -6672,12 +6723,12 @@ function moveExistingBlockToCanvas(blockId, point = { x: 0, y: 0 }) {
   const sourceFrame = resolveDetachedBlockFrame(source, meta)
   const width = Math.min(sourceFrame.width, canvasGridWidth.value)
   const height = sourceFrame.height
-  const frame = {
+  const frame = resolveCanvasDropFrame(blockId, {
     x: clamp(Number(point.x) || 0, 0, Math.max(0, canvasGridWidth.value - width)),
     y: Math.max(0, Number(point.y) || 0),
     width,
     height,
-  }
+  })
   const gridPatch = frameToGridPatch(frame)
   const movedBlock = {
     ...source,
@@ -6791,8 +6842,19 @@ function removeTabChild(childId) {
   patchBlockProps(selectedBlock.value.id, { tabs })
 }
 
-function nextFreePixelTop() {
+function resolveCanvasDropFrame(sourceId = '', frame = {}) {
+  if (!doesFrameOverlapBlocks(sourceId, frame))
+    return frame
+  return {
+    ...frame,
+    y: nextFreePixelTop(sourceId),
+  }
+}
+
+function nextFreePixelTop(excludeId = '') {
   return blocks.value.reduce((acc, block) => {
+    if (block.id === excludeId)
+      return acc
     const rect = resolveBlockFrame(block)
     return Math.max(acc, rect.y + rect.height + gap)
   }, 0)
@@ -7545,7 +7607,7 @@ function resolveAutoGridH(block = {}, normalizedGridW = block.gridW) {
     return Math.max(8, gridRowsForPixels(238))
   }
   if (block.blockType === 'AiCrudPage') {
-    return Math.max(10, gridRowsForPixels(320))
+    return Math.max(5, gridRowsForPixels(160))
   }
   if (block.blockType === 'AiTable') {
     return Math.max(8, gridRowsForPixels(250))
@@ -7689,10 +7751,11 @@ function updateNestedMovePreview(event) {
   const block = findBlockInTree(blocks.value, nestedMoveCtx.blockId)
   draggedBlockType.value = block?.blockType || draggedBlockType.value
   const container = resolveDropContainerFromPoint(event.clientX, event.clientY)
+  dragBlockedBlockId.value = !container ? resolveNonContainerDropBlock(event, nestedMoveCtx.blockId)?.id || '' : ''
   activeDropCell.value = container?.block?.blockType === 'grid-layout' && container.cellKey
     ? { containerId: container.id, cellKey: container.cellKey }
     : null
-  dragOverCell.value = activeDropCell.value ? null : pixelToCell(event.clientX, event.clientY)
+  dragOverCell.value = activeDropCell.value || dragBlockedBlockId.value ? null : pixelToCell(event.clientX, event.clientY)
   dragOverPoint.value = pixelToPoint(event.clientX, event.clientY)
 }
 
@@ -7702,10 +7765,13 @@ function endNestedMove(event) {
   const ctx = nestedMoveCtx
   const blockId = ctx.blockId
   const container = resolveDropContainerFromPoint(event.clientX, event.clientY)
+  const blockedBlock = !container ? resolveNonContainerDropBlock(event, blockId) : null
   const cellStylePatch = container?.cellRect ? resolveNestedCellDropStyle(event, container, ctx) : {}
   const point = pixelToPoint(event.clientX, event.clientY)
   cleanupNestedMove()
   if (!ctx.moved)
+    return
+  if (blockedBlock)
     return
   if (container?.block?.blockType === 'grid-layout' && container.cellKey) {
     moveExistingBlockToGridCell(blockId, container.id, container.cellKey, cellStylePatch)
@@ -7775,6 +7841,14 @@ function onMove(event) {
   const offsetX = clamp(rawDx, minDx, maxDx)
   const offsetY = Math.max(rawDy, minDy)
   movingPixelOffset.value = { x: offsetX, y: offsetY }
+  canvasDragActive.value = true
+  draggedExistingBlockId.value = moveCtx.blockId
+  draggedBlockType.value = block.blockType || draggedBlockType.value
+  const container = resolveDropContainerFromPoint(event.clientX, event.clientY)
+  dragBlockedBlockId.value = !container ? resolveNonContainerDropBlock(event, moveCtx.blockId)?.id || '' : ''
+  activeDropCell.value = container?.block?.blockType === 'grid-layout' && container.cellKey
+    ? { containerId: container.id, cellKey: container.cellKey }
+    : null
   const nextFrame = {
     x: Math.round(moveCtx.originX + offsetX),
     y: Math.round(moveCtx.originY + offsetY),
@@ -7801,7 +7875,7 @@ function endMove() {
   const preview = movingPreviewBlock.value
   if (moveCtx && preview) {
     const block = findBlockInTree(blocks.value, moveCtx.blockId)
-    if (block) {
+    if (block && !dragBlockedBlockId.value) {
       const rect = resolveBlockFrame(preview)
       patchBlockFrame(block.id, { x: rect.x, y: rect.y, width: rect.width, height: rect.height })
     }
@@ -7810,6 +7884,7 @@ function endMove() {
   movingBlockId.value = ''
   movingPreviewBlock.value = null
   movingPixelOffset.value = { x: 0, y: 0 }
+  resetCanvasDragState()
   flushDeferredLayoutEmit()
   window.removeEventListener('pointermove', onMove)
   window.removeEventListener('pointerup', endMove)
@@ -9310,8 +9385,12 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 
 .canvas-panel {
   position: relative;
-  background: radial-gradient(circle at 1px 1px, rgba(113, 113, 122, 0.22) 1px, transparent 0), #f8f9fa;
-  background-size: 20px 20px;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.24) 1px, transparent 0),
+    linear-gradient(180deg, #eef3f8 0%, #e7edf4 100%);
+  background-size:
+    20px 20px,
+    auto;
   min-width: 0;
   min-height: 0;
 }
@@ -9527,9 +9606,11 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   box-sizing: content-box;
   padding: 0;
   border-radius: 8px;
-  border: 1px solid #e4e4e7;
-  background: #fff;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  border: 1px solid #cbd5e1;
+  background: #f3f6fa;
+  box-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72);
   will-change: transform;
 }
 
@@ -9569,7 +9650,7 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 
 .canvas-panel.drag-over .canvas-grid {
   border-color: #2563eb;
-  background: #f8fbff;
+  background: #eff6ff;
 }
 
 .grid-row,
@@ -9579,15 +9660,13 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 }
 
 .grid-row {
-  left: 0;
-  right: 0;
-  border-bottom: 1px dashed #eef2f7;
+  display: none;
 }
 
 .grid-col {
   top: 0;
   bottom: 0;
-  border-right: 1px dashed #eef2f7;
+  border-right: 1px solid rgba(100, 116, 139, 0.08);
 }
 
 .grid-item {
@@ -9604,9 +9683,10 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   position: absolute;
   inset: -2px;
   z-index: 24;
-  border: 2px solid transparent;
-  border-radius: 10px;
+  border: 1px solid transparent;
+  border-radius: 2px;
   pointer-events: none;
+  box-shadow: none;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
@@ -9617,20 +9697,18 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 }
 
 .grid-item:hover::after {
-  border-color: rgba(37, 99, 235, 0.62);
-  box-shadow:
-    0 0 0 1px rgba(37, 99, 235, 0.08),
-    0 10px 22px rgba(37, 99, 235, 0.12);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
 }
 
 .grid-item.selected {
   z-index: 10;
-  filter: drop-shadow(0 14px 24px rgba(37, 99, 235, 0.14));
+  filter: none;
 }
 
 .grid-item.selected::after {
   border-color: #2563eb;
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.26);
 }
 
 .grid-item.moving {
@@ -9722,6 +9800,13 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   font-weight: 700;
   pointer-events: none;
   box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
+.drop-preview-blocked {
+  border-color: #ef4444;
+  background: rgba(254, 242, 242, 0.9);
+  color: #b91c1c;
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.12);
 }
 
 .move-placeholder {
@@ -10576,7 +10661,16 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   cursor: pointer;
   border: 1px solid rgba(212, 212, 216, 0.72);
   border-radius: 3px;
-  background: #fff;
+  background-color: transparent;
+  background-image:
+    linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+  background-position:
+    0 0,
+    0 5px,
+    5px -5px,
+    -5px 0;
+  background-size: 10px 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   overflow: hidden;
 }

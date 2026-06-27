@@ -2513,7 +2513,7 @@ watch(
 
 .grid-block.block-AiCrudPage {
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .grid-block.selected {
@@ -3093,13 +3093,23 @@ watch(
 
 .ai-crud-preview {
   width: 100%;
+  height: 100%;
   min-width: 0;
-  overflow: visible;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .ai-crud-preview :deep(.ai-crud-page) {
   width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ai-crud-preview :deep(.ai-crud-main.has-inline-workspace:not(.is-tab-workspace) .ai-crud-table),
+.ai-crud-preview :deep(.ai-crud-detail-tabs),
+.ai-crud-preview :deep(.ai-crud-inline-workspace) {
   min-height: 0;
 }
 

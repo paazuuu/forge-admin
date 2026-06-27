@@ -207,7 +207,7 @@
 
 <script setup>
 import { useMessage } from 'naive-ui'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import {
   businessObjectDesigner,
@@ -220,21 +220,11 @@ import {
 import { cloneSchema } from '@/components/lowcode-builder/model/model-schema'
 import { useTabStore, useUserStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
-import BusinessAdvancedConfig from './components/designer/BusinessAdvancedConfig.vue'
-import BusinessDetailDesigner from './components/designer/BusinessDetailDesigner.vue'
-import BusinessDocumentPanel from './components/designer/BusinessDocumentPanel.vue'
-import BusinessFieldManager from './components/designer/BusinessFieldManager.vue'
-import BusinessFlowBindingPanel from './components/designer/BusinessFlowBindingPanel.vue'
-import BusinessFormDesigner from './components/designer/BusinessFormDesigner.vue'
-import BusinessListDesigner from './components/designer/BusinessListDesigner.vue'
 import BusinessObjectDesignerShell from './components/designer/BusinessObjectDesignerShell.vue'
-import BusinessPermissionFlowPanel from './components/designer/BusinessPermissionFlowPanel.vue'
-import BusinessPublishChecklist from './components/designer/BusinessPublishChecklist.vue'
-import BusinessRelationDesigner from './components/designer/BusinessRelationDesigner.vue'
+import DesignerAsyncLoader from './components/designer/DesignerAsyncLoader.vue'
 import { renameFormDesignerFieldRefs } from './components/designer/form-first/fieldReferenceUtils'
 import { normalizeMultiFormDesignerSchema } from './components/designer/form-first/formDesignerSchema'
 import { renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
-import FormulaFunctionMarket from './components/designer/formula/FormulaFunctionMarket.vue'
 
 const props = defineProps({
   embedded: {
@@ -264,6 +254,27 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'saved'])
+
+const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./components/designer/BusinessAdvancedConfig.vue'))
+const BusinessDetailDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDetailDesigner.vue'))
+const BusinessDocumentPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDocumentPanel.vue'))
+const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
+const BusinessFlowBindingPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowBindingPanel.vue'))
+const BusinessFormDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormDesigner.vue'))
+const BusinessListDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessListDesigner.vue'))
+const BusinessPermissionFlowPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPermissionFlowPanel.vue'))
+const BusinessPublishChecklist = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPublishChecklist.vue'))
+const BusinessRelationDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessRelationDesigner.vue'))
+const FormulaFunctionMarket = defineDesignerAsyncComponent(() => import('./components/designer/formula/FormulaFunctionMarket.vue'))
+
+function defineDesignerAsyncComponent(loader) {
+  return defineAsyncComponent({
+    loader,
+    loadingComponent: DesignerAsyncLoader,
+    delay: 80,
+    timeout: 60000,
+  })
+}
 
 const route = useRoute()
 const router = useRouter()

@@ -109,7 +109,7 @@
     </template>
 
     <template v-else-if="componentKey === 'barcode'">
-      <div class="barcode-widget" :style="{ background: propsData.background || '#fff' }">
+      <div class="barcode-widget" :style="{ background: propsData.background || 'transparent' }">
         <svg ref="barcodeSvgRef" class="barcode-svg" />
         <span v-if="!barcodeValid" class="widget-error">条形码内容无效</span>
       </div>
@@ -179,7 +179,7 @@
         <n-descriptions
           :title="propsData.title || undefined"
           :column="Number(propsData.column || 2)"
-          :bordered="propsData.bordered !== false"
+          :bordered="propsData.bordered === true"
           :label-placement="propsData.labelPlacement || 'left'"
           :size="propsData.size || 'small'"
         >
@@ -199,7 +199,7 @@
         class="announcement-widget"
         :title="announcementTitle"
         :type="propsData.type || 'info'"
-        :bordered="propsData.bordered !== false"
+        :bordered="propsData.bordered === true"
         :show-icon="propsData.showIcon !== false"
         :closable="propsData.closable === true"
       >
@@ -213,7 +213,7 @@
           {{ propsData.title }}
         </div>
         <n-list
-          :bordered="propsData.bordered !== false"
+          :bordered="propsData.bordered === true"
           :hoverable="propsData.hoverable !== false"
           :size="propsData.size || 'small'"
         >
@@ -365,18 +365,9 @@
 </template>
 
 <script setup>
-import VMdEditor from '@kangc/v-md-editor'
-import vuepressTheme from '@kangc/v-md-editor/lib/theme/vuepress.js'
-import { Editor as WangEditor, Toolbar as WangToolbar } from '@wangeditor/editor-for-vue'
-import JsBarcode from 'jsbarcode'
-import Prism from 'prismjs'
-import QRCodeVue3 from 'qrcode-vue3'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { request } from '@/utils'
 import { interpolateTemplate, safeHtml, safeJsonParseObject } from './page-widget-schema'
-import '@kangc/v-md-editor/lib/style/base-editor.css'
-import '@kangc/v-md-editor/lib/theme/style/vuepress.css'
-import '@wangeditor/editor/dist/css/style.css'
 
 const props = defineProps({
   componentKey: { type: String, required: true },
@@ -386,7 +377,49 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:propsData'])
 
-VMdEditor.use(vuepressTheme, { Prism })
+let wangEditorModulePromise
+let markdownEditorPromise
+let barcodeModulePromise
+
+const WangEditor = defineAsyncComponent(() => loadWangEditorModule().then(module => module.Editor))
+const WangToolbar = defineAsyncComponent(() => loadWangEditorModule().then(module => module.Toolbar))
+const VMdEditor = defineAsyncComponent(() => loadMarkdownEditor())
+const QRCodeVue3 = defineAsyncComponent(() => import('qrcode-vue3').then(module => module.default || module))
+
+function loadWangEditorModule() {
+  if (!wangEditorModulePromise) {
+    wangEditorModulePromise = Promise.all([
+      import('@wangeditor/editor/dist/css/style.css'),
+      import('@wangeditor/editor-for-vue'),
+    ]).then(([, module]) => module)
+  }
+  return wangEditorModulePromise
+}
+
+function loadMarkdownEditor() {
+  if (!markdownEditorPromise) {
+    markdownEditorPromise = Promise.all([
+      import('@kangc/v-md-editor/lib/style/base-editor.css'),
+      import('@kangc/v-md-editor/lib/theme/style/vuepress.css'),
+      import('@kangc/v-md-editor'),
+      import('@kangc/v-md-editor/lib/theme/vuepress.js'),
+      import('prismjs'),
+    ]).then(([, , editorModule, themeModule, prismModule]) => {
+      const editor = editorModule.default || editorModule
+      const theme = themeModule.default || themeModule
+      const Prism = prismModule.default || prismModule
+      editor.use(theme, { Prism })
+      return editor
+    })
+  }
+  return markdownEditorPromise
+}
+
+function loadBarcodeModule() {
+  if (!barcodeModulePromise)
+    barcodeModulePromise = import('jsbarcode').then(module => module.default || module)
+  return barcodeModulePromise
+}
 
 const transferLoading = ref(false)
 const transferError = ref('')
@@ -400,8 +433,10 @@ const barcodeValid = ref(true)
 
 const richContentStyle = computed(() => ({
   minHeight: `${Number(props.propsData.minHeight || 180)}px`,
-  backgroundColor: props.propsData.backgroundColor || '#ffffff',
-  borderColor: props.propsData.bordered === false ? 'transparent' : '#e2e8f0',
+  backgroundColor: props.propsData.backgroundColor || 'transparent',
+  borderColor: props.propsData.bordered === true ? '#e2e8f0' : 'transparent',
+  borderWidth: props.propsData.bordered === true ? '1px' : 0,
+  borderRadius: 0,
 }))
 const wangToolbarConfig = computed(() => ({
   excludeKeys: Array.isArray(props.propsData.excludeToolbarKeys) ? props.propsData.excludeToolbarKeys : [],
@@ -448,7 +483,7 @@ const qrcodeDotsOptions = computed(() => ({
   color: props.propsData.foreground || '#0f172a',
 }))
 const qrcodeBackgroundOptions = computed(() => ({
-  color: props.propsData.background || '#ffffff',
+  color: props.propsData.background || 'transparent',
 }))
 const qrcodeCornersSquareOptions = computed(() => ({
   type: props.propsData.cornersSquareType || 'square',
@@ -586,13 +621,14 @@ async function renderBarcode() {
   if (!svg)
     return
   try {
+    const JsBarcode = await loadBarcodeModule()
     JsBarcode(svg, barcodeValue.value, {
       format: props.propsData.format || 'CODE128',
       width: Number(props.propsData.barWidth || 2),
       height: Number(props.propsData.barHeight || 72),
       displayValue: props.propsData.showText !== false,
       lineColor: props.propsData.lineColor || '#0f172a',
-      background: props.propsData.background || '#ffffff',
+      background: props.propsData.background || 'transparent',
       fontSize: Number(props.propsData.fontSize || 14),
       margin: Number(props.propsData.margin ?? 8),
       valid: (value) => {
@@ -950,10 +986,10 @@ function sanitizeCss(value = '') {
 
 .naive-widget-shell {
   align-content: start;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .rich-editor-head,
@@ -988,9 +1024,8 @@ function sanitizeCss(value = '') {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid;
-  border-radius: 10px;
-  background: #fff;
+  border-style: solid;
+  background: transparent;
 }
 
 .wang-toolbar {
@@ -1011,6 +1046,11 @@ function sanitizeCss(value = '') {
   min-height: inherit;
 }
 
+.wang-editor-wrap :deep(.w-e-toolbar),
+.wang-editor-wrap :deep(.w-e-text-container) {
+  background-color: transparent;
+}
+
 .wang-editor :deep(.w-e-scroll),
 .wang-editor :deep(.w-e-text),
 .wang-editor :deep(.w-e-text-placeholder) {
@@ -1025,8 +1065,8 @@ function sanitizeCss(value = '') {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
 }
 
 .markdown-editor :deep(.v-md-editor),
@@ -1037,6 +1077,15 @@ function sanitizeCss(value = '') {
 .markdown-editor :deep(.vuepress-markdown-body) {
   max-width: 100%;
   min-width: 0;
+}
+
+.markdown-editor :deep(.v-md-editor),
+.markdown-editor :deep(.v-md-editor__main),
+.markdown-editor :deep(.v-md-editor__left-area),
+.markdown-editor :deep(.v-md-editor__right-area),
+.markdown-editor :deep(.v-md-textarea-editor),
+.markdown-editor :deep(.vuepress-markdown-body) {
+  background-color: transparent;
 }
 
 .markdown-editor :deep(pre),
@@ -1159,10 +1208,10 @@ function sanitizeCss(value = '') {
   width: 100%;
   height: 100%;
   min-height: 180px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
   overflow: hidden;
-  background: #fff;
+  background: transparent;
 }
 
 .split-pane {
@@ -1191,7 +1240,7 @@ function sanitizeCss(value = '') {
   width: 100%;
   height: 100%;
   min-height: 120px;
-  border-radius: 10px;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -1202,10 +1251,10 @@ function sanitizeCss(value = '') {
   gap: 6px;
   min-height: 100%;
   padding: 18px;
-  border: 1px dashed #bfdbfe;
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
   color: #1e3a8a;
-  background: rgba(248, 250, 252, 0.78);
+  background: transparent;
 }
 
 .code-preview {
@@ -1226,9 +1275,9 @@ function sanitizeCss(value = '') {
   display: block;
   min-height: 64px;
   padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #334155;
   line-height: 1.7;
 }
@@ -1241,9 +1290,9 @@ function sanitizeCss(value = '') {
 
 .vue-widget-shell {
   padding: 12px;
-  border: 1px solid #dbeafe;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #eff6ff, #fff);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .vue-badge {
