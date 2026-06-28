@@ -203,3 +203,15 @@
 - 验证：
   - `pnpm --dir forge-admin-ui exec eslint src/views/login/index.vue` 通过。
   - `git diff --check -- forge-admin-ui/src/views/login/index.vue` 通过。
+
+## 2026-06-28 登录页表单控件圆角收敛
+
+- 用户反馈：
+  - 登录页输入框和按钮圆角需要改成 `2px`。
+- 变更：
+  - 将登录页用户名、密码、验证码输入框的 Naive UI 外层和状态边框圆角统一改为 `2px`。
+  - 将租户选择框、登录按钮、短信验证码按钮、滑块验证触发按钮、社交登录按钮圆角统一改为 `2px`。
+  - 登录按钮内部高光层和登录区信任信息条同步改为 `2px`，保持视觉一致。
+- 验证：
+  - `pnpm --dir forge-admin-ui exec eslint src/views/login/index.vue` 通过。
+  - `git diff --check -- forge-admin-ui/src/views/login/index.vue` 通过。

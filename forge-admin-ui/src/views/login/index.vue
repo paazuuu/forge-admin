@@ -84,7 +84,7 @@
         <div class="login-form">
           <div class="form-header">
             <h2 class="form-title">
-              登录系统
+              登录ForgeAdmin
             </h2>
             <p class="form-subtitle">
               {{ loginSubtitle }}
@@ -1470,7 +1470,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 
 .form-title {
   font-size: 1.75rem;
-  font-weight: 850;
   color: #0f172a;
   margin: 0 0 8px;
   letter-spacing: 0;
@@ -1517,11 +1516,11 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 
 /* Override Naive UI input styles */
 :deep(.modern-input.n-input) {
-  border-radius: 10px;
+  border-radius: 2px;
 }
 
 :deep(.modern-select .n-base-selection) {
-  border-radius: 10px;
+  border-radius: 2px;
 }
 
 :deep(.modern-select .n-base-selection:not(.n-base-selection--disabled):hover) {
@@ -1535,7 +1534,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 
 :deep(.modern-input .n-input__border),
 :deep(.modern-input .n-input__state-border) {
-  border-radius: 10px;
+  border-radius: 2px;
 }
 
 :deep(.modern-input.n-input:not(.n-input--disabled):hover) {
@@ -1564,8 +1563,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   width: 120px;
   height: 40px;
   padding: 3px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid #e0e0e6;
   overflow: hidden;
   cursor: pointer;
   transition:
@@ -1655,7 +1653,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   gap: 10px;
   padding: 0 16px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1.5px solid #e2e8f0;
   background: #f8fafc;
   cursor: pointer;
@@ -1809,7 +1807,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 .sms-button {
   min-width: 120px;
   white-space: nowrap;
-  border-radius: 10px;
+  border-radius: 2px;
 }
 
 .mb-3 {
@@ -1832,7 +1830,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  border-radius: 12px;
+  border-radius: 0px !important;
   border: 1px solid rgba(22, 93, 255, 0.22);
   background: linear-gradient(
     135deg,
@@ -1870,7 +1868,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   justify-content: center;
   gap: 5px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 2px;
   background: #f8fafc;
   color: #64748b;
   font-size: 12px;
@@ -1887,7 +1885,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   content: '';
   position: absolute;
   inset: 1px;
-  border-radius: 11px;
+  border-radius: 2px;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.14) 0%,
@@ -1998,7 +1996,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 .social-button {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 2px;
   border: 1.5px solid #e2e8f0;
   background: #f8fafc;
   cursor: pointer;
