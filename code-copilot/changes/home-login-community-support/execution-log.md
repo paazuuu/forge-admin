@@ -215,3 +215,41 @@
 - 验证：
   - `pnpm --dir forge-admin-ui exec eslint src/views/login/index.vue` 通过。
   - `git diff --check -- forge-admin-ui/src/views/login/index.vue` 通过。
+
+## 2026-06-28 首页个人微信双二维码与支持文案增强
+
+- 用户反馈：
+  - 原“交流群”卡片需要改成两个人的微信二维码，使用 `forge-wechat-group.png` 和 `forge-wechat-group1.png`。
+  - `community-support-copy` 文案希望更丰富、更吸引人，可以加一些颜色。
+- 变更：
+  - 首页社区卡从单张“交流群二维码”改为同一卡内两张个人微信二维码，并增加“维护者 A / 维护者 B”标识。
+  - 文案改为添加维护者微信、备注 ForgeAdmin，用于场景交流、问题排查和后续沟通。
+  - 左侧社区介绍改为更专业的“复杂后台方案落地”表达，并新增“问题排查 / 二开建议 / 版本动态”彩色标签。
+  - 引入 `forge-wechat-group1.png` 作为第二张个人微信二维码资源。
+- 验证：
+  - `pnpm --dir forge-admin-ui exec eslint src/views/home/index.vue` 通过。
+  - `git diff --check -- forge-admin-ui/src/views/home/index.vue forge-admin-ui/src/assets/images/forge-wechat-group.png forge-admin-ui/src/assets/images/forge-wechat-group1.png` 通过。
+
+## 2026-06-28 文档站首页社区与支持二维码
+
+- 用户反馈：
+  - `forge-docs` 里也需要加“添加维护者微信”和“支持维护”二维码入口。
+- 变更：
+  - 在 `forge-docs/index.md` 的在线演示下方新增“社区与支持”区块。
+  - 复制首页同源二维码到 `forge-docs/public/images/community/`，包含两张维护者微信和一张支持维护二维码。
+  - 使用 `withBase()` 生成图片地址，兼容文档站 `base: /forge-docs` 部署路径。
+  - 在 `forge-docs/.vitepress/theme/custom.css` 中新增社区支持区样式，桌面双栏、移动端堆叠，并适配暗色模式。
+- 验证：
+  - `pnpm --dir forge-docs docs:build` 通过。
+  - `git diff --check -- forge-docs/index.md forge-docs/.vitepress/theme/custom.css forge-docs/public/images/community/forge-wechat-group.png forge-docs/public/images/community/forge-wechat-group1.png forge-docs/public/images/community/forge-wechat-support.png` 通过。
+
+## 2026-06-28 文档站顶部社区与支持导航
+
+- 用户反馈：
+  - 文档站顶部菜单需要加“社区与支持”，让二维码入口更明显。
+- 变更：
+  - 在 `forge-docs/.vitepress/config.js` 顶部导航新增“社区与支持”。
+  - 为首页社区区块增加稳定锚点 `community-support`，导航指向 `/#community-support`。
+- 验证：
+  - `pnpm --dir forge-docs docs:build` 通过。
+  - `git diff --check -- forge-docs/.vitepress/config.js forge-docs/index.md` 通过。

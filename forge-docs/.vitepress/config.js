@@ -13,6 +13,7 @@ export default defineConfig({
       { text: '开发指南', link: '/guide/sdd-workflow' },
       { text: '前端文档', link: '/frontend/components/overview' },
       { text: '后端文档', link: '/backend/modules/overview' },
+      { text: '社区与支持', link: '/#community-support' },
     ],
     sidebar: {
       '/guide/': [

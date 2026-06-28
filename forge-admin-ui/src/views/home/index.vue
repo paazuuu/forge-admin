@@ -141,28 +141,51 @@
           <i class="i-material-symbols:forum-rounded" />
           <span>ForgeAdmin 社区</span>
         </div>
-        <h2>进群交流，把后台搭建得更顺手</h2>
+        <h2>把复杂后台，聊成可落地的方案</h2>
         <p>
-          遇到低代码配置、流程、插件扩展或二开问题，可以扫码加入交流群。也欢迎把使用场景和建议反馈给项目维护者。
+          低代码配置、流程审批、插件扩展、业务二开，很多问题不是一句文档能讲清楚。添加维护者微信，把你的场景、截图和想法发过来，我们一起把路径理顺。
         </p>
+        <div class="community-support-highlights">
+          <span>问题排查</span>
+          <span>二开建议</span>
+          <span>版本动态</span>
+        </div>
       </div>
       <div class="community-qr-grid">
         <article class="community-qr-card primary">
           <div class="community-qr-card-header">
-            <span>交流群</span>
-            <em>推荐加入</em>
+            <span>添加维护者微信</span>
+            <em>交流咨询</em>
           </div>
-          <div class="community-qr-preview">
-            <n-image
-              class="community-qr-image"
-              :src="wechatGroupQr"
-              :preview-src="wechatGroupQr"
-              object-fit="contain"
-              alt="ForgeAdmin 交流群二维码"
-            />
-            <span class="community-qr-zoom">点击放大</span>
+          <div class="community-qr-duo">
+            <div class="community-qr-person">
+              <div class="community-qr-preview">
+                <n-image
+                  class="community-qr-image"
+                  :src="wechatGroupQr"
+                  :preview-src="wechatGroupQr"
+                  object-fit="contain"
+                  alt="ForgeAdmin 维护者微信二维码"
+                />
+                <span class="community-qr-zoom">点击放大</span>
+              </div>
+              <span>维护者 A</span>
+            </div>
+            <div class="community-qr-person">
+              <div class="community-qr-preview">
+                <n-image
+                  class="community-qr-image"
+                  :src="wechatGroupQrAlt"
+                  :preview-src="wechatGroupQrAlt"
+                  object-fit="contain"
+                  alt="ForgeAdmin 维护者微信二维码"
+                />
+                <span class="community-qr-zoom">点击放大</span>
+              </div>
+              <span>维护者 B</span>
+            </div>
           </div>
-          <p>扫码进群，交流实践经验和最新更新。</p>
+          <p>扫码添加任一维护者，备注 ForgeAdmin，方便确认来源并拉你进入后续交流。</p>
         </article>
         <article class="community-qr-card support">
           <div class="community-qr-card-header">
@@ -371,6 +394,7 @@ import * as echarts from 'echarts'
 import { nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
+import wechatGroupQrAlt from '@/assets/images/forge-wechat-group1.png'
 import wechatGroupQr from '@/assets/images/forge-wechat-group.png'
 import wechatSupportQr from '@/assets/images/forge-wechat-support.png'
 import { useUserStore } from '@/store'
@@ -970,6 +994,27 @@ onMounted(() => {
   line-height: 24px;
 }
 
+.community-support-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.community-support-highlights span {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #eff6ff, #f0fdfa);
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .community-qr-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1033,6 +1078,27 @@ onMounted(() => {
   border: 1px solid #edf2f7;
   border-radius: 6px;
   background: #fff;
+}
+
+.community-qr-duo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.community-qr-person {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.community-qr-person > span {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
 }
 
 .community-qr-image {
@@ -1683,6 +1749,10 @@ onMounted(() => {
   }
 
   .community-qr-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .community-qr-duo {
     grid-template-columns: 1fr;
   }
 
