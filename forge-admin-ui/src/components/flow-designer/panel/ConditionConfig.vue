@@ -2,9 +2,10 @@
 /**
  * ConditionConfig — 网关条件配置
  *
- * 条件分支支持两种编辑方式：
- * - 表单字段条件：用动态表单字段 + 运算符 + 值生成 SpEL 条件表达式
- * - 高级表达式：保留原始手写表达式
+ * 条件分支支持三种编辑方式：
+ * - 审批结果：业务人员选择“同意通过 / 驳回修改”等结果，系统生成表达式
+ * - 业务字段条件：用动态表单字段 + 运算符 + 值生成 SpEL 条件表达式
+ * - 开发者高级配置：保留原始手写表达式
  *
  * BPMN 导出仍只消费 edge.condition，因此规则配置器必须同步生成标准表达式字符串。
  */
@@ -73,6 +74,37 @@ const operatorOptions = [
   { label: '不为空', value: 'notEmpty' },
 ]
 
+const approvalResultOptions = [
+  {
+    label: '同意通过',
+    value: 'approve',
+    expression: '$' + "{approvalResult == 'approve'}",
+    icon: 'i-material-symbols:check-circle',
+    desc: '审批人点击同意后走这条分支',
+  },
+  {
+    label: '驳回修改',
+    value: 'reject',
+    expression: '$' + "{approvalResult == 'reject'}",
+    icon: 'i-material-symbols:edit-note',
+    desc: '审批人要求申请人修改后走这条分支',
+  },
+  {
+    label: '退回上一步',
+    value: 'return',
+    expression: '$' + "{approvalResult == 'return'}",
+    icon: 'i-material-symbols:keyboard-return',
+    desc: '审批人选择退回时走这条分支',
+  },
+  {
+    label: '终止流程',
+    value: 'terminate',
+    expression: '$' + "{approvalResult == 'terminate'}",
+    icon: 'i-material-symbols:stop-circle',
+    desc: '审批人选择终止时走这条分支',
+  },
+]
+
 function getBranchTitle(index) {
   return `分支 ${index + 1}`
 }
@@ -111,6 +143,11 @@ function updateMode(edge, mode) {
   if (props.readonly)
     return
 
+  if (mode === 'approvalResult') {
+    updateApprovalResult(edge, getApprovalResultValue(edge) || 'approve')
+    return
+  }
+
   if (mode === 'advanced') {
     const advancedCondition = getAdvancedCondition(edge)
     const patch = {
@@ -132,11 +169,52 @@ function updateMode(edge, mode) {
 function getMode(edge) {
   if (edge?.conditionMode)
     return edge.conditionMode
+  if (findApprovalResultOption(edge?.condition))
+    return 'approvalResult'
   if (edge?.conditionRules?.length)
     return 'rules'
   if (parseConditionExpression(getRulesCondition(edge)).rules.length)
     return 'rules'
-  return formFields.value.length && !edge?.condition ? 'rules' : 'advanced'
+  return edge?.condition ? 'advanced' : 'approvalResult'
+}
+
+function getApprovalResultValue(edge) {
+  const configured = edge?.approvalResult
+  if (approvalResultOptions.some(item => item.value === configured))
+    return configured
+  return findApprovalResultOption(edge?.condition)?.value || ''
+}
+
+function updateApprovalResult(edge, value) {
+  if (props.readonly)
+    return
+  const option = approvalResultOptions.find(item => item.value === value)
+  if (!option)
+    return
+  const patch = {
+    condition: option.expression,
+    conditionType: 'expression',
+    conditionMode: 'approvalResult',
+    approvalResult: option.value,
+    approvalResultLabel: option.label,
+  }
+  if (getMode(edge) === 'advanced' && edge.advancedCondition === undefined)
+    patch.advancedCondition = edge.condition || ''
+  if (getMode(edge) === 'rules' && edge.rulesCondition === undefined)
+    patch.rulesCondition = edge.condition || ''
+  emit('update:edge', edge.id, patch)
+}
+
+function findApprovalResultOption(condition) {
+  const normalized = normalizeConditionExpression(condition)
+  return approvalResultOptions.find(item => normalizeConditionExpression(item.expression) === normalized)
+}
+
+function normalizeConditionExpression(value) {
+  return String(value || '')
+    .trim()
+    .replaceAll('"', '\'')
+    .replace(/\s+/g, '')
 }
 
 function getLogic(edge) {
@@ -572,12 +650,22 @@ function hasField(field) {
           <button
             type="button"
             class="condition-mode-button"
+            :class="{ active: getMode(e) === 'approvalResult' }"
+            :disabled="readonly"
+            data-test="mode-approval-result"
+            @click="updateMode(e, 'approvalResult')"
+          >
+            审批结果
+          </button>
+          <button
+            type="button"
+            class="condition-mode-button"
             :class="{ active: getMode(e) === 'rules' }"
             :disabled="readonly || formFields.length === 0"
             data-test="mode-rules"
             @click="updateMode(e, 'rules')"
           >
-            表单字段条件
+            业务字段
           </button>
           <button
             type="button"
@@ -587,11 +675,35 @@ function hasField(field) {
             data-test="mode-advanced"
             @click="updateMode(e, 'advanced')"
           >
-            高级表达式
+            开发者高级
           </button>
         </div>
 
-        <div v-if="getMode(e) === 'rules' && formFields.length > 0" class="condition-rule-panel">
+        <div v-if="getMode(e) === 'approvalResult'" class="approval-result-panel">
+          <button
+            v-for="item in approvalResultOptions"
+            :key="item.value"
+            type="button"
+            class="approval-result-card"
+            :class="{ active: getApprovalResultValue(e) === item.value }"
+            :disabled="readonly"
+            :data-test="`approval-result-${item.value}`"
+            @click="updateApprovalResult(e, item.value)"
+          >
+            <span class="approval-result-icon">
+              <i :class="item.icon" />
+            </span>
+            <span class="approval-result-copy">
+              <span class="approval-result-title">{{ item.label }}</span>
+              <span class="approval-result-desc">{{ item.desc }}</span>
+            </span>
+          </button>
+          <div class="approval-result-tip">
+            选择业务动作即可，系统会在导出 BPMN 时自动转换为 Flowable 条件。
+          </div>
+        </div>
+
+        <div v-else-if="getMode(e) === 'rules' && formFields.length > 0" class="condition-rule-panel">
           <div v-if="getRules(e).length > 0" class="condition-rule-header condition-rule-grid">
             <span />
             <span>字段</span>
@@ -715,7 +827,7 @@ function hasField(field) {
 
         <n-form-item
           v-else
-          label="条件表达式"
+          label="开发者高级条件"
           label-placement="top"
           :show-feedback="false"
         >
@@ -724,7 +836,7 @@ function hasField(field) {
             :value="getAdvancedCondition(e)"
             :disabled="readonly"
             type="textarea"
-            placeholder="${days > 3}"
+            placeholder="${amount > 10000}"
             :autosize="{ minRows: 2, maxRows: 4 }"
             @update:value="updateCondition(e.id, $event)"
           />
@@ -831,7 +943,7 @@ function hasField(field) {
 
 .condition-mode-switch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   margin-top: 14px;
   border: 1px solid #dbe4ef;
@@ -864,6 +976,78 @@ function hasField(field) {
 .condition-mode-button:disabled {
   color: #cbd5e1;
   cursor: not-allowed;
+}
+
+.approval-result-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.approval-result-card {
+  min-height: 58px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.approval-result-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+}
+
+.approval-result-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.approval-result-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+  font-size: 18px;
+}
+
+.approval-result-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.approval-result-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.approval-result-desc,
+.approval-result-tip {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.approval-result-tip {
+  border-radius: 7px;
+  background: #f8fafc;
+  padding: 8px 10px;
 }
 
 .condition-rule-panel {
@@ -1060,6 +1244,7 @@ function hasField(field) {
 
 @media (prefers-reduced-motion: reduce) {
   .condition-mode-button,
+  .approval-result-card,
   .condition-rule-remove {
     transition: none;
   }

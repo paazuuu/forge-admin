@@ -106,6 +106,109 @@ describe('convertJsonToBpmn - 主结构', () => {
     ])
   })
 
+  it('carbonCopy 写入抄送人配置和默认平台抄送委托', () => {
+    const json = baseJson()
+    json.nodes.splice(2, 0, {
+      id: 'CC1',
+      nodeType: 'carbonCopy',
+      name: '抄送总经理',
+      config: {
+        candidateUsers: ['1001', '1002'],
+        candidateUserNames: ['张三', '李四'],
+      },
+    })
+    json.edges = [
+      { id: 'F1', source: 'S', target: 'T_appr', condition: '', isDefault: false },
+      { id: 'F2', source: 'T_appr', target: 'CC1', condition: '', isDefault: false },
+      { id: 'F3', source: 'CC1', target: 'E', condition: '', isDefault: false },
+    ]
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const cc = findElementsByLocalName(doc, 'serviceTask')[0]
+
+    expect(getFlowableAttr(cc, 'type')).toBe('cc')
+    expect(getFlowableAttr(cc, 'ccReceiverType')).toBe('users')
+    expect(getFlowableAttr(cc, 'candidateUsers')).toBe('1001,1002')
+    expect(getFlowableAttr(cc, 'candidateUserNames')).toBe('张三,李四')
+    expect(getFlowableAttr(cc, 'delegateExpression')).toBe(`${DOLLAR}{flowCcNodeDelegate}`)
+  })
+
+  it('carbonCopy 支持按角色和表达式配置接收人', () => {
+    const json = baseJson()
+    json.nodes.splice(2, 0, {
+      id: 'CC1',
+      nodeType: 'carbonCopy',
+      name: '按角色抄送',
+      config: {
+        ccReceiverType: 'roles',
+        candidateGroups: ['general_manager'],
+        candidateGroupNames: ['总经理'],
+      },
+    }, {
+      id: 'CC2',
+      nodeType: 'carbonCopy',
+      name: '按表达式抄送',
+      config: {
+        ccReceiverType: 'expression',
+        ccExpressionTarget: 'users',
+        ccExpression: `${DOLLAR}{flowSpelService.findUsersByRole('general_manager')}`,
+      },
+    })
+    json.edges = [
+      { id: 'F1', source: 'S', target: 'T_appr', condition: '', isDefault: false },
+      { id: 'F2', source: 'T_appr', target: 'CC1', condition: '', isDefault: false },
+      { id: 'F3', source: 'CC1', target: 'CC2', condition: '', isDefault: false },
+      { id: 'F4', source: 'CC2', target: 'E', condition: '', isDefault: false },
+    ]
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const [roleCc, exprCc] = findElementsByLocalName(doc, 'serviceTask')
+
+    expect(getFlowableAttr(roleCc, 'ccReceiverType')).toBe('roles')
+    expect(getFlowableAttr(roleCc, 'candidateGroups')).toBe('general_manager')
+    expect(getFlowableAttr(roleCc, 'candidateGroupNames')).toBe('总经理')
+    expect(getFlowableAttr(exprCc, 'ccReceiverType')).toBe('expression')
+    expect(getFlowableAttr(exprCc, 'ccExpressionTarget')).toBe('users')
+    expect(getFlowableAttr(exprCc, 'candidateUsers')).toBe(`${DOLLAR}{flowSpelService.findUsersByRole('general_manager')}`)
+  })
+
+  it('userTask 会签写入 Flowable collection 与 elementVariable', () => {
+    const json = baseJson()
+    Object.assign(json.nodes[1].config, {
+      assignee: `${DOLLAR}{assignee}`,
+      multiInstanceType: 'parallel',
+      multiInstanceCollection: `${DOLLAR}{countersignUserList}`,
+      multiInstanceElementVariable: 'assignee',
+      completionCondition: 'all',
+      passRate: 100,
+    })
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const loop = findElementsByLocalName(doc, 'multiInstanceLoopCharacteristics')[0]
+
+    expect(getFlowableAttr(loop, 'collection')).toBe(`${DOLLAR}{countersignUserList}`)
+    expect(getFlowableAttr(loop, 'elementVariable')).toBe('assignee')
+    expect(findElementsByLocalName(loop, 'loopCardinality')).toHaveLength(0)
+  })
+
+  it('userTask 会签缺少 collection 时写入 loopCardinality 兜底，避免 Flowable 部署校验失败', () => {
+    const json = baseJson()
+    Object.assign(json.nodes[1].config, {
+      multiInstanceType: 'parallel',
+      multiInstanceCollection: '',
+      multiInstanceLoopCardinality: '',
+      completionCondition: 'all',
+      passRate: 100,
+    })
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const loop = findElementsByLocalName(doc, 'multiInstanceLoopCharacteristics')[0]
+    const cardinality = findElementsByLocalName(loop, 'loopCardinality')[0]
+
+    expect(getFlowableAttr(loop, 'collection')).toBe(null)
+    expect(cardinality.textContent).toBe(`${DOLLAR}{nrOfInstances}`)
+  })
+
   it('userTask 写入处理时限和逾期提醒扩展属性', () => {
     const json = baseJson()
     Object.assign(json.nodes[1].config, {

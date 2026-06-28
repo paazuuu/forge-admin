@@ -113,6 +113,92 @@
         </section>
 
         <section class="approval-detail-section">
+          <div class="approval-section-header">
+            <i class="i-material-symbols:fact-check" />
+            表单内容
+          </div>
+
+          <div v-if="formInfoLoading" class="form-loading">
+            <n-spin size="small" />
+            <span>加载表单内容中...</span>
+          </div>
+
+          <template v-else>
+            <FlowBusinessForm
+              v-if="useExternalForm"
+              :form-url="taskFormInfo.formUrl"
+              :task-id="taskFormInfo.taskId"
+              :business-key="taskFormInfo.businessKey"
+              :process-instance-id="taskFormInfo.processInstanceId"
+              :task-def-key="taskFormInfo.taskDefKey"
+              :process-def-key="taskFormInfo.processDefKey"
+              :variables="taskFormInfo.variables || {}"
+              :approval-policy="readonlyApprovalPolicy"
+              read-only
+              @submit="noop"
+            />
+
+            <div v-else-if="businessFormLoading" class="form-loading">
+              <n-spin size="small" />
+              <span>加载业务表单中...</span>
+            </div>
+
+            <div v-else-if="useBusinessObjectForm" class="business-task-form-section readonly">
+              <div class="approval-form-title">
+                {{ businessFormTitle }}
+              </div>
+              <AiForm
+                v-model:value="businessFormData"
+                :schema="readonlyBusinessFormFields"
+                :show-actions="false"
+                :show-feedback="false"
+                :grid-cols="2"
+                label-placement="top"
+                :context="businessFormRenderContext"
+              />
+              <div v-if="businessFormWarnings.length" class="business-form-warnings">
+                <n-alert v-for="warning in businessFormWarnings" :key="warning" type="warning" :show-icon="false">
+                  {{ warning }}
+                </n-alert>
+              </div>
+            </div>
+
+            <div v-else-if="useBusinessCodeForm" class="business-task-form-section readonly">
+              <div class="approval-form-title">
+                {{ businessFormTitle }}
+              </div>
+              <div class="business-form-warnings">
+                <n-alert v-for="warning in businessFormWarnings" :key="warning" type="warning" :show-icon="false">
+                  {{ warning }}
+                </n-alert>
+                <n-alert v-if="!businessCodeFormUrl" type="warning" :show-icon="false">
+                  当前代码业务表单未提供可查看地址
+                </n-alert>
+              </div>
+              <div v-if="businessCodeFormUrl" class="business-form-actions">
+                <NButton type="primary" secondary @click="openBusinessCodeForm">
+                  打开业务表单
+                </NButton>
+              </div>
+            </div>
+
+            <div v-if="useDynamicForm" class="dynamic-form-section readonly">
+              <div class="approval-form-title">
+                节点动态表单
+              </div>
+              <FlowFormCreateRenderer
+                v-model="dynamicFormData"
+                :schema="taskFormInfo.formJson"
+                :field-permissions="taskFormInfo.formFieldPermissions"
+                read-only
+              />
+            </div>
+
+            <n-empty v-if="showNoFormContent" description="暂无可展示的表单内容" size="small" />
+          </template>
+        </section>
+
+        <section class="approval-detail-section">
           <n-collapse arrow-placement="right">
             <n-collapse-item title="查看流程图" name="diagram">
               <div class="approval-diagram">
@@ -130,16 +216,22 @@
 <script setup>
 import { NButton, NTreeSelect } from 'naive-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { businessTaskFormReadonlyContext } from '@/api/business-app'
 import flowApi from '@/api/flow'
+import { AiForm } from '@/components/ai-form'
+import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignatureImage from '@/components/flow/SignatureImage.vue'
+import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
+const router = useRouter()
 const { dict, getLabel } = useDict('flow_done_status')
 const loading = ref(false)
 const dataSource = ref([])
@@ -176,8 +268,53 @@ function buildTreeSelectOptions(treeData) {
 const showDrawer = ref(false)
 const currentTask = ref(null)
 const approvalHistory = ref([])
+const taskFormInfo = ref(null)
+const formInfoLoading = ref(false)
+const dynamicFormData = ref({})
+const businessFormContext = ref(null)
+const businessFormData = ref({})
+const businessFormLoading = ref(false)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_done_status).filter(item => item.value !== 6))
+const readonlyApprovalPolicy = {
+  allowApprove: false,
+  allowReject: false,
+  allowDelegate: false,
+  allowReturn: false,
+  allowTerminate: false,
+  requireComment: false,
+  requireSignature: false,
+}
+const useExternalForm = computed(() => taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
+const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
+const useBusinessObjectForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-object')
+const useBusinessCodeForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-code')
+const businessFormTitle = computed(() => businessFormContext.value?.formName || '业务表单')
+const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
+const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
+const businessFormRenderContext = computed(() => ({
+  task: currentTask.value,
+  taskFormInfo: taskFormInfo.value,
+  businessFormContext: businessFormContext.value,
+}))
+const readonlyBusinessFormFields = computed(() => {
+  return (businessFormContext.value?.fields || []).map(field => ({
+    ...field,
+    writable: false,
+    readonly: true,
+    disabled: true,
+    props: {
+      ...(field.props || {}),
+      disabled: true,
+      readonly: true,
+    },
+  }))
+})
+const showNoFormContent = computed(() => {
+  if (formInfoLoading.value || businessFormLoading.value)
+    return false
+  return !useExternalForm.value && !useDynamicForm.value && !useBusinessObjectForm.value && !useBusinessCodeForm.value
+})
 
 function getStatusTagClass(status) {
   const cls = { 2: 'success', 3: 'error', 4: 'warning', 5: 'info', 6: 'default', 7: 'warning', 8: 'error' }
@@ -207,18 +344,160 @@ function toNumberOptions(options = []) {
   }))
 }
 
+function compactParams(source = {}) {
+  const result = {}
+  Object.entries(source).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '')
+      result[key] = value
+  })
+  return result
+}
+
+function parseJsonObject(value) {
+  if (!value)
+    return {}
+  if (typeof value === 'object')
+    return { ...value }
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
+}
+
+function resetReadonlyForm() {
+  taskFormInfo.value = null
+  dynamicFormData.value = {}
+  businessFormContext.value = null
+  businessFormData.value = {}
+  formInfoLoading.value = false
+  businessFormLoading.value = false
+}
+
+function buildProcessFormInfoQuery(row = {}) {
+  return compactParams({
+    taskId: row.taskId || row.id,
+    businessKey: row.businessKey,
+    processInstanceId: row.processInstanceId,
+    processDefKey: row.processDefKey || row.processDefinitionKey,
+  })
+}
+
+function buildBusinessReadonlyQuery(row = {}, formInfo = {}) {
+  return compactParams({
+    taskId: formInfo.taskId || row.taskId || row.id,
+    businessKey: formInfo.businessKey || row.businessKey,
+    processInstanceId: formInfo.processInstanceId || row.processInstanceId,
+    processDefKey: formInfo.processDefKey || row.processDefKey || row.processDefinitionKey,
+    taskDefKey: formInfo.taskDefKey || row.taskDefKey || row.taskDefinitionKey,
+    objectCode: formInfo.objectCode || row.objectCode,
+    recordId: formInfo.recordId || row.recordId,
+    formKey: formInfo.formKey,
+  })
+}
+
+function hasBusinessReadonlyQuery(query = {}) {
+  return Boolean(query.processInstanceId || query.businessKey || (query.objectCode && query.recordId))
+}
+
+async function loadReadonlyBusinessTaskFormContext(row, formInfo) {
+  businessFormContext.value = null
+  businessFormData.value = {}
+  const query = buildBusinessReadonlyQuery(row, formInfo)
+  if (!hasBusinessReadonlyQuery(query))
+    return null
+
+  businessFormLoading.value = true
+  try {
+    const res = await businessTaskFormReadonlyContext(query)
+    if (res.code !== 200) {
+      console.error('加载业务表单只读上下文失败', res.message)
+      return null
+    }
+    businessFormContext.value = res.data || null
+    businessFormData.value = { ...(res.data?.recordData || {}) }
+    return businessFormContext.value
+  }
+  catch (error) {
+    console.error('加载业务表单只读上下文失败', error)
+    return null
+  }
+  finally {
+    businessFormLoading.value = false
+  }
+}
+
+async function loadReadonlyFormInfo(row) {
+  const query = buildProcessFormInfoQuery(row)
+  if (!query.processInstanceId && !query.businessKey && !query.taskId)
+    return
+
+  formInfoLoading.value = true
+  try {
+    const res = await flowApi.getProcessFormInfo(query)
+    if (res.code !== 200) {
+      console.error('加载流程表单只读信息失败', res.message)
+      return
+    }
+    const formInfo = res.data || {}
+    taskFormInfo.value = formInfo
+    dynamicFormData.value = {
+      ...(formInfo.variables || {}),
+      ...parseJsonObject(formInfo.formData),
+    }
+    await loadReadonlyBusinessTaskFormContext(row, formInfo)
+  }
+  catch (error) {
+    console.error('加载流程表单只读信息失败', error)
+  }
+  finally {
+    formInfoLoading.value = false
+  }
+}
+
+function openBusinessCodeForm() {
+  const url = businessCodeFormUrl.value
+  if (!url)
+    return
+  if (/^https?:\/\//i.test(url)) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  router.push({
+    path: url,
+    query: compactParams({
+      taskId: businessFormContext.value?.taskId || taskFormInfo.value?.taskId || currentTask.value?.taskId,
+      businessKey: businessFormContext.value?.businessKey,
+      processInstanceId: businessFormContext.value?.processInstanceId,
+      taskDefKey: businessFormContext.value?.taskDefKey,
+      source: 'flowDone',
+      readOnly: 'true',
+    }),
+  })
+}
+
+function noop() {}
+
 async function openDrawer(row) {
   currentTask.value = row
   approvalHistory.value = []
+  resetReadonlyForm()
   showDrawer.value = true
+  const promises = []
   if (row.processInstanceId) {
-    try {
-      const res = await flowApi.getProcessHistory(row.processInstanceId)
-      if (res.code === 200)
-        approvalHistory.value = res.data || []
-    }
-    catch (e) { console.error('加载审批历史失败', e) }
+    promises.push(
+      flowApi.getProcessHistory(row.processInstanceId)
+        .then((res) => {
+          if (res.code === 200)
+            approvalHistory.value = res.data || []
+        })
+        .catch(e => console.error('加载审批历史失败', e)),
+    )
   }
+  promises.push(loadReadonlyFormInfo(row))
+  await Promise.all(promises)
 }
 
 async function loadData() {
@@ -342,6 +621,50 @@ onMounted(() => {
 .category-select {
   width: 132px;
 }
+
+.form-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 88px;
+  color: #64748b;
+}
+
+.dynamic-form-section,
+.business-task-form-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #d7dde7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dynamic-form-section.readonly,
+.business-task-form-section.readonly {
+  background: #fbfcfe;
+}
+
+.approval-form-title {
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.business-form-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.business-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 .table-container {
   background: #fff;
   border-radius: 12px;

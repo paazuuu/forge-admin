@@ -311,9 +311,12 @@ function applyMultiInstance(el, config) {
   const collection = getAttr(loop, 'collection') || getFlowableAttr(loop, 'collection')
   if (collection)
     config.multiInstanceCollection = collection
-  const elementVariable = getAttr(loop, 'elementVariable')
+  const elementVariable = getAttr(loop, 'elementVariable') || getFlowableAttr(loop, 'elementVariable')
   if (elementVariable)
     config.multiInstanceElementVariable = elementVariable
+  const loopCardinality = getChild(loop, 'loopCardinality')
+  if (loopCardinality)
+    config.multiInstanceLoopCardinality = getTextContent(loopCardinality)
 }
 
 /**

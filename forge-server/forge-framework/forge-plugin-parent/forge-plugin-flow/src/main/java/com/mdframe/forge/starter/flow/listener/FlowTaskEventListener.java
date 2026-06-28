@@ -30,7 +30,9 @@ import org.flowable.engine.TaskService;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.event.FlowableCancelledEvent;
 import org.flowable.engine.delegate.event.FlowableProcessEngineEvent;
+import org.flowable.engine.HistoryService;
 import org.flowable.engine.impl.persistence.entity.ExecutionEntity;
+import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.task.service.impl.persistence.entity.TaskEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -38,6 +40,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +78,10 @@ public class FlowTaskEventListener implements FlowableEventListener {
     @Autowired
     @Lazy
     private RuntimeService runtimeService;
+
+    @Autowired
+    @Lazy
+    private HistoryService historyService;
 
     /** Redis Pub/Sub 发布器（可选，未引入 Redis 依赖时为 null）*/
     @Autowired(required = false)
@@ -469,6 +476,13 @@ public class FlowTaskEventListener implements FlowableEventListener {
             }
             
             if (processInstanceId != null) {
+                processVariables = readProcessVariables(processInstanceId, processVariables);
+                if (approvalResult == null || approvalResult.isBlank()) {
+                    Object approvalResultVar = processVariables.get("approvalResult");
+                    if (approvalResultVar != null) {
+                        approvalResult = String.valueOf(approvalResultVar);
+                    }
+                }
                 boolean rejected = "reject".equalsIgnoreCase(approvalResult);
 
                 // 更新 FlowBusiness 状态
@@ -518,17 +532,46 @@ public class FlowTaskEventListener implements FlowableEventListener {
     }
 
     private Map<String, Object> readTaskVariables(TaskEntity task) {
+        Map<String, Object> taskVariables = null;
         try {
-            return taskService.getVariables(task.getId());
+            taskVariables = taskService.getVariables(task.getId());
         } catch (Exception e) {
             log.debug("从任务读取流程变量失败，尝试从运行实例读取: taskId={}", task.getId());
-            try {
-                return runtimeService.getVariables(task.getProcessInstanceId());
-            } catch (Exception ex) {
-                log.debug("从运行实例读取流程变量失败: processInstanceId={}", task.getProcessInstanceId());
-                return null;
-            }
         }
+        return readProcessVariables(task.getProcessInstanceId(), taskVariables);
+    }
+
+    private Map<String, Object> readProcessVariables(String processInstanceId, Map<String, Object> currentVariables) {
+        Map<String, Object> variables = new LinkedHashMap<>();
+        if (currentVariables != null && !currentVariables.isEmpty()) {
+            variables.putAll(currentVariables);
+        }
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return variables;
+        }
+
+        try {
+            Map<String, Object> runtimeVariables = runtimeService.getVariables(processInstanceId);
+            if (runtimeVariables != null && !runtimeVariables.isEmpty()) {
+                variables.putAll(runtimeVariables);
+            }
+        } catch (Exception e) {
+            log.debug("从运行实例读取流程变量失败，尝试从历史变量兜底: processInstanceId={}", processInstanceId);
+        }
+
+        try {
+            List<HistoricVariableInstance> historicVariables = historyService.createHistoricVariableInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .list();
+            if (historicVariables != null) {
+                for (HistoricVariableInstance variable : historicVariables) {
+                    variables.put(variable.getVariableName(), variable.getValue());
+                }
+            }
+        } catch (Exception e) {
+            log.debug("从历史变量读取流程变量失败: processInstanceId={}", processInstanceId);
+        }
+        return variables;
     }
 
     private void sendProcessCc(FlowBusiness business, Map<String, Object> variables) {

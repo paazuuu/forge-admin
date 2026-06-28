@@ -26,7 +26,11 @@ public class BusinessFlowBindingVO {
 
     private String startMode;
 
+    private BusinessFlowBindingDTO.BusinessBindingDTO businessBinding;
+
     private List<BusinessFlowBindingDTO.VariableMappingDTO> variableMapping = new ArrayList<>();
+
+    private List<Map<String, Object>> nodeForms = new ArrayList<>();
 
     private List<Map<String, Object>> conditionFlows = new ArrayList<>();
 

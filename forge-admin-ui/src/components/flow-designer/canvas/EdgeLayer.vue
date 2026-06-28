@@ -21,6 +21,7 @@ const props = defineProps({
   canvasBounds: { type: Object, default: null },
   nodeStatuses: { type: Object, default: () => ({}) },
   pathType: { type: String, default: 'rounded' },
+  showLabels: { type: Boolean, default: true },
 })
 
 const svgSize = computed(() => {
@@ -67,6 +68,7 @@ function statusOf(edge) {
       :path="paths.get(edge.id) || { points: [], type: pathType }"
       :path-type="pathType"
       :status="statusOf(edge)"
+      :show-label="showLabels"
     />
   </svg>
 </template>

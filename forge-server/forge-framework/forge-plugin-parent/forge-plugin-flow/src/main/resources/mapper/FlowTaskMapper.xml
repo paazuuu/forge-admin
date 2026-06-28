@@ -10,6 +10,16 @@
         WHERE t.task_id = #{taskId}
     </select>
 
+    <!-- 根据 Flowable 任务ID或流程任务记录ID查询任务（带流程名称） -->
+    <select id="selectByIdOrTaskId" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
+        SELECT t.*, m.model_name AS process_name
+        FROM sys_flow_task t
+        LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        WHERE t.task_id = #{taskId} OR t.id = #{taskId}
+        ORDER BY CASE WHEN t.task_id = #{taskId} THEN 0 ELSE 1 END
+        LIMIT 1
+    </select>
+
     <!-- 待办任务列表（带分类关联查询） -->
     <select id="selectTodoTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
         SELECT t.*, m.model_name AS process_name

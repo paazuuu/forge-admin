@@ -78,7 +78,51 @@ describe('conditionConfig', () => {
     const wrapper = mountConfig()
 
     expect(wrapper.text()).toContain('可使用 2 个表单字段生成表达式')
-    expect(wrapper.text()).toContain('表单字段条件')
+    expect(wrapper.text()).toContain('审批结果')
+    expect(wrapper.text()).toContain('业务字段')
+    expect(wrapper.text()).toContain('开发者高级')
+    expect(wrapper.text()).toContain('同意通过')
+    expect(wrapper.text()).toContain('驳回修改')
+
+    wrapper.unmount()
+  })
+
+  it('审批结果选择驳回修改时生成 Flowable 条件表达式', async () => {
+    const wrapper = mountConfig()
+
+    expect(wrapper.find('[data-test="mode-approval-result"]').classes()).toContain('active')
+
+    await wrapper.find('[data-test="approval-result-reject"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.vm.edges[0].condition).toBe(`${DOLLAR}{approvalResult == 'reject'}`)
+    expect(wrapper.vm.edges[0].conditionMode).toBe('approvalResult')
+    expect(wrapper.vm.edges[0].approvalResult).toBe('reject')
+    expect(wrapper.vm.edges[0].approvalResultLabel).toBe('驳回修改')
+
+    wrapper.unmount()
+  })
+
+  it('已有驳回表达式重新打开时回显为审批结果模式', () => {
+    const wrapper = mountConfig({
+      edges: [
+        { id: 'F1', source: 'GW', target: 'T1', condition: `${DOLLAR}{approvalResult == 'reject'}`, isDefault: false },
+      ],
+    })
+
+    expect(wrapper.find('[data-test="mode-approval-result"]').classes()).toContain('active')
+    expect(wrapper.find('[data-test="approval-result-reject"]').classes()).toContain('active')
+    expect(wrapper.text()).toContain('审批人要求申请人修改后走这条分支')
+
+    wrapper.unmount()
+  })
+
+  it('切换到业务字段后展示字段条件配置器', async () => {
+    const wrapper = mountConfig()
+
+    await wrapper.find('[data-test="mode-rules"]').trigger('click')
+    await nextTick()
+
     expect(wrapper.text()).toContain('总金额（必填）')
     expect(wrapper.text()).toContain('JTPO单号')
 
@@ -88,6 +132,8 @@ describe('conditionConfig', () => {
   it('字段条件输入数值后生成 SpEL 表达式', async () => {
     const wrapper = mountConfig()
 
+    await wrapper.find('[data-test="mode-rules"]').trigger('click')
+    await nextTick()
     await wrapper.find('[data-test="rule-value"]').setValue('3000')
     await nextTick()
 
@@ -105,6 +151,8 @@ describe('conditionConfig', () => {
   it('区间条件生成起止范围表达式', async () => {
     const wrapper = mountConfig()
 
+    await wrapper.find('[data-test="mode-rules"]').trigger('click')
+    await nextTick()
     await wrapper.find('[data-test="rule-operator"]').setValue('between')
     await nextTick()
     await wrapper.find('[data-test="rule-value"]').setValue('0')
@@ -119,6 +167,8 @@ describe('conditionConfig', () => {
   it('删除最后一条规则后清空该分支条件', async () => {
     const wrapper = mountConfig()
 
+    await wrapper.find('[data-test="mode-rules"]').trigger('click')
+    await nextTick()
     await wrapper.find('[data-test="rule-value"]').setValue('3000')
     await nextTick()
     await wrapper.find('.condition-rule-remove').trigger('click')
@@ -139,8 +189,10 @@ describe('conditionConfig', () => {
     })
 
     expect(wrapper.text()).toContain('默认分支')
-    expect(wrapper.text()).toContain('表单字段条件')
+    expect(wrapper.text()).toContain('审批结果')
 
+    await wrapper.find('[data-test="mode-rules"]').trigger('click')
+    await nextTick()
     await wrapper.find('[data-test="rule-value"]').setValue('5000')
     await nextTick()
 

@@ -306,4 +306,17 @@ public class FlowTaskController {
         TaskFormInfo formInfo = flowTaskService.getTaskFormInfo(taskId);
         return RespInfo.success(formInfo);
     }
+
+    /**
+     * 获取流程关联表单信息。
+     * 用于已办、抄送、流程历史等没有运行中任务的只读查看场景。
+     */
+    @GetMapping("/form")
+    public RespInfo<TaskFormInfo> getProcessFormInfo(@RequestParam(required = false) String processInstanceId,
+                                                     @RequestParam(required = false) String businessKey,
+                                                     @RequestParam(required = false) String processDefKey,
+                                                     @RequestParam(required = false) String taskId) {
+        TaskFormInfo formInfo = flowTaskService.getProcessFormInfo(processInstanceId, businessKey, processDefKey, taskId);
+        return RespInfo.success(formInfo);
+    }
 }

@@ -34,6 +34,16 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-auth</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-orm</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-tenant</artifactId>
+        </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
@@ -53,6 +63,16 @@
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-message</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-flow-client</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-generator</artifactId>
         </dependency>
         
         <dependency>

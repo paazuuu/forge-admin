@@ -21,6 +21,11 @@ public interface FlowTaskMapper extends BaseMapper<FlowTask> {
     FlowTask selectByTaskId(String taskId);
 
     /**
+     * 根据任务ID或流程任务记录ID查询任务
+     */
+    FlowTask selectByIdOrTaskId(@Param("taskId") String taskId);
+
+    /**
      * 分页查询待办任务（带分类关联）
      */
     IPage<FlowTask> selectTodoTasks(Page<FlowTask> page, @Param("userId") String userId,

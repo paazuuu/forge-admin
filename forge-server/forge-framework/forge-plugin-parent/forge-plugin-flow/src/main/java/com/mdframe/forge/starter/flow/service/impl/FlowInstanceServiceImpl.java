@@ -16,12 +16,14 @@ import com.mdframe.forge.starter.flow.service.FlowInstanceService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.flowable.engine.HistoryService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
+import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -53,6 +55,9 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
 
     @Autowired
     private RuntimeService runtimeService;
+
+    @Autowired
+    private HistoryService historyService;
 
     @Autowired
     private TaskService taskService;
@@ -423,7 +428,7 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
         if (business == null || business.getProcessInstanceId() == null) {
             return new HashMap<>();
         }
-        return runtimeService.getVariables(business.getProcessInstanceId());
+        return readProcessVariables(business.getProcessInstanceId());
     }
 
     @Override
@@ -439,6 +444,25 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
         }
 
         log.info("更新流程变量：businessKey={}", businessKey);
+    }
+
+    private Map<String, Object> readProcessVariables(String processInstanceId) {
+        Map<String, Object> variables = new HashMap<>();
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (processInstance != null) {
+            variables.putAll(runtimeService.getVariables(processInstanceId));
+            return variables;
+        }
+
+        List<HistoricVariableInstance> historicVariables = historyService.createHistoricVariableInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .list();
+        for (HistoricVariableInstance variable : historicVariables) {
+            variables.put(variable.getVariableName(), variable.getValue());
+        }
+        return variables;
     }
 
     @Override

@@ -47,6 +47,52 @@ function mountDesigner(props = {}) {
   })
 }
 
+function leftOf(wrapper) {
+  const style = wrapper.attributes('style') || ''
+  const match = style.match(/left:\s*([\d.-]+)px/)
+  return match ? Number(match[1]) : null
+}
+
+function topOf(wrapper) {
+  const style = wrapper.attributes('style') || ''
+  const match = style.match(/top:\s*([\d.-]+)px/)
+  return match ? Number(match[1]) : null
+}
+
+function reentryDecisionJson() {
+  return {
+    processId: 'P',
+    nodes: [
+      { id: 'S', nodeType: 'start', config: {} },
+      { id: 'A1', nodeType: 'approver', config: { mergeNode: true } },
+      { id: 'GW1', nodeType: 'condition', config: { defaultFlowId: 'F3' } },
+      { id: 'A2', nodeType: 'approver', config: {} },
+      { id: 'GW2', nodeType: 'condition', config: { defaultFlowId: 'F6' } },
+      { id: 'A3', nodeType: 'approver', config: {} },
+      { id: 'GW3', nodeType: 'condition', config: { defaultFlowId: 'F9' } },
+      { id: 'MOD', nodeType: 'approver', config: { mergeNode: true } },
+      { id: 'MOD_GW', nodeType: 'condition', config: { defaultFlowId: 'F12' } },
+      { id: 'E_OK', nodeType: 'end', config: {} },
+      { id: 'E_STOP', nodeType: 'end', config: {} },
+    ],
+    edges: [
+      { id: 'F1', source: 'S', target: 'A1' },
+      { id: 'F2', source: 'A1', target: 'GW1' },
+      { id: 'F3', source: 'GW1', target: 'A2', isDefault: true, branchId: 'b1' },
+      { id: 'F4', source: 'GW1', target: 'MOD', condition: `${DOLLAR}{approvalResult == 'reject'}`, branchId: 'b2' },
+      { id: 'F5', source: 'A2', target: 'GW2' },
+      { id: 'F6', source: 'GW2', target: 'A3', isDefault: true, branchId: 'b3' },
+      { id: 'F7', source: 'GW2', target: 'MOD', condition: `${DOLLAR}{approvalResult == 'reject'}`, branchId: 'b4' },
+      { id: 'F8', source: 'A3', target: 'GW3' },
+      { id: 'F9', source: 'GW3', target: 'E_OK', isDefault: true, branchId: 'b5' },
+      { id: 'F10', source: 'GW3', target: 'MOD', condition: `${DOLLAR}{approvalResult == 'reject'}`, branchId: 'b6' },
+      { id: 'F11', source: 'MOD', target: 'MOD_GW' },
+      { id: 'F12', source: 'MOD_GW', target: 'A1', isDefault: true, branchId: 'b7' },
+      { id: 'F13', source: 'MOD_GW', target: 'E_STOP', condition: `${DOLLAR}{approvalResult == 'terminate'}`, branchId: 'b8' },
+    ],
+  }
+}
+
 describe('dingFlowDesigner - 基础 mount', () => {
   it('空 props 挂载默认 createEmptyFlow（start → end）', () => {
     const w = mountDesigner()
@@ -211,12 +257,68 @@ describe('dingFlowDesigner - 网关分支配置', () => {
     w.unmount()
   })
 
+  it('添加分支按钮居中，默认分支标签避开按钮', async () => {
+    const w = mountDesigner()
+    const gatewayId = w.vm.designer.addNode('StartEvent_1', 'condition')
+    await w.vm.$nextTick()
+
+    const gatewayWrap = w.find(`.node-renderer-wrap[data-node-id="${gatewayId}"]`)
+    const branchAdd = w.find('.branch-add-button-wrap')
+    const defaultHeader = w.findAll('.branch-header')
+      .find(item => item.text().includes('默认'))
+
+    const gatewayLeft = leftOf(gatewayWrap)
+    const branchAddLeft = leftOf(branchAdd)
+    const defaultHeaderLeft = leftOf(defaultHeader)
+
+    expect(branchAddLeft).toBe(gatewayLeft + 22)
+    expect(Math.abs(defaultHeaderLeft - branchAddLeft)).toBeGreaterThan(48)
+
+    w.unmount()
+  })
+
   it('网关本身不显示普通添加按钮，分支节点可继续添加', async () => {
     const w = mountDesigner()
     w.vm.designer.addNode('StartEvent_1', 'condition')
     await w.vm.$nextTick()
 
     expect(w.findAll('.add-node-button-wrap')).toHaveLength(3)
+    w.unmount()
+  })
+
+  it('复杂驳回回路中分支标签不与加号或彼此重叠', async () => {
+    const w = mountDesigner()
+    w.vm.designer.loadJson(reentryDecisionJson())
+    await w.vm.$nextTick()
+
+    expect(w.text()).toContain('驳回修改')
+    expect(w.text()).toContain('终止流程')
+
+    const headers = w.findAll('.branch-header').map(item => ({
+      left: leftOf(item),
+      top: topOf(item),
+    }))
+    const addButtons = w.findAll('.branch-add-button-wrap').map(item => ({
+      left: leftOf(item),
+      top: topOf(item),
+    }))
+
+    expect(headers.length).toBeGreaterThan(4)
+    for (let i = 0; i < headers.length; i += 1) {
+      for (let j = i + 1; j < headers.length; j += 1) {
+        const sameArea = Math.abs(headers[i].left - headers[j].left) < 128
+          && Math.abs(headers[i].top - headers[j].top) < 30
+        expect(sameArea).toBe(false)
+      }
+    }
+    for (const header of headers) {
+      for (const button of addButtons) {
+        const overlapped = Math.abs(header.left - button.left) < 64
+          && Math.abs(header.top - button.top) < 30
+        expect(overlapped).toBe(false)
+      }
+    }
+
     w.unmount()
   })
 })

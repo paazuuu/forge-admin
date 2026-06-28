@@ -100,6 +100,12 @@ export default {
     request.get(`/api/flow/task/form/${taskId}`),
 
   /**
+   * 获取流程表单只读信息（已办、抄送、历史查看）
+   */
+  getProcessFormInfo: params =>
+    request.get('/api/flow/task/form', { params }),
+
+  /**
    * 催办任务
    */
   remindTask: taskId =>

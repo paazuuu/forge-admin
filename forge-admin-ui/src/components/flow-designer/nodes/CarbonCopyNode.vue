@@ -17,10 +17,20 @@ defineEmits(['click', 'delete', 'context-menu'])
 
 const subtitle = computed(() => {
   const c = props.node?.config || {}
+  if (c.ccReceiverType === 'expression' || c.ccExpression) {
+    return c.ccExpressionTarget === 'roles'
+      ? '按表达式解析角色后抄送'
+      : '按表达式解析人员后抄送'
+  }
   if (Array.isArray(c.candidateUsers) && c.candidateUsers.length) {
     const names = c.candidateUserNames || c.candidateUsers
     const head = names.slice(0, 3).join('、')
     return `抄送 ${names.length} 人：${head}${names.length > 3 ? ' 等' : ''}`
+  }
+  if (Array.isArray(c.candidateGroups) && c.candidateGroups.length) {
+    const names = c.candidateGroupNames || c.candidateGroups
+    const head = names.slice(0, 3).join('、')
+    return `抄送角色 ${names.length} 个：${head}${names.length > 3 ? ' 等' : ''}`
   }
   if (c.implementation)
     return `表达式：${c.implementation}`

@@ -3,10 +3,14 @@ package com.mdframe.forge.plugin.generator.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowBindingDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowCallbackDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowResubmitDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowStartDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormContextQueryDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormSaveDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessFlowBindingVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessFlowRuntimeVO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessTaskFormContextVO;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
@@ -53,6 +57,34 @@ public class BusinessFlowController {
         return RespInfo.success(flowService.getVariableCandidates(modelKey, objectCode));
     }
 
+    @GetMapping("/form-assets/{objectCode}")
+    @SaCheckPermission("ai:businessFlow:config")
+    @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务流程表单资产")
+    public RespInfo<Map<String, Object>> formAssets(@PathVariable String objectCode) {
+        return RespInfo.success(flowService.getFormAssets(objectCode));
+    }
+
+    @GetMapping("/task-form-context")
+    @SaCheckPermission("ai:businessFlow:view")
+    @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务待办表单上下文")
+    public RespInfo<BusinessTaskFormContextVO> taskFormContext(BusinessTaskFormContextQueryDTO query) {
+        return RespInfo.success(flowService.getTaskFormContext(query));
+    }
+
+    @GetMapping("/task-form-context/readonly")
+    @SaCheckPermission("ai:businessFlow:view")
+    @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务历史表单上下文")
+    public RespInfo<BusinessTaskFormContextVO> taskFormReadonlyContext(BusinessTaskFormContextQueryDTO query) {
+        return RespInfo.success(flowService.getTaskFormReadonlyContext(query));
+    }
+
+    @PutMapping("/task-form-context")
+    @SaCheckPermission("ai:businessFlow:view")
+    @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "保存业务待办表单字段")
+    public RespInfo<BusinessTaskFormContextVO> saveTaskFormContext(@RequestBody BusinessTaskFormSaveDTO dto) {
+        return RespInfo.success(flowService.saveTaskFormContext(dto));
+    }
+
     @PutMapping("/binding/{objectCode}")
     @SaCheckPermission("ai:businessFlow:config")
     @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "保存业务流程绑定")
@@ -67,6 +99,13 @@ public class BusinessFlowController {
     @OperationLog(module = "业务流程", type = OperationType.ADD, desc = "发起业务流程")
     public RespInfo<BusinessFlowRuntimeVO> start(@RequestBody BusinessFlowStartDTO dto) {
         return RespInfo.success(flowService.startDocumentFlow(dto));
+    }
+
+    @PostMapping("/resubmit")
+    @SaCheckPermission("ai:businessFlow:start")
+    @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "驳回修改后重提")
+    public RespInfo<BusinessFlowRuntimeVO> resubmit(@RequestBody BusinessFlowResubmitDTO dto) {
+        return RespInfo.success(flowService.resubmit(dto));
     }
 
     @GetMapping("/status/{objectCode}/{recordId}")

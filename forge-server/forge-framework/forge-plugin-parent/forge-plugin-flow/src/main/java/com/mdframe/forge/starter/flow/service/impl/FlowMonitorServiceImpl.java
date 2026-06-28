@@ -10,6 +10,7 @@ import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
+import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -389,7 +390,22 @@ public class FlowMonitorServiceImpl implements FlowMonitorService {
 
     @Override
     public Map<String, Object> getProcessVariables(String processInstanceId) {
-        return runtimeService.getVariables(processInstanceId);
+        Map<String, Object> variables = new HashMap<>();
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (processInstance != null) {
+            variables.putAll(runtimeService.getVariables(processInstanceId));
+            return variables;
+        }
+
+        List<HistoricVariableInstance> historicVariables = historyService.createHistoricVariableInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .list();
+        for (HistoricVariableInstance variable : historicVariables) {
+            variables.put(variable.getVariableName(), variable.getValue());
+        }
+        return variables;
     }
 
     @Override
