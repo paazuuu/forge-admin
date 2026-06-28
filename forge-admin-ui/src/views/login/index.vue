@@ -6,49 +6,75 @@
       <!-- Left side - Branding -->
       <div class="login-brand">
         <div class="brand-content">
-          <div class="logo-wrapper">
+          <div class="logo-lockup">
             <img :src="brandLogoUrl" class="logo-img" alt="Logo" @error="handleBrandLogoError">
+            <div class="logo-text">
+              ForgeAdmin
+            </div>
           </div>
-          <h1 class="brand-title">
-            {{ title }}
-          </h1>
-          <p class="brand-subtitle">
-            <span>智能</span>
-            <i />
-            <span>高效</span>
-            <i />
-            <span>开放</span>
-            <i />
-            <span>可扩展</span>
-          </p>
-          <div class="feature-list">
-            <div class="feature-item">
-              <div class="feature-icon">
-                <i class="ai-icon:shield" />
+
+          <div class="banner">
+            <n-carousel
+              autoplay
+              :interval="4200"
+              show-arrow
+              class="stack-carousel"
+            >
+              <div class="carousel-item">
+                <div class="carousel-copy">
+                  <div class="carousel-title">
+                    开箱即用的后台模板
+                  </div>
+                  <div class="carousel-subtitle">
+                    常见列表、表单、详情和权限场景快速落地
+                  </div>
+                </div>
+                <img :src="loginCarouselImage" class="carousel-image" alt="后台系统能力总览">
               </div>
-              <div class="feature-text">
-                <span class="feature-title">安全可靠</span>
-                <span class="feature-desc">企业级安全架构</span>
+              <div class="carousel-item">
+                <div class="carousel-copy">
+                  <div class="carousel-title">
+                    业务对象驱动生成
+                  </div>
+                  <div class="carousel-subtitle">
+                    字段、操作、列表和表单配置保持一致
+                  </div>
+                </div>
+                <img :src="loginCarouselImage" class="carousel-image" alt="业务对象驱动生成">
               </div>
-            </div>
-            <div class="feature-item">
-              <div class="feature-icon">
-                <i class="ai-icon:zap" />
+              <div class="carousel-item">
+                <div class="carousel-copy">
+                  <div class="carousel-title">
+                    权限与流程统一治理
+                  </div>
+                  <div class="carousel-subtitle">
+                    多租户、数据权限和审批流程统一接入
+                  </div>
+                </div>
+                <img :src="loginCarouselImage" class="carousel-image" alt="权限与流程统一治理">
               </div>
-              <div class="feature-text">
-                <span class="feature-title">高效便捷</span>
-                <span class="feature-desc">快速开发部署</span>
-              </div>
-            </div>
-            <div class="feature-item">
-              <div class="feature-icon">
-                <i class="ai-icon:layers" />
-              </div>
-              <div class="feature-text">
-                <span class="feature-title">功能强大</span>
-                <span class="feature-desc">插件化架构设计</span>
-              </div>
-            </div>
+              <template #arrow="{ prev, next }">
+                <button type="button" class="arco-carousel-arrow-left" title="上一页" @click="prev">
+                  <i class="ai-icon:chevron-left" />
+                </button>
+                <button type="button" class="arco-carousel-arrow-right" title="下一页" @click="next">
+                  <i class="ai-icon:chevron-right" />
+                </button>
+              </template>
+              <template #dots="{ total, currentIndex, to }">
+                <div class="arco-carousel-dots" role="tablist">
+                  <button
+                    v-for="index in total"
+                    :key="index"
+                    type="button"
+                    class="arco-carousel-dot"
+                    :class="{ active: currentIndex === index - 1 }"
+                    :aria-selected="currentIndex === index - 1"
+                    @click="to(index - 1)"
+                  />
+                </div>
+              </template>
+            </n-carousel>
           </div>
         </div>
       </div>
@@ -58,7 +84,7 @@
         <div class="login-form">
           <div class="form-header">
             <h2 class="form-title">
-              欢迎回来
+              登录系统
             </h2>
             <p class="form-subtitle">
               {{ loginSubtitle }}
@@ -249,6 +275,12 @@
               <i v-if="!loading" class="button-icon ai-icon:arrow-right" />
             </n-button>
 
+            <div class="login-trust-strip">
+              <span><i class="ai-icon:shield" />安全登录</span>
+              <span><i class="ai-icon:layers" />租户隔离</span>
+              <span><i class="ai-icon:check-circle" />操作审计</span>
+            </div>
+
             <!-- Social login buttons -->
             <div v-if="socialPlatforms.length > 0" class="social-login-section">
               <div class="social-divider">
@@ -342,12 +374,13 @@ import { useStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SlideVerify from 'vue3-slide-verify'
 import mainApi from '@/api'
+import loginCarouselImage from '@/assets/images/login-carousel-platform.png'
 import defaultLogoUrl from '@/assets/images/logo_text.png'
 import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
-import { getDefaultPageTitle, normalizePageTitle } from '@/utils/page-title'
+import { normalizePageTitle } from '@/utils/page-title'
 import { applyTenantConfig, resolveTenantPublicAssetUrl } from '@/utils/tenant-config'
 import api from './api'
 import 'vue3-slide-verify/dist/style.css'
@@ -357,7 +390,6 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 const router = useRouter()
 const route = useRoute()
-const defaultTitle = getDefaultPageTitle()
 const userClient = import.meta.env.VITE_USER_CLIENT || 'pc'
 const LOGIN_TENANT_STORAGE_KEY = 'login_selected_tenant_id'
 const SOCIAL_TENANT_MAP_KEY = 'login_social_tenant_map'
@@ -367,13 +399,10 @@ const selectedTenantId = ref(null)
 const tenantConfigApplying = ref(false)
 const brandLogoUrl = ref(defaultLogoUrl)
 const loginConfig = ref(null)
-const tenantPageTitle = computed(() => normalizePageTitle(loginConfig.value?.browserTitle)
-  || normalizePageTitle(loginConfig.value?.systemName)
-  || defaultTitle)
-const title = computed(() => tenantPageTitle.value)
 const selectedTenantOption = computed(() => tenantOptions.value.find(item => String(item.value) === String(selectedTenantId.value)) || null)
-const loginSubtitle = computed(() => normalizePageTitle(loginConfig.value?.systemIntro)
-  || (selectedTenantOption.value?.tenantName ? `${selectedTenantOption.value.tenantName} 租户入口` : '请登录您的账户'))
+const loginSubtitle = computed(() => selectedTenantOption.value?.tenantName
+  ? `${selectedTenantOption.value.tenantName} 租户入口`
+  : '请输入账号密码')
 const copyrightInfo = computed(() => normalizePageTitle(loginConfig.value?.copyrightInfo))
 const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.label,
@@ -1045,19 +1074,19 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
 /* Container */
 .login-container {
   position: relative;
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 24px;
-  overflow: hidden;
-  font-family: 'Inter', sans-serif;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 /* Static background */
@@ -1065,9 +1094,9 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 28%),
-    radial-gradient(circle at 76% 76%, rgba(219, 234, 254, 0.86) 0%, rgba(219, 234, 254, 0) 34%),
-    linear-gradient(135deg, #f8fbff 0%, #eef6ff 48%, #e7f7f7 100%);
+    radial-gradient(circle at 20% 18%, rgba(37, 99, 235, 0.18) 0%, rgba(37, 99, 235, 0) 26%),
+    radial-gradient(circle at 82% 80%, rgba(20, 184, 166, 0.18) 0%, rgba(20, 184, 166, 0) 28%),
+    linear-gradient(135deg, #f7fbff 0%, #eef4fb 52%, #f8fafc 100%);
   z-index: 0;
 }
 
@@ -1088,53 +1117,43 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   z-index: 2;
   display: grid;
   grid-template-columns: 1fr;
-  max-width: 1100px;
+  max-width: none;
   width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   background: #fff;
-  border-radius: 12px;
-  border: 1px solid rgba(203, 213, 225, 0.72);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.02),
-    0 4px 6px -1px rgba(0, 0, 0, 0.02),
-    0 12px 24px -4px rgba(0, 0, 0, 0.04),
-    0 24px 48px -8px rgba(0, 0, 0, 0.06);
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
   overflow: hidden;
 }
 
 .login-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  padding: 1px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(96, 165, 250, 0.52), rgba(255, 255, 255, 0.32));
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0.82;
-  pointer-events: none;
+  content: none;
 }
 
 .login-card::after {
   content: none;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .login-card {
-    grid-template-columns: 42% 58%;
+    grid-template-columns: minmax(0, 48%) minmax(440px, 52%);
   }
 }
 
 /* Left side - Branding */
 .login-brand {
-  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
-  padding: 48px 40px;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 30%),
+    radial-gradient(circle at 82% 80%, rgba(191, 219, 254, 0.22) 0%, rgba(191, 219, 254, 0) 34%),
+    linear-gradient(135deg, #1e40af, #3b82f6, #60a5fa);
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 36px 44px;
   display: none;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   position: relative;
   overflow: hidden;
 }
@@ -1148,15 +1167,17 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 42px 42px;
-  opacity: 0.46;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size:
+    44px 44px,
+    44px 44px;
+  opacity: 0.38;
   mask-image: linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
   pointer-events: none;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .login-brand {
     display: flex;
   }
@@ -1165,177 +1186,306 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 .brand-content {
   position: relative;
   z-index: 1;
-  text-align: center;
+  display: flex;
+  width: 100%;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  text-align: left;
 }
 
-.logo-wrapper {
-  margin-bottom: 28px;
+.logo-lockup {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
 }
 
 .logo-img {
-  width: 100px;
-  height: 100px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
-  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.25));
-  transition: transform 0.3s ease;
-  border-radius: 16px;
+  border-radius: 8px;
 }
 
-.logo-img:hover {
-  transform: scale(1.05);
-}
-
-.brand-title {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: white;
-  margin-bottom: 8px;
-  letter-spacing: -0.02em;
-}
-
-.brand-subtitle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 9px;
-  width: fit-content;
-  margin: 0 auto 40px;
-  padding: 8px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 10px 28px rgba(15, 23, 42, 0.12);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.brand-subtitle span {
+.logo-text {
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
   line-height: 1;
-  white-space: nowrap;
 }
 
-.brand-subtitle i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.72);
-}
-
-.feature-list {
+.banner {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  width: 100%;
+  min-height: clamp(430px, 62vh, 640px);
+  align-items: stretch;
+  justify-content: center;
+  margin-top: 0;
 }
 
-.feature-item {
+.stack-carousel {
+  width: 100%;
+  height: clamp(430px, 62vh, 640px);
+  margin: 0 auto;
+}
+
+.stack-carousel :deep(.n-carousel__slides) {
+  width: 100%;
+  height: 100%;
+  align-items: stretch;
+}
+
+.stack-carousel :deep(.n-carousel__slide) {
+  width: 100%;
+  min-width: 100%;
   display: flex;
+  justify-content: center;
+}
+
+.carousel-item {
+  position: relative;
+  width: 100%;
+  height: clamp(430px, 62vh, 640px);
+  margin: 0 auto;
+  padding: 0 0 68px;
+  overflow: hidden;
+}
+
+.carousel-image {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  width: min(620px, 100%);
+  max-width: none;
+  max-height: calc(100% - 136px);
+  height: auto;
+  object-fit: contain;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 22px 34px rgba(30, 64, 175, 0.22));
+  pointer-events: none;
+  user-select: none;
+}
+
+.arco-carousel-arrow-left,
+.arco-carousel-arrow-right {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
   align-items: center;
-  gap: 16px;
-  text-align: left;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
-  cursor: default;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.18);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
 }
 
-.feature-item:hover {
-  background: rgba(255, 255, 255, 0.12);
-  transform: translateX(4px);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+.arco-carousel-arrow-left:hover,
+.arco-carousel-arrow-right:hover {
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.feature-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.15);
+.arco-carousel-arrow-left {
+  left: 8px;
+}
+
+.arco-carousel-arrow-right {
+  right: 8px;
+}
+
+.arco-carousel-dots {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  color: white;
-  flex-shrink: 0;
+  gap: 8px;
+}
+
+.arco-carousel-dot {
+  width: 16px;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.36);
+  cursor: pointer;
   transition:
-    transform 0.3s ease,
-    background 0.3s ease;
+    width 0.18s ease,
+    background 0.18s ease;
 }
 
-.feature-item:hover .feature-icon {
-  background: rgba(255, 255, 255, 0.22);
-  transform: rotate(-4deg) scale(1.06);
+.arco-carousel-dot.active {
+  width: 26px;
+  background: #fff;
 }
 
-.feature-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.carousel-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
 }
 
-.feature-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: white;
+.carousel-title {
+  color: #fff;
+  font-size: 1.28rem;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
-.feature-desc {
-  font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.7);
+.carousel-subtitle {
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.94rem;
+  line-height: 1.55;
 }
 
 /* Right side - Form */
 .login-form-wrapper {
-  padding: 48px 40px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 40px 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98)), #fff;
+  overflow-y: auto;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 959px) {
+  .login-container {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .login-card {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: none;
+    margin: 0;
+    overflow: visible;
+  }
+
   .login-form-wrapper {
-    padding: 32px 24px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    align-items: flex-start;
+    padding: 22px 22px 72px;
+    overflow: visible;
+  }
+
+  .login-form {
+    max-width: 380px;
+    margin: 0 auto;
+  }
+
+  .form-header {
+    margin-bottom: 16px;
+  }
+
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  .form-label {
+    margin-bottom: 6px;
+  }
+
+  .form-options {
+    margin-bottom: 14px;
+  }
+
+  .login-button {
+    margin-top: 2px;
+  }
+
+  .login-trust-strip {
+    display: none;
+  }
+
+  .social-login-section {
+    margin-top: 18px;
+  }
+
+  .social-divider {
+    margin-bottom: 14px;
+  }
+}
+
+@media (min-width: 960px) and (max-height: 760px) {
+  .login-brand {
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
+
+  .logo-lockup {
+    top: 0;
+  }
+
+  .banner {
+    min-height: 380px;
+  }
+
+  .stack-carousel,
+  .carousel-item {
+    height: 380px;
+  }
+
+  .carousel-image {
+    top: 76px;
+    width: min(560px, 100%);
+    max-height: calc(100% - 112px);
   }
 }
 
 .login-form {
   width: 100%;
-  max-width: 380px;
+  max-width: 360px;
 }
 
 .form-header {
-  margin-bottom: 32px;
-  text-align: center;
+  margin-bottom: 22px;
+  text-align: left;
 }
 
 .form-title {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 1.625rem;
-  font-weight: 700;
+  font-size: 1.75rem;
+  font-weight: 850;
   color: #0f172a;
-  margin-bottom: 8px;
-  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  letter-spacing: 0;
 }
 
 .form-subtitle {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: #64748b;
   font-weight: 400;
+  line-height: 1.6;
 }
 
 /* Form groups */
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .form-label {
@@ -1626,7 +1776,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 }
 
 .slider-modal-title {
-  font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 1.125rem;
   font-weight: 700;
   color: #0f172a;
@@ -1693,7 +1842,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   ) !important;
   font-size: 0.9375rem;
   font-weight: 600;
-  height: 46px;
+  height: 52px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
     0 10px 22px rgba(22, 93, 255, 0.24),
@@ -1704,6 +1853,34 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
     border-color 0.25s ease,
     background 0.25s ease;
   cursor: pointer;
+}
+
+.login-trust-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.login-trust-strip span {
+  display: inline-flex;
+  min-width: 0;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.login-trust-strip i {
+  color: #3b82f6;
+  font-size: 14px;
 }
 
 .login-button::after {
@@ -1766,7 +1943,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 }
 
 .button-text {
-  font-family: 'Plus Jakarta Sans', sans-serif;
   letter-spacing: 0.01em;
   color: #fff;
 }
@@ -1948,12 +2124,17 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 
 /* Responsive */
 @media (max-width: 767px) {
+  .login-container {
+    align-items: stretch;
+    padding: 0;
+  }
+
   .form-title {
     font-size: 1.375rem;
   }
 
   .login-card {
-    border-radius: 20px;
+    border-radius: 0;
   }
 }
 </style>
