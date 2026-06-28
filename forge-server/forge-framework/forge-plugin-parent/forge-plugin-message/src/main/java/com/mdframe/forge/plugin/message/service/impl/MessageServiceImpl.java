@@ -24,9 +24,11 @@ import com.mdframe.forge.plugin.message.service.MessageService;
 import com.mdframe.forge.plugin.message.service.SysMessageReceiverService;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.message.channel.MessageChannel;
 import com.mdframe.forge.starter.message.sdk.MessageClient;
 import com.mdframe.forge.starter.message.service.MessageTemplateEngine;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage> implements MessageService {
+
+    private static final Long DEFAULT_TENANT_ID = 1L;
 
     private final SysMessageMapper messageMapper;
     private final SysMessageReceiverMapper receiverMapper;
@@ -76,20 +80,22 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SysMessage send(MessageSendRequestDTO req) {
+        Long tenantId = resolveTenantId();
+
         // 1. 渲染消息内容（处理模板）
         RenderResult renderResult = renderMessageContent(req);
         
         // 2. 创建消息主记录
-        SysMessage msg = createMessageRecord(req, renderResult);
+        SysMessage msg = createMessageRecord(req, renderResult, tenantId);
         
         // 3. 批量创建接收人记录（优化：使用回调方式避免内存溢出）
-        int receiverCount = batchCreateReceiverRecords(msg.getId(), req);
+        int receiverCount = batchCreateReceiverRecords(msg.getId(), req, tenantId);
         
         // 4. 发送消息到渠道（对于WEB站内信，无需调用第三方）
         MessageChannel.SendResult sendResult = sendToChannel(msg, renderResult, req);
         
         // 5. 创建发送记录
-        createSendRecord(msg.getId(), req.getChannel(), receiverCount, sendResult);
+        createSendRecord(msg.getId(), req.getChannel(), receiverCount, sendResult, tenantId);
         
         return msg;
     }
@@ -100,7 +106,9 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         if (StrUtil.isBlank(bizType) || StrUtil.isBlank(bizKey)) {
             return send(req);
         }
-        SysMessage existing = messageMapper.selectByBizTypeAndBizKey(bizType, bizKey);
+        Long tenantId = resolveTenantId();
+        SysMessage existing = TenantContextHolder.executeWithTenant(tenantId,
+                () -> messageMapper.selectByBizTypeAndBizKey(bizType, bizKey));
         if (existing != null) {
             log.debug("消息已存在，跳过重复发送: bizType={}, bizKey={}, messageId={}",
                     bizType, bizKey, existing.getId());
@@ -108,7 +116,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         }
         req.setBizType(bizType);
         req.setBizKey(bizKey);
-        return send(req);
+        return TenantContextHolder.executeWithTenant(tenantId, () -> send(req));
     }
     
     /**
@@ -144,8 +152,9 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     /**
      * 创建消息主记录
      */
-    private SysMessage createMessageRecord(MessageSendRequestDTO req, RenderResult renderResult) {
+    private SysMessage createMessageRecord(MessageSendRequestDTO req, RenderResult renderResult, Long tenantId) {
         SysMessage msg = new SysMessage();
+        msg.setTenantId(tenantId);
         msg.setTitle(renderResult.title);
         msg.setContent(renderResult.content);
         msg.setType(req.getType());
@@ -164,7 +173,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
      * 批量创建接收人记录（优化：使用回调方式处理，避免内存溢出）
      * @return 接收人总数
      */
-    private int batchCreateReceiverRecords(Long messageId, MessageSendRequestDTO req) {
+    private int batchCreateReceiverRecords(Long messageId, MessageSendRequestDTO req, Long tenantId) {
         final int BATCH_SIZE = 500; // 每批次处理500条
         final int[] totalCount = {0}; // 使用数组包装以便在lambda中修改
         
@@ -181,6 +190,7 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
                 
                 for (Long userId : userIdBatch) {
                     SysMessageReceiver receiver = new SysMessageReceiver();
+                    receiver.setTenantId(tenantId);
                     receiver.setMessageId(messageId);
                     receiver.setUserId(userId);
                     receiver.setReadFlag(0);
@@ -247,8 +257,10 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     /**
      * 创建发送记录
      */
-    private void createSendRecord(Long messageId, String channel, int receiverCount, MessageChannel.SendResult result) {
+    private void createSendRecord(Long messageId, String channel, int receiverCount, MessageChannel.SendResult result,
+                                  Long tenantId) {
         SysMessageSendRecord record = new SysMessageSendRecord();
+        record.setTenantId(tenantId);
         record.setMessageId(messageId);
         record.setChannel(channel);
         record.setReceiverCount(receiverCount);
@@ -337,6 +349,22 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int markWebReadByBiz(String bizType, String bizKey) {
+        if (StrUtil.isBlank(bizType) || StrUtil.isBlank(bizKey)) {
+            return 0;
+        }
+        Long tenantId = resolveTenantId();
+        Integer updated = TenantContextHolder.executeWithTenant(tenantId,
+                () -> receiverMapper.markWebMessagesReadByBiz(bizType, bizKey, LocalDateTime.now()));
+        int count = updated == null ? 0 : updated;
+        if (count > 0) {
+            log.info("按业务键标记站内信已读: bizType={}, bizKey={}, updated={}", bizType, bizKey, count);
+        }
+        return count;
+    }
+
+    @Override
     public IPage<MessageVO> pageUserMessages(Long userId, MessageQueryDTO query, Integer pageNum, Integer pageSize) {
         Page<MessageVO> page = new Page<>(pageNum, pageSize);
         MessageQueryDTO safeQuery = query == null ? new MessageQueryDTO() : query;
@@ -394,5 +422,18 @@ public class MessageServiceImpl extends ServiceImpl<SysMessageMapper,SysMessage>
         }
         
         return vo;
+    }
+
+    private Long resolveTenantId() {
+        Long tenantId = TenantContextHolder.getTenantId();
+        if (tenantId != null && tenantId > 0) {
+            return tenantId;
+        }
+        try {
+            tenantId = SessionHelper.getTenantId();
+        } catch (Exception ignored) {
+            tenantId = null;
+        }
+        return tenantId != null && tenantId > 0 ? tenantId : DEFAULT_TENANT_ID;
     }
 }

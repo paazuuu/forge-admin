@@ -29,6 +29,8 @@
       :variables="variables"
       :approval-policy="approvalPolicy"
       :read-only="readOnly"
+      :submitting="submitting"
+      :submitting-action="submittingAction"
       @submit="handleFormSubmit"
       @cancel="$emit('cancel')"
     >
@@ -81,6 +83,10 @@ const props = defineProps({
   approvalPolicy: { type: Object, default: () => ({}) },
   /** 是否只读（已办/发起人查看） */
   readOnly: { type: Boolean, default: false },
+  /** 父级审批提交中 */
+  submitting: { type: Boolean, default: false },
+  /** 父级正在提交的审批动作 */
+  submittingAction: { type: String, default: '' },
 })
 
 const emit = defineEmits(['submit', 'cancel'])

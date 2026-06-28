@@ -47,6 +47,7 @@ import org.flowable.image.ProcessDiagramGenerator;
 import org.flowable.task.api.DelegationState;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
+import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -219,6 +220,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             throw new RuntimeException("任务不存在或已处理");
         }
         validateTaskAction(task, ACTION_APPROVE, comment, signature);
+        validateRequiredVariables(task, variables);
 
         try {
             if (comment != null && !comment.isEmpty()) {
@@ -1301,6 +1303,10 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
     }
 
     private Boolean readBooleanFlowableAttribute(FlowNode flowNode, String name) {
+        return parseBooleanValue(readStringFlowableAttribute(flowNode, name));
+    }
+
+    private String readStringFlowableAttribute(FlowNode flowNode, String name) {
         String value = flowNode.getAttributeValue(FLOWABLE_NS, name);
         if (isBlank(value)) {
             Map<String, List<ExtensionElement>> extensions = flowNode.getExtensionElements();
@@ -1309,7 +1315,52 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                 value = elements.get(0).getElementText();
             }
         }
-        return parseBooleanValue(value);
+        return value;
+    }
+
+    private void validateRequiredVariables(Task task, Map<String, Object> variables) {
+        FlowNode flowNode = getFlowNode(task);
+        if (flowNode == null) {
+            return;
+        }
+        String requiredVariables = readStringFlowableAttribute(flowNode, "requiredVariables");
+        if (isBlank(requiredVariables)) {
+            return;
+        }
+
+        List<String> missing = new ArrayList<>();
+        for (String variable : requiredVariables.split("[,;，；]")) {
+            String key = variable == null ? "" : variable.trim();
+            if (key.isEmpty()) {
+                continue;
+            }
+            Object value = variables == null ? null : variables.get(key);
+            if (isEmptyVariableValue(value)) {
+                missing.add(key);
+            }
+        }
+        if (missing.isEmpty()) {
+            return;
+        }
+
+        String message = readStringFlowableAttribute(flowNode, "requiredMessage");
+        if (isBlank(message)) {
+            message = "请补充必填流程表单信息：" + String.join("、", missing);
+        }
+        throw new RuntimeException(message);
+    }
+
+    private boolean isEmptyVariableValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String) {
+            return ((String) value).trim().isEmpty();
+        }
+        if (value instanceof Collection<?>) {
+            return ((Collection<?>) value).isEmpty();
+        }
+        return false;
     }
 
     private Boolean readBooleanProcessAttribute(String processDefinitionId, String name) {
@@ -1535,6 +1586,283 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         return formInfo;
     }
 
+    @Override
+    public TaskFormInfo getProcessFormInfo(String processInstanceId, String businessKey, String processDefKey,
+                                           String taskId) {
+        if (!isBlank(taskId)) {
+            Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+            if (task != null) {
+                return getTaskFormInfo(taskId);
+            }
+        }
+
+        FlowTask sourceTask = null;
+        if (!isBlank(taskId)) {
+            sourceTask = getBaseMapper().selectByTaskId(taskId);
+        }
+
+        FlowBusiness business = resolveFlowBusiness(processInstanceId, businessKey);
+        String effectiveProcessInstanceId = firstNonBlank(processInstanceId,
+                business != null ? business.getProcessInstanceId() : null,
+                sourceTask != null ? sourceTask.getProcessInstanceId() : null);
+        String effectiveBusinessKey = firstNonBlank(businessKey,
+                business != null ? business.getBusinessKey() : null,
+                sourceTask != null ? sourceTask.getBusinessKey() : null);
+        String effectiveProcessDefKey = firstNonBlank(processDefKey,
+                business != null ? business.getProcessDefKey() : null,
+                sourceTask != null ? sourceTask.getProcessDefKey() : null);
+        String processDefinitionId = firstNonBlank(
+                sourceTask != null ? sourceTask.getProcessDefId() : null,
+                business != null ? business.getProcessDefId() : null,
+                resolveProcessDefinitionId(effectiveProcessInstanceId, effectiveProcessDefKey));
+        String taskDefKey = firstNonBlank(
+                sourceTask != null ? sourceTask.getTaskDefKey() : null,
+                findFirstHistoricTaskDefinitionKey(effectiveProcessInstanceId));
+
+        TaskFormInfo formInfo = new TaskFormInfo();
+        formInfo.setTaskId(taskId);
+        formInfo.setTaskName(sourceTask != null ? sourceTask.getTaskName() : null);
+        formInfo.setTaskDefKey(taskDefKey);
+        formInfo.setProcessInstanceId(effectiveProcessInstanceId);
+        formInfo.setProcessDefKey(effectiveProcessDefKey);
+        formInfo.setBusinessKey(effectiveBusinessKey);
+        formInfo.setTitle(business != null ? business.getTitle() : sourceTask != null ? sourceTask.getTitle() : null);
+        if (business != null) {
+            formInfo.setStartUserId(business.getApplyUserId());
+            formInfo.setStartUserName(business.getApplyUserName());
+            formInfo.setStartDeptId(business.getApplyDeptId());
+            formInfo.setStartDeptName(business.getApplyDeptName());
+        }
+
+        Map<String, Object> variables = readProcessVariablesForForm(effectiveProcessInstanceId);
+        if (!isBlank(effectiveBusinessKey)) {
+            variables.putIfAbsent("businessKey", effectiveBusinessKey);
+        }
+        formInfo.setVariables(variables);
+        hydrateFormInstanceSnapshot(formInfo, effectiveProcessInstanceId);
+        applyFormConfiguration(formInfo, processDefinitionId, effectiveProcessDefKey, taskDefKey);
+        formInfo.setAllowApprove(false);
+        formInfo.setAllowReject(false);
+        formInfo.setAllowDelegate(false);
+        formInfo.setAllowReturn(false);
+        formInfo.setAllowTerminate(false);
+        formInfo.setRequireComment(false);
+        formInfo.setRequireSignature(false);
+        formInfo.setAllowRejectToStart(false);
+        return formInfo;
+    }
+
+    private FlowBusiness resolveFlowBusiness(String processInstanceId, String businessKey) {
+        FlowBusiness business = null;
+        if (!isBlank(processInstanceId)) {
+            business = flowBusinessMapper.selectByProcessInstanceId(processInstanceId);
+        }
+        if (business == null && !isBlank(businessKey)) {
+            business = flowBusinessMapper.selectByBusinessKey(businessKey);
+        }
+        return business;
+    }
+
+    private String resolveProcessDefinitionId(String processInstanceId, String processDefKey) {
+        if (!isBlank(processInstanceId)) {
+            try {
+                ProcessInstance runtimeInstance = runtimeService.createProcessInstanceQuery()
+                        .processInstanceId(processInstanceId)
+                        .singleResult();
+                if (runtimeInstance != null) {
+                    return runtimeInstance.getProcessDefinitionId();
+                }
+            } catch (Exception e) {
+                log.debug("从运行实例解析流程定义失败: processInstanceId={}", processInstanceId);
+            }
+            try {
+                HistoricProcessInstance historicInstance = historyService.createHistoricProcessInstanceQuery()
+                        .processInstanceId(processInstanceId)
+                        .singleResult();
+                if (historicInstance != null) {
+                    return historicInstance.getProcessDefinitionId();
+                }
+            } catch (Exception e) {
+                log.debug("从历史实例解析流程定义失败: processInstanceId={}", processInstanceId);
+            }
+        }
+        if (!isBlank(processDefKey)) {
+            try {
+                ProcessDefinition definition = repositoryService.createProcessDefinitionQuery()
+                        .processDefinitionKey(processDefKey)
+                        .latestVersion()
+                        .singleResult();
+                return definition != null ? definition.getId() : null;
+            } catch (Exception e) {
+                log.debug("从流程定义Key解析最新流程定义失败: processDefKey={}", processDefKey);
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> readProcessVariablesForForm(String processInstanceId) {
+        Map<String, Object> variables = new HashMap<>();
+        if (isBlank(processInstanceId)) {
+            return variables;
+        }
+        try {
+            Map<String, Object> runtimeVariables = runtimeService.getVariables(processInstanceId);
+            if (runtimeVariables != null) {
+                variables.putAll(runtimeVariables);
+            }
+        } catch (Exception e) {
+            log.debug("读取运行流程变量失败，继续读取历史变量: processInstanceId={}", processInstanceId);
+        }
+        try {
+            List<HistoricVariableInstance> historicVariables = historyService.createHistoricVariableInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .list();
+            if (historicVariables != null) {
+                for (HistoricVariableInstance variable : historicVariables) {
+                    if (variable != null && variable.getVariableName() != null) {
+                        variables.putIfAbsent(variable.getVariableName(), variable.getValue());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("读取历史流程变量失败: processInstanceId={}", processInstanceId, e);
+        }
+        return variables;
+    }
+
+    private String findFirstHistoricTaskDefinitionKey(String processInstanceId) {
+        if (isBlank(processInstanceId)) {
+            return null;
+        }
+        try {
+            List<HistoricTaskInstance> historicTasks = historyService.createHistoricTaskInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .orderByHistoricTaskInstanceStartTime()
+                    .asc()
+                    .list();
+            if (historicTasks != null && !historicTasks.isEmpty()) {
+                return historicTasks.get(0).getTaskDefinitionKey();
+            }
+        } catch (Exception e) {
+            log.debug("读取历史任务定义Key失败: processInstanceId={}", processInstanceId);
+        }
+        return null;
+    }
+
+    private void applyFormConfiguration(TaskFormInfo formInfo, String processDefinitionId, String processDefKey,
+                                        String taskDefKey) {
+        FlowModel flowModel = !isBlank(processDefKey) ? flowModelService.getModelByKey(processDefKey) : null;
+        FlowNode flowNode = resolveFormFlowNode(processDefinitionId, taskDefKey);
+        NodeFormConfig nodeForm = readNodeFormConfig(flowNode);
+        formInfo.setFormFieldPermissions(nodeForm.formFieldPermissions);
+
+        if (!isBlank(nodeForm.formUrl)) {
+            formInfo.setFormType("external");
+            formInfo.setFormUrl(nodeForm.formUrl);
+            formInfo.setFormTarget(!isBlank(nodeForm.formTarget) ? nodeForm.formTarget : "modal");
+        } else if (!isBlank(nodeForm.formKey) || !isBlank(nodeForm.formJson)) {
+            formInfo.setFormType("dynamic");
+            formInfo.setFormKey(nodeForm.formKey);
+            formInfo.setFormJson(resolveFormJson(nodeForm.formKey, nodeForm.formJson));
+        } else if (flowModel != null) {
+            String formType = flowModel.getFormType();
+            formInfo.setFormType(formType);
+            if ("dynamic".equals(formType)) {
+                formInfo.setFormKey(flowModel.getFormId());
+                formInfo.setFormJson(resolveModelFormJson(flowModel.getFormId(), flowModel.getFormJson()));
+            } else if ("external".equals(formType)) {
+                formInfo.setFormUrl(flowModel.getFormId());
+                formInfo.setFormTarget("modal");
+            }
+        } else if (!isBlank(formInfo.getFormJson()) || !isBlank(formInfo.getFormKey())) {
+            formInfo.setFormType("dynamic");
+            formInfo.setFormJson(resolveFormJson(formInfo.getFormKey(), formInfo.getFormJson()));
+        } else {
+            formInfo.setFormType("none");
+        }
+    }
+
+    private FlowNode resolveFormFlowNode(String processDefinitionId, String taskDefKey) {
+        if (isBlank(processDefinitionId)) {
+            return null;
+        }
+        BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinitionId);
+        if (bpmnModel == null || bpmnModel.getMainProcess() == null) {
+            return null;
+        }
+        Process process = bpmnModel.getMainProcess();
+        if (!isBlank(taskDefKey)) {
+            FlowElement element = process.getFlowElement(taskDefKey);
+            if (element instanceof FlowNode) {
+                return (FlowNode) element;
+            }
+        }
+
+        FlowNode firstUserTask = null;
+        for (FlowElement element : process.getFlowElements()) {
+            if (element instanceof UserTask) {
+                FlowNode candidate = (FlowNode) element;
+                if (firstUserTask == null) {
+                    firstUserTask = candidate;
+                }
+                if (readNodeFormConfig(candidate).hasForm()) {
+                    return candidate;
+                }
+            }
+        }
+        return firstUserTask;
+    }
+
+    private NodeFormConfig readNodeFormConfig(FlowNode flowNode) {
+        NodeFormConfig config = new NodeFormConfig();
+        if (flowNode == null) {
+            return config;
+        }
+        if (flowNode instanceof UserTask) {
+            config.formKey = ((UserTask) flowNode).getFormKey();
+        }
+
+        config.formUrl = flowNode.getAttributeValue(FLOWABLE_NS, "formUrl");
+        config.formJson = flowNode.getAttributeValue(FLOWABLE_NS, "formJson");
+        config.formTarget = flowNode.getAttributeValue(FLOWABLE_NS, "formTarget");
+        config.formFieldPermissions = flowNode.getAttributeValue(FLOWABLE_NS, "formFieldPermissions");
+
+        Map<String, List<ExtensionElement>> extensions = flowNode.getExtensionElements();
+        if (extensions == null) {
+            return config;
+        }
+        List<ExtensionElement> formJsonElements = extensions.get("formJson");
+        if (isBlank(config.formJson) && formJsonElements != null && !formJsonElements.isEmpty()) {
+            config.formJson = formJsonElements.get(0).getElementText();
+        }
+        List<ExtensionElement> formUrlElements = extensions.get("formUrl");
+        if (isBlank(config.formUrl) && formUrlElements != null && !formUrlElements.isEmpty()) {
+            config.formUrl = formUrlElements.get(0).getElementText();
+        }
+        List<ExtensionElement> formTargetElements = extensions.get("formTarget");
+        if (isBlank(config.formTarget) && formTargetElements != null && !formTargetElements.isEmpty()) {
+            config.formTarget = formTargetElements.get(0).getElementText();
+        }
+        List<ExtensionElement> formFieldPermissionElements = extensions.get("formFieldPermissions");
+        if (isBlank(config.formFieldPermissions) && formFieldPermissionElements != null
+                && !formFieldPermissionElements.isEmpty()) {
+            config.formFieldPermissions = formFieldPermissionElements.get(0).getElementText();
+        }
+        return config;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (!isBlank(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private void hydrateFormInstanceSnapshot(TaskFormInfo formInfo, String processInstanceId) {
         if (flowFormInstanceMapper == null || processInstanceId == null || processInstanceId.isEmpty()) {
             return;
@@ -1687,6 +2015,20 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         errorLog.setActivityName(activityName);
         errorLog.setErrorStage(errorStage);
         flowErrorLogService.recordError(errorLog, e);
+    }
+
+    private static class NodeFormConfig {
+        private String formKey;
+        private String formJson;
+        private String formUrl;
+        private String formTarget;
+        private String formFieldPermissions;
+
+        private boolean hasForm() {
+            return (formKey != null && !formKey.isBlank())
+                    || (formJson != null && !formJson.isBlank())
+                    || (formUrl != null && !formUrl.isBlank());
+        }
     }
 
     private static class TaskApprovalPolicy {

@@ -110,34 +110,68 @@
             <span class="context-subtitle">{{ displayRows.length }} 项资源</span>
           </div>
 
-          <div class="list-filters">
-            <n-input
-              v-model:value="resourceKeyword"
-              size="small"
-              clearable
-              placeholder="搜索名称 / 路由 / 权限 / API"
-              class="keyword-input"
-            >
-              <template #prefix>
-                <i class="i-material-symbols:search" />
-              </template>
-            </n-input>
-            <n-select
-              v-model:value="resourceTypeFilter"
-              size="small"
-              clearable
-              placeholder="类型"
-              :options="resourceTypeFilterOptions"
-              class="type-filter"
-            />
-            <n-select
-              v-model:value="visibleFilter"
-              size="small"
-              clearable
-              placeholder="状态"
-              :options="visibleFilterOptions"
-              class="visible-filter"
-            />
+          <div class="list-toolbar-right">
+            <div class="batch-actions">
+              <NCheckbox
+                size="small"
+                :checked="allDisplayRowsChecked"
+                :indeterminate="displayRowsCheckIndeterminate"
+                :disabled="displayRows.length === 0"
+                @update:checked="handleDisplayRowsCheckedChange"
+              >
+                本页
+              </NCheckbox>
+              <span class="checked-count">已选 {{ checkedResourceIds.length }}</span>
+              <NButton size="tiny" secondary :disabled="checkedResourceIds.length === 0" @click="openBatchMigrate">
+                <template #icon>
+                  <i class="i-material-symbols:drive-file-move-outline" />
+                </template>
+                批量迁移
+              </NButton>
+              <NButton
+                size="tiny"
+                type="error"
+                secondary
+                :disabled="checkedResourceIds.length === 0"
+                :loading="batchActionLoading"
+                @click="handleBatchDelete"
+              >
+                <template #icon>
+                  <i class="i-material-symbols:delete-outline" />
+                </template>
+                批量删除
+              </NButton>
+            </div>
+
+            <div class="list-filters">
+              <n-input
+                v-model:value="resourceKeyword"
+                size="small"
+                clearable
+                placeholder="搜索名称 / 路由 / 权限 / API"
+                class="keyword-input"
+              >
+                <template #prefix>
+                  <i class="i-material-symbols:search" />
+                </template>
+              </n-input>
+              <n-select
+                v-model:value="resourceTypeFilter"
+                size="small"
+                clearable
+                placeholder="类型"
+                :options="resourceTypeFilterOptions"
+                class="type-filter"
+              />
+              <n-select
+                v-model:value="visibleFilter"
+                size="small"
+                clearable
+                placeholder="状态"
+                :options="visibleFilterOptions"
+                class="visible-filter"
+              />
+            </div>
           </div>
         </div>
 
@@ -152,9 +186,17 @@
               v-for="row in displayRows"
               :key="row.id"
               class="resource-list-row"
-              :class="{ 'is-active': activeResource?.id === row.id }"
+              :class="{ 'is-active': activeResource?.id === row.id, 'is-checked': checkedResourceIdSet.has(row.id) }"
               @click="selectedRow = row"
             >
+              <div class="resource-list-check" @click.stop>
+                <NCheckbox
+                  size="small"
+                  :checked="checkedResourceIdSet.has(row.id)"
+                  @update:checked="checked => handleResourceCheckedChange(row, checked)"
+                />
+              </div>
+
               <div class="resource-list-main">
                 <span
                   class="resource-level-spacer"
@@ -461,6 +503,47 @@
       </n-drawer-content>
     </n-drawer>
 
+    <n-modal
+      v-model:show="batchMigrateVisible"
+      preset="card"
+      title="批量迁移归属"
+      :bordered="false"
+      :mask-closable="!batchActionLoading"
+      :style="{ width: 'min(520px, calc(100vw - 32px))' }"
+    >
+      <div class="batch-migrate-content">
+        <n-alert type="info" :bordered="false">
+          已选 {{ checkedResourceIds.length }} 项，实际迁移 {{ batchMigrateRootRows.length }} 个根节点
+        </n-alert>
+        <n-form label-placement="left" label-width="90" size="small">
+          <n-form-item label="目标上级">
+            <n-tree-select
+              v-model:value="batchMigrateParentId"
+              :options="batchMigrateParentOptions"
+              clearable
+              filterable
+              default-expand-all
+              key-field="value"
+              label-field="label"
+              children-field="children"
+              placeholder="请选择目标上级资源"
+            />
+          </n-form-item>
+        </n-form>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <NButton :disabled="batchActionLoading" @click="batchMigrateVisible = false">
+            取消
+          </NButton>
+          <NButton type="primary" :loading="batchActionLoading" @click="handleBatchMigrateSubmit">
+            确认迁移
+          </NButton>
+        </n-space>
+      </template>
+    </n-modal>
+
     <IconSelector
       ref="tableIconSelectorRef"
       :trigger="false"
@@ -474,6 +557,7 @@
 import {
   NAutoComplete,
   NButton,
+  NCheckbox,
   NDropdown,
   NInputNumber,
   NTag,
@@ -515,9 +599,11 @@ const clientList = ref([])
 const currentClientCode = ref(currentUserClientCode.value)
 const loading = ref(false)
 const submitLoading = ref(false)
+const batchActionLoading = ref(false)
 const allResources = ref([])
 const selectedResourceId = ref(0)
 const selectedRow = ref(null)
+const checkedResourceIds = ref([])
 const navigationExpandedKeys = ref([0])
 const treeKeyword = ref('')
 const resourceKeyword = ref('')
@@ -529,6 +615,8 @@ const pendingClientCode = ref(null)
 const drawerVisible = ref(false)
 const drawerMode = ref('add')
 const formData = ref({})
+const batchMigrateVisible = ref(false)
+const batchMigrateParentId = ref(0)
 const formIconTab = ref('font')
 const tableIconSelectorRef = ref(null)
 const tableIconEditRow = ref(null)
@@ -644,6 +732,42 @@ const displayRows = computed(() => {
   return baseRows.filter(row => matchesResourceFilter(row))
 })
 
+const checkedResourceIdSet = computed(() => new Set(checkedResourceIds.value))
+
+const checkedResourceRows = computed(() => {
+  const checkedIds = checkedResourceIdSet.value
+  return flatResources.value.filter(row => checkedIds.has(row.id))
+})
+
+const allDisplayRowsChecked = computed(() => {
+  return displayRows.value.length > 0 && displayRows.value.every(row => checkedResourceIdSet.value.has(row.id))
+})
+
+const displayRowsCheckIndeterminate = computed(() => {
+  if (displayRows.value.length === 0)
+    return false
+  const checkedCount = displayRows.value.filter(row => checkedResourceIdSet.value.has(row.id)).length
+  return checkedCount > 0 && checkedCount < displayRows.value.length
+})
+
+const batchMigrateRootRows = computed(() => {
+  const checkedIds = checkedResourceIdSet.value
+  return checkedResourceRows.value.filter(row => !hasCheckedAncestor(row, checkedIds))
+})
+
+const batchMigrateDisabledParentIds = computed(() => {
+  const disabledIds = new Set(checkedResourceIds.value)
+  checkedResourceRows.value.forEach((row) => {
+    collectRowDescendantIds(row).forEach(id => disabledIds.add(id))
+  })
+  return disabledIds
+})
+
+const batchMigrateParentOptions = computed(() => [
+  { label: '顶级资源', value: 0, key: 0 },
+  ...buildBatchMigrateParentOptions(allResources.value, batchMigrateDisabledParentIds.value),
+])
+
 const typeStyleMap = {
   1: { text: '目录', icon: 'i-material-symbols:folder-outline', color: '#4C6EF5', bg: '#EDF2FF', fontWeight: '600' },
   2: { text: '菜单', icon: 'i-material-symbols:menu', color: '#40C057', bg: '#EBFBEE', fontWeight: '500' },
@@ -654,6 +778,7 @@ const typeStyleMap = {
 watch(currentClientCode, async () => {
   selectedResourceId.value = 0
   selectedRow.value = null
+  checkedResourceIds.value = []
   pendingParentId.value = null
   pendingClientCode.value = null
   await loadResourceTree({ expandAll: true })
@@ -738,6 +863,7 @@ async function loadResourceTree(options = {}) {
     else
       reconcileNavigationExpandedKeys()
     keepSelectionAvailable()
+    reconcileCheckedResourceIds()
     await nextTick()
     scheduleTableHeightUpdate()
   }
@@ -770,6 +896,40 @@ function keepSelectionAvailable() {
     selectedResourceId.value = 0
     selectedRow.value = null
   }
+}
+
+function reconcileCheckedResourceIds() {
+  if (checkedResourceIds.value.length === 0)
+    return
+  const existingIds = new Set(flatResources.value.map(item => item.id))
+  checkedResourceIds.value = checkedResourceIds.value.filter(id => existingIds.has(id))
+}
+
+function handleResourceCheckedChange(row, checked) {
+  if (!row?.id)
+    return
+
+  const nextIds = new Set(checkedResourceIds.value)
+  if (checked)
+    nextIds.add(row.id)
+  else
+    nextIds.delete(row.id)
+  checkedResourceIds.value = [...nextIds]
+}
+
+function handleDisplayRowsCheckedChange(checked) {
+  const nextIds = new Set(checkedResourceIds.value)
+  displayRows.value.forEach((row) => {
+    if (checked)
+      nextIds.add(row.id)
+    else
+      nextIds.delete(row.id)
+  })
+  checkedResourceIds.value = [...nextIds]
+}
+
+function clearCheckedResources() {
+  checkedResourceIds.value = []
 }
 
 function handleClientTabChange(clientCode) {
@@ -1033,6 +1193,44 @@ function syncParentResourceOptions(list = allResources.value) {
   ]
 }
 
+function buildBatchMigrateParentOptions(list = [], disabledIds = new Set()) {
+  return (Array.isArray(list) ? list : [])
+    .filter(item => !disabledIds.has(item.id))
+    .map((item) => {
+      const children = buildBatchMigrateParentOptions(item.children || [], disabledIds)
+      return {
+        label: item.resourceName,
+        value: item.id,
+        key: item.id,
+        children: children.length > 0 ? children : undefined,
+      }
+    })
+}
+
+function hasCheckedAncestor(row, checkedIds = checkedResourceIdSet.value) {
+  let parent = row?.parent
+  while (parent) {
+    if (checkedIds.has(parent.id))
+      return true
+    parent = parent.parent
+  }
+  return false
+}
+
+function collectRowDescendantIds(row) {
+  const ids = []
+  const walk = (children = []) => {
+    children.forEach((child) => {
+      if (child?.id)
+        ids.push(child.id)
+      if (child?.children?.length)
+        walk(child.children)
+    })
+  }
+  walk(row?.children || [])
+  return ids
+}
+
 function handleAddRoot() {
   handleAdd(null)
 }
@@ -1111,6 +1309,145 @@ function handleDelete(row) {
       }
     },
   })
+}
+
+function handleBatchDelete() {
+  if (checkedResourceIds.value.length === 0) {
+    window.$message?.warning('请先选择要删除的资源')
+    return
+  }
+
+  const blockers = getBatchDeleteBlockers()
+  if (blockers.length > 0) {
+    const names = blockers.slice(0, 3).map(row => row.resourceName).join('、')
+    window.$message?.warning(`「${names}」下还有未选择的子资源，请勾选整棵子树后再删除`)
+    return
+  }
+
+  const deletingIds = [...checkedResourceIds.value]
+  window.$dialog.warning({
+    title: '批量删除',
+    content: `确定要删除选中的 ${deletingIds.length} 项资源吗？删除后将无法恢复。`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        batchActionLoading.value = true
+        const res = await request.post('/system/resource/removeBatch', deletingIds)
+        if (res.code === 200) {
+          window.$message.success('批量删除成功')
+          resetSelectionAfterDelete(deletingIds)
+          await refreshSystemMenu()
+          await loadResourceTree({ expandAll: false })
+        }
+        else {
+          window.$message.error(res.msg || '批量删除失败')
+        }
+      }
+      catch (error) {
+        console.error('批量删除资源失败:', error)
+        window.$message.error('批量删除失败')
+      }
+      finally {
+        batchActionLoading.value = false
+      }
+    },
+  })
+}
+
+function getBatchDeleteBlockers() {
+  const checkedIds = checkedResourceIdSet.value
+  return checkedResourceRows.value.filter(row =>
+    collectRowDescendantIds(row).some(id => !checkedIds.has(id)),
+  )
+}
+
+function resetSelectionAfterDelete(deletedIds) {
+  const deletedIdSet = new Set(deletedIds)
+  if (selectedRow.value?.id && deletedIdSet.has(selectedRow.value.id))
+    selectedRow.value = null
+  if (selectedResourceId.value && deletedIdSet.has(selectedResourceId.value))
+    selectedResourceId.value = 0
+  navigationExpandedKeys.value = navigationExpandedKeys.value.filter(key => !deletedIdSet.has(key))
+  clearCheckedResources()
+}
+
+function openBatchMigrate() {
+  if (checkedResourceIds.value.length === 0) {
+    window.$message?.warning('请先选择要迁移的资源')
+    return
+  }
+  batchMigrateParentId.value = resolveDefaultBatchMigrateParentId()
+  batchMigrateVisible.value = true
+}
+
+function resolveDefaultBatchMigrateParentId() {
+  const contextParentId = currentNode.value?.id || 0
+  return isValidBatchMigrateParent(contextParentId) ? contextParentId : 0
+}
+
+function isValidBatchMigrateParent(parentId) {
+  const normalizedParentId = Number(parentId || 0)
+  if (normalizedParentId === 0)
+    return true
+  return !batchMigrateDisabledParentIds.value.has(normalizedParentId)
+    && flatResources.value.some(row => row.id === normalizedParentId)
+}
+
+async function handleBatchMigrateSubmit() {
+  if (checkedResourceIds.value.length === 0) {
+    window.$message?.warning('请先选择要迁移的资源')
+    return
+  }
+
+  const targetParentId = Number(batchMigrateParentId.value || 0)
+  if (!isValidBatchMigrateParent(targetParentId)) {
+    window.$message?.warning('目标上级不能是选中资源或其下级资源')
+    return
+  }
+
+  const migratingIds = [...checkedResourceIds.value]
+  try {
+    batchActionLoading.value = true
+    const res = await request.post('/system/resource/migrateBatch', {
+      ids: migratingIds,
+      parentId: targetParentId,
+    })
+    if (res.code === 200) {
+      window.$message.success('批量迁移成功')
+      batchMigrateVisible.value = false
+      clearCheckedResources()
+      await refreshSystemMenu()
+      await loadResourceTree({ expandAll: false })
+      focusMigratedParent(targetParentId)
+    }
+    else {
+      window.$message.error(res.msg || '批量迁移失败')
+    }
+  }
+  catch (error) {
+    console.error('批量迁移资源失败:', error)
+    window.$message.error('批量迁移失败')
+  }
+  finally {
+    batchActionLoading.value = false
+  }
+}
+
+function focusMigratedParent(parentId) {
+  if (!parentId) {
+    selectedResourceId.value = 0
+    selectedRow.value = null
+    return
+  }
+
+  const parent = flatResources.value.find(row => row.id === parentId)
+  if (!parent)
+    return
+  expandResourcePath(parent)
+  navigationExpandedKeys.value = [...new Set([...navigationExpandedKeys.value, parent.id])]
+  selectedResourceId.value = parent.id
+  selectedRow.value = parent
 }
 
 function getChildResourceCount(row) {
@@ -1878,6 +2215,30 @@ const editSchema = computed(() => [
   padding-top: 2px;
 }
 
+.list-toolbar-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.checked-count {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .list-filters {
   display: flex;
   align-items: center;
@@ -2076,7 +2437,7 @@ const editSchema = computed(() => [
 
 .resource-list-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(180px, 0.8fr) 58px 44px 66px;
+  grid-template-columns: 26px minmax(260px, 1fr) minmax(180px, 0.8fr) 58px 44px 66px;
   gap: 10px;
   align-items: center;
   min-height: 46px;
@@ -2092,6 +2453,21 @@ const editSchema = computed(() => [
 
 .resource-list-row.is-active {
   background: #eef5ff;
+}
+
+.resource-list-row.is-checked {
+  background: #f4f8ff;
+}
+
+.resource-list-row.is-active.is-checked {
+  background: #e8f1ff;
+}
+
+.resource-list-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
 }
 
 .resource-list-main {
@@ -2481,6 +2857,12 @@ const editSchema = computed(() => [
   font-size: 12px;
 }
 
+.batch-migrate-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 :deep(.is-active-row td) {
   background: #eef5ff !important;
 }
@@ -2532,9 +2914,15 @@ const editSchema = computed(() => [
   }
 
   .header-actions,
+  .list-toolbar-right,
   .list-filters {
+    align-items: stretch;
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .batch-actions {
+    justify-content: flex-start;
   }
 
   .metric-strip {

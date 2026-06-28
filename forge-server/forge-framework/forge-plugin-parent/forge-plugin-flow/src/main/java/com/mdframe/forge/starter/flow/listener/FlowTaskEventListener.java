@@ -14,9 +14,11 @@ import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowFormInstanceMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
+import com.mdframe.forge.starter.flow.service.FlowCcService;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
 import com.mdframe.forge.starter.flow.service.FlowTaskReceiverResolver;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEvent;
 import org.flowable.common.engine.api.delegate.event.FlowableEntityEvent;
@@ -35,6 +37,8 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -50,6 +54,7 @@ import java.util.stream.Collectors;
 public class FlowTaskEventListener implements FlowableEventListener {
 
     private static final String PHYSICAL_CLEANUP_REASON_KEYWORD = "删除流程数据";
+    private static final String FLOW_TODO_MESSAGE_BIZ_TYPE = "FLOW_TODO";
 
     @Autowired
     @Lazy
@@ -100,6 +105,10 @@ public class FlowTaskEventListener implements FlowableEventListener {
     @Autowired(required = false)
     @Lazy
     private FlowFormInstanceMapper flowFormInstanceMapper;
+
+    @Autowired(required = false)
+    @Lazy
+    private FlowCcService flowCcService;
 
     @Override
     public void onEvent(FlowableEvent event) {
@@ -204,6 +213,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
             }
             
             if (business != null) {
+                flowTask.setTenantId(business.getTenantId());
                 flowTask.setTitle(business.getTitle());
                 flowTask.setBusinessKey(business.getBusinessKey());
                 flowTask.setBusinessType(business.getBusinessType());
@@ -223,7 +233,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
             flowTaskMapper.insert(flowTask);
             log.info("创建待办任务成功：taskId={}, title={}, assignee={}, candidateUsers={}, candidateGroups={}",
                     task.getId(), flowTask.getTitle(), flowTask.getAssignee(), flowTask.getCandidateUsers(), flowTask.getCandidateGroups());
-            sendTaskCreatedMessage(flowTask);
+            sendTaskCreatedMessage(flowTask, business);
             log.info("==================================");
     
             // 发布 TASK_CREATED 事件，业务侧可监听并处理（如：发送待办通知、记录日志等）
@@ -242,6 +252,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         flowTask.getAssignee(),
                         null,   // assigneeName 在创建时暂无姓名
                         null);
+                fillTenantId(msg, business);
                 publishEvent(msg, flowTask.getProcessDefKey());
             }
             
@@ -274,6 +285,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 
                 FlowBusiness business = getFlowBusiness(task.getProcessInstanceId());
                 if (business != null) {
+                    flowTask.setTenantId(business.getTenantId());
                     flowTask.setTitle(business.getTitle());
                     flowTask.setBusinessKey(business.getBusinessKey());
                     flowTask.setBusinessType(business.getBusinessType());
@@ -284,9 +296,9 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 flowTaskMapper.insert(flowTask);
                 log.info("创建已完成任务记录：taskId={}", task.getId());
             }
-
             // 发布 TASK_COMPLETED 事件，业务侧可监听具体节点完成情况（如：更新业务表审批节点状态等）
             FlowBusiness completedBusiness = getFlowBusiness(task.getProcessInstanceId());
+            markTaskTodoMessageRead(task.getId(), completedBusiness);
             if (completedBusiness != null) {
                 // 获取该任务的审批意见
                 String comment = null;
@@ -312,12 +324,30 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         flowTask.getAssignee(),
                         null,   // assigneeName 暂无
                         comment);
+                msg.setVariables(readTaskVariables(task));
+                fillTenantId(msg, completedBusiness);
                 publishEvent(msg, flowTask.getProcessDefKey());
             }
             
         } catch (Exception e) {
             log.error("处理任务完成事件失败", e);
             recordEventListenerError(event, "EVENT_TASK_COMPLETED", e);
+        }
+    }
+
+    private void markTaskTodoMessageRead(String taskId, FlowBusiness business) {
+        if (messageService == null || taskId == null || taskId.isBlank()) {
+            return;
+        }
+        try {
+            final int[] updated = {0};
+            runWithBusinessTenant(business,
+                    () -> updated[0] = messageService.markWebReadByBiz(FLOW_TODO_MESSAGE_BIZ_TYPE, taskId));
+            if (updated[0] > 0) {
+                log.info("待办站内信已自动置为已读: taskId={}, updated={}", taskId, updated[0]);
+            }
+        } catch (Exception e) {
+            log.warn("待办站内信自动置已读失败，不阻断流程: taskId={}", taskId, e);
         }
     }
 
@@ -357,6 +387,10 @@ public class FlowTaskEventListener implements FlowableEventListener {
             if (flowTask != null && flowTask.getAssignee() != null) {
                 FlowBusiness assignedBusiness = getFlowBusiness(task.getProcessInstanceId());
                 if (assignedBusiness != null) {
+                    if (flowTask.getTenantId() == null && assignedBusiness.getTenantId() != null) {
+                        flowTask.setTenantId(assignedBusiness.getTenantId());
+                    }
+                    sendTaskCreatedMessage(flowTask, assignedBusiness);
                     FlowEventMessage msg = FlowEventMessage.ofTask(
                             FlowEventMessage.TASK_ASSIGNED,
                             task.getProcessInstanceId(),
@@ -371,6 +405,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                             flowTask.getAssignee(),
                             null,
                             null);
+                    fillTenantId(msg, assignedBusiness);
                     publishEvent(msg, flowTask.getProcessDefKey());
                 }
             }
@@ -401,6 +436,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                     flowTaskMapper.updateById(flowTask);
                     log.info("更新任务状态为已取消：taskId={}", task.getId());
                 }
+                markTaskTodoMessageRead(task.getId(), getFlowBusiness(task.getProcessInstanceId()));
             }
             
         } catch (Exception e) {
@@ -416,20 +452,29 @@ public class FlowTaskEventListener implements FlowableEventListener {
         try {
             Object entity = ((FlowableEntityEvent) event).getEntity();
             String processInstanceId = null;
+            String approvalResult = null;
+            Map<String, Object> processVariables = null;
             
             // PROCESS_COMPLETED 事件的 entity 是 ExecutionEntity
             if (entity instanceof org.flowable.engine.impl.persistence.entity.ExecutionEntity) {
                 org.flowable.engine.impl.persistence.entity.ExecutionEntity execution =
                     (org.flowable.engine.impl.persistence.entity.ExecutionEntity) entity;
                 processInstanceId = execution.getProcessInstanceId();
-                log.info("流程完成事件：processInstanceId={}", processInstanceId);
+                processVariables = execution.getVariables();
+                Object approvalResultVar = execution.getVariable("approvalResult");
+                if (approvalResultVar != null) {
+                    approvalResult = String.valueOf(approvalResultVar);
+                }
+                log.info("流程完成事件：processInstanceId={}, approvalResult={}", processInstanceId, approvalResult);
             }
             
             if (processInstanceId != null) {
-                // 更新 FlowBusiness 状态为已通过
+                boolean rejected = "reject".equalsIgnoreCase(approvalResult);
+
+                // 更新 FlowBusiness 状态
                 FlowBusiness business = getFlowBusiness(processInstanceId);
                 if (business != null) {
-                    business.setStatus("approved"); // 已通过
+                    business.setStatus(rejected ? "rejected" : "approved");
                     business.setEndTime(LocalDateTime.now());
                     if (business.getApplyTime() != null) {
                         long duration = java.time.Duration.between(
@@ -439,12 +484,15 @@ public class FlowTaskEventListener implements FlowableEventListener {
                         business.setDuration(duration);
                     }
                     flowBusinessMapper.updateById(business);
-                    updateFormInstanceStatus(processInstanceId, "APPROVED");
-                    log.info("更新流程业务状态为已通过：processInstanceId={}", processInstanceId);
+                    updateFormInstanceStatus(processInstanceId, rejected ? "REJECTED" : "APPROVED");
+                    log.info("更新流程业务状态为{}：processInstanceId={}",
+                            rejected ? "已驳回" : "已通过", processInstanceId);
 
-                    // 发布事件（方案B: Redis Pub/Sub ＋ 方案C: HTTP Webhook）
+                    String eventType = rejected
+                            ? FlowEventMessage.PROCESS_REJECTED
+                            : FlowEventMessage.PROCESS_COMPLETED;
                     FlowEventMessage msg = FlowEventMessage.ofProcess(
-                            FlowEventMessage.PROCESS_COMPLETED,
+                            eventType,
                             processInstanceId,
                             business.getProcessDefKey(),
                             business.getBusinessKey(),
@@ -452,7 +500,12 @@ public class FlowTaskEventListener implements FlowableEventListener {
                             business.getTitle(),
                             business.getApplyUserId(),
                             business.getApplyUserName());
+                    msg.setVariables(processVariables);
+                    fillTenantId(msg, business);
                     publishEvent(msg, business.getProcessDefKey());
+                    if (!rejected) {
+                        sendProcessCc(business, processVariables);
+                    }
                 } else {
                     log.warn("未找到流程业务记录：processInstanceId={}", processInstanceId);
                 }
@@ -462,6 +515,120 @@ public class FlowTaskEventListener implements FlowableEventListener {
             log.error("处理流程完成事件失败", e);
             recordEventListenerError(event, "EVENT_PROCESS_COMPLETED", e);
         }
+    }
+
+    private Map<String, Object> readTaskVariables(TaskEntity task) {
+        try {
+            return taskService.getVariables(task.getId());
+        } catch (Exception e) {
+            log.debug("从任务读取流程变量失败，尝试从运行实例读取: taskId={}", task.getId());
+            try {
+                return runtimeService.getVariables(task.getProcessInstanceId());
+            } catch (Exception ex) {
+                log.debug("从运行实例读取流程变量失败: processInstanceId={}", task.getProcessInstanceId());
+                return null;
+            }
+        }
+    }
+
+    private void sendProcessCc(FlowBusiness business, Map<String, Object> variables) {
+        if (flowCcService == null || flowOrgIntegrationService == null || variables == null || variables.isEmpty()) {
+            return;
+        }
+        List<String> roleKeys = resolveCcRoleKeys(variables.get("ccRoleKeys"));
+        if (roleKeys.isEmpty()) {
+            return;
+        }
+
+        Set<String> ccUserIds = new LinkedHashSet<>();
+        for (String roleKey : roleKeys) {
+            try {
+                List<String> userIds = flowOrgIntegrationService.getUserIdsByRoleCode(roleKey);
+                if (userIds != null) {
+                    ccUserIds.addAll(userIds);
+                }
+            } catch (Exception e) {
+                log.warn("流程抄送角色解析失败: businessKey={}, roleKey={}",
+                        business.getBusinessKey(), roleKey, e);
+            }
+        }
+        if (ccUserIds.isEmpty()) {
+            log.warn("流程抄送未找到接收人: businessKey={}, roleKeys={}", business.getBusinessKey(), roleKeys);
+            return;
+        }
+
+        List<String> userIds = new ArrayList<>(ccUserIds);
+        try {
+            runWithBusinessTenant(business, () -> flowCcService.sendCc(
+                    business.getProcessInstanceId(),
+                    business.getProcessDefKey(),
+                    null,
+                    business.getTitle(),
+                    "流程已通过，请知悉：" + safeText(business.getTitle(), business.getBusinessKey()),
+                    business.getBusinessKey(),
+                    userIds,
+                    resolveUserNames(userIds),
+                    business.getApplyUserId(),
+                    business.getApplyUserName()));
+        } catch (Exception e) {
+            log.warn("流程抄送发送失败，不阻断主流程: businessKey={}, ccUserIds={}",
+                    business.getBusinessKey(), userIds, e);
+        }
+    }
+
+    private List<String> resolveCcRoleKeys(Object rawValue) {
+        List<String> result = new ArrayList<>();
+        if (rawValue instanceof Iterable<?>) {
+            for (Object item : (Iterable<?>) rawValue) {
+                addNonBlank(result, item);
+            }
+            return result;
+        }
+        if (rawValue instanceof String) {
+            String text = ((String) rawValue).trim();
+            if (text.isEmpty()) {
+                return result;
+            }
+            for (String item : text.split("[,;，；]")) {
+                addNonBlank(result, item);
+            }
+            return result;
+        }
+        addNonBlank(result, rawValue);
+        return result;
+    }
+
+    private void addNonBlank(List<String> values, Object value) {
+        if (value == null) {
+            return;
+        }
+        String text = String.valueOf(value).trim();
+        if (!text.isEmpty()) {
+            values.add(text);
+        }
+    }
+
+    private List<String> resolveUserNames(List<String> userIds) {
+        List<String> names = new ArrayList<>();
+        for (String userId : userIds) {
+            String name = null;
+            try {
+                Map<String, Object> userInfo = flowOrgIntegrationService.getUserInfo(userId);
+                if (userInfo != null) {
+                    Object rawName = userInfo.get("name");
+                    if (rawName == null) {
+                        rawName = userInfo.get("realName");
+                    }
+                    if (rawName != null) {
+                        name = String.valueOf(rawName);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("解析抄送用户姓名失败: userId={}", userId);
+            }
+            names.add(name);
+        }
+        return names;
     }
 
     /**
@@ -507,6 +674,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
                             business.getTitle(),
                             business.getApplyUserId(),
                             business.getApplyUserName());
+                    fillTenantId(msg, business);
                     publishEvent(msg, business.getProcessDefKey());
                 } else {
                     log.warn("未找到流程业务记录：processInstanceId={}", processInstanceId);
@@ -624,7 +792,7 @@ public class FlowTaskEventListener implements FlowableEventListener {
         return flowTask;
     }
 
-    private void sendTaskCreatedMessage(FlowTask flowTask) {
+    private void sendTaskCreatedMessage(FlowTask flowTask, FlowBusiness business) {
         if (messageService == null || flowTask == null || flowTask.getTaskId() == null) {
             return;
         }
@@ -652,7 +820,8 @@ public class FlowTaskEventListener implements FlowableEventListener {
                 "jumpUrl", "/flow/todo?taskId=" + flowTask.getTaskId()
         ));
         try {
-            messageService.sendIfAbsent(request, "FLOW_TODO", flowTask.getTaskId());
+            runWithBusinessTenant(business,
+                    () -> messageService.sendIfAbsent(request, FLOW_TODO_MESSAGE_BIZ_TYPE, flowTask.getTaskId()));
             log.info("待办站内信已推送: taskId={}, receivers={}", flowTask.getTaskId(), receiverIds);
         } catch (Exception e) {
             log.warn("待办站内信推送失败，不阻断流程: taskId={}", flowTask.getTaskId(), e);
@@ -780,6 +949,15 @@ public class FlowTaskEventListener implements FlowableEventListener {
         if (processDefKey == null) {
             return;
         }
+        Long tenantId = parseTenantId(message == null ? null : message.getTenantId());
+        if (tenantId != null) {
+            TenantContextHolder.executeWithTenant(tenantId, () -> doPublishEvent(message, processDefKey));
+            return;
+        }
+        doPublishEvent(message, processDefKey);
+    }
+
+    private void doPublishEvent(FlowEventMessage message, String processDefKey) {
         try {
             FlowModel model = flowModelMapper.selectOne(
                     new LambdaQueryWrapper<FlowModel>()
@@ -821,6 +999,37 @@ public class FlowTaskEventListener implements FlowableEventListener {
         } catch (Exception e) {
             log.warn("[FlowEvent] 发布事件失败，不影响主流程: processDefKey={}, error={}", processDefKey, e.getMessage(), e);
         }
+    }
+
+    private Long parseTenantId(String tenantId) {
+        if (tenantId == null || tenantId.isBlank()) {
+            return null;
+        }
+        try {
+            Long value = Long.parseLong(tenantId.trim());
+            return value > 0 ? value : null;
+        } catch (NumberFormatException e) {
+            log.warn("[FlowEvent] tenantId 格式错误，按当前上下文发布: tenantId={}", tenantId);
+            return null;
+        }
+    }
+
+    private void fillTenantId(FlowEventMessage message, FlowBusiness business) {
+        if (message != null && business != null && business.getTenantId() != null) {
+            message.setTenantId(String.valueOf(business.getTenantId()));
+        }
+    }
+
+    private void runWithBusinessTenant(FlowBusiness business, Runnable action) {
+        if (action == null) {
+            return;
+        }
+        Long tenantId = business == null ? null : business.getTenantId();
+        if (tenantId != null && tenantId > 0) {
+            TenantContextHolder.executeWithTenant(tenantId, action);
+            return;
+        }
+        action.run();
     }
 
     /**

@@ -15,6 +15,7 @@ import com.mdframe.forge.starter.flow.service.FlowInstanceService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -66,15 +67,24 @@ public class FlowInstanceController {
             variables.putAll(innerVars);
         }
         
-        // 从Session获取当前用户信息
+        // FlowClient 会显式传入业务发起人；Session 仅作为人工从流程中心发起时的兜底。
+        String requestUserId = toText(params.get("userId"));
+        String requestUserName = toText(params.get("userName"));
+        String requestDeptId = toText(params.get("deptId"));
+        String requestDeptName = toText(params.get("deptName"));
         LoginUser loginUser = SessionHelper.getLoginUser();
-        String userId = loginUser != null ? String.valueOf(loginUser.getUserId()) : null;
-        String userName = loginUser != null ? loginUser.getRealName() : null;
-        String deptId = loginUser != null && loginUser.getMainOrgId() != null ? String.valueOf(loginUser.getMainOrgId()) : null;
-        String deptName = null;
-        
-        // 获取部门名称
-        if (userId != null && flowOrgIntegrationService != null) {
+        String userId = StringUtils.hasText(requestUserId)
+                ? requestUserId
+                : loginUser != null ? String.valueOf(loginUser.getUserId()) : null;
+        String userName = StringUtils.hasText(requestUserName)
+                ? requestUserName
+                : loginUser != null ? loginUser.getRealName() : null;
+        String deptId = StringUtils.hasText(requestDeptId)
+                ? requestDeptId
+                : loginUser != null && loginUser.getMainOrgId() != null ? String.valueOf(loginUser.getMainOrgId()) : null;
+        String deptName = requestDeptName;
+
+        if (!StringUtils.hasText(deptName) && StringUtils.hasText(userId) && flowOrgIntegrationService != null) {
             deptName = flowOrgIntegrationService.getUserDeptName(userId);
         }
         
@@ -101,6 +111,14 @@ public class FlowInstanceController {
                 userId, userName, deptId, deptName);
         
         return RespInfo.success("流程发起成功", processInstanceId);
+    }
+
+    private String toText(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     /**

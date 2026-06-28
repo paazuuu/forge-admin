@@ -141,6 +141,35 @@
             {{ currentCc.content || '暂无内容' }}
           </div>
         </div>
+        <div class="cc-business-form-panel">
+          <div class="cc-business-form-head">
+            <div>
+              <div class="cc-business-form-title">
+                业务表单
+              </div>
+              <div class="cc-business-form-subtitle">
+                {{ ccFormInfo?.title || currentCc.title || '-' }}
+              </div>
+            </div>
+          </div>
+
+          <div v-if="ccFormLoading" class="cc-form-loading">
+            <n-spin size="small" />
+            <span>加载表单中...</span>
+          </div>
+          <FlowBusinessForm
+            v-else-if="useCcExternalForm"
+            :form-url="ccFormInfo.formUrl"
+            :task-id="ccFormInfo.taskId"
+            :business-key="ccFormInfo.businessKey"
+            :process-instance-id="ccFormInfo.processInstanceId"
+            :task-def-key="ccFormInfo.taskDefKey"
+            :process-def-key="ccFormInfo.processDefKey"
+            :variables="ccFormInfo.variables || {}"
+            :read-only="true"
+          />
+          <n-empty v-else :description="ccFormError || '暂无业务表单'" size="small" />
+        </div>
       </div>
 
       <template #footer>
@@ -158,6 +187,7 @@
 import { NButton } from 'naive-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
 import flowApi from '@/api/flow'
+import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import { useDict } from '@/composables/useDict'
@@ -192,6 +222,10 @@ const readOptions = computed(() => toNumberOptions(dict.value.flow_read_status))
 const unreadCc = ref(0)
 const showDetailModal = ref(false)
 const currentCc = ref(null)
+const ccFormInfo = ref(null)
+const ccFormLoading = ref(false)
+const ccFormError = ref('')
+const useCcExternalForm = computed(() => ccFormInfo.value?.formType === 'external' && ccFormInfo.value?.formUrl)
 
 function toNumberOptions(options = []) {
   return options.map(item => ({
@@ -245,8 +279,39 @@ function handleTabChange() {
 async function openCcDetail(row) {
   currentCc.value = row
   showDetailModal.value = true
+  loadCcFormInfo(row)
   if (activeTab.value === 'received' && row.isRead === 0)
     await handleMarkRead(row.id, false)
+}
+
+async function loadCcFormInfo(row) {
+  ccFormInfo.value = null
+  ccFormError.value = ''
+  if (!row?.id) {
+    return
+  }
+  const ccId = row.id
+  ccFormLoading.value = true
+  try {
+    const res = await flowApi.getCcFormInfo(ccId)
+    if (currentCc.value?.id !== ccId) {
+      return
+    }
+    if (res.code === 200) {
+      ccFormInfo.value = res.data || null
+    }
+    else {
+      ccFormError.value = res.message || '业务表单加载失败'
+    }
+  }
+  catch (error) {
+    if (currentCc.value?.id === ccId)
+      ccFormError.value = error?.message || '业务表单加载失败'
+  }
+  finally {
+    if (currentCc.value?.id === ccId)
+      ccFormLoading.value = false
+  }
 }
 
 async function handleMarkRead(id, showToast = true) {
@@ -505,6 +570,45 @@ onMounted(() => {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.cc-business-form-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.cc-business-form-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.cc-business-form-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cc-business-form-subtitle {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.cc-form-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 120px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 @media (max-width: 760px) {

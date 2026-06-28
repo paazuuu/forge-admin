@@ -864,9 +864,10 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
       }
       const typeClass = action.type ? `type-${action.type}` : ''
       const isDanger = action.type === 'error' || action.type === 'danger'
-      const disabled = isActionDisabled(action, row) || isActionLoading(action, row)
+      const loading = isActionLoading(action, row)
+      const disabled = isActionDisabled(action, row) || loading
       nodes.push(h('a', {
-        class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : ''],
+        class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : '', loading ? 'loading' : ''],
         title: disabled ? actionDisabledReason(action, row) : action.label,
         onClick: (e) => {
           e?.stopPropagation()
@@ -876,10 +877,10 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
             return
           }
           if (action.onClick)
-            action.onClick(row)
+            handleCustomActionClick(action, row)
           else handleActionClick(action, row)
         },
-      }, action.label))
+      }, resolveActionDisplayLabel(action, row)))
       return nodes
     }).flat())
   }
@@ -887,7 +888,7 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
   // 需要折叠：显示前 maxActionButtons 个，其余放入"更多"下拉
   const inlineActions = visibleActions.slice(0, maxVisibleActions)
   const dropdownOptions = visibleActions.slice(maxVisibleActions).map(action => ({
-    label: action.label,
+    label: resolveActionDisplayLabel(action, row),
     key: action.key || action.label,
     disabled: isActionDisabled(action, row) || isActionLoading(action, row),
   }))
@@ -899,9 +900,10 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
     }
     const typeClass = action.type ? `type-${action.type}` : ''
     const isDanger = action.type === 'error' || action.type === 'danger'
-    const disabled = isActionDisabled(action, row) || isActionLoading(action, row)
+    const loading = isActionLoading(action, row)
+    const disabled = isActionDisabled(action, row) || loading
     nodes.push(h('a', {
-      class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : ''],
+      class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : '', loading ? 'loading' : ''],
       title: disabled ? actionDisabledReason(action, row) : action.label,
       onClick: (e) => {
         e?.stopPropagation()
@@ -911,10 +913,10 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
           return
         }
         if (action.onClick)
-          action.onClick(row)
+          handleCustomActionClick(action, row)
         else handleActionClick(action, row)
       },
-    }, action.label))
+    }, resolveActionDisplayLabel(action, row)))
     return nodes
   }).flat()
 
@@ -930,8 +932,12 @@ function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) 
           showActionDisabledMessage(action, row)
           return
         }
+        if (action && isActionLoading(action, row)) {
+          showActionDisabledMessage(action, row)
+          return
+        }
         if (action?.onClick)
-          action.onClick(row)
+          handleCustomActionClick(action, row)
         else handleActionClick(action || key, row)
       },
     }, {
@@ -1001,7 +1007,7 @@ function isActionDisabled(action, row) {
 
 function actionDisabledReason(action, row) {
   if (isActionLoading(action, row))
-    return '操作执行中，请稍候'
+    return resolveActionTextValue(action.loadingReason, row) || '操作执行中，请稍候'
   if (typeof action.disabledReason === 'function')
     return action.disabledReason(row)
   return action.disabledReason || '当前状态不可执行'
@@ -1009,6 +1015,42 @@ function actionDisabledReason(action, row) {
 
 function showActionDisabledMessage(action, row) {
   window.$message?.warning(actionDisabledReason(action, row))
+}
+
+function resolveActionDisplayLabel(action, row) {
+  if (isActionLoading(action, row)) {
+    const loadingLabel = resolveActionTextValue(action.loadingLabel, row)
+    if (loadingLabel)
+      return loadingLabel
+  }
+  return resolveActionTextValue(action.label, row) || action.key || ''
+}
+
+function resolveActionTextValue(value, row) {
+  if (typeof value === 'function')
+    return value(row)
+  if (value === undefined || value === null)
+    return ''
+  return String(value)
+}
+
+async function handleCustomActionClick(action, row) {
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message?.info(resolveActionTextValue(action.loadingReason, row) || '操作正在执行，请稍候')
+    return
+  }
+  setActionLoading(loadingKey, true)
+  try {
+    await action.onClick(row)
+  }
+  catch (error) {
+    const failureMessage = resolveActionTextValue(action.failureMessage, row) || error?.message || '操作失败'
+    window.$message?.error(failureMessage)
+  }
+  finally {
+    setActionLoading(loadingKey, false)
+  }
 }
 
 function hasRuntimePermission(permissionCode = '') {
@@ -1439,7 +1481,10 @@ function getActionLoadingKey(action, row) {
 }
 
 function isActionLoading(action, row) {
-  return actionLoadingKeys.value.has(getActionLoadingKey(action, row))
+  const internalLoading = actionLoadingKeys.value.has(getActionLoadingKey(action, row))
+  if (typeof action?.loading === 'function')
+    return internalLoading || !!action.loading(row)
+  return internalLoading || !!action?.loading
 }
 
 function setActionLoading(key, loading) {

@@ -49,6 +49,81 @@ public final class BpmnXmlUtils {
         }
     }
 
+    public static LegacyMultiInstanceNormalizationResult normalizeLegacyMultiInstanceExpressions(String bpmnXml) {
+        if (bpmnXml == null || bpmnXml.isBlank()) {
+            return new LegacyMultiInstanceNormalizationResult(bpmnXml, List.of());
+        }
+
+        try {
+            Document document = parseXml(bpmnXml);
+            List<String> normalizedNodeIds = removeLegacyMultiInstanceExpressions(document);
+            if (normalizedNodeIds.isEmpty()) {
+                return new LegacyMultiInstanceNormalizationResult(bpmnXml, normalizedNodeIds);
+            }
+            return new LegacyMultiInstanceNormalizationResult(serialize(document), normalizedNodeIds);
+        }
+        catch (Exception e) {
+            throw new RuntimeException("BPMN XML 多实例配置解析失败：" + e.getMessage(), e);
+        }
+    }
+
+    private static List<String> removeLegacyMultiInstanceExpressions(Document document) {
+        List<String> normalizedNodeIds = new ArrayList<>();
+        NodeList allNodes = document.getElementsByTagName("*");
+        for (int i = 0; i < allNodes.getLength(); i++) {
+            Node node = allNodes.item(i);
+            if (!(node instanceof Element element)
+                    || !"multiInstanceLoopCharacteristics".equals(localName(element))
+                    || !hasFlowableCollection(element)) {
+                continue;
+            }
+
+            int removed = removeLegacyMultiInstanceChildren(element);
+            if (removed > 0) {
+                normalizedNodeIds.add(findOwnerNodeId(element));
+            }
+        }
+        return normalizedNodeIds;
+    }
+
+    private static boolean hasFlowableCollection(Element element) {
+        return !normalizeText(element.getAttribute("flowable:collection")).isBlank()
+                || !normalizeText(element.getAttribute("collection")).isBlank();
+    }
+
+    private static int removeLegacyMultiInstanceChildren(Element multiInstanceElement) {
+        List<Node> nodesToRemove = new ArrayList<>();
+        NodeList children = multiInstanceElement.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (!(child instanceof Element childElement)) {
+                continue;
+            }
+            String localName = localName(childElement);
+            String expressionText = normalizeExpressionText(childElement.getTextContent());
+            if ("loopCardinality".equals(localName) && "${nrOfInstances}".equals(expressionText)) {
+                nodesToRemove.add(childElement);
+            }
+            if ("completionCondition".equals(localName)
+                    && "${nrOfCompletedInstances==nrOfInstances}".equals(expressionText)) {
+                nodesToRemove.add(childElement);
+            }
+        }
+        nodesToRemove.forEach(BpmnXmlUtils::removeElement);
+        return nodesToRemove.size();
+    }
+
+    private static String findOwnerNodeId(Element element) {
+        Node parent = element.getParentNode();
+        if (parent instanceof Element parentElement) {
+            String id = normalizeText(parentElement.getAttribute("id"));
+            if (!id.isBlank()) {
+                return id;
+            }
+        }
+        return "unknown";
+    }
+
     private static List<DuplicateSequenceFlowRepair> removeDuplicateSequenceFlows(Document document) {
         Set<String> explicitFlowRefs = collectExplicitFlowRefs(document);
         Set<String> defaultFlowRefs = collectDefaultFlowRefs(document);
@@ -317,6 +392,10 @@ public final class BpmnXmlUtils {
         return text == null ? "" : text.replaceAll("\\s+", " ").trim();
     }
 
+    private static String normalizeExpressionText(String text) {
+        return normalizeText(text).replace(" ", "");
+    }
+
     private static final class SequenceFlowInfo {
         private final String id;
         private final String sourceRef;
@@ -350,6 +429,28 @@ public final class BpmnXmlUtils {
 
         public boolean hasRepairs() {
             return repairs != null && !repairs.isEmpty();
+        }
+    }
+
+    public static final class LegacyMultiInstanceNormalizationResult {
+        private final String bpmnXml;
+        private final List<String> normalizedNodeIds;
+
+        private LegacyMultiInstanceNormalizationResult(String bpmnXml, List<String> normalizedNodeIds) {
+            this.bpmnXml = bpmnXml;
+            this.normalizedNodeIds = normalizedNodeIds;
+        }
+
+        public String getBpmnXml() {
+            return bpmnXml;
+        }
+
+        public List<String> getNormalizedNodeIds() {
+            return normalizedNodeIds;
+        }
+
+        public boolean hasRepairs() {
+            return normalizedNodeIds != null && !normalizedNodeIds.isEmpty();
         }
     }
 

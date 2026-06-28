@@ -66,6 +66,12 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!-- Tenant context for async flow callbacks -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-tenant</artifactId>
+        </dependency>
         
         <dependency>
             <groupId>jakarta.servlet</groupId>

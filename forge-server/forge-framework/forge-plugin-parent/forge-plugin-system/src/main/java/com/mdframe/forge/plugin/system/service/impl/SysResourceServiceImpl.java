@@ -20,14 +20,22 @@ import com.mdframe.forge.starter.auth.domain.UserResourceTreeVO;
 import com.mdframe.forge.starter.auth.service.IMenuService;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -131,6 +139,7 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
                 : normalizeMinUserType(existing.getMinUserType());
         resource.setMinUserType(dto.getMinUserType() != null ? minUserType : null);
         Long parentId = dto.getParentId() != null ? dto.getParentId() : existing.getParentId();
+        validateParentCycle(dto.getId(), parentId);
         validateParentUserTypeBoundary(parentId, minUserType);
         boolean updated = resourceMapper.updateById(resource) > 0;
         clearApiPermissionCacheIfChanged(updated);
@@ -138,11 +147,220 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteResourceById(Long id) {
+        return deleteResourceByIds(id == null ? new Long[0] : new Long[]{id});
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean deleteResourceByIds(Long[] ids) {
         assertSystemAdmin();
-        boolean deleted = resourceMapper.deleteById(id) > 0;
+        List<Long> resourceIds = normalizeResourceIds(ids == null ? Collections.emptyList() : Arrays.asList(ids));
+        if (CollUtil.isEmpty(resourceIds)) {
+            throw new RuntimeException("请选择要删除的资源");
+        }
+
+        List<SysResource> selectedResources = loadSelectedResources(resourceIds);
+        validateSelectedResourcesExist(resourceIds, selectedResources);
+        validateNoUnselectedDescendants(resourceIds);
+        deleteRoleResourceBindings(resourceIds);
+
+        int deletedCount = resourceMapper.deleteBatchIds(resourceIds);
+        if (deletedCount != resourceIds.size()) {
+            throw new RuntimeException("部分资源删除失败，请刷新后重试");
+        }
+        boolean deleted = deletedCount > 0;
         clearApiPermissionCacheIfChanged(deleted);
         return deleted;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean batchMigrateResources(List<Long> ids, Long parentId) {
+        assertSystemAdmin();
+        List<Long> resourceIds = normalizeResourceIds(ids);
+        if (CollUtil.isEmpty(resourceIds)) {
+            throw new RuntimeException("请选择要迁移的资源");
+        }
+
+        Long targetParentId = normalizeParentId(parentId);
+        List<SysResource> allResources = resourceMapper.selectList(new LambdaQueryWrapper<SysResource>()
+                .select(SysResource::getId, SysResource::getParentId, SysResource::getResourceName, SysResource::getMinUserType));
+        Map<Long, SysResource> resourceMap = allResources.stream()
+                .collect(Collectors.toMap(SysResource::getId, item -> item, (left, right) -> left));
+
+        List<SysResource> selectedResources = resourceIds.stream()
+                .map(resourceMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        validateSelectedResourcesExist(resourceIds, selectedResources);
+        validateBatchMigrateTarget(resourceIds, targetParentId, allResources, resourceMap);
+
+        Set<Long> selectedIdSet = new HashSet<>(resourceIds);
+        List<SysResource> movableResources = selectedResources.stream()
+                .filter(resource -> !hasSelectedAncestor(resource, selectedIdSet, resourceMap))
+                .collect(Collectors.toList());
+        if (CollUtil.isEmpty(movableResources)) {
+            return true;
+        }
+
+        for (SysResource resource : movableResources) {
+            validateParentUserTypeBoundary(targetParentId, normalizeMinUserType(resource.getMinUserType()));
+        }
+
+        List<SysResource> updateList = movableResources.stream()
+                .map(resource -> {
+                    SysResource update = new SysResource();
+                    update.setId(resource.getId());
+                    update.setParentId(targetParentId);
+                    return update;
+                })
+                .collect(Collectors.toList());
+        boolean updated = updateBatchById(updateList);
+        clearApiPermissionCacheIfChanged(updated);
+        return updated;
+    }
+
+    private List<Long> normalizeResourceIds(Collection<Long> ids) {
+        if (CollUtil.isEmpty(ids)) {
+            return new ArrayList<>();
+        }
+        return ids.stream()
+                .filter(Objects::nonNull)
+                .filter(id -> id > 0)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private List<SysResource> loadSelectedResources(List<Long> resourceIds) {
+        if (CollUtil.isEmpty(resourceIds)) {
+            return new ArrayList<>();
+        }
+        return resourceMapper.selectList(new LambdaQueryWrapper<SysResource>().in(SysResource::getId, resourceIds));
+    }
+
+    private void validateSelectedResourcesExist(List<Long> resourceIds, List<SysResource> selectedResources) {
+        Set<Long> existingIds = selectedResources.stream()
+                .map(SysResource::getId)
+                .collect(Collectors.toSet());
+        if (!existingIds.containsAll(resourceIds)) {
+            throw new RuntimeException("部分资源不存在或已被删除");
+        }
+    }
+
+    private void validateNoUnselectedDescendants(List<Long> resourceIds) {
+        Set<Long> selectedIdSet = new HashSet<>(resourceIds);
+        List<SysResource> allResources = resourceMapper.selectList(new LambdaQueryWrapper<SysResource>()
+                .select(SysResource::getId, SysResource::getParentId, SysResource::getResourceName));
+        Map<Long, List<SysResource>> childrenMap = groupResourcesByParent(allResources);
+        Map<Long, SysResource> resourceMap = allResources.stream()
+                .collect(Collectors.toMap(SysResource::getId, item -> item, (left, right) -> left));
+        List<String> blockers = new ArrayList<>();
+
+        for (Long resourceId : resourceIds) {
+            Set<Long> descendantIds = collectDescendantIds(resourceId, childrenMap);
+            boolean hasUnselectedDescendant = descendantIds.stream().anyMatch(id -> !selectedIdSet.contains(id));
+            if (hasUnselectedDescendant) {
+                SysResource resource = resourceMap.get(resourceId);
+                blockers.add(resource == null ? String.valueOf(resourceId) : resource.getResourceName());
+            }
+        }
+
+        if (CollUtil.isNotEmpty(blockers)) {
+            String resourceNames = blockers.stream().limit(3).collect(Collectors.joining("、"));
+            throw new RuntimeException("资源「" + resourceNames + "」下还有未选择的子资源，请勾选整棵子树后再删除");
+        }
+    }
+
+    private void deleteRoleResourceBindings(List<Long> resourceIds) {
+        if (CollUtil.isEmpty(resourceIds)) {
+            return;
+        }
+        TenantContextHolder.executeIgnore(() -> {
+            LambdaQueryWrapper<SysRoleResource> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SysRoleResource::getResourceId, resourceIds);
+            roleResourceMapper.delete(wrapper);
+        });
+    }
+
+    private void validateBatchMigrateTarget(List<Long> resourceIds,
+                                            Long targetParentId,
+                                            List<SysResource> allResources,
+                                            Map<Long, SysResource> resourceMap) {
+        if (targetParentId == null || targetParentId == 0L) {
+            return;
+        }
+        if (!resourceMap.containsKey(targetParentId)) {
+            throw new RuntimeException("目标上级资源不存在");
+        }
+
+        Set<Long> selectedIdSet = new HashSet<>(resourceIds);
+        if (selectedIdSet.contains(targetParentId)) {
+            throw new RuntimeException("不能迁移到选中的资源自身下面");
+        }
+
+        Map<Long, List<SysResource>> childrenMap = groupResourcesByParent(allResources);
+        for (Long resourceId : resourceIds) {
+            if (collectDescendantIds(resourceId, childrenMap).contains(targetParentId)) {
+                throw new RuntimeException("不能迁移到选中资源的下级资源下面");
+            }
+        }
+    }
+
+    private boolean hasSelectedAncestor(SysResource resource, Set<Long> selectedIdSet, Map<Long, SysResource> resourceMap) {
+        Long parentId = normalizeParentId(resource.getParentId());
+        Set<Long> visitedIds = new HashSet<>();
+        while (parentId != null && parentId != 0L && visitedIds.add(parentId)) {
+            if (selectedIdSet.contains(parentId)) {
+                return true;
+            }
+            SysResource parent = resourceMap.get(parentId);
+            if (parent == null) {
+                break;
+            }
+            parentId = normalizeParentId(parent.getParentId());
+        }
+        return false;
+    }
+
+    private void validateParentCycle(Long resourceId, Long parentId) {
+        if (resourceId == null || parentId == null || parentId == 0L) {
+            return;
+        }
+        if (Objects.equals(resourceId, parentId)) {
+            throw new RuntimeException("上级资源不能选择自身");
+        }
+
+        List<SysResource> allResources = resourceMapper.selectList(new LambdaQueryWrapper<SysResource>()
+                .select(SysResource::getId, SysResource::getParentId));
+        Map<Long, List<SysResource>> childrenMap = groupResourcesByParent(allResources);
+        if (collectDescendantIds(resourceId, childrenMap).contains(parentId)) {
+            throw new RuntimeException("上级资源不能选择当前资源的下级");
+        }
+    }
+
+    private Map<Long, List<SysResource>> groupResourcesByParent(List<SysResource> resources) {
+        if (CollUtil.isEmpty(resources)) {
+            return Collections.emptyMap();
+        }
+        return resources.stream()
+                .collect(Collectors.groupingBy(resource -> normalizeParentId(resource.getParentId())));
+    }
+
+    private Set<Long> collectDescendantIds(Long parentId, Map<Long, List<SysResource>> childrenMap) {
+        Set<Long> descendantIds = new HashSet<>();
+        collectDescendantIds(parentId, childrenMap, descendantIds);
+        return descendantIds;
+    }
+
+    private void collectDescendantIds(Long parentId, Map<Long, List<SysResource>> childrenMap, Set<Long> descendantIds) {
+        List<SysResource> children = childrenMap.getOrDefault(parentId, Collections.emptyList());
+        for (SysResource child : children) {
+            if (child.getId() != null && descendantIds.add(child.getId())) {
+                collectDescendantIds(child.getId(), childrenMap, descendantIds);
+            }
+        }
     }
 
     @Override
@@ -380,6 +598,10 @@ public class SysResourceServiceImpl extends ServiceImpl<SysResourceMapper, SysRe
 
     private Integer normalizeMinUserType(Integer minUserType) {
         return normalizeUserType(minUserType);
+    }
+
+    private Long normalizeParentId(Long parentId) {
+        return parentId == null ? 0L : parentId;
     }
 
     private void validateParentUserTypeBoundary(Long parentId, Integer minUserType) {

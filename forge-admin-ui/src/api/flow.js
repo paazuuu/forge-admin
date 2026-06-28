@@ -311,6 +311,12 @@ export default {
     request.get('/api/flow/cc/sent', { params }),
 
   /**
+   * 获取抄送关联业务表单
+   */
+  getCcFormInfo: id =>
+    request.get(`/api/flow/cc/form/${id}`),
+
+  /**
    * 标记已读
    */
   markCcRead: id =>
