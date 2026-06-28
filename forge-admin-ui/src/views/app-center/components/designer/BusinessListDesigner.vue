@@ -1130,6 +1130,8 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
     hideSelection: tableProps.hideSelection === true,
     maxHeight: tableProps.maxHeight || undefined,
     scrollX: tableProps.scrollX || undefined,
+    resizable: tableProps.resizable === true,
+    expandConfig: tableProps.expandConfig || {},
     listMethod: tableProps.listMethod || 'get',
     listDataField: tableProps.listDataField || 'records',
     listTotalField: tableProps.listTotalField || 'total',
@@ -1157,6 +1159,7 @@ function buildDesignerCrudHookHandlers(tableProps = {}) {
 function handleListCustomActionsUpdate(actions = []) {
   const nextActions = normalizeListCustomActions(actions)
   listCustomActions.value = nextActions
+  setLocalSchema(syncSchemaCustomActions(localSchema.value, nextActions))
   emit('update:designerActions', cloneSchema(nextActions.map((action, index) => listActionToDesignerAction(action, index, { preserveDraftParams: true }))))
   emit('dirtyChange', true)
 }
@@ -1169,6 +1172,56 @@ function normalizeDesignerActionsForList(actions = []) {
   if (!Array.isArray(actions))
     return []
   return normalizeListCustomActions(actions.map(designerActionToListAction))
+}
+
+function syncSchemaCustomActions(schema = {}, actions = []) {
+  const normalizedActions = normalizeListCustomActions(actions)
+  const syncGrid = (grid = {}) => {
+    if (!grid || !Array.isArray(grid.items))
+      return grid
+    let changed = false
+    const items = grid.items.map((item) => {
+      if (!['AiCrudPage', 'data-table', 'AiTable', 'toolbar'].includes(item?.blockType))
+        return item
+      changed = true
+      return {
+        ...item,
+        props: {
+          ...(item.props || {}),
+          customActions: cloneSchema(normalizedActions),
+        },
+      }
+    })
+    return changed ? { ...grid, items } : grid
+  }
+
+  const listGridLayout = syncGrid(schema.listGridLayout)
+  const pages = Array.isArray(schema.pages)
+    ? schema.pages.map(page => ({
+        ...page,
+        gridLayout: syncGrid(page?.gridLayout),
+      }))
+    : schema.pages
+  const zones = Array.isArray(schema.zones)
+    ? schema.zones.map((zone) => {
+        if (zone?.zoneKey !== 'table')
+          return zone
+        return {
+          ...zone,
+          props: {
+            ...(zone.props || {}),
+            customActions: cloneSchema(normalizedActions),
+          },
+        }
+      })
+    : schema.zones
+
+  return {
+    ...schema,
+    listGridLayout,
+    pages,
+    zones,
+  }
 }
 
 function designerActionToListAction(action = {}, index = 0) {
@@ -1184,11 +1237,13 @@ function designerActionToListAction(action = {}, index = 0) {
         ? (config.triggerCode || action.routePath || '')
         : config.targetPath || action.routePath || ''
   return {
+    clientKey: action.clientKey || config.clientKey || key,
     key,
     label: action.actionName || action.label || '自定义操作',
     position,
     type: action.type || resolveDefaultActionButtonType(actionType),
     actionType: designerActionTypeToListType(actionType),
+    visible: action.visible !== false,
     routePath,
     targetFormKey: config.targetFormKey || action.targetFormKey || '',
     openTarget: config.openTarget || action.openTarget || (actionType === 'OPEN_EXTERNAL' ? '_blank' : '_self'),
@@ -1209,10 +1264,12 @@ function listActionToDesignerAction(action = {}, index = 0, options = {}) {
   const normalized = normalizeListCustomAction(action, index)
   const actionType = listActionTypeToDesignerType(normalized.actionType)
   return {
+    clientKey: normalized.clientKey || normalized.key,
     actionCode: normalizeActionCode(normalized.key || normalized.label) || `custom_${index + 1}`,
     actionName: normalized.label || '自定义操作',
     actionPosition: normalizeDesignerActionPosition(normalized.position),
     actionType,
+    visible: normalized.visible !== false,
     permission: normalized.permissionCode || '',
     confirmRequired: Boolean(normalized.confirmText),
     confirmText: normalized.confirmText || '',
@@ -1225,7 +1282,10 @@ function listActionToDesignerAction(action = {}, index = 0, options = {}) {
 }
 
 function buildDesignerActionConfig(action = {}, actionType = 'OPEN_PAGE', options = {}) {
-  const config = parsePlainObject(action.actionConfig)
+  const config = {
+    ...parsePlainObject(action.actionConfig),
+    clientKey: action.clientKey || action.actionConfig?.clientKey || action.key || '',
+  }
   const sourceParams = actionType === 'CALL_API'
     ? config.params || []
     : action.params?.length ? action.params : config.params || []
@@ -1290,11 +1350,13 @@ function normalizeListCustomAction(action = {}, index = 0) {
   const config = normalizeListActionConfig(actionType, action.actionConfig)
   return {
     ...action,
+    clientKey: action.clientKey || key,
     key,
     label: action.label || action.actionName || '自定义操作',
     position: normalizeListActionPosition(action.position || action.actionPosition),
     type: action.type || resolveDefaultListButtonType(actionType),
     actionType,
+    visible: action.visible !== false,
     routePath: action.routePath || resolveListActionRoutePath(actionType, config),
     targetFormKey: action.targetFormKey || config.targetFormKey || '',
     openTarget: action.openTarget || config.openTarget || (actionType === 'external' ? '_blank' : '_self'),
@@ -1563,7 +1625,10 @@ function buildDesignerFieldMap(fields = []) {
 }
 
 function buildDesignerColumns(zone = {}, fieldMap = new Map()) {
-  return resolveDesignerZoneRefs(zone, fieldMap).map((fieldCode) => {
+  return resolveDesignerZoneRefs(zone, fieldMap).filter((fieldCode) => {
+    const setting = zone.props?.fieldSettings?.[fieldCode] || {}
+    return setting.visible !== false
+  }).map((fieldCode) => {
     const field = fieldMap.get(fieldCode) || {}
     const setting = zone.props?.fieldSettings?.[fieldCode] || {}
     return {

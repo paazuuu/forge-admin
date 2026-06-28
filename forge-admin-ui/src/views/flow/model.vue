@@ -181,7 +181,7 @@
 
     <!-- 新增/编辑弹窗 -->
     <Teleport to="body">
-      <n-modal
+      <NModal
         v-model:show="showModal"
         preset="card"
         :title="modalTitle"
@@ -300,11 +300,11 @@
             </n-button>
           </n-space>
         </template>
-      </n-modal>
+      </NModal>
     </Teleport>
 
     <Teleport to="body">
-      <n-modal
+      <NModal
         v-model:show="showStartTestModal"
         preset="card"
         :title="startTestTitle"
@@ -333,7 +333,7 @@
           </n-alert>
 
           <FlowFormCreateRenderer
-            v-if="startTestFormSchema.length"
+            v-if="showStartTestModal && startTestFormSchema.length"
             ref="startTestFormRef"
             v-model="startTestFormData"
             :schema="startTestFormSchema"
@@ -354,11 +354,11 @@
             </n-button>
           </n-space>
         </template>
-      </n-modal>
+      </NModal>
     </Teleport>
 
     <Teleport to="body">
-      <n-modal
+      <NModal
         v-model:show="showDesignModal"
         :mask-closable="false"
         :close-on-esc="false"
@@ -376,7 +376,7 @@
             @deployed="fetchData"
           />
         </div>
-      </n-modal>
+      </NModal>
     </Teleport>
 
     <VersionHistory
@@ -391,19 +391,77 @@
 
 <script setup>
 import { CopyOutline, CreateOutline, PauseCircleOutline, PlayCircleOutline, TimeOutline, TrashOutline } from '@vicons/ionicons5'
-import { NIcon, NTreeSelect } from 'naive-ui'
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { NIcon, NModal, NTreeSelect } from 'naive-ui'
+import { computed, defineAsyncComponent, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
 import FlowModelStats from '@/components/flow/FlowModelStats.vue'
-import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
-import FlowDesignPage from './design.vue'
-import VersionHistory from './version.vue'
+import DesignerAsyncLoader from '@/views/app-center/components/designer/DesignerAsyncLoader.vue'
 
 const router = useRouter()
 
 const { dict, getLabel } = useDict('flow_model_status', 'flow_process_form_type')
+
+const FlowDesignAsyncLoader = {
+  name: 'FlowDesignAsyncLoader',
+  setup() {
+    return () => h(DesignerAsyncLoader, {
+      title: '正在打开流程设计器',
+      description: '首次加载需要准备流程画布与属性面板资源',
+      overlay: true,
+    })
+  },
+}
+
+const FlowFormRendererAsyncLoader = {
+  name: 'FlowFormRendererAsyncLoader',
+  setup() {
+    return () => h(DesignerAsyncLoader, {
+      title: '正在加载测试表单',
+      description: '首次打开需要准备表单渲染资源',
+      overlay: true,
+    })
+  },
+}
+
+const FlowModalAsyncLoader = {
+  name: 'FlowModalAsyncLoader',
+  setup() {
+    return () => h(NModal, {
+      show: true,
+      preset: 'card',
+      title: '正在加载',
+      style: 'width: min(560px, calc(100vw - 32px))',
+      maskClosable: false,
+    }, {
+      default: () => h(DesignerAsyncLoader, {
+        title: '正在加载版本历史',
+        description: '首次打开需要准备流程图查看资源',
+        overlay: true,
+      }),
+    })
+  },
+}
+
+const FlowDesignPage = defineAsyncComponent({
+  loader: () => import('./design.vue'),
+  loadingComponent: FlowDesignAsyncLoader,
+  delay: 120,
+  suspensible: false,
+})
+const FlowFormCreateRenderer = defineAsyncComponent({
+  loader: () => import('@/components/form-create/FlowFormCreateRenderer.vue'),
+  loadingComponent: FlowFormRendererAsyncLoader,
+  delay: 120,
+  suspensible: false,
+})
+const VersionHistory = defineAsyncComponent({
+  loader: () => import('./version.vue'),
+  loadingComponent: FlowModalAsyncLoader,
+  delay: 120,
+  suspensible: false,
+})
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_model_status))
 const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])

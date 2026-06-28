@@ -161,6 +161,7 @@
         <AiTable
           ref="tableRef"
           v-model:checked-row-keys="selectedKeys"
+          v-model:expanded-row-keys="expandedRowKeys"
           :columns="tableColumns"
           :data-source="dataSource"
           :loading="tableLoading"
@@ -177,6 +178,7 @@
           :search-visible="searchPanelVisible"
           :max-height="computedMaxHeight"
           :scroll-x="computedScrollX"
+          :resizable="resolvedResizable"
           v-bind="tableProps"
           @page-change="handlePageChange"
           @page-size-change="handlePageSizeChange"
@@ -699,7 +701,7 @@ import {
   TrashOutline,
 } from '@vicons/ionicons5'
 import { NButton, NDropdown, NProgress, NTag } from 'naive-ui'
-import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
 import { previewFormula } from '@/api/formula'
@@ -711,10 +713,12 @@ import { downloadFile, request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
 import AiCrudFlowDetail from './AiCrudFlowDetail.vue'
 import { aiCrudPageProps } from './AiCrudPageProps'
+import AiCrudRowExpand from './AiCrudRowExpand.vue'
 import AiCustomQuery from './AiCustomQuery.vue'
 import AiForm from './AiForm.vue'
 import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
+import { normalizeExpandConfig, shouldExpandRow } from './expand-utils'
 
 /**
  * ==================== Props 定义 ====================
@@ -742,6 +746,7 @@ const emit = defineEmits([
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const slots = useSlots()
 
 /**
  * ==================== Refs ====================
@@ -761,6 +766,7 @@ const searchParams = ref({})
 const dataSource = ref([])
 const tableLoading = ref(false)
 const selectedKeys = ref([])
+const expandedRowKeys = ref([])
 const customQueryPayload = ref(null)
 const customQueryFields = ref([])
 const activeRenderMode = ref(props.renderMode || 'table')
@@ -1720,10 +1726,44 @@ const activeSourceColumns = computed(() => {
 })
 
 /**
+ * 表单上下文（传递 modalStatus 等信息）
+ */
+const formContext = computed(() => {
+  return {
+    modalStatus: modalStatus.value, // 'add' | 'edit' | 'detail'
+    isEdit: modalStatus.value === 'edit',
+    isAdd: modalStatus.value === 'add',
+    isDetail: modalStatus.value === 'detail',
+    currentRow: currentRow.value,
+    formAssets: props.formAssets,
+  }
+})
+
+const normalizedExpandConfig = computed(() => normalizeExpandConfig(props.expandConfig, props.childrenConfig))
+const hasExpandConfig = computed(() => normalizedExpandConfig.value.enabled && normalizedExpandConfig.value.panels.length > 0)
+const resolvedResizable = computed(() => props.resizable === true || props.tableProps?.resizable === true)
+
+/**
  * 表格列配置（添加操作列）
  */
 const tableColumns = computed(() => {
   const cols = []
+
+  if (hasExpandConfig.value) {
+    cols.push({
+      type: 'expand',
+      key: '__expand',
+      width: 48,
+      fixed: 'left',
+      expandable: row => shouldExpandRow(normalizedExpandConfig.value.rowExpandable, row, formContext.value),
+      renderExpand: row => h(AiCrudRowExpand, {
+        config: normalizedExpandConfig.value,
+        row,
+        rowKeyValue: resolveRowKeyValue(row),
+        context: formContext.value,
+      }, collectExpandSlots()),
+    })
+  }
 
   // 判断是否是操作列（兼容 action / actions / operation 等写法）
   const isActionCol = (col) => {
@@ -1774,6 +1814,14 @@ const tableColumns = computed(() => {
 
   return cols
 })
+
+function collectExpandSlots() {
+  return Object.keys(slots).reduce((result, name) => {
+    if (name.startsWith('expand-'))
+      result[name] = slotProps => slots[name]?.(slotProps)
+    return result
+  }, {})
+}
 
 function normalizeRowActions(actions = []) {
   const next = Array.isArray(actions) ? [...actions] : []
@@ -2371,20 +2419,6 @@ function isEmptyRuntimeFormulaValue(value) {
     return value.length === 0
   return value === null || value === undefined || value === ''
 }
-
-/**
- * 表单上下文（传递 modalStatus 等信息）
- */
-const formContext = computed(() => {
-  return {
-    modalStatus: modalStatus.value, // 'add' | 'edit' | 'detail'
-    isEdit: modalStatus.value === 'edit',
-    isAdd: modalStatus.value === 'add',
-    isDetail: modalStatus.value === 'detail',
-    currentRow: currentRow.value,
-    formAssets: props.formAssets,
-  }
-})
 
 watch(runtimeFormulaSignature, () => {
   if (!runtimeFormulaCalculationEnabled.value)

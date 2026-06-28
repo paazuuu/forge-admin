@@ -1291,8 +1291,8 @@
                     </template>
                   </n-collapse-item>
 
-                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['查询与列表字段', '搜索与表格', '搜索', '查询区', '搜索布局', '搜索字段', '表格', '列表字段', '表格列', '列标题', '列宽', '对齐', '固定', '省略', '排序', '分页', '列数', '最大高度', '横向宽度', '边框', '斑马纹'])" name="search" title="查询与列表字段">
-                    <div class="property-search-anchor" data-property-search="查询与列表字段 搜索与表格 搜索 查询区 搜索布局 搜索字段 表格 列表字段 表格列 列标题 列宽 对齐 固定 省略 排序 分页 列数 最大高度 横向宽度 边框 斑马纹" />
+                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['查询与列表字段', '搜索与表格', '搜索', '查询区', '搜索布局', '搜索字段', '表格', '列表字段', '表格列', '列标题', '列宽', '对齐', '固定', '省略', '排序', '分页', '列数', '最大高度', '横向宽度', '边框', '斑马纹', '行按钮', '操作列', '列表行自定义按钮'])" name="search" title="查询与列表字段">
+                    <div class="property-search-anchor" data-property-search="查询与列表字段 搜索与表格 搜索 查询区 搜索布局 搜索字段 表格 列表字段 表格列 列标题 列宽 对齐 固定 省略 排序 分页 列数 最大高度 横向宽度 边框 斑马纹 行按钮 操作列 列表行自定义按钮" />
                     <n-form-item label="显示项">
                       <n-checkbox-group
                         :value="resolveAiCrudVisibleFlags(selectedBlock)"
@@ -1357,37 +1357,134 @@
                         </label>
                       </div>
                     </n-form-item>
-                    <n-form-item label="字段配置">
-                      <div class="field-config-card-list compact">
-                        <div class="field-config-entry compact">
-                          <div>
-                            <strong>{{ resolveBlockFieldCount(selectedBlock, 'search') }} 个搜索字段</strong>
-                            <span>查询字段、方式、控件和映射。</span>
+                    <n-form-item label="字段与操作">
+                      <div class="bitable-field-panel">
+                        <div class="bitable-field-panel-head">
+                          <strong>字段</strong>
+                          <div class="bitable-field-panel-actions">
+                            <button type="button" @click="openFieldDrawer('search')">
+                              查询字段 {{ resolveBlockFieldCount(selectedBlock, 'search') }}
+                            </button>
+                            <button type="button" @click="openFieldDrawer('table')">
+                              列表字段 {{ resolveBlockFieldCount(selectedBlock, 'table') }}
+                            </button>
                           </div>
-                          <button type="button" class="field-config-icon-action" title="配置搜索字段" @click="openFieldDrawer('search')">
-                            <n-icon><SettingsOutline /></n-icon>
-                          </button>
                         </div>
-                        <div class="field-config-entry compact">
-                          <div>
-                            <strong>{{ resolveBlockFieldCount(selectedBlock, 'table') }} 个列表字段</strong>
-                            <span>列标题、宽度、排序和固定列。</span>
+                        <div class="bitable-field-panel-list">
+                          <draggable
+                            :model-value="crudTablePanelFields"
+                            item-key="field"
+                            handle=".bitable-field-drag"
+                            :animation="160"
+                            @update:model-value="handleCrudTableFieldReorder"
+                          >
+                            <template #item="{ element }">
+                              <div class="bitable-field-row" :class="{ invisible: !isCrudTableFieldVisible(element.field) }">
+                                <button type="button" class="bitable-field-drag" title="拖拽排序">
+                                  <n-icon><BitableDragIcon /></n-icon>
+                                </button>
+                                <n-icon class="bitable-field-icon">
+                                  <component :is="resolveCrudFieldIconComponent(element)" />
+                                </n-icon>
+                                <div class="bitable-field-name">
+                                  <span>{{ resolveCrudFieldInlineTitle(element) }}</span>
+                                  <small>{{ element.field }}</small>
+                                </div>
+                                <button
+                                  type="button"
+                                  class="bitable-field-icon-button"
+                                  :title="isCrudTableFieldVisible(element.field) ? '隐藏字段' : '显示字段'"
+                                  @click="toggleCrudTableField(element.field, !isCrudTableFieldVisible(element.field))"
+                                >
+                                  <n-icon>
+                                    <component :is="isCrudTableFieldVisible(element.field) ? EyeOutline : BitableInvisibleIcon" />
+                                  </n-icon>
+                                </button>
+                                <button type="button" class="bitable-field-icon-button" title="配置字段" @click="openInlineFieldDrawer(element.field, 'table')">
+                                  <n-icon>
+                                    <EllipsisHorizontalOutline />
+                                  </n-icon>
+                                </button>
+                              </div>
+                            </template>
+                          </draggable>
+                          <span v-if="!crudTablePanelFields.length" class="custom-action-empty">暂无可配置字段</span>
+                        </div>
+                        <div class="bitable-field-operation-divider" />
+                        <div class="bitable-field-operation-group">
+                          <div class="bitable-field-operation-head">
+                            <div class="bitable-field-operation-title">
+                              <span class="bitable-field-drag disabled">
+                                <n-icon>
+                                  <BitableDragIcon />
+                                </n-icon>
+                              </span>
+                              <n-icon class="bitable-field-icon">
+                                <BitableButtonIcon />
+                              </n-icon>
+                              <strong>操作</strong>
+                              <n-popover trigger="click" placement="top" :show-arrow="false" class="bitable-field-info-popover">
+                                <template #trigger>
+                                  <button type="button" class="bitable-field-tip-button" title="操作说明">
+                                    <n-icon class="bitable-field-tip-icon">
+                                      <BitableInfoIcon />
+                                    </n-icon>
+                                  </button>
+                                </template>
+                                <div class="bitable-field-info-content">
+                                  行按钮会显示在表格操作列；隐藏后仍保留配置，可随时重新显示。
+                                </div>
+                              </n-popover>
+                            </div>
+                            <button type="button" class="bitable-field-add-button" @click="addCustomAction('row')">
+                              <n-icon><AddOutline /></n-icon>
+                              <span>添加</span>
+                            </button>
                           </div>
-                          <button type="button" class="field-config-icon-action" title="配置列表字段" @click="openFieldDrawer('table')">
-                            <n-icon><SettingsOutline /></n-icon>
-                          </button>
                         </div>
-                      </div>
-                    </n-form-item>
-                    <n-form-item label="自定义操作">
-                      <div class="custom-action-summary custom-action-featured">
-                        <div>
-                          <strong>已配置 {{ customActionList.length }} 个自定义操作</strong>
-                          <span>配置工具栏按钮或行按钮，例如审批、打开详情、调用接口、跳转页面。</span>
+                        <div class="bitable-operation-list">
+                          <draggable
+                            :model-value="rowCustomActions"
+                            item-key="clientKey"
+                            handle=".custom-action-drag"
+                            :animation="160"
+                            @update:model-value="rows => handleCustomActionGroupReorder('row', rows)"
+                          >
+                            <template #item="{ element }">
+                              <div class="bitable-field-row bitable-action-row" :class="{ invisible: element.visible === false }">
+                                <button type="button" class="custom-action-drag bitable-field-drag" title="拖拽排序">
+                                  <n-icon>
+                                    <BitableDragIcon />
+                                  </n-icon>
+                                </button>
+                                <n-icon class="bitable-field-icon">
+                                  <BitableButtonIcon />
+                                </n-icon>
+                                <div class="bitable-field-name">
+                                  <span>{{ element.label || '自定义按钮' }}</span>
+                                  <small>{{ resolveActionBehaviorLabel(element) }}</small>
+                                </div>
+                                <button type="button" class="bitable-field-icon-button" :title="element.visible === false ? '显示按钮' : '隐藏按钮'" @click="toggleCustomActionVisible(element)">
+                                  <n-icon>
+                                    <component :is="element.visible === false ? BitableInvisibleIcon : BitableVisibleIcon" />
+                                  </n-icon>
+                                </button>
+                                <n-dropdown
+                                  trigger="click"
+                                  :options="customActionMoreOptions(element)"
+                                  @select="key => handleCustomActionMoreSelect(key, element)"
+                                >
+                                  <button type="button" class="bitable-field-icon-button" title="配置按钮">
+                                    <n-icon>
+                                      <BitableAdminIcon />
+                                    </n-icon>
+                                  </button>
+                                </n-dropdown>
+                              </div>
+                            </template>
+                          </draggable>
+                          <span v-if="!rowCustomActions.length" class="custom-action-empty">暂无行自定义按钮</span>
                         </div>
-                        <n-button size="small" type="primary" secondary @click="openCustomActionModal">
-                          配置自定义操作
-                        </n-button>
                       </div>
                     </n-form-item>
                     <n-form-item label="表格展示">
@@ -1427,9 +1524,201 @@
                           <n-checkbox value="bordered" label="边框" />
                           <n-checkbox value="striped" label="斑马纹" />
                           <n-checkbox value="hideSelection" label="隐藏多选" />
+                          <n-checkbox value="resizable" label="列宽拖拽" />
                           <n-checkbox value="searchEnableCollapse" label="搜索折叠" />
                         </n-space>
                       </n-checkbox-group>
+                    </n-form-item>
+                    <n-form-item label="展开面板">
+                      <div class="crud-expand-config-panel">
+                        <div class="crud-expand-config-head">
+                          <n-switch
+                            :value="selectedBlock.props?.expandConfig?.enabled === true"
+                            size="small"
+                            @update:value="checked => updateAiCrudExpandEnabled(checked)"
+                          />
+                          <span>{{ selectedBlock.props?.expandConfig?.enabled === true ? '已启用行展开' : '未启用行展开' }}</span>
+                        </div>
+                        <template v-if="selectedBlock.props?.expandConfig?.enabled === true">
+                          <div class="crud-expand-config-section">
+                            <div class="crud-expand-section-title">
+                              基础设置
+                            </div>
+                            <div class="crud-expand-config-grid">
+                              <label class="crud-expand-config-field">
+                                <span>
+                                  触发方式
+                                </span>
+                                <n-select
+                                  :value="selectedBlock.props?.expandConfig?.trigger || 'icon'"
+                                  :options="expandTriggerOptions"
+                                  @update:value="value => updateAiCrudExpandConfig({ trigger: value || 'icon' })"
+                                />
+                              </label>
+                              <label class="crud-expand-config-field">
+                                <span>
+                                  展示方式
+                                </span>
+                                <n-select
+                                  :value="selectedBlock.props?.expandConfig?.layout?.mode || 'single'"
+                                  :options="expandLayoutModeOptions"
+                                  @update:value="value => updateAiCrudExpandConfig({ layout: { ...(selectedBlock.props?.expandConfig?.layout || {}), mode: value || 'single' } })"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                          <div class="crud-expand-config-section">
+                            <div class="crud-expand-section-title">
+                              内容设置
+                            </div>
+                            <div class="crud-expand-config-grid">
+                              <label class="crud-expand-config-field">
+                                <span>
+                                  面板类型
+                                </span>
+                                <n-select
+                                  :value="firstExpandPanel(selectedBlock)?.type || 'descriptions'"
+                                  :options="expandPanelTypeOptions"
+                                  @update:value="value => updateFirstAiCrudExpandPanel({ type: value || 'descriptions' })"
+                                />
+                              </label>
+                              <label class="crud-expand-config-field">
+                                <span>
+                                  面板标题
+                                </span>
+                                <n-input
+                                  :value="firstExpandPanel(selectedBlock)?.title || ''"
+                                  clearable
+                                  placeholder="概览 / 明细"
+                                  @update:value="value => updateFirstAiCrudExpandPanel({ title: value || undefined })"
+                                />
+                              </label>
+                              <label class="crud-expand-config-field">
+                                <span>
+                                  数据来源
+                                </span>
+                                <n-select
+                                  :value="firstExpandPanel(selectedBlock)?.dataSource?.type || 'row'"
+                                  :options="expandDataSourceTypeOptions"
+                                  @update:value="value => updateFirstAiCrudExpandPanel({ dataSource: { ...(firstExpandPanel(selectedBlock)?.dataSource || {}), type: value || 'row' } })"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                          <div
+                            v-if="firstExpandPanel(selectedBlock)?.dataSource?.type === 'api'"
+                            class="crud-expand-config-section"
+                          >
+                            <div class="crud-expand-section-title">
+                              接口参数
+                            </div>
+                            <label class="crud-expand-config-field">
+                              <span>
+                                接口地址
+                              </span>
+                              <n-input
+                                :value="firstExpandPanel(selectedBlock)?.dataSource?.api || ''"
+                                clearable
+                                placeholder="子表接口，例如 get@/api/order/item/page"
+                                @update:value="value => updateFirstAiCrudExpandDataSource({ api: value || '' })"
+                              />
+                            </label>
+                            <label class="crud-expand-config-field">
+                              <span>
+                                参数映射
+                              </span>
+                              <n-input
+                                :value="stringifyJsonProp(firstExpandPanel(selectedBlock)?.dataSource?.paramsMap || {})"
+                                type="textarea"
+                                :autosize="{ minRows: 2, maxRows: 4 }"
+                                placeholder="例如 {&quot;orderId&quot;:&quot;row.id&quot;}"
+                                @update:value="value => updateFirstAiCrudExpandParamsMap(value)"
+                              />
+                            </label>
+                          </div>
+                          <div
+                            v-if="firstExpandPanel(selectedBlock)?.type === 'descriptions'"
+                            class="crud-expand-config-section"
+                          >
+                            <div class="crud-expand-section-title">
+                              描述字段
+                            </div>
+                            <div class="bitable-config-summary-row">
+                              <div class="bitable-config-summary-label">
+                                展示字段
+                              </div>
+                              <div class="bitable-config-summary-value">
+                                <div class="bitable-config-value-box">
+                                  <div class="bitable-config-value-box-text">
+                                    {{ resolveExpandDescriptionSelectedFields(firstExpandPanel(selectedBlock), selectedBlock).length }} 个字段
+                                  </div>
+                                  <div class="bitable-config-value-box-btn">
+                                    <n-popover
+                                      v-model:show="expandDescriptionFieldPanelOpen"
+                                      trigger="click"
+                                      placement="bottom-end"
+                                      :show-arrow="false"
+                                      raw
+                                    >
+                                      <template #trigger>
+                                        <button type="button" class="bitable-config-icon-button" title="设置展示字段">
+                                          <n-icon><SettingsOutline /></n-icon>
+                                        </button>
+                                      </template>
+                                      <div class="bitable-field-popover-panel">
+                                        <div class="bitable-field-panel-arrow" />
+                                        <div class="bitable-field-popover-head">
+                                          展示字段
+                                        </div>
+                                        <div class="bitable-field-panel-list">
+                                          <draggable
+                                            :model-value="resolveExpandDescriptionPanelFields(firstExpandPanel(selectedBlock), selectedBlock)"
+                                            item-key="field"
+                                            handle=".crud-expand-field-drag"
+                                            :animation="160"
+                                            @update:model-value="handleFirstAiCrudDescriptionPanelReorder"
+                                          >
+                                            <template #item="{ element }">
+                                              <div class="bitable-field-row" :class="{ invisible: !element.selected }">
+                                                <button type="button" class="bitable-field-drag crud-expand-field-drag" title="拖拽排序">
+                                                  <n-icon><BitableDragIcon /></n-icon>
+                                                </button>
+                                                <n-icon class="bitable-field-icon">
+                                                  <component :is="resolveCrudFieldIconComponent(element)" />
+                                                </n-icon>
+                                                <div class="bitable-field-name">
+                                                  <span>{{ element.label || element.field }}</span>
+                                                  <small>{{ element.field }}</small>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  class="bitable-field-icon-button"
+                                                  :title="element.selected ? '隐藏字段' : '显示字段'"
+                                                  @click="toggleFirstAiCrudDescriptionField(element.field, !element.selected)"
+                                                >
+                                                  <n-icon>
+                                                    <component :is="element.selected ? BitableVisibleIcon : BitableInvisibleIcon" />
+                                                  </n-icon>
+                                                </button>
+                                              </div>
+                                            </template>
+                                          </draggable>
+                                          <span v-if="!resolveExpandDescriptionFieldOptions(selectedBlock).length" class="custom-action-empty">暂无可选字段</span>
+                                        </div>
+                                      </div>
+                                    </n-popover>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <n-empty
+                              v-if="!resolveExpandDescriptionFieldOptions(selectedBlock).length"
+                              size="small"
+                              description="暂无可选字段"
+                            />
+                          </div>
+                        </template>
+                      </div>
                     </n-form-item>
                   </n-collapse-item>
 
@@ -1533,52 +1822,6 @@
                     </n-form-item>
                   </n-collapse-item>
 
-                  <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['字段快捷配置', '搜索字段', '导入导出字段', '导入字段', '导出字段', '查询条件'])" name="field-quick-config" title="字段快捷配置">
-                    <div class="property-search-anchor" data-property-search="字段快捷配置 搜索字段 导入导出字段 导入字段 导出字段 查询条件 searchable importable exportable" />
-                    <n-form-item label="搜索 / 导入 / 导出字段">
-                      <div class="crud-field-quick-panel">
-                        <div class="field-help">
-                          这里配置当前 CRUD 组件使用的字段能力。搜索字段会作为查询条件，导入/导出字段会随当前组件配置保存。
-                        </div>
-                        <div class="crud-field-quick-head">
-                          <span>字段</span>
-                          <span>搜索</span>
-                          <span>导入</span>
-                          <span>导出</span>
-                        </div>
-                        <div v-if="crudFieldQuickRows.length" class="crud-field-quick-list">
-                          <div
-                            v-for="field in crudFieldQuickRows"
-                            :key="field.field"
-                            class="crud-field-quick-row"
-                          >
-                            <div class="crud-field-quick-meta">
-                              <strong>{{ field.label }}</strong>
-                              <small>{{ field.field }}</small>
-                            </div>
-                            <n-switch
-                              size="small"
-                              :value="resolveCrudFieldQuickValue(selectedBlock, field.field, 'searchable', field.searchable)"
-                              @update:value="updateCrudFieldQuickSetting(field.field, 'searchable', $event)"
-                            />
-                            <n-switch
-                              size="small"
-                              :value="resolveCrudFieldQuickValue(selectedBlock, field.field, 'importable', field.importable)"
-                              :disabled="field.systemField"
-                              @update:value="updateCrudFieldQuickSetting(field.field, 'importable', $event)"
-                            />
-                            <n-switch
-                              size="small"
-                              :value="resolveCrudFieldQuickValue(selectedBlock, field.field, 'exportable', field.exportable)"
-                              @update:value="updateCrudFieldQuickSetting(field.field, 'exportable', $event)"
-                            />
-                          </div>
-                        </div>
-                        <n-empty v-else size="small" description="暂无可配置字段" />
-                      </div>
-                    </n-form-item>
-                  </n-collapse-item>
-
                   <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['工具栏与导入导出', '工具栏', '导入', '导出', '导出任务', '自定义查询', '自定义操作', '按钮文案', '回调', '参数处理', '提交前', '搜索前', '加载列表前'])" name="toolbar" title="工具栏按钮与导入导出">
                     <div class="property-search-anchor" data-property-search="工具栏与导入导出 工具栏 导入 导出 导出任务 自定义查询 自定义操作 按钮文案 回调 参数处理 提交前 搜索前 加载列表前" />
                     <n-form-item label="工具栏显示项">
@@ -1667,22 +1910,61 @@
                         />
                       </div>
                     </n-form-item>
-                    <n-form-item label="自定义操作">
-                      <div class="custom-action-summary">
-                        <div v-if="customActionList.length" class="action-chip-list">
-                          <span
-                            v-for="action in customActionList"
-                            :key="action.key"
-                            class="action-chip"
+                    <n-form-item label="工具栏按钮">
+                      <div class="custom-action-builder">
+                        <div class="custom-action-builder-section">
+                          <div class="custom-action-builder-head">
+                            <div>
+                              <strong>工具栏自定义按钮</strong>
+                              <span>显示在列表顶部工具栏。</span>
+                            </div>
+                            <n-button size="tiny" secondary @click="addCustomAction('toolbar')">
+                              <template #icon>
+                                <n-icon><AddOutline /></n-icon>
+                              </template>
+                              添加
+                            </n-button>
+                          </div>
+                          <draggable
+                            :model-value="toolbarCustomActions"
+                            item-key="clientKey"
+                            handle=".custom-action-drag"
+                            :animation="160"
+                            class="custom-action-card-list"
+                            @update:model-value="rows => handleCustomActionGroupReorder('toolbar', rows)"
                           >
-                            {{ action.label || action.key }}
-                            <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
-                          </span>
+                            <template #item="{ element }">
+                              <div class="custom-action-card-row">
+                                <button type="button" class="custom-action-drag" title="拖拽排序">
+                                  <n-icon><ReorderThreeOutline /></n-icon>
+                                </button>
+                                <n-input
+                                  class="custom-action-name-input"
+                                  size="small"
+                                  :value="element.label || '自定义按钮'"
+                                  placeholder="按钮文字"
+                                  @update:value="value => updateCustomActionByIdentity(element, { label: value || '自定义按钮' })"
+                                >
+                                  <template #suffix>
+                                    <button type="button" class="custom-action-inline-icon" title="设置" @click.stop="openCustomActionEditor(element)">
+                                      <n-icon><SettingsOutline /></n-icon>
+                                    </button>
+                                  </template>
+                                </n-input>
+                                <n-dropdown
+                                  trigger="click"
+                                  :options="customActionMoreOptions(element)"
+                                  @select="key => handleCustomActionMoreSelect(key, element)"
+                                >
+                                  <button type="button" class="custom-action-more" title="更多">
+                                    <n-icon><EllipsisHorizontalOutline /></n-icon>
+                                  </button>
+                                </n-dropdown>
+                              </div>
+                            </template>
+                          </draggable>
+                          <span v-if="!toolbarCustomActions.length" class="custom-action-empty">暂无工具栏自定义按钮</span>
                         </div>
-                        <span v-else class="empty">暂未配置自定义操作</span>
-                        <n-button size="tiny" type="primary" secondary block @click="openCustomActionModal">
-                          配置自定义操作（{{ customActionList.length }}）
-                        </n-button>
                       </div>
                     </n-form-item>
                     <n-form-item label="树表操作">
@@ -1928,21 +2210,60 @@
                   </n-checkbox-group>
                 </n-form-item>
                 <n-divider>自定义操作按钮</n-divider>
-                <div class="custom-action-summary">
-                  <div v-if="customActionList.length" class="action-chip-list">
-                    <span
-                      v-for="action in customActionList"
-                      :key="action.key"
-                      class="action-chip"
+                <div class="custom-action-builder">
+                  <div class="custom-action-builder-section">
+                    <div class="custom-action-builder-head">
+                      <div>
+                        <strong>工具栏自定义按钮</strong>
+                        <span>显示在当前工具栏区块。</span>
+                      </div>
+                      <n-button size="tiny" secondary @click="addCustomAction('toolbar')">
+                        <template #icon>
+                          <n-icon><AddOutline /></n-icon>
+                        </template>
+                        添加
+                      </n-button>
+                    </div>
+                    <draggable
+                      :model-value="toolbarCustomActions"
+                      item-key="clientKey"
+                      handle=".custom-action-drag"
+                      :animation="160"
+                      class="custom-action-card-list"
+                      @update:model-value="rows => handleCustomActionGroupReorder('toolbar', rows)"
                     >
-                      {{ action.label || action.key }}
-                      <small>{{ actionPositionText(action.position) }} · {{ actionBehaviorText(action.actionType) }}</small>
-                    </span>
+                      <template #item="{ element }">
+                        <div class="custom-action-card-row">
+                          <button type="button" class="custom-action-drag" title="拖拽排序">
+                            <n-icon><ReorderThreeOutline /></n-icon>
+                          </button>
+                          <n-input
+                            class="custom-action-name-input"
+                            size="small"
+                            :value="element.label || '自定义按钮'"
+                            placeholder="按钮文字"
+                            @update:value="value => updateCustomActionByIdentity(element, { label: value || '自定义按钮' })"
+                          >
+                            <template #suffix>
+                              <button type="button" class="custom-action-inline-icon" title="设置" @click.stop="openCustomActionEditor(element)">
+                                <n-icon><SettingsOutline /></n-icon>
+                              </button>
+                            </template>
+                          </n-input>
+                          <n-dropdown
+                            trigger="click"
+                            :options="customActionMoreOptions(element)"
+                            @select="key => handleCustomActionMoreSelect(key, element)"
+                          >
+                            <button type="button" class="custom-action-more" title="更多">
+                              <n-icon><EllipsisHorizontalOutline /></n-icon>
+                            </button>
+                          </n-dropdown>
+                        </div>
+                      </template>
+                    </draggable>
+                    <span v-if="!toolbarCustomActions.length" class="custom-action-empty">暂无工具栏自定义按钮</span>
                   </div>
-                  <span v-else class="empty">暂未配置自定义操作</span>
-                  <n-button size="small" type="primary" secondary block @click="openCustomActionModal">
-                    配置自定义操作（{{ customActionList.length }}）
-                  </n-button>
                 </div>
               </template>
 
@@ -3614,6 +3935,22 @@
                       @update:value="updateFieldRole(activeDrawerField.field, 'edit', $event)"
                     />
                   </label>
+                  <label v-if="selectedBlock.blockType === 'AiCrudPage'">
+                    <span>导入</span>
+                    <n-switch
+                      size="small"
+                      :value="resolveFieldRoleEnabled(activeDrawerField.field, 'import')"
+                      @update:value="updateFieldRole(activeDrawerField.field, 'import', $event)"
+                    />
+                  </label>
+                  <label v-if="selectedBlock.blockType === 'AiCrudPage'">
+                    <span>导出</span>
+                    <n-switch
+                      size="small"
+                      :value="resolveFieldRoleEnabled(activeDrawerField.field, 'export')"
+                      @update:value="updateFieldRole(activeDrawerField.field, 'export', $event)"
+                    />
+                  </label>
                 </div>
               </div>
               <div class="field-detail-grid">
@@ -3784,7 +4121,7 @@
           <div class="action-modal-list">
             <button
               v-for="(action, idx) in customActionList"
-              :key="action.key || idx"
+              :key="action.clientKey || action.key || idx"
               type="button"
               class="action-list-item"
               :class="{ active: activeActionIndex === idx }"
@@ -4249,6 +4586,7 @@ import {
   DocumentTextOutline,
   EllipsisHorizontalOutline,
   ExpandOutline,
+  EyeOutline,
   FlashOutline,
   GridOutline,
   ListOutline,
@@ -4271,7 +4609,7 @@ import {
   TimerOutline,
   ToggleOutline,
 } from '@vicons/ionicons5'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { enabledApiConfigs } from '@/api/business-app'
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
@@ -4348,6 +4686,79 @@ const rowHeight = 32
 const gap = 8
 const previewMinWidth = 360
 const TREE_PANEL_COLLAPSED_WIDTH = 44
+
+function createBitableSvgIcon(name, children = []) {
+  return {
+    name,
+    render() {
+      return h(
+        'svg',
+        {
+          width: '1em',
+          height: '1em',
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          xmlns: 'http://www.w3.org/2000/svg',
+        },
+        children.map((child, index) => h(child.tag || 'path', { key: index, ...child })),
+      )
+    },
+  }
+}
+
+const BitableDragIcon = createBitableSvgIcon('BitableDragIcon', [
+  { d: 'M8.25 6.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm0 7.25a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm1.75 5.5a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0ZM14.753 6.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5ZM16.5 12a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Zm-1.747 9a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Z', fill: 'currentColor' },
+])
+const BitableStyleIcon = createBitableSvgIcon('BitableStyleIcon', [
+  { d: 'M8.437 4.898 5.447 13h6.063L8.437 4.898Zm6.025 15.881L12.269 15h-7.56l-2.131 5.78a1 1 0 1 1-1.873-.703L7.02 2.982c.491-1.31 2.344-1.31 2.835 0l6.48 17.095a1 1 0 1 1-1.872.702ZM15.056 5a1 1 0 1 0 0 2H23a1 1 0 1 0 0-2h-7.944Zm1.055 7a1 1 0 0 1 1-1H23a1 1 0 1 1 0 2h-5.89a1 1 0 0 1-1-1Zm3.056 5a1 1 0 1 0 0 2H23a1 1 0 1 0 0-2h-3.833Z', fill: 'currentColor' },
+])
+const BitableSelectIcon = createBitableSvgIcon('BitableSelectIcon', [
+  { d: 'M7.755 11.658a1 1 0 0 1 1.416-1.415L12 13.07l2.828-2.829a1 1 0 0 1 1.416 1.416c-1.181 1.189-2.356 2.386-3.553 3.56a.987.987 0 0 1-1.383 0c-1.196-1.175-2.371-2.371-3.553-3.56Z', fill: 'currentColor' },
+  { d: 'M12 23C5.925 23 1 18.075 1 12S5.925 1 12 1s11 4.925 11 11-4.925 11-11 11Zm0-2a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', fill: 'currentColor' },
+])
+const BitableTodoIcon = createBitableSvgIcon('BitableTodoIcon', [
+  { d: 'M17.207 10.207a1 1 0 0 0-1.414-1.414L11 13.586l-2.293-2.293a1 1 0 0 0-1.414 1.414l3 3a1 1 0 0 0 1.414 0l5.5-5.5Z', fill: 'currentColor' },
+  { d: 'M2 4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4Zm2 0v16h16V4H4Z', fill: 'currentColor' },
+])
+const BitableNumberIcon = createBitableSvgIcon('BitableNumberIcon', [
+  { d: 'M8.774 2.14a1 1 0 0 1 .85 1.129L9.242 6h6.98l.423-3.01a1 1 0 1 1 1.98.279L18.242 6H22a1 1 0 1 1 0 2h-4.04l-.984 7H20a1 1 0 1 1 0 2h-3.305l-.575 4.093a1 1 0 1 1-1.98-.278L14.674 17h-6.98l-.575 4.093a1 1 0 1 1-1.98-.278L5.674 17H2a1 1 0 1 1 0-2h3.956l.984-7H4a1 1 0 1 1 0-2h3.221l.423-3.01a1 1 0 0 1 1.13-.85ZM14.956 15l.984-7H8.96l-.984 7h6.98Z', fill: 'currentColor' },
+])
+const BitableCalendarIcon = createBitableSvgIcon('BitableCalendarIcon', [
+  { d: 'M7 2a1 1 0 0 1 1 1h8a1 1 0 1 1 2 0h2a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2a1 1 0 0 1 1-1Zm9 3H8a1 1 0 0 1-2 0H4v15h16V5h-2a1 1 0 1 1-2 0ZM9 15a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1Zm1.5-5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1Zm3 5a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1Zm1.5 0a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1Zm3-5a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1Z', fill: 'currentColor' },
+])
+const BitablePhoneIcon = createBitableSvgIcon('BitablePhoneIcon', [
+  { d: 'M12.858 1.6c.678 0 1.337.02 1.973.06l.628.049c.21.018.42.04.624.063l.607.078c4.183.599 6.993 2.3 7.16 5.396.108 2.033-.837 3.395-2.435 3.936a4.554 4.554 0 0 1-.706.175c.353.989.618 2.512.792 3.342.134.636.228 1.45.287 2.449l.034.693.022.748.008.394a3 3 0 0 1-2.777 3.039l-.223.008H5.142l-.223-.008a3 3 0 0 1-2.777-3.039l.008-.394.023-.748.033-.693c.059-.999.154-1.813.287-2.449.174-.83.436-2.354.789-3.343a4.535 4.535 0 0 1-.7-.174C.984 10.642.04 9.28.15 7.246c.162-3.02 2.84-4.714 6.855-5.35l.304-.046.606-.078.31-.034.315-.03.628-.047a30.04 30.04 0 0 1 1.301-.054l2.39-.007Zm3.109 6.648-.056-.314H8.087l-.008.055c-.243 1.49-.967 2.568-2.174 3.123a2.94 2.94 0 0 1-.457.162l.18-.458c-.566 1.398-.957 3.24-1.178 4.293-.111.533-.195 1.255-.247 2.16l-.019.35-.026.67-.016.725a1 1 0 0 0 .874 1.007l.118.009H18.86c.56-.009 1-.463.992-1.016l-.016-.725-.026-.67c-.051-1.072-.14-1.91-.266-2.51-.197-.938-.531-2.628-1.001-3.839a2.728 2.728 0 0 1-.45-.158c-1.136-.522-1.844-1.508-2.126-2.864Zm-1.108 7.396a1 1 0 0 1 .117 1.993l-.117.007H9.142a1 1 0 0 1-.117-1.993l.117-.007h5.717ZM12.858 3.6l-2.05.002c-5.044.056-8.536 1.391-8.662 3.752-.06 1.127.321 1.678 1.078 1.934.624.211 1.498.166 1.846.007.625-.287.985-.9 1.08-1.99A1.5 1.5 0 0 1 7.507 5.94l.136-.006h8.71a1.5 1.5 0 0 1 1.494 1.371c.094 1.09.455 1.703 1.08 1.99.347.16 1.222.204 1.846-.007.757-.256 1.139-.807 1.078-1.934-.127-2.36-3.618-3.696-8.663-3.752l-.331-.002Z', fill: 'currentColor' },
+])
+const BitableMailIcon = createBitableSvgIcon('BitableMailIcon', [
+  { d: 'M5.558 10.214a1 1 0 0 1 .925-1.77l5.481 2.861 5.481-2.862a1 1 0 0 1 .925 1.772l-5.887 3.074a.995.995 0 0 1-.52.112.994.994 0 0 1-.518-.112l-5.887-3.075Z', fill: 'currentColor' },
+  { d: 'M21.009 3C22.113 3 23 3.895 23 5v14c0 1.105-.888 2-1.992 2H2.99A1.993 1.993 0 0 1 1 19V5c0-1.104.888-2 1.992-2H21.01ZM21 5H3v14h18V5Z', fill: 'currentColor' },
+])
+const BitableAttachmentIcon = createBitableSvgIcon('BitableAttachmentIcon', [
+  { d: 'M12.304 7.315a1 1 0 0 1 1.414 1.414L8.13 14.317a1.485 1.485 0 0 0 0 2.1l.01.011a1.5 1.5 0 0 0 2.117-.005l7.43-7.43a3.5 3.5 0 0 0 0-4.95l-.036-.037a3.5 3.5 0 0 0-4.95 0l-7.778 7.777a5.521 5.521 0 0 0 7.808 7.809l7.07-7.07a1 1 0 0 1 1.415 1.414l-7.07 7.07A7.521 7.521 0 0 1 3.509 10.37l7.778-7.778a5.5 5.5 0 0 1 7.778 0l.037.037a5.5 5.5 0 0 1 0 7.778l-7.43 7.43a3.5 3.5 0 0 1-4.939.012l-.006-.006-.012-.012a3.485 3.485 0 0 1 0-4.928l5.589-5.588Z', fill: 'currentColor' },
+])
+const BitableMemberIcon = createBitableSvgIcon('BitableMemberIcon', [
+  { d: 'M15 6.5a3 3 0 1 0-6 0 3 3 0 0 0 6 0Zm2 0a5 5 0 1 1-10 0 5 5 0 0 1 10 0ZM4 19v2h16v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4Zm-2 0a6 6 0 0 1 6-6h8a6 6 0 0 1 6 6v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2Z', fill: 'currentColor' },
+])
+const BitableLookupIcon = createBitableSvgIcon('BitableLookupIcon', [
+  { d: 'M20 4H4v16h7v2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6h-2V4Z', fill: 'currentColor' },
+  { d: 'M7 6.5a1 1 0 0 0 0 2h8a1 1 0 1 0 0-2H7Zm-1 5a1 1 0 0 1 1-1h3.5a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm1 3a1 1 0 1 0 0 2h2.5a1 1 0 1 0 0-2H7Zm13.939 4.58a5 5 0 1 0-1.522 1.298l1.698 1.953a1 1 0 0 0 1.51-1.312l-1.686-1.939ZM17 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z', fill: 'currentColor' },
+])
+const BitableButtonIcon = createBitableSvgIcon('BitableButtonIcon', [
+  { d: 'M21 6.133H3V16.8h9.662l1.214 3.2H3c-1.105 0-2-.955-2-2.133V6.133C1 4.955 1.895 4 3 4h18c1.105 0 2 .955 2 2.133v7.786l-2-.91V6.132Z', fill: 'currentColor' },
+  { d: 'M23.172 18.16a1 1 0 0 0 .182-1.883l-8.366-3.808a1 1 0 0 0-1.35 1.265l3.26 8.595a1 1 0 0 0 1.89-.06l1.018-3.307 3.366-.802Z', fill: 'currentColor' },
+])
+const BitableVisibleIcon = createBitableSvgIcon('BitableVisibleIcon', [
+  { d: 'M11.985 18.5c3.238 0 6.236-2.06 9.015-6.513C18.292 7.55 15.3 5.5 11.985 5.5 8.67 5.5 5.689 7.549 3 11.987c2.76 4.454 5.748 6.513 8.985 6.513ZM1.502 12.89a1.782 1.782 0 0 1 .023-1.838C4.428 6.017 7.915 3.5 11.984 3.5c4.086 0 7.594 2.538 10.523 7.614l.028.048c.296.519.294 1.16-.01 1.675-3.006 5.108-6.52 7.663-10.541 7.663-4.007 0-7.501-2.537-10.482-7.61ZM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-2a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z', fill: 'currentColor' },
+])
+const BitableInvisibleIcon = createBitableSvgIcon('BitableInvisibleIcon', [
+  { d: 'M2.032 8.172a1 1 0 0 1 1.388.267C5.263 11.159 8.637 13 12 13c3.364 0 6.737-1.841 8.58-4.561a1 1 0 0 1 1.656 1.122 11.928 11.928 0 0 1-2.002 2.259l2.009 2.008a1 1 0 1 1-1.415 1.415l-2.12-2.122a1.003 1.003 0 0 1-.085-.096c-.745.472-1.54.87-2.368 1.181l.712 2.658a1 1 0 1 1-1.932.517l-.702-2.62A11.64 11.64 0 0 1 12 15c-.71 0-1.42-.068-2.118-.197l-.691 2.578a1 1 0 1 1-1.932-.517l.692-2.582a13.01 13.01 0 0 1-2.607-1.278c-.03.04-.064.08-.101.117L3.12 15.243a1 1 0 1 1-1.414-1.415l2.032-2.032a11.919 11.919 0 0 1-1.974-2.235 1 1 0 0 1 .267-1.389Z', fill: 'currentColor' },
+])
+const BitableInfoIcon = createBitableSvgIcon('BitableInfoIcon', [
+  { d: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 2C5.925 23 1 18.075 1 12S5.925 1 12 1s11 4.925 11 11-4.925 11-11 11Zm-1-7.5v-4a1 1 0 1 1 0-2h1.004c.55 0 .998.445.998.996.003 1.668-.002 3.336-.002 5.004h.5a1 1 0 1 1 0 2h-3a1 1 0 1 1 0-2h.5Zm1-7a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z', fill: 'currentColor' },
+])
+const BitableAdminIcon = createBitableSvgIcon('BitableAdminIcon', [
+  { d: 'M18.874 7a4.002 4.002 0 0 1-7.748 0H3a1 1 0 0 1 0-2h8.126a4.002 4.002 0 0 1 7.748 0H21a1 1 0 1 1 0 2h-2.126ZM15 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm-2.126 11a4.002 4.002 0 0 1-7.748 0H3a1 1 0 1 1 0-2h2.126a4.002 4.002 0 0 1 7.748 0H21a1 1 0 1 1 0 2h-8.126ZM9 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z', fill: 'currentColor' },
+])
 const canvasWidthOptions = [
   { label: '390 移动', value: 390 },
   { label: '768 窄屏', value: 768 },
@@ -4648,6 +5059,28 @@ const renderModeOptions = [
   { label: '表格', value: 'table' },
   { label: '卡片', value: 'card' },
 ]
+const expandTriggerOptions = [
+  { label: '图标', value: 'icon' },
+  { label: '整行', value: 'row' },
+  { label: '图标和整行', value: 'both' },
+]
+const expandLayoutModeOptions = [
+  { label: '单面板', value: 'single' },
+  { label: 'Tabs', value: 'tabs' },
+  { label: '上下堆叠', value: 'stack' },
+]
+const expandPanelTypeOptions = [
+  { label: '描述信息', value: 'descriptions' },
+  { label: '子表表格', value: 'table' },
+  { label: '只读表单', value: 'form' },
+  { label: '多面板 Tabs', value: 'tabs' },
+  { label: '自定义插槽', value: 'custom' },
+]
+const expandDataSourceTypeOptions = [
+  { label: '当前行数据', value: 'row' },
+  { label: '接口加载', value: 'api' },
+  { label: '静态数据', value: 'static' },
+]
 const requestMethodOptions = [
   { label: 'GET', value: 'get' },
   { label: 'POST', value: 'post' },
@@ -4765,6 +5198,7 @@ const selectedBlockId = ref(null)
 const fieldDrawerOpen = ref(false)
 const fieldDrawerMode = ref('table')
 const activeDrawerFieldName = ref('')
+const expandDescriptionFieldPanelOpen = ref(false)
 const fieldAdvancedOpen = ref(false)
 const customActionModalOpen = ref(false)
 const sourceModalOpen = ref(false)
@@ -4916,7 +5350,7 @@ const propertySearchTabIndex = {
 }
 const propertySearchKeywordRegistry = [
   '基础配置 接口 基础路径 行主键 真实接口预览 响应字段 表单布局 api list detail create update delete import export',
-  '查询与列表字段 搜索 查询区 搜索布局 搜索字段 表格 表格列 列标题 列宽 对齐 固定 省略 排序 分页 最大高度 横向宽度 边框 斑马纹',
+  '查询与列表字段 搜索 查询区 搜索布局 搜索字段 表格 表格列 列标题 列宽 对齐 固定 省略 排序 分页 最大高度 横向宽度 边框 斑马纹 行按钮 操作列 列表行自定义按钮',
   '表单与弹窗 新增 编辑 表单 弹窗 抽屉 详情 页脚 打开方式 标签位置 标签对齐 标签宽度',
   '工具栏 导入 导出 自定义查询 自定义操作 按钮文案 回调 参数处理 提交前 搜索前 加载列表前',
   '默认参数 公共参数 publicParams publicQuery 表单默认值 提交固定参数 查询默认参数',
@@ -5046,7 +5480,11 @@ const selectedBlockFixedWidth = computed(() => {
 const layoutCodeText = computed(() => JSON.stringify(localLayout.value || {}, null, 2))
 const selectedBlockCodeText = computed(() => selectedBlock.value ? JSON.stringify(selectedBlock.value, null, 2) : '')
 const externalCustomActionsEnabled = computed(() => Array.isArray(props.customActions))
-const customActionList = computed(() => externalCustomActionsEnabled.value ? (props.customActions || []) : (selectedBlock.value?.props?.customActions || []))
+const customActionList = computed(() => normalizeCustomActionList(
+  externalCustomActionsEnabled.value ? (props.customActions || []) : (selectedBlock.value?.props?.customActions || []),
+))
+const toolbarCustomActions = computed(() => customActionList.value.filter(action => (action.position || 'toolbar') === 'toolbar'))
+const rowCustomActions = computed(() => customActionList.value.filter(action => (action.position || 'row') === 'row'))
 const activeAction = computed(() => customActionList.value[activeActionIndex.value] || null)
 const apiConfigs = ref([])
 const apiConfigLoading = ref(false)
@@ -5175,23 +5613,6 @@ const rowFieldOptions = computed(() => props.fields
     value: field.field,
   })))
 const runtimeRuleFieldOptions = computed(() => rowFieldOptions.value)
-const crudFieldQuickRows = computed(() => {
-  return (props.fields || [])
-    .map((field) => {
-      const fieldCode = resolveCrudFieldKey(field)
-      if (!fieldCode)
-        return null
-      return {
-        field: fieldCode,
-        label: resolveCrudFieldLabel(field),
-        searchable: field.searchable === true,
-        importable: field.importable !== false,
-        exportable: field.exportable !== false,
-        systemField: field.systemField === true,
-      }
-    })
-    .filter(Boolean)
-})
 const childBlockTypeOptions = computed(() => listPageBlockCatalog
   .filter(item => !item.unique)
   .filter(item => !['card', 'tabs', 'grid-layout', 'box-layout'].includes(item.blockType))
@@ -5383,6 +5804,19 @@ const selectedFieldsList = computed(() => selectedFieldRefs.value
 const availableFields = computed(() => {
   const set = new Set(selectedFieldRefs.value)
   return props.fields.filter(f => isPageFieldVisible(f, selectedBlockZoneKey.value) && !set.has(f.field))
+})
+const crudTablePanelFields = computed(() => {
+  if (selectedBlock.value?.blockType !== 'AiCrudPage')
+    return []
+  const tableFields = props.fields.filter(field => isPageFieldVisible(field, 'table') && field?.field)
+  const refIndex = new Map(resolveSelectedFieldRefs(selectedBlock.value, 'table').map((ref, index) => [ref, index]))
+  return [...tableFields].sort((left, right) => {
+    const leftIndex = refIndex.has(left.field) ? refIndex.get(left.field) : Number.MAX_SAFE_INTEGER
+    const rightIndex = refIndex.has(right.field) ? refIndex.get(right.field) : Number.MAX_SAFE_INTEGER
+    if (leftIndex !== rightIndex)
+      return leftIndex - rightIndex
+    return tableFields.indexOf(left) - tableFields.indexOf(right)
+  })
 })
 const activeDrawerField = computed(() => {
   if (!selectedFieldsList.value.length)
@@ -5840,6 +6274,8 @@ function resolveAiCrudTableFlags(block = {}) {
     flags.push('striped')
   if (props.hideSelection === true)
     flags.push('hideSelection')
+  if (props.resizable === true)
+    flags.push('resizable')
   if (props.searchEnableCollapse !== false)
     flags.push('searchEnableCollapse')
   return flags
@@ -5852,8 +6288,231 @@ function updateAiCrudTableFlags(values = []) {
     bordered: values.includes('bordered'),
     striped: values.includes('striped'),
     hideSelection: values.includes('hideSelection'),
+    resizable: values.includes('resizable'),
     searchEnableCollapse: values.includes('searchEnableCollapse'),
   })
+}
+
+function firstExpandPanel(block = {}) {
+  return block.props?.expandConfig?.panels?.[0] || null
+}
+
+function updateAiCrudExpandEnabled(enabled) {
+  if (!selectedBlock.value)
+    return
+  const current = selectedBlock.value.props?.expandConfig || {}
+  const nextConfig = enabled
+    ? {
+        enabled: true,
+        trigger: current.trigger || 'icon',
+        lazy: current.lazy !== false,
+        cache: current.cache !== false,
+        layout: current.layout || { mode: 'single', density: 'compact', padding: 12 },
+        panels: current.panels?.length ? current.panels : [createDefaultAiCrudExpandPanel(selectedBlock.value)],
+      }
+    : { ...current, enabled: false }
+  patchBlockProps(selectedBlock.value.id, { expandConfig: nextConfig })
+}
+
+function updateAiCrudExpandConfig(patch = {}) {
+  if (!selectedBlock.value)
+    return
+  const current = selectedBlock.value.props?.expandConfig || {}
+  patchBlockProps(selectedBlock.value.id, {
+    expandConfig: {
+      ...current,
+      ...patch,
+      enabled: current.enabled === true,
+    },
+  })
+}
+
+function updateFirstAiCrudExpandPanel(patch = {}) {
+  if (!selectedBlock.value)
+    return
+  const current = selectedBlock.value.props?.expandConfig || {}
+  const panels = current.panels?.length ? [...current.panels] : [createDefaultAiCrudExpandPanel(selectedBlock.value)]
+  panels[0] = normalizeAiCrudExpandPanelPatch({ ...panels[0], ...patch })
+  patchBlockProps(selectedBlock.value.id, {
+    expandConfig: {
+      ...current,
+      enabled: true,
+      panels,
+    },
+  })
+}
+
+function updateFirstAiCrudExpandDataSource(patch = {}) {
+  const panel = firstExpandPanel(selectedBlock.value) || createDefaultAiCrudExpandPanel(selectedBlock.value)
+  updateFirstAiCrudExpandPanel({
+    dataSource: {
+      ...(panel.dataSource || {}),
+      ...patch,
+    },
+  })
+}
+
+function updateFirstAiCrudExpandParamsMap(value) {
+  updateFirstAiCrudExpandDataSource({ paramsMap: parseJsonObjectProp(value) })
+}
+
+function updateFirstAiCrudDescriptionFields(value) {
+  const fields = Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : String(value || '').split(/\r?\n|,/).map(item => item.trim()).filter(Boolean)
+  updateFirstAiCrudExpandPanel({
+    descriptions: {
+      ...(firstExpandPanel(selectedBlock.value)?.descriptions || {}),
+      fields: fields.map(field => ({ field, label: resolveFieldLabelByCode(field) })),
+    },
+  })
+}
+
+function resolveExpandDescriptionFieldKeys(panel, block = {}) {
+  const configured = (panel?.descriptions?.fields || [])
+    .map(field => field.field || field.key)
+    .filter(Boolean)
+  if (configured.length)
+    return configured
+  return resolveAiCrudDefaultDescriptionFields(block).map(field => field.field).filter(Boolean)
+}
+
+function resolveExpandDescriptionFieldOptions() {
+  const sourceFields = crudTablePanelFields.value.length
+    ? crudTablePanelFields.value
+    : props.fields || []
+  const seen = new Set()
+  return sourceFields
+    .map((field) => {
+      const value = resolveCrudFieldKey(field)
+      if (!value || seen.has(value))
+        return null
+      seen.add(value)
+      const rawLabel = resolveCrudFieldLabel(field)
+      return {
+        label: `${rawLabel}（${value}）`,
+        rawLabel,
+        value,
+      }
+    })
+    .filter(Boolean)
+}
+
+function resolveExpandDescriptionSelectedFields(panel, block = {}) {
+  const optionMap = new Map(resolveExpandDescriptionFieldOptions(block).map(option => [option.value, option]))
+  return resolveExpandDescriptionFieldKeys(panel, block).map((field) => {
+    const option = optionMap.get(field)
+    return {
+      field,
+      label: option?.rawLabel || resolveFieldLabelByCode(field),
+    }
+  })
+}
+
+function resolveExpandDescriptionPanelFields(panel, block = {}) {
+  const selectedKeys = resolveExpandDescriptionFieldKeys(panel, block)
+  const selected = new Set(selectedKeys)
+  const optionMap = new Map(resolveExpandDescriptionFieldOptions(block).map(option => [option.value, option]))
+  const orderedKeys = [
+    ...selectedKeys,
+    ...Array.from(optionMap.keys()).filter(key => !selected.has(key)),
+  ]
+  return orderedKeys
+    .map((field) => {
+      const option = optionMap.get(field)
+      if (!option && !selected.has(field))
+        return null
+      return {
+        field,
+        label: option?.rawLabel || resolveFieldLabelByCode(field),
+        selected: selected.has(field),
+      }
+    })
+    .filter(Boolean)
+}
+
+function addFirstAiCrudDescriptionField(field) {
+  if (!field)
+    return
+  const fields = resolveExpandDescriptionFieldKeys(firstExpandPanel(selectedBlock.value), selectedBlock.value)
+  updateFirstAiCrudDescriptionFields(Array.from(new Set([...fields, field])))
+}
+
+function removeFirstAiCrudDescriptionField(field) {
+  const fields = resolveExpandDescriptionFieldKeys(firstExpandPanel(selectedBlock.value), selectedBlock.value)
+  updateFirstAiCrudDescriptionFields(fields.filter(item => item !== field))
+}
+
+function toggleFirstAiCrudDescriptionField(field, visible) {
+  if (visible)
+    addFirstAiCrudDescriptionField(field)
+  else
+    removeFirstAiCrudDescriptionField(field)
+}
+
+function handleFirstAiCrudDescriptionPanelReorder(fields = []) {
+  updateFirstAiCrudDescriptionFields(fields.filter(field => field?.selected).map(field => field.field))
+}
+
+function createDefaultAiCrudExpandPanel(block = {}) {
+  const fields = resolveAiCrudDefaultDescriptionFields(block)
+  return {
+    key: 'summary',
+    title: '概览',
+    type: 'descriptions',
+    dataSource: { type: 'row' },
+    descriptions: {
+      columns: 3,
+      fields,
+    },
+  }
+}
+
+function normalizeAiCrudExpandPanelPatch(panel = {}) {
+  const type = panel.type || 'descriptions'
+  const key = panel.key || (type === 'table' ? 'detailTable' : 'summary')
+  return {
+    ...panel,
+    key,
+    title: panel.title || (type === 'table' ? '明细' : '概览'),
+    type,
+    dataSource: panel.dataSource || { type: 'row' },
+    descriptions: panel.descriptions || { columns: 3, fields: resolveAiCrudDefaultDescriptionFields(selectedBlock.value) },
+    table: panel.table || { rowKey: 'id', columns: [], pagination: false, maxHeight: 320 },
+  }
+}
+
+function resolveAiCrudDefaultDescriptionFields(block = {}) {
+  const refs = Array.isArray(block.props?.tableFieldRefs) && block.props.tableFieldRefs.length
+    ? block.props.tableFieldRefs
+    : Array.isArray(block.fieldRefs) ? block.fieldRefs : []
+  return refs.slice(0, 6).map(field => ({ field, label: resolveFieldLabelByCode(field) }))
+}
+
+function resolveFieldLabelByCode(fieldCode) {
+  const field = props.fields.find(item => item.field === fieldCode || item.fieldCode === fieldCode || item.key === fieldCode)
+  return field?.label || field?.title || fieldCode
+}
+
+function stringifyJsonProp(value) {
+  if (value === undefined || value === null || value === '')
+    return ''
+  if (typeof value === 'string')
+    return value
+  return JSON.stringify(value, null, 2)
+}
+
+function parseJsonObjectProp(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
 }
 
 function resolveAiCrudEditFlags(block = {}) {
@@ -8060,6 +8719,13 @@ function openFieldDrawer(mode = 'table') {
   fieldDrawerOpen.value = true
 }
 
+function openInlineFieldDrawer(fieldName = '', mode = 'table') {
+  fieldDrawerMode.value = mode === 'search' ? 'search' : 'table'
+  activeDrawerFieldName.value = fieldName || resolveSelectedFieldRefs(selectedBlock.value, fieldDrawerMode.value)?.[0] || ''
+  fieldAdvancedOpen.value = false
+  fieldDrawerOpen.value = true
+}
+
 function selectDrawerField(fieldName = '') {
   activeDrawerFieldName.value = fieldName
   fieldAdvancedOpen.value = false
@@ -8079,6 +8745,10 @@ function resolveSelectedFieldRefs(block = selectedBlock.value, zoneKey = selecte
 }
 
 function resolveBlockFieldCount(block = selectedBlock.value, zoneKey = 'table') {
+  if (block?.blockType === 'AiCrudPage' && zoneKey === 'table') {
+    const refs = new Set(resolveSelectedFieldRefs(block, 'table'))
+    return props.fields.filter(field => refs.has(field.field) && isCrudTableFieldVisible(field.field, block)).length
+  }
   return resolveSelectedFieldRefs(block, zoneKey).length
 }
 
@@ -8098,6 +8768,97 @@ function handleSelectedReorder(rows) {
   updateSelectedFieldRefs(rows.map(r => r.field))
 }
 
+function handleCrudTableFieldReorder(rows = []) {
+  if (!selectedBlock.value?.id)
+    return
+  const nextRefs = resolveCrudTablePanelFieldRefs(rows)
+  patchBlock(selectedBlock.value.id, {
+    fieldRefs: nextRefs,
+    props: {
+      ...(selectedBlock.value.props || {}),
+      fieldSettings: buildCrudTableVisibilitySettings(nextRefs),
+    },
+  })
+}
+
+function toggleCrudTableField(fieldName = '', visible = true) {
+  if (!selectedBlock.value?.id || !fieldName)
+    return
+  const nextRefs = resolveCrudTablePanelFieldRefs()
+  patchBlock(selectedBlock.value.id, {
+    fieldRefs: nextRefs,
+    props: {
+      ...(selectedBlock.value.props || {}),
+      fieldSettings: buildCrudTableVisibilitySettings(nextRefs, { [fieldName]: visible === true }),
+    },
+  })
+}
+
+function resolveCrudFieldInlineTitle(field = {}) {
+  const setting = selectedBlock.value?.props?.fieldSettings?.[field.field] || {}
+  return setting.title || field.label || field.field
+}
+
+function resolveCrudTablePanelFieldRefs(rows = crudTablePanelFields.value) {
+  return Array.from(new Set((rows || [])
+    .map(row => row?.field)
+    .filter(Boolean)))
+}
+
+function isCrudTableFieldVisible(fieldName = '', block = selectedBlock.value) {
+  if (!fieldName || !block)
+    return false
+  const refs = resolveSelectedFieldRefs(block, 'table')
+  const setting = block.props?.fieldSettings?.[fieldName] || {}
+  return refs.includes(fieldName) && setting.visible !== false
+}
+
+function buildCrudTableVisibilitySettings(nextRefs = [], overrides = {}) {
+  const block = selectedBlock.value || {}
+  const previousRefs = new Set(resolveSelectedFieldRefs(block, 'table'))
+  const currentSettings = block.props?.fieldSettings || {}
+  const nextSettings = { ...currentSettings }
+  nextRefs.forEach((fieldName) => {
+    const previous = currentSettings[fieldName] || {}
+    const nextVisible = Object.prototype.hasOwnProperty.call(overrides, fieldName)
+      ? overrides[fieldName] === true
+      : previous.visible === false
+        ? false
+        : previousRefs.has(fieldName)
+    nextSettings[fieldName] = {
+      ...previous,
+      visible: nextVisible,
+    }
+  })
+  return nextSettings
+}
+
+function resolveCrudFieldIconComponent(field = {}) {
+  const componentType = String(field.componentType || field.type || '').toLowerCase()
+  const dataType = String(field.dataType || '').toLowerCase()
+  const fieldName = String(field.field || '').toLowerCase()
+  const text = `${componentType} ${dataType} ${fieldName}`
+  if (field.dictType || ['select', 'dictselect', 'radio', 'radiogroup', 'switch', 'selector'].some(type => text.includes(type)))
+    return BitableSelectIcon
+  if (['checkbox', 'checkboxgroup', 'todo', 'boolean'].some(type => text.includes(type)))
+    return BitableTodoIcon
+  if (['number', 'inputnumber', 'counter', 'int', 'long', 'bigint', 'decimal', 'double', 'float'].some(type => text.includes(type)))
+    return BitableNumberIcon
+  if (['date', 'time', 'calendar', 'localdatetime', 'timestamp'].some(type => text.includes(type)))
+    return BitableCalendarIcon
+  if (['phone', 'mobile', 'tel'].some(type => text.includes(type)))
+    return BitablePhoneIcon
+  if (['email', 'mail'].some(type => text.includes(type)))
+    return BitableMailIcon
+  if (['file', 'image', 'upload', 'attachment'].some(type => text.includes(type)))
+    return BitableAttachmentIcon
+  if (['user', 'member', 'owner', 'creator', 'createby', 'updateby'].some(type => text.includes(type)))
+    return BitableMemberIcon
+  if (['lookup', 'relation', 'reference', 'org', 'dept', 'region', 'tree'].some(type => text.includes(type)))
+    return BitableLookupIcon
+  return BitableStyleIcon
+}
+
 function updateSelectedFieldRefs(fieldRefs = []) {
   if (!selectedBlock.value)
     return
@@ -8115,12 +8876,20 @@ function resolveFieldRoleEnabled(fieldName, role) {
     return resolveSelectedFieldRefs(selectedBlock.value, 'search').includes(fieldName)
   if (role === 'table')
     return resolveSelectedFieldRefs(selectedBlock.value, 'table').includes(fieldName)
+  if (role === 'import')
+    return resolveCrudFieldQuickValue(selectedBlock.value, fieldName, 'importable', true)
+  if (role === 'export')
+    return resolveCrudFieldQuickValue(selectedBlock.value, fieldName, 'exportable', true)
   return resolveFieldSetting(fieldName).editVisible !== false
 }
 
 function updateFieldRole(fieldName, role, enabled) {
   if (!selectedBlock.value || !fieldName)
     return
+  if (role === 'import' || role === 'export') {
+    updateCrudFieldQuickSetting(fieldName, role === 'import' ? 'importable' : 'exportable', enabled)
+    return
+  }
   if (role === 'search' || role === 'table') {
     const current = resolveSelectedFieldRefs(selectedBlock.value, role)
     const next = enabled
@@ -8379,12 +9148,29 @@ function updateCodeColor(value = '') {
   patchBlockProps(selectedBlock.value.id, { foreground: value || '#0f172a' })
 }
 
-function addCustomAction() {
+function clonePlainValue(value) {
+  return JSON.parse(JSON.stringify(value || {}))
+}
+
+function createCustomActionClientKey(prefix = 'custom_action') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getCustomActionIdentity(action = {}) {
+  if (action && typeof action === 'object')
+    return action.clientKey || action.key || ''
+  return String(action || '')
+}
+
+function addCustomAction(position = 'row') {
   const list = [...customActionList.value]
+  const normalizedPosition = ['toolbar', 'row', 'detail'].includes(position) ? position : 'row'
+  const clientKey = createCustomActionClientKey()
   list.push({
-    key: `custom_${Date.now()}`,
+    clientKey,
+    key: clientKey,
     label: '自定义按钮',
-    position: 'row',
+    position: normalizedPosition,
     type: 'primary',
     actionType: 'route',
     routePath: '',
@@ -8401,7 +9187,8 @@ function addCustomAction() {
   })
   persistCustomActionList(list)
   activeActionIndex.value = list.length - 1
-  customActionModalOpen.value = true
+  if (!['toolbar', 'row'].includes(position))
+    customActionModalOpen.value = true
 }
 
 function updateCustomAction(idx, patch) {
@@ -8410,11 +9197,123 @@ function updateCustomAction(idx, patch) {
   persistCustomActionList(list)
 }
 
+function findCustomActionIndexByIdentity(actionOrIdentity = '') {
+  const identity = getCustomActionIdentity(actionOrIdentity)
+  if (!identity)
+    return -1
+  return customActionList.value.findIndex(action => getCustomActionIdentity(action) === identity)
+}
+
+function updateCustomActionByIdentity(actionOrIdentity = '', patch = {}) {
+  const index = findCustomActionIndexByIdentity(actionOrIdentity)
+  if (index < 0)
+    return
+  updateCustomAction(index, patch)
+}
+
+function toggleCustomActionVisible(action = {}) {
+  updateCustomActionByIdentity(action, { visible: action.visible === false })
+}
+
+function openCustomActionEditor(actionOrIdentity = '') {
+  const index = findCustomActionIndexByIdentity(actionOrIdentity)
+  activeActionIndex.value = index
+  if (isApiCustomAction(customActionList.value[index]))
+    loadEnabledApiConfigs()
+  customActionModalOpen.value = index >= 0
+}
+
+function handleCustomActionGroupReorder(position = 'toolbar', rows = []) {
+  const targetPosition = ['toolbar', 'row', 'detail'].includes(position) ? position : 'toolbar'
+  const rowKeys = new Set(rows.map(action => getCustomActionIdentity(action)))
+  const normalizedRows = rows.map(action => ({ ...action, position: targetPosition }))
+  const next = []
+  let inserted = false
+  customActionList.value.forEach((action) => {
+    if ((action.position || 'toolbar') === targetPosition) {
+      if (!inserted) {
+        next.push(...normalizedRows)
+        inserted = true
+      }
+      return
+    }
+    if (!rowKeys.has(getCustomActionIdentity(action)))
+      next.push(action)
+  })
+  if (!inserted)
+    next.push(...normalizedRows)
+  persistCustomActionList(next)
+}
+
+function customActionMoreOptions(action = {}) {
+  const currentPosition = action.position || 'toolbar'
+  return [
+    { label: '设置', key: 'configure' },
+    {
+      label: currentPosition === 'toolbar' ? '移到行按钮' : '移到工具栏',
+      key: currentPosition === 'toolbar' ? 'move-row' : 'move-toolbar',
+    },
+    { label: '复制', key: 'copy' },
+    { label: '删除', key: 'delete' },
+  ]
+}
+
+function handleCustomActionMoreSelect(key = '', action = {}) {
+  const index = findCustomActionIndexByIdentity(action)
+  if (index < 0)
+    return
+  if (key === 'configure') {
+    openCustomActionEditor(action)
+    return
+  }
+  if (key === 'move-row') {
+    updateCustomAction(index, { position: 'row' })
+    return
+  }
+  if (key === 'move-toolbar') {
+    updateCustomAction(index, { position: 'toolbar' })
+    return
+  }
+  if (key === 'copy') {
+    const list = [...customActionList.value]
+    const clientKey = createCustomActionClientKey('custom_action_copy')
+    const copied = {
+      ...clonePlainValue(list[index]),
+      clientKey,
+      key: clientKey,
+      label: `${list[index].label || '自定义按钮'} 副本`,
+    }
+    list.splice(index + 1, 0, copied)
+    persistCustomActionList(list)
+    activeActionIndex.value = index + 1
+    return
+  }
+  if (key === 'delete')
+    removeCustomActionByIdentity(action)
+}
+
 function removeCustomAction(idx) {
   const list = [...customActionList.value]
+  if (idx < 0 || idx >= list.length)
+    return
   list.splice(idx, 1)
   persistCustomActionList(list)
-  activeActionIndex.value = Math.max(0, Math.min(activeActionIndex.value, list.length - 1))
+  activeActionIndex.value = list.length ? Math.min(idx, list.length - 1) : -1
+  if (!list.length)
+    customActionModalOpen.value = false
+}
+
+function removeCustomActionByIdentity(actionOrIdentity = '') {
+  const identity = getCustomActionIdentity(actionOrIdentity)
+  if (!identity)
+    return
+  const list = customActionList.value.filter(action => getCustomActionIdentity(action) !== identity)
+  if (list.length === customActionList.value.length)
+    return
+  persistCustomActionList(list)
+  activeActionIndex.value = list.length ? Math.min(activeActionIndex.value, list.length - 1) : -1
+  if (!list.length)
+    customActionModalOpen.value = false
 }
 
 function persistCustomActionList(list = []) {
@@ -8425,13 +9324,6 @@ function persistCustomActionList(list = []) {
   if (selectedBlock.value && ['AiCrudPage', 'toolbar', 'data-table', 'AiTable'].includes(selectedBlock.value.blockType)) {
     patchBlockProps(selectedBlock.value.id, { customActions: normalized })
   }
-}
-
-function openCustomActionModal() {
-  activeActionIndex.value = customActionList.value.length ? 0 : -1
-  if (isApiCustomAction(customActionList.value[activeActionIndex.value]))
-    loadEnabledApiConfigs()
-  customActionModalOpen.value = true
 }
 
 function updateActiveCustomAction(patch) {
@@ -8669,6 +9561,10 @@ function resolveActionBehaviorValue(value) {
   return normalizeCustomActionType(value)
 }
 
+function resolveActionBehaviorLabel(action = {}) {
+  return actionBehaviorOptions.find(item => item.value === resolveActionBehaviorValue(action.actionType))?.label || '站内跳转'
+}
+
 function normalizeCustomActionList(list = []) {
   return (Array.isArray(list) ? list : [])
     .filter(action => action && typeof action === 'object')
@@ -8680,8 +9576,10 @@ function normalizeCustomActionList(list = []) {
       const actionParams = actionType === 'CALL_API'
         ? actionConfig.params || []
         : action.params?.length ? action.params : actionConfig.params || []
+      const clientKey = action.clientKey || action.key || `custom_${index + 1}`
       return {
         ...action,
+        clientKey,
         key: normalizeActionKey(action.key || action.label) || `custom_${index + 1}`,
         label: action.label || '自定义按钮',
         position: ['toolbar', 'row', 'detail'].includes(action.position) ? action.position : 'row',
@@ -8882,14 +9780,6 @@ function normalizeParamName(value) {
   return String(value || '')
     .trim()
     .replace(/[^\w.-]/g, '')
-}
-
-function actionPositionText(position) {
-  return actionPositionOptions.find(item => item.value === (position || 'toolbar'))?.label || '工具栏'
-}
-
-function actionBehaviorText(actionType) {
-  return actionBehaviorOptions.find(item => item.value === resolveActionBehaviorValue(actionType))?.label || '站内跳转'
 }
 
 function actionPathPlaceholder(action = {}) {
@@ -10992,59 +11882,380 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   grid-template-columns: minmax(64px, 74px) minmax(0, 1fr);
 }
 
-.custom-action-summary {
+.bitable-field-panel {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  background: #f8f9fa;
+}
+
+.bitable-field-panel-head,
+.bitable-field-operation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bitable-field-panel-head strong,
+.bitable-field-operation-head strong {
+  color: #18181b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.bitable-field-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bitable-field-panel-actions button {
+  max-width: 86px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-field-panel-actions button:hover {
+  color: #1d4ed8;
+}
+
+.bitable-field-panel-list {
+  display: grid;
+  gap: 1px;
+  max-height: 386px;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.bitable-field-row {
+  display: grid;
+  grid-template-columns: 20px 18px minmax(0, 1fr) 24px 24px;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  min-width: 0;
+  padding: 4px 4px;
+  border-radius: 5px;
+  background: #f8f9fa;
+  color: #27272a;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.bitable-field-row:hover {
+  background: #eef1f4;
+}
+
+.bitable-field-row.invisible {
+  visibility: visible !important;
+  background: #f8f9fa;
+  color: #a1a1aa;
+}
+
+.bitable-field-row.invisible .bitable-field-name span,
+.bitable-field-row.invisible .bitable-field-icon,
+.bitable-field-row.invisible .bitable-field-name small {
+  color: #c4c4cc;
+}
+
+.bitable-field-row.invisible:hover {
+  background: #eef1f4;
+}
+
+.bitable-field-drag,
+.bitable-field-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.bitable-field-drag {
+  cursor: grab;
+}
+
+.bitable-field-drag.disabled {
+  cursor: default;
+  opacity: 0.36;
+}
+
+.bitable-field-icon-button:hover,
+.bitable-field-drag:hover:not(.disabled) {
+  color: #2563eb;
+}
+
+.bitable-field-icon {
+  color: #71717a;
+  font-size: 14px;
+}
+
+.bitable-field-name {
+  display: grid;
+  min-width: 0;
+}
+
+.bitable-field-name span {
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-field-name small {
+  overflow: hidden;
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-field-operation-divider {
+  height: 1px;
+  margin: 6px 0 0;
+  background: #e4e4e7;
+}
+
+.bitable-field-operation-group {
+  display: grid;
+  gap: 1px;
+}
+
+.bitable-field-operation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px;
+  border-radius: 5px;
+  color: #52525b;
+}
+
+.bitable-field-operation-head:hover {
+  background: #f8fafc;
+}
+
+.bitable-field-operation-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bitable-field-operation-title strong {
+  flex: 0 0 auto;
+}
+
+.bitable-field-tip-icon {
+  color: #71717a;
+  font-size: 14px;
+}
+
+.bitable-field-tip-button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+}
+
+.bitable-field-tip-button:hover {
+  color: #2563eb;
+}
+
+:global(.bitable-field-info-popover) {
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #3f3f46;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.bitable-field-info-content {
+  color: #3f3f46;
+}
+
+.bitable-field-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid #e4e4e7;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #52525b;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 20px;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.bitable-field-add-button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.bitable-field-add-button .n-icon {
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
+.bitable-operation-list {
+  display: grid;
+  gap: 1px;
+}
+
+.bitable-action-row {
+  grid-template-columns: 20px 18px minmax(0, 1fr) 24px 24px;
+  border-color: transparent;
+  background: #f8f9fa;
+  padding: 4px;
+}
+
+.bitable-action-row:hover {
+  background: #eef1f4;
+}
+
+.custom-action-builder {
   display: grid;
   gap: 10px;
-}
-
-.custom-action-featured {
   width: 100%;
-  padding: 8px;
-  border: 1px solid #c7d2fe;
-  border-radius: 8px;
-  background: #eef2ff;
 }
 
-.custom-action-featured > div:first-child {
+.custom-action-builder-section {
   display: grid;
-  gap: 3px;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fff;
 }
 
-.custom-action-featured strong {
-  color: #3730a3;
+.custom-action-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.custom-action-builder-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.custom-action-builder-head strong {
+  color: #18181b;
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;
 }
 
-.custom-action-featured span {
-  color: #6366f1;
+.custom-action-builder-head span {
+  overflow: hidden;
+  color: #71717a;
   font-size: 10px;
   line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.action-chip-list {
+.custom-action-card-list {
   display: grid;
   gap: 6px;
-}
-
-.action-chip {
-  display: grid;
-  gap: 2px;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid #dbe3ee;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #0f172a;
-  font-size: 12px;
-  font-weight: 600;
 }
 
-.action-chip small {
-  color: #64748b;
+.custom-action-card-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.custom-action-drag,
+.custom-action-more,
+.custom-action-inline-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+}
+
+.custom-action-drag {
+  cursor: grab;
+}
+
+.custom-action-drag:active {
+  cursor: grabbing;
+}
+
+.custom-action-drag:hover,
+.custom-action-more:hover,
+.custom-action-inline-icon:hover {
+  color: #2563eb;
+}
+
+.custom-action-name-input {
+  min-width: 0;
+}
+
+.custom-action-empty {
+  padding: 4px 2px 2px;
+  color: #94a3b8;
   font-size: 11px;
-  font-weight: 400;
+  line-height: 16px;
 }
 
 .custom-action-modal {
@@ -12066,118 +13277,199 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
     flex-direction: column;
   }
 }
-.crud-field-quick-panel {
+.crud-expand-config-panel {
   display: grid;
-  gap: 10px;
+  width: 100%;
+  gap: 12px;
   min-width: 0;
 }
 
-.crud-field-quick-head,
-.crud-field-quick-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px 48px 48px;
-  gap: 8px;
+.crud-expand-config-head {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  color: #52525b;
+  font-size: 12px;
+  line-height: 20px;
 }
 
-.crud-field-quick-head {
+.crud-expand-config-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 10px;
+}
+
+.crud-expand-section-title {
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.crud-expand-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.crud-expand-config-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.crud-expand-config-field > span {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.crud-expand-config-section :deep(.n-input),
+.crud-expand-config-section :deep(.n-select) {
+  width: 100%;
+}
+
+.bitable-config-summary-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 86px) minmax(0, 1fr);
+  align-items: center;
+  min-height: 32px;
+  min-width: 0;
+  border-radius: 5px;
+}
+
+.bitable-config-summary-label {
+  overflow: hidden;
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-config-summary-value {
+  display: block;
+  min-width: 0;
+}
+
+.bitable-config-value-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: #f4f5f7;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.bitable-config-value-box:hover {
+  background: #eef1f4;
+  border-color: #e4e7ec;
+}
+
+.bitable-config-value-box-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 8px;
-  color: #71717a;
+  color: #52525b;
   font-size: 12px;
-  font-weight: 600;
-}
-
-.crud-field-quick-list {
-  display: grid;
-  gap: 6px;
-  max-height: 360px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.crud-field-quick-row {
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
-  background: #fff;
-  padding: 8px;
-}
-
-.crud-field-quick-meta {
-  display: grid;
-  min-width: 0;
-}
-
-.crud-field-quick-meta strong,
-.crud-field-quick-meta small {
-  overflow: hidden;
+  line-height: 30px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.crud-field-quick-meta strong {
-  color: #27272a;
-  font-size: 12px;
-}
-
-.crud-field-quick-meta small {
-  color: #71717a;
-  font-size: 11px;
-}
-.crud-field-quick-panel {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.crud-field-quick-head,
-.crud-field-quick-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px 42px 42px;
+.bitable-config-value-box-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
 }
 
-.crud-field-quick-head {
+.bitable-config-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: #71717a;
-  font-size: 12px;
-  font-weight: 600;
+  cursor: pointer;
+  font-size: 15px;
 }
 
-.crud-field-quick-list {
+.bitable-config-icon-button:hover {
+  background: #e4e7ec;
+  color: #2563eb;
+}
+
+.bitable-field-popover-panel {
+  position: relative;
   display: grid;
-  gap: 6px;
-  max-height: 320px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.crud-field-quick-row {
+  gap: 0;
+  width: 310px;
+  max-width: calc(100vw - 48px);
+  padding: 0;
   border: 1px solid #e4e4e7;
   border-radius: 8px;
   background: #fff;
-  padding: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
 }
 
-.crud-field-quick-meta {
+.bitable-field-panel-arrow {
+  position: absolute;
+  top: -6px;
+  right: 16px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid #e4e4e7;
+  border-left: 1px solid #e4e4e7;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.bitable-field-popover-head {
+  height: 40px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #18181b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.bitable-field-popover-panel .bitable-field-panel-list {
+  max-height: 386px;
+  padding: 6px;
+}
+
+.crud-expand-field-list {
   display: grid;
-  gap: 2px;
-  min-width: 0;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
-.crud-field-quick-meta strong,
-.crud-field-quick-meta small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.crud-field-quick-meta strong {
-  color: #27272a;
-  font-size: 12px;
-}
-
-.crud-field-quick-meta small {
-  color: #71717a;
-  font-size: 11px;
+@media (max-width: 1280px) {
+  .crud-expand-config-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

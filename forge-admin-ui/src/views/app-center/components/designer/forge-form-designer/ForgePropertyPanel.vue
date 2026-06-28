@@ -2447,6 +2447,13 @@
               <div class="panel-item-title">
                 表格细节
               </div>
+              <n-form-item label="列宽拖拽">
+                <n-switch
+                  size="small"
+                  :value="crudOptions.resizable === true"
+                  @update:value="updateCrudOption('resizable', $event)"
+                />
+              </n-form-item>
               <n-form-item label="表格最大高度">
                 <n-input
                   :value="crudOptions.maxHeight || ''"
@@ -2464,6 +2471,203 @@
                   @update:value="updateCrudOption('scrollX', $event || undefined)"
                 />
               </n-form-item>
+            </section>
+
+            <section class="panel-item">
+              <div class="panel-item-title">
+                展开面板
+              </div>
+              <div class="crud-expand-config-panel">
+                <div class="crud-expand-config-head">
+                  <n-switch
+                    size="small"
+                    :value="crudOptions.expandConfig?.enabled === true"
+                    @update:value="updateCrudExpandEnabled"
+                  />
+                  <span>{{ crudOptions.expandConfig?.enabled === true ? '已启用行展开' : '未启用行展开' }}</span>
+                </div>
+              </div>
+              <template v-if="crudOptions.expandConfig?.enabled === true">
+                <div class="crud-expand-config-section">
+                  <div class="crud-expand-section-title">
+                    基础设置
+                  </div>
+                  <div class="crud-expand-config-grid">
+                    <label class="crud-expand-config-field">
+                      <span>
+                        触发方式
+                      </span>
+                      <n-select
+                        :value="crudOptions.expandConfig?.trigger || 'icon'"
+                        :options="expandTriggerOptions"
+                        size="small"
+                        @update:value="value => updateCrudExpandConfig({ trigger: value || 'icon' })"
+                      />
+                    </label>
+                    <label class="crud-expand-config-field">
+                      <span>
+                        展示方式
+                      </span>
+                      <n-select
+                        :value="crudOptions.expandConfig?.layout?.mode || 'single'"
+                        :options="expandLayoutModeOptions"
+                        size="small"
+                        @update:value="value => updateCrudExpandConfig({ layout: { ...(crudOptions.expandConfig?.layout || {}), mode: value || 'single' } })"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div class="crud-expand-config-section">
+                  <div class="crud-expand-section-title">
+                    内容设置
+                  </div>
+                  <div class="crud-expand-config-grid">
+                    <label class="crud-expand-config-field">
+                      <span>
+                        面板类型
+                      </span>
+                      <n-select
+                        :value="firstCrudExpandPanel?.type || 'descriptions'"
+                        :options="expandPanelTypeOptions"
+                        size="small"
+                        @update:value="value => updateFirstCrudExpandPanel({ type: value || 'descriptions' })"
+                      />
+                    </label>
+                    <label class="crud-expand-config-field">
+                      <span>
+                        面板标题
+                      </span>
+                      <n-input
+                        :value="firstCrudExpandPanel?.title || ''"
+                        size="small"
+                        clearable
+                        placeholder="概览 / 明细"
+                        @update:value="value => updateFirstCrudExpandPanel({ title: value || undefined })"
+                      />
+                    </label>
+                    <label class="crud-expand-config-field">
+                      <span>
+                        数据来源
+                      </span>
+                      <n-select
+                        :value="firstCrudExpandPanel?.dataSource?.type || 'row'"
+                        :options="expandDataSourceTypeOptions"
+                        size="small"
+                        @update:value="value => updateFirstCrudExpandPanel({ dataSource: { ...(firstCrudExpandPanel?.dataSource || {}), type: value || 'row' } })"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div v-if="firstCrudExpandPanel?.dataSource?.type === 'api'" class="crud-expand-config-section">
+                  <div class="crud-expand-section-title">
+                    接口参数
+                  </div>
+                  <label class="crud-expand-config-field">
+                    <span>
+                      接口地址
+                    </span>
+                    <n-input
+                      :value="firstCrudExpandPanel?.dataSource?.api || ''"
+                      size="small"
+                      clearable
+                      placeholder="get@/api/order/item/page"
+                      @update:value="value => updateFirstCrudExpandDataSource({ api: value || '' })"
+                    />
+                  </label>
+                  <label class="crud-expand-config-field">
+                    <span>
+                      参数映射
+                    </span>
+                    <n-input
+                      :value="stringifyJsonProp(firstCrudExpandPanel?.dataSource?.paramsMap || {})"
+                      type="textarea"
+                      :autosize="{ minRows: 2, maxRows: 4 }"
+                      placeholder="例如 {&quot;orderId&quot;:&quot;row.id&quot;}"
+                      @update:value="updateFirstCrudExpandParamsMap"
+                    />
+                  </label>
+                </div>
+                <div v-if="firstCrudExpandPanel?.type === 'descriptions'" class="crud-expand-config-section">
+                  <div class="crud-expand-section-title">
+                    描述字段
+                  </div>
+                  <div class="bitable-config-summary-row">
+                    <div class="bitable-config-summary-label">
+                      展示字段
+                    </div>
+                    <div class="bitable-config-summary-value">
+                      <div class="bitable-config-value-box">
+                        <div class="bitable-config-value-box-text">
+                          {{ resolveCrudExpandDescriptionSelectedFields(firstCrudExpandPanel).length }} 个字段
+                        </div>
+                        <div class="bitable-config-value-box-btn">
+                          <n-popover
+                            v-model:show="crudDescriptionFieldPanelOpen"
+                            trigger="click"
+                            placement="bottom-end"
+                            :show-arrow="false"
+                            raw
+                          >
+                            <template #trigger>
+                              <button type="button" class="bitable-config-icon-button" title="设置展示字段">
+                                <n-icon><SettingsOutline /></n-icon>
+                              </button>
+                            </template>
+                            <div class="bitable-field-popover-panel">
+                              <div class="bitable-field-panel-arrow" />
+                              <div class="bitable-field-popover-head">
+                                展示字段
+                              </div>
+                              <div class="bitable-field-panel-list">
+                                <draggable
+                                  :model-value="resolveCrudExpandDescriptionPanelFields(firstCrudExpandPanel)"
+                                  item-key="field"
+                                  handle=".crud-bitable-field-drag"
+                                  :animation="160"
+                                  @update:model-value="handleCrudExpandDescriptionPanelReorder"
+                                >
+                                  <template #item="{ element }">
+                                    <div class="crud-bitable-field-row" :class="{ invisible: !element.selected }">
+                                      <button type="button" class="crud-bitable-field-drag" title="拖拽排序">
+                                        <n-icon>
+                                          <BitableDragIcon />
+                                        </n-icon>
+                                      </button>
+                                      <n-icon class="crud-bitable-field-icon">
+                                        <component :is="resolveCrudBitableFieldIconComponent(element)" />
+                                      </n-icon>
+                                      <div class="crud-bitable-field-name">
+                                        <span>{{ element.label || element.field }}</span>
+                                        <small>{{ element.field }}</small>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        class="crud-bitable-field-visible"
+                                        :title="element.selected ? '隐藏字段' : '显示字段'"
+                                        @click="toggleFirstCrudExpandDescriptionField(element.field, !element.selected)"
+                                      >
+                                        <n-icon>
+                                          <component :is="element.selected ? EyeOutline : EyeOffOutline" />
+                                        </n-icon>
+                                      </button>
+                                    </div>
+                                  </template>
+                                </draggable>
+                                <span v-if="!crudDescriptionFieldOptions.length" class="custom-action-empty">暂无可选字段</span>
+                              </div>
+                            </div>
+                          </n-popover>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <n-empty
+                    v-if="!crudDescriptionFieldOptions.length"
+                    size="small"
+                    description="暂无可选字段"
+                  />
+                </div>
+              </template>
             </section>
 
             <section class="panel-item">
@@ -3650,6 +3854,8 @@
 import {
   CodeSlashOutline,
   ColorPaletteOutline,
+  EyeOffOutline,
+  EyeOutline,
   FlashOutline,
   GridOutline,
   LayersOutline,
@@ -3657,7 +3863,8 @@ import {
   SettingsOutline,
   ToggleOutline,
 } from '@vicons/ionicons5'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import draggable from 'vuedraggable'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
@@ -3677,9 +3884,56 @@ const props = defineProps({
 
 const emit = defineEmits(['update:schema', 'update:selectedId', 'close'])
 
+function createBitableSvgIcon(name, children = []) {
+  return {
+    name,
+    render() {
+      return h(
+        'svg',
+        {
+          width: '1em',
+          height: '1em',
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          xmlns: 'http://www.w3.org/2000/svg',
+        },
+        children.map((child, index) => h(child.tag || 'path', { key: index, ...child })),
+      )
+    },
+  }
+}
+
+const BitableDragIcon = createBitableSvgIcon('BitableDragIcon', [
+  { d: 'M8.25 6.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm0 7.25a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm1.75 5.5a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0ZM14.753 6.5a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5ZM16.5 12a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Zm-1.747 9a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Z', fill: 'currentColor' },
+])
+const BitableStyleIcon = createBitableSvgIcon('BitableStyleIcon', [
+  { d: 'M8.437 4.898 5.447 13h6.063L8.437 4.898Zm6.025 15.881L12.269 15h-7.56l-2.131 5.78a1 1 0 1 1-1.873-.703L7.02 2.982c.491-1.31 2.344-1.31 2.835 0l6.48 17.095a1 1 0 1 1-1.872.702ZM15.056 5a1 1 0 1 0 0 2H23a1 1 0 1 0 0-2h-7.944Zm1.055 7a1 1 0 0 1 1-1H23a1 1 0 1 1 0 2h-5.89a1 1 0 0 1-1-1Zm3.056 5a1 1 0 1 0 0 2H23a1 1 0 1 0 0-2h-3.833Z', fill: 'currentColor' },
+])
+const BitableSelectIcon = createBitableSvgIcon('BitableSelectIcon', [
+  { d: 'M7.755 11.658a1 1 0 0 1 1.416-1.415L12 13.07l2.828-2.829a1 1 0 0 1 1.416 1.416c-1.181 1.189-2.356 2.386-3.553 3.56a.987.987 0 0 1-1.383 0c-1.196-1.175-2.371-2.371-3.553-3.56Z', fill: 'currentColor' },
+  { d: 'M12 23C5.925 23 1 18.075 1 12S5.925 1 12 1s11 4.925 11 11-4.925 11-11 11Zm0-2a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', fill: 'currentColor' },
+])
+const BitableNumberIcon = createBitableSvgIcon('BitableNumberIcon', [
+  { d: 'M8.774 2.14a1 1 0 0 1 .85 1.129L9.242 6h6.98l.423-3.01a1 1 0 1 1 1.98.279L18.242 6H22a1 1 0 1 1 0 2h-4.04l-.984 7H20a1 1 0 1 1 0 2h-3.305l-.575 4.093a1 1 0 1 1-1.98-.278L14.674 17h-6.98l-.575 4.093a1 1 0 1 1-1.98-.278L5.674 17H2a1 1 0 1 1 0-2h3.956l.984-7H4a1 1 0 1 1 0-2h3.221l.423-3.01a1 1 0 0 1 1.13-.85ZM14.956 15l.984-7H8.96l-.984 7h6.98Z', fill: 'currentColor' },
+])
+const BitableCalendarIcon = createBitableSvgIcon('BitableCalendarIcon', [
+  { d: 'M7 2a1 1 0 0 1 1 1h8a1 1 0 1 1 2 0h2a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2a1 1 0 0 1 1-1Zm9 3H8a1 1 0 0 1-2 0H4v15h16V5h-2a1 1 0 1 1-2 0ZM9 15a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1Zm1.5-5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1Zm3 5a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1Zm1.5 0a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1Zm3-5a1 1 0 0 0-1-1h-1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1Z', fill: 'currentColor' },
+])
+const BitableAttachmentIcon = createBitableSvgIcon('BitableAttachmentIcon', [
+  { d: 'M12.304 7.315a1 1 0 0 1 1.414 1.414L8.13 14.317a1.485 1.485 0 0 0 0 2.1l.01.011a1.5 1.5 0 0 0 2.117-.005l7.43-7.43a3.5 3.5 0 0 0 0-4.95l-.036-.037a3.5 3.5 0 0 0-4.95 0l-7.778 7.777a5.521 5.521 0 0 0 7.808 7.809l7.07-7.07a1 1 0 0 1 1.415 1.414l-7.07 7.07A7.521 7.521 0 0 1 3.509 10.37l7.778-7.778a5.5 5.5 0 0 1 7.778 0l.037.037a5.5 5.5 0 0 1 0 7.778l-7.43 7.43a3.5 3.5 0 0 1-4.939.012l-.006-.006-.012-.012a3.485 3.485 0 0 1 0-4.928l5.589-5.588Z', fill: 'currentColor' },
+])
+const BitableMemberIcon = createBitableSvgIcon('BitableMemberIcon', [
+  { d: 'M15 6.5a3 3 0 1 0-6 0 3 3 0 0 0 6 0Zm2 0a5 5 0 1 1-10 0 5 5 0 0 1 10 0ZM4 19v2h16v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4Zm-2 0a6 6 0 0 1 6-6h8a6 6 0 0 1 6 6v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2Z', fill: 'currentColor' },
+])
+const BitableLookupIcon = createBitableSvgIcon('BitableLookupIcon', [
+  { d: 'M20 4H4v16h7v2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6h-2V4Z', fill: 'currentColor' },
+  { d: 'M7 6.5a1 1 0 0 0 0 2h8a1 1 0 1 0 0-2H7Zm-1 5a1 1 0 0 1 1-1h3.5a1 1 0 1 1 0 2H7a1 1 0 0 1-1-1Zm1 3a1 1 0 1 0 0 2h2.5a1 1 0 1 0 0-2H7Zm13.939 4.58a5 5 0 1 0-1.522 1.298l1.698 1.953a1 1 0 0 0 1.51-1.312l-1.686-1.939ZM17 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z', fill: 'currentColor' },
+])
+
 const advancedConfigVisible = ref(false)
 const componentPropsVisible = ref(false)
 const crudFieldDrawerVisible = ref(false)
+const crudDescriptionFieldPanelOpen = ref(false)
 const editingCrudFieldId = ref('')
 const propertyActiveTab = ref('basic')
 const formPropertyActiveTab = ref('basic')
@@ -4019,6 +4273,28 @@ const formOpenModeOptions = [
   { label: '平铺', value: 'flat' },
   { label: '多页签', value: 'tabWorkspace' },
 ]
+const expandTriggerOptions = [
+  { label: '图标', value: 'icon' },
+  { label: '整行', value: 'row' },
+  { label: '图标和整行', value: 'both' },
+]
+const expandLayoutModeOptions = [
+  { label: '单面板', value: 'single' },
+  { label: 'Tabs', value: 'tabs' },
+  { label: '上下堆叠', value: 'stack' },
+]
+const expandPanelTypeOptions = [
+  { label: '描述信息', value: 'descriptions' },
+  { label: '子表表格', value: 'table' },
+  { label: '只读表单', value: 'form' },
+  { label: '多面板 Tabs', value: 'tabs' },
+  { label: '自定义插槽', value: 'custom' },
+]
+const expandDataSourceTypeOptions = [
+  { label: '当前行数据', value: 'row' },
+  { label: '接口加载', value: 'api' },
+  { label: '静态数据', value: 'static' },
+]
 const modalContentModeOptions = [
   { label: '复用当前表单', value: 'currentForm' },
   { label: '引用表单资产', value: 'formAsset' },
@@ -4190,6 +4466,14 @@ const rowTotalColumns = computed(() => normalizeGridCount(selectedComponent.valu
 const rowColumns = computed(() => (selectedComponent.value?.children || []).filter(child => child?.componentKey === 'col'))
 const rowColumnCount = computed(() => rowColumns.value.length || 1)
 const crudConfigFields = computed(() => collectCrudConfigFields(selectedComponent.value?.children || []))
+const crudDescriptionFieldOptions = computed(() => crudConfigFields.value.map(field => ({
+  label: `${field.label || field.fieldCode}（${field.fieldCode}）`,
+  rawLabel: field.label || field.fieldCode,
+  value: field.fieldCode,
+  field: field.fieldCode,
+  componentKey: field.componentKey,
+})))
+const firstCrudExpandPanel = computed(() => crudOptions.value?.expandConfig?.panels?.[0] || null)
 const editingCrudField = computed(() => editingCrudFieldId.value ? getDesignerComponent(props.schema, editingCrudFieldId.value) : null)
 const editingCrudConfig = computed(() => editingCrudField.value?.props?.__crudConfig || {})
 const selectedOptions = computed(() => selectedComponent.value?.props?.options || [])
@@ -5191,6 +5475,200 @@ function updateCrudOption(key, value) {
       },
     },
   })
+}
+
+function updateCrudExpandEnabled(enabled) {
+  const current = crudOptions.value?.expandConfig || {}
+  updateCrudOption('expandConfig', enabled
+    ? {
+        enabled: true,
+        trigger: current.trigger || 'icon',
+        lazy: current.lazy !== false,
+        cache: current.cache !== false,
+        layout: current.layout || { mode: 'single', density: 'compact', padding: 12 },
+        panels: current.panels?.length ? current.panels : [createDefaultCrudExpandPanel()],
+      }
+    : { ...current, enabled: false })
+}
+
+function updateCrudExpandConfig(patch = {}) {
+  const current = crudOptions.value?.expandConfig || {}
+  updateCrudOption('expandConfig', {
+    ...current,
+    ...patch,
+    enabled: current.enabled === true,
+  })
+}
+
+function updateFirstCrudExpandPanel(patch = {}) {
+  const current = crudOptions.value?.expandConfig || {}
+  const panels = current.panels?.length ? [...current.panels] : [createDefaultCrudExpandPanel()]
+  panels[0] = normalizeCrudExpandPanelPatch({ ...panels[0], ...patch })
+  updateCrudOption('expandConfig', {
+    ...current,
+    enabled: true,
+    panels,
+  })
+}
+
+function updateFirstCrudExpandDataSource(patch = {}) {
+  updateFirstCrudExpandPanel({
+    dataSource: {
+      ...(firstCrudExpandPanel.value?.dataSource || {}),
+      ...patch,
+    },
+  })
+}
+
+function updateFirstCrudExpandParamsMap(value) {
+  updateFirstCrudExpandDataSource({ paramsMap: parseJsonObjectProp(value) })
+}
+
+function updateFirstCrudExpandDescriptionFields(value) {
+  const fields = Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : String(value || '').split(/\r?\n|,/).map(item => item.trim()).filter(Boolean)
+  updateFirstCrudExpandPanel({
+    descriptions: {
+      ...(firstCrudExpandPanel.value?.descriptions || {}),
+      fields: fields.map(field => ({ field, label: resolveCrudFieldLabel(field) })),
+    },
+  })
+}
+
+function resolveCrudExpandDescriptionFieldKeys(panel) {
+  const configured = (panel?.descriptions?.fields || [])
+    .map(field => field.field || field.key)
+    .filter(Boolean)
+  if (configured.length)
+    return configured
+  return resolveDefaultCrudDescriptionFields().map(field => field.field).filter(Boolean)
+}
+
+function resolveCrudExpandDescriptionSelectedFields(panel) {
+  const optionMap = new Map(crudDescriptionFieldOptions.value.map(option => [option.value, option]))
+  return resolveCrudExpandDescriptionFieldKeys(panel).map((field) => {
+    const option = optionMap.get(field)
+    return {
+      field,
+      label: option?.rawLabel || resolveCrudFieldLabel(field),
+      componentKey: option?.componentKey,
+    }
+  })
+}
+
+function resolveCrudExpandDescriptionPanelFields(panel) {
+  const selectedKeys = resolveCrudExpandDescriptionFieldKeys(panel)
+  const selected = new Set(selectedKeys)
+  const optionMap = new Map(crudDescriptionFieldOptions.value.map(option => [option.value, option]))
+  const orderedKeys = [
+    ...selectedKeys,
+    ...Array.from(optionMap.keys()).filter(key => !selected.has(key)),
+  ]
+  return orderedKeys
+    .map((field) => {
+      const option = optionMap.get(field)
+      if (!option && !selected.has(field))
+        return null
+      return {
+        field,
+        label: option?.rawLabel || resolveCrudFieldLabel(field),
+        componentKey: option?.componentKey,
+        selected: selected.has(field),
+      }
+    })
+    .filter(Boolean)
+}
+
+function addFirstCrudExpandDescriptionField(field) {
+  if (!field)
+    return
+  const fields = resolveCrudExpandDescriptionFieldKeys(firstCrudExpandPanel.value)
+  updateFirstCrudExpandDescriptionFields(Array.from(new Set([...fields, field])))
+}
+
+function removeFirstCrudExpandDescriptionField(field) {
+  const fields = resolveCrudExpandDescriptionFieldKeys(firstCrudExpandPanel.value)
+  updateFirstCrudExpandDescriptionFields(fields.filter(item => item !== field))
+}
+
+function toggleFirstCrudExpandDescriptionField(field, visible) {
+  if (visible)
+    addFirstCrudExpandDescriptionField(field)
+  else
+    removeFirstCrudExpandDescriptionField(field)
+}
+
+function handleCrudExpandDescriptionPanelReorder(fields = []) {
+  updateFirstCrudExpandDescriptionFields(fields.filter(field => field?.selected).map(field => field.field))
+}
+
+function resolveCrudBitableFieldIconComponent(field = {}) {
+  const key = String(field.componentKey || '').toLowerCase()
+  if (['number', 'inputnumber', 'input-number', 'rate', 'slider'].includes(key))
+    return BitableNumberIcon
+  if (['date', 'datetime', 'datepicker', 'timepicker', 'time', 'month', 'year'].includes(key))
+    return BitableCalendarIcon
+  if (['select', 'dictselect', 'radio', 'radiobutton', 'checkbox', 'cascader', 'treeselect', 'switch'].includes(key))
+    return BitableSelectIcon
+  if (['upload', 'fileupload', 'imageupload'].includes(key))
+    return BitableAttachmentIcon
+  if (['userselect', 'deptselect'].includes(key))
+    return BitableMemberIcon
+  if (['lookup', 'relation', 'reference'].includes(key))
+    return BitableLookupIcon
+  return BitableStyleIcon
+}
+
+function createDefaultCrudExpandPanel() {
+  return {
+    key: 'summary',
+    title: '概览',
+    type: 'descriptions',
+    dataSource: { type: 'row' },
+    descriptions: {
+      columns: 3,
+      fields: resolveDefaultCrudDescriptionFields(),
+    },
+  }
+}
+
+function normalizeCrudExpandPanelPatch(panel = {}) {
+  const type = panel.type || 'descriptions'
+  return {
+    ...panel,
+    key: panel.key || (type === 'table' ? 'detailTable' : 'summary'),
+    title: panel.title || (type === 'table' ? '明细' : '概览'),
+    type,
+    dataSource: panel.dataSource || { type: 'row' },
+    descriptions: panel.descriptions || { columns: 3, fields: resolveDefaultCrudDescriptionFields() },
+    table: panel.table || { rowKey: 'id', columns: [], pagination: false, maxHeight: 320 },
+  }
+}
+
+function resolveDefaultCrudDescriptionFields() {
+  return crudConfigFields.value.slice(0, 6).map(field => ({
+    field: field.fieldCode,
+    label: field.label || field.fieldCode,
+  }))
+}
+
+function resolveCrudFieldLabel(fieldCode) {
+  const field = crudConfigFields.value.find(item => item.fieldCode === fieldCode || item.id === fieldCode)
+  return field?.label || fieldCode
+}
+
+function parseJsonObjectProp(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
 }
 
 function normalizeFormOpenModePatch(value) {
@@ -6694,6 +7172,300 @@ onBeforeUnmount(() => {
   min-height: 20px;
   line-height: 20px;
   font-size: 11px;
+}
+
+.crud-expand-config-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.crud-expand-config-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #52525b;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.crud-expand-config-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 10px;
+}
+
+.crud-expand-section-title {
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.crud-expand-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.crud-expand-config-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.crud-expand-config-field > span {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.crud-expand-config-section :deep(.n-input),
+.crud-expand-config-section :deep(.n-select) {
+  width: 100%;
+}
+
+.bitable-config-summary-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 86px) minmax(0, 1fr);
+  align-items: center;
+  min-height: 32px;
+  min-width: 0;
+  border-radius: 5px;
+}
+
+.bitable-config-summary-label {
+  overflow: hidden;
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-config-summary-value {
+  display: block;
+  min-width: 0;
+}
+
+.bitable-config-value-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: #f4f5f7;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.bitable-config-value-box:hover {
+  background: #eef1f4;
+  border-color: #e4e7ec;
+}
+
+.bitable-config-value-box-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 8px;
+  color: #52525b;
+  font-size: 12px;
+  line-height: 30px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-config-value-box-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+}
+
+.bitable-config-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.bitable-config-icon-button:hover {
+  background: #e4e7ec;
+  color: #2563eb;
+}
+
+.bitable-field-popover-panel {
+  position: relative;
+  display: grid;
+  width: 310px;
+  max-width: calc(100vw - 48px);
+  padding: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.bitable-field-panel-arrow {
+  position: absolute;
+  top: -6px;
+  right: 16px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid #e4e4e7;
+  border-left: 1px solid #e4e4e7;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.bitable-field-popover-head {
+  height: 40px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #18181b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.bitable-field-panel-list {
+  display: grid;
+  gap: 1px;
+  max-height: 386px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.crud-expand-field-list {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.crud-bitable-field-row {
+  display: grid;
+  grid-template-columns: 20px 18px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  min-width: 0;
+  border-radius: 5px;
+  background: #f8f9fa;
+  color: #27272a;
+  padding: 4px;
+}
+
+.crud-bitable-field-row:hover {
+  background: #eef1f4;
+}
+
+.crud-bitable-field-row.invisible {
+  visibility: visible !important;
+  background: #f8f9fa;
+  color: #a1a1aa;
+}
+
+.crud-bitable-field-row.invisible .crud-bitable-field-name span,
+.crud-bitable-field-row.invisible .crud-bitable-field-icon,
+.crud-bitable-field-row.invisible .crud-bitable-field-name small {
+  color: #c4c4cc;
+}
+
+.crud-bitable-field-row.invisible:hover {
+  background: #eef1f4;
+}
+
+.crud-bitable-field-drag,
+.crud-bitable-field-visible {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.crud-bitable-field-drag {
+  cursor: grab;
+}
+
+.crud-bitable-field-drag:hover,
+.crud-bitable-field-visible:hover {
+  color: #2563eb;
+}
+
+.crud-bitable-field-icon {
+  color: #71717a;
+  font-size: 14px;
+}
+
+.crud-bitable-field-name {
+  display: grid;
+  min-width: 0;
+}
+
+.crud-bitable-field-name span,
+.crud-bitable-field-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crud-bitable-field-name span {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+}
+
+.crud-bitable-field-name small {
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.custom-action-empty {
+  padding: 4px 2px 2px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+@media (max-width: 1280px) {
+  .crud-expand-config-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .panel-item :deep(.n-radio-group),

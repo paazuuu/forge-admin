@@ -743,7 +743,9 @@ function handleTopbarActionsClick(event) {
   border: 0;
   border-radius: 0;
   background: #f8f9fa;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .panel-frame.dirty {

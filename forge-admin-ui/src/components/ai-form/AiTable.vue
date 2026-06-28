@@ -56,8 +56,10 @@
       :max-height="maxHeight"
       :scroll-x="scrollX"
       :checked-row-keys="innerCheckedRowKeys"
+      :expanded-row-keys="expandedRowKeys"
       v-bind="$attrs"
       @update:checked-row-keys="handleUpdateCheckedKeys"
+      @update:expanded-row-keys="handleUpdateExpandedKeys"
     >
       <template #empty>
         <NEmpty description="暂无数据" />
@@ -237,6 +239,14 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  expandedRowKeys: {
+    type: Array,
+    default: () => [],
+  },
+  resizable: {
+    type: Boolean,
+    default: false,
+  },
   // 上下文对象（传递给插槽）
   context: {
     type: Object,
@@ -337,6 +347,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   'update:checked-row-keys',
+  'update:expanded-row-keys',
   'page-change',
   'page-size-change',
   'refresh',
@@ -421,6 +432,8 @@ const tableColumns = computed(() => {
       align: columnAlign,
       titleAlign: columnTitleAlign,
       fixed: col.fixed,
+      type: col.type,
+      resizable: col.resizable ?? props.resizable,
       ellipsis: col.ellipsis !== false ? { tooltip: true } : false,
       sorter: col.sortable
         ? (row1, row2) => {
@@ -435,6 +448,15 @@ const tableColumns = computed(() => {
       filter: col.filter,
       filterMultiple: col.filterMultiple,
       filterOptions: col.filterOptions,
+    }
+
+    if (col.type === 'expand') {
+      column.renderExpand = col.renderExpand
+      column.expandable = col.expandable
+      column.width = col.width || 48
+      column.fixed = col.fixed || 'left'
+      cols.push(column)
+      return
     }
 
     // 自定义渲染
@@ -614,6 +636,10 @@ const paginationProps = computed(() => {
 function handleUpdateCheckedKeys(keys) {
   innerCheckedRowKeys.value = keys
   emit('update:checked-row-keys', keys)
+}
+
+function handleUpdateExpandedKeys(keys) {
+  emit('update:expanded-row-keys', keys)
 }
 
 function isRowChecked(row) {

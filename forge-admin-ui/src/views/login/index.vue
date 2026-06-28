@@ -1,15 +1,7 @@
 <template>
   <div class="login-container">
-    <!-- Animated background -->
-    <div class="login-bg-animated">
-      <div class="gradient-orb orb-1" />
-      <div class="gradient-orb orb-2" />
-      <div class="gradient-orb orb-3" />
-      <div class="grid-pattern" />
-      <div class="light-sweep" />
-    </div>
+    <div class="login-bg-animated" />
 
-    <!-- Login card with glassmorphism -->
     <div class="login-card">
       <!-- Left side - Branding -->
       <div class="login-brand">
@@ -58,12 +50,6 @@
               </div>
             </div>
           </div>
-        </div>
-        <!-- Decorative elements -->
-        <div class="brand-decoration">
-          <div class="deco-circle deco-1" />
-          <div class="deco-circle deco-2" />
-          <div class="deco-circle deco-3" />
         </div>
       </div>
 
@@ -355,8 +341,8 @@
 import { useStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SlideVerify from 'vue3-slide-verify'
-import defaultLogoUrl from '@/assets/images/logo_text.png'
 import mainApi from '@/api'
+import defaultLogoUrl from '@/assets/images/logo_text.png'
 import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
@@ -1074,151 +1060,29 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   font-family: 'Inter', sans-serif;
 }
 
-/* Animated background */
+/* Static background */
 .login-bg-animated {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 26% 18%, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0) 28%),
-    linear-gradient(135deg, #f0f9ff 0%, #dbeafe 46%, #a5f3fc 100%);
+    radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 28%),
+    radial-gradient(circle at 76% 76%, rgba(219, 234, 254, 0.86) 0%, rgba(219, 234, 254, 0) 34%),
+    linear-gradient(135deg, #f8fbff 0%, #eef6ff 48%, #e7f7f7 100%);
   z-index: 0;
 }
 
 .login-bg-animated::before {
   content: '';
   position: absolute;
-  inset: -18%;
-  background:
-    conic-gradient(
-      from 120deg at 50% 50%,
-      rgba(14, 165, 233, 0),
-      rgba(59, 130, 246, 0.18),
-      rgba(34, 211, 238, 0.14),
-      rgba(14, 165, 233, 0) 38%
-    ),
-    linear-gradient(120deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.42) 48%, rgba(255, 255, 255, 0) 100%);
-  opacity: 0.78;
-  mix-blend-mode: screen;
-  animation: auroraBreathe 9s ease-in-out infinite;
-}
-
-.gradient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
-  animation: float 25s ease-in-out infinite;
-}
-
-.orb-1 {
-  width: 600px;
-  height: 600px;
-  background: linear-gradient(135deg, #3b82f6, #60a5fa);
-  top: -20%;
-  left: -10%;
-  animation-delay: 0s;
-}
-
-.orb-2 {
-  width: 500px;
-  height: 500px;
-  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-  bottom: -15%;
-  right: -10%;
-  animation-delay: 8s;
-}
-
-.orb-3 {
-  width: 400px;
-  height: 400px;
-  background: linear-gradient(135deg, #06b6d4, #22d3ee);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  animation-delay: 16s;
-}
-
-.grid-pattern {
-  position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+  background:
+    linear-gradient(rgba(59, 130, 246, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.035) 1px, transparent 1px);
   background-size: 50px 50px;
-  z-index: 1;
-}
-
-.light-sweep {
-  position: absolute;
-  top: -18%;
-  left: -40%;
-  width: 48%;
-  height: 138%;
-  z-index: 1;
-  background: linear-gradient(
-    105deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.34) 42%,
-    rgba(255, 255, 255, 0.78) 50%,
-    rgba(255, 255, 255, 0.3) 58%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  filter: blur(2px);
-  transform: skewX(-18deg);
-  animation: backgroundSweep 9.6s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  25% {
-    transform: translate(40px, -60px) scale(1.05);
-  }
-  50% {
-    transform: translate(-30px, 30px) scale(0.95);
-  }
-  75% {
-    transform: translate(20px, 40px) scale(1.02);
-  }
-}
-
-@keyframes auroraBreathe {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.82;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes backgroundSweep {
-  0% {
-    left: -52%;
-    opacity: 0;
-  }
-  16%,
-  58% {
-    opacity: 0.72;
-  }
-  100% {
-    left: 112%;
-    opacity: 0;
-  }
+  opacity: 0.7;
 }
 
 /* Login card */
-@property --login-card-border-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
 .login-card {
   position: relative;
   z-index: 2;
@@ -1226,18 +1090,15 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   grid-template-columns: 1fr;
   max-width: 1100px;
   width: 100%;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: #fff;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(203, 213, 225, 0.72);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.02),
     0 4px 6px -1px rgba(0, 0, 0, 0.02),
     0 12px 24px -4px rgba(0, 0, 0, 0.04),
     0 24px 48px -8px rgba(0, 0, 0, 0.06);
   overflow: hidden;
-  animation: slideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .login-card::before {
@@ -1258,49 +1119,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 }
 
 .login-card::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  z-index: 4;
-  padding: 3px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--login-card-border-angle),
-    transparent 0deg,
-    transparent 268deg,
-    rgba(8, 145, 178, 0.12) 286deg,
-    rgba(29, 78, 216, 0.82) 310deg,
-    rgba(14, 116, 144, 1) 332deg,
-    rgba(125, 211, 252, 0.92) 346deg,
-    rgba(8, 145, 178, 0.88) 356deg,
-    transparent 360deg
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 1;
-  filter: drop-shadow(0 0 8px rgba(29, 78, 216, 0.72)) drop-shadow(0 0 18px rgba(8, 145, 178, 0.5));
-  pointer-events: none;
-  animation: loginCardMeteor 7.2s linear infinite;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(40px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes loginCardMeteor {
-  to {
-    --login-card-border-angle: 360deg;
-  }
+  content: none;
 }
 
 @media (min-width: 768px) {
@@ -1321,25 +1140,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 }
 
 .login-brand::before {
-  content: '';
-  position: absolute;
-  top: -24%;
-  left: -72%;
-  width: 52%;
-  height: 150%;
-  z-index: 1;
-  background: linear-gradient(
-    95deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.08) 35%,
-    rgba(255, 255, 255, 0.36) 50%,
-    rgba(255, 255, 255, 0.08) 65%,
-    transparent 100%
-  );
-  filter: blur(1px);
-  transform: skewX(-18deg);
-  animation: brandSweep 7.8s ease-in-out infinite;
-  pointer-events: none;
+  content: none;
 }
 
 .login-brand::after {
@@ -1352,90 +1153,12 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   background-size: 42px 42px;
   opacity: 0.46;
   mask-image: linear-gradient(180deg, transparent 0%, #000 18%, #000 82%, transparent 100%);
-  animation: brandGrid 11s linear infinite;
   pointer-events: none;
-}
-
-@keyframes brandSweep {
-  0% {
-    left: -72%;
-    opacity: 0;
-  }
-  22%,
-  64% {
-    opacity: 0.9;
-  }
-  100% {
-    left: 118%;
-    opacity: 0;
-  }
-}
-
-@keyframes brandGrid {
-  from {
-    background-position:
-      0 0,
-      0 0;
-  }
-  to {
-    background-position:
-      42px 0,
-      0 42px;
-  }
 }
 
 @media (min-width: 768px) {
   .login-brand {
     display: flex;
-  }
-}
-
-.brand-decoration {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.deco-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.deco-1 {
-  width: 300px;
-  height: 300px;
-  top: -100px;
-  right: -80px;
-  animation: pulse 8s ease-in-out infinite;
-}
-
-.deco-2 {
-  width: 200px;
-  height: 200px;
-  bottom: -60px;
-  left: -40px;
-  animation: pulse 6s ease-in-out infinite 2s;
-}
-
-.deco-3 {
-  width: 150px;
-  height: 150px;
-  top: 40%;
-  right: 20%;
-  background: rgba(255, 255, 255, 0.05);
-  animation: pulse 7s ease-in-out infinite 4s;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.7;
   }
 }
 
@@ -1447,7 +1170,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 
 .logo-wrapper {
   margin-bottom: 28px;
-  animation: fadeIn 0.8s ease-out 0.2s both;
   display: flex;
   justify-content: center;
 }
@@ -1471,7 +1193,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   font-weight: 700;
   color: white;
   margin-bottom: 8px;
-  animation: fadeIn 0.8s ease-out 0.3s both;
   letter-spacing: -0.02em;
 }
 
@@ -1491,7 +1212,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     0 10px 28px rgba(15, 23, 42, 0.12);
   color: rgba(255, 255, 255, 0.92);
-  animation: fadeIn 0.8s ease-out 0.4s both;
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1527,19 +1247,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
   cursor: default;
-  animation: featureRise 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.feature-item:nth-child(1) {
-  animation-delay: 0.5s;
-}
-
-.feature-item:nth-child(2) {
-  animation-delay: 0.62s;
-}
-
-.feature-item:nth-child(3) {
-  animation-delay: 0.74s;
 }
 
 .feature-item:hover {
@@ -1586,28 +1293,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   color: rgba(255, 255, 255, 0.7);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes featureRise {
-  from {
-    opacity: 0;
-    transform: translateX(-18px) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) translateY(0);
-  }
-}
-
 /* Right side - Form */
 .login-form-wrapper {
   padding: 48px 40px;
@@ -1630,7 +1315,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
 
 .form-header {
   margin-bottom: 32px;
-  animation: fadeIn 0.6s ease-out 0.2s both;
   text-align: center;
 }
 
@@ -1649,49 +1333,9 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   font-weight: 400;
 }
 
-.form-body {
-  animation: fadeIn 0.6s ease-out 0.4s both;
-}
-
 /* Form groups */
 .form-group {
   margin-bottom: 20px;
-  animation: formItemRise 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.form-group:nth-of-type(1) {
-  animation-delay: 0.52s;
-}
-
-.form-group:nth-of-type(2) {
-  animation-delay: 0.62s;
-}
-
-.form-group:nth-of-type(3) {
-  animation-delay: 0.72s;
-}
-
-.form-options {
-  animation: formItemRise 0.52s cubic-bezier(0.16, 1, 0.3, 1) 0.82s both;
-}
-
-.login-button {
-  animation: formItemRise 0.52s cubic-bezier(0.16, 1, 0.3, 1) 0.92s both;
-}
-
-.social-login-section {
-  animation: formItemRise 0.52s cubic-bezier(0.16, 1, 0.3, 1) 1.02s both;
-}
-
-@keyframes formItemRise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .form-label {
@@ -2012,37 +1656,6 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   color: #cbd5e1;
 }
 
-/* Modal transitions */
-.modal-enter-active {
-  animation: modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.modal-leave-active {
-  animation: modalOut 0.25s ease-in forwards;
-}
-
-@keyframes modalIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes modalOut {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.95) translateY(10px);
-  }
-}
-
 /* SMS button */
 .sms-button {
   min-width: 120px;
@@ -2297,12 +1910,7 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
     transition-duration: 0.01ms !important;
   }
 
-  .gradient-orb,
-  .deco-circle,
-  .grid-pattern,
-  .light-sweep,
   .login-bg-animated::before,
-  .login-brand::before,
   .login-brand::after,
   .login-card::after {
     animation: none;

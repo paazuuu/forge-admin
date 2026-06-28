@@ -314,7 +314,10 @@ function collectDuplicateFields(items = [], path, errors) {
 function buildSearchFields(zone = {}, fieldMap, fallbackFields = []) {
   const refs = resolveZoneRefs(zone, fallbackFields.map(item => item.fieldCode))
   const settings = zone?.props?.fieldSettings || {}
-  return refs.filter(fieldCode => fieldMap.has(fieldCode)).map((fieldCode, index) => {
+  return refs.filter((fieldCode) => {
+    const setting = settings[fieldCode] || {}
+    return fieldMap.has(fieldCode) && setting.visible !== false
+  }).map((fieldCode, index) => {
     const field = fieldMap.get(fieldCode) || {}
     const setting = settings[fieldCode] || {}
     return {

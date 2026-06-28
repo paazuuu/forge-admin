@@ -1,5 +1,32 @@
 # 执行日志：forge-list-designer-productivity-upgrades
 
+## 2026-06-26 追加：列表行自定义按钮删除修复
+
+### 变更范围
+
+- `ListPageGridDesigner.vue` 中自定义按钮补充稳定 `clientKey`，新增、复制、历史数据规范化都会生成或保留该身份。
+- 列表行按钮、工具栏按钮和独立 toolbar 区块的拖拽 `item-key` 改为 `clientKey`。
+- 行内改名、设置弹窗、排序、复制、删除统一按稳定身份定位按钮，避免筛选后的“列表行自定义按钮”视图里新增按钮删除需要点两次。
+- 后续修正：`ListPageGridDesigner.vue` 读取自定义按钮时先规范化，避免历史数据没有 `clientKey` 时拖拽列表身份不稳定。
+- 后续修正：`BusinessListDesigner.vue` 在 `listCustomActions`、`designerActions` 和 `actionConfig` 之间转换时保留 `clientKey`，避免第一个/唯一按钮删除后被父级旧数据回灌恢复。
+- 后续修正：自定义按钮更新时同步写回 `listGridLayout`、`pages[].gridLayout` 和 `zones.table.props.customActions`，避免 `collectSchemaCustomActions` 从旧 schema 中兜底采集并恢复已删除的第一个按钮。
+- 参考飞书多维表格字段配置面板，将 AiCrudPage 右侧“字段配置”和“列表行按钮”合并为“字段与操作”紧凑列表，字段区支持显隐、拖拽排序、快速进入设置，操作区承接列表行自定义按钮的添加、排序、改名和更多菜单。
+- 后续修正：字段显隐从“显/隐”文字改为 `EyeOutline/EyeOffOutline` 图标，隐藏字段不从配置列表移除而是保留为不可见状态；行按钮从输入框行改为纯列表行，名称直接展示，设置和更多操作分别用图标承接。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过，保留既有 10 个 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过。
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/BusinessListDesigner.vue`：通过，保留既有 10 个 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/BusinessListDesigner.vue`：通过。
+- schema 同步修正后复跑 `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/BusinessListDesigner.vue` 和 `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/BusinessListDesigner.vue`：通过。
+- 字段与操作面板修正后复跑 `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/BusinessListDesigner.vue` 和 `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/BusinessListDesigner.vue`：通过，保留既有 10 个按钮换行 warning。
+- 字段与操作列表视觉修正后复跑 `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue src/views/app-center/components/designer/BusinessListDesigner.vue` 和 `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue forge-admin-ui/src/views/app-center/components/designer/BusinessListDesigner.vue`：通过，保留既有 10 个按钮换行 warning。
+
+### 跳过项
+
+- 未启动浏览器手工复测：本轮为定向交互逻辑修复，以静态检查和空白检查验证。
+
 ## 2026-06-26 11:06:31 CST
 
 ### 变更范围
@@ -123,6 +150,38 @@
 ### 跳过项
 
 - 未启动 Vite 和浏览器截图验证：本轮以静态检查和生产构建覆盖，背景色透出效果需在列表设计器真实页面中手工确认。
+
+### 服务清理
+
+- 本轮未启动常驻服务，无需清理 PID。
+
+## 2026-06-26 CRUD 自定义按钮配置体验优化
+
+### 变更范围
+
+- `ListPageGridDesigner.vue` 中 AiCrudPage 右侧“自定义操作”改为分组列表管理，拆分为工具栏自定义按钮和列表行自定义按钮。
+- 自定义按钮列表支持拖拽排序、行内修改按钮文字、设置图标进入完整配置弹窗。
+- 更多菜单支持复制、删除、工具栏/行按钮位置切换。
+- 单独 `toolbar` 区块的自定义按钮配置同步使用可拖拽列表，保持体验一致。
+- 移除 AiCrudPage 基础配置里的重复“自定义操作”快捷入口，避免基础配置、工具栏配置和弹窗三处入口同时存在。
+- 修复自定义操作只剩一个按钮时删除要点两次的问题，删除到空列表时 activeIndex 置为 `-1` 并关闭配置弹窗。
+- 按配置语义重新归位：列表行自定义按钮移动到“查询与列表字段”，工具栏配置区只保留工具栏自定义按钮。
+
+### 命令与结果
+
+- `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过，保留既有 `vue/singleline-html-element-content-newline` warning。
+- `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过。
+- `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：通过。
+- 删除逻辑修正后复跑 `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue`、`git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue` 和 `NODE_OPTIONS=--max-old-space-size=8192 pnpm --dir forge-admin-ui build`：均通过，保留既有 warning。
+- 行按钮位置调整后复跑 `pnpm --dir forge-admin-ui exec eslint src/components/lowcode-builder/page/ListPageGridDesigner.vue` 和 `git diff --check -- forge-admin-ui/src/components/lowcode-builder/page/ListPageGridDesigner.vue`：通过，保留既有按钮换行 warning。
+
+### 警告
+
+- 构建保留项目既有 warning：CSS 中存在 `//` 注释、`src/store/index.js` 同时动态/静态导入导致 chunk 提示、部分 chunk 体积较大。
+
+### 跳过项
+
+- 未启动 Vite 和浏览器手工拖拽验证：本轮以静态检查和生产构建覆盖，拖拽排序手感需在真实设计器页面中补充确认。
 
 ### 服务清理
 

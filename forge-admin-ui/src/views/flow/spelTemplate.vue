@@ -16,12 +16,29 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue'
-import { AiCrudPage } from '@/components/ai-form'
+import { computed, defineAsyncComponent, h } from 'vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import DesignerAsyncLoader from '@/views/app-center/components/designer/DesignerAsyncLoader.vue'
 
 defineOptions({ name: 'FlowSpelTemplate' })
+
+const FlowSpelCrudLoader = {
+  name: 'FlowSpelCrudLoader',
+  setup() {
+    return () => h(DesignerAsyncLoader, {
+      title: '正在加载模板列表',
+      description: '首次打开需要准备列表和表单组件资源',
+    })
+  },
+}
+
+const AiCrudPage = defineAsyncComponent({
+  loader: () => import('@/components/ai-form').then(module => module.AiCrudPage),
+  loadingComponent: FlowSpelCrudLoader,
+  delay: 120,
+  suspensible: false,
+})
 
 const { dict } = useDict('flow_spel_category', 'sys_enable_disable')
 

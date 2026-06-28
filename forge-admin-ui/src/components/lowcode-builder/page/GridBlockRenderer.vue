@@ -1144,6 +1144,8 @@ const fieldMap = computed(() => new Map(props.fields.map(f => [f.field, f])))
 const resolvedFields = computed(() => (props.block.fieldRefs || [])
   .map(ref => fieldMap.value.get(ref))
   .filter(Boolean))
+const visibleResolvedFields = computed(() => resolvedFields.value
+  .filter(field => props.block.props?.fieldSettings?.[field.field]?.visible !== false))
 const previewFormValue = ref({})
 const signaturePreviewValue = ref('')
 const runtimeCrudRef = ref(null)
@@ -1403,7 +1405,7 @@ const blockStyle = computed(() => {
 })
 
 const tableColumns = computed(() => [
-  ...resolvedFields.value.slice(0, 8).map(field => ({
+  ...visibleResolvedFields.value.slice(0, 8).map(field => ({
     key: field.field,
     title: field.label || field.field,
     minWidth: 96,
@@ -1414,7 +1416,7 @@ const tableColumns = computed(() => [
   { key: '__actions', title: '操作', width: 96, fixed: 'right' },
 ])
 const aiActionColumn = computed(() => {
-  const rowActions = (props.block.props?.customActions || []).filter(action => (action.position || 'row') === 'row')
+  const rowActions = (props.block.props?.customActions || []).filter(action => (action.position || 'row') === 'row' && action.visible !== false)
   if (!rowActions.length)
     return null
   return {
@@ -1436,7 +1438,7 @@ const aiActionColumn = computed(() => {
     }, action.label || action.key))),
   }
 })
-const aiTableColumns = computed(() => resolvedFields.value.slice(0, 8).map(field => ({
+const aiTableColumns = computed(() => visibleResolvedFields.value.slice(0, 8).map(field => ({
   key: field.field,
   field: field.field,
   title: field.label || field.field,
@@ -1525,6 +1527,8 @@ const effectiveRuntimeCrudProps = computed(() => {
     hideSelection: blockProps.hideSelection ?? props.runtimeCrudProps.hideSelection,
     maxHeight: blockProps.maxHeight || props.runtimeCrudProps.maxHeight,
     scrollX: blockProps.scrollX || props.runtimeCrudProps.scrollX,
+    resizable: blockProps.resizable ?? props.runtimeCrudProps.resizable,
+    expandConfig: blockProps.expandConfig || props.runtimeCrudProps.expandConfig || {},
     listMethod: blockProps.listMethod || props.runtimeCrudProps.listMethod,
     listDataField: blockProps.listDataField || props.runtimeCrudProps.listDataField,
     listTotalField: blockProps.listTotalField || props.runtimeCrudProps.listTotalField,
@@ -1584,7 +1588,7 @@ const previewPagination = {
   showQuickJumper: true,
 }
 const toolbarCustomActions = computed(() => (props.block.props?.customActions || [])
-  .filter(action => (action.position || 'toolbar') === 'toolbar'))
+  .filter(action => (action.position || 'toolbar') === 'toolbar' && action.visible !== false))
 const transferOptions = computed(() => normalizeOptionItems(props.block.props?.options))
 const transferValue = computed(() => Array.isArray(props.block.props?.value) ? props.block.props.value : [])
 const transferSelectedOptions = computed(() => transferOptions.value.filter(item => transferValue.value.includes(item.value)))
@@ -1673,7 +1677,7 @@ const descriptionGridStyle = computed(() => ({
 
 const sampleRows = computed(() => Array.from({ length: 3 }).map((_, idx) => {
   const row = { id: idx + 1, __actions: '编辑' }
-  resolvedFields.value.slice(0, 8).forEach((field) => {
+  visibleResolvedFields.value.slice(0, 8).forEach((field) => {
     row[field.field] = sampleValue(field, idx)
   })
   return row

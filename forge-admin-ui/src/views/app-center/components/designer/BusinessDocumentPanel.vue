@@ -602,7 +602,7 @@ defineExpose({
 .business-document-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: calc(100vh - 106px);
+  min-height: 100%;
   background: #f4f6f9;
 }
 
@@ -639,7 +639,7 @@ defineExpose({
 
 .document-main {
   min-width: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 16px;
 }
 

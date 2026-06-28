@@ -135,6 +135,55 @@
       </div>
     </div>
 
+    <section class="community-support-panel">
+      <div class="community-support-copy">
+        <div class="community-eyebrow">
+          <i class="i-material-symbols:forum-rounded" />
+          <span>ForgeAdmin 社区</span>
+        </div>
+        <h2>进群交流，把后台搭建得更顺手</h2>
+        <p>
+          遇到低代码配置、流程、插件扩展或二开问题，可以扫码加入交流群。也欢迎把使用场景和建议反馈给项目维护者。
+        </p>
+      </div>
+      <div class="community-qr-grid">
+        <article class="community-qr-card primary">
+          <div class="community-qr-card-header">
+            <span>交流群</span>
+            <em>推荐加入</em>
+          </div>
+          <div class="community-qr-preview">
+            <n-image
+              class="community-qr-image"
+              :src="wechatGroupQr"
+              :preview-src="wechatGroupQr"
+              object-fit="contain"
+              alt="ForgeAdmin 交流群二维码"
+            />
+            <span class="community-qr-zoom">点击放大</span>
+          </div>
+          <p>扫码进群，交流实践经验和最新更新。</p>
+        </article>
+        <article class="community-qr-card support">
+          <div class="community-qr-card-header">
+            <span>支持维护</span>
+            <em>随心支持</em>
+          </div>
+          <div class="community-qr-preview">
+            <n-image
+              class="community-qr-image"
+              :src="wechatSupportQr"
+              :preview-src="wechatSupportQr"
+              object-fit="contain"
+              alt="ForgeAdmin 维护支持二维码"
+            />
+            <span class="community-qr-zoom">点击放大</span>
+          </div>
+          <p>如果这个项目帮你节省了时间，可以请维护者喝杯咖啡，支持持续优化。</p>
+        </article>
+      </div>
+    </section>
+
     <!-- 中间内容区域 -->
     <div class="content-grid">
       <!-- 左侧：待办任务大列表 -->
@@ -322,6 +371,8 @@ import * as echarts from 'echarts'
 import { nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
+import wechatGroupQr from '@/assets/images/forge-wechat-group.png'
+import wechatSupportQr from '@/assets/images/forge-wechat-support.png'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
 
@@ -854,6 +905,170 @@ onMounted(() => {
 .stat-desc {
   font-size: 12px;
   color: #64748b;
+}
+
+/* 社区与维护支持 */
+.community-support-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(520px, 680px);
+  gap: 20px;
+  align-items: stretch;
+  margin-bottom: 10px;
+  padding: 18px;
+  border: 1px solid #dbe7f3;
+  border-radius: 8px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    rgba(248, 251, 255, 0.96) 48%,
+    rgba(240, 253, 250, 0.92) 100%
+  );
+  box-shadow: 0 8px 20px rgba(30, 41, 59, 0.04);
+}
+
+.community-support-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 10px;
+}
+
+.community-eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 5px 9px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.community-eyebrow i {
+  font-size: 15px;
+}
+
+.community-support-copy h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 34px;
+}
+
+.community-support-copy p {
+  max-width: 620px;
+  margin: 10px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.community-qr-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.community-qr-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e3edf8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.community-qr-card.primary {
+  border-color: #bfdbfe;
+  background: #fbfdff;
+}
+
+.community-qr-card.support {
+  border-color: #bbf7d0;
+  background: #fbfffd;
+}
+
+.community-qr-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.community-qr-card-header em {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.community-qr-card.support .community-qr-card-header em {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.community-qr-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #edf2f7;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.community-qr-image {
+  width: 100%;
+  height: 260px;
+  cursor: zoom-in;
+}
+
+.community-qr-image :deep(img) {
+  width: 100%;
+  height: 260px;
+  object-fit: contain;
+}
+
+.community-qr-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.68);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.community-qr-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 /* 内容网格 */
@@ -1417,6 +1632,10 @@ onMounted(() => {
 }
 
 @media (max-width: 1200px) {
+  .community-support-panel {
+    grid-template-columns: 1fr;
+  }
+
   .content-grid {
     grid-template-columns: 1fr;
   }
@@ -1448,6 +1667,31 @@ onMounted(() => {
     width: 40px;
     height: 40px;
     font-size: 20px;
+  }
+
+  .community-support-panel {
+    padding: 12px;
+  }
+
+  .community-support-copy {
+    padding: 0;
+  }
+
+  .community-support-copy h2 {
+    font-size: 19px;
+    line-height: 27px;
+  }
+
+  .community-qr-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .community-qr-image {
+    height: 320px;
+  }
+
+  .community-qr-image :deep(img) {
+    height: 320px;
   }
 
   .quick-grid {
@@ -1488,6 +1732,7 @@ onMounted(() => {
 }
 
 .dark .stat-card,
+.dark .community-support-panel,
 .dark .todo-panel,
 .dark .notice-panel,
 .dark .quick-panel,
@@ -1497,6 +1742,8 @@ onMounted(() => {
 }
 
 .dark .stat-value,
+.dark .community-support-copy h2,
+.dark .community-qr-card-header,
 .dark .panel-title,
 .dark .todo-title,
 .dark .notice-title,
@@ -1509,6 +1756,8 @@ onMounted(() => {
 }
 
 .dark .stat-desc,
+.dark .community-support-copy p,
+.dark .community-qr-card p,
 .dark .todo-meta,
 .dark .todo-time,
 .dark .notice-meta,
@@ -1520,8 +1769,27 @@ onMounted(() => {
 
 .dark .todo-item,
 .dark .notice-item,
-.dark .quick-item {
+.dark .quick-item,
+.dark .community-qr-card {
   background: #334155;
+}
+
+.dark .community-support-panel {
+  background: #1e293b;
+}
+
+.dark .community-eyebrow {
+  border-color: #1d4ed8;
+  background: #172554;
+  color: #bfdbfe;
+}
+
+.dark .community-qr-card.primary {
+  border-color: #1d4ed8;
+}
+
+.dark .community-qr-card.support {
+  border-color: #047857;
 }
 
 .dark .todo-item:hover,

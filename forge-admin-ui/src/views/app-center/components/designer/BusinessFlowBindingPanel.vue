@@ -348,7 +348,7 @@ defineExpose({
 .business-flow-binding-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: calc(100vh - 106px);
+  min-height: 100%;
 }
 
 .flow-head {
@@ -384,7 +384,7 @@ defineExpose({
 
 .flow-main {
   min-width: 0;
-  overflow: auto;
+  overflow: visible;
   background: #f8fafc;
   padding: 14px;
 }

@@ -37,12 +37,14 @@
 
     <!-- 导入表弹窗 -->
     <ImportTableModal
+      v-if="showImportModal"
       v-model:show="showImportModal"
       @success="handleImportSuccess"
     />
 
     <!-- 字段配置弹窗 -->
     <ColumnConfigModal
+      v-if="showColumnModal"
       v-model:show="showColumnModal"
       :table-id="currentTableId"
       :table-name="currentTableName"
@@ -51,12 +53,14 @@
 
     <!-- 代码预览弹窗 -->
     <CodePreviewModal
+      v-if="showPreviewModal"
       v-model:show="showPreviewModal"
       :table-name="currentTableName"
     />
 
     <!-- AI 建表弹窗 -->
     <AiSchemaModal
+      v-if="showAiSchemaModal"
       v-model:show="showAiSchemaModal"
       @success="handleImportSuccess"
     />
@@ -64,15 +68,46 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { NModal } from 'naive-ui'
+import { computed, defineAsyncComponent, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import { request } from '@/utils'
-import AiSchemaModal from './components/AiSchemaModal.vue'
-import CodePreviewModal from './components/CodePreviewModal.vue'
-import ColumnConfigModal from './components/ColumnConfigModal.vue'
-import ImportTableModal from './components/ImportTableModal.vue'
+import DesignerAsyncLoader from '@/views/app-center/components/designer/DesignerAsyncLoader.vue'
 
 defineOptions({ name: 'GeneratorTable' })
+
+const GeneratorModalAsyncLoader = {
+  name: 'GeneratorModalAsyncLoader',
+  setup() {
+    return () => h(NModal, {
+      show: true,
+      preset: 'card',
+      title: '正在加载',
+      style: 'width: min(520px, calc(100vw - 32px))',
+      maskClosable: false,
+    }, {
+      default: () => h(DesignerAsyncLoader, {
+        title: '正在加载弹窗',
+        description: '首次打开需要准备组件资源',
+        overlay: true,
+      }),
+    })
+  },
+}
+
+function defineLazyGeneratorModal(loader) {
+  return defineAsyncComponent({
+    loader,
+    loadingComponent: GeneratorModalAsyncLoader,
+    delay: 120,
+    suspensible: false,
+  })
+}
+
+const AiSchemaModal = defineLazyGeneratorModal(() => import('./components/AiSchemaModal.vue'))
+const CodePreviewModal = defineLazyGeneratorModal(() => import('./components/CodePreviewModal.vue'))
+const ColumnConfigModal = defineLazyGeneratorModal(() => import('./components/ColumnConfigModal.vue'))
+const ImportTableModal = defineLazyGeneratorModal(() => import('./components/ImportTableModal.vue'))
 
 const crudRef = ref(null)
 const showImportModal = ref(false)

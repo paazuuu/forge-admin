@@ -181,6 +181,24 @@ export const aiCrudPageProps = {
   },
 
   /**
+   * 表格列是否允许拖拽调整宽度。
+   * @type {boolean}
+   */
+  resizable: {
+    type: Boolean,
+    default: false,
+  },
+
+  /**
+   * 行展开面板配置。支持 table/descriptions/form/tabs/custom，不局限子表。
+   * @type {object}
+   */
+  expandConfig: {
+    type: Object,
+    default: () => ({}),
+  },
+
+  /**
    * 树形表配置。只负责树形数据结构；“添加下级”需通过 enableTreeAddChild 显式开启。
    * @type {object}
    */

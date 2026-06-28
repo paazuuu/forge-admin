@@ -441,7 +441,7 @@ defineExpose({
 .business-permission-flow-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: calc(100vh - 106px);
+  min-height: 100%;
 }
 
 .permission-flow-head {
@@ -481,7 +481,7 @@ defineExpose({
   align-content: start;
   gap: 12px;
   min-width: 0;
-  overflow: auto;
+  overflow: visible;
   background: #f8fafc;
   padding: 14px;
 }
