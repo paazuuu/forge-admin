@@ -113,13 +113,34 @@ function readExtensionText(el, localName) {
 }
 
 function normalizeFormFieldPermission(item = {}) {
+  const field = String(item.field || item.fieldCode || item.code || '').trim()
+  const readable = readBoolean(item.readable, readBoolean(item.visible, true))
+  const writable = readable && readBoolean(item.writable, readBoolean(item.editable, true))
   return {
-    field: String(item.field || '').trim(),
-    label: String(item.label || item.field || '').trim(),
-    readable: item.readable !== false,
-    writable: item.writable !== false,
-    required: item.required === true,
+    field,
+    fieldCode: field,
+    label: String(item.label || field || '').trim(),
+    visible: readable,
+    editable: writable,
+    readable,
+    writable,
+    required: writable && item.required === true,
   }
+}
+
+function readBoolean(value, defaultValue) {
+  if (value === undefined || value === null || value === '')
+    return defaultValue
+  if (typeof value === 'boolean')
+    return value
+  if (typeof value === 'number')
+    return value !== 0
+  const text = String(value).trim().toLowerCase()
+  if (['true', '1', 'yes'].includes(text))
+    return true
+  if (['false', '0', 'no'].includes(text))
+    return false
+  return defaultValue
 }
 
 function applyAssignee(el, config) {

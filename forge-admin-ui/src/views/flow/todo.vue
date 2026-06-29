@@ -267,16 +267,20 @@
                 </n-alert>
               </div>
               <div v-if="businessFormHasWritableFields || (useBusinessCodeForm && businessCodeFormUrl)" class="business-form-actions">
-                <NButton
-                  v-if="businessFormHasWritableFields"
-                  type="primary"
-                  secondary
-                  :loading="businessFormSaving"
-                  :disabled="isApprovalBusy"
-                  @click="() => saveBusinessTaskFormFields({ validate: true, silent: false })"
-                >
-                  保存业务字段
-                </NButton>
+                <n-tooltip v-if="businessFormHasWritableFields" trigger="hover">
+                  <template #trigger>
+                    <NButton
+                      type="primary"
+                      secondary
+                      :loading="businessFormSaving"
+                      :disabled="isApprovalBusy"
+                      @click="() => saveBusinessTaskFormFields({ validate: true, silent: false })"
+                    >
+                      暂存修改
+                    </NButton>
+                  </template>
+                  同意或驳回时会先提交本节点可编辑字段；这里用于暂存修改，不流转流程。
+                </n-tooltip>
                 <NButton
                   v-if="useBusinessCodeForm && businessCodeFormUrl"
                   secondary
@@ -297,6 +301,8 @@
                 v-model="dynamicFormData"
                 :schema="taskFormInfo.formJson"
                 :field-permissions="taskFormInfo.formFieldPermissions"
+                :grid-cols="2"
+                label-placement="top"
               />
             </div>
 
@@ -460,6 +466,7 @@ import SignaturePad from '@/components/flow/SignaturePad.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
 import { getBusinessFormDisplayTitle, getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
@@ -525,7 +532,11 @@ const businessFormTitle = computed(() => getBusinessFormDisplayTitle(businessFor
 const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
 const businessFormHasWritableFields = computed(() => hasWritableBusinessFormFields(businessFormContext.value))
 const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
-const businessFormFieldPermissions = computed(() => businessFormContext.value?.fieldPermissions || taskFormInfo.value?.fieldPermissions || taskFormInfo.value?.formFieldPermissions || [])
+const businessFormFieldPermissions = computed(() => pickFirstNonEmptyFieldPermissions([
+  businessFormContext.value?.fieldPermissions,
+  taskFormInfo.value?.fieldPermissions,
+  taskFormInfo.value?.formFieldPermissions,
+]))
 const businessFormRenderContext = computed(() => ({
   task: currentTask.value,
   taskFormInfo: taskFormInfo.value,
@@ -696,7 +707,7 @@ async function saveBusinessTaskFormFields(options = {}) {
     businessFormContext.value = res.data || businessFormContext.value
     businessFormData.value = { ...(businessFormContext.value?.recordData || businessFormData.value) }
     if (!silent)
-      window.$message.success('业务字段已保存')
+      window.$message.success('修改已暂存')
     return businessFormContext.value
   }
   catch (error) {
@@ -712,7 +723,7 @@ async function saveBusinessTaskFormFields(options = {}) {
 }
 
 async function persistBusinessTaskFormBeforeAction(action) {
-  if (action !== 'approve')
+  if (!['approve', 'reject'].includes(action))
     return
   if (!useBusinessManagedForm.value || !businessFormHasWritableFields.value)
     return
@@ -734,6 +745,9 @@ function openBusinessCodeForm() {
       businessKey: businessFormContext.value?.businessKey,
       processInstanceId: businessFormContext.value?.processInstanceId,
       taskDefKey: businessFormContext.value?.taskDefKey,
+      processDefKey: businessFormContext.value?.processDefKey,
+      objectCode: businessFormContext.value?.objectCode,
+      recordId: businessFormContext.value?.recordId,
       source: 'flowTodo',
     }),
   })

@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.mdframe.forge.flow.client.FlowClient;
 import com.mdframe.forge.flow.client.FlowResult;
+import com.mdframe.forge.flow.client.spi.FlowBusinessListDisplayItem;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessDocumentConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessFlowInstanceLink;
@@ -45,6 +46,7 @@ import org.redisson.api.RedissonClient;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -171,6 +173,47 @@ public class BusinessFlowService {
             throw new BusinessException("流程模型Key不能为空");
         }
         return variableResolver.resolve(modelKey, objectCode);
+    }
+
+    /**
+     * 批量补齐流程任务/抄送列表中的业务对象名称和业务摘要。
+     */
+    public void enrichBusinessListDisplay(List<FlowBusinessListDisplayItem> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        Long tenantId = resolveTenantId();
+        Map<String, AiBusinessFlowInstanceLink> linkByBusinessKey = loadLinksByBusinessKey(tenantId, items);
+        Map<String, List<BusinessListRuntime>> grouped = new LinkedHashMap<>();
+        for (FlowBusinessListDisplayItem item : items) {
+            if (item == null) {
+                continue;
+            }
+            AiBusinessFlowInstanceLink link = linkByBusinessKey.get(StringUtils.trimToEmpty(item.getBusinessKey()));
+            String objectCode = StringUtils.firstNonBlank(
+                    link == null ? null : link.getObjectCode(),
+                    StringUtils.trimToNull(item.getObjectCode()),
+                    parseBusinessKeyObjectCode(item.getBusinessKey()));
+            Long recordId = link == null || link.getRecordId() == null
+                    ? item.getRecordId()
+                    : link.getRecordId();
+            if (recordId == null) {
+                recordId = parseBusinessKeyRecordId(item.getBusinessKey());
+            }
+            String businessKey = StringUtils.firstNonBlank(
+                    link == null ? null : link.getBusinessKey(),
+                    StringUtils.trimToNull(item.getBusinessKey()),
+                    objectCode != null && recordId != null ? buildBusinessKey(objectCode, recordId) : null);
+            if (StringUtils.isBlank(objectCode) || recordId == null) {
+                item.setProcessDefinitionName(StringUtils.firstNonBlank(
+                        item.getProcessDefinitionName(), item.getProcessName(), item.getProcessDefKey()));
+                continue;
+            }
+            String canonicalObjectCode = resolveCanonicalObjectCode(tenantId, objectCode);
+            grouped.computeIfAbsent(canonicalObjectCode, key -> new ArrayList<>())
+                    .add(new BusinessListRuntime(item, canonicalObjectCode, recordId, businessKey));
+        }
+        grouped.forEach((objectCode, runtimes) -> enrichBusinessListGroup(tenantId, objectCode, runtimes));
     }
 
     /**
@@ -863,6 +906,154 @@ public class BusinessFlowService {
         query.setObjectCode(objectCode);
         List<BusinessObjectVO> objects = businessObjectMapper.selectObjectList(tenantId, query);
         return objects == null || objects.isEmpty() ? null : objects.get(0);
+    }
+
+    private Map<String, AiBusinessFlowInstanceLink> loadLinksByBusinessKey(Long tenantId,
+                                                                           List<FlowBusinessListDisplayItem> items) {
+        Set<String> businessKeys = new LinkedHashSet<>();
+        for (FlowBusinessListDisplayItem item : items) {
+            String businessKey = item == null ? null : StringUtils.trimToNull(item.getBusinessKey());
+            if (businessKey != null) {
+                businessKeys.add(businessKey);
+            }
+        }
+        if (businessKeys.isEmpty()) {
+            return Map.of();
+        }
+        List<AiBusinessFlowInstanceLink> links = flowInstanceLinkMapper.selectLatestByBusinessKeys(tenantId, businessKeys);
+        Map<String, AiBusinessFlowInstanceLink> result = new LinkedHashMap<>();
+        if (links != null) {
+            for (AiBusinessFlowInstanceLink link : links) {
+                if (link != null && StringUtils.isNotBlank(link.getBusinessKey())) {
+                    result.put(link.getBusinessKey(), link);
+                }
+            }
+        }
+        return result;
+    }
+
+    private void enrichBusinessListGroup(Long tenantId, String objectCode, List<BusinessListRuntime> runtimes) {
+        if (StringUtils.isBlank(objectCode) || runtimes == null || runtimes.isEmpty()) {
+            return;
+        }
+        BusinessObjectVO object = queryBusinessObject(tenantId, objectCode);
+        AiCrudConfig runtimeConfig = resolvePublishedRuntimeConfig(tenantId, objectCode);
+        AiBusinessDocumentConfig documentConfig = resolveEnabledDocumentConfig(tenantId, objectCode, runtimeConfig);
+        String configKey = documentConfig != null ? documentConfig.getConfigKey()
+                : runtimeConfig == null ? null : runtimeConfig.getConfigKey();
+        AiBusinessBinding binding = selectMainFlowBindingForConfig(tenantId, objectCode);
+        JSONObject bindingConfig = binding == null ? new JSONObject() : readBindingConfig(binding.getBindingConfig());
+        String objectName = StringUtils.firstNonBlank(
+                object == null ? null : object.getObjectName(),
+                documentConfig == null ? null : documentConfig.getDocumentName(),
+                runtimeConfig == null ? null : runtimeConfig.getObjectName(),
+                objectCode);
+
+        if (StringUtils.isNotBlank(configKey)) {
+            enrichLowcodeBusinessListGroup(objectCode, objectName, configKey, object, bindingConfig, runtimes);
+            return;
+        }
+        enrichCodeBusinessListGroup(objectCode, objectName, runtimes);
+    }
+
+    private void enrichLowcodeBusinessListGroup(String objectCode,
+                                                String objectName,
+                                                String configKey,
+                                                BusinessObjectVO object,
+                                                JSONObject bindingConfig,
+                                                List<BusinessListRuntime> runtimes) {
+        List<Long> recordIds = runtimes.stream()
+                .map(BusinessListRuntime::recordId)
+                .distinct()
+                .toList();
+        Map<Object, Map<String, Object>> records = dynamicCrudService.selectByIds(configKey, recordIds);
+        for (BusinessListRuntime runtime : runtimes) {
+            FlowBusinessListDisplayItem item = runtime.item();
+            Map<String, Object> recordData = findBatchRecord(records, runtime.recordId());
+            TaskFormRuntimeContext taskRuntime = new TaskFormRuntimeContext(
+                    objectCode, runtime.recordId(), runtime.businessKey(), configKey, bindingConfig);
+            item.setObjectCode(objectCode);
+            item.setRecordId(runtime.recordId());
+            item.setBusinessObjectName(objectName);
+            item.setBusinessSummary(StringUtils.firstNonBlank(
+                    resolveBusinessSummary(object, taskRuntime, recordData),
+                    item.getBusinessSummary()));
+            item.setProcessDefinitionName(StringUtils.firstNonBlank(
+                    item.getProcessDefinitionName(),
+                    item.getProcessName(),
+                    bindingConfig.getString("flowModelName"),
+                    item.getProcessDefKey()));
+        }
+    }
+
+    private Map<String, Object> findBatchRecord(Map<Object, Map<String, Object>> records, Long recordId) {
+        if (records == null || records.isEmpty() || recordId == null) {
+            return Map.of();
+        }
+        Map<String, Object> record = records.get(recordId);
+        if (record != null) {
+            return record;
+        }
+        record = records.get(String.valueOf(recordId));
+        return record == null ? Map.of() : record;
+    }
+
+    private void enrichCodeBusinessListGroup(String objectCode,
+                                             String fallbackObjectName,
+                                             List<BusinessListRuntime> runtimes) {
+        List<Map<String, Object>> assets = codeFormProviderRegistry.listAssets(objectCode, true);
+        if (assets.isEmpty()) {
+            applyBusinessListFallback(objectCode, fallbackObjectName, runtimes);
+            return;
+        }
+        Map<String, Object> asset = assets.get(0);
+        String providerKey = StringUtils.trimToNull(textValue(asset.get("providerKey")));
+        String objectName = StringUtils.firstNonBlank(
+                StringUtils.trimToNull(textValue(asset.get("objectName"))),
+                StringUtils.trimToNull(textValue(asset.get("businessName"))),
+                StringUtils.trimToNull(textValue(asset.get("appName"))),
+                fallbackObjectName,
+                objectCode);
+        Map<Long, String> summaries = providerKey == null
+                ? Map.of()
+                : codeFormProviderRegistry.find(providerKey)
+                        .map(provider -> provider.buildSummaries(objectCode, collectRecordIds(runtimes)))
+                        .orElse(Map.of());
+        if (summaries == null) {
+            summaries = Map.of();
+        }
+        for (BusinessListRuntime runtime : runtimes) {
+            FlowBusinessListDisplayItem item = runtime.item();
+            item.setObjectCode(objectCode);
+            item.setRecordId(runtime.recordId());
+            item.setBusinessObjectName(objectName);
+            item.setBusinessSummary(StringUtils.firstNonBlank(summaries.get(runtime.recordId()), item.getBusinessSummary()));
+            item.setProcessDefinitionName(StringUtils.firstNonBlank(
+                    item.getProcessDefinitionName(), item.getProcessName(), item.getProcessDefKey()));
+        }
+    }
+
+    private Collection<Long> collectRecordIds(List<BusinessListRuntime> runtimes) {
+        List<Long> ids = new ArrayList<>();
+        for (BusinessListRuntime runtime : runtimes) {
+            if (runtime.recordId() != null && !ids.contains(runtime.recordId())) {
+                ids.add(runtime.recordId());
+            }
+        }
+        return ids;
+    }
+
+    private void applyBusinessListFallback(String objectCode,
+                                           String objectName,
+                                           List<BusinessListRuntime> runtimes) {
+        for (BusinessListRuntime runtime : runtimes) {
+            FlowBusinessListDisplayItem item = runtime.item();
+            item.setObjectCode(objectCode);
+            item.setRecordId(runtime.recordId());
+            item.setBusinessObjectName(StringUtils.firstNonBlank(objectName, item.getBusinessObjectName(), objectCode));
+            item.setProcessDefinitionName(StringUtils.firstNonBlank(
+                    item.getProcessDefinitionName(), item.getProcessName(), item.getProcessDefKey()));
+        }
     }
 
     private JSONObject findNodeForm(JSONObject bindingConfig, String taskDefKey) {
@@ -2646,13 +2837,13 @@ public class BusinessFlowService {
             item.put("field", field);
             item.put("fieldCode", field);
             putIfText(item, "label", source.getString("label"));
-            boolean readable = readBooleanValue(source.get("visible"), readBooleanValue(source.get("readable"), true));
-            boolean writable = readBooleanValue(source.get("editable"), readBooleanValue(source.get("writable"), false));
+            boolean readable = readBooleanValue(source.get("readable"), readBooleanValue(source.get("visible"), true));
+            boolean writable = readable && readBooleanValue(source.get("writable"), readBooleanValue(source.get("editable"), true));
             item.put("visible", readable);
             item.put("editable", writable);
             item.put("readable", readable);
             item.put("writable", writable);
-            item.put("required", readBooleanValue(source.get("required"), false));
+            item.put("required", writable && readBooleanValue(source.get("required"), false));
             result.add(item);
         }
         return result;
@@ -2856,6 +3047,12 @@ public class BusinessFlowService {
     }
 
     private record BusinessKeyParts(String objectCode, Long recordId) {
+    }
+
+    private record BusinessListRuntime(FlowBusinessListDisplayItem item,
+                                       String objectCode,
+                                       Long recordId,
+                                       String businessKey) {
     }
 
     private record TaskFormRuntimeContext(String objectCode,

@@ -71,13 +71,34 @@ const configuredCount = computed(() => {
 })
 
 function normalizePermission(item = {}) {
+  const field = String(item.field || item.fieldCode || item.code || '').trim()
+  const readable = readBoolean(item.readable, readBoolean(item.visible, true))
+  const writable = readable && readBoolean(item.writable, readBoolean(item.editable, true))
   return {
-    field: String(item.field || '').trim(),
-    label: String(item.label || item.field || '').trim(),
-    readable: item.readable !== false,
-    writable: item.writable !== false,
-    required: item.required === true,
+    field,
+    fieldCode: field,
+    label: String(item.label || field || '').trim(),
+    visible: readable,
+    editable: writable,
+    readable,
+    writable,
+    required: writable && item.required === true,
   }
+}
+
+function readBoolean(value, defaultValue) {
+  if (value === undefined || value === null || value === '')
+    return defaultValue
+  if (typeof value === 'boolean')
+    return value
+  if (typeof value === 'number')
+    return value !== 0
+  const text = String(value).trim().toLowerCase()
+  if (['true', '1', 'yes'].includes(text))
+    return true
+  if (['false', '0', 'no'].includes(text))
+    return false
+  return defaultValue
 }
 
 function update(field, patch) {
@@ -87,14 +108,54 @@ function update(field, patch) {
     if (row.field !== field)
       return row
     const next = { ...row, ...patch }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'readable')) {
+      next.readable = patch.readable === true
+      next.visible = next.readable
+      if (!next.readable) {
+        next.writable = false
+        next.editable = false
+        next.required = false
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'writable')) {
+      next.writable = patch.writable === true
+      next.editable = next.writable
+      if (next.writable) {
+        next.readable = true
+        next.visible = true
+      }
+      else {
+        next.required = false
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'required')) {
+      next.required = patch.required === true
+      if (next.required) {
+        next.readable = true
+        next.visible = true
+        next.writable = true
+        next.editable = true
+      }
+    }
+
     if (next.readable === false) {
       next.writable = false
+      next.editable = false
       next.required = false
     }
-    if (next.writable === true || next.required === true)
+    if (next.writable === true || next.required === true) {
       next.readable = true
-    if (next.required === true)
+      next.visible = true
+    }
+    if (next.required === true) {
       next.writable = true
+      next.editable = true
+    }
+    next.visible = next.readable
+    next.editable = next.writable
     return next
   })
   emit('update:config', {

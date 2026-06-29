@@ -45,6 +45,7 @@ const lastEmittedXml = ref('')
 const drawerVisible = ref(false)
 const drawerNodeId = ref(null)
 const drawerFocusEdgeId = ref(null)
+const drawerRef = ref(null)
 const drawerNode = computed(() => designer.getNode(drawerNodeId.value))
 const drawerOutgoingEdges = computed(() => drawerNodeId.value ? designer.getOutgoingEdges(drawerNodeId.value) : [])
 
@@ -434,7 +435,13 @@ async function setXML(xml) {
   await importXml(xml)
 }
 
+function commitOpenDrawerDraft() {
+  if (drawerVisible.value)
+    drawerRef.value?.commitDraft?.()
+}
+
 function getXML(_formatted = false) {
+  commitOpenDrawerDraft()
   return convertJsonToBpmn({
     ...designer.flowJson.value,
     config: {
@@ -559,6 +566,7 @@ onBeforeUnmount(() => {
     />
 
     <NodeConfigDrawer
+      ref="drawerRef"
       :visible="drawerVisible"
       :node="drawerNode"
       :outgoing-edges="drawerOutgoingEdges"

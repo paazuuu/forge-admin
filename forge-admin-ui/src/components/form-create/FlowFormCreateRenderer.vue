@@ -17,6 +17,7 @@
 <script setup>
 import { computed, getCurrentInstance, ref, watch } from 'vue'
 import { hydrateForgeBusinessPreviewRules } from '@/views/app-center/components/designer/form-first/forgeBusinessComponents'
+import { normalizeFieldPermissions } from '@/utils/field-permissions'
 import {
   buildDefaultFormOptions,
   cloneValue,
@@ -44,8 +45,20 @@ const props = defineProps({
     default: false,
   },
   fieldPermissions: {
-    type: [Array, String],
+    type: [Array, String, Object],
     default: () => [],
+  },
+  gridCols: {
+    type: Number,
+    default: 2,
+  },
+  labelPlacement: {
+    type: String,
+    default: 'top',
+  },
+  labelWidth: {
+    type: [String, Number],
+    default: '110px',
   },
 })
 
@@ -61,21 +74,29 @@ let hydrateSeq = 0
 
 const fieldPermissionMap = computed(() => {
   const map = new Map()
-  for (const item of normalizeFieldPermissions(props.fieldPermissions)) {
+  for (const item of normalizeFieldPermissions(props.fieldPermissions, { readOnly: props.readOnly })) {
     if (item.field)
       map.set(item.field, item)
   }
   return map
 })
 const rawRules = computed(() => applyFieldPermissions(
-  normalizeFormCreateRules(props.schema),
+  applyLayoutToRules(normalizeFormCreateRules(props.schema)),
   fieldPermissionMap.value,
 ))
 const rules = computed(() => hydratedRules.value)
-const mergedOptions = computed(() => ({
-  ...buildDefaultFormOptions(),
-  ...normalizeFormCreateOptions(props.options),
-}))
+const mergedOptions = computed(() => {
+  const baseOptions = normalizeFormCreateOptions(props.options)
+  return {
+    ...buildDefaultFormOptions(),
+    ...baseOptions,
+    form: {
+      ...(baseOptions.form || {}),
+      labelPosition: props.labelPlacement === 'top' ? 'top' : 'right',
+      labelWidth: props.labelPlacement === 'top' ? undefined : normalizeLabelWidth(props.labelWidth),
+    },
+  }
+})
 
 watch(
   () => props.modelValue,
@@ -94,26 +115,6 @@ watch(
 function handleChange() {
   emit('update:modelValue', cloneValue(innerValue.value) || {})
   emit('change', cloneValue(innerValue.value) || {})
-}
-
-function normalizeFieldPermissions(source) {
-  let list = source
-  if (typeof source === 'string' && source.trim()) {
-    try {
-      list = JSON.parse(source)
-    }
-    catch {
-      list = []
-    }
-  }
-  if (!Array.isArray(list))
-    return []
-  return list.map(item => ({
-    field: String(item?.field || '').trim(),
-    readable: item?.readable !== false,
-    writable: item?.writable !== false,
-    required: item?.required === true,
-  }))
 }
 
 function applyFieldPermissions(rules, permissionMap) {
@@ -135,6 +136,11 @@ function applyFieldPermissionToRule(rule, permissionMap) {
   const next = cloneValue(rule)
   const field = String(next.field || next.props?.field || '').trim()
   const permission = field ? permissionMap.get(field) : null
+
+  if (props.readOnly) {
+    next.props = { ...(next.props || {}), disabled: true }
+    next.disabled = true
+  }
 
   if (permission?.readable === false)
     return null
@@ -159,6 +165,40 @@ function ensureRequiredRule(validate, title) {
   if (!list.some(item => item?.required))
     list.unshift({ required: true, message: `请输入${title || '该字段'}`, trigger: 'blur' })
   return list
+}
+
+function applyLayoutToRules(rules) {
+  return applyLayoutToList(rules || [], normalizeGridSpan(props.gridCols))
+}
+
+function applyLayoutToList(rules, span) {
+  return (rules || []).map((rule) => {
+    if (!rule || typeof rule !== 'object')
+      return rule
+    const next = cloneValue(rule)
+    if (next.field)
+      next.col = { ...(next.col || {}), span }
+    if (Array.isArray(next.children))
+      next.children = applyLayoutToList(next.children, span)
+    return next
+  })
+}
+
+function normalizeGridSpan(cols) {
+  const count = Number(cols)
+  if (!Number.isFinite(count) || count <= 1)
+    return 24
+  if (count >= 4)
+    return 6
+  if (count === 3)
+    return 8
+  return 12
+}
+
+function normalizeLabelWidth(value) {
+  if (typeof value === 'number')
+    return `${value}px`
+  return value || '110px'
 }
 
 async function hydrateRules() {
@@ -201,6 +241,32 @@ defineExpose({
 
 :deep(.form-create) {
   margin: 0;
+}
+
+:deep(.el-form) {
+  width: 100%;
+}
+
+:deep(.el-row) {
+  row-gap: 4px;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+:deep(.el-form-item__label) {
+  line-height: 1.4;
+  color: var(--text-color-2, #4b5563);
+  font-weight: 500;
+}
+
+:deep(.el-input),
+:deep(.el-select),
+:deep(.el-date-editor),
+:deep(.el-textarea),
+:deep(.el-input-number) {
+  width: 100%;
 }
 
 :deep(.el-form-item:last-child) {

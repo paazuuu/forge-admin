@@ -31,6 +31,18 @@ public class FlowCc {
     private String processDefKey;
 
     /**
+     * 流程名称（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String processName;
+
+    /**
+     * 流程定义名称（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String processDefinitionName;
+
+    /**
      * 来源任务ID
      */
     private String taskId;
@@ -49,6 +61,30 @@ public class FlowCc {
      * 业务Key
      */
     private String businessKey;
+
+    /**
+     * 业务对象编码（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String objectCode;
+
+    /**
+     * 业务记录ID（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private Long recordId;
+
+    /**
+     * 业务对象名称（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String businessObjectName;
+
+    /**
+     * 业务摘要（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String businessSummary;
 
     /**
      * 抄送人ID

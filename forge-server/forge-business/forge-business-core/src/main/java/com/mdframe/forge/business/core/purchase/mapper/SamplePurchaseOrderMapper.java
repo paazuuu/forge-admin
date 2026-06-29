@@ -9,6 +9,9 @@ import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
+import java.util.List;
+
 /**
  * 采购单审批测试 Mapper。
  */
@@ -21,6 +24,9 @@ public interface SamplePurchaseOrderMapper extends BaseMapper<SamplePurchaseOrde
 
     SamplePurchaseOrderVO selectDetail(@Param("tenantId") Long tenantId,
                                        @Param("id") Long id);
+
+    List<SamplePurchaseOrderVO> selectDetailsByIds(@Param("tenantId") Long tenantId,
+                                                   @Param("ids") Collection<Long> ids);
 
     SamplePurchaseOrder selectByBusinessKey(@Param("tenantId") Long tenantId,
                                             @Param("businessKey") String businessKey);

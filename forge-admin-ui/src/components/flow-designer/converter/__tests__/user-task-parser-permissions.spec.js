@@ -113,7 +113,16 @@ describe('parseUserTaskConfig - 表单 / 优先级 / dueDate', () => {
   it('解析表单字段权限配置', () => {
     const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_external'))
     expect(cfg.formFieldPermissions).toEqual([
-      { field: 'amount', label: '金额', readable: true, writable: false, required: true },
+      {
+        field: 'amount',
+        fieldCode: 'amount',
+        label: '金额',
+        visible: true,
+        editable: false,
+        readable: true,
+        writable: false,
+        required: false,
+      },
     ])
   })
 

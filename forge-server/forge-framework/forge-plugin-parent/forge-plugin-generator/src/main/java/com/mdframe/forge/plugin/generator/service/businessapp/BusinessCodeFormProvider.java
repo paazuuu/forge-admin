@@ -5,6 +5,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormSaveDT
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessTaskFormContextVO;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +41,13 @@ public interface BusinessCodeFormProvider {
      */
     default String buildSummary(Map<String, Object> recordData) {
         return null;
+    }
+
+    /**
+     * 根据业务记录 ID 批量构建用户可读摘要。列表页应优先实现该方法，避免逐条查询。
+     */
+    default Map<Long, String> buildSummaries(String objectCode, Collection<Long> recordIds) {
+        return Map.of();
     }
 
     /**

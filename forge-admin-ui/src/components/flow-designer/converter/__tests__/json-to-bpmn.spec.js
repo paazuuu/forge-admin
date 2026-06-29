@@ -102,7 +102,16 @@ describe('convertJsonToBpmn - 主结构', () => {
     const permissions = JSON.parse(getFlowableAttr(t, 'formFieldPermissions'))
 
     expect(permissions).toEqual([
-      { field: 'amount', label: '金额', readable: true, writable: false, required: true },
+      {
+        field: 'amount',
+        fieldCode: 'amount',
+        label: '金额',
+        visible: true,
+        editable: false,
+        readable: true,
+        writable: false,
+        required: false,
+      },
     ])
   })
 

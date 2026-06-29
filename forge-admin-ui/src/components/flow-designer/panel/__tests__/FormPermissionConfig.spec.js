@@ -68,8 +68,26 @@ describe('formPermissionConfig', () => {
     await writableInputs[0].setValue(false)
 
     expect(wrapper.vm.config.formFieldPermissions).toEqual([
-      { field: 'amount', label: '金额', readable: true, writable: false, required: false },
-      { field: 'reason', label: '申请原因', readable: true, writable: true, required: false },
+      {
+        field: 'amount',
+        fieldCode: 'amount',
+        label: '金额',
+        visible: true,
+        editable: false,
+        readable: true,
+        writable: false,
+        required: false,
+      },
+      {
+        field: 'reason',
+        fieldCode: 'reason',
+        label: '申请原因',
+        visible: true,
+        editable: true,
+        readable: true,
+        writable: true,
+        required: false,
+      },
     ])
 
     wrapper.unmount()
@@ -87,10 +105,44 @@ describe('formPermissionConfig', () => {
 
     expect(wrapper.vm.config.formFieldPermissions[0]).toEqual({
       field: 'amount',
+      fieldCode: 'amount',
       label: '金额',
+      visible: false,
+      editable: false,
       readable: false,
       writable: false,
       required: false,
+    })
+
+    wrapper.unmount()
+  })
+
+  it('存在 visible/editable 旧字段时以 readable/writable 为准', async () => {
+    const wrapper = mountConfig({
+      permissions: [
+        {
+          field: 'amount',
+          label: '金额',
+          visible: true,
+          editable: true,
+          readable: false,
+          writable: false,
+          required: false,
+        },
+      ],
+    })
+
+    const readableInputs = wrapper.findAll('[data-test="permission-readable"]')
+    expect(readableInputs[0].element.checked).toBe(false)
+
+    await readableInputs[0].setValue(true)
+
+    expect(wrapper.vm.config.formFieldPermissions[0]).toMatchObject({
+      field: 'amount',
+      visible: true,
+      editable: false,
+      readable: true,
+      writable: false,
     })
 
     wrapper.unmount()

@@ -20,6 +20,7 @@
  */
 import { computed, ref } from 'vue'
 import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
+import { normalizeFieldPermissions } from '@/utils/field-permissions'
 import ApproverAssigneeForm from './ApproverAssigneeForm.vue'
 import BasicConfig from './BasicConfig.vue'
 import FormPermissionConfig from './FormPermissionConfig.vue'
@@ -66,7 +67,11 @@ const selectedFormAsset = computed(() => {
   const formKey = String(config.value.formKey || '').trim()
   if (!formKey)
     return null
-  return normalizedFormAssetOptions.value.find(item => item.value === formKey || item.formKey === formKey) || null
+  return findFormAsset({
+    formMode: config.value.formMode,
+    formKey,
+    providerKey: config.value.providerKey,
+  }) || null
 })
 const activeFormFieldCatalog = computed(() => {
   if (selectedFormAsset.value?.fieldCatalog?.length)
@@ -107,6 +112,7 @@ function handleFormAssetUpdate(partial = {}) {
     })
     return
   }
+  const asset = findFormAsset(partial)
   patch({
     formType: 'dynamic',
     formMode: partial.formMode || 'BUSINESS_OBJECT_FORM',
@@ -117,8 +123,85 @@ function handleFormAssetUpdate(partial = {}) {
     formUrl: partial.formUrl || '',
     viewKey: partial.viewKey || 'default',
     formRef: partial.formRef || {},
-    formFieldPermissions: [],
+    formFieldPermissions: buildFormFieldPermissionsForCatalog(
+      config.value.formFieldPermissions,
+      asset?.fieldCatalog,
+    ),
   })
+}
+
+function findFormAsset(partial = {}) {
+  const formKey = String(partial.formKey || '').trim()
+  if (!formKey)
+    return null
+  const providerKey = String(partial.providerKey || '')
+  const formMode = normalizeFormMode(partial.formMode || partial.formRef?.type || config.value.formMode)
+  return normalizedFormAssetOptions.value.find(asset =>
+    String(asset.formKey || asset.value || '') === formKey
+    && normalizeFormMode(asset.formMode || asset.type) === formMode
+    && String(asset.providerKey || '') === providerKey,
+  )
+    || normalizedFormAssetOptions.value.find(asset =>
+      String(asset.formKey || asset.value || '') === formKey
+      && String(asset.providerKey || '') === providerKey,
+    )
+    || normalizedFormAssetOptions.value.find(asset => String(asset.formKey || asset.value || '') === formKey)
+    || null
+}
+
+function buildFormFieldPermissionsForCatalog(currentPermissions, fieldCatalog = []) {
+  const current = new Map()
+  for (const permission of normalizeFieldPermissions(currentPermissions)) {
+    if (permission.field)
+      current.set(permission.field, permission)
+  }
+  const catalog = normalizeFieldCatalog(fieldCatalog)
+  if (!catalog.length)
+    return Array.from(current.values())
+  return catalog.map((field) => {
+    const saved = current.get(field.field)
+    if (saved) {
+      return {
+        ...saved,
+        label: field.label || saved.label || field.field,
+      }
+    }
+    const required = field.required === true
+    return {
+      field: field.field,
+      fieldCode: field.field,
+      label: field.label || field.field,
+      visible: true,
+      editable: true,
+      readable: true,
+      writable: true,
+      required,
+    }
+  })
+}
+
+function normalizeFieldCatalog(fieldCatalog = []) {
+  const seen = new Set()
+  return (Array.isArray(fieldCatalog) ? fieldCatalog : [])
+    .map((item) => {
+      const field = String(item?.field || item?.fieldCode || item?.fieldName || item?.name || item?.key || '').trim()
+      if (!field || seen.has(field))
+        return null
+      seen.add(field)
+      return {
+        field,
+        label: String(item?.label || item?.title || item?.fieldName || field).trim(),
+        required: item?.required === true || item?.sourceRequired === true,
+      }
+    })
+    .filter(Boolean)
+}
+
+function normalizeFormMode(value) {
+  const normalized = String(value || 'BUSINESS_OBJECT_FORM').toUpperCase()
+  if (normalized === 'BUSINESS_CODE_FORM' || normalized === 'EXTERNAL')
+    return normalized
+  return 'BUSINESS_OBJECT_FORM'
 }
 </script>
 

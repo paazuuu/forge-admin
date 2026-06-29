@@ -173,7 +173,7 @@ const isCodeApp = computed(() => {
 })
 const codeAppMessage = computed(() => {
   return configState.value?.options?.documentMessage
-    || '业务数据、状态流转和列表详情由代码模块维护；平台只维护流程模型、变量映射和节点表单权限。'
+    || '业务数据、状态流转和列表详情由代码模块维护；平台只维护流程模型、流程可识别的业务字段和节点表单权限。'
 })
 const flowBinding = computed(() => configState.value?.flowBinding || {})
 const documentConfig = computed(() => configState.value?.documentConfig || props.initialConfig || {})
@@ -244,8 +244,8 @@ const activeStages = computed(() => {
       {
         key: 'variable-mapping',
         index: 3,
-        title: '变量映射',
-        description: `${Array.isArray(flowBinding.value?.variableMapping) ? flowBinding.value.variableMapping.length : 0} 项变量`,
+        title: '让流程认识业务字段',
+        description: `${Array.isArray(flowBinding.value?.variableMapping) ? flowBinding.value.variableMapping.length : 0} 项字段可用于流程判断`,
         done: Array.isArray(flowBinding.value?.variableMapping) && flowBinding.value.variableMapping.length > 0,
         active: isActiveStage('variable-mapping'),
         section: 'flow',

@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { findElementsByLocalName, getFlowableAttr, parseBpmnXml } from '../converter/xml-utils.js'
 import DingFlowDesigner from '../DingFlowDesigner.vue'
 
 const DOLLAR = '$'
@@ -35,7 +36,11 @@ const STUBS = {
   },
   'n-radio-group': { template: '<div class="n-radio-group"><slot /></div>' },
   'n-space': { template: '<div class="n-space"><slot /></div>' },
-  'n-checkbox': { template: '<input type="checkbox" class="n-checkbox" /><slot />' },
+  'n-checkbox': {
+    props: ['checked', 'disabled'],
+    emits: ['update:checked'],
+    template: '<input type="checkbox" class="n-checkbox" :checked="checked" :disabled="disabled" v-bind="$attrs" @change="$emit(\'update:checked\', $event.target.checked)" />',
+  },
   'n-divider': { template: '<hr class="n-divider" />' },
   'n-tag': { template: '<span class="n-tag"><slot /></span>' },
 }
@@ -132,6 +137,38 @@ describe('dingFlowDesigner - props.xml 输入加载', () => {
     expect(xml).toContain('Process_T1')
     expect(xml).toContain('userTask')
     expect(xml).toContain(`${DOLLAR}{initiator}`)
+    w.unmount()
+  })
+
+  it('getXML 前会提交打开的节点抽屉草稿配置', async () => {
+    const w = mountDesigner({
+      xml: SIMPLE_XML,
+      formFieldCatalog: [
+        { field: 'amount', label: '金额', required: false },
+      ],
+    })
+    await new Promise(r => setTimeout(r, 50))
+
+    await w.find('[data-node-type="approver"]').trigger('click')
+    await w.vm.$nextTick()
+
+    const writableInputs = w.findAll('[data-test="permission-writable"]')
+    expect(writableInputs.length).toBeGreaterThan(0)
+    await writableInputs[0].setValue(false)
+
+    const xml = w.vm.getXML()
+    const doc = parseBpmnXml(xml)
+    const task = findElementsByLocalName(doc, 'userTask').find(t => t.getAttribute('id') === 'T1')
+    const permissions = JSON.parse(getFlowableAttr(task, 'formFieldPermissions'))
+
+    expect(permissions[0]).toMatchObject({
+      field: 'amount',
+      readable: true,
+      writable: false,
+      visible: true,
+      editable: false,
+    })
+
     w.unmount()
   })
 

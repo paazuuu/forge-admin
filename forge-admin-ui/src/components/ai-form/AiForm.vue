@@ -128,6 +128,7 @@ import { ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5'
 import { computed, nextTick, ref, useSlots, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
+import { createFieldPermissionMap } from '@/utils/field-permissions'
 import AiFormLayoutNodes from './AiFormLayoutNodes.vue'
 
 const props = defineProps({
@@ -228,7 +229,7 @@ const props = defineProps({
     default: () => [],
   },
   fieldPermissions: {
-    type: Array,
+    type: [Array, String, Object],
     default: () => [],
   },
 })
@@ -247,26 +248,7 @@ const actionModalSchema = ref([])
 const actionModalValue = ref({})
 const actionModalLayout = ref({})
 
-const fieldPermissionMap = computed(() => {
-  const map = new Map()
-  ;(Array.isArray(props.fieldPermissions) ? props.fieldPermissions : []).forEach((permission) => {
-    if (!permission || typeof permission !== 'object')
-      return
-    const field = String(permission.fieldCode || permission.field || permission.code || permission.name || '').trim()
-    if (!field)
-      return
-    const visible = readPermissionBoolean(permission.visible, readPermissionBoolean(permission.readable, true))
-    const editable = readPermissionBoolean(permission.editable, readPermissionBoolean(permission.writable, true))
-    map.set(field, {
-      ...permission,
-      field,
-      visible,
-      editable,
-      required: readPermissionBoolean(permission.required, false),
-    })
-  })
-  return map
-})
+const fieldPermissionMap = computed(() => createFieldPermissionMap(props.fieldPermissions))
 
 // 初始化表单数据
 watch(() => props.value, (newVal) => {
@@ -820,7 +802,7 @@ function applyFieldPermissionsToNodes(nodes = []) {
 
 function applyFieldPermission(node, permission, children) {
   const readonlyByPermission = permission.editable === false
-  const required = node.required === true || permission.required === true
+  const required = readonlyByPermission ? false : (node.required === true || permission.required === true)
   const nextProps = {
     ...(node.props || {}),
   }
@@ -845,21 +827,6 @@ function applyFieldPermission(node, permission, children) {
 
 function resolvePermissionField(node = {}) {
   return String(node.field || node.prop || node.fieldCode || node.code || '').trim()
-}
-
-function readPermissionBoolean(value, fallback) {
-  if (value === undefined || value === null || value === '')
-    return fallback
-  if (typeof value === 'boolean')
-    return value
-  if (typeof value === 'number')
-    return value !== 0
-  const text = String(value).trim().toLowerCase()
-  if (['true', '1', 'yes', 'y'].includes(text))
-    return true
-  if (['false', '0', 'no', 'n'].includes(text))
-    return false
-  return fallback
 }
 
 function filterVisibleNodes(nodes = []) {

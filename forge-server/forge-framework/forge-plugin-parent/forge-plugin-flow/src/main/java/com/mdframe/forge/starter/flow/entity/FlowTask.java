@@ -72,6 +72,36 @@ public class FlowTask {
     private String processName;
 
     /**
+     * 流程定义名称（来自模型或业务侧兜底，仅用于展示）
+     */
+    @TableField(exist = false)
+    private String processDefinitionName;
+
+    /**
+     * 业务对象编码（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String objectCode;
+
+    /**
+     * 业务记录ID（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private Long recordId;
+
+    /**
+     * 业务对象名称（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String businessObjectName;
+
+    /**
+     * 业务摘要（由业务侧列表展示扩展点补齐）
+     */
+    @TableField(exist = false)
+    private String businessSummary;
+
+    /**
      * 任务标题
      */
     private String title;

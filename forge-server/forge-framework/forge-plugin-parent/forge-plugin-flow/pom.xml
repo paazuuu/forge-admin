@@ -27,6 +27,12 @@
             <artifactId>forge-plugin-message</artifactId>
         </dependency>
 
+        <!-- Flow Client SPI (业务列表展示扩展点) -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-flow-client</artifactId>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

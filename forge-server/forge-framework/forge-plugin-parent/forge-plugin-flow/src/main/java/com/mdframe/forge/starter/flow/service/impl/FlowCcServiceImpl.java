@@ -5,15 +5,19 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.flow.client.spi.FlowBusinessListDisplayAdapter;
+import com.mdframe.forge.flow.client.spi.FlowBusinessListDisplayItem;
 import com.mdframe.forge.starter.flow.entity.FlowCc;
 import com.mdframe.forge.starter.flow.mapper.FlowCcMapper;
 import com.mdframe.forge.starter.flow.service.FlowCcService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 流程抄送服务实现
@@ -21,6 +25,9 @@ import java.util.List;
 @Slf4j
 @Service
 public class FlowCcServiceImpl extends ServiceImpl<FlowCcMapper, FlowCc> implements FlowCcService {
+
+    @Autowired(required = false)
+    private FlowBusinessListDisplayAdapter flowBusinessListDisplayAdapter;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -62,7 +69,7 @@ public class FlowCcServiceImpl extends ServiceImpl<FlowCcMapper, FlowCc> impleme
         wrapper.eq(FlowCc::getCcUserId, userId)
                 .eq(isRead != null, FlowCc::getIsRead, isRead)
                 .orderByDesc(FlowCc::getCcTime);
-        return page(page, wrapper);
+        return enrichCcPage(page(page, wrapper));
     }
 
     @Override
@@ -70,7 +77,70 @@ public class FlowCcServiceImpl extends ServiceImpl<FlowCcMapper, FlowCc> impleme
         LambdaQueryWrapper<FlowCc> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FlowCc::getSendUserId, userId)
                 .orderByDesc(FlowCc::getCcTime);
-        return page(page, wrapper);
+        return enrichCcPage(page(page, wrapper));
+    }
+
+    private IPage<FlowCc> enrichCcPage(IPage<FlowCc> page) {
+        if (flowBusinessListDisplayAdapter == null || page == null || page.getRecords() == null
+                || page.getRecords().isEmpty()) {
+            return page;
+        }
+        List<FlowBusinessListDisplayItem> items = page.getRecords().stream()
+                .map(this::toDisplayItem)
+                .collect(Collectors.toList());
+        try {
+            flowBusinessListDisplayAdapter.enrich(items);
+            for (int i = 0; i < page.getRecords().size(); i++) {
+                applyDisplayItem(page.getRecords().get(i), items.get(i));
+            }
+        } catch (Exception e) {
+            log.warn("补齐流程抄送业务摘要失败，继续返回流程基础信息: {}", e.getMessage());
+        }
+        return page;
+    }
+
+    private FlowBusinessListDisplayItem toDisplayItem(FlowCc cc) {
+        FlowBusinessListDisplayItem item = new FlowBusinessListDisplayItem();
+        item.setBusinessKey(cc.getBusinessKey());
+        item.setProcessInstanceId(cc.getProcessInstanceId());
+        item.setProcessDefKey(cc.getProcessDefKey());
+        item.setProcessName(cc.getProcessName());
+        item.setProcessDefinitionName(cc.getProcessDefinitionName());
+        item.setTaskId(cc.getTaskId());
+        item.setTitle(cc.getTitle());
+        item.setObjectCode(cc.getObjectCode());
+        item.setRecordId(cc.getRecordId());
+        item.setBusinessObjectName(cc.getBusinessObjectName());
+        item.setBusinessSummary(cc.getBusinessSummary());
+        return item;
+    }
+
+    private void applyDisplayItem(FlowCc cc, FlowBusinessListDisplayItem item) {
+        if (item == null) {
+            return;
+        }
+        cc.setObjectCode(firstNonBlank(item.getObjectCode(), cc.getObjectCode()));
+        cc.setRecordId(item.getRecordId() != null ? item.getRecordId() : cc.getRecordId());
+        cc.setBusinessObjectName(firstNonBlank(item.getBusinessObjectName(), cc.getBusinessObjectName()));
+        cc.setBusinessSummary(firstNonBlank(item.getBusinessSummary(), cc.getBusinessSummary()));
+        cc.setProcessName(firstNonBlank(cc.getProcessName(), item.getProcessName()));
+        cc.setProcessDefinitionName(firstNonBlank(
+                cc.getProcessDefinitionName(),
+                item.getProcessDefinitionName(),
+                cc.getProcessName(),
+                cc.getProcessDefKey()));
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     @Override

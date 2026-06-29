@@ -2220,3 +2220,96 @@ Forge 后端已通过 Jackson `BigNumberSerializer` 将超出 JS 安全范围的
 **影响范围**:
 - 应用中心对象卡片、业务域卡片、流程设计器返回业务应用按钮。
 - 代码应用“表单字段”只读面板和流程配置入口。
+
+## 82. 流程字段权限新旧键名必须新键优先并双写
+
+**发现日期**: 2026-06-29
+
+**问题描述**:
+流程设计器节点抽屉的“表单字段权限”矩阵里，“可见 / 可编辑”点击后看起来没有反应，或短暂变化后立刻回弹。
+
+**根本原因**:
+字段权限对象为了兼容运行时同时保留了旧键 `visible/editable` 和新键 `readable/writable`。如果归一化时优先读取旧键，而 UI 点击只更新新键，下一次 computed 重算会继续用旧键覆盖新状态。
+
+**解决方案**:
+- 权限归一化统一优先读取 `readable/writable`，只在新键缺失时回退到 `visible/editable`。
+- `FormPermissionConfig.update()` 写入 `readable/writable/required` 时同步维护 `visible/editable`。
+- BPMN parser/writer 也要使用同一归一化规则，避免设计器保存后再打开出现状态漂移。
+
+**影响范围**:
+- 流程设计器字段权限矩阵。
+- BPMN `flowable:formFieldPermissions` 的读写往返。
+- 待办/已办表单字段权限运行时消费。
+
+## 83. 流程设计器全局保存前必须提交打开中的节点抽屉草稿
+
+**发现日期**: 2026-06-29
+
+**问题描述**:
+在流程设计器节点抽屉里修改“表单字段权限”后，点击页面顶部“保存草稿 / 发布部署”，第二次进入流程设计器发现修改丢失。
+
+**根本原因**:
+`NodeConfigDrawer` 内部维护 `draftNode` 草稿，字段权限变化只进入抽屉草稿。只有点击抽屉底部“保存”才会 emit 到 `DingFlowDesigner` 主流程 JSON。用户直接点击顶部全局保存/发布时，`getXML()` 从主流程 JSON 序列化，拿到的仍是旧节点配置。
+
+**解决方案**:
+- `NodeConfigDrawer` 暴露 `commitDraft()`，复用抽屉保存逻辑但不关闭抽屉。
+- `DingFlowDesigner.getXML()` 在 `convertJsonToBpmn()` 前调用 `commitOpenDrawerDraft()`。
+- 回归测试覆盖：打开节点抽屉、修改字段权限、不点抽屉保存，直接 `getXML()`，BPMN XML 必须包含最新 `flowable:formFieldPermissions`。
+
+**影响范围**:
+- 流程设计器顶部“保存草稿 / 发布部署”。
+- 节点表单资产、字段权限、审批人、会签、审批权限等所有由节点抽屉草稿承载的配置。
+
+## 84. 运行时字段权限必须复用共享归一化
+
+**发现日期**: 2026-06-29
+
+**问题描述**:
+流程设计器字段权限已经保存到 BPMN，第二次进入也能回显，但待办审批表单渲染时仍然没有按“不可见 / 不可编辑”展示。
+
+**根本原因**:
+运行时字段权限消费链路分叉：
+- `AiForm` 只接受数组，不解析 Flow 服务 `TaskFormInfo.formFieldPermissions` 返回的 JSON 字符串。
+- `FlowFormCreateRenderer`、代码业务页 composable 和后端 `BusinessFlowService` 各自维护归一化逻辑，容易出现新旧键优先级不一致。
+- `todo.vue` 用 `businessFormContext.fieldPermissions || taskFormInfo.formFieldPermissions` 取值，空数组是真值，会挡住后面的节点权限。
+
+**解决方案**:
+- 前端统一使用 `forge-admin-ui/src/utils/field-permissions.js`，支持数组、JSON 字符串、`{ fields: [] }` 三种输入。
+- 归一化必须优先读取 `readable/writable`，只在缺失时回退 `visible/editable`。
+- 待办页权限来源必须取“第一个非空权限源”，不能用简单 `||`。
+- 后端 `BusinessFlowService.normalizeFieldPermissions()` 也必须保持相同优先级，不可写字段必须清掉 `required`。
+
+**影响范围**:
+- 待办 / 已办业务托管表单。
+- 节点动态表单 `FlowFormCreateRenderer`。
+- 代码业务页通过 `useBusinessTaskFormContext()` 接入节点字段权限的页面。
+- 任何从 BPMN `flowable:formFieldPermissions` 读取运行时权限的后端接口。
+
+## 85. 节点表单资产选择不能清空字段权限
+
+**发现日期**: 2026-06-29
+
+**问题描述**:
+流程设计器节点抽屉中，用户已经配置好“表单字段权限”，再点击“节点表单资产”下面的表单卡片后，下方权限配置立即消失或恢复默认。
+
+**根本原因**:
+`ApproverConfig.handleFormAssetUpdate()` 把资产选择事件当成整块节点表单配置替换处理，每次选中资产都固定写入：
+
+```js
+formFieldPermissions: []
+```
+
+所以即使用户只是点了一下当前已选中的表单资产，也会把已经配置好的权限矩阵清空。
+
+**解决方案**:
+- 只有“清除绑定”时才清空 `formFieldPermissions`。
+- 选中表单资产时按该资产的字段目录重建权限：
+  - 同名字段保留已有 `readable/writable/required` 配置。
+  - 新字段补默认 `readable=true`、`writable=true`。
+  - 表单源字段必填时同步默认 `required=true`。
+- 为 `ApproverConfig` 增加回归测试，覆盖点击当前资产卡片后权限不丢。
+
+**影响范围**:
+- 流程设计器节点抽屉“表单权限”页签。
+- `BusinessFlowFormAssetSelect` 卡片选择事件。
+- 任何未来把“选择资产”和“字段权限矩阵”放在同一配置块里的节点配置组件。

@@ -113,6 +113,20 @@
         LIMIT 1
     </select>
 
+    <select id="selectDetailsByIds" resultMap="PurchaseOrderVOMap">
+        SELECT
+        <include refid="BaseColumns" />
+        FROM sample_purchase_order po
+        LEFT JOIN sys_user dept_user ON dept_user.id = po.dept_leader_id
+        LEFT JOIN sys_user engineering_user ON engineering_user.id = po.engineering_manager_id
+        WHERE po.tenant_id = #{tenantId}
+          AND po.id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY po.update_time DESC, po.id DESC
+    </select>
+
     <select id="selectByBusinessKey" resultType="com.mdframe.forge.business.core.purchase.domain.SamplePurchaseOrder">
         SELECT
             id,

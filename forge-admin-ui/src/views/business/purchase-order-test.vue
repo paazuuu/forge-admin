@@ -38,7 +38,7 @@
         <div class="section-title">
           <span>{{ currentNodeTitle }}</span>
           <n-tag size="small" :type="isModifyTask ? 'warning' : 'info'">
-            {{ props.taskDefKey || '未知节点' }}
+            {{ currentTaskDefKey || '未知节点' }}
           </n-tag>
         </div>
 
@@ -50,40 +50,50 @@
           require-mark-placement="right-hanging"
         >
           <n-grid :cols="2" :x-gap="16" :y-gap="4" responsive="screen">
-            <n-form-item-gi v-if="isModifyTask" label="采购主题" path="title">
-              <n-input v-model:value="taskForm.title" :disabled="taskFormDisabled" maxlength="128" show-count />
+            <n-form-item-gi v-if="isModifyTask && canShowTaskField('title')" label="采购主题" path="title">
+              <n-input v-model:value="taskForm.title" :disabled="isTaskFieldDisabled('title')" maxlength="128" show-count />
             </n-form-item-gi>
-            <n-form-item-gi v-if="isModifyTask" label="供应商" path="supplierName">
-              <n-input v-model:value="taskForm.supplierName" :disabled="taskFormDisabled" maxlength="128" show-count />
+            <n-form-item-gi v-if="isModifyTask && canShowTaskField('supplierName')" label="供应商" path="supplierName">
+              <n-input v-model:value="taskForm.supplierName" :disabled="isTaskFieldDisabled('supplierName')" maxlength="128" show-count />
             </n-form-item-gi>
-            <n-form-item-gi v-if="isModifyTask" label="采购金额" path="amountYuan">
+            <n-form-item-gi v-if="isModifyTask && canShowTaskField('amountCent')" label="采购金额" path="amountYuan">
               <n-input-number
                 v-model:value="taskForm.amountYuan"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('amountCent')"
                 :min="0.01"
                 :precision="2"
                 :step="100"
                 style="width: 100%"
               >
                 <template #suffix>
-                  元
-                </template>
-              </n-input-number>
+                元
+              </template>
+            </n-input-number>
             </n-form-item-gi>
-            <n-form-item-gi v-if="isModifyTask" label="采购明细" path="purchaseItems" :span="2">
+            <n-form-item-gi v-if="isModifyTask && canShowTaskField('needDate')" label="期望到货日期" path="needDate">
+              <n-date-picker
+                v-model:formatted-value="taskForm.needDate"
+                :disabled="isTaskFieldDisabled('needDate')"
+                type="date"
+                value-format="yyyy-MM-dd"
+                clearable
+                style="width: 100%"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi v-if="isModifyTask && canShowTaskField('purchaseItems')" label="采购明细" path="purchaseItems" :span="2">
               <n-input
                 v-model:value="taskForm.purchaseItems"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('purchaseItems')"
                 type="textarea"
                 :rows="4"
                 maxlength="1000"
                 show-count
               />
             </n-form-item-gi>
-            <n-form-item-gi v-if="isModifyTask" label="修改说明" path="applicantModifyRemark" :span="2">
+            <n-form-item-gi v-if="isModifyTask && canShowTaskField('applicantModifyRemark')" label="修改说明" path="applicantModifyRemark" :span="2">
               <n-input
                 v-model:value="taskForm.applicantModifyRemark"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('applicantModifyRemark')"
                 type="textarea"
                 :rows="3"
                 maxlength="500"
@@ -91,21 +101,21 @@
               />
             </n-form-item-gi>
 
-            <n-form-item-gi v-if="isDeptLeaderTask" label="负责人上传清单" path="arrivalListFileIds" :span="2">
+            <n-form-item-gi v-if="isDeptLeaderTask && canShowTaskField('arrivalListFileIds')" label="负责人上传清单" path="arrivalListFileIds" :span="2">
               <FileUpload
                 v-model="taskForm.arrivalListFileIds"
                 business-type="sample_purchase_order"
                 :business-id="String(detail.id || '')"
                 :limit="5"
                 :file-size="20"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('arrivalListFileIds')"
                 upload-button-text="上传清单"
               />
             </n-form-item-gi>
-            <n-form-item-gi v-if="isDeptLeaderTask" label="部门负责人补充意见" path="deptLeaderRemark" :span="2">
+            <n-form-item-gi v-if="isDeptLeaderTask && canShowTaskField('deptLeaderRemark')" label="部门负责人补充意见" path="deptLeaderRemark" :span="2">
               <n-input
                 v-model:value="taskForm.deptLeaderRemark"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('deptLeaderRemark')"
                 type="textarea"
                 :rows="3"
                 maxlength="500"
@@ -113,10 +123,10 @@
               />
             </n-form-item-gi>
 
-            <n-form-item-gi v-if="isEngineeringTask" label="工程部经理意见" path="engineeringManagerRemark" :span="2">
+            <n-form-item-gi v-if="isEngineeringTask && canShowTaskField('engineeringManagerRemark')" label="工程部经理意见" path="engineeringManagerRemark" :span="2">
               <n-input
                 v-model:value="taskForm.engineeringManagerRemark"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('engineeringManagerRemark')"
                 type="textarea"
                 :rows="3"
                 maxlength="500"
@@ -124,10 +134,10 @@
               />
             </n-form-item-gi>
 
-            <n-form-item-gi v-if="isCountersignTask" label="会签意见" path="countersignRemark" :span="2">
+            <n-form-item-gi v-if="isCountersignTask && canShowTaskField('countersignRemark')" label="会签意见" path="countersignRemark" :span="2">
               <n-input
                 v-model:value="taskForm.countersignRemark"
-                :disabled="taskFormDisabled"
+                :disabled="isTaskFieldDisabled('countersignRemark')"
                 type="textarea"
                 :rows="3"
                 maxlength="500"
@@ -136,7 +146,7 @@
             </n-form-item-gi>
           </n-grid>
 
-          <n-alert v-if="!editableNodeFields.length" type="info" :show-icon="false">
+          <n-alert v-if="!writableNodeFields.length" type="info" :show-icon="false">
             当前节点只查看采购单，不开放业务字段编辑。
           </n-alert>
 
@@ -152,7 +162,7 @@
             />
           </n-form-item>
 
-          <div v-if="!props.readOnly" class="task-actions">
+          <div v-if="!taskRuntime.readOnly" class="task-actions">
             <slot name="actions" />
             <n-button
               v-if="canApprove"
@@ -399,6 +409,7 @@ import {
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictTag from '@/components/DictTag.vue'
 import FileUpload from '@/components/file-upload/index.vue'
+import { useBusinessTaskFormContext } from '@/composables/useBusinessTaskFormContext'
 import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'BusinessPurchaseOrderTest' })
@@ -422,7 +433,18 @@ const route = useRoute()
 const router = useRouter()
 const { dict } = useDict('sample_purchase_order_status')
 const statusOptions = computed(() => dict.value.sample_purchase_order_status || [])
-const isTaskFormMode = computed(() => Boolean(props.taskId || props.businessKey || props.processInstanceId))
+const taskRuntime = computed(() => ({
+  taskId: props.taskId || route.query.taskId || '',
+  businessKey: props.businessKey || route.query.businessKey || '',
+  processInstanceId: props.processInstanceId || route.query.processInstanceId || '',
+  taskDefKey: props.taskDefKey || route.query.taskDefKey || '',
+  processDefKey: props.processDefKey || route.query.processDefKey || '',
+  readOnly: props.readOnly || route.query.readOnly === 'true',
+}))
+const isTaskFormMode = computed(() => Boolean(taskRuntime.value.taskId || taskRuntime.value.businessKey || taskRuntime.value.processInstanceId))
+const currentTaskDefKey = computed(() => taskRuntime.value.taskDefKey || '')
+const taskRuntimeReadonly = computed(() => taskRuntime.value.readOnly)
+const businessTaskForm = useBusinessTaskFormContext({}, { readonly: taskRuntimeReadonly })
 
 const query = reactive({
   orderNo: '',
@@ -524,10 +546,10 @@ const localSubmitting = ref(false)
 const localSubmittingAction = ref('')
 const taskForm = reactive(defaultTaskForm())
 
-const isDeptLeaderTask = computed(() => props.taskDefKey === 'dept_leader_approve')
-const isEngineeringTask = computed(() => props.taskDefKey === 'engineering_manager_approve')
-const isCountersignTask = computed(() => props.taskDefKey === 'purchase_countersign')
-const isModifyTask = computed(() => props.taskDefKey === 'applicant_modify')
+const isDeptLeaderTask = computed(() => currentTaskDefKey.value === 'dept_leader_approve')
+const isEngineeringTask = computed(() => currentTaskDefKey.value === 'engineering_manager_approve')
+const isCountersignTask = computed(() => currentTaskDefKey.value === 'purchase_countersign')
+const isModifyTask = computed(() => currentTaskDefKey.value === 'applicant_modify')
 const editableNodeFields = computed(() => {
   if (isDeptLeaderTask.value)
     return ['arrivalListFileIds', 'deptLeaderRemark']
@@ -536,9 +558,10 @@ const editableNodeFields = computed(() => {
   if (isCountersignTask.value)
     return ['countersignRemark']
   if (isModifyTask.value)
-    return ['title', 'supplierName', 'amountCent', 'purchaseItems', 'applicantModifyRemark']
+    return ['title', 'supplierName', 'amountCent', 'purchaseItems', 'needDate', 'applicantModifyRemark']
   return []
 })
+const writableNodeFields = computed(() => editableNodeFields.value.filter(field => canShowTaskField(field) && canEditTaskField(field)))
 const currentNodeTitle = computed(() => {
   if (isDeptLeaderTask.value)
     return '部门负责人审批'
@@ -553,28 +576,74 @@ const currentNodeTitle = computed(() => {
 const canApprove = computed(() => props.approvalPolicy?.allowApprove !== false)
 const canReject = computed(() => props.approvalPolicy?.allowReject !== false)
 const requireComment = computed(() => props.approvalPolicy?.requireComment !== false)
-const taskFormDisabled = computed(() => props.readOnly || props.submitting || localSubmitting.value)
+const taskFormDisabled = computed(() => taskRuntime.value.readOnly || props.submitting || localSubmitting.value)
+
+function canShowTaskField(field) {
+  return businessTaskForm.canShowField(field)
+}
+
+function canEditTaskField(field) {
+  return businessTaskForm.canEditField(field)
+}
+
+function isTaskFieldDisabled(field) {
+  return taskFormDisabled.value || !canEditTaskField(field)
+}
+
+function isTaskFieldRequired(field, fallback = false) {
+  const permission = businessTaskForm.fieldPermission(field)
+  return permission ? permission.required === true : fallback
+}
+
+function shouldValidateTaskField(field, fallbackRequired = false) {
+  return canShowTaskField(field) && canEditTaskField(field) && isTaskFieldRequired(field, fallbackRequired)
+}
 
 const taskFormRules = computed(() => {
   const rules = {}
   if (isModifyTask.value) {
-    rules.title = { required: true, message: '请输入采购主题', trigger: ['blur', 'input'] }
-    rules.supplierName = { required: true, message: '请输入供应商', trigger: ['blur', 'input'] }
-    rules.amountYuan = {
-      required: true,
-      type: 'number',
-      validator: (_, value) => Number(value) > 0,
-      message: '采购金额必须大于0',
-      trigger: ['blur', 'change'],
+    if (shouldValidateTaskField('title', true))
+      rules.title = { required: true, message: '请输入采购主题', trigger: ['blur', 'input'] }
+    if (shouldValidateTaskField('supplierName', true))
+      rules.supplierName = { required: true, message: '请输入供应商', trigger: ['blur', 'input'] }
+    if (shouldValidateTaskField('amountCent', true)) {
+      rules.amountYuan = {
+        required: true,
+        type: 'number',
+        validator: (_, value) => Number(value) > 0,
+        message: '采购金额必须大于0',
+        trigger: ['blur', 'change'],
+      }
     }
+    if (shouldValidateTaskField('needDate'))
+      rules.needDate = { required: true, message: '请选择期望到货日期', trigger: ['blur', 'change'] }
+    if (shouldValidateTaskField('purchaseItems'))
+      rules.purchaseItems = { required: true, message: '请输入采购明细', trigger: ['blur', 'input'] }
+    if (shouldValidateTaskField('applicantModifyRemark'))
+      rules.applicantModifyRemark = { required: true, message: '请输入修改说明', trigger: ['blur', 'input'] }
   }
+  if (isDeptLeaderTask.value) {
+    if (shouldValidateTaskField('arrivalListFileIds'))
+      rules.arrivalListFileIds = { required: true, message: '请上传清单', trigger: ['change'] }
+    if (shouldValidateTaskField('deptLeaderRemark'))
+      rules.deptLeaderRemark = { required: true, message: '请输入部门负责人意见', trigger: ['blur', 'input'] }
+  }
+  if (isEngineeringTask.value && shouldValidateTaskField('engineeringManagerRemark'))
+    rules.engineeringManagerRemark = { required: true, message: '请输入工程部经理意见', trigger: ['blur', 'input'] }
+  if (isCountersignTask.value && shouldValidateTaskField('countersignRemark'))
+    rules.countersignRemark = { required: true, message: '请输入会签意见', trigger: ['blur', 'input'] }
   if (requireComment.value) {
     rules.comment = { required: true, message: '请输入审批意见', trigger: ['blur', 'input'] }
   }
   return rules
 })
 
-watch(() => [props.taskId, props.businessKey, props.processInstanceId], () => {
+watch(() => [
+  taskRuntime.value.taskId,
+  taskRuntime.value.businessKey,
+  taskRuntime.value.processInstanceId,
+  taskRuntime.value.taskDefKey,
+], () => {
   if (isTaskFormMode.value)
     loadTaskDetail()
 }, { immediate: true })
@@ -758,6 +827,7 @@ async function loadTaskDetail() {
     return
   detailLoading.value = true
   try {
+    await loadBusinessTaskContext()
     const res = await purchaseOrderDetail(query)
     if (res.code !== 200) {
       window.$message.error(res.message || '采购单详情加载失败')
@@ -765,6 +835,7 @@ async function loadTaskDetail() {
     }
     Object.keys(detail).forEach(key => delete detail[key])
     Object.assign(detail, res.data || {})
+    Object.assign(detail, businessTaskForm.recordData.value || {})
     Object.assign(taskForm, detailToTaskForm(detail))
   }
   finally {
@@ -772,22 +843,54 @@ async function loadTaskDetail() {
   }
 }
 
+async function loadBusinessTaskContext() {
+  try {
+    return await businessTaskForm.load({
+      taskId: taskRuntime.value.taskId,
+      businessKey: taskRuntime.value.businessKey,
+      processInstanceId: taskRuntime.value.processInstanceId,
+      processDefKey: taskRuntime.value.processDefKey,
+      taskDefKey: taskRuntime.value.taskDefKey,
+    })
+  }
+  catch (error) {
+    window.$message.warning(error?.message || '字段权限加载失败，将使用默认节点规则')
+    return null
+  }
+}
+
 async function saveTaskFields() {
   const recordQuery = resolveRecordQuery() || {}
-  const payload = {
-    id: detail.id || recordQuery.id,
-    businessKey: props.businessKey || recordQuery.businessKey,
-    taskId: props.taskId,
-    taskDefKey: props.taskDefKey,
+  const data = {
     title: taskForm.title,
     supplierName: taskForm.supplierName,
     amountCent: yuanToCent(taskForm.amountYuan),
     purchaseItems: taskForm.purchaseItems,
+    needDate: taskForm.needDate,
     arrivalListFileIds: taskForm.arrivalListFileIds,
     applicantModifyRemark: taskForm.applicantModifyRemark,
     deptLeaderRemark: taskForm.deptLeaderRemark,
     engineeringManagerRemark: taskForm.engineeringManagerRemark,
     countersignRemark: taskForm.countersignRemark,
+  }
+  if (businessTaskForm.context.value?.configured) {
+    const savedContext = await businessTaskForm.save(data, {
+      taskId: taskRuntime.value.taskId,
+      businessKey: taskRuntime.value.businessKey || recordQuery.businessKey,
+      processInstanceId: taskRuntime.value.processInstanceId,
+      processDefKey: taskRuntime.value.processDefKey,
+      taskDefKey: taskRuntime.value.taskDefKey,
+      recordId: detail.id || recordQuery.id,
+    })
+    Object.assign(detail, savedContext?.recordData || {})
+    return savedContext?.recordData
+  }
+  const payload = {
+    id: detail.id || recordQuery.id,
+    businessKey: taskRuntime.value.businessKey || recordQuery.businessKey,
+    taskId: taskRuntime.value.taskId,
+    taskDefKey: taskRuntime.value.taskDefKey,
+    ...data,
   }
   const res = await savePurchaseOrderTaskFields(payload)
   if (res.code !== 200)
@@ -809,7 +912,7 @@ async function submitTask(action) {
   localSubmittingAction.value = action
   try {
     await taskFormRef.value?.validate()
-    if (editableNodeFields.value.length)
+    if (writableNodeFields.value.length)
       await saveTaskFields()
     emit('submit', {
       action,
@@ -837,13 +940,14 @@ async function submitTask(action) {
 }
 
 function resolveRecordQuery() {
-  const businessKey = cleanBusinessKey(props.businessKey || props.variables?.businessKey)
+  const businessKey = cleanBusinessKey(taskRuntime.value.businessKey || props.variables?.businessKey)
   if (businessKey)
     return { businessKey }
 
   const id = normalizeSnowflakeId(props.variables?.purchaseOrderId)
-    || normalizeSnowflakeId(extractIdFromBusinessKey(props.businessKey || props.variables?.businessKey))
+    || normalizeSnowflakeId(extractIdFromBusinessKey(taskRuntime.value.businessKey || props.variables?.businessKey))
     || normalizeSnowflakeId(props.variables?.recordId)
+    || normalizeSnowflakeId(route.query.recordId)
   return id ? { id } : null
 }
 
@@ -934,6 +1038,7 @@ function defaultTaskForm() {
     supplierName: '',
     amountYuan: null,
     purchaseItems: '',
+    needDate: null,
     arrivalListFileIds: '',
     applicantModifyRemark: '',
     deptLeaderRemark: '',
@@ -973,6 +1078,7 @@ function detailToTaskForm(row) {
     supplierName: row.supplierName || '',
     amountYuan: centToYuan(row.amountCent),
     purchaseItems: row.purchaseItems || '',
+    needDate: row.needDate || null,
     arrivalListFileIds: row.arrivalListFileIds || '',
     applicantModifyRemark: row.applicantModifyRemark || '',
     deptLeaderRemark: row.deptLeaderRemark || '',

@@ -3,7 +3,7 @@
     <div class="flow-head">
       <div>
         <h3>流程与自动化</h3>
-        <p>绑定默认流程，配置标题模板和单据字段到流程变量的映射。</p>
+        <p>绑定默认流程，配置标题模板，并告诉流程哪些业务字段可用于条件分支和审批人规则。</p>
       </div>
       <n-space size="small">
         <n-button size="small" secondary :loading="loading" @click="loadBinding">
@@ -181,8 +181,8 @@
           <section class="flow-card">
             <div class="flow-card-head">
               <div>
-                <h4>变量映射</h4>
-                <p>把业务单据字段写入流程变量，供流程条件线、审批人表达式和标题模板使用。</p>
+                <h4>让流程认识你的业务字段</h4>
+                <p>把业务字段交给流程条件和审批人规则使用；例如金额映射为 amount 后，条件线才能判断 ${amount > 10000}。</p>
               </div>
             </div>
             <FlowVariableMappingEditor

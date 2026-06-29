@@ -2,8 +2,8 @@
   <div class="flow-variable-mapping-editor">
     <div class="mapping-guide">
       <div>
-        <strong>业务字段 -> 流程变量</strong>
-        <span>左边选择单据字段，右边选择流程模型里使用的变量。只有条件分支、审批人表达式或标题模板需要用到的字段才需要映射。</span>
+        <strong>让流程认识你的业务字段</strong>
+        <span>举例：金额(amount) → 流程条件 ${amount > 10000} 判断走总经理审批。</span>
       </div>
       <n-tag size="small" :type="suggestions.length ? 'info' : 'default'" :bordered="false">
         {{ suggestions.length ? `${suggestions.length} 条推荐` : '无推荐' }}
@@ -28,7 +28,7 @@
           :options="fieldOptions"
           clearable
           filterable
-          placeholder="单据字段"
+          placeholder="业务字段（来自当前业务单据）"
           @update:value="value => updateMapping(index, { formField: value, label: fieldLabel(value) })"
         />
         <span>→</span>
@@ -39,7 +39,7 @@
           clearable
           filterable
           tag
-          placeholder="流程变量"
+          placeholder="流程使用的变量名"
           @update:value="value => updateMapping(index, { flowVariable: value || '' })"
         />
         <n-button quaternary circle size="small" @click="removeMapping(index)">
@@ -49,7 +49,10 @@
         </n-button>
       </div>
     </div>
-    <n-empty v-else description="暂无变量映射" />
+    <n-empty
+      v-else
+      description="还没配置映射。如果流程有条件分支（如金额 > 10000 走总经理），需要把“金额”映射给变量 amount，否则分支不生效。"
+    />
 
     <n-alert v-if="warnings.length" type="warning" :bordered="false" class="mapping-warning">
       {{ warnings.join('；') }}

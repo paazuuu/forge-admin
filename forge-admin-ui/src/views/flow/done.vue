@@ -177,6 +177,8 @@
                 v-model="dynamicFormData"
                 :schema="taskFormInfo.formJson"
                 :field-permissions="taskFormInfo.formFieldPermissions"
+                :grid-cols="2"
+                label-placement="top"
                 read-only
               />
             </div>
@@ -216,6 +218,7 @@ import SignatureImage from '@/components/flow/SignatureImage.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
 import { getBusinessFormDisplayTitle, getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
@@ -287,12 +290,11 @@ const businessFormRenderContext = computed(() => ({
   businessFormContext: businessFormContext.value,
 }))
 const readonlyBusinessFormFieldPermissions = computed(() => {
-  const permissions = businessFormContext.value?.fieldPermissions || taskFormInfo.value?.fieldPermissions || taskFormInfo.value?.formFieldPermissions || []
-  return (Array.isArray(permissions) ? permissions : []).map(permission => ({
-    ...permission,
-    editable: false,
-    writable: false,
-  }))
+  return pickFirstNonEmptyFieldPermissions([
+    businessFormContext.value?.fieldPermissions,
+    taskFormInfo.value?.fieldPermissions,
+    taskFormInfo.value?.formFieldPermissions,
+  ], { readOnly: true })
 })
 const readonlyBusinessFormFields = computed(() => {
   return (businessFormContext.value?.fields || []).map(field => ({
@@ -469,6 +471,9 @@ function openBusinessCodeForm() {
       businessKey: businessFormContext.value?.businessKey,
       processInstanceId: businessFormContext.value?.processInstanceId,
       taskDefKey: businessFormContext.value?.taskDefKey,
+      processDefKey: businessFormContext.value?.processDefKey,
+      objectCode: businessFormContext.value?.objectCode,
+      recordId: businessFormContext.value?.recordId,
       source: 'flowDone',
       readOnly: 'true',
     }),

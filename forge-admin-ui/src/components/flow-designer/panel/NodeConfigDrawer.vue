@@ -108,14 +108,28 @@ function handleClose() {
   emit('update:visible', false)
 }
 
-function handleSave() {
+function buildDraftPatch() {
   if (!draftNode.value)
-    return
-  const patch = {
+    return null
+  return {
     name: draftNode.value.name,
     config: draftNode.value.config,
   }
+}
+
+function commitDraft() {
+  if (props.readonly)
+    return false
+  const patch = buildDraftPatch()
+  if (!patch || !draftNode.value)
+    return false
   emit('save', patch, draftNode.value.id)
+  return true
+}
+
+function handleSave() {
+  if (!commitDraft())
+    return
   emit('update:visible', false)
 }
 
@@ -136,6 +150,10 @@ function updateEdge(edgeId, patch) {
 function cloneDeep(v) {
   return JSON.parse(JSON.stringify(v))
 }
+
+defineExpose({
+  commitDraft,
+})
 </script>
 
 <template>

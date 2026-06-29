@@ -9,6 +9,9 @@ import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderFlowInitVO
 import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderVO;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 
+import java.util.Collection;
+import java.util.List;
+
 /**
  * 采购单审批测试服务。
  */
@@ -33,6 +36,8 @@ public interface SamplePurchaseOrderService {
     IPage<SamplePurchaseOrderVO> page(PageQuery pageQuery, SamplePurchaseOrderQuery query);
 
     SamplePurchaseOrderVO detail(Long id);
+
+    List<SamplePurchaseOrderVO> detailsByIds(Collection<Long> ids);
 
     SamplePurchaseOrderVO detailByBusinessKey(String businessKey);
 

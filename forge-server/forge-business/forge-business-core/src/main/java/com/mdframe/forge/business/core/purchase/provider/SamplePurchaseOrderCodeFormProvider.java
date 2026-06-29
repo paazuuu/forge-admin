@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,35 @@ public class SamplePurchaseOrderCodeFormProvider implements BusinessCodeFormProv
     @Override
     public String providerName() {
         return "采购单审批代码表单";
+    }
+
+    @Override
+    public String buildSummary(Map<String, Object> recordData) {
+        if (recordData == null || recordData.isEmpty()) {
+            return null;
+        }
+        String orderNo = text(recordData.get("orderNo"));
+        String applicant = text(recordData.get("applicantName"));
+        return buildSummary(orderNo, applicant);
+    }
+
+    @Override
+    public Map<Long, String> buildSummaries(String objectCode, Collection<Long> recordIds) {
+        if (StringUtils.hasText(objectCode)
+                && !SamplePurchaseOrderService.BUSINESS_TYPE.equalsIgnoreCase(objectCode)) {
+            return Map.of();
+        }
+        List<SamplePurchaseOrderVO> details = purchaseOrderService.detailsByIds(recordIds);
+        if (details == null || details.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> result = new LinkedHashMap<>();
+        for (SamplePurchaseOrderVO detail : details) {
+            if (detail != null && detail.getId() != null) {
+                result.put(detail.getId(), buildSummary(detail));
+            }
+        }
+        return result;
     }
 
     @Override
@@ -204,8 +234,12 @@ public class SamplePurchaseOrderCodeFormProvider implements BusinessCodeFormProv
     }
 
     private String buildSummary(SamplePurchaseOrderVO detail) {
-        String orderNo = StringUtils.hasText(detail.getOrderNo()) ? detail.getOrderNo() : "未编号";
-        String applicant = StringUtils.hasText(detail.getApplicantName()) ? detail.getApplicantName() : "未知申请人";
+        return buildSummary(detail.getOrderNo(), detail.getApplicantName());
+    }
+
+    private String buildSummary(String orderNoValue, String applicantValue) {
+        String orderNo = StringUtils.hasText(orderNoValue) ? orderNoValue : "未编号";
+        String applicant = StringUtils.hasText(applicantValue) ? applicantValue : "未知申请人";
         return "采购申请单 · " + orderNo + " · " + applicant;
     }
 

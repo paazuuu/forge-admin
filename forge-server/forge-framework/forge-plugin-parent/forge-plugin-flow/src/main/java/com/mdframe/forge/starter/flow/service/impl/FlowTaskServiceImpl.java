@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.flow.client.spi.FlowBusinessListDisplayAdapter;
+import com.mdframe.forge.flow.client.spi.FlowBusinessListDisplayItem;
 import com.mdframe.forge.plugin.message.service.MessageService;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
@@ -133,19 +135,22 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
     @Autowired(required = false)
     private FlowFormInstanceMapper flowFormInstanceMapper;
 
-@Override
+    @Autowired(required = false)
+    private FlowBusinessListDisplayAdapter flowBusinessListDisplayAdapter;
+
+    @Override
     public IPage<FlowTask> todoTasks(Page<FlowTask> page, String userId, String title, String category, Integer status) {
-        return this.getBaseMapper().selectTodoTasks(page, userId, title, category, status);
+        return enrichTaskPage(this.getBaseMapper().selectTodoTasks(page, userId, title, category, status));
     }
 
     @Override
     public IPage<FlowTask> doneTasks(Page<FlowTask> page, String userId, String title, String category, Integer status) {
-        return this.getBaseMapper().selectDoneTasks(page, userId, title, category, status);
+        return enrichTaskPage(this.getBaseMapper().selectDoneTasks(page, userId, title, category, status));
     }
 
     @Override
     public IPage<FlowTask> startedTasks(Page<FlowTask> page, String userId, String title, String category, Integer status) {
-        return this.getBaseMapper().selectStartedTasks(page, userId, title, category, status);
+        return enrichTaskPage(this.getBaseMapper().selectStartedTasks(page, userId, title, category, status));
     }
 
     @Override
@@ -194,7 +199,71 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                 .like(title != null, FlowTask::getTitle, title)
                 .orderByDesc(FlowTask::getCreateTime);
         
-        return page(page, wrapper);
+        return enrichTaskPage(page(page, wrapper));
+    }
+
+    private IPage<FlowTask> enrichTaskPage(IPage<FlowTask> page) {
+        if (flowBusinessListDisplayAdapter == null || page == null || page.getRecords() == null
+                || page.getRecords().isEmpty()) {
+            return page;
+        }
+        List<FlowBusinessListDisplayItem> items = page.getRecords().stream()
+                .map(this::toDisplayItem)
+                .collect(Collectors.toList());
+        try {
+            flowBusinessListDisplayAdapter.enrich(items);
+            for (int i = 0; i < page.getRecords().size(); i++) {
+                applyDisplayItem(page.getRecords().get(i), items.get(i));
+            }
+        } catch (Exception e) {
+            log.warn("补齐流程任务业务摘要失败，继续返回流程基础信息: {}", e.getMessage());
+        }
+        return page;
+    }
+
+    private FlowBusinessListDisplayItem toDisplayItem(FlowTask task) {
+        FlowBusinessListDisplayItem item = new FlowBusinessListDisplayItem();
+        item.setBusinessKey(task.getBusinessKey());
+        item.setProcessInstanceId(task.getProcessInstanceId());
+        item.setProcessDefKey(task.getProcessDefKey());
+        item.setProcessName(task.getProcessName());
+        item.setProcessDefinitionName(task.getProcessDefinitionName());
+        item.setTaskId(task.getTaskId());
+        item.setTaskName(task.getTaskName());
+        item.setTitle(task.getTitle());
+        item.setObjectCode(task.getObjectCode());
+        item.setRecordId(task.getRecordId());
+        item.setBusinessObjectName(task.getBusinessObjectName());
+        item.setBusinessSummary(task.getBusinessSummary());
+        return item;
+    }
+
+    private void applyDisplayItem(FlowTask task, FlowBusinessListDisplayItem item) {
+        if (item == null) {
+            return;
+        }
+        task.setObjectCode(firstNonBlank(item.getObjectCode(), task.getObjectCode()));
+        task.setRecordId(item.getRecordId() != null ? item.getRecordId() : task.getRecordId());
+        task.setBusinessObjectName(firstNonBlank(item.getBusinessObjectName(), task.getBusinessObjectName()));
+        task.setBusinessSummary(firstNonBlank(item.getBusinessSummary(), task.getBusinessSummary()));
+        task.setProcessName(firstNonBlank(task.getProcessName(), item.getProcessName()));
+        task.setProcessDefinitionName(firstNonBlank(
+                task.getProcessDefinitionName(),
+                item.getProcessDefinitionName(),
+                task.getProcessName(),
+                task.getProcessDefKey()));
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -1849,18 +1918,6 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             config.formFieldPermissions = formFieldPermissionElements.get(0).getElementText();
         }
         return config;
-    }
-
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (!isBlank(value)) {
-                return value;
-            }
-        }
-        return null;
     }
 
     private void hydrateFormInstanceSnapshot(TaskFormInfo formInfo, String processInstanceId) {

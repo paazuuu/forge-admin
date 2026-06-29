@@ -34,6 +34,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -72,6 +73,18 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
             throw new BusinessException("采购单不存在");
         }
         return detail;
+    }
+
+    @Override
+    public List<SamplePurchaseOrderVO> detailsByIds(Collection<Long> ids) {
+        List<Long> normalizedIds = ids == null ? List.of() : ids.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (normalizedIds.isEmpty()) {
+            return List.of();
+        }
+        return getBaseMapper().selectDetailsByIds(resolveTenantId(), normalizedIds);
     }
 
     @Override
