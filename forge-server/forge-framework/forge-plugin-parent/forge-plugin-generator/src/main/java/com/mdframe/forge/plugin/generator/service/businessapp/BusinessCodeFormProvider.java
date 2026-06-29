@@ -36,6 +36,13 @@ public interface BusinessCodeFormProvider {
     }
 
     /**
+     * 根据业务记录构建用户可读摘要。默认不提供，由具体 Provider 按业务字段实现。
+     */
+    default String buildSummary(Map<String, Object> recordData) {
+        return null;
+    }
+
+    /**
      * 构建待办页代码业务表单上下文。
      */
     BusinessTaskFormContextVO buildContext(BusinessTaskFormContextQueryDTO query,

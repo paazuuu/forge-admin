@@ -3,9 +3,9 @@
  * ApproverConfig — 审批人节点完整配置
  *
  * 内部用 NTabs 切换：
- *   - basic        审批设置（assignee / candidates / form 引用）
+ *   - basic        审批办理（assignee / candidates / 会签）
  *   - multi        会签设置（multiInstance + completionCondition）
- *   - form         表单字段权限（formFieldPermissions 列表）
+ *   - form         表单资产和字段权限（formKey / formFieldPermissions 列表）
  *   - permissions  审批操作权限（7 个布尔开关）
  *   - extensions   逾期提醒 / 任务监听器 / 执行监听器
  *
@@ -19,6 +19,7 @@
  *   - update:config   增量 patch，外层 NodeConfigDrawer 合并到 draftNode.config
  */
 import { computed, ref } from 'vue'
+import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
 import ApproverAssigneeForm from './ApproverAssigneeForm.vue'
 import BasicConfig from './BasicConfig.vue'
 import FormPermissionConfig from './FormPermissionConfig.vue'
@@ -29,6 +30,7 @@ import PermissionConfig from './PermissionConfig.vue'
 
 const props = defineProps({
   node: { type: Object, required: true },
+  formAssetOptions: { type: Array, default: () => [] },
   formFieldCatalog: { type: Array, default: () => [] },
   readonly: Boolean,
 })
@@ -38,6 +40,49 @@ const emit = defineEmits(['update:config', 'update:node'])
 const tab = ref('basic')
 
 const config = computed(() => props.node?.config || {})
+const normalizedFormAssetOptions = computed(() => (props.formAssetOptions || [])
+  .map((item) => {
+    const value = String(item?.value || item?.formKey || item?.key || '').trim()
+    if (!value)
+      return null
+    return {
+      ...item,
+      value,
+      formKey: item?.formKey || value,
+      formName: item?.formName || item?.label || value,
+      label: item?.label || `${item?.formName || value}（${value}）`,
+      formMode: item?.formMode || item?.type || 'BUSINESS_OBJECT_FORM',
+      providerKey: item?.providerKey || '',
+      providerName: item?.providerName || '',
+      objectName: item?.objectName || '',
+      sourceType: item?.sourceType || item?.source || '',
+      fieldCount: item?.fieldCount,
+      fieldPreview: item?.fieldPreview || [],
+      fieldCatalog: Array.isArray(item?.fieldCatalog) ? item.fieldCatalog : [],
+    }
+  })
+  .filter(Boolean))
+const selectedFormAsset = computed(() => {
+  const formKey = String(config.value.formKey || '').trim()
+  if (!formKey)
+    return null
+  return normalizedFormAssetOptions.value.find(item => item.value === formKey || item.formKey === formKey) || null
+})
+const activeFormFieldCatalog = computed(() => {
+  if (selectedFormAsset.value?.fieldCatalog?.length)
+    return selectedFormAsset.value.fieldCatalog
+  return props.formFieldCatalog
+})
+const nodeFormForAssetSelect = computed(() => ({
+  formMode: config.value.formMode
+    || selectedFormAsset.value?.formMode
+    || normalizedFormAssetOptions.value[0]?.formMode
+    || 'BUSINESS_OBJECT_FORM',
+  formKey: config.value.formKey || '',
+  formName: config.value.formName || '',
+  providerKey: config.value.providerKey || '',
+  formUrl: config.value.formUrl || '',
+}))
 
 function patch(part) {
   emit('update:config', part)
@@ -46,12 +91,41 @@ function patch(part) {
 function updateNode(node) {
   emit('update:node', node)
 }
+
+function handleFormAssetUpdate(partial = {}) {
+  if (!partial.formKey) {
+    patch({
+      formType: 'none',
+      formMode: '',
+      formKey: '',
+      formName: '',
+      providerKey: '',
+      formJson: '',
+      formUrl: '',
+      formRef: {},
+      formFieldPermissions: [],
+    })
+    return
+  }
+  patch({
+    formType: 'dynamic',
+    formMode: partial.formMode || 'BUSINESS_OBJECT_FORM',
+    formKey: partial.formKey || '',
+    formName: partial.formName || partial.formKey || '',
+    providerKey: partial.providerKey || '',
+    formJson: '',
+    formUrl: partial.formUrl || '',
+    viewKey: partial.viewKey || 'default',
+    formRef: partial.formRef || {},
+    formFieldPermissions: [],
+  })
+}
 </script>
 
 <template>
   <div class="approver-config">
     <n-tabs v-model:value="tab" type="line" size="large" animated>
-      <n-tab-pane name="basic" tab="审批人设置">
+      <n-tab-pane name="basic" tab="审批办理">
         <BasicConfig
           :node="node"
           :readonly="readonly"
@@ -74,9 +148,29 @@ function updateNode(node) {
         </div>
       </n-tab-pane>
       <n-tab-pane name="form" tab="表单权限">
+        <div class="config-section-block">
+          <div class="config-section-title">
+            节点表单资产
+          </div>
+          <div class="node-form-asset-block">
+            <BusinessFlowFormAssetSelect
+              :node-form="nodeFormForAssetSelect"
+              :form-assets="normalizedFormAssetOptions"
+              :disabled="readonly"
+              show-all-modes
+              @update="handleFormAssetUpdate"
+            />
+            <n-tag size="small" :type="config.formKey ? 'success' : 'default'" :bordered="false">
+              {{ config.formKey ? '已绑定' : '未绑定' }}
+            </n-tag>
+          </div>
+          <div class="node-form-asset-hint">
+            运行时按节点 formKey 加载表单资产，并按下方字段权限控制该节点可见、可编辑和必填字段。
+          </div>
+        </div>
         <FormPermissionConfig
           :config="config"
-          :form-field-catalog="formFieldCatalog"
+          :form-field-catalog="activeFormFieldCatalog"
           :readonly="readonly"
           @update:config="patch"
         />
@@ -113,3 +207,19 @@ function updateNode(node) {
     </n-tabs>
   </div>
 </template>
+
+<style scoped>
+.node-form-asset-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.node-form-asset-hint {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+</style>

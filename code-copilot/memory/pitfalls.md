@@ -2170,3 +2170,53 @@ Forge 后端已通过 Jackson `BigNumberSerializer` 将超出 JS 安全范围的
 - 流程外部表单 `variables`
 - 用户选择器返回值
 - 所有前端 API 请求中的后端 `Long` 主键和流程业务键
+
+## 79. 代码表单 Provider 不能依赖低代码运行配置 configKey
+
+**发现日期**: 2026-06-28
+
+**问题描述**:
+代码实现的复杂业务通过 `BusinessCodeFormProvider` 接入流程节点表单时，业务记录可能没有低代码 `AiCrudConfig.configKey`。如果 `BusinessFlowService.buildTaskFormContext()` 在进入节点表单解析前要求 `runtime.configKey` 不为空，纯代码业务会提前返回“未解析到业务对象、记录或运行配置”，导致 Provider 没有机会加载表单内容。
+
+**根本原因**:
+低代码业务表单需要 `configKey` 调用 `DynamicCrudService` 读取和保存记录，但代码表单 Provider 自己负责业务记录加载与保存，不能被低代码运行配置前置条件阻断。
+
+**解决方案**:
+- `buildTaskFormContext()` 只在低代码 `BUSINESS_OBJECT_FORM` 分支要求 `configKey`。
+- `saveTaskFormContext()` 严格模式下，如果当前节点是 `BUSINESS_CODE_FORM`，允许 `configKey` 为空并交给 Provider 保存。
+- `BUSINESS_CODE_FORM` 保存前仍必须由平台按节点字段权限过滤 `dto.data`，Provider 只接收允许写入的字段。
+
+**影响范围**:
+- 采购单审批测试等代码优先流程业务
+- 任何不通过低代码应用创建、但要复用平台待办/已办表单上下文的复杂业务
+
+## 80. AiForm 字段权限必须由组件和调用端共同接入
+
+**发现日期**: 2026-06-29
+
+**问题描述**:
+流程节点字段权限已经保存到 BPMN，并由后端待办表单上下文返回 `fieldPermissions`，但业务托管表单使用 `<AiForm>` 渲染时如果组件本身不消费该 prop，或 `todo.vue/done.vue` 没有把权限传进去，前端仍会展示可编辑字段。后端虽然会过滤不可写字段，但用户感知是“配置不生效”。
+
+**解决方案**:
+- `AiForm.vue` 必须支持 `fieldPermissions`，按字段编码处理 `visible/editable/required` 三态。
+- 待办页业务托管表单分支必须传入 `taskFormInfo.fieldPermissions` / `businessFormContext.fieldPermissions`。
+- 已办、历史详情这类场景必须在调用端强制把所有可见字段覆盖为 `editable=false`，不能只依赖原节点配置。
+
+**影响范围**:
+- 流程待办 / 已办中的业务托管表单。
+- 任何未来复用 `AiForm` 承载节点级字段权限的页面。
+
+## 81. 应用中心对象设计器 URL 统一使用 object/:objectCode/designer
+
+**发现日期**: 2026-06-29
+
+**问题描述**:
+历史代码里存在 `/app-center/object-designer/:objectCode` 或 `object-designer/sample_purchase_order` 风格入口。当前应用中心对象设计器主链路已经收敛到 `/app-center/object/:objectCode/designer`，如果新增跳转继续使用旧 URL，会出现路由不一致、菜单高亮异常或进入旧兼容组件的问题。
+
+**解决方案**:
+- 新增入口统一使用 `/app-center/object/{objectCode}/designer?panel=...`。
+- 搜索旧 URL 时，允许保留 `router/index.js` 对旧组件文件的兼容 import，但业务跳转、卡片入口、流程 Banner 返回入口不能再拼旧路径。
+
+**影响范围**:
+- 应用中心对象卡片、业务域卡片、流程设计器返回业务应用按钮。
+- 代码应用“表单字段”只读面板和流程配置入口。

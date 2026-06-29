@@ -66,7 +66,7 @@
         </span>
       </template>
       <template #title="{ row }">
-        {{ row.title || '-' }}
+        {{ getRowDisplayTitle(row) }}
       </template>
       <template #meta="{ row }">
         <span>
@@ -101,7 +101,7 @@
         <div class="cc-detail-header">
           <div>
             <div class="cc-detail-title">
-              {{ currentCc?.title || '抄送详情' }}
+              {{ currentCc ? getRowDisplayTitle(currentCc) : '抄送详情' }}
             </div>
             <div class="cc-detail-meta">
               {{ activeTab === 'received' ? '抄送给我的' : '我发送的' }}
@@ -148,7 +148,7 @@
                 业务表单
               </div>
               <div class="cc-business-form-subtitle">
-                {{ ccFormInfo?.title || currentCc.title || '-' }}
+                {{ ccFormInfo?.title || getRowDisplayTitle(currentCc) }}
               </div>
             </div>
           </div>
@@ -192,6 +192,7 @@ import UserAvatar from '@/components/common/UserAvatar.vue'
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const { dict, getLabel } = useDict('flow_read_status')

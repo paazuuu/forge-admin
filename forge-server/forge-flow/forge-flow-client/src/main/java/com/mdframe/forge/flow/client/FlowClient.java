@@ -247,6 +247,14 @@ public class FlowClient {
     }
 
     /**
+     * 获取任务表单信息，包含流程节点上的 formKey/formUrl/formFieldPermissions。
+     */
+    public FlowResult<Map<String, Object>> getTaskFormInfo(String taskId) {
+        String url = flowServiceUrl + "/api/flow/task/form/" + taskId;
+        return get(url, new TypeReference<FlowResult<Map<String, Object>>>() {});
+    }
+
+    /**
      * 签收任务
      */
     public FlowResult<Void> claimTask(String taskId, String userId) {
@@ -430,7 +438,7 @@ public class FlowClient {
             throw new FlowClientException("调用流程服务失败 [GET " + url + "]: " + e.getMessage(), e);
         }
     }
-    
+
     private <T> T post(String url, Object body, TypeReference<T> typeReference) {
         try {
             String json = body != null ? objectMapper.writeValueAsString(body) : null;

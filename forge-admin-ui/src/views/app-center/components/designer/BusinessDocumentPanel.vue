@@ -319,23 +319,8 @@ async function loadConfig() {
 async function saveConfig() {
   if (!props.objectId)
     return
-  if (form.documentEnabled && !form.statusField) {
-    message.warning('启用单据模式后必须选择状态字段')
+  if (!validateBeforeSave())
     return
-  }
-  if (form.documentEnabled && form.statusField && !statusValueOptions.value.length) {
-    message.warning('状态字段未配置字典或选项，不能保存状态映射')
-    return
-  }
-  ensureDocumentNoField()
-  if (form.documentEnabled && form.noRuleTemplate && !form.options.documentNoField) {
-    message.warning('配置编号规则后必须选择编号字段')
-    return
-  }
-  if (noRulePreview.value?.valid === false) {
-    message.warning('编号规则存在错误，请先修正预览提示')
-    return
-  }
   saving.value = true
   try {
     await saveBusinessDocumentConfig(props.objectId, buildPayload())
@@ -347,6 +332,27 @@ async function saveConfig() {
   finally {
     saving.value = false
   }
+}
+
+function validateBeforeSave() {
+  if (form.documentEnabled && !form.statusField) {
+    message.warning('启用单据模式后必须选择状态字段')
+    return false
+  }
+  if (form.documentEnabled && form.statusField && !statusValueOptions.value.length) {
+    message.warning('状态字段未配置字典或选项，不能保存状态映射')
+    return false
+  }
+  ensureDocumentNoField()
+  if (form.documentEnabled && form.noRuleTemplate && !form.options.documentNoField) {
+    message.warning('配置编号规则后必须选择编号字段')
+    return false
+  }
+  if (noRulePreview.value?.valid === false) {
+    message.warning('编号规则存在错误，请先修正预览提示')
+    return false
+  }
+  return true
 }
 
 function buildPayload() {
@@ -595,6 +601,9 @@ function markDirty() {
 defineExpose({
   saveConfig,
   loadConfig,
+  assignConfig,
+  buildPayload,
+  validateBeforeSave,
 })
 </script>
 

@@ -21,6 +21,10 @@ public class BusinessTaskFormContextVO {
 
     private String objectCode;
 
+    private String businessObjectName;
+
+    private String businessSummary;
+
     private String configKey;
 
     private Long recordId;

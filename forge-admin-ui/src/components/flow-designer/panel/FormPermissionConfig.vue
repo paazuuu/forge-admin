@@ -2,7 +2,7 @@
 /**
  * FormPermissionConfig — 表单字段权限
  *
- * 由流程全局动态表单字段目录生成，不再手工输入字段名。
+ * 由当前流程字段目录生成，不再手工输入字段名。
  * config.formFieldPermissions: [{ field, label, readable, writable, required }]
  */
 import { computed } from 'vue'
@@ -111,7 +111,7 @@ function update(field, patch) {
           表单字段权限
         </div>
         <div class="form-permission-desc">
-          按流程全局表单字段控制当前审批节点的可见、可编辑和必填。
+          按当前流程字段目录控制该审批节点的可见、可编辑和必填。
         </div>
       </div>
       <n-tag size="small" :type="configuredCount > 0 ? 'info' : 'default'" :bordered="false">
@@ -126,7 +126,7 @@ function update(field, patch) {
           暂无可配置字段
         </div>
         <div class="form-permission-empty-desc">
-          请先在“更多设置 / 表单配置”中配置动态表单，保存后这里会自动列出字段。
+          请先为流程选择动态表单，或从应用中心带业务对象进入流程设计器。
         </div>
       </div>
     </div>

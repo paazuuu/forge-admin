@@ -96,7 +96,7 @@
                   <template v-else-if="action.actionType === 'START_FLOW'">
                     <n-form-item-gi :span="3" label="主流程">
                       <div class="main-flow-action-hint">
-                        <strong>使用“流程与自动化”中配置的主流程</strong>
+                        <strong>使用“业务流程配置”中维护的主流程</strong>
                         <span>这里只维护按钮名称、位置、权限和确认文案。</span>
                       </div>
                     </n-form-item-gi>
@@ -219,7 +219,7 @@
         </section>
         <section>
           <h4>发布关注</h4>
-          <p>发起主流程按钮会复用当前对象的主流程配置；流程模型、标题和变量映射在流程与自动化里维护。</p>
+          <p>发起主流程按钮会复用当前对象的主流程配置；流程模型、标题和变量映射在业务流程配置里维护。</p>
         </section>
       </aside>
     </div>

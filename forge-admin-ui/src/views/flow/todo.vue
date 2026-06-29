@@ -68,7 +68,7 @@
         </span>
       </template>
       <template #title="{ row }">
-        {{ row.title || row.taskName }}
+        {{ getRowDisplayTitle(row) }}
       </template>
       <template #meta="{ row }">
         <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
@@ -133,7 +133,7 @@
     <FlowTaskDetailShell
       v-model:show="showDrawer"
       :busy="approveLoading"
-      :title="currentTask?.title || '审批详情'"
+      :title="currentTask ? getRowDisplayTitle(currentTask) : '审批详情'"
       :subtitle="currentTask?.taskName ? `当前节点：${currentTask.taskName}` : ''"
       :status-text="getLabel('flow_todo_status', currentTask?.status)"
       :status-class="currentTask?.status === 0 ? 'todo-status-pending' : 'todo-status-active'"
@@ -246,14 +246,15 @@
               <span>加载业务表单中...</span>
             </div>
 
-            <div v-else-if="useBusinessObjectForm" class="business-task-form-section">
+            <div v-else-if="useBusinessManagedForm" class="business-task-form-section">
               <div class="approval-form-title">
-                {{ businessFormTitle }}
+                <span>{{ businessFormTitle }}</span>
               </div>
               <AiForm
                 ref="businessFormRef"
                 v-model:value="businessFormData"
                 :schema="businessFormContext.fields || []"
+                :field-permissions="businessFormFieldPermissions"
                 :show-actions="false"
                 :show-feedback="true"
                 :grid-cols="2"
@@ -265,8 +266,9 @@
                   {{ warning }}
                 </n-alert>
               </div>
-              <div v-if="businessFormHasWritableFields" class="business-form-actions">
+              <div v-if="businessFormHasWritableFields || (useBusinessCodeForm && businessCodeFormUrl)" class="business-form-actions">
                 <NButton
+                  v-if="businessFormHasWritableFields"
                   type="primary"
                   secondary
                   :loading="businessFormSaving"
@@ -275,24 +277,13 @@
                 >
                   保存业务字段
                 </NButton>
-              </div>
-            </div>
-
-            <div v-else-if="useBusinessCodeForm" class="business-task-form-section">
-              <div class="approval-form-title">
-                {{ businessFormTitle }}
-              </div>
-              <div class="business-form-warnings">
-                <n-alert v-for="warning in businessFormWarnings" :key="warning" type="warning" :show-icon="false">
-                  {{ warning }}
-                </n-alert>
-                <n-alert v-if="!businessCodeFormUrl" type="warning" :show-icon="false">
-                  当前代码业务表单未提供可打开地址
-                </n-alert>
-              </div>
-              <div v-if="businessCodeFormUrl" class="business-form-actions">
-                <NButton type="primary" secondary :disabled="isApprovalBusy" @click="openBusinessCodeForm">
-                  打开业务表单
+                <NButton
+                  v-if="useBusinessCodeForm && businessCodeFormUrl"
+                  secondary
+                  :disabled="isApprovalBusy"
+                  @click="openBusinessCodeForm"
+                >
+                  打开完整业务页
                 </NButton>
               </div>
             </div>
@@ -469,6 +460,7 @@ import SignaturePad from '@/components/flow/SignaturePad.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { getBusinessFormDisplayTitle, getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const route = useRoute()
@@ -517,7 +509,6 @@ const approvalHistory = ref([])
 // 业务自定义表单
 const taskFormInfo = ref(null)
 const formInfoLoading = ref(false)
-const useExternalForm = computed(() => taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
 const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
 const dynamicFormRef = ref(null)
 const dynamicFormData = ref({})
@@ -528,10 +519,13 @@ const businessFormLoading = ref(false)
 const businessFormSaving = ref(false)
 const useBusinessObjectForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-object')
 const useBusinessCodeForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-code')
-const businessFormTitle = computed(() => businessFormContext.value?.formName || '业务表单')
+const useBusinessManagedForm = computed(() => useBusinessObjectForm.value || useBusinessCodeForm.value)
+const useExternalForm = computed(() => !useBusinessManagedForm.value && taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
+const businessFormTitle = computed(() => getBusinessFormDisplayTitle(businessFormContext.value, '业务表单'))
 const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
 const businessFormHasWritableFields = computed(() => hasWritableBusinessFormFields(businessFormContext.value))
 const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
+const businessFormFieldPermissions = computed(() => businessFormContext.value?.fieldPermissions || taskFormInfo.value?.fieldPermissions || taskFormInfo.value?.formFieldPermissions || [])
 const businessFormRenderContext = computed(() => ({
   task: currentTask.value,
   taskFormInfo: taskFormInfo.value,
@@ -686,7 +680,7 @@ function buildBusinessTaskFormSavePayload() {
 }
 
 async function saveBusinessTaskFormFields(options = {}) {
-  if (!useBusinessObjectForm.value || !businessFormHasWritableFields.value)
+  if (!useBusinessManagedForm.value || !businessFormHasWritableFields.value)
     return null
 
   const { validate = true, silent = true } = options
@@ -720,7 +714,7 @@ async function saveBusinessTaskFormFields(options = {}) {
 async function persistBusinessTaskFormBeforeAction(action) {
   if (action !== 'approve')
     return
-  if (!useBusinessObjectForm.value || !businessFormHasWritableFields.value)
+  if (!useBusinessManagedForm.value || !businessFormHasWritableFields.value)
     return
   await saveBusinessTaskFormFields({ validate: true, silent: true })
 }
@@ -977,15 +971,17 @@ async function claimTaskBeforeQuickAction(row, taskId) {
 }
 
 function assertQuickActionAllowed(action, formInfo, businessFormContext = null) {
+  const businessManaged = businessFormContext?.configured === true
+    && ['business-object', 'business-code'].includes(businessFormContext?.formType)
   if (action === 'approve' && formInfo?.allowApprove === false)
     throw new Error('当前节点不允许同意')
   if (action === 'reject' && formInfo?.allowReject === false)
     throw new Error('当前节点不允许驳回')
   if (formInfo?.requireSignature === true)
     throw new Error('需要手写签名，请进入详情处理')
-  if (action === 'approve' && formInfo?.formType === 'dynamic' && formInfo?.formJson)
+  if (action === 'approve' && !businessManaged && formInfo?.formType === 'dynamic' && formInfo?.formJson)
     throw new Error('需要填写节点表单，请进入详情处理')
-  if (action === 'approve' && formInfo?.formType === 'external' && formInfo?.formUrl)
+  if (action === 'approve' && !businessManaged && formInfo?.formType === 'external' && formInfo?.formUrl)
     throw new Error('需要填写业务表单，请进入详情处理')
   if (action === 'approve' && businessFormContext?.configured === true && businessFormContext?.formType === 'business-code')
     throw new Error('需要进入业务表单处理')
@@ -1678,6 +1674,16 @@ watch(
   background: #f8fafc;
 }
 
+.approval-form-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .business-form-warnings {
   display: flex;
   flex-direction: column;
@@ -1688,6 +1694,7 @@ watch(
 .business-form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 12px;
 }
 

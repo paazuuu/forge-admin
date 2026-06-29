@@ -138,4 +138,46 @@
         LIMIT 1
     </select>
 
+    <select id="selectFlowBindingsByModelKey" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingSummaryVO">
+        SELECT
+          b.id AS bindingId,
+          COALESCE(NULLIF(b.binding_key, ''), #{modelKey}) AS flowModelKey,
+          b.binding_name AS bindingName,
+          b.target_code AS objectCode,
+          COALESCE(o.object_name, b.target_code) AS objectName,
+          s.suite_name AS suiteName,
+          CASE
+            WHEN JSON_VALID(o.options) AND JSON_UNQUOTE(JSON_EXTRACT(o.options, '$.codeApp')) = 'true' THEN 1
+            WHEN JSON_VALID(o.designer_options) AND JSON_UNQUOTE(JSON_EXTRACT(o.designer_options, '$.codeApp')) = 'true' THEN 1
+            ELSE 0
+          END AS codeApp,
+          CONCAT(
+            '/app-center/object/', b.target_code, '/designer?panel=flow-app',
+            CASE
+              WHEN JSON_VALID(o.options) AND JSON_UNQUOTE(JSON_EXTRACT(o.options, '$.codeApp')) = 'true' THEN '&amp;codeApp=1'
+              WHEN JSON_VALID(o.designer_options) AND JSON_UNQUOTE(JSON_EXTRACT(o.designer_options, '$.codeApp')) = 'true' THEN '&amp;codeApp=1'
+              ELSE ''
+            END
+          ) AS entryRoute
+        FROM ai_business_binding b
+        LEFT JOIN ai_business_object o
+          ON o.tenant_id = b.tenant_id
+         AND o.object_code = b.target_code
+        LEFT JOIN ai_business_suite s
+          ON s.tenant_id = o.tenant_id
+         AND s.suite_code = o.suite_code
+        WHERE b.tenant_id = #{tenantId}
+          AND b.target_type = 'OBJECT'
+          AND b.binding_type = 'FLOW'
+          AND b.status = 1
+          AND (
+            b.binding_key = #{modelKey}
+            OR (
+              JSON_VALID(b.binding_config)
+              AND JSON_UNQUOTE(JSON_EXTRACT(b.binding_config, '$.flowModelKey')) = #{modelKey}
+            )
+          )
+        ORDER BY COALESCE(o.sort_order, 0) ASC, b.sort_order ASC, b.id ASC
+    </select>
+
 </mapper>

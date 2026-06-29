@@ -2,6 +2,8 @@ package com.mdframe.forge.business.core.purchase.dto;
 
 import lombok.Data;
 
+import java.time.LocalDate;
+
 /**
  * 待办节点保存采购单业务字段参数。
  */
@@ -23,6 +25,8 @@ public class SamplePurchaseOrderTaskSaveDTO {
     private Long amountCent;
 
     private String purchaseItems;
+
+    private LocalDate needDate;
 
     private String arrivalListFileIds;
 

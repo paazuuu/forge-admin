@@ -212,6 +212,9 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
                     }
                     entity.setAmountCent(dto.getAmountCent());
                 }
+                if (dto.getNeedDate() != null) {
+                    entity.setNeedDate(dto.getNeedDate());
+                }
                 entity.setPurchaseItems(dto.getPurchaseItems());
                 entity.setApplicantModifyRemark(dto.getApplicantModifyRemark());
             }
@@ -358,8 +361,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         payload.put("category", "purchase");
         payload.put("flowType", "purchase");
         payload.put("designerType", "approval");
-        payload.put("formType", "external");
-        payload.put("formId", "/business/purchase-order-test");
+        payload.put("formType", "none");
+        payload.put("formId", null);
         payload.put("notifyType", "redis");
         payload.put("bpmnXml", bpmnXml);
         return payload;

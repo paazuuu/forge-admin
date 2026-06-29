@@ -194,6 +194,12 @@
           </template>
           初始化测试流程
         </n-button>
+        <n-button secondary @click="openFlowConfig">
+          <template #icon>
+            <i class="i-material-symbols:tune-rounded" />
+          </template>
+          业务流程配置
+        </n-button>
         <n-button type="primary" @click="openCreate">
           <template #icon>
             <i class="i-material-symbols:add-rounded" />
@@ -379,6 +385,7 @@
 
 <script setup>
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   createPurchaseOrder,
   initPurchaseOrderFlow,
@@ -389,9 +396,9 @@ import {
   submitPurchaseOrder,
   updatePurchaseOrder,
 } from '@/api/business/purchase-order-test'
+import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictTag from '@/components/DictTag.vue'
 import FileUpload from '@/components/file-upload/index.vue'
-import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import { useDict } from '@/composables/useDict'
 
 defineOptions({ name: 'BusinessPurchaseOrderTest' })
@@ -411,6 +418,8 @@ const props = defineProps({
 
 const emit = defineEmits(['submit', 'cancel'])
 
+const route = useRoute()
+const router = useRouter()
 const { dict } = useDict('sample_purchase_order_status')
 const statusOptions = computed(() => dict.value.sample_purchase_order_status || [])
 const isTaskFormMode = computed(() => Boolean(props.taskId || props.businessKey || props.processInstanceId))
@@ -609,6 +618,18 @@ function handleSearch() {
 function handleReset() {
   Object.assign(query, { orderNo: '', title: '', supplierName: '', status: null })
   handleSearch()
+}
+
+function openFlowConfig() {
+  router.push({
+    path: '/app-center/object/sample_purchase_order/designer',
+    query: {
+      panel: 'flow-app',
+      codeApp: '1',
+      name: '采购申请',
+      returnTo: route.fullPath,
+    },
+  })
 }
 
 async function handleInitFlow() {

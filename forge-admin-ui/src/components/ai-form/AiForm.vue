@@ -227,6 +227,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  fieldPermissions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['update:value', 'submit', 'reset', 'cancel', 'nodeAction'])
@@ -242,6 +246,27 @@ const actionModalTitle = ref('业务弹窗')
 const actionModalSchema = ref([])
 const actionModalValue = ref({})
 const actionModalLayout = ref({})
+
+const fieldPermissionMap = computed(() => {
+  const map = new Map()
+  ;(Array.isArray(props.fieldPermissions) ? props.fieldPermissions : []).forEach((permission) => {
+    if (!permission || typeof permission !== 'object')
+      return
+    const field = String(permission.fieldCode || permission.field || permission.code || permission.name || '').trim()
+    if (!field)
+      return
+    const visible = readPermissionBoolean(permission.visible, readPermissionBoolean(permission.readable, true))
+    const editable = readPermissionBoolean(permission.editable, readPermissionBoolean(permission.writable, true))
+    map.set(field, {
+      ...permission,
+      field,
+      visible,
+      editable,
+      required: readPermissionBoolean(permission.required, false),
+    })
+  })
+  return map
+})
 
 // 初始化表单数据
 watch(() => props.value, (newVal) => {
@@ -280,11 +305,10 @@ function isFieldVisible(field) {
   return true
 }
 
-const conditionVisibleSchema = computed(() => {
-  return filterVisibleNodes(props.schema)
-})
+const permissionAppliedSchema = computed(() => applyFieldPermissionsToNodes(props.schema))
+const conditionVisibleSchema = computed(() => filterVisibleNodes(permissionAppliedSchema.value))
 
-const allFieldSchema = computed(() => flattenFieldNodes(props.schema))
+const allFieldSchema = computed(() => flattenFieldNodes(permissionAppliedSchema.value))
 const visibleFieldSchema = computed(() => flattenFieldNodes(conditionVisibleSchema.value))
 
 // 生成表单验证规则
@@ -292,34 +316,49 @@ const formRules = computed(() => {
   const rules = {}
   visibleFieldSchema.value.forEach((field) => {
     if (field.rules) {
-      rules[field.field] = normalizeFieldRules(field, field.rules)
+      rules[field.field] = withRequiredRule(field, normalizeFieldRules(field, field.rules))
     }
     else if (field.required) {
-      const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
-      const isNumericType = field.type === 'number' || field.type === 'inputNumber'
-      const isDateType = isDateLikeType(field.type)
-      const isSelectionType = isSelectionLikeType(field.type)
-      const rule = {
-        key: field.field,
-        required: true,
-        message: field.requiredMessage || `请${inputTypes.includes(field.type) ? '输入' : '选择'}${field.label}`,
-        trigger: field.trigger || (isNumericType || isDateType || isSelectionType ? 'change' : ['blur', 'change']),
-      }
-      // number/date/treeSelect 等类型需要自定义 validator，避免 0、数字 ID、数组等有效值被误判为空
-      if (isNumericType || isDateType || isSelectionType) {
-        rule.validator = (_rule, value) => {
-          if (!hasFormValue(value)) {
-            return new Error(rule.message)
-          }
-          return true
-        }
-        delete rule.required
-      }
-      rules[field.field] = rule
+      rules[field.field] = buildRequiredRule(field)
     }
   })
   return rules
 })
+
+function buildRequiredRule(field) {
+  const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
+  const isNumericType = field.type === 'number' || field.type === 'inputNumber'
+  const isDateType = isDateLikeType(field.type)
+  const isSelectionType = isSelectionLikeType(field.type)
+  const rule = {
+    key: field.field,
+    required: true,
+    message: field.requiredMessage || `请${inputTypes.includes(field.type) ? '输入' : '选择'}${field.label}`,
+    trigger: field.trigger || (isNumericType || isDateType || isSelectionType ? 'change' : ['blur', 'change']),
+  }
+  // number/date/treeSelect 等类型需要自定义 validator，避免 0、数字 ID、数组等有效值被误判为空
+  if (isNumericType || isDateType || isSelectionType) {
+    rule.validator = (_rule, value) => {
+      if (!hasFormValue(value))
+        return new Error(rule.message)
+      return true
+    }
+    rule.__required = true
+    delete rule.required
+  }
+  return rule
+}
+
+function withRequiredRule(field, fieldRules) {
+  if (!field.required)
+    return fieldRules
+  const rules = Array.isArray(fieldRules) ? fieldRules : [fieldRules]
+  const hasRequired = rules.some(rule => rule?.required === true || rule?.__required === true)
+  if (hasRequired)
+    return fieldRules
+  const next = [...rules, buildRequiredRule(field)]
+  return Array.isArray(fieldRules) ? next : next
+}
 
 function isDateLikeType(type) {
   return ['date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange'].includes(type)
@@ -374,6 +413,7 @@ function normalizeFieldRules(field, fieldRules) {
       return true
     }
     rule.trigger = rule.trigger || 'change'
+    rule.__required = true
     delete rule.required
     return rule
   })
@@ -753,6 +793,74 @@ defineExpose({
   reset: handleReset,
   getFormData: () => ({ ...formValue.value }),
 })
+
+function applyFieldPermissionsToNodes(nodes = []) {
+  return (Array.isArray(nodes) ? nodes : [])
+    .map((node) => {
+      if (!node || typeof node !== 'object')
+        return null
+      const children = Array.isArray(node.children)
+        ? applyFieldPermissionsToNodes(node.children)
+        : undefined
+      const field = resolvePermissionField(node)
+      if (!field) {
+        return children
+          ? { ...node, children }
+          : node
+      }
+      const permission = fieldPermissionMap.value.get(field)
+      if (!permission)
+        return children ? { ...node, children } : node
+      if (permission.visible === false)
+        return null
+      return applyFieldPermission(node, permission, children)
+    })
+    .filter(Boolean)
+}
+
+function applyFieldPermission(node, permission, children) {
+  const readonlyByPermission = permission.editable === false
+  const required = node.required === true || permission.required === true
+  const nextProps = {
+    ...(node.props || {}),
+  }
+  if (readonlyByPermission) {
+    nextProps.disabled = true
+    nextProps.readonly = true
+  }
+  const next = {
+    ...node,
+    ...(children ? { children } : {}),
+    required,
+    readable: true,
+    writable: readonlyByPermission ? false : node.writable,
+    readonly: readonlyByPermission || node.readonly === true,
+    disabled: readonlyByPermission || node.disabled === true,
+    props: nextProps,
+  }
+  if (permission.required === true)
+    next.requiredMessage = next.requiredMessage || `请填写${next.label || next.field || '该字段'}`
+  return next
+}
+
+function resolvePermissionField(node = {}) {
+  return String(node.field || node.prop || node.fieldCode || node.code || '').trim()
+}
+
+function readPermissionBoolean(value, fallback) {
+  if (value === undefined || value === null || value === '')
+    return fallback
+  if (typeof value === 'boolean')
+    return value
+  if (typeof value === 'number')
+    return value !== 0
+  const text = String(value).trim().toLowerCase()
+  if (['true', '1', 'yes', 'y'].includes(text))
+    return true
+  if (['false', '0', 'no', 'n'].includes(text))
+    return false
+  return fallback
+}
 
 function filterVisibleNodes(nodes = []) {
   return (Array.isArray(nodes) ? nodes : [])

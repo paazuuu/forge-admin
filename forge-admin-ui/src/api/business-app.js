@@ -171,6 +171,10 @@ export function businessBindingList(params) {
   return request.get('/ai/business/binding/list', { params })
 }
 
+export function businessFlowModelBindings(modelKey) {
+  return request.get(`/ai/business/flow/model/${modelKey}/business-bindings`)
+}
+
 export function createBusinessBinding(data) {
   return request.post('/ai/business/binding', data)
 }
@@ -375,12 +379,20 @@ export function saveBusinessFlowBinding(objectCode, data) {
   return request.put(`/ai/business/flow/binding/${objectCode}`, data)
 }
 
+export function businessFlowAppConfig(objectCode) {
+  return request.get(`/ai/business/flow-app/config/${objectCode}`)
+}
+
+export function saveBusinessFlowAppConfig(objectCode, data) {
+  return request.put(`/ai/business/flow-app/config/${objectCode}`, data)
+}
+
 export function businessFlowVariables(modelKey, params = {}) {
   return request.get(`/ai/business/flow/model/${modelKey}/variables`, { params })
 }
 
-export function businessFlowFormAssets(objectCode) {
-  return request.get(`/ai/business/flow/form-assets/${objectCode}`)
+export function businessFlowFormAssets(objectCode, params = {}) {
+  return request.get(`/ai/business/flow/form-assets/${objectCode}`, { params })
 }
 
 export function businessTaskFormContext(params = {}) {

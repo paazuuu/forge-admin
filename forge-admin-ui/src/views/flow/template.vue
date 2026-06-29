@@ -4,6 +4,9 @@
       <h2 class="text-18 mb-16 font-bold">
         流程模板
       </h2>
+      <n-alert type="info" :bordered="false" class="mb-16">
+        该列表用于维护独立流程模板；已绑定业务应用的流程请从应用中心进入配置。
+      </n-alert>
 
       <!-- 搜索栏 -->
       <NSpace class="mb-16" :vertical="false">

@@ -53,6 +53,7 @@ public class BusinessFlowVariableResolver {
 
     private final BusinessObjectService objectService;
     private final AiCrudConfigMapper crudConfigMapper;
+    private final BusinessCodeFormProviderRegistry codeFormProviderRegistry;
     private final ObjectMapper objectMapper;
 
     public Map<String, Object> resolve(String modelKey, String objectCode) {
@@ -268,13 +269,13 @@ public class BusinessFlowVariableResolver {
             query.setObjectCode(objectCode);
             List<BusinessObjectVO> objects = objectService.list(query);
             if (objects == null || objects.isEmpty()) {
-                warnings.add("业务对象不存在或无权限访问: " + objectCode);
-                return List.of();
+                return collectCodeFieldCandidates(objectCode, warnings,
+                        "业务对象不存在或无权限访问，且未找到代码表单字段目录: " + objectCode);
             }
             String configKey = objects.get(0).getConfigKey();
             if (StringUtils.isBlank(configKey)) {
-                warnings.add("业务对象缺少运行配置，无法读取字段候选项: " + objectCode);
-                return List.of();
+                return collectCodeFieldCandidates(objectCode, warnings,
+                        "业务对象缺少低代码运行配置，且未找到代码表单字段目录: " + objectCode);
             }
             AiCrudConfig config = crudConfigMapper.selectByConfigKey(resolveTenantId(), configKey);
             if (config == null || StringUtils.isBlank(config.getModelSchema())) {
@@ -302,6 +303,52 @@ public class BusinessFlowVariableResolver {
             warnings.add("业务对象字段解析失败: " + e.getMessage());
             return List.of();
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> collectCodeFieldCandidates(String objectCode,
+                                                                 List<String> warnings,
+                                                                 String fallbackWarning) {
+        List<Map<String, Object>> assets = codeFormProviderRegistry.listAssets(objectCode);
+        if (assets.isEmpty()) {
+            warnings.add(fallbackWarning);
+            return List.of();
+        }
+        List<Map<String, Object>> fields = new ArrayList<>();
+        Set<String> used = new LinkedHashSet<>();
+        for (Map<String, Object> asset : assets) {
+            Object source = asset.get("fieldCatalog");
+            if (!(source instanceof List<?>)) {
+                source = asset.get("fields");
+            }
+            if (!(source instanceof List<?> list)) {
+                continue;
+            }
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                String fieldCode = firstText(map, "fieldCode", "field", "code", "name");
+                if (StringUtils.isBlank(fieldCode) || !used.add(fieldCode)) {
+                    continue;
+                }
+                Map<String, Object> field = new LinkedHashMap<>();
+                field.put("fieldCode", fieldCode);
+                field.put("columnName", firstText(map, "columnName", "column", "fieldColumn"));
+                field.put("fieldLabel", StringUtils.defaultIfBlank(firstText(map, "fieldLabel", "label", "fieldName", "title"), fieldCode));
+                field.put("dataType", StringUtils.defaultIfBlank(firstText(map, "dataType", "fieldType", "type", "componentType"), "string"));
+                field.put("dictType", firstText(map, "dictType", "dict"));
+                field.put("formMode", StringUtils.defaultIfBlank(text(asset.get("formMode")), "BUSINESS_CODE_FORM"));
+                field.put("formKey", text(asset.get("formKey")));
+                field.put("providerKey", text(asset.get("providerKey")));
+                fields.add(field);
+            }
+        }
+        if (fields.isEmpty()) {
+            warnings.add("代码表单资产未暴露字段目录，无法读取字段候选项: " + objectCode);
+            return List.of();
+        }
+        return fields;
     }
 
     private List<BusinessFlowVariableMappingSuggestionVO> buildSuggestions(

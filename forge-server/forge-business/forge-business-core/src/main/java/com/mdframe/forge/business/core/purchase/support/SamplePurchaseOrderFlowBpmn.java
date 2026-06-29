@@ -23,7 +23,7 @@ public class SamplePurchaseOrderFlowBpmn {
                     <bpmn:startEvent id="StartEvent_1" name="提交采购单" flowable:initiator="initiator">
                       <bpmn:outgoing>Flow_001</bpmn:outgoing>
                     </bpmn:startEvent>
-                    <bpmn:userTask id="dept_leader_approve" name="部门负责人审批" flowable:assignee="${deptLeaderId}" flowable:formUrl="/business/purchase-order-test" flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true" flowable:formFieldPermissions='[{"field":"arrivalListFileIds","visible":true,"writable":true},{"field":"deptLeaderRemark","visible":true,"writable":true}]'>
+                    <bpmn:userTask id="dept_leader_approve" name="部门负责人审批" flowable:assignee="${deptLeaderId}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"arrivalListFileIds","label":"上传清单","readable":true,"writable":true,"required":false},{"field":"deptLeaderRemark","label":"部门负责人意见","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_001</bpmn:incoming>
                       <bpmn:incoming>Flow_012</bpmn:incoming>
                       <bpmn:outgoing>Flow_002</bpmn:outgoing>
@@ -33,7 +33,7 @@ public class SamplePurchaseOrderFlowBpmn {
                       <bpmn:outgoing>Flow_003</bpmn:outgoing>
                       <bpmn:outgoing>Flow_004</bpmn:outgoing>
                     </bpmn:exclusiveGateway>
-                    <bpmn:userTask id="engineering_manager_approve" name="工程部经理审批" flowable:assignee="${engineeringManagerId}" flowable:formUrl="/business/purchase-order-test" flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true" flowable:formFieldPermissions='[{"field":"engineeringManagerRemark","visible":true,"writable":true}]'>
+                    <bpmn:userTask id="engineering_manager_approve" name="工程部经理审批" flowable:assignee="${engineeringManagerId}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"engineeringManagerRemark","label":"工程部经理意见","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_003</bpmn:incoming>
                       <bpmn:outgoing>Flow_005</bpmn:outgoing>
                     </bpmn:userTask>
@@ -42,7 +42,7 @@ public class SamplePurchaseOrderFlowBpmn {
                       <bpmn:outgoing>Flow_006</bpmn:outgoing>
                       <bpmn:outgoing>Flow_007</bpmn:outgoing>
                     </bpmn:exclusiveGateway>
-                    <bpmn:userTask id="purchase_countersign" name="采购会签" flowable:assignee="${assignee}" flowable:formUrl="/business/purchase-order-test" flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true" flowable:formFieldPermissions='[{"field":"countersignRemark","visible":true,"writable":true}]'>
+                    <bpmn:userTask id="purchase_countersign" name="采购会签" flowable:assignee="${assignee}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"countersignRemark","label":"会签意见","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_006</bpmn:incoming>
                       <bpmn:outgoing>Flow_008</bpmn:outgoing>
                       <bpmn:multiInstanceLoopCharacteristics isSequential="false" flowable:collection="${countersignUserList}" flowable:elementVariable="assignee">
@@ -54,7 +54,7 @@ public class SamplePurchaseOrderFlowBpmn {
                       <bpmn:outgoing>Flow_009</bpmn:outgoing>
                       <bpmn:outgoing>Flow_010</bpmn:outgoing>
                     </bpmn:exclusiveGateway>
-                    <bpmn:userTask id="applicant_modify" name="申请人修改" flowable:assignee="${initiator}" flowable:formUrl="/business/purchase-order-test" flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="false" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true" flowable:formFieldPermissions='[{"field":"title","visible":true,"writable":true},{"field":"supplierName","visible":true,"writable":true},{"field":"amountCent","visible":true,"writable":true},{"field":"purchaseItems","visible":true,"writable":true},{"field":"applicantModifyRemark","visible":true,"writable":true}]'>
+                    <bpmn:userTask id="applicant_modify" name="申请人修改" flowable:assignee="${initiator}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"title","label":"采购主题","readable":true,"writable":true,"required":true},{"field":"supplierName","label":"供应商","readable":true,"writable":true,"required":true},{"field":"amountCent","label":"采购金额分","readable":true,"writable":true,"required":true},{"field":"purchaseItems","label":"采购明细","readable":true,"writable":true,"required":false},{"field":"needDate","label":"期望到货日期","readable":true,"writable":true,"required":false},{"field":"applicantModifyRemark","label":"申请人修改说明","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="false" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_004</bpmn:incoming>
                       <bpmn:incoming>Flow_007</bpmn:incoming>
                       <bpmn:incoming>Flow_010</bpmn:incoming>

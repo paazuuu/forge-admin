@@ -59,6 +59,17 @@
       </div>
     </div>
 
+    <div v-if="businessContextActive" class="business-context-banner">
+      <div class="business-context-banner__main">
+        <i class="i-material-symbols:domain" />
+        <span>当前流程已绑定业务对象</span>
+        <strong>{{ businessContextName }}</strong>
+      </div>
+      <n-button text type="primary" @click="goBackToBusinessApp">
+        返回业务应用
+      </n-button>
+    </div>
+
     <!-- 主体内容 -->
     <div class="main-content" :class="{ 'is-settings': workspaceMode === 'settings' }">
       <!-- 中间区域（画布） -->
@@ -70,6 +81,7 @@
             ref="modelerRef"
             :key="designerRenderKey"
             :xml="bpmnXml"
+            :form-asset-options="nodeFormAssetOptions"
             :form-field-catalog="formFieldCatalog"
             :process-config="processConfig"
             @change="handleBpmnChange"
@@ -682,6 +694,7 @@ import { NTag, NTreeSelect } from 'naive-ui'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { modelListByProvider, providerPage } from '@/api/ai'
+import { businessFlowFormAssets } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import { streamFlowGenerate } from '@/api/flow-generator'
 import FlowModeler from '@/components/bpmn/FlowModeler.vue'
@@ -702,6 +715,22 @@ const props = defineProps({
     type: [String, Number],
     default: '',
   },
+  businessObjectCode: {
+    type: String,
+    default: '',
+  },
+  businessObjectName: {
+    type: String,
+    default: '',
+  },
+  businessEntryRoute: {
+    type: String,
+    default: '',
+  },
+  codeApp: {
+    type: Boolean,
+    default: false,
+  },
 })
 const emit = defineEmits(['close', 'saved', 'deployed'])
 const route = useRoute()
@@ -709,6 +738,10 @@ const router = useRouter()
 const message = window.$message
 
 const embedded = computed(() => props.embedded)
+const businessObjectCode = computed(() => routeQueryText(props.businessObjectCode || route.query.businessObjectCode || route.query.objectCode))
+const businessContextActive = computed(() => !!businessObjectCode.value)
+const businessContextName = computed(() => routeQueryText(props.businessObjectName || route.query.businessObjectName || route.query.objectName) || businessObjectCode.value)
+const businessEntryRoute = computed(() => routeQueryText(props.businessEntryRoute || route.query.businessEntryRoute))
 
 const saving = ref(false)
 const deploying = ref(false)
@@ -773,6 +806,7 @@ const formSchema = ref([])
 const formOptions = ref([])
 const formFieldCatalog = ref([])
 const showFormPreview = ref(false)
+const businessFormAssets = ref([])
 
 const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
@@ -893,6 +927,36 @@ const processConfig = computed(() => ({
   allowSubmitterWithdraw: modelInfo.allowSubmitterWithdraw !== false,
   autoApprovalMode: normalizeAutoApprovalMode(modelInfo.autoApprovalMode),
 }))
+
+const nodeFormAssetOptions = computed(() => {
+  if (businessContextActive.value) {
+    return businessFormAssets.value.map(asset => ({
+      ...asset,
+      label: `${asset.formName || asset.formKey}（${asset.formKey}）`,
+      value: asset.formKey,
+      formKey: asset.formKey,
+      formName: asset.formName || asset.formKey,
+      fieldCatalog: asset.fieldCatalog || [],
+      formMode: asset.formMode || asset.type || 'BUSINESS_OBJECT_FORM',
+      sourceType: asset.sourceType || asset.source || '',
+      fieldCount: asset.fieldCount,
+      fieldPreview: asset.fieldPreview || [],
+      providerKey: asset.providerKey || '',
+      providerName: asset.providerName || '',
+      objectName: asset.objectName || '',
+      source: asset.source || 'business',
+    })).filter(item => item.value)
+  }
+  return formOptions.value.map(item => ({
+    label: item.label || item.formKey || item.value,
+    value: item.formKey || item.value,
+    formKey: item.formKey || item.value,
+    formName: item.label || item.formKey || item.value,
+    currentVersionId: item.currentVersionId,
+    fieldCatalog: [],
+    source: 'flowForm',
+  })).filter(item => item.value)
+})
 
 const autoApprovalModeLabel = computed(() => {
   return autoApprovalModeOptions.find(item => item.value === processConfig.value.autoApprovalMode)?.label || '每个节点都需要审批'
@@ -1031,6 +1095,7 @@ function resetNewModelState() {
   bpmnXml.value = ''
   formSchema.value = []
   formFieldCatalog.value = []
+  businessFormAssets.value = []
   dockedElement.value = null
   modelerInstance.value = null
   workspaceMode.value = 'design'
@@ -1091,6 +1156,12 @@ watch(() => props.modelId, async (value, oldValue) => {
   finally {
     pageLoading.value = false
   }
+})
+
+watch(businessObjectCode, async (value, oldValue) => {
+  if (value === oldValue || !modelInfo.id)
+    return
+  await refreshFormFieldCatalog()
 })
 
 onUnmounted(() => {
@@ -1195,6 +1266,11 @@ async function loadForms() {
 }
 
 async function refreshFormFieldCatalog(formDetail = null) {
+  if (businessContextActive.value) {
+    await refreshBusinessFormFieldCatalog()
+    return
+  }
+  businessFormAssets.value = []
   if (modelInfo.formType !== 'dynamic') {
     formFieldCatalog.value = []
     return
@@ -1230,8 +1306,119 @@ async function refreshFormFieldCatalog(formDetail = null) {
   formFieldCatalog.value = resolveLocalFormFieldCatalog()
 }
 
+async function refreshBusinessFormFieldCatalog() {
+  if (!businessObjectCode.value) {
+    businessFormAssets.value = []
+    formFieldCatalog.value = []
+    return
+  }
+  try {
+    const res = await businessFlowFormAssets(businessObjectCode.value)
+    const assets = normalizeBusinessFormAssets(res.data?.formAssets || [])
+    businessFormAssets.value = assets
+    formFieldCatalog.value = collectBusinessAssetFields(assets)
+  }
+  catch (error) {
+    console.warn('[FlowDesign] 加载业务表单字段目录失败:', error?.message || error)
+    businessFormAssets.value = []
+    formFieldCatalog.value = []
+  }
+}
+
+function normalizeBusinessFormAssets(assets = []) {
+  return (Array.isArray(assets) ? assets : [])
+    .map((asset) => {
+      const formKey = routeQueryText(asset?.formKey || asset?.key || asset?.id)
+      const fields = Array.isArray(asset?.fieldCatalog)
+        ? asset.fieldCatalog
+        : Array.isArray(asset?.fields) ? asset.fields : []
+      return {
+        ...asset,
+        formKey,
+        formName: routeQueryText(asset?.formName || asset?.name || asset?.label) || formKey,
+        fieldCatalog: normalizeBusinessFieldCatalog(fields),
+      }
+    })
+    .filter(asset => asset.formKey)
+}
+
+function collectBusinessAssetFields(assets = []) {
+  const result = []
+  const used = new Set()
+  ;(Array.isArray(assets) ? assets : []).forEach((asset) => {
+    const fields = Array.isArray(asset?.fieldCatalog)
+      ? asset.fieldCatalog
+      : normalizeBusinessFieldCatalog(asset?.fields || [])
+    fields.forEach((field) => {
+      const code = routeQueryText(field?.field || field?.fieldCode || field?.code || field?.name)
+      if (!code || used.has(code))
+        return
+      used.add(code)
+      result.push({
+        field: code,
+        label: field?.label || field?.fieldLabel || field?.fieldName || field?.title || code,
+        componentType: field?.componentType || field?.type || field?.fieldType || '',
+        dataType: field?.dataType || '',
+        required: field?.required === true,
+        readonly: field?.readonly === true || field?.systemField === true || field?.writable === false,
+      })
+    })
+  })
+  return result
+}
+
+function normalizeBusinessFieldCatalog(fields = []) {
+  return (Array.isArray(fields) ? fields : [])
+    .map((field) => {
+      const code = routeQueryText(field?.field || field?.fieldCode || field?.code || field?.name)
+      if (!code)
+        return null
+      return {
+        ...field,
+        field: code,
+        label: field?.label || field?.fieldLabel || field?.fieldName || field?.title || code,
+        componentType: field?.componentType || field?.type || field?.fieldType || '',
+        dataType: field?.dataType || '',
+        required: field?.required === true,
+        readonly: field?.readonly === true || field?.systemField === true || field?.writable === false,
+      }
+    })
+    .filter(Boolean)
+}
+
 function resolveLocalFormFieldCatalog() {
   return buildLocalFormFieldCatalog(formSchema.value)
+}
+
+function routeQueryText(value) {
+  return String(Array.isArray(value) ? value[0] || '' : value || '').trim()
+}
+
+function goBackToBusinessApp() {
+  if (businessEntryRoute.value) {
+    router.push(normalizeBusinessEntryRoute(businessEntryRoute.value))
+    return
+  }
+  router.push({
+    path: `/app-center/object/${businessObjectCode.value}/designer`,
+    query: {
+      panel: 'flow-app',
+      codeApp: props.codeApp ? '1' : undefined,
+    },
+  })
+}
+
+function normalizeBusinessEntryRoute(value) {
+  const route = String(value || '').trim()
+  if (!route)
+    return route
+  const [path, query = ''] = route.split('?')
+  const params = new URLSearchParams(query)
+  if (!params.get('panel'))
+    params.set('panel', 'flow-app')
+  if (props.codeApp && !params.get('codeApp'))
+    params.set('codeApp', '1')
+  return `${path}?${params.toString()}`
 }
 
 function normalizeDesignerType(value) {
@@ -2488,6 +2675,35 @@ function getElementIcon(el) {
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.08),
     inset 0 0 0 1px #bfdbfe;
+}
+
+.business-context-banner {
+  min-height: 38px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  color: #0f766e;
+  background: #ecfdf5;
+  border-bottom: 1px solid #bbf7d0;
+  font-size: 13px;
+}
+
+.business-context-banner__main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.business-context-banner__main strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #064e3b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main-content {

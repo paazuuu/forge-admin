@@ -103,11 +103,11 @@
     </section>
 
     <footer class="unit-actions">
-      <n-button secondary size="small" :disabled="!canManageObject" @click="emit('designObject', unit.object, 'form')">
+      <n-button secondary size="small" :disabled="!canManageObject" @click="emit('designObject', unit.object, primaryDesignPanel)">
         <template #icon>
           <n-icon><BuildOutline /></n-icon>
         </template>
-        数据设计
+        {{ primaryDesignText }}
       </n-button>
       <n-button secondary size="small" :disabled="!canManageObject" @click="emit('statsObject', unit.object)">
         <template #icon>
@@ -166,14 +166,17 @@ const emit = defineEmits([
 const canManageObject = computed(() => Boolean(props.unit.object?.id))
 const visibleApps = computed(() => props.unit.apps.slice(0, 4))
 const hiddenAppCount = computed(() => Math.max(props.unit.apps.length - visibleApps.value.length, 0))
+const codeAppObject = computed(() => isCodeAppMeta(props.unit.object))
+const primaryDesignPanel = computed(() => codeAppObject.value ? 'flow-app' : 'form')
+const primaryDesignText = computed(() => codeAppObject.value ? '业务流程配置' : '数据设计')
 const objectOptions = computed(() => [
   {
     label: '打开详情',
     key: 'open',
   },
   {
-    label: '流程与自动化',
-    key: 'automation',
+    label: '业务流程配置',
+    key: 'flow-app',
   },
   {
     label: props.unit.object?.status === 1 ? '停用业务单元' : '启用业务单元',
@@ -251,13 +254,35 @@ function isCodeDownload(app) {
   return app?.entryMode === 'RUNTIME' && app?.appMode === 'CODE_DOWNLOAD'
 }
 
+function isCodeAppMeta(object) {
+  return hasCodeAppFlag(object?.options) || hasCodeAppFlag(object?.designerOptions)
+}
+
+function hasCodeAppFlag(value) {
+  if (!value)
+    return false
+  if (typeof value === 'object')
+    return value.codeApp === true
+  if (typeof value !== 'string')
+    return false
+  const compactValue = value.replace(/\s/g, '')
+  if (compactValue.includes('"codeApp":true'))
+    return true
+  try {
+    return JSON.parse(value)?.codeApp === true
+  }
+  catch {
+    return false
+  }
+}
+
 function handleObjectSelect(key) {
   if (key === 'open') {
     emit('openObject', props.unit.object)
     return
   }
-  if (key === 'automation') {
-    emit('designObject', props.unit.object, 'automation')
+  if (key === 'flow-app') {
+    emit('designObject', props.unit.object, 'flow-app')
     return
   }
   if (key === 'toggle') {

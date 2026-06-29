@@ -18,11 +18,11 @@
       </div>
     </div>
     <div class="object-actions">
-      <n-button secondary size="small" @click.stop="emit('design', object, 'form')">
+      <n-button secondary size="small" @click.stop="emit('design', object, primaryDesignPanel)">
         <template #icon>
           <n-icon><BuildOutline /></n-icon>
         </template>
-        设计对象
+        {{ primaryDesignText }}
       </n-button>
       <n-button quaternary circle size="small" aria-label="打开业务单元" @click.stop="emit('open', object)">
         <template #icon>
@@ -55,14 +55,13 @@ const props = defineProps({
 
 const emit = defineEmits(['open', 'design', 'stats', 'toggle', 'delete'])
 
+const codeAppObject = computed(() => isCodeAppMeta(props.object))
+const primaryDesignPanel = computed(() => codeAppObject.value ? 'flow-app' : 'form')
+const primaryDesignText = computed(() => codeAppObject.value ? '业务流程配置' : '设计对象')
 const moreOptions = computed(() => [
   {
-    label: '单据设置',
-    key: 'document',
-  },
-  {
-    label: '流程自动化',
-    key: 'automation',
+    label: '业务流程配置',
+    key: 'flow-app',
   },
   {
     label: '报表看板',
@@ -87,7 +86,7 @@ const moreOptions = computed(() => [
 ])
 
 function handleMoreSelect(key) {
-  if (key === 'document' || key === 'automation') {
+  if (key === 'flow-app') {
     emit('design', props.object, key)
     return
   }
@@ -101,6 +100,28 @@ function handleMoreSelect(key) {
   }
   if (key === 'delete')
     emit('delete', props.object)
+}
+
+function isCodeAppMeta(object) {
+  return hasCodeAppFlag(object?.options) || hasCodeAppFlag(object?.designerOptions)
+}
+
+function hasCodeAppFlag(value) {
+  if (!value)
+    return false
+  if (typeof value === 'object')
+    return value.codeApp === true
+  if (typeof value !== 'string')
+    return false
+  const compactValue = value.replace(/\s/g, '')
+  if (compactValue.includes('"codeApp":true'))
+    return true
+  try {
+    return JSON.parse(value)?.codeApp === true
+  }
+  catch {
+    return false
+  }
 }
 </script>
 

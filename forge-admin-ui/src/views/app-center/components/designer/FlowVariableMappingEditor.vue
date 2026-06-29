@@ -1,5 +1,15 @@
 <template>
   <div class="flow-variable-mapping-editor">
+    <div class="mapping-guide">
+      <div>
+        <strong>业务字段 -> 流程变量</strong>
+        <span>左边选择单据字段，右边选择流程模型里使用的变量。只有条件分支、审批人表达式或标题模板需要用到的字段才需要映射。</span>
+      </div>
+      <n-tag size="small" :type="suggestions.length ? 'info' : 'default'" :bordered="false">
+        {{ suggestions.length ? `${suggestions.length} 条推荐` : '无推荐' }}
+      </n-tag>
+    </div>
+
     <div class="mapping-toolbar">
       <n-space size="small">
         <n-button size="small" secondary :disabled="!suggestions.length" @click="applySuggestions">
@@ -165,6 +175,32 @@ function fieldLabel(code) {
   display: grid;
   gap: 10px;
   width: 100%;
+}
+
+.mapping-guide {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px 12px;
+}
+
+.mapping-guide strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.mapping-guide span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .mapping-toolbar {

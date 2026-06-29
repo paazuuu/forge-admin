@@ -95,6 +95,10 @@
                 {{ designerTypeLabel(item.designerType) }}
               </span>
             </div>
+            <div class="card-binding" :class="{ empty: !item.businessBindings?.length }">
+              <i class="i-material-symbols:apps" />
+              <span>{{ formatBusinessBindings(item) }}</span>
+            </div>
             <div class="card-desc">
               {{ item.description || '暂无描述' }}
             </div>
@@ -371,6 +375,10 @@
             v-if="currentDesignModelId"
             embedded
             :model-id="currentDesignModelId"
+            :business-object-code="currentDesignBinding?.objectCode || ''"
+            :business-object-name="currentDesignBinding?.objectName || ''"
+            :business-entry-route="currentDesignBinding?.entryRoute || ''"
+            :code-app="currentDesignBinding?.codeApp === true"
             @close="handleDesignModalClose"
             @saved="fetchData"
             @deployed="fetchData"
@@ -394,6 +402,7 @@ import { CopyOutline, CreateOutline, PauseCircleOutline, PlayCircleOutline, Time
 import { NIcon, NModal, NTreeSelect } from 'naive-ui'
 import { computed, defineAsyncComponent, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { businessFlowModelBindings } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import FlowModelStats from '@/components/flow/FlowModelStats.vue'
 import { useDict } from '@/composables/useDict'
@@ -585,6 +594,7 @@ const currentModelId = ref('')
 const currentModelVersion = ref(null)
 const showDesignModal = ref(false)
 const currentDesignModelId = ref('')
+const currentDesignBinding = ref(null)
 const showStartTestModal = ref(false)
 const startTestLoading = ref(false)
 const startTestFormRef = ref(null)
@@ -638,7 +648,8 @@ async function fetchData() {
       ...queryParams,
     })
     if (res.code === 200) {
-      dataSource.value = res.data?.records || []
+      const records = res.data?.records || []
+      dataSource.value = await enrichModelBusinessBindings(records)
       pagination.itemCount = res.data?.total || 0
       totalCount.value = res.data?.total || 0
       designingCount.value = dataSource.value.filter(r => r.status === 0).length
@@ -744,7 +755,38 @@ async function handleSubmit() {
   }
 }
 
-function handleDesign(row) {
+async function enrichModelBusinessBindings(records = []) {
+  await Promise.all(records.map(async (row) => {
+    if (!row?.modelKey) {
+      row.businessBindings = []
+      return
+    }
+    try {
+      const res = await businessFlowModelBindings(row.modelKey)
+      row.businessBindings = res.code === 200 && Array.isArray(res.data) ? res.data : []
+    }
+    catch (error) {
+      console.warn('[FlowModel] 加载业务绑定失败:', row.modelKey, error?.message || error)
+      row.businessBindings = []
+    }
+  }))
+  return records
+}
+
+function formatBusinessBindings(row = {}) {
+  const bindings = Array.isArray(row.businessBindings) ? row.businessBindings : []
+  if (!bindings.length)
+    return '未绑定业务应用'
+  const names = bindings.map(item => item.objectName || item.objectCode).filter(Boolean)
+  return names.length > 2 ? `${names.slice(0, 2).join('、')} 等 ${names.length} 个业务应用` : names.join('、')
+}
+
+async function handleDesign(row) {
+  if (!Array.isArray(row.businessBindings)) {
+    const enriched = await enrichModelBusinessBindings([row])
+    row.businessBindings = enriched[0]?.businessBindings || []
+  }
+  currentDesignBinding.value = row.businessBindings?.[0] || null
   currentDesignModelId.value = row.id
   showDesignModal.value = true
 }
@@ -752,6 +794,7 @@ function handleDesign(row) {
 function handleDesignModalClose() {
   showDesignModal.value = false
   currentDesignModelId.value = ''
+  currentDesignBinding.value = null
   fetchData()
 }
 
@@ -1293,6 +1336,28 @@ onMounted(() => {
   color: #047857;
   background: #ecfdf5;
   border-color: #bbf7d0;
+}
+
+.card-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: #047857;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.card-binding.empty {
+  color: #94a3b8;
+}
+
+.card-binding span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-desc {

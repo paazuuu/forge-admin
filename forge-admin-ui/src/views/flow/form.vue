@@ -14,6 +14,9 @@
           </NButton>
         </NSpace>
       </div>
+      <n-alert type="info" :bordered="false" class="mb-16">
+        该列表仅用于未绑定业务应用的独立流程，业务应用请到应用中心配置表单与流程。
+      </n-alert>
 
       <!-- 搜索栏 -->
       <NSpace class="mb-16" :vertical="false">

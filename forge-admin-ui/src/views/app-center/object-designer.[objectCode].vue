@@ -10,6 +10,9 @@
     :preview-disabled="!objectId"
     :show-advanced="canAdvanced"
     :closure-steps="closureSteps"
+    :nav-panels="designerNavPanels"
+    :show-preview="!isCodeAppDesigner"
+    :show-publish="!isCodeAppDesigner"
     @save="handleSave"
     @preview="handlePreview"
     @publish="handlePublish"
@@ -77,6 +80,12 @@
       @updated="handleFieldsUpdated"
       @dirty-change="handleDirtyChange"
       @add-to-form="handleAddFieldToForm"
+    />
+
+    <BusinessFormFieldsReadonlyPanel
+      v-else-if="activePanel === 'form' && isCodeAppDesigner"
+      :object-code="draft.objectCode || objectCode"
+      :object-name="draft.objectName"
     />
 
     <section v-else-if="activePanel === 'form'" class="form-detail-panel">
@@ -147,27 +156,21 @@
       @dirty-change="handleDirtyChange"
     />
 
-    <BusinessDocumentPanel
-      v-else-if="activePanel === 'document'"
-      ref="documentPanelRef"
+    <BusinessFlowAppConfigPanel
+      v-else-if="activePanel === 'flow-app'"
+      ref="flowAppConfigRef"
       :object-id="objectId"
       :suite-code="draft.suiteCode"
       :object-code="draft.objectCode"
       :object-name="draft.objectName"
       :fields="draft.fields"
       :initial-config="draft.documentConfig"
-      @saved="handleDocumentSaved"
-      @configure-flow="handlePanelSwitch('automation')"
+      :initial-section="route.query.section"
+      :code-app="isCodeAppDesigner"
+      @saved="handleFlowAppSaved"
       @dirty-change="handleDirtyChange"
-    />
-
-    <BusinessFlowBindingPanel
-      v-else-if="activePanel === 'automation'"
-      ref="flowBindingPanelRef"
-      :object-code="draft.objectCode"
-      :fields="draft.fields"
-      @saved="handleFlowSaved"
-      @dirty-change="handleDirtyChange"
+      @open-trigger="openTriggerConfig"
+      @open-publish="handlePanelSwitch('publish')"
     />
 
     <BusinessPermissionFlowPanel
@@ -257,9 +260,9 @@ const emit = defineEmits(['close', 'saved'])
 
 const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./components/designer/BusinessAdvancedConfig.vue'))
 const BusinessDetailDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDetailDesigner.vue'))
-const BusinessDocumentPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDocumentPanel.vue'))
 const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
-const BusinessFlowBindingPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowBindingPanel.vue'))
+const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
+const BusinessFormFieldsReadonlyPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormFieldsReadonlyPanel.vue'))
 const BusinessFormDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormDesigner.vue'))
 const BusinessListDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessListDesigner.vue'))
 const BusinessPermissionFlowPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPermissionFlowPanel.vue'))
@@ -300,8 +303,7 @@ const formDesignerRef = ref(null)
 const listDesignerRef = ref(null)
 const detailDesignerRef = ref(null)
 const relationDesignerRef = ref(null)
-const documentPanelRef = ref(null)
-const flowBindingPanelRef = ref(null)
+const flowAppConfigRef = ref(null)
 const permissionFlowRef = ref(null)
 const publishChecklistRef = ref(null)
 const draft = reactive(createEmptyDraft())
@@ -316,21 +318,30 @@ const canAdvanced = computed(() => {
     || hasPermission(userStore.apiPermissions, 'ai:businessObject:advanced')
     || hasPermission(userStore.getDataPermission, 'ai:businessObject:advanced')
 })
+const isCodeAppDesigner = computed(() => {
+  return draft.designerOptions?.codeApp === true
+    || designer.value?.options?.codeApp === true
+    || (!objectId.value && (route.query.codeApp === '1' || route.query.appType === 'code'))
+})
 const publishDisabled = computed(() => {
+  if (isCodeAppDesigner.value)
+    return true
   if (!objectId.value)
     return true
   return publishCheckState.value?.publishable === false
 })
+const designerNavPanels = computed(() => (isCodeAppDesigner.value ? ['form', 'flow-app'] : []))
 const closureSteps = computed(() => {
+  if (isCodeAppDesigner.value || activePanel.value === 'flow-app')
+    return []
   const documentConfig = draft.documentConfig || {}
   const mainFlow = documentConfig.mainFlowSummary || {}
   const startMode = normalizeStartMode(mainFlow.startMode)
   const triggerRequired = startMode === 'TRIGGER' || startMode === 'BOTH'
   const hasTriggerGap = hasPublishItem('DOCUMENT_TRIGGER_MISSING')
   return [
-    step('document', '单据设置', 'document', Boolean(documentConfig.documentEnabled && documentConfig.statusField)),
-    step('flow', '主流程', 'automation', Boolean(mainFlow.configured)),
-    step('start', '发起方式', 'automation', Boolean(startMode), !startMode && Boolean(mainFlow.configured)),
+    step('flow-app', '单据流程', 'flow-app', Boolean(documentConfig.documentEnabled && documentConfig.statusField && mainFlow.configured)),
+    step('start', '发起方式', 'flow-app', Boolean(startMode), !startMode && Boolean(mainFlow.configured)),
     step('trigger', '自动化触发器', 'trigger', triggerRequired && !hasTriggerGap, triggerRequired && hasTriggerGap),
     step('publish', '发布检查', 'publish', publishCheckState.value?.publishable === true, publishCheckState.value?.publishable === false),
     step('runtime', '试运行', 'runtime', Boolean(runtimeInfo.value?.canOpen), Boolean(runtimeInfo.value && !runtimeInfo.value.canOpen)),
@@ -358,11 +369,15 @@ const runtimeFormOptions = computed(() => {
 
 function resolveInitialPanel() {
   const panel = props.embedded ? props.initialPanel : route.query.panel
-  if (panel === 'flow')
-    return 'automation'
+  return normalizePanel(panel) || 'form'
+}
+
+function normalizePanel(panel) {
+  if (['flow', 'document', 'automation', 'flow-app'].includes(panel))
+    return 'flow-app'
   if (panel === 'actions')
     return 'list'
-  return panel === 'detail' ? 'form' : panel || 'form'
+  return panel === 'detail' ? 'form' : panel
 }
 
 function resolveInitialDetailTab() {
@@ -438,12 +453,25 @@ watch(canAdvanced, (value) => {
     activePanel.value = 'form'
 }, { immediate: true })
 
+watch(isCodeAppDesigner, (value) => {
+  if (value && !['form', 'flow-app'].includes(activePanel.value))
+    activePanel.value = 'flow-app'
+}, { immediate: true })
+
 async function loadDesigner() {
   loading.value = true
   ready.value = false
   try {
     const object = await resolveBusinessObject()
     if (!object?.id) {
+      if (shouldOpenCodeFlowApp()) {
+        applyCodeAppDesignerDraft()
+        await nextTick()
+        dirty.value = false
+        designerDraftDirty.value = false
+        ready.value = true
+        return
+      }
       message.warning('未找到业务单元')
       return
     }
@@ -471,6 +499,37 @@ async function resolveBusinessObject() {
     objectCode: objectCode.value,
   })
   return (res.data || [])[0] || null
+}
+
+function shouldOpenCodeFlowApp() {
+  return ['form', 'flow-app'].includes(activePanel.value)
+    && !props.embedded
+    && !!objectCode.value
+    && (route.query.codeApp === '1' || route.query.appType === 'code' || route.query.panel === 'flow-app')
+}
+
+function applyCodeAppDesignerDraft() {
+  const code = String(objectCode.value || '').trim()
+  const name = String(route.query.name || route.query.objectName || code || '代码应用')
+  const virtualDesigner = {
+    objectId: null,
+    objectCode: code,
+    objectName: name,
+    suiteCode: 'CODE_APP',
+    suiteName: '代码应用',
+    designStatus: 'PUBLISHED',
+    publishStatus: 'PUBLISHED',
+    options: { codeApp: true },
+    designerOptions: { codeApp: true },
+    fields: [],
+    documentConfig: null,
+  }
+  designer.value = virtualDesigner
+  runtimeInfo.value = null
+  publishCheckState.value = null
+  if (!['form', 'flow-app'].includes(activePanel.value))
+    activePanel.value = 'flow-app'
+  Object.assign(draft, createDraftFromDesigner(virtualDesigner))
 }
 
 async function loadRuntimeInfo(id = objectId.value) {
@@ -513,15 +572,9 @@ async function handleSave() {
       await loadDesigner()
       return
     }
-    if (activePanel.value === 'document') {
+    if (activePanel.value === 'flow-app') {
       await persistPendingDesignerDraft()
-      await documentPanelRef.value?.saveConfig?.()
-      await loadDesigner()
-      return
-    }
-    if (activePanel.value === 'automation') {
-      await persistPendingDesignerDraft()
-      await flowBindingPanelRef.value?.saveConfig?.()
+      await flowAppConfigRef.value?.saveConfig?.()
       await loadDesigner()
       return
     }
@@ -564,7 +617,7 @@ async function waitForSaveLoadingPaint() {
 }
 
 async function handlePanelSwitch(panel) {
-  const nextPanel = panel === 'actions' ? 'list' : panel
+  const nextPanel = normalizePanel(panel)
   if (!nextPanel || nextPanel === activePanel.value)
     return
   await syncActiveFormDraft()
@@ -789,16 +842,17 @@ function handleRelationsUpdated(relations) {
   draft.relations = cloneSchema(relations || [])
 }
 
-async function handleDocumentSaved() {
+async function handleFlowAppSaved() {
   await loadDesigner()
+  if (isCodeAppDesigner.value) {
+    if (!['form', 'flow-app'].includes(activePanel.value))
+      activePanel.value = 'flow-app'
+    return
+  }
   const mainFlow = draft.documentConfig?.mainFlowSummary || {}
   if (draft.documentConfig?.documentEnabled && !mainFlow.configured)
-    activePanel.value = 'automation'
-}
-
-async function handleFlowSaved(binding = {}) {
-  await loadDesigner()
-  const startMode = String(binding.startMode || draft.documentConfig?.mainFlowSummary?.startMode || '').toUpperCase()
+    activePanel.value = 'flow-app'
+  const startMode = String(mainFlow.startMode || '').toUpperCase()
   if (startMode === 'TRIGGER' || startMode === 'BOTH') {
     openTriggerConfig()
     return
@@ -843,7 +897,7 @@ function step(key, label, panel, done, warn = false) {
 }
 
 async function handleFixTarget(panel) {
-  const targetPanel = panel === 'flow' ? 'automation' : panel
+  const targetPanel = normalizePanel(panel)
   if (targetPanel === 'trigger') {
     openTriggerConfig()
     return

@@ -29,6 +29,7 @@ import { NodeConfigDrawer } from './panel/index.js'
 const props = defineProps({
   xml: { type: String, default: '' },
   readonly: { type: Boolean, default: false },
+  formAssetOptions: { type: Array, default: () => [] },
   formFieldCatalog: { type: Array, default: () => [] },
   processConfig: { type: Object, default: () => ({}) },
 })
@@ -562,6 +563,7 @@ onBeforeUnmount(() => {
       :node="drawerNode"
       :outgoing-edges="drawerOutgoingEdges"
       :nodes="designer.flowJson.value.nodes"
+      :form-asset-options="formAssetOptions"
       :form-field-catalog="formFieldCatalog"
       :focus-edge-id="drawerFocusEdgeId"
       :readonly="readonly"

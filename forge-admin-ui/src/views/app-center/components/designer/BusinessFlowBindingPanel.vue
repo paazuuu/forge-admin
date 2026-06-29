@@ -61,7 +61,7 @@
             </n-form>
           </section>
 
-          <section class="flow-card">
+          <section v-if="!codeApp" class="flow-card">
             <div class="flow-card-head">
               <div>
                 <h4>业务记录绑定</h4>
@@ -152,11 +152,37 @@
             </n-alert>
           </section>
 
+          <section v-else class="flow-card adapter-card">
+            <div class="flow-card-head">
+              <div>
+                <h4>业务记录绑定</h4>
+                <p>代码业务由业务模块读取、保存和回写状态，平台只保存流程实例与业务键的关联。</p>
+              </div>
+              <n-tag type="info" :bordered="false">
+                代码适配器
+              </n-tag>
+            </div>
+            <div class="adapter-facts">
+              <div>
+                <span>业务编码</span>
+                <strong>{{ objectCode }}</strong>
+              </div>
+              <div>
+                <span>主键字段</span>
+                <strong>{{ form.businessBinding.primaryKeyField || 'id' }}</strong>
+              </div>
+              <div>
+                <span>状态回写</span>
+                <strong>业务代码处理</strong>
+              </div>
+            </div>
+          </section>
+
           <section class="flow-card">
             <div class="flow-card-head">
               <div>
                 <h4>变量映射</h4>
-                <p>流程变量来自已选模型，推荐映射只补充空项，不覆盖手动配置。</p>
+                <p>把业务单据字段写入流程变量，供流程条件线、审批人表达式和标题模板使用。</p>
               </div>
             </div>
             <FlowVariableMappingEditor
@@ -170,102 +196,52 @@
             />
           </section>
 
-          <section class="flow-card">
+          <section class="flow-card flow-designer-entry-card">
             <div class="flow-card-head">
               <div>
-                <h4>节点表单策略</h4>
-                <p>按人工节点选择业务表单和字段权限，不再手工输入页面路径。</p>
+                <h4>流程节点配置</h4>
+                <p>审批办理、节点表单资产和字段权限在流程设计器节点抽屉中配置，运行时读取流程节点配置。</p>
               </div>
-              <n-tag :type="configuredNodeFormCount ? 'success' : 'default'" :bordered="false">
-                {{ configuredNodeFormCount ? `${configuredNodeFormCount} 个节点` : '未配置' }}
+              <n-tag :type="userTasks.length ? 'info' : 'default'" :bordered="false">
+                {{ userTasks.length ? `${userTasks.length} 个节点` : '未读取节点' }}
               </n-tag>
             </div>
 
             <n-spin :show="variablesLoading || formAssetsLoading">
-              <div v-if="form.nodeForms.length" class="node-form-list">
-                <div v-for="nodeForm in form.nodeForms" :key="nodeForm.taskDefKey" class="node-form-row">
-                  <div class="node-form-title">
-                    <strong>{{ nodeForm.taskName || nodeForm.taskDefKey }}</strong>
-                    <span>{{ nodeForm.taskDefKey }}</span>
+              <div class="flow-designer-entry">
+                <div class="flow-designer-entry-main">
+                  <div class="flow-designer-entry-icon">
+                    <i class="i-material-symbols:account-tree-outline" />
                   </div>
-                  <n-grid :cols="3" :x-gap="10" :y-gap="6" responsive="screen">
-                    <n-form-item-gi label="表单类型">
-                      <n-select
-                        v-model:value="nodeForm.formMode"
-                        :options="nodeFormModeOptions"
-                        @update:value="value => handleNodeFormModeChange(nodeForm, value)"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi label="表单引用">
-                      <n-select
-                        v-if="nodeForm.formMode === 'BUSINESS_OBJECT_FORM'"
-                        v-model:value="nodeForm.formKey"
-                        :options="formAssetOptions"
-                        clearable
-                        filterable
-                        placeholder="选择业务表单"
-                        @update:value="value => handleNodeFormAssetChange(nodeForm, value)"
-                      />
-                      <n-input
-                        v-else-if="nodeForm.formMode === 'BUSINESS_CODE_FORM'"
-                        v-model:value="nodeForm.formKey"
-                        placeholder="业务适配器注册的表单编码"
-                        @update:value="markDirty"
-                      />
-                      <n-input
-                        v-else
-                        v-model:value="nodeForm.formUrl"
-                        placeholder="外部表单地址（开发者维护）"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi label="办理模式">
-                      <n-select
-                        v-model:value="nodeForm.editMode"
-                        :options="nodeEditModeOptions"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi :span="3" label="可见字段">
-                      <n-select
-                        v-model:value="nodeForm.visibleFields"
-                        :options="fieldOptionsForNode(nodeForm)"
-                        :disabled="nodeForm.formMode !== 'BUSINESS_OBJECT_FORM' || !nodeForm.formKey"
-                        multiple
-                        clearable
-                        filterable
-                        placeholder="不选表示全部可见"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi :span="3" label="可编辑字段">
-                      <n-select
-                        v-model:value="nodeForm.writableFields"
-                        :options="fieldOptionsForNode(nodeForm)"
-                        :disabled="nodeForm.formMode !== 'BUSINESS_OBJECT_FORM' || !nodeForm.formKey"
-                        multiple
-                        clearable
-                        filterable
-                        placeholder="审批节点默认不开放业务字段编辑"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi :span="3" label="必填字段">
-                      <n-select
-                        v-model:value="nodeForm.requiredFields"
-                        :options="fieldOptionsForNode(nodeForm)"
-                        :disabled="nodeForm.formMode !== 'BUSINESS_OBJECT_FORM' || !nodeForm.formKey"
-                        multiple
-                        clearable
-                        filterable
-                        placeholder="仅对可编辑字段生效"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                  </n-grid>
+                  <div>
+                    <strong>在流程设计器中配置节点</strong>
+                    <span>打开流程画布，选中审批节点，在节点抽屉的“表单权限”页签配置字段可见、可编辑和必填。</span>
+                  </div>
+                </div>
+                <n-button
+                  type="primary"
+                  secondary
+                  :disabled="!selectedFlowModelId"
+                  @click="openFlowDesigner"
+                >
+                  打开流程设计器
+                </n-button>
+              </div>
+
+              <div class="flow-designer-facts">
+                <div>
+                  <span>当前流程</span>
+                  <strong>{{ form.flowModelName || form.flowModelKey || '-' }}</strong>
+                </div>
+                <div>
+                  <span>人工节点</span>
+                  <strong>{{ userTasks.length }} 个</strong>
+                </div>
+                <div>
+                  <span>业务字段目录</span>
+                  <strong>{{ formAssets.length }} 个资产 · {{ fieldOptions.length }} 字段</strong>
                 </div>
               </div>
-              <n-empty v-else description="选择流程模型后自动读取人工节点" />
             </n-spin>
 
             <n-alert v-if="formAssetWarnings.length" type="warning" :bordered="false" class="node-form-warning">
@@ -300,8 +276,8 @@
               <strong>{{ form.businessBinding.statusField || '-' }}</strong>
             </div>
             <div>
-              <span>节点表单</span>
-              <strong>{{ configuredNodeFormCount }} 项</strong>
+              <span>流程节点</span>
+              <strong>{{ userTasks.length }} 个</strong>
             </div>
             <div>
               <span>变量候选</span>
@@ -317,6 +293,7 @@
 <script setup>
 import { useMessage } from 'naive-ui'
 import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { businessFlowBinding, businessFlowFormAssets, businessFlowVariables, saveBusinessFlowBinding } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import FlowVariableMappingEditor from './FlowVariableMappingEditor.vue'
@@ -335,11 +312,16 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  codeApp: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['dirtyChange', 'saved', 'loaded'])
 
 const message = useMessage()
+const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const flowModelsLoading = ref(false)
@@ -349,6 +331,7 @@ const flowModelOptions = ref([])
 const variableOptions = ref([])
 const userTasks = ref([])
 const formAssets = ref([])
+const flowFieldCandidates = ref([])
 const mappingSuggestions = ref([])
 const variableWarnings = ref([])
 const formAssetWarnings = ref([])
@@ -359,31 +342,47 @@ const startModeOptions = [
   { label: '触发器自动发起', value: 'TRIGGER' },
   { label: '按钮和触发器都可以', value: 'BOTH' },
 ]
-const businessBindingModeOptions = [
-  { label: '低代码对象', value: 'LOWCODE_OBJECT' },
-  { label: '简单业务表', value: 'BUSINESS_TABLE' },
-  { label: '代码适配器', value: 'ADAPTER' },
-]
+const businessBindingModeOptions = computed(() => {
+  if (props.codeApp) {
+    return [
+      { label: '代码适配器', value: 'ADAPTER' },
+      { label: '简单业务表', value: 'BUSINESS_TABLE' },
+    ]
+  }
+  return [
+    { label: '低代码对象', value: 'LOWCODE_OBJECT' },
+    { label: '简单业务表', value: 'BUSINESS_TABLE' },
+    { label: '代码适配器', value: 'ADAPTER' },
+  ]
+})
 
-const fieldOptions = computed(() => props.fields
-  .filter(field => fieldCode(field) && !isInactiveField(field))
-  .map(field => ({
-    label: `${field.fieldName || field.label || fieldCode(field)}（${fieldCode(field)}）`,
-    value: fieldCode(field),
-  })))
+const fieldOptions = computed(() => {
+  const options = []
+  const used = new Set()
+  const append = (field) => {
+    const code = fieldCode(field)
+    if (!code || used.has(code) || isInactiveField(field)) {
+      return
+    }
+    used.add(code)
+    const label = field.fieldName || field.fieldLabel || field.label || code
+    options.push({
+      label: `${label}（${code}）`,
+      value: code,
+    })
+  }
+  props.fields.forEach(append)
+  flowFieldCandidates.value.forEach(append)
+  return options
+})
 const validMappingCount = computed(() => form.variableMapping.filter(item => item.formField && item.flowVariable).length)
-const configuredNodeFormCount = computed(() => form.nodeForms.filter((item) => {
-  if (item.formMode === 'BUSINESS_OBJECT_FORM' || item.formMode === 'BUSINESS_CODE_FORM')
-    return !!item.formKey
-  if (item.formMode === 'EXTERNAL')
-    return !!item.formUrl
-  return false
-}).length)
+const selectedFlowModel = computed(() => flowModelOptions.value.find(item => item.value === form.flowModelKey) || null)
+const selectedFlowModelId = computed(() => selectedFlowModel.value?.id || '')
 const startModeLabel = computed(() => startModeOptions.find(item => item.value === form.startMode)?.label || '-')
 const normalizedBusinessBindingMode = computed(() => normalizeBusinessBindingMode(form.businessBinding.mode))
 const businessBindingAdapterMode = computed(() => normalizedBusinessBindingMode.value === 'ADAPTER')
 const businessBindingReadonly = computed(() => normalizedBusinessBindingMode.value === 'LOWCODE_OBJECT' || businessBindingAdapterMode.value)
-const businessBindingModeLabel = computed(() => businessBindingModeOptions.find(item => item.value === normalizedBusinessBindingMode.value)?.label || '低代码对象')
+const businessBindingModeLabel = computed(() => businessBindingModeOptions.value.find(item => item.value === normalizedBusinessBindingMode.value)?.label || (props.codeApp ? '代码适配器' : '低代码对象'))
 const businessBindingTagType = computed(() => {
   if (businessBindingAdapterMode.value)
     return 'info'
@@ -407,21 +406,6 @@ const businessBindingMessage = computed(() => {
     return '未选择流程状态字段时，流程仍可发起，但业务列表不会自动显示流程状态。'
   return ''
 })
-const formAssetOptions = computed(() => formAssets.value.map(asset => ({
-  label: `${asset.formName || asset.formKey}（${asset.formKey}）`,
-  value: asset.formKey,
-})))
-const nodeFormModeOptions = [
-  { label: '低代码业务表单', value: 'BUSINESS_OBJECT_FORM' },
-  { label: '代码适配器表单', value: 'BUSINESS_CODE_FORM' },
-  { label: '外部地址', value: 'EXTERNAL' },
-]
-const nodeEditModeOptions = [
-  { label: '只读审批', value: 'READONLY' },
-  { label: '补充办理', value: 'EDITABLE' },
-  { label: '驳回修改重提', value: 'MODIFY_RESUBMIT' },
-]
-
 watch(() => props.objectCode, () => {
   loadBinding()
 }, { immediate: true })
@@ -455,6 +439,7 @@ async function loadFlowModels() {
     flowModelOptions.value = (res.data || []).map(model => ({
       label: `${model.modelName || model.name || model.modelKey || model.key}（${model.modelKey || model.key}）`,
       value: model.modelKey || model.key,
+      id: model.id,
       modelName: model.modelName || model.name || model.modelKey || model.key,
     })).filter(item => item.value)
   }
@@ -487,10 +472,8 @@ async function loadFormAssets() {
 async function saveConfig() {
   if (!props.objectCode)
     return
-  if (!form.flowModelKey) {
-    message.warning('请选择流程模型')
+  if (!validateBeforeSave())
     return
-  }
   saving.value = true
   try {
     await saveBusinessFlowBinding(props.objectCode, buildPayload())
@@ -502,6 +485,14 @@ async function saveConfig() {
   finally {
     saving.value = false
   }
+}
+
+function validateBeforeSave() {
+  if (!form.flowModelKey) {
+    message.warning('请选择流程模型')
+    return false
+  }
+  return true
 }
 
 function buildPayload() {
@@ -535,6 +526,23 @@ function assignBinding(value = {}) {
     conditionFlows: Array.isArray(value.conditionFlows) ? value.conditionFlows : [],
     options: { ...(value.options || {}) },
   })
+}
+
+async function applyBindingConfig(value = {}, assetCatalog = null) {
+  if (assetCatalog) {
+    formAssets.value = Array.isArray(assetCatalog.formAssets) ? assetCatalog.formAssets : []
+    formAssetWarnings.value = assetCatalog.warnings || []
+  }
+  else {
+    await loadFormAssets()
+  }
+  assignBinding(value || createDefaultBinding())
+  await Promise.all([
+    loadFlowModels(),
+    loadVariableCandidates(),
+  ])
+  emit('loaded', { ...form })
+  emit('dirtyChange', false)
 }
 
 function normalizeMappings(list = []) {
@@ -581,6 +589,7 @@ function handleBusinessBindingModeChange(value) {
 
 async function loadVariableCandidates() {
   variableOptions.value = []
+  flowFieldCandidates.value = []
   mappingSuggestions.value = []
   variableWarnings.value = []
   if (!form.flowModelKey)
@@ -594,14 +603,14 @@ async function loadVariableCandidates() {
       value: item.variableName,
       source: item.source,
     })).filter(item => item.value)
+    flowFieldCandidates.value = normalizeFlowFieldCandidates(data.fieldCandidates || [])
     userTasks.value = normalizeUserTasks(data.userTasks || [])
     mappingSuggestions.value = data.mappingSuggestions || []
     variableWarnings.value = data.warnings || []
-    syncNodeFormsWithTasks()
   }
   catch (e) {
+    flowFieldCandidates.value = []
     userTasks.value = []
-    syncNodeFormsWithTasks()
     variableWarnings.value = [e.message || '流程变量候选项加载失败']
   }
   finally {
@@ -622,16 +631,15 @@ function normalizeUserTasks(list = []) {
     .filter(item => item.taskDefKey)
 }
 
-function syncNodeFormsWithTasks() {
-  const byTask = new Map(form.nodeForms.map(item => [item.taskDefKey, item]))
-  form.nodeForms = userTasks.value.map((task) => {
-    const current = byTask.get(task.taskDefKey)
-    return normalizeNodeForm({
-      ...(current || {}),
-      taskDefKey: task.taskDefKey,
-      taskName: task.taskName || current?.taskName || task.taskDefKey,
-    })
-  })
+function normalizeFlowFieldCandidates(list = []) {
+  return (Array.isArray(list) ? list : [])
+    .map(item => ({
+      fieldCode: normalizeText(item.fieldCode || item.field || item.code),
+      fieldLabel: normalizeText(item.fieldLabel || item.label || item.fieldName || item.title),
+      dataType: normalizeText(item.dataType || item.fieldType || item.type),
+      fieldStatus: normalizeText(item.fieldStatus),
+    }))
+    .filter(item => item.fieldCode)
 }
 
 function normalizeNodeForms(list = []) {
@@ -641,19 +649,17 @@ function normalizeNodeForms(list = []) {
 }
 
 function normalizeNodeForm(value = {}) {
-  const formKey = normalizeText(value.formKey)
-  const asset = findFormAsset(formKey)
   const fieldPermissions = Array.isArray(value.fieldPermissions) ? value.fieldPermissions : []
   return {
     taskDefKey: normalizeText(value.taskDefKey),
     taskName: normalizeText(value.taskName),
-    formMode: normalizeNodeFormMode(value.formMode),
-    formKey,
-    formName: normalizeText(value.formName) || asset?.formName || '',
+    formMode: normalizeText(value.formMode),
+    formKey: normalizeText(value.formKey),
+    formName: normalizeText(value.formName),
     providerKey: normalizeText(value.providerKey),
     formUrl: normalizeText(value.formUrl),
     viewKey: normalizeText(value.viewKey) || 'default',
-    editMode: normalizeNodeEditMode(value.editMode),
+    editMode: normalizeText(value.editMode) || 'READONLY',
     visibleFields: normalizeFieldSelection(value.visibleFields || fieldsByPermission(fieldPermissions, 'readable')),
     writableFields: normalizeFieldSelection(value.writableFields || fieldsByPermission(fieldPermissions, 'writable')),
     requiredFields: normalizeFieldSelection(value.requiredFields || fieldsByPermission(fieldPermissions, 'required')),
@@ -664,49 +670,19 @@ function normalizeNodeFormsForPayload(list = []) {
   return normalizeNodeForms(list)
     .filter(item => item.taskDefKey)
     .map((item) => {
-      const asset = findFormAsset(item.formKey)
-      const formRef = buildNodeFormRef(item)
-      const fieldPermissions = buildFieldPermissions(item, asset)
       return {
         taskDefKey: item.taskDefKey,
         taskName: item.taskName,
-        formMode: normalizeNodeFormMode(item.formMode),
+        formMode: item.formMode || '',
         formKey: item.formKey || '',
-        formName: item.formName || asset?.formName || '',
+        formName: item.formName || '',
         providerKey: item.providerKey || '',
         formUrl: item.formUrl || '',
         viewKey: item.viewKey || 'default',
-        editMode: normalizeNodeEditMode(item.editMode),
-        formRef,
-        fieldPermissions,
+        editMode: item.editMode || 'READONLY',
+        fieldPermissions: buildFieldPermissionsFromSelections(item),
       }
     })
-}
-
-function buildNodeFormRef(item) {
-  if (item.formMode === 'BUSINESS_OBJECT_FORM' && item.formKey) {
-    return {
-      type: 'BUSINESS_OBJECT_FORM',
-      objectCode: props.objectCode,
-      formKey: item.formKey,
-      viewKey: item.viewKey || 'default',
-    }
-  }
-  if (item.formMode === 'BUSINESS_CODE_FORM' && item.formKey) {
-    return {
-      type: 'BUSINESS_CODE_FORM',
-      objectCode: props.objectCode,
-      providerKey: item.providerKey || props.objectCode,
-      formKey: item.formKey,
-    }
-  }
-  if (item.formMode === 'EXTERNAL' && item.formUrl) {
-    return {
-      type: 'EXTERNAL',
-      formUrl: item.formUrl,
-    }
-  }
-  return {}
 }
 
 function fieldsByPermission(fieldPermissions = [], permission) {
@@ -725,83 +701,22 @@ function normalizeFieldSelection(value = []) {
     .filter(Boolean)))
 }
 
-function buildFieldPermissions(nodeForm, asset) {
-  const fields = Array.isArray(asset?.fieldCatalog) ? asset.fieldCatalog : []
+function buildFieldPermissionsFromSelections(nodeForm) {
   const visible = new Set(nodeForm.visibleFields || [])
   const writable = new Set(nodeForm.writableFields || [])
   const required = new Set(nodeForm.requiredFields || [])
-  return fields
-    .filter(field => field?.field || field?.fieldCode)
-    .map((field) => {
-      const code = field.field || field.fieldCode
-      const readable = visible.size === 0 || visible.has(code)
-      return {
-        field: code,
-        label: field.label || code,
-        readable,
-        writable: readable && writable.has(code),
-        required: readable && writable.has(code) && required.has(code),
-      }
-    })
-}
-
-function handleNodeFormModeChange(nodeForm, value) {
-  nodeForm.formMode = normalizeNodeFormMode(value)
-  if (nodeForm.formMode === 'BUSINESS_OBJECT_FORM') {
-    nodeForm.providerKey = ''
-    nodeForm.formUrl = ''
-  }
-  else {
-    nodeForm.formKey = ''
-    nodeForm.formName = ''
-    nodeForm.providerKey = ''
-    nodeForm.formUrl = ''
-    nodeForm.visibleFields = []
-    nodeForm.writableFields = []
-    nodeForm.requiredFields = []
-  }
-  markDirty()
-}
-
-function normalizeNodeFormMode(value) {
-  const normalized = normalizeText(value).toUpperCase()
-  return nodeFormModeOptions.some(item => item.value === normalized) ? normalized : 'BUSINESS_OBJECT_FORM'
-}
-
-function normalizeNodeEditMode(value) {
-  const normalized = normalizeText(value).toUpperCase()
-  return nodeEditModeOptions.some(item => item.value === normalized) ? normalized : 'READONLY'
-}
-
-function handleNodeFormAssetChange(nodeForm, formKey) {
-  const asset = findFormAsset(formKey)
-  nodeForm.formKey = formKey || ''
-  nodeForm.formName = asset?.formName || ''
-  nodeForm.visibleFields = []
-  nodeForm.writableFields = []
-  nodeForm.requiredFields = []
-  markDirty()
-}
-
-function fieldOptionsForNode(nodeForm) {
-  const asset = findFormAsset(nodeForm.formKey)
-  return (asset?.fieldCatalog || [])
-    .map(field => ({
-      label: `${field.label || field.field || field.fieldCode}（${field.field || field.fieldCode}）`,
-      value: field.field || field.fieldCode,
-    }))
-    .filter(item => item.value)
-}
-
-function findFormAsset(formKey) {
-  if (!formKey)
-    return null
-  return formAssets.value.find(item => item.formKey === formKey) || null
+  const fields = new Set([...visible, ...writable, ...required])
+  return Array.from(fields).map(field => ({
+    field,
+    readable: visible.size === 0 || visible.has(field),
+    writable: writable.has(field),
+    required: required.has(field),
+  }))
 }
 
 function createDefaultBusinessBinding() {
   return {
-    mode: 'LOWCODE_OBJECT',
+    mode: props.codeApp ? 'ADAPTER' : 'LOWCODE_OBJECT',
     tableName: '',
     primaryKeyField: 'id',
     tenantField: 'tenant_id',
@@ -839,8 +754,9 @@ function fillLowcodeBusinessBindingDefaults() {
 }
 
 function normalizeBusinessBindingMode(value) {
-  const normalized = String(value || 'LOWCODE_OBJECT').trim().toUpperCase()
-  return businessBindingModeOptions.some(item => item.value === normalized) ? normalized : 'LOWCODE_OBJECT'
+  const fallback = props.codeApp ? 'ADAPTER' : 'LOWCODE_OBJECT'
+  const normalized = String(value || fallback).trim().toUpperCase()
+  return businessBindingModeOptions.value.some(item => item.value === normalized) ? normalized : fallback
 }
 
 function normalizeText(value) {
@@ -907,7 +823,23 @@ function fieldLabel(code) {
 }
 
 function fieldCode(field = {}) {
-  return field.fieldCode || field.field || ''
+  return field.fieldCode || field.field || field.code || ''
+}
+
+function openFlowDesigner() {
+  if (!selectedFlowModelId.value) {
+    message.warning('请选择流程模型后再打开流程设计器')
+    return
+  }
+  router.push({
+    path: '/flow/design',
+    query: {
+      id: selectedFlowModelId.value,
+      businessObjectCode: props.objectCode,
+      codeApp: props.codeApp ? '1' : undefined,
+      source: 'appCenter',
+    },
+  })
 }
 
 function normalizeStartMode(value) {
@@ -931,6 +863,10 @@ function markDirty() {
 defineExpose({
   saveConfig,
   loadBinding,
+  applyBindingConfig,
+  assignBinding,
+  buildPayload,
+  validateBeforeSave,
 })
 </script>
 
@@ -1012,40 +948,123 @@ defineExpose({
   margin-top: 10px;
 }
 
-.node-form-list {
+.adapter-card {
+  background: #f8fbff;
+}
+
+.adapter-facts {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.node-form-row {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-  padding: 12px;
-}
-
-.node-form-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.node-form-title strong {
+.adapter-facts div {
   min-width: 0;
-  color: #0f172a;
-  font-size: 13px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
 }
 
-.node-form-title span {
-  flex-shrink: 0;
+.adapter-facts span {
+  display: block;
   color: #64748b;
   font-size: 12px;
+  line-height: 16px;
+}
+
+.adapter-facts strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 4px;
+  color: #111827;
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .node-form-warning {
   margin-top: 10px;
+}
+
+.flow-designer-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.flow-designer-entry-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.flow-designer-entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #e0ecff;
+  color: #2563eb;
+  font-size: 18px;
+}
+
+.flow-designer-entry-main strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.flow-designer-entry-main span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.flow-designer-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.flow-designer-facts div {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.flow-designer-facts span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.flow-designer-facts strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 4px;
+  color: #111827;
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mapping-row {
@@ -1102,6 +1121,19 @@ defineExpose({
   }
 
   .mapping-row {
+    grid-template-columns: 1fr;
+  }
+
+  .adapter-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-designer-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flow-designer-facts {
     grid-template-columns: 1fr;
   }
 }

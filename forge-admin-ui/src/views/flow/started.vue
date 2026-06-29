@@ -36,7 +36,7 @@
         </span>
       </template>
       <template #title="{ row }">
-        {{ row.title || row.taskName }}
+        {{ getRowDisplayTitle(row) }}
       </template>
       <template #meta="{ row }">
         <span><span class="task-meta-label">当前任务</span> <span class="task-meta-value">{{ row.taskName || '已结束' }}</span></span>
@@ -55,7 +55,7 @@
     <FlowTaskDetailShell
       v-model:show="showDrawer"
       :busy="withdrawLoading"
-      :title="currentTask?.title || '流程详情'"
+      :title="currentTask ? getRowDisplayTitle(currentTask) : '流程详情'"
       :subtitle="currentTask?.taskName ? `当前任务：${currentTask.taskName}` : '流程已结束'"
       :status-text="getStatusText(currentTask?.status)"
       :status-class="getStatusTagClass(currentTask?.status)"
@@ -139,6 +139,7 @@ import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const { dict, getLabel } = useDict('flow_started_status')

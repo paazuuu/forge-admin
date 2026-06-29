@@ -13,6 +13,7 @@
  *   - node           当前编辑节点（外层 useFlowDesigner.getNode 取）
  *   - outgoingEdges  当前节点出边，网关配置分支条件时使用
  *   - nodes          当前流程节点数组，用于网关配置显示下游节点名称
+ *   - formAssetOptions 节点可选表单资产，业务应用进入时来自应用表单资产
  *   - formFieldCatalog 流程动态表单字段目录，条件分支配置时用于生成表达式
  *   - focusEdgeId    从画布分支标签进入时聚焦的分支边 ID
  *   - readonly       只读模式（查看器场景）
@@ -38,6 +39,7 @@ const props = defineProps({
   node: { type: Object, default: null },
   outgoingEdges: { type: Array, default: () => [] },
   nodes: { type: Array, default: () => [] },
+  formAssetOptions: { type: Array, default: () => [] },
   formFieldCatalog: { type: Array, default: () => [] },
   focusEdgeId: { type: String, default: '' },
   readonly: { type: Boolean, default: false },
@@ -68,6 +70,7 @@ const ConfigComponent = computed(() => {
 const configExtraProps = computed(() => {
   if (draftNode.value?.nodeType === 'approver') {
     return {
+      formAssetOptions: props.formAssetOptions,
       formFieldCatalog: props.formFieldCatalog,
     }
   }

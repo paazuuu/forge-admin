@@ -30,7 +30,7 @@
         </span>
       </template>
       <template #title="{ row }">
-        {{ row.title || row.taskName }}
+        {{ getRowDisplayTitle(row) }}
       </template>
       <template #meta="{ row }">
         <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
@@ -51,7 +51,7 @@
     <!-- 详情弹窗 -->
     <FlowTaskDetailShell
       v-model:show="showDrawer"
-      :title="currentTask?.title || '审批详情'"
+      :title="currentTask ? getRowDisplayTitle(currentTask) : '审批详情'"
       :subtitle="currentTask?.taskName ? `处理节点：${currentTask.taskName}` : ''"
       :status-text="getStatusText(currentTask?.status)"
       :status-class="getStatusTagClass(currentTask?.status)"
@@ -143,13 +143,14 @@
               <span>加载业务表单中...</span>
             </div>
 
-            <div v-else-if="useBusinessObjectForm" class="business-task-form-section readonly">
+            <div v-else-if="useBusinessManagedForm" class="business-task-form-section readonly">
               <div class="approval-form-title">
-                {{ businessFormTitle }}
+                <span>{{ businessFormTitle }}</span>
               </div>
               <AiForm
                 v-model:value="businessFormData"
                 :schema="readonlyBusinessFormFields"
+                :field-permissions="readonlyBusinessFormFieldPermissions"
                 :show-actions="false"
                 :show-feedback="false"
                 :grid-cols="2"
@@ -161,23 +162,9 @@
                   {{ warning }}
                 </n-alert>
               </div>
-            </div>
-
-            <div v-else-if="useBusinessCodeForm" class="business-task-form-section readonly">
-              <div class="approval-form-title">
-                {{ businessFormTitle }}
-              </div>
-              <div class="business-form-warnings">
-                <n-alert v-for="warning in businessFormWarnings" :key="warning" type="warning" :show-icon="false">
-                  {{ warning }}
-                </n-alert>
-                <n-alert v-if="!businessCodeFormUrl" type="warning" :show-icon="false">
-                  当前代码业务表单未提供可查看地址
-                </n-alert>
-              </div>
               <div v-if="businessCodeFormUrl" class="business-form-actions">
                 <NButton type="primary" secondary @click="openBusinessCodeForm">
-                  打开业务表单
+                  打开完整业务页
                 </NButton>
               </div>
             </div>
@@ -229,6 +216,7 @@ import SignatureImage from '@/components/flow/SignatureImage.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
+import { getBusinessFormDisplayTitle, getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -285,11 +273,12 @@ const readonlyApprovalPolicy = {
   requireComment: false,
   requireSignature: false,
 }
-const useExternalForm = computed(() => taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
 const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
 const useBusinessObjectForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-object')
 const useBusinessCodeForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-code')
-const businessFormTitle = computed(() => businessFormContext.value?.formName || '业务表单')
+const useBusinessManagedForm = computed(() => useBusinessObjectForm.value || useBusinessCodeForm.value)
+const useExternalForm = computed(() => !useBusinessManagedForm.value && taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
+const businessFormTitle = computed(() => getBusinessFormDisplayTitle(businessFormContext.value, '业务表单'))
 const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
 const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
 const businessFormRenderContext = computed(() => ({
@@ -297,6 +286,14 @@ const businessFormRenderContext = computed(() => ({
   taskFormInfo: taskFormInfo.value,
   businessFormContext: businessFormContext.value,
 }))
+const readonlyBusinessFormFieldPermissions = computed(() => {
+  const permissions = businessFormContext.value?.fieldPermissions || taskFormInfo.value?.fieldPermissions || taskFormInfo.value?.formFieldPermissions || []
+  return (Array.isArray(permissions) ? permissions : []).map(permission => ({
+    ...permission,
+    editable: false,
+    writable: false,
+  }))
+})
 const readonlyBusinessFormFields = computed(() => {
   return (businessFormContext.value?.fields || []).map(field => ({
     ...field,
@@ -313,7 +310,7 @@ const readonlyBusinessFormFields = computed(() => {
 const showNoFormContent = computed(() => {
   if (formInfoLoading.value || businessFormLoading.value)
     return false
-  return !useExternalForm.value && !useDynamicForm.value && !useBusinessObjectForm.value && !useBusinessCodeForm.value
+  return !useExternalForm.value && !useDynamicForm.value && !useBusinessManagedForm.value
 })
 
 function getStatusTagClass(status) {
@@ -646,6 +643,9 @@ onMounted(() => {
 }
 
 .approval-form-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 12px;
   font-size: 14px;
   font-weight: 700;
@@ -662,6 +662,7 @@ onMounted(() => {
 .business-form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 12px;
 }
 

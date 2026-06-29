@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessBindingQueryDTO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingSummaryVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -38,4 +39,7 @@ public interface BusinessBindingMapper extends BaseMapper<AiBusinessBinding> {
                                                   @Param("targetType") String targetType,
                                                   @Param("targetCode") String targetCode,
                                                   @Param("bindingType") String bindingType);
+
+    List<BusinessBindingSummaryVO> selectFlowBindingsByModelKey(@Param("tenantId") Long tenantId,
+                                                                @Param("modelKey") String modelKey);
 }

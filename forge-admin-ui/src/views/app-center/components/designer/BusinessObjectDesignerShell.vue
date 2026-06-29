@@ -46,7 +46,15 @@
             </template>
           </n-button>
         </n-dropdown>
-        <n-button class="topbar-icon-button" quaternary circle :disabled="loading || previewDisabled" title="预览" @click="$emit('preview')">
+        <n-button
+          v-if="showPreview"
+          class="topbar-icon-button"
+          quaternary
+          circle
+          :disabled="loading || previewDisabled"
+          title="预览"
+          @click="$emit('preview')"
+        >
           <template #icon>
             <n-icon><CaretForward /></n-icon>
           </template>
@@ -58,6 +66,7 @@
           保存
         </n-button>
         <button
+          v-if="showPublish"
           type="button"
           class="topbar-publish-button"
           :disabled="loading || publishDisabled || publishing"
@@ -146,7 +155,6 @@ import {
   ChevronBackOutline,
   ChevronForwardOutline,
   CubeOutline,
-  DocumentTextOutline,
   GitBranchOutline,
   GitNetworkOutline,
   KeyOutline,
@@ -201,6 +209,18 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  navPanels: {
+    type: Array,
+    default: () => [],
+  },
+  showPreview: {
+    type: Boolean,
+    default: true,
+  },
+  showPublish: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits([
@@ -223,23 +243,39 @@ const navItems = [
   { key: 'fields', label: '高级字段资产', icon: TextOutline },
   { key: 'list', label: '列表设计', icon: ListOutline },
   { key: 'relations', label: '关系与级联', icon: GitNetworkOutline },
-  { key: 'document', label: '单据设置', icon: DocumentTextOutline },
-  { key: 'automation', label: '流程与自动化', icon: GitBranchOutline },
+  { key: 'flow-app', label: '业务流程配置', icon: GitBranchOutline },
   { key: 'permission', label: '数据权限', icon: KeyOutline },
   { key: 'publish', label: '发布检查', icon: CheckmarkDoneOutline },
   { key: 'advanced', label: '高级配置', icon: SettingsOutline },
 ]
 
+const codeAppNavMode = computed(() => props.navPanels?.includes('form') && props.navPanels?.includes('flow-app'))
 const filteredNavItems = computed(() => {
+  const whitelist = props.navPanels || []
   return navItems.filter((item) => {
+    if (whitelist.length && !whitelist.includes(item.key))
+      return false
     if (item.key === 'fields')
       return props.activePanel === 'fields'
     if (item.key === 'advanced')
       return props.showAdvanced
     return true
+  }).map((item) => {
+    if (item.key === 'form' && codeAppNavMode.value) {
+      return {
+        ...item,
+        label: '表单字段',
+      }
+    }
+    return item
   })
 })
 const moreOptions = computed(() => {
+  if (props.navPanels?.length) {
+    return [
+      { label: '刷新设计器', key: 'refresh' },
+    ]
+  }
   const options = [
     { label: '函数市场', key: 'openFunctionMarket' },
     { label: '刷新设计器', key: 'refresh' },
@@ -805,4 +841,3 @@ function handleTopbarActionsClick(event) {
   min-height: 0;
 }
 </style>
-  PlayCircleOutline,

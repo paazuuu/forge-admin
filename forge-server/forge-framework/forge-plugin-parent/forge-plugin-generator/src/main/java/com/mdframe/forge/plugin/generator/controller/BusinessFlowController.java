@@ -8,6 +8,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowStartDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormContextQueryDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormSaveDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowService;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingSummaryVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessFlowBindingVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessFlowRuntimeVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessTaskFormContextVO;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -57,11 +59,19 @@ public class BusinessFlowController {
         return RespInfo.success(flowService.getVariableCandidates(modelKey, objectCode));
     }
 
+    @GetMapping("/model/{modelKey}/business-bindings")
+    @SaCheckPermission("ai:businessFlow:config")
+    @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "按流程模型查询业务绑定")
+    public RespInfo<List<BusinessBindingSummaryVO>> listBusinessBindingsByModelKey(@PathVariable String modelKey) {
+        return RespInfo.success(flowService.listBusinessBindingsByModelKey(modelKey));
+    }
+
     @GetMapping("/form-assets/{objectCode}")
     @SaCheckPermission("ai:businessFlow:config")
     @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询业务流程表单资产")
-    public RespInfo<Map<String, Object>> formAssets(@PathVariable String objectCode) {
-        return RespInfo.success(flowService.getFormAssets(objectCode));
+    public RespInfo<Map<String, Object>> formAssets(@PathVariable String objectCode,
+                                                    @RequestParam(defaultValue = "false") Boolean includeInternal) {
+        return RespInfo.success(flowService.getFormAssets(objectCode, Boolean.TRUE.equals(includeInternal)));
     }
 
     @GetMapping("/task-form-context")

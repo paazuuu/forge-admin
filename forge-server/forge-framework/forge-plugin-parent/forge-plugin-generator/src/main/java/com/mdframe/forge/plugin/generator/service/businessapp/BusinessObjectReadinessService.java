@@ -348,7 +348,7 @@ public class BusinessObjectReadinessService {
             item.setMessage("当前对象按普通 CRUD 运行，未启用单据闭环");
             item.setNextAction("CONFIGURE_DOCUMENT");
             item.setNextActionLabel("配置单据");
-            item.setNextActionUrl("/app-center/object-designer/" + object.getObjectCode() + "?panel=document");
+            item.setNextActionUrl(buildDesignerUrl(object.getObjectCode(), "document"));
             return item;
         }
         if (StringUtils.isBlank(config.getStatusField())) {
@@ -357,7 +357,7 @@ public class BusinessObjectReadinessService {
             item.setMessage("单据模式已启用，但未配置状态字段");
             item.setNextAction("CONFIGURE_DOCUMENT");
             item.setNextActionLabel("配置单据状态");
-            item.setNextActionUrl("/app-center/object-designer/" + object.getObjectCode() + "?panel=document");
+            item.setNextActionUrl(buildDesignerUrl(object.getObjectCode(), "document"));
             return item;
         }
 
@@ -368,7 +368,7 @@ public class BusinessObjectReadinessService {
             item.setMessage("单据已配置，尚未绑定主流程");
             item.setNextAction("CONFIGURE_FLOW");
             item.setNextActionLabel("配置主流程");
-            item.setNextActionUrl("/app-center/object-designer/" + object.getObjectCode() + "?panel=automation");
+            item.setNextActionUrl(buildDesignerUrl(object.getObjectCode(), "flow"));
             return item;
         }
         if (!Boolean.TRUE.equals(mainFlow.get("complete"))) {
@@ -377,7 +377,7 @@ public class BusinessObjectReadinessService {
             item.setMessage("主流程仍有缺口: " + summarizeGaps(mainFlow.get("gaps")));
             item.setNextAction("CONFIGURE_FLOW");
             item.setNextActionLabel("完善流程配置");
-            item.setNextActionUrl("/app-center/object-designer/" + object.getObjectCode() + "?panel=automation");
+            item.setNextActionUrl(buildDesignerUrl(object.getObjectCode(), "flow"));
             return item;
         }
         Object startModeValue = mainFlow.get("startMode");
@@ -568,6 +568,10 @@ public class BusinessObjectReadinessService {
             return false;
         }
         return options.replace(" ", "").contains("\"" + key + "\":true");
+    }
+
+    private String buildDesignerUrl(String objectCode, String section) {
+        return "/app-center/object/" + objectCode + "/designer?panel=flow-app&section=" + section;
     }
 
     private void setNextAction(BusinessObjectReadinessVO vo, List<BusinessReadinessItemVO> items, String overallStatus) {
