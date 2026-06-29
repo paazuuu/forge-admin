@@ -1372,6 +1372,19 @@ async function loadAndSetMenuData(loginTenantId = selectedTenantId.value) {
   overflow-y: auto;
 }
 
+@media (min-width: 960px) {
+  /* Fixed-height internal scroll so a tall form (incl. "其他登录方式")
+     stays reachable on short / low-resolution screens instead of being
+     clipped below the fold. "safe center" falls back to top alignment
+     when content overflows, avoiding the flexbox top-clip bug. */
+  .login-form-wrapper {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    align-items: safe center;
+  }
+}
+
 @media (max-width: 959px) {
   .login-container {
     align-items: stretch;
