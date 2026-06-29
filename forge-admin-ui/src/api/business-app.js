@@ -379,8 +379,28 @@ export function businessFlowVariables(modelKey, params = {}) {
   return request.get(`/ai/business/flow/model/${modelKey}/variables`, { params })
 }
 
+export function businessFlowFormAssets(objectCode) {
+  return request.get(`/ai/business/flow/form-assets/${objectCode}`)
+}
+
+export function businessTaskFormContext(params = {}) {
+  return request.get('/ai/business/flow/task-form-context', { params })
+}
+
+export function businessTaskFormReadonlyContext(params = {}) {
+  return request.get('/ai/business/flow/task-form-context/readonly', { params })
+}
+
+export function saveBusinessTaskFormContext(data) {
+  return request.put('/ai/business/flow/task-form-context', data)
+}
+
 export function startBusinessDocumentFlow(data) {
   return request.post('/ai/business/flow/start', data)
+}
+
+export function resubmitBusinessDocumentFlow(data) {
+  return request.post('/ai/business/flow/resubmit', data)
 }
 
 export function businessFlowStatus(objectCode, recordId) {

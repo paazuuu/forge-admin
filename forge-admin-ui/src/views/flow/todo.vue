@@ -241,6 +241,62 @@
           </template>
 
           <template v-else>
+            <div v-if="businessFormLoading" class="form-loading">
+              <n-spin size="small" />
+              <span>加载业务表单中...</span>
+            </div>
+
+            <div v-else-if="useBusinessObjectForm" class="business-task-form-section">
+              <div class="approval-form-title">
+                {{ businessFormTitle }}
+              </div>
+              <AiForm
+                ref="businessFormRef"
+                v-model:value="businessFormData"
+                :schema="businessFormContext.fields || []"
+                :show-actions="false"
+                :show-feedback="true"
+                :grid-cols="2"
+                label-placement="top"
+                :context="businessFormRenderContext"
+              />
+              <div v-if="businessFormWarnings.length" class="business-form-warnings">
+                <n-alert v-for="warning in businessFormWarnings" :key="warning" type="warning" :show-icon="false">
+                  {{ warning }}
+                </n-alert>
+              </div>
+              <div v-if="businessFormHasWritableFields" class="business-form-actions">
+                <NButton
+                  type="primary"
+                  secondary
+                  :loading="businessFormSaving"
+                  :disabled="isApprovalBusy"
+                  @click="() => saveBusinessTaskFormFields({ validate: true, silent: false })"
+                >
+                  保存业务字段
+                </NButton>
+              </div>
+            </div>
+
+            <div v-else-if="useBusinessCodeForm" class="business-task-form-section">
+              <div class="approval-form-title">
+                {{ businessFormTitle }}
+              </div>
+              <div class="business-form-warnings">
+                <n-alert v-for="warning in businessFormWarnings" :key="warning" type="warning" :show-icon="false">
+                  {{ warning }}
+                </n-alert>
+                <n-alert v-if="!businessCodeFormUrl" type="warning" :show-icon="false">
+                  当前代码业务表单未提供可打开地址
+                </n-alert>
+              </div>
+              <div v-if="businessCodeFormUrl" class="business-form-actions">
+                <NButton type="primary" secondary :disabled="isApprovalBusy" @click="openBusinessCodeForm">
+                  打开业务表单
+                </NButton>
+              </div>
+            </div>
+
             <div v-if="useDynamicForm" class="dynamic-form-section">
               <div class="approval-form-title">
                 节点动态表单
@@ -400,7 +456,9 @@
 import { NButton, NSpace, NTreeSelect } from 'naive-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { businessTaskFormContext, saveBusinessTaskFormContext } from '@/api/business-app'
 import flowApi from '@/api/flow'
+import { AiForm } from '@/components/ai-form'
 import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import UserSelectModal from '@/components/common/UserSelectModal.vue'
@@ -463,6 +521,22 @@ const useExternalForm = computed(() => taskFormInfo.value?.formType === 'externa
 const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
 const dynamicFormRef = ref(null)
 const dynamicFormData = ref({})
+const businessFormContext = ref(null)
+const businessFormData = ref({})
+const businessFormRef = ref(null)
+const businessFormLoading = ref(false)
+const businessFormSaving = ref(false)
+const useBusinessObjectForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-object')
+const useBusinessCodeForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-code')
+const businessFormTitle = computed(() => businessFormContext.value?.formName || '业务表单')
+const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
+const businessFormHasWritableFields = computed(() => hasWritableBusinessFormFields(businessFormContext.value))
+const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
+const businessFormRenderContext = computed(() => ({
+  task: currentTask.value,
+  taskFormInfo: taskFormInfo.value,
+  businessFormContext: businessFormContext.value,
+}))
 const canApprove = computed(() => taskFormInfo.value?.allowApprove !== false)
 const canReject = computed(() => taskFormInfo.value?.allowReject !== false)
 const canDelegate = computed(() => taskFormInfo.value?.allowDelegate !== false)
@@ -504,7 +578,7 @@ const delegateSignatureKey = ref(0)
 const routeTaskOpening = ref(false)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_todo_status))
-const isApprovalBusy = computed(() => approveLoading.value || delegateLoading.value || Boolean(claimLoadingTaskId.value))
+const isApprovalBusy = computed(() => approveLoading.value || delegateLoading.value || businessFormSaving.value || Boolean(claimLoadingTaskId.value))
 
 // 优先级
 function getPriorityClass(p) {
@@ -529,6 +603,158 @@ function toNumberOptions(options = []) {
   }))
 }
 
+function resetBusinessTaskForm() {
+  businessFormContext.value = null
+  businessFormData.value = {}
+  businessFormLoading.value = false
+  businessFormSaving.value = false
+}
+
+function buildBusinessTaskFormQuery(row = {}, formInfo = {}) {
+  return compactParams({
+    taskId: formInfo.taskId || row.taskId || row.id,
+    businessKey: formInfo.businessKey || row.businessKey,
+    processInstanceId: formInfo.processInstanceId || row.processInstanceId,
+    processDefKey: formInfo.processDefKey || row.processDefKey || row.processDefinitionKey,
+    taskDefKey: formInfo.taskDefKey || row.taskDefKey || row.taskDefinitionKey,
+    objectCode: formInfo.objectCode || row.objectCode,
+    recordId: formInfo.recordId || row.recordId,
+    formKey: formInfo.formKey,
+  })
+}
+
+function compactParams(source = {}) {
+  const result = {}
+  Object.entries(source).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '')
+      result[key] = value
+  })
+  return result
+}
+
+function hasBusinessTaskFormQuery(query = {}) {
+  return Boolean(query.taskId || query.processInstanceId || query.businessKey || (query.objectCode && query.recordId))
+}
+
+function hasWritableBusinessFormFields(context) {
+  return Array.isArray(context?.fields) && context.fields.some(field =>
+    field?.writable === true && field?.readonly !== true && field?.disabled !== true,
+  )
+}
+
+async function loadBusinessTaskFormContext(row, formInfo) {
+  businessFormContext.value = null
+  businessFormData.value = {}
+
+  const query = buildBusinessTaskFormQuery(row, formInfo)
+  if (!hasBusinessTaskFormQuery(query))
+    return null
+
+  businessFormLoading.value = true
+  try {
+    const res = await businessTaskFormContext(query)
+    if (res.code !== 200) {
+      console.error('加载业务表单上下文失败', res.message)
+      return null
+    }
+    businessFormContext.value = res.data || null
+    businessFormData.value = { ...(res.data?.recordData || {}) }
+    return businessFormContext.value
+  }
+  catch (error) {
+    console.error('加载业务表单上下文失败', error)
+    return null
+  }
+  finally {
+    businessFormLoading.value = false
+  }
+}
+
+function buildBusinessTaskFormSavePayload() {
+  const context = businessFormContext.value || {}
+  return compactParams({
+    taskId: context.taskId || taskFormInfo.value?.taskId || currentTask.value?.taskId || currentTask.value?.id,
+    businessKey: context.businessKey || taskFormInfo.value?.businessKey,
+    processInstanceId: context.processInstanceId || taskFormInfo.value?.processInstanceId || currentTask.value?.processInstanceId,
+    processDefKey: context.processDefKey || taskFormInfo.value?.processDefKey || currentTask.value?.processDefKey || currentTask.value?.processDefinitionKey,
+    taskDefKey: context.taskDefKey || taskFormInfo.value?.taskDefKey || currentTask.value?.taskDefKey || currentTask.value?.taskDefinitionKey,
+    objectCode: context.objectCode || taskFormInfo.value?.objectCode || currentTask.value?.objectCode,
+    recordId: context.recordId || taskFormInfo.value?.recordId || currentTask.value?.recordId,
+    formKey: context.formKey || taskFormInfo.value?.formKey,
+    data: { ...businessFormData.value },
+  })
+}
+
+async function saveBusinessTaskFormFields(options = {}) {
+  if (!useBusinessObjectForm.value || !businessFormHasWritableFields.value)
+    return null
+
+  const { validate = true, silent = true } = options
+  businessFormSaving.value = true
+  try {
+    if (validate)
+      await businessFormRef.value?.validate?.()
+
+    const res = await saveBusinessTaskFormContext(buildBusinessTaskFormSavePayload())
+    if (res.code !== 200)
+      throw new Error(res.message || '业务字段保存失败')
+
+    businessFormContext.value = res.data || businessFormContext.value
+    businessFormData.value = { ...(businessFormContext.value?.recordData || businessFormData.value) }
+    if (!silent)
+      window.$message.success('业务字段已保存')
+    return businessFormContext.value
+  }
+  catch (error) {
+    if (!silent) {
+      window.$message.error(error?.message || '业务字段保存失败')
+      return null
+    }
+    throw error
+  }
+  finally {
+    businessFormSaving.value = false
+  }
+}
+
+async function persistBusinessTaskFormBeforeAction(action) {
+  if (action !== 'approve')
+    return
+  if (!useBusinessObjectForm.value || !businessFormHasWritableFields.value)
+    return
+  await saveBusinessTaskFormFields({ validate: true, silent: true })
+}
+
+function openBusinessCodeForm() {
+  const url = businessCodeFormUrl.value
+  if (!url)
+    return
+  if (/^https?:\/\//i.test(url)) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  router.push({
+    path: url,
+    query: compactParams({
+      taskId: businessFormContext.value?.taskId || taskFormInfo.value?.taskId || currentTask.value?.taskId,
+      businessKey: businessFormContext.value?.businessKey,
+      processInstanceId: businessFormContext.value?.processInstanceId,
+      taskDefKey: businessFormContext.value?.taskDefKey,
+      source: 'flowTodo',
+    }),
+  })
+}
+
+async function loadQuickBusinessTaskFormContext(row, formInfo) {
+  const query = buildBusinessTaskFormQuery(row, formInfo)
+  if (!hasBusinessTaskFormQuery(query))
+    return null
+  const res = await businessTaskFormContext(query)
+  if (res.code !== 200)
+    throw new Error(res.message || '业务表单策略加载失败')
+  return res.data || null
+}
+
 async function openDrawer(row) {
   currentTask.value = row
   approveForm.comment = ''
@@ -538,6 +764,7 @@ async function openDrawer(row) {
   approvalHistory.value = []
   taskFormInfo.value = null
   dynamicFormData.value = {}
+  resetBusinessTaskForm()
   showDrawer.value = true
 
   const promises = []
@@ -557,10 +784,11 @@ async function openDrawer(row) {
     formInfoLoading.value = true
     promises.push(
       flowApi.getTaskFormInfo(taskId)
-        .then((res) => {
+        .then(async (res) => {
           if (res.code === 200) {
             taskFormInfo.value = res.data
             dynamicFormData.value = { ...(res.data?.variables || {}) }
+            await loadBusinessTaskFormContext(row, res.data || {})
           }
         })
         .catch(e => console.error('加载表单信息失败', e))
@@ -684,6 +912,7 @@ async function submitApprove(action) {
     approveForm.signature = signature
     const api = resolveActionApi(action)
     const variables = await collectDynamicFormVariables(action)
+    await persistBusinessTaskFormBeforeAction(action)
     const res = await api({
       taskId: currentTask.value.taskId,
       userId: userStore.userId,
@@ -747,7 +976,7 @@ async function claimTaskBeforeQuickAction(row, taskId) {
     throw new Error(res.message || '签收失败')
 }
 
-function assertQuickActionAllowed(action, formInfo) {
+function assertQuickActionAllowed(action, formInfo, businessFormContext = null) {
   if (action === 'approve' && formInfo?.allowApprove === false)
     throw new Error('当前节点不允许同意')
   if (action === 'reject' && formInfo?.allowReject === false)
@@ -757,6 +986,10 @@ function assertQuickActionAllowed(action, formInfo) {
   if (action === 'approve' && formInfo?.formType === 'dynamic' && formInfo?.formJson)
     throw new Error('需要填写节点表单，请进入详情处理')
   if (action === 'approve' && formInfo?.formType === 'external' && formInfo?.formUrl)
+    throw new Error('需要填写业务表单，请进入详情处理')
+  if (action === 'approve' && businessFormContext?.configured === true && businessFormContext?.formType === 'business-code')
+    throw new Error('需要进入业务表单处理')
+  if (action === 'approve' && businessFormContext?.configured === true && hasWritableBusinessFormFields(businessFormContext))
     throw new Error('需要填写业务表单，请进入详情处理')
 }
 
@@ -772,7 +1005,8 @@ async function executeQuickAction(action, row, comment) {
     throw new Error(formRes.message || '审批策略加载失败')
 
   const formInfo = formRes.data || {}
-  assertQuickActionAllowed(action, formInfo)
+  const businessContext = await loadQuickBusinessTaskFormContext(row, formInfo)
+  assertQuickActionAllowed(action, formInfo, businessContext)
 
   const api = action === 'approve' ? flowApi.approveTask : flowApi.rejectTask
   const res = await api({
@@ -1435,12 +1669,26 @@ watch(
   color: #64748b;
 }
 
-.dynamic-form-section {
+.dynamic-form-section,
+.business-task-form-section {
   margin-bottom: 16px;
   padding: 14px;
   border: 1px solid #d7dde7;
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.business-form-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.business-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .dynamic-form-header {

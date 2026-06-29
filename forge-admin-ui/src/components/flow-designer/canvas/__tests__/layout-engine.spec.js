@@ -78,6 +78,24 @@ describe('layoutFlow - 分支流程', () => {
       expect(pos.height).toBeGreaterThan(0)
     }
   })
+
+  it('网关使用紧凑菱形尺寸，连线端点连接到菱形边界', () => {
+    const out = layoutFlow(branchJson())
+    const gateway = out.nodePositions.get('GW')
+    const incoming = out.edgePaths.get('F1').points
+    const outgoing = out.edgePaths.get('F2').points
+
+    expect(gateway.width).toBe(44)
+    expect(gateway.height).toBe(44)
+    expect(incoming.at(-1)).toMatchObject({
+      x: gateway.x + gateway.width / 2,
+      y: gateway.y,
+    })
+    expect(outgoing[0]).toMatchObject({
+      x: gateway.x + gateway.width / 2,
+      y: gateway.y + gateway.height,
+    })
+  })
 })
 
 describe('layoutFlow - 边界', () => {

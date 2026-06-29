@@ -43,8 +43,8 @@ const SAMPLE_MI = [
   '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">',
   '  <bpmn:process id="P_MI" isExecutable="true">',
   '    <bpmn:startEvent id="S"/>',
-  '    <bpmn:userTask id="T_mi" flowable:candidateUsers="1,2,3">',
-  '      <bpmn:multiInstanceLoopCharacteristics isSequential="false">',
+  `    <bpmn:userTask id="T_mi" flowable:assignee="${DOLLAR}{assignee}" flowable:candidateUsers="1,2,3">`,
+  `      <bpmn:multiInstanceLoopCharacteristics isSequential="false" flowable:collection="${DOLLAR}{countersignUserList}" flowable:elementVariable="assignee">`,
   `        <bpmn:completionCondition>${DOLLAR}{nrOfCompletedInstances/nrOfInstances >= 0.6}</bpmn:completionCondition>`,
   '      </bpmn:multiInstanceLoopCharacteristics>',
   '    </bpmn:userTask>',
@@ -97,9 +97,11 @@ describe('roundtrip - 会签语义等价', () => {
     const json2 = convertBpmnToJson(xml2)
 
     const t = json2.nodes.find(n => n.id === 'T_mi')
-    expect(t.config.taskType).toBe('candidateUsers')
-    expect(t.config.candidateUsers).toEqual(['1', '2', '3'])
+    expect(t.config.taskType).toBe('assignee')
+    expect(t.config.assignee).toBe(`${DOLLAR}{assignee}`)
     expect(t.config.multiInstanceType).toBe('parallel')
+    expect(t.config.multiInstanceCollection).toBe(`${DOLLAR}{countersignUserList}`)
+    expect(t.config.multiInstanceElementVariable).toBe('assignee')
     expect(t.config.completionCondition).toBe('ratio')
     expect(t.config.passRate).toBe(60)
   })

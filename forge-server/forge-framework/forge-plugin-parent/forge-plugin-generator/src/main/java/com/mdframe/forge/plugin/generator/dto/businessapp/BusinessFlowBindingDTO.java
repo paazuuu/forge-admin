@@ -21,7 +21,11 @@ public class BusinessFlowBindingDTO {
 
     private String startMode;
 
+    private BusinessBindingDTO businessBinding;
+
     private List<VariableMappingDTO> variableMapping = new ArrayList<>();
+
+    private List<Map<String, Object>> nodeForms = new ArrayList<>();
 
     private List<Map<String, Object>> conditionFlows = new ArrayList<>();
 
@@ -35,5 +39,23 @@ public class BusinessFlowBindingDTO {
         private String flowVariable;
 
         private String label;
+    }
+
+    @Data
+    public static class BusinessBindingDTO {
+
+        private String mode;
+
+        private String tableName;
+
+        private String primaryKeyField;
+
+        private String tenantField;
+
+        private String statusField;
+
+        private String titleField;
+
+        private String ownerField;
     }
 }

@@ -24,6 +24,7 @@ const DEFAULT_PROCESS_CONFIG = {
   allowSubmitterWithdraw: true,
   autoApprovalMode: 'none',
 }
+const DEFAULT_CC_DELEGATE_EXPRESSION = '$' + '{flowCcNodeDelegate}'
 
 export function convertJsonToBpmn(flowJson) {
   if (!flowJson || !Array.isArray(flowJson.nodes))
@@ -105,8 +106,20 @@ function writeNode(node) {
     case NODE_TYPE.SERVICE:
     case NODE_TYPE.CARBON_COPY: {
       const c = node.config || {}
-      if (node.nodeType === NODE_TYPE.CARBON_COPY)
+      if (node.nodeType === NODE_TYPE.CARBON_COPY) {
+        const ccValues = normalizeCarbonCopyValues(c)
         attrs.push('flowable:type="cc"')
+        attrs.push(`flowable:ccReceiverType="${escapeXmlAttr(ccValues.ccReceiverType)}"`)
+        attrs.push(`flowable:ccExpressionTarget="${escapeXmlAttr(ccValues.ccExpressionTarget)}"`)
+        if (ccValues.candidateUsers.length)
+          attrs.push(`flowable:candidateUsers="${escapeXmlAttr(ccValues.candidateUsers.join(','))}"`)
+        if (Array.isArray(c.candidateUserNames) && c.candidateUserNames.length)
+          attrs.push(`flowable:candidateUserNames="${escapeXmlAttr(c.candidateUserNames.join(','))}"`)
+        if (ccValues.candidateGroups.length)
+          attrs.push(`flowable:candidateGroups="${escapeXmlAttr(ccValues.candidateGroups.join(','))}"`)
+        if (Array.isArray(c.candidateGroupNames) && c.candidateGroupNames.length)
+          attrs.push(`flowable:candidateGroupNames="${escapeXmlAttr(c.candidateGroupNames.join(','))}"`)
+      }
       if (c.implementationType && c.implementation) {
         const t = c.implementationType
         const v = escapeXmlAttr(c.implementation)
@@ -116,6 +129,9 @@ function writeNode(node) {
           attrs.push(`flowable:expression="${v}"`)
         else if (t === 'delegateExpression')
           attrs.push(`flowable:delegateExpression="${v}"`)
+      }
+      else if (node.nodeType === NODE_TYPE.CARBON_COPY) {
+        attrs.push(`flowable:delegateExpression="${escapeXmlAttr(DEFAULT_CC_DELEGATE_EXPRESSION)}"`)
       }
       if (c.async)
         attrs.push('flowable:async="true"')
@@ -150,6 +166,62 @@ function writeNode(node) {
   if (children.length)
     return `<${tag} ${attrs.join(' ')}>${children.join('')}</${tag}>`
   return `<${tag} ${attrs.join(' ')}/>`
+}
+
+function normalizeCarbonCopyValues(config = {}) {
+  const ccReceiverType = config.ccReceiverType || inferCarbonCopyReceiverType(config)
+  const ccExpressionTarget = config.ccExpressionTarget || inferCarbonCopyExpressionTarget(config)
+  const expression = normalizeExpression(config.ccExpression || inferCarbonCopyExpression(config))
+  if (ccReceiverType === 'expression' && expression) {
+    return {
+      ccReceiverType,
+      ccExpressionTarget,
+      candidateUsers: ccExpressionTarget === 'roles' ? [] : [expression],
+      candidateGroups: ccExpressionTarget === 'roles' ? [expression] : [],
+    }
+  }
+  return {
+    ccReceiverType,
+    ccExpressionTarget,
+    candidateUsers: Array.isArray(config.candidateUsers) ? config.candidateUsers : [],
+    candidateGroups: Array.isArray(config.candidateGroups) ? config.candidateGroups : [],
+  }
+}
+
+function inferCarbonCopyReceiverType(config = {}) {
+  if (config.ccExpression || findExpressionValue(config.candidateUsers) || findExpressionValue(config.candidateGroups))
+    return 'expression'
+  if (Array.isArray(config.candidateGroups) && config.candidateGroups.length)
+    return 'roles'
+  return 'users'
+}
+
+function inferCarbonCopyExpressionTarget(config = {}) {
+  return findExpressionValue(config.candidateGroups) ? 'roles' : 'users'
+}
+
+function inferCarbonCopyExpression(config = {}) {
+  return findExpressionValue(config.candidateUsers) || findExpressionValue(config.candidateGroups) || ''
+}
+
+function findExpressionValue(values) {
+  if (!Array.isArray(values))
+    return ''
+  return values.find(value => isExpressionValue(value)) || ''
+}
+
+function isExpressionValue(value) {
+  const text = String(value || '').trim()
+  return text.startsWith('${') && text.endsWith('}')
+}
+
+function normalizeExpression(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return ''
+  if (isExpressionValue(text))
+    return text
+  return '$' + `{${text}}`
 }
 
 function writeEdge(edge) {

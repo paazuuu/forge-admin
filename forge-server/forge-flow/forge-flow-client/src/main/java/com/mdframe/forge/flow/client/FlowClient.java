@@ -239,6 +239,14 @@ public class FlowClient {
     }
 
     /**
+     * 获取任务详情。
+     */
+    public FlowResult<Map<String, Object>> getTaskDetail(String taskId) {
+        String url = flowServiceUrl + "/api/flow/task/" + taskId;
+        return get(url, new TypeReference<FlowResult<Map<String, Object>>>() {});
+    }
+
+    /**
      * 签收任务
      */
     public FlowResult<Void> claimTask(String taskId, String userId) {
@@ -358,6 +366,30 @@ public class FlowClient {
         return get(url, new TypeReference<FlowResult<Map<String, Object>>>() {});
     }
 
+    /**
+     * 创建流程模型。
+     */
+    public FlowResult<Map<String, Object>> createModel(Map<String, Object> model) {
+        String url = flowServiceUrl + "/api/flow/model";
+        return post(url, model, new TypeReference<FlowResult<Map<String, Object>>>() {});
+    }
+
+    /**
+     * 更新流程模型。
+     */
+    public FlowResult<Map<String, Object>> updateModel(Map<String, Object> model) {
+        String url = flowServiceUrl + "/api/flow/model";
+        return put(url, model, new TypeReference<FlowResult<Map<String, Object>>>() {});
+    }
+
+    /**
+     * 发布流程模型。
+     */
+    public FlowResult<String> deployModel(String id) {
+        String url = flowServiceUrl + "/api/flow/model/" + id + "/deploy";
+        return post(url, null, new TypeReference<FlowResult<String>>() {});
+    }
+
     // ==================== HTTP 方法封装 ====================
 
     private HttpHeaders buildHeaders() {
@@ -414,6 +446,24 @@ public class FlowClient {
             throw e;
         } catch (Exception e) {
             throw new FlowClientException("调用流程服务失败 [POST " + url + "]: " + e.getMessage(), e);
+        }
+    }
+
+    private <T> T put(String url, Object body, TypeReference<T> typeReference) {
+        try {
+            String json = body != null ? objectMapper.writeValueAsString(body) : null;
+            HttpEntity<String> entity = new HttpEntity<>(json, buildHeaders());
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+            String responseBody = response.getBody();
+            if (responseBody == null || responseBody.isBlank()) {
+                throw new FlowClientException("调用流程服务返回空响应体 [PUT " + url + "]" +
+                        "（HTTP " + response.getStatusCode().value() + "）请检查服务端日志");
+            }
+            return objectMapper.readValue(responseBody, typeReference);
+        } catch (FlowClientException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FlowClientException("调用流程服务失败 [PUT " + url + "]: " + e.getMessage(), e);
         }
     }
 }

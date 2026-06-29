@@ -641,20 +641,138 @@
           <!-- 服务任务配置Tab -->
           <n-tab-pane v-if="elementType === 'bpmn:ServiceTask'" name="service" tab="服务配置">
             <n-form :model="properties" label-placement="top" size="small">
-              <n-form-item label="实现方式">
-                <n-select
-                  v-model:value="properties.implementationType"
-                  :options="implementationTypeOptions"
-                  @update:value="updateServiceImplementation"
-                />
+              <n-form-item>
+                <n-checkbox
+                  :checked="properties.flowableType === 'cc'"
+                  @update:checked="toggleCarbonCopyService"
+                >
+                  作为抄送节点
+                </n-checkbox>
               </n-form-item>
-              <n-form-item label="实现值">
-                <n-input
-                  v-model:value="properties.implementation"
-                  :placeholder="getImplementationPlaceholder()"
-                  @blur="updateServiceImplementation"
-                />
-              </n-form-item>
+
+              <template v-if="properties.flowableType === 'cc'">
+                <n-form-item label="抄送来源">
+                  <div class="carbon-copy-source-switch">
+                    <button
+                      v-for="item in carbonCopyReceiverTypeOptions"
+                      :key="item.value"
+                      type="button"
+                      class="carbon-copy-source-button"
+                      :class="{ active: properties.ccReceiverType === item.value }"
+                      @click="handleCarbonCopyReceiverTypeChange(item.value)"
+                    >
+                      {{ item.label }}
+                    </button>
+                  </div>
+                </n-form-item>
+
+                <n-form-item v-if="properties.ccReceiverType === 'users'" label="抄送人">
+                  <n-space vertical size="small" style="width: 100%">
+                    <n-button
+                      type="primary"
+                      dashed
+                      block
+                      @click="openUserSelect('carbonCopyUsers')"
+                    >
+                      <template #icon>
+                        <i class="i-material-symbols:group-add" />
+                      </template>
+                      从用户列表选择
+                    </n-button>
+                    <div v-if="properties.candidateUserNames.length > 0" style="margin-top: 8px">
+                      <n-tag
+                        v-for="(name, index) in properties.candidateUserNames"
+                        :key="index"
+                        type="info"
+                        closable
+                        style="margin: 2px"
+                        @close="removeCarbonCopyUser(index)"
+                      >
+                        {{ name }}
+                      </n-tag>
+                    </div>
+                  </n-space>
+                </n-form-item>
+
+                <n-form-item v-else-if="properties.ccReceiverType === 'roles'" label="抄送角色">
+                  <n-select
+                    :value="properties.candidateGroups"
+                    :options="carbonCopyRoleOptions"
+                    :loading="roleLoading"
+                    placeholder="请选择角色"
+                    multiple
+                    clearable
+                    filterable
+                    remote
+                    @focus="loadRoleList"
+                    @search="loadRoleList"
+                    @update:value="handleCarbonCopyRolesChange"
+                  />
+                </n-form-item>
+
+                <template v-else>
+                  <n-form-item label="表达式返回内容">
+                    <n-select
+                      v-model:value="properties.ccExpressionTarget"
+                      :options="carbonCopyExpressionTargetOptions"
+                      @update:value="updateCarbonCopyExpression"
+                    />
+                  </n-form-item>
+                  <n-form-item label="抄送表达式">
+                    <n-input
+                      v-model:value="properties.ccExpression"
+                      type="textarea"
+                      :autosize="{ minRows: 3, maxRows: 5 }"
+                      placeholder="${ccUserIds} 或 ${flowSpelService.findUsersByRole('general_manager')}"
+                      @blur="updateCarbonCopyExpression"
+                    />
+                  </n-form-item>
+                  <n-alert type="info" size="small" style="margin-bottom: 12px">
+                    表达式可返回单个 ID、逗号分隔字符串或数组；选择“返回角色”时系统会按角色编码解析抄送人。
+                  </n-alert>
+                </template>
+
+                <n-alert type="info" size="small" style="margin-bottom: 12px">
+                  流程到达该节点时会发送抄送消息，不需要审批，发送后自动流转到下一节点。
+                </n-alert>
+              </template>
+
+              <template v-if="properties.flowableType === 'cc'">
+                <n-collapse class="advanced-condition-collapse">
+                  <n-collapse-item title="开发者高级配置（可选）" name="carbonCopyAdvanced">
+                    <n-form-item label="实现方式">
+                      <n-select
+                        v-model:value="properties.implementationType"
+                        :options="carbonCopyImplementationTypeOptions"
+                        @update:value="updateServiceImplementation"
+                      />
+                    </n-form-item>
+                    <n-form-item label="实现值">
+                      <n-input
+                        v-model:value="properties.implementation"
+                        :placeholder="getImplementationPlaceholder()"
+                        @blur="updateServiceImplementation"
+                      />
+                    </n-form-item>
+                  </n-collapse-item>
+                </n-collapse>
+              </template>
+              <template v-else>
+                <n-form-item label="实现方式">
+                  <n-select
+                    v-model:value="properties.implementationType"
+                    :options="implementationTypeOptions"
+                    @update:value="updateServiceImplementation"
+                  />
+                </n-form-item>
+                <n-form-item label="实现值">
+                  <n-input
+                    v-model:value="properties.implementation"
+                    :placeholder="getImplementationPlaceholder()"
+                    @blur="updateServiceImplementation"
+                  />
+                </n-form-item>
+              </template>
               <n-form-item label="异步执行">
                 <n-switch v-model:value="properties.async" @update:value="markDirty" />
               </n-form-item>
@@ -690,23 +808,37 @@
             <n-form :model="properties" label-placement="top" size="small">
               <n-form-item>
                 <n-checkbox v-model:checked="properties.hasCondition" @update:checked="toggleCondition">
-                  启用条件表达式
+                  设置这条线的流转条件
                 </n-checkbox>
               </n-form-item>
 
               <template v-if="properties.hasCondition">
-                <n-form-item label="条件类型">
-                  <n-radio-group v-model:value="properties.conditionType" @update:value="updateConditionType">
-                    <n-radio-button value="expression">
-                      表达式
-                    </n-radio-button>
-                    <n-radio-button value="script">
-                      脚本
-                    </n-radio-button>
+                <n-form-item label="这条线什么时候走">
+                  <n-radio-group
+                    v-model:value="properties.conditionPreset"
+                    class="approval-result-options"
+                    @update:value="updateConditionPreset"
+                  >
+                    <n-radio
+                      v-for="item in approvalResultConditionOptions"
+                      :key="item.value"
+                      :value="item.value"
+                      class="approval-result-option"
+                    >
+                      <div class="approval-result-card" :class="{ active: properties.conditionPreset === item.value }">
+                        <div class="approval-result-title">
+                          <i :class="item.icon" />
+                          <span>{{ item.label }}</span>
+                        </div>
+                        <div class="approval-result-desc">
+                          {{ item.desc }}
+                        </div>
+                      </div>
+                    </n-radio>
                   </n-radio-group>
                 </n-form-item>
 
-                <n-form-item v-if="properties.conditionType === 'expression'" label="条件表达式">
+                <n-form-item v-if="properties.conditionPreset === 'custom'" label="按业务字段判断">
                   <n-space vertical size="small" style="width: 100%">
                     <div class="condition-builder">
                       <n-select
@@ -731,38 +863,59 @@
                         生成
                       </n-button>
                     </div>
-                    <n-input
-                      v-model:value="properties.condition"
-                      type="textarea"
-                      :rows="3"
-                      placeholder="${approved == true}"
-                      @blur="updateCondition"
-                    />
+                    <div class="field-catalog-tip">
+                      例如：采购金额大于 10000 时走经理审批；合同类型等于框架合同时走法务审核。
+                    </div>
                   </n-space>
                 </n-form-item>
 
-                <n-form-item v-if="properties.conditionType === 'script'" label="脚本内容">
-                  <n-input
-                    v-model:value="properties.script"
-                    type="textarea"
-                    :rows="5"
-                    placeholder="return approved == true;"
-                    @blur="updateCondition"
-                  />
-                </n-form-item>
+                <n-collapse class="advanced-condition-collapse">
+                  <n-collapse-item title="开发者高级配置（可选）" name="advancedCondition">
+                    <n-form-item label="高级类型">
+                      <n-radio-group v-model:value="properties.conditionType" @update:value="updateConditionType">
+                        <n-radio-button value="expression">
+                          表达式
+                        </n-radio-button>
+                        <n-radio-button value="script">
+                          脚本
+                        </n-radio-button>
+                      </n-radio-group>
+                    </n-form-item>
 
-                <n-form-item v-if="properties.conditionType === 'script'" label="脚本语言">
-                  <n-select
-                    v-model:value="properties.scriptFormat"
-                    :options="scriptFormatOptions"
-                    @update:value="updateCondition"
-                  />
-                </n-form-item>
+                    <n-form-item v-if="properties.conditionType === 'expression'" label="条件表达式">
+                      <n-input
+                        v-model:value="properties.condition"
+                        type="textarea"
+                        :rows="3"
+                        placeholder="${approvalResult == 'approve'}"
+                        @blur="syncConditionPresetFromCondition(); updateCondition()"
+                      />
+                    </n-form-item>
+
+                    <n-form-item v-if="properties.conditionType === 'script'" label="脚本内容">
+                      <n-input
+                        v-model:value="properties.script"
+                        type="textarea"
+                        :rows="5"
+                        placeholder="return approvalResult == 'approve';"
+                        @blur="updateCondition"
+                      />
+                    </n-form-item>
+
+                    <n-form-item v-if="properties.conditionType === 'script'" label="脚本语言">
+                      <n-select
+                        v-model:value="properties.scriptFormat"
+                        :options="scriptFormatOptions"
+                        @update:value="updateCondition"
+                      />
+                    </n-form-item>
+                  </n-collapse-item>
+                </n-collapse>
               </template>
 
               <n-form-item>
                 <n-checkbox v-model:checked="properties.isDefault" @update:checked="toggleDefault">
-                  设为默认路径
+                  其它情况默认走这条线
                 </n-checkbox>
               </n-form-item>
             </n-form>
@@ -968,12 +1121,17 @@ const properties = reactive({
   // 执行监听器
   executionListeners: [],
   // 服务任务
+  flowableType: '',
+  ccReceiverType: 'users',
+  ccExpression: '',
+  ccExpressionTarget: 'users',
   implementationType: 'class',
   implementation: '',
   async: false,
   // 序列流
   hasCondition: false,
   conditionType: 'expression',
+  conditionPreset: 'custom',
   condition: '',
   script: '',
   scriptFormat: 'javascript',
@@ -1063,6 +1221,44 @@ const conditionOperatorOptions = [
   { label: '小于', value: '<' },
   { label: '小于等于', value: '<=' },
   { label: '包含', value: 'contains' },
+]
+
+const approvalResultConditionOptions = [
+  {
+    label: '同意通过',
+    value: 'approve',
+    expression: '$' + '{approvalResult == \'approve\'}',
+    icon: 'i-material-symbols:check-circle',
+    desc: '审批人点击同意后走这条线',
+  },
+  {
+    label: '驳回修改',
+    value: 'reject',
+    expression: '$' + '{approvalResult == \'reject\'}',
+    icon: 'i-material-symbols:edit-note',
+    desc: '审批人点击驳回修改后走这条线',
+  },
+  {
+    label: '退回上一步',
+    value: 'return',
+    expression: '$' + '{approvalResult == \'return\'}',
+    icon: 'i-material-symbols:keyboard-return',
+    desc: '审批人点击退回时走这条线',
+  },
+  {
+    label: '终止流程',
+    value: 'terminate',
+    expression: '$' + '{approvalResult == \'terminate\'}',
+    icon: 'i-material-symbols:stop-circle',
+    desc: '审批人点击终止时走这条线',
+  },
+  {
+    label: '按业务字段判断',
+    value: 'custom',
+    expression: '',
+    icon: 'i-material-symbols:tune',
+    desc: '按金额、部门、类型等字段配置条件',
+  },
 ]
 
 const formTypeOptions = [
@@ -1173,6 +1369,42 @@ function quoteConditionValue(value) {
   return `'${text.replaceAll('\'', '\\\'')}'`
 }
 
+function normalizeConditionExpression(value) {
+  return String(value || '')
+    .trim()
+    .replaceAll('"', '\'')
+    .replace(/\s+/g, '')
+}
+
+function findApprovalResultPresetByExpression(expression) {
+  const normalized = normalizeConditionExpression(expression)
+  return approvalResultConditionOptions.find(item =>
+    item.expression && normalizeConditionExpression(item.expression) === normalized,
+  )
+}
+
+function syncConditionPresetFromCondition() {
+  if (!properties.condition) {
+    properties.conditionPreset = 'custom'
+    return
+  }
+  properties.conditionPreset = findApprovalResultPresetByExpression(properties.condition)?.value || 'custom'
+}
+
+function updateConditionPreset(value) {
+  const preset = approvalResultConditionOptions.find(item => item.value === value)
+  properties.hasCondition = true
+  properties.conditionType = 'expression'
+  properties.script = ''
+  if (preset?.expression) {
+    properties.condition = preset.expression
+  }
+  else if (value === 'custom' && findApprovalResultPresetByExpression(properties.condition)) {
+    properties.condition = ''
+  }
+  updateCondition()
+}
+
 // 标记为未保存状态
 function markDirty() {
   isDirty.value = true
@@ -1258,6 +1490,7 @@ async function handleSaveConfig() {
 
     if (elementType.value === 'bpmn:ServiceTask') {
       updateServiceImplementation()
+      updateCarbonCopyConfig()
       updateAsync()
     }
 
@@ -1335,6 +1568,33 @@ const implementationTypeOptions = [
   { label: '表达式', value: 'expression' },
   { label: '委托表达式', value: 'delegateExpression' },
 ]
+
+const carbonCopyImplementationTypeOptions = [
+  { label: '平台默认/委托表达式', value: 'delegateExpression' },
+  { label: '表达式', value: 'expression' },
+  { label: 'Java类', value: 'class' },
+]
+
+const carbonCopyReceiverTypeOptions = [
+  { label: '指定人员', value: 'users' },
+  { label: '指定角色', value: 'roles' },
+  { label: '表达式', value: 'expression' },
+]
+
+const carbonCopyExpressionTargetOptions = [
+  { label: '表达式返回人员', value: 'users' },
+  { label: '表达式返回角色', value: 'roles' },
+]
+
+const carbonCopyRoleOptions = computed(() => {
+  const selected = properties.candidateGroups.map((value, index) => ({
+    label: properties.candidateGroupNames[index] || value,
+    value,
+    roleName: properties.candidateGroupNames[index] || value,
+    roleKey: value,
+  }))
+  return mergeSelectOptions(roleList.value.map(normalizeRoleOption).filter(Boolean), selected)
+})
 
 const scriptFormatOptions = [
   { label: 'JavaScript', value: 'javascript' },
@@ -1424,6 +1684,19 @@ function openUserSelect(type) {
       currentSelectedUsers.value = []
     }
   }
+  else if (type === 'carbonCopyUsers') {
+    userSelectTitle.value = '选择抄送人'
+    userSelectMultiple.value = true
+    if (properties.candidateUsers.length > 0) {
+      currentSelectedUsers.value = properties.candidateUsers.map((id, index) => ({
+        id: Number.parseInt(id),
+        nickName: properties.candidateUserNames[index] || '',
+      }))
+    }
+    else {
+      currentSelectedUsers.value = []
+    }
+  }
   showUserSelect.value = true
 }
 
@@ -1448,6 +1721,21 @@ function handleUserSelectConfirm(users) {
     })
     updateCandidateUsers()
   }
+  else if (userSelectType.value === 'carbonCopyUsers') {
+    const userList = Array.isArray(users) ? users : [users]
+    properties.ccReceiverType = 'users'
+    properties.ccExpression = ''
+    properties.ccExpressionTarget = 'users'
+    properties.candidateGroups = []
+    properties.candidateGroupNames = []
+    userList.filter(Boolean).forEach((user) => {
+      if (!properties.candidateUsers.includes(user.id.toString())) {
+        properties.candidateUsers.push(user.id.toString())
+        properties.candidateUserNames.push(user.nickName || user.realName || user.name || user.userName)
+      }
+    })
+    updateCarbonCopyConfig()
+  }
   showUserSelect.value = false
 }
 
@@ -1466,6 +1754,12 @@ function removeCandidateUser(index) {
   updateCandidateUsers()
 }
 
+function removeCarbonCopyUser(index) {
+  properties.candidateUsers.splice(index, 1)
+  properties.candidateUserNames.splice(index, 1)
+  updateCarbonCopyConfig()
+}
+
 // 打开角色选择弹窗
 async function openRoleSelect() {
   // 回显已选角色
@@ -1480,11 +1774,15 @@ async function openRoleSelect() {
 }
 
 // 加载角色列表
-async function loadRoleList() {
+async function loadRoleList(keyword = '') {
   roleLoading.value = true
   try {
     const res = await request.get('/system/role/page', {
-      params: { pageNum: 1, pageSize: 1000 },
+      params: {
+        pageNum: 1,
+        pageSize: 1000,
+        roleName: typeof keyword === 'string' ? keyword || undefined : undefined,
+      },
     })
     if (res.code === 200 && res.data?.records) {
       roleList.value = res.data.records
@@ -1496,6 +1794,33 @@ async function loadRoleList() {
   finally {
     roleLoading.value = false
   }
+}
+
+function normalizeRoleOption(role) {
+  const value = isFilled(role?.roleKey) ? role.roleKey : role?.id
+  if (!isFilled(value))
+    return null
+  const label = String(role.roleName || role.roleKey || value)
+  return {
+    label,
+    value: String(value),
+    roleName: label,
+    roleKey: String(value),
+  }
+}
+
+function mergeSelectOptions(primary = [], append = []) {
+  const map = new Map()
+  for (const option of [...append, ...primary]) {
+    if (!option || !isFilled(option.value))
+      continue
+    map.set(String(option.value), option)
+  }
+  return Array.from(map.values())
+}
+
+function isFilled(value) {
+  return value !== null && value !== undefined && String(value).trim() !== ''
 }
 
 // 角色选择
@@ -1521,6 +1846,99 @@ function removeCandidateGroup(index) {
   properties.candidateGroups.splice(index, 1)
   properties.candidateGroupNames.splice(index, 1)
   updateCandidateGroups()
+}
+
+function handleCarbonCopyReceiverTypeChange(value) {
+  properties.ccReceiverType = value || 'users'
+  if (properties.ccReceiverType === 'users') {
+    properties.candidateGroups = []
+    properties.candidateGroupNames = []
+    properties.ccExpression = ''
+    properties.ccExpressionTarget = 'users'
+  }
+  else if (properties.ccReceiverType === 'roles') {
+    properties.candidateUsers = []
+    properties.candidateUserNames = []
+    properties.ccExpression = ''
+    properties.ccExpressionTarget = 'roles'
+    loadRoleList()
+  }
+  else {
+    applyCarbonCopyExpressionToProperties()
+  }
+  updateCarbonCopyConfig()
+}
+
+function handleCarbonCopyRolesChange(values, selectedOptions = []) {
+  const nextValues = normalizeList(values)
+  const selectedOptionList = Array.isArray(selectedOptions) ? selectedOptions : selectedOptions ? [selectedOptions] : []
+  const optionMap = new Map(carbonCopyRoleOptions.value.map(option => [String(option.value), option]))
+  const selectedMap = new Map(selectedOptionList.map(option => [String(option.value), option]))
+  properties.ccReceiverType = 'roles'
+  properties.ccExpression = ''
+  properties.ccExpressionTarget = 'roles'
+  properties.candidateUsers = []
+  properties.candidateUserNames = []
+  properties.candidateGroups = nextValues
+  properties.candidateGroupNames = nextValues.map((value) => {
+    const option = selectedMap.get(String(value)) || optionMap.get(String(value))
+    return option?.roleName || option?.label || value
+  })
+  updateCarbonCopyConfig()
+}
+
+function updateCarbonCopyExpression() {
+  properties.ccReceiverType = 'expression'
+  applyCarbonCopyExpressionToProperties()
+  updateCarbonCopyConfig()
+}
+
+function applyCarbonCopyExpressionToProperties() {
+  const expression = normalizeCarbonCopyExpression(properties.ccExpression)
+  properties.ccExpression = expression
+  const label = expression ? ['表达式配置'] : []
+  if (properties.ccExpressionTarget === 'roles') {
+    properties.candidateUsers = []
+    properties.candidateUserNames = []
+    properties.candidateGroups = expression ? [expression] : []
+    properties.candidateGroupNames = label
+    return
+  }
+  properties.candidateUsers = expression ? [expression] : []
+  properties.candidateUserNames = label
+  properties.candidateGroups = []
+  properties.candidateGroupNames = []
+}
+
+function normalizeCarbonCopyExpression(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return ''
+  if (text.startsWith('$' + '{') && text.endsWith('}'))
+    return text
+  return '$' + `{${text}}`
+}
+
+function normalizeList(value) {
+  if (Array.isArray(value))
+    return value.map(item => String(item ?? '').trim()).filter(Boolean)
+  if (!isFilled(value))
+    return []
+  return String(value).split(/[,，\s]+/).map(item => item.trim()).filter(Boolean)
+}
+
+function findCarbonCopyExpression(values) {
+  return normalizeList(values).find(value => value.startsWith('$' + '{') && value.endsWith('}')) || ''
+}
+
+function inferCarbonCopyReceiverType(candidateUsers, candidateGroups, configuredType) {
+  if (configuredType)
+    return configuredType
+  if (findCarbonCopyExpression(candidateUsers) || findCarbonCopyExpression(candidateGroups))
+    return 'expression'
+  if (normalizeList(candidateGroups).length)
+    return 'roles'
+  return 'users'
 }
 
 // 加载元素属性
@@ -1733,6 +2151,13 @@ function loadServiceTaskProperties(bo) {
   const classVal = bo.class ?? bo['flowable:class'] ?? attrs['flowable:class']
   const exprVal = bo.expression ?? bo['flowable:expression'] ?? attrs['flowable:expression']
   const delegateVal = bo.delegateExpression ?? bo['flowable:delegateExpression'] ?? attrs['flowable:delegateExpression']
+  const flowableType = bo.type ?? bo['flowable:type'] ?? attrs['flowable:type'] ?? ''
+  const candidateUsers = bo.candidateUsers ?? attrs['flowable:candidateUsers'] ?? ''
+  const candidateUserNames = bo.candidateUserNames ?? attrs['flowable:candidateUserNames'] ?? ''
+  const candidateGroups = bo.candidateGroups ?? attrs['flowable:candidateGroups'] ?? ''
+  const candidateGroupNames = bo.candidateGroupNames ?? attrs['flowable:candidateGroupNames'] ?? ''
+  const ccReceiverType = bo.ccReceiverType ?? attrs['flowable:ccReceiverType'] ?? ''
+  const ccExpressionTarget = bo.ccExpressionTarget ?? attrs['flowable:ccExpressionTarget'] ?? ''
 
   if (classVal) {
     properties.implementationType = 'class'
@@ -1744,12 +2169,22 @@ function loadServiceTaskProperties(bo) {
   }
   else if (delegateVal) {
     properties.implementationType = 'delegateExpression'
-    properties.implementation = delegateVal
+    properties.implementation = flowableType === 'cc' && delegateVal === '$' + '{flowCcNodeDelegate}' ? '' : delegateVal
   }
   else {
-    properties.implementationType = 'class'
+    properties.implementationType = flowableType === 'cc' ? 'delegateExpression' : 'class'
     properties.implementation = ''
   }
+  properties.flowableType = flowableType
+  properties.candidateUsers = candidateUsers ? candidateUsers.split(',').filter(Boolean) : []
+  properties.candidateUserNames = candidateUserNames ? candidateUserNames.split(',').filter(Boolean) : []
+  properties.candidateGroups = candidateGroups ? candidateGroups.split(',').filter(Boolean) : []
+  properties.candidateGroupNames = candidateGroupNames ? candidateGroupNames.split(',').filter(Boolean) : []
+  properties.ccReceiverType = flowableType === 'cc'
+    ? inferCarbonCopyReceiverType(properties.candidateUsers, properties.candidateGroups, ccReceiverType)
+    : 'users'
+  properties.ccExpressionTarget = ccExpressionTarget || (findCarbonCopyExpression(properties.candidateGroups) ? 'roles' : 'users')
+  properties.ccExpression = findCarbonCopyExpression(properties.candidateUsers) || findCarbonCopyExpression(properties.candidateGroups) || ''
   properties.async = bo.async ?? attrs['flowable:async'] ?? false
 }
 
@@ -1760,9 +2195,13 @@ function loadSequenceFlowProperties(bo) {
     properties.hasCondition = true
     properties.condition = conditionExpression.body || ''
     properties.conditionType = 'expression'
+    syncConditionPresetFromCondition()
   }
   else {
     properties.hasCondition = false
+    properties.condition = ''
+    properties.conditionType = 'expression'
+    properties.conditionPreset = 'custom'
   }
 
   // 检查是否默认流
@@ -1837,6 +2276,7 @@ function applyConditionBuilder() {
     : ` ${operator} ${quoteConditionValue(conditionBuilder.value)}`
   properties.hasCondition = true
   properties.conditionType = 'expression'
+  properties.conditionPreset = 'custom'
   properties.condition = operator === 'contains'
     ? toExpression(`${field}${rightValue}`)
     : toExpression(`${field}${rightValue}`)
@@ -2232,6 +2672,61 @@ function updateServiceImplementation() {
   emit('update')
 }
 
+function toggleCarbonCopyService(checked) {
+  properties.flowableType = checked ? 'cc' : ''
+  if (checked) {
+    properties.ccReceiverType = properties.ccReceiverType || 'users'
+    if (!properties.implementation) {
+      properties.implementationType = 'delegateExpression'
+    }
+  }
+  else {
+    properties.candidateUsers = []
+    properties.candidateUserNames = []
+    properties.candidateGroups = []
+    properties.candidateGroupNames = []
+    properties.ccReceiverType = 'users'
+    properties.ccExpression = ''
+    properties.ccExpressionTarget = 'users'
+    if (properties.implementationType === 'delegateExpression' && !properties.implementation) {
+      properties.implementationType = 'class'
+    }
+  }
+  updateCarbonCopyConfig()
+}
+
+function updateCarbonCopyConfig() {
+  if (!rawElement.value || !props.modeler)
+    return
+
+  const modeling = props.modeler.get('modeling')
+  const isCarbonCopy = properties.flowableType === 'cc'
+  if (isCarbonCopy && properties.ccReceiverType === 'expression') {
+    applyCarbonCopyExpressionToProperties()
+  }
+  const usersStr = properties.candidateUsers.join(',')
+  const userNamesStr = properties.candidateUserNames.join(',')
+  const groupsStr = properties.candidateGroups.join(',')
+  const groupNamesStr = properties.candidateGroupNames.join(',')
+  const updateProps = {
+    'flowable:type': isCarbonCopy ? 'cc' : null,
+    'flowable:ccReceiverType': isCarbonCopy ? properties.ccReceiverType : null,
+    'flowable:ccExpressionTarget': isCarbonCopy ? properties.ccExpressionTarget : null,
+    'flowable:candidateUsers': isCarbonCopy && usersStr ? usersStr : null,
+    'flowable:candidateUserNames': isCarbonCopy && userNamesStr ? userNamesStr : null,
+    'flowable:candidateGroups': isCarbonCopy && groupsStr ? groupsStr : null,
+    'flowable:candidateGroupNames': isCarbonCopy && groupNamesStr ? groupNamesStr : null,
+  }
+  if (isCarbonCopy && !properties.implementation) {
+    updateProps['flowable:delegateExpression'] = '$' + '{flowCcNodeDelegate}'
+  }
+  if (!isCarbonCopy && !properties.implementation) {
+    updateProps['flowable:delegateExpression'] = null
+  }
+  modeling.updateProperties(rawElement.value, updateProps)
+  emit('update')
+}
+
 // 更新异步
 function updateAsync() {
   if (!rawElement.value || !props.modeler)
@@ -2258,14 +2753,19 @@ function getImplementationPlaceholder() {
 function toggleCondition(checked) {
   if (!checked) {
     properties.condition = ''
+    properties.conditionPreset = 'custom'
     updateCondition()
+    return
   }
+  syncConditionPresetFromCondition()
 }
 
 // 更新条件类型
 function updateConditionType() {
   properties.condition = ''
   properties.script = ''
+  properties.conditionPreset = 'custom'
+  updateCondition()
 }
 
 // 更新流转条件
@@ -2542,6 +3042,108 @@ function updateProperty(prop) {
   color: #64748b;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.approval-result-options {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.approval-result-option {
+  width: 100%;
+  margin: 0;
+}
+
+.approval-result-card {
+  width: 100%;
+  min-height: 54px;
+  padding: 9px 10px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.approval-result-option :deep(.n-radio__label) {
+  flex: 1;
+  min-width: 0;
+}
+
+.approval-result-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.approval-result-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #172033;
+}
+
+.approval-result-title i {
+  width: 16px;
+  height: 16px;
+  color: #2563eb;
+}
+
+.approval-result-desc {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.advanced-condition-collapse {
+  margin-top: -4px;
+}
+
+.advanced-condition-collapse :deep(.n-collapse-item__header) {
+  font-size: 12px;
+  color: #475569;
+}
+
+.carbon-copy-source-switch {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.carbon-copy-source-button {
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  border-right: 1px solid #d8dee8;
+  background: transparent;
+  color: #344054;
+  font-size: 12px;
+  line-height: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.carbon-copy-source-button:last-child {
+  border-right: 0;
+}
+
+.carbon-copy-source-button.active {
+  background: #eef4ff;
+  color: #2563eb;
+  box-shadow: inset 0 -2px 0 #2563eb;
+  font-weight: 600;
 }
 
 .condition-builder {

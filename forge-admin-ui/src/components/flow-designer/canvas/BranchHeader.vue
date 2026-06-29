@@ -21,9 +21,19 @@ const props = defineProps({
 
 defineEmits(['click'])
 
+const approvalResultLabels = [
+  { label: '同意通过', value: 'approve', expression: '$' + "{approvalResult == 'approve'}" },
+  { label: '驳回修改', value: 'reject', expression: '$' + "{approvalResult == 'reject'}" },
+  { label: '退回上一步', value: 'return', expression: '$' + "{approvalResult == 'return'}" },
+  { label: '终止流程', value: 'terminate', expression: '$' + "{approvalResult == 'terminate'}" },
+]
+
 const labelText = computed(() => {
   if (props.edge?.isDefault)
     return '默认'
+  const approvalLabel = getApprovalResultLabel(props.edge)
+  if (approvalLabel)
+    return approvalLabel
   if (!props.edge?.condition)
     return '配置条件'
   const ruleCount = Array.isArray(props.edge?.conditionRules) ? props.edge.conditionRules.length : 0
@@ -33,6 +43,9 @@ const labelText = computed(() => {
 const labelTitle = computed(() => {
   if (props.edge?.isDefault)
     return '默认分支'
+  const approvalLabel = getApprovalResultLabel(props.edge)
+  if (approvalLabel)
+    return approvalLabel
   return props.edge?.condition || '点击配置条件'
 })
 
@@ -43,11 +56,30 @@ const colorClass = computed(() => {
     return 'is-configured'
   return 'is-empty'
 })
+
+function getApprovalResultLabel(edge) {
+  if (!edge)
+    return ''
+  if (edge.approvalResultLabel)
+    return edge.approvalResultLabel
+  const byValue = approvalResultLabels.find(item => item.value === edge.approvalResult)
+  if (byValue)
+    return byValue.label
+  const normalized = normalizeConditionExpression(edge.condition)
+  return approvalResultLabels.find(item => normalizeConditionExpression(item.expression) === normalized)?.label || ''
+}
+
+function normalizeConditionExpression(value) {
+  return String(value || '')
+    .trim()
+    .replaceAll('"', '\'')
+    .replace(/\s+/g, '')
+}
 </script>
 
 <template>
   <div
-    class="branch-header text-xs absolute z-10 flex cursor-pointer items-center px-2.5 py-1"
+    class="branch-header text-xs absolute z-30 flex cursor-pointer items-center px-2.5 py-1"
     :class="colorClass"
     :style="{
       left: `${position.x}px`,

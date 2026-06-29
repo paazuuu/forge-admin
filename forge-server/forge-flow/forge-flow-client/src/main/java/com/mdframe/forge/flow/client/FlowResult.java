@@ -1,5 +1,6 @@
 package com.mdframe.forge.flow.client;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
@@ -21,6 +22,7 @@ public class FlowResult<T> {
     /**
      * 消息
      */
+    @JsonAlias("message")
     private String msg;
 
     /**

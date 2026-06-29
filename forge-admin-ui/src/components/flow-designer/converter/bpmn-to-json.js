@@ -49,6 +49,7 @@ const NON_NODE_TAGS = new Set([
   'lane',
   'multiInstanceLoopCharacteristics',
 ])
+const DEFAULT_CC_DELEGATE_EXPRESSION = '$' + '{flowCcNodeDelegate}'
 
 /**
  * 解析 BPMN XML 字符串为 flowJson。
@@ -211,8 +212,19 @@ function parseBaseConfig(element, nodeType) {
       config.implementation = impl.implementation
       config.async = getFlowableBoolAttr(element, 'async')
       // carbonCopy 默认带 flowable:type='cc'
-      if (nodeType === NODE_TYPE.CARBON_COPY)
+      if (nodeType === NODE_TYPE.CARBON_COPY) {
         config.flowableType = 'cc'
+        config.candidateUsers = splitCsv(getFlowableAttr(element, 'candidateUsers'))
+        config.candidateUserNames = splitCsv(getFlowableAttr(element, 'candidateUserNames'))
+        config.candidateGroups = splitCsv(getFlowableAttr(element, 'candidateGroups'))
+        config.candidateGroupNames = splitCsv(getFlowableAttr(element, 'candidateGroupNames'))
+        config.ccReceiverType = getFlowableAttr(element, 'ccReceiverType') || inferCarbonCopyReceiverType(config)
+        config.ccExpressionTarget = getFlowableAttr(element, 'ccExpressionTarget') || inferCarbonCopyExpressionTarget(config)
+        config.ccExpression = inferCarbonCopyExpression(config)
+        if (config.implementationType === 'delegateExpression' && config.implementation === DEFAULT_CC_DELEGATE_EXPRESSION) {
+          config.implementation = ''
+        }
+      }
       break
     }
     case NODE_TYPE.SCRIPT: {
@@ -271,6 +283,37 @@ function parseImplementation(element) {
     return { implementationType: 'delegateExpression', implementation: delegateVal }
 
   return { implementationType: 'class', implementation: '' }
+}
+
+function splitCsv(value) {
+  if (!value)
+    return []
+  return String(value).split(',').map(item => item.trim()).filter(Boolean)
+}
+
+function inferCarbonCopyReceiverType(config = {}) {
+  if (inferCarbonCopyExpression(config))
+    return 'expression'
+  if (Array.isArray(config.candidateGroups) && config.candidateGroups.length)
+    return 'roles'
+  return 'users'
+}
+
+function inferCarbonCopyExpressionTarget(config = {}) {
+  return findExpressionValue(config.candidateGroups) ? 'roles' : 'users'
+}
+
+function inferCarbonCopyExpression(config = {}) {
+  return findExpressionValue(config.candidateUsers) || findExpressionValue(config.candidateGroups) || ''
+}
+
+function findExpressionValue(values) {
+  if (!Array.isArray(values))
+    return ''
+  return values.find((value) => {
+    const text = String(value || '').trim()
+    return text.startsWith('${') && text.endsWith('}')
+  }) || ''
 }
 
 /**

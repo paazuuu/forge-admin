@@ -2126,3 +2126,47 @@ Vue `emit` 不会等待父组件异步处理。外部表单如果只维护本地
 - `FlowBusinessForm`
 - `/views/*/*ApproveForm.vue` 这类外部流程审批表单
 - 流程待办详情里的同意、驳回、退回、终结、签收等异步操作按钮
+
+## 77. 流程完成事件必须携带完整变量快照
+
+**发现日期**: 2026-06-28
+
+**问题描述**:
+Flowable 的 `TASK_COMPLETED` 和 `PROCESS_COMPLETED` 事件消费顺序不能作为业务前提。若流程完成事件只读取 `ExecutionEntity#getVariables()`，最后一个审批节点提交的业务变量可能没有出现在完成事件消息里；业务侧 `@FlowCallback` 如果依赖这些变量，可能抛错并导致业务状态停留在“审批中”。
+
+**根本原因**:
+流程完成后运行时变量可能已经不可读，业务侧 Redis Pub/Sub 订阅器回调失败默认只记录日志，不做持久化重试。完成事件必须尽量自带完整变量快照，不能依赖后续再从运行时实例读取。
+
+**解决方案**:
+- `PROCESS_COMPLETED/PROCESS_REJECTED` 发布前合并当前执行变量、运行时变量和历史变量。
+- `TASK_COMPLETED` 读取任务变量失败后继续按流程实例和历史变量兜底。
+- `FlowInstanceService#getProcessVariables`、监控变量查询等入口必须支持流程结束后读取历史变量。
+- 业务回调仍需做幂等和缺失变量兜底；如需强一致状态流转，应后续引入持久化事件重试/死信机制。
+
+**影响范围**:
+- `FlowTaskEventListener`
+- `FlowInstanceServiceImpl`
+- `FlowMonitorServiceImpl`
+- 所有依赖 `@FlowCallback` 或流程完成事件变量更新业务状态的模块
+
+## 78. 前端禁止把雪花 Long ID 转成 Number
+
+**发现日期**: 2026-06-28
+
+**问题描述**:
+采购单待办外部表单调用 `POST /business/sample-purchase-order/getById` 时返回“采购单不存在”。后端记录存在，但前端从流程变量或记录行读取采购单 ID 后用 `Number()` 转换，雪花 ID 超过 JS `Number.MAX_SAFE_INTEGER` 后发生精度丢失，最终请求传到后端的是错误 ID。
+
+**根本原因**:
+Forge 后端已通过 Jackson `BigNumberSerializer` 将超出 JS 安全范围的 `Long` 序列化为字符串，但前端业务页、流程变量处理、用户选择器值归一化如果再次执行 `Number(id)`，仍会破坏 ID 精度。
+
+**解决方案**:
+- 前端所有 `Long` / 雪花 ID / 用户 ID / 流程记录 ID 均按字符串保存和传参。
+- 详情类接口优先使用稳定业务键，例如 `businessKey=sample_purchase_order:{id}`；`id` 只作为字符串兜底。
+- 路径参数拼接前使用 `String(id)` 和 `encodeURIComponent`，不要用 `Number(id)`。
+- 金额、数量等真实数值字段可以使用 `Number()`，但变量名包含 `id/Id/recordId/businessKey/purchaseOrderId/userId` 时必须保持字符串。
+
+**影响范围**:
+- 采购单审批测试页
+- 流程外部表单 `variables`
+- 用户选择器返回值
+- 所有前端 API 请求中的后端 `Long` 主键和流程业务键

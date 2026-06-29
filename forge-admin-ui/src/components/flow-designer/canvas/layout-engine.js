@@ -22,11 +22,14 @@ import { calculateLayout as baseLayout } from '../converter/layout-algorithm.js'
 const DEFAULT_OPTS = {
   NODE_WIDTH: 300,
   NODE_HEIGHT: 104,
+  GATEWAY_SIZE: 44,
   V_GAP: 66,
   H_GAP: 80,
   MARGIN_TOP: 56,
   MARGIN_LEFT: 240,
 }
+
+const GATEWAY_TYPES = new Set(['condition', 'parallel', 'inclusive'])
 
 export function layoutFlow(flowJson, opts = {}) {
   const cfg = { ...DEFAULT_OPTS, ...opts }
@@ -41,8 +44,19 @@ export function layoutFlow(flowJson, opts = {}) {
   // 复用 converter 的几何计算
   const base = baseLayout(flowJson, cfg)
 
-  // 节点位置直接复用
+  // 节点位置直接复用；网关在画布上是菱形锚点，不占用普通任务卡尺寸。
   for (const [id, pos] of base.nodePositions.entries()) {
+    const node = flowJson.nodes.find(item => item.id === id)
+    if (GATEWAY_TYPES.has(node?.nodeType)) {
+      const size = cfg.GATEWAY_SIZE
+      result.nodePositions.set(id, {
+        x: pos.x + (pos.width - size) / 2,
+        y: pos.y + (pos.height - size) / 2,
+        width: size,
+        height: size,
+      })
+      continue
+    }
     result.nodePositions.set(id, {
       x: pos.x,
       y: pos.y,
@@ -51,14 +65,15 @@ export function layoutFlow(flowJson, opts = {}) {
     })
   }
 
-  // 边 path：基于原始 waypoints，标识类型
+  // 边 path：保留布局算法的中间折点，但把起止端点修正到真实节点边界。
   for (const edge of flowJson.edges) {
     const wp = base.edgeWaypoints.get(edge.id)
     if (!wp || wp.length < 2)
       continue
+    const points = normalizeEdgePoints(edge, wp, result.nodePositions)
     // 起止 x 一致 → straight；否则按 orthogonal（折线）
-    const type = wp.length === 2 ? 'straight' : 'orthogonal'
-    result.edgePaths.set(edge.id, { points: wp, type })
+    const type = points.length === 2 ? 'straight' : 'orthogonal'
+    result.edgePaths.set(edge.id, { points, type })
   }
 
   // canvasBounds：聚合所有节点 + waypoint
@@ -93,4 +108,43 @@ export function layoutFlow(flowJson, opts = {}) {
     result.canvasBounds = { minX, minY, maxX, maxY }
 
   return result
+}
+
+function normalizeEdgePoints(edge, points, nodePositions) {
+  const source = nodePositions.get(edge.source)
+  const target = nodePositions.get(edge.target)
+  if (!source || !target)
+    return points
+
+  const sourceCenterX = source.x + source.width / 2
+  const targetCenterX = target.x + target.width / 2
+  const sourceAboveTarget = source.y <= target.y
+  const start = {
+    x: sourceCenterX,
+    y: sourceAboveTarget ? source.y + source.height : source.y,
+  }
+  const end = {
+    x: targetCenterX,
+    y: sourceAboveTarget ? target.y : target.y + target.height,
+  }
+
+  if (points.length === 2)
+    return [start, end]
+
+  const next = points.map(point => ({ ...point }))
+  next[0] = start
+  next[next.length - 1] = end
+
+  if (next[1]) {
+    next[1].x = start.x
+    if (Math.abs(next[1].y - points[0].y) < 1)
+      next[1].y = start.y
+  }
+  if (next[next.length - 2]) {
+    next[next.length - 2].x = end.x
+    if (Math.abs(next[next.length - 2].y - points[points.length - 1].y) < 1)
+      next[next.length - 2].y = end.y
+  }
+
+  return next
 }

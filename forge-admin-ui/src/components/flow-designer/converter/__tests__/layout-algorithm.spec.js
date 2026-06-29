@@ -43,6 +43,35 @@ function parallelJson() {
   }
 }
 
+function reentryDecisionJson() {
+  return {
+    processId: 'P',
+    nodes: [
+      { id: 'S', nodeType: 'start', config: {} },
+      { id: 'A1', nodeType: 'approver', config: { mergeNode: true } },
+      { id: 'GW1', nodeType: 'condition', config: { defaultFlowId: 'F3' } },
+      { id: 'A2', nodeType: 'approver', config: {} },
+      { id: 'GW2', nodeType: 'condition', config: { defaultFlowId: 'F6' } },
+      { id: 'MOD', nodeType: 'approver', config: { mergeNode: true } },
+      { id: 'MOD_GW', nodeType: 'condition', config: { defaultFlowId: 'F8' } },
+      { id: 'E_OK', nodeType: 'end', config: {} },
+      { id: 'E_STOP', nodeType: 'end', config: {} },
+    ],
+    edges: [
+      { id: 'F1', source: 'S', target: 'A1' },
+      { id: 'F2', source: 'A1', target: 'GW1' },
+      { id: 'F3', source: 'GW1', target: 'A2', isDefault: true, branchId: 'b1' },
+      { id: 'F4', source: 'GW1', target: 'MOD', condition: 'reject', branchId: 'b2' },
+      { id: 'F5', source: 'A2', target: 'GW2' },
+      { id: 'F6', source: 'GW2', target: 'E_OK', isDefault: true, branchId: 'b3' },
+      { id: 'F7', source: 'GW2', target: 'MOD', condition: 'reject', branchId: 'b4' },
+      { id: 'F8', source: 'MOD_GW', target: 'A1', isDefault: true, branchId: 'b5' },
+      { id: 'F9', source: 'MOD', target: 'MOD_GW' },
+      { id: 'F10', source: 'MOD_GW', target: 'E_STOP', condition: 'stop', branchId: 'b6' },
+    ],
+  }
+}
+
 describe('calculateLayout - 线性流程', () => {
   it('y 单调递增', () => {
     const out = calculateLayout(linearJson())
@@ -84,6 +113,29 @@ describe('calculateLayout - 并行三分支', () => {
   it('所有节点都被布局', () => {
     const out = calculateLayout(parallelJson())
     expect(out.nodePositions.size).toBe(7)
+  })
+})
+
+describe('calculateLayout - 驳回重提回路', () => {
+  it('回退入口不应打断主链路，驳回处理节点应侧向展开', () => {
+    const out = calculateLayout(reentryDecisionJson())
+    const start = out.nodePositions.get('S')
+    const firstApprove = out.nodePositions.get('A1')
+    const gateway = out.nodePositions.get('GW1')
+    const secondGateway = out.nodePositions.get('GW2')
+    const defaultNext = out.nodePositions.get('A2')
+    const approvedEnd = out.nodePositions.get('E_OK')
+    const modify = out.nodePositions.get('MOD')
+    const rejectPath = out.edgeWaypoints.get('F4')
+
+    expect(firstApprove.x).toBe(start.x)
+    expect(gateway.x).toBe(start.x)
+    expect(defaultNext.x).toBe(gateway.x)
+    expect(modify.x).toBeGreaterThan(gateway.x)
+    expect(modify.y).toBeGreaterThan(secondGateway.y)
+    expect(modify.y).toBe(approvedEnd.y)
+    expect(rejectPath.length).toBeGreaterThan(2)
+    expect(rejectPath[1].y).toBeLessThan(modify.y)
   })
 })
 

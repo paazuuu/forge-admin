@@ -107,6 +107,24 @@ describe('edgeLayer - 渲染', () => {
     const wrapper = mount(EdgeLayer, { props: { edges: [], paths: new Map() } })
     expect(wrapper.findAllComponents(EdgePath).length).toBe(0)
   })
+
+  it('showLabels=false 时不在 SVG 连线层渲染条件标签', () => {
+    const edges = [
+      { id: 'F1', source: 'GW', target: 'A', condition: `${DOLLAR}{amount > 1000}`, isDefault: false },
+    ]
+    const paths = new Map([
+      ['F1', { points: [{ x: 0, y: 0 }, { x: 100, y: 100 }], type: 'straight' }],
+    ])
+    const wrapper = mount(EdgeLayer, {
+      props: {
+        edges,
+        paths,
+        canvasBounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
+        showLabels: false,
+      },
+    })
+    expect(wrapper.text()).not.toContain('条件已设')
+  })
 })
 
 describe('branchHeader - 条件摘要', () => {

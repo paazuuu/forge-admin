@@ -76,6 +76,31 @@
           "type": "String"
         },
         {
+          "name": "type",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "ccReceiverType",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "ccExpressionTarget",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "title",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "content",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
           "name": "initiator",
           "isAttr": true,
           "type": "String"

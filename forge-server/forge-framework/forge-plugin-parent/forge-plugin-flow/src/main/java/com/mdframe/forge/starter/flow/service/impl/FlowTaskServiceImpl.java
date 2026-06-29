@@ -569,7 +569,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Override
     public FlowTask getTaskDetail(String taskId) {
-        return getBaseMapper().selectByTaskId(taskId);
+        return getBaseMapper().selectByIdOrTaskId(taskId);
     }
 
     @Override
@@ -1598,7 +1598,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
         FlowTask sourceTask = null;
         if (!isBlank(taskId)) {
-            sourceTask = getBaseMapper().selectByTaskId(taskId);
+            sourceTask = getBaseMapper().selectByIdOrTaskId(taskId);
         }
 
         FlowBusiness business = resolveFlowBusiness(processInstanceId, businessKey);

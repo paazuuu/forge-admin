@@ -36,6 +36,24 @@ const SAMPLE_MI = [
   '</bpmn:definitions>',
 ].join('\n')
 
+const SAMPLE_MI_COLLECTION = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">',
+  '  <bpmn:process id="P">',
+  `    <bpmn:userTask id="T_collect" flowable:assignee="${DOLLAR}{assignee}">`,
+  `      <bpmn:multiInstanceLoopCharacteristics isSequential="false" flowable:collection="${DOLLAR}{countersignUserList}" flowable:elementVariable="assignee">`,
+  `        <bpmn:completionCondition>${DOLLAR}{nrOfCompletedInstances == nrOfInstances}</bpmn:completionCondition>`,
+  '      </bpmn:multiInstanceLoopCharacteristics>',
+  '    </bpmn:userTask>',
+  '    <bpmn:userTask id="T_cardinality">',
+  '      <bpmn:multiInstanceLoopCharacteristics isSequential="true">',
+  `        <bpmn:loopCardinality>${DOLLAR}{nrOfInstances}</bpmn:loopCardinality>`,
+  '      </bpmn:multiInstanceLoopCharacteristics>',
+  '    </bpmn:userTask>',
+  '  </bpmn:process>',
+  '</bpmn:definitions>',
+].join('\n')
+
 describe('parseCompletionExpression', () => {
   it('all (==1)', () => {
     expect(parseCompletionExpression(`${DOLLAR}{nrOfCompletedInstances/nrOfInstances == 1}`))
@@ -89,5 +107,17 @@ describe('parseUserTaskConfig - multiInstance', () => {
     expect(cfg.multiInstanceType).toBe('none')
     expect(cfg.completionCondition).toBe('all')
     expect(cfg.passRate).toBe(100)
+  })
+
+  it('保留 flowable:collection 与 flowable:elementVariable', () => {
+    const cfg = parseUserTaskConfig(getTask(SAMPLE_MI_COLLECTION, 'T_collect'))
+    expect(cfg.multiInstanceCollection).toBe(`${DOLLAR}{countersignUserList}`)
+    expect(cfg.multiInstanceElementVariable).toBe('assignee')
+  })
+
+  it('保留 loopCardinality 兜底表达式', () => {
+    const cfg = parseUserTaskConfig(getTask(SAMPLE_MI_COLLECTION, 'T_cardinality'))
+    expect(cfg.multiInstanceType).toBe('sequential')
+    expect(cfg.multiInstanceLoopCardinality).toBe(`${DOLLAR}{nrOfInstances}`)
   })
 })

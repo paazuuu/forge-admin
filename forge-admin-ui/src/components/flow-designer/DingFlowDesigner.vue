@@ -273,6 +273,77 @@ function handleAddBranch(gatewayId) {
   }
 }
 
+function nodeCenterX(pos) {
+  return pos.x + pos.width / 2
+}
+
+function branchLaneY(gatewayPos, targetPos) {
+  return (gatewayPos.y + gatewayPos.height + targetPos.y) / 2
+}
+
+function segmentLength(a, b) {
+  if (!a || !b)
+    return 0
+  return Math.hypot(b.x - a.x, b.y - a.y)
+}
+
+function findLongestSegment(points, predicate) {
+  let best = null
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1]
+    const b = points[i]
+    if (!predicate(a, b))
+      continue
+    const length = segmentLength(a, b)
+    if (!best || length > best.length)
+      best = { a, b, length }
+  }
+  return best
+}
+
+function branchHeaderPosition(edge, gatewayPos, targetPos) {
+  const path = layoutResult.value.edgePaths.get(edge.id)?.points || []
+  const horizontal = findLongestSegment(path, (a, b) => Math.abs(a.y - b.y) < 1 && Math.abs(a.x - b.x) > 24)
+  if (horizontal) {
+    return {
+      x: (horizontal.a.x + horizontal.b.x) / 2,
+      y: horizontal.a.y - 18,
+    }
+  }
+
+  const vertical = findLongestSegment(path, (a, b) => Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) > 24)
+  if (vertical) {
+    const gatewayCenterX = nodeCenterX(gatewayPos)
+    const targetCenterX = nodeCenterX(targetPos)
+    const labelOnLeft = Math.abs(gatewayCenterX - targetCenterX) < 1 || targetCenterX <= gatewayCenterX
+    return {
+      x: targetCenterX + (labelOnLeft ? -86 : 86),
+      y: (vertical.a.y + vertical.b.y) / 2,
+    }
+  }
+
+  const gatewayCenterX = nodeCenterX(gatewayPos)
+  const targetCenterX = nodeCenterX(targetPos)
+  return {
+    x: Math.abs(gatewayCenterX - targetCenterX) < 1 ? targetCenterX - 86 : (gatewayCenterX + targetCenterX) / 2,
+    y: branchLaneY(gatewayPos, targetPos),
+  }
+}
+
+function avoidHeaderCollision(position, placed) {
+  const next = { ...position }
+  let guard = 0
+  while (
+    guard < 8
+    && placed.some(item => Math.abs(item.x - next.x) < 128 && Math.abs(item.y - next.y) < 30)
+  ) {
+    next.y += 30
+    guard += 1
+  }
+  placed.push(next)
+  return next
+}
+
 const addButtonPositions = computed(() => {
   const list = []
   for (const node of designer.flowJson.value.nodes) {
@@ -291,6 +362,7 @@ const addButtonPositions = computed(() => {
 
 const branchHeaders = computed(() => {
   const out = []
+  const placed = []
   for (const node of designer.flowJson.value.nodes) {
     if (!['condition', 'parallel', 'inclusive'].includes(node.nodeType))
       continue
@@ -301,12 +373,10 @@ const branchHeaders = computed(() => {
       const targetPos = layoutResult.value.nodePositions.get(edge.target)
       if (!targetPos)
         continue
+      const position = branchHeaderPosition(edge, gwPos, targetPos)
       out.push({
         edge,
-        position: {
-          x: targetPos.x + targetPos.width / 2,
-          y: (gwPos.y + gwPos.height + targetPos.y) / 2,
-        },
+        position: avoidHeaderCollision(position, placed),
       })
     }
   }
@@ -327,11 +397,19 @@ const branchAddButtons = computed(() => {
       .filter(Boolean)
     if (!targetPositions.length)
       continue
+    const gatewayBottomY = gwPos.y + gwPos.height
+    const downstreamTargets = targetPositions
+      .filter(pos => pos.y >= gatewayBottomY)
+      .sort((a, b) => a.y - b.y)
+    const anchorTarget = downstreamTargets[0]
+      || targetPositions
+        .slice()
+        .sort((a, b) => Math.abs(a.y - gatewayBottomY) - Math.abs(b.y - gatewayBottomY))[0]
     out.push({
       gatewayId: node.id,
       position: {
-        x: gwPos.x + gwPos.width / 2 + 52,
-        y: gwPos.y + gwPos.height + 14,
+        x: nodeCenterX(gwPos),
+        y: anchorTarget ? Math.min(branchLaneY(gwPos, anchorTarget), gatewayBottomY + 32) : gatewayBottomY + 32,
       },
     })
   }
@@ -421,6 +499,7 @@ onBeforeUnmount(() => {
           :edges="designer.flowJson.value.edges"
           :paths="layoutResult.edgePaths"
           :canvas-bounds="layoutResult.canvasBounds"
+          :show-labels="false"
         />
       </template>
       <template #nodes>

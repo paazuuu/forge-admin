@@ -150,9 +150,22 @@ export function writeUserTaskConfig(config) {
   if (cfg.multiInstanceType && cfg.multiInstanceType !== 'none') {
     const seq = cfg.multiInstanceType === 'sequential' ? 'true' : 'false'
     const expr = buildCompletionExpression(cfg.completionCondition, cfg.passRate)
+    const collection = normalizeOptionalText(cfg.multiInstanceCollection)
+    const elementVariable = normalizeOptionalText(cfg.multiInstanceElementVariable) || 'assignee'
+    const loopAttrs = [`isSequential="${seq}"`]
+    let loopCardinalityXml = ''
+    if (collection) {
+      loopAttrs.push(`flowable:collection="${escapeXmlAttr(collection)}"`)
+      loopAttrs.push(`flowable:elementVariable="${escapeXmlAttr(elementVariable)}"`)
+    }
+    else {
+      const loopCardinality = normalizeOptionalText(cfg.multiInstanceLoopCardinality) || `${DOLLAR}{nrOfInstances}`
+      loopCardinalityXml = `<bpmn:loopCardinality xsi:type="bpmn:tFormalExpression">${escapeXmlText(loopCardinality)}</bpmn:loopCardinality>`
+    }
     children.push(
-      `<bpmn:multiInstanceLoopCharacteristics isSequential="${seq}">`
-      + `<bpmn:completionCondition>${escapeXmlText(expr)}</bpmn:completionCondition>`
+      `<bpmn:multiInstanceLoopCharacteristics ${loopAttrs.join(' ')}>`
+      + loopCardinalityXml
+      + `<bpmn:completionCondition xsi:type="bpmn:tFormalExpression">${escapeXmlText(expr)}</bpmn:completionCondition>`
       + `</bpmn:multiInstanceLoopCharacteristics>`,
     )
   }
@@ -210,6 +223,11 @@ function normalizeNonNegativeInt(value, fallback) {
 function normalizePositiveInt(value, fallback) {
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+function normalizeOptionalText(value) {
+  const text = String(value == null ? '' : value).trim()
+  return text || ''
 }
 
 function buildListener(tag, l) {
