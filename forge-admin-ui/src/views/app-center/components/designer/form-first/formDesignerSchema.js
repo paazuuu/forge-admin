@@ -401,7 +401,7 @@ export function createDefaultFormDesignerSchema(options = {}) {
       columnGap: 16,
     },
     components: fields
-      .filter(field => field && field.formVisible !== false && !field.systemField && !field.readonly)
+      .filter(field => field && field.formVisible !== false && !field.systemField && (options.includeReadonlyFields || !field.readonly))
       .map((field, index) => createComponentFromField(field, index)),
   }, gridColumns)
 }

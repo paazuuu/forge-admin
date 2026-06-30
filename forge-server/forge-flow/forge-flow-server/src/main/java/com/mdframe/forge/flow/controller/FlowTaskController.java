@@ -315,8 +315,10 @@ public class FlowTaskController {
     public RespInfo<TaskFormInfo> getProcessFormInfo(@RequestParam(required = false) String processInstanceId,
                                                      @RequestParam(required = false) String businessKey,
                                                      @RequestParam(required = false) String processDefKey,
-                                                     @RequestParam(required = false) String taskId) {
-        TaskFormInfo formInfo = flowTaskService.getProcessFormInfo(processInstanceId, businessKey, processDefKey, taskId);
+                                                     @RequestParam(required = false) String taskId,
+                                                     @RequestParam(required = false) String taskDefKey) {
+        TaskFormInfo formInfo = flowTaskService.getProcessFormInfo(
+                processInstanceId, businessKey, processDefKey, taskId, taskDefKey);
         return RespInfo.success(formInfo);
     }
 }

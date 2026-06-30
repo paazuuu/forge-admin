@@ -116,6 +116,45 @@ export const manualRoutes = [
     meta: { title: '数据统计看板' },
   },
   {
+    name: 'Workspace',
+    path: '/workspace',
+    component: () => import('@/views/workspace/index.vue'),
+    redirect: '/workspace/summary',
+    meta: { title: '我的工作台' },
+    children: [
+      {
+        name: 'WorkspaceSummary',
+        path: 'summary',
+        component: () => import('@/views/workspace/summary.vue'),
+        meta: { title: '工作台首页' },
+      },
+      {
+        name: 'WorkspaceTodo',
+        path: 'todo',
+        component: () => import('@/views/workspace/todo.vue'),
+        meta: { title: '我的待办' },
+      },
+      {
+        name: 'WorkspaceDone',
+        path: 'done',
+        component: () => import('@/views/workspace/done.vue'),
+        meta: { title: '我的已办' },
+      },
+      {
+        name: 'WorkspaceStarted',
+        path: 'started',
+        component: () => import('@/views/workspace/started.vue'),
+        meta: { title: '我发起的' },
+      },
+      {
+        name: 'WorkspaceCc',
+        path: 'cc',
+        component: () => import('@/views/workspace/cc.vue'),
+        meta: { title: '抄送我' },
+      },
+    ],
+  },
+  {
     name: 'ReportSsoBridge',
     path: SSO_BRIDGE_ROUTE,
     component: () => import('@/views/report/design.vue'),

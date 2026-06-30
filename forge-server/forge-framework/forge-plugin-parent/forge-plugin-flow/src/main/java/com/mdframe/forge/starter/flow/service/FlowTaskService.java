@@ -163,7 +163,9 @@ public interface FlowTaskService {
      * @param businessKey 业务Key
      * @param processDefKey 流程定义Key
      * @param taskId 任务ID（可选）
+     * @param taskDefKey 任务定义Key（可选）
      * @return 表单信息
      */
-    TaskFormInfo getProcessFormInfo(String processInstanceId, String businessKey, String processDefKey, String taskId);
+    TaskFormInfo getProcessFormInfo(String processInstanceId, String businessKey, String processDefKey,
+                                    String taskId, String taskDefKey);
 }

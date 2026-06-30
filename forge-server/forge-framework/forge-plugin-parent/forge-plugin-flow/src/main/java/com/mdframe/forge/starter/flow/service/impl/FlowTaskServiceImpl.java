@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.flow.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -77,6 +78,8 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
     private static final String AUTO_APPROVAL_FIRST_ONLY = "firstOnly";
     private static final String AUTO_APPROVAL_CONSECUTIVE = "consecutive";
     private static final String AUTO_APPROVAL_NONE = "none";
+    private static final String FORM_TYPE_BUSINESS = "business";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Autowired
     private RuntimeService runtimeService;
@@ -480,6 +483,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         }
 
         if (variables != null && !variables.isEmpty()) {
+            runtimeService.setVariables(task.getProcessInstanceId(), variables);
             taskService.complete(taskId, variables);
         } else {
             taskService.complete(taskId);
@@ -638,7 +642,13 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Override
     public FlowTask getTaskDetail(String taskId) {
-        return getBaseMapper().selectByIdOrTaskId(taskId);
+        FlowTask task = getBaseMapper().selectByIdOrTaskId(taskId);
+        if (task != null) {
+            task.setProcessDefKey(resolveProcessDefinitionKey(
+                    firstNonBlank(task.getProcessDefId(), task.getProcessDefKey()),
+                    task.getProcessDefKey()));
+        }
+        return task;
     }
 
     @Override
@@ -1314,16 +1324,22 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
     }
 
     private TaskApprovalPolicy getTaskApprovalPolicy(Task task) {
+        return getTaskApprovalPolicy(task, null, null);
+    }
+
+    private TaskApprovalPolicy getTaskApprovalPolicy(Task task, FlowModel flowModel, FlowNode flowNode) {
         TaskApprovalPolicy policy = TaskApprovalPolicy.defaultPolicy();
-        FlowNode flowNode = getFlowNode(task);
-        if (flowNode != null) {
-            applyBpmnPolicy(policy, flowNode);
+        FlowNode effectiveFlowNode = flowNode != null ? flowNode : getFlowNode(task);
+        if (effectiveFlowNode != null) {
+            applyBpmnPolicy(policy, effectiveFlowNode);
         }
 
-        FlowModel flowModel = flowModelService.getModelByKey(extractProcessKey(task.getProcessDefinitionId()));
-        if (flowModel != null) {
+        FlowModel effectiveFlowModel = flowModel != null
+                ? flowModel
+                : flowModelService.getModelByKey(resolveProcessDefinitionKey(task.getProcessDefinitionId(), null));
+        if (effectiveFlowModel != null) {
             FlowNodeConfig nodeConfig = flowNodeConfigService.getByModelAndNode(
-                    flowModel.getId(), task.getTaskDefinitionKey());
+                    effectiveFlowModel.getId(), task.getTaskDefinitionKey());
             if (nodeConfig != null) {
                 applyNodeConfigPolicy(policy, nodeConfig);
             }
@@ -1522,7 +1538,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         formInfo.setProcessInstanceId(task.getProcessInstanceId());
 
         // 2. 获取流程定义Key
-        String processDefKey = extractProcessKey(task.getProcessDefinitionId());
+        String processDefKey = resolveProcessDefinitionKey(task.getProcessDefinitionId(), null);
         formInfo.setProcessDefKey(processDefKey);
 
         // 3. 获取流程变量
@@ -1539,107 +1555,15 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             formInfo.setStartDeptId(business.getApplyDeptId());
             formInfo.setStartDeptName(business.getApplyDeptName());
         }
-        hydrateFormInstanceSnapshot(formInfo, task.getProcessInstanceId());
 
-        // 5. 获取流程模型信息（全局表单配置）
-        FlowModel flowModel = flowModelService.getModelByKey(processDefKey);
-        
-        // 6. 从BPMN中获取节点级别的表单配置
-        BpmnModel bpmnModel = repositoryService.getBpmnModel(task.getProcessDefinitionId());
-        FlowNode flowNode = null;
-        if (bpmnModel != null) {
-            Process process = bpmnModel.getMainProcess();
-            if (process != null) {
-                flowNode = (FlowNode) process.getFlowElement(task.getTaskDefinitionKey());
-            }
-        }
-        
-        // 检查节点是否有专属表单配置
-        String nodeFormKey = null;
-        String nodeFormJson = null;
-        String nodeFormUrl = null;
-        String nodeFormTarget = null;
-        String nodeFormFieldPermissions = null;
+        // 5. 读取流程模型和 BPMN 节点表单配置，同一次请求内复用给审批策略解析。
+        FlowModel flowModel = !isBlank(processDefKey) ? flowModelService.getModelByKey(processDefKey) : null;
+        FlowNode flowNode = resolveFormFlowNode(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+        applyFormConfiguration(formInfo, flowModel, flowNode);
+        hydrateFormInstanceSnapshotIfNecessary(formInfo, task.getProcessInstanceId());
 
-        // Flowable BPMN 命名空间（flowable:xxx 属性存放的命名空间）
-        final String FLOWABLE_NS = "http://flowable.org/bpmn";
-
-        if (flowNode != null) {
-            // 方式1：flowable:formKey 作为标准 UserTask.formKey 属性
-            if (flowNode instanceof UserTask) {
-                UserTask userTask = (UserTask) flowNode;
-                nodeFormKey = userTask.getFormKey();
-            }
-
-            // 方式2：flowable:formUrl / formJson / formTarget 以 XML 属性方式写入
-            //   例如 <bpmn:userTask flowable:formUrl="/leave/LeaveApproveForm">
-            //   Flowable 解析后存入 BaseElement.attributes(namespace -> ExtensionAttribute)
-            String attrFormUrl = flowNode.getAttributeValue(FLOWABLE_NS, "formUrl");
-            String attrFormJson = flowNode.getAttributeValue(FLOWABLE_NS, "formJson");
-            String attrFormTarget = flowNode.getAttributeValue(FLOWABLE_NS, "formTarget");
-            String attrFormFieldPermissions = flowNode.getAttributeValue(FLOWABLE_NS, "formFieldPermissions");
-            if (attrFormUrl != null && !attrFormUrl.isEmpty()) nodeFormUrl = attrFormUrl;
-            if (attrFormJson != null && !attrFormJson.isEmpty()) nodeFormJson = attrFormJson;
-            if (attrFormTarget != null && !attrFormTarget.isEmpty()) nodeFormTarget = attrFormTarget;
-            if (attrFormFieldPermissions != null && !attrFormFieldPermissions.isEmpty()) {
-                nodeFormFieldPermissions = attrFormFieldPermissions;
-            }
-
-            // 方式3：兼容旧有以子元素方式写入的情况
-            //   例如 <flowable:formUrl>/leave/LeaveApproveForm</flowable:formUrl>
-            Map<String, List<ExtensionElement>> extensions = flowNode.getExtensionElements();
-            if (extensions != null) {
-                List<ExtensionElement> formJsonElements = extensions.get("formJson");
-                if (nodeFormJson == null && formJsonElements != null && !formJsonElements.isEmpty()) {
-                    nodeFormJson = formJsonElements.get(0).getElementText();
-                }
-                List<ExtensionElement> formUrlElements = extensions.get("formUrl");
-                if (nodeFormUrl == null && formUrlElements != null && !formUrlElements.isEmpty()) {
-                    nodeFormUrl = formUrlElements.get(0).getElementText();
-                }
-                List<ExtensionElement> formTargetElements = extensions.get("formTarget");
-                if (nodeFormTarget == null && formTargetElements != null && !formTargetElements.isEmpty()) {
-                    nodeFormTarget = formTargetElements.get(0).getElementText();
-                }
-                List<ExtensionElement> formFieldPermissionElements = extensions.get("formFieldPermissions");
-                if (nodeFormFieldPermissions == null && formFieldPermissionElements != null && !formFieldPermissionElements.isEmpty()) {
-                    nodeFormFieldPermissions = formFieldPermissionElements.get(0).getElementText();
-                }
-            }
-        }
-        formInfo.setFormFieldPermissions(nodeFormFieldPermissions);
-        
-        // 确定表单类型和配置
-        if (nodeFormUrl != null && !nodeFormUrl.isEmpty()) {
-            // 节点配置了外置表单
-            formInfo.setFormType("external");
-            formInfo.setFormUrl(nodeFormUrl);
-            formInfo.setFormTarget(nodeFormTarget != null ? nodeFormTarget : "modal");
-        } else if (nodeFormKey != null || nodeFormJson != null) {
-            // 节点配置了动态表单
-            formInfo.setFormType("dynamic");
-            formInfo.setFormKey(nodeFormKey);
-            formInfo.setFormJson(resolveFormJson(nodeFormKey, nodeFormJson));
-        } else if (flowModel != null) {
-            // 使用全局表单配置
-            String formType = flowModel.getFormType();
-            formInfo.setFormType(formType);
-
-            if ("dynamic".equals(formType)) {
-                // 动态表单
-                formInfo.setFormKey(flowModel.getFormId());
-                formInfo.setFormJson(resolveModelFormJson(flowModel.getFormId(), flowModel.getFormJson()));
-            } else if ("external".equals(formType)) {
-                // 外部表单
-                formInfo.setFormUrl(flowModel.getFormId());
-            }
-        } else {
-            // 无表单
-            formInfo.setFormType("none");
-        }
-
-        // 7. 获取节点办理配置（BPMN扩展属性 + 节点配置表，配置表优先）
-        TaskApprovalPolicy policy = getTaskApprovalPolicy(task);
+        // 6. 获取节点办理配置（BPMN扩展属性 + 节点配置表，配置表优先）
+        TaskApprovalPolicy policy = getTaskApprovalPolicy(task, flowModel, flowNode);
         formInfo.setAllowApprove(policy.allowApprove);
         formInfo.setAllowReject(policy.allowReject);
         formInfo.setAllowDelegate(policy.allowDelegate);
@@ -1657,7 +1581,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
 
     @Override
     public TaskFormInfo getProcessFormInfo(String processInstanceId, String businessKey, String processDefKey,
-                                           String taskId) {
+                                           String taskId, String taskDefKey) {
         if (!isBlank(taskId)) {
             Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
             if (task != null) {
@@ -1677,21 +1601,24 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         String effectiveBusinessKey = firstNonBlank(businessKey,
                 business != null ? business.getBusinessKey() : null,
                 sourceTask != null ? sourceTask.getBusinessKey() : null);
-        String effectiveProcessDefKey = firstNonBlank(processDefKey,
+        String rawProcessDefKey = firstNonBlank(processDefKey,
                 business != null ? business.getProcessDefKey() : null,
                 sourceTask != null ? sourceTask.getProcessDefKey() : null);
         String processDefinitionId = firstNonBlank(
                 sourceTask != null ? sourceTask.getProcessDefId() : null,
                 business != null ? business.getProcessDefId() : null,
-                resolveProcessDefinitionId(effectiveProcessInstanceId, effectiveProcessDefKey));
-        String taskDefKey = firstNonBlank(
+                resolveProcessDefinitionId(effectiveProcessInstanceId, rawProcessDefKey));
+        String effectiveProcessDefKey = resolveProcessDefinitionKey(processDefinitionId, rawProcessDefKey);
+        String effectiveTaskDefKey = firstNonBlank(
+                taskDefKey,
                 sourceTask != null ? sourceTask.getTaskDefKey() : null,
+                findActiveTaskDefinitionKey(effectiveProcessInstanceId),
                 findFirstHistoricTaskDefinitionKey(effectiveProcessInstanceId));
 
         TaskFormInfo formInfo = new TaskFormInfo();
         formInfo.setTaskId(taskId);
         formInfo.setTaskName(sourceTask != null ? sourceTask.getTaskName() : null);
-        formInfo.setTaskDefKey(taskDefKey);
+        formInfo.setTaskDefKey(effectiveTaskDefKey);
         formInfo.setProcessInstanceId(effectiveProcessInstanceId);
         formInfo.setProcessDefKey(effectiveProcessDefKey);
         formInfo.setBusinessKey(effectiveBusinessKey);
@@ -1708,8 +1635,8 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             variables.putIfAbsent("businessKey", effectiveBusinessKey);
         }
         formInfo.setVariables(variables);
-        hydrateFormInstanceSnapshot(formInfo, effectiveProcessInstanceId);
-        applyFormConfiguration(formInfo, processDefinitionId, effectiveProcessDefKey, taskDefKey);
+        applyFormConfiguration(formInfo, processDefinitionId, effectiveProcessDefKey, effectiveTaskDefKey);
+        hydrateFormInstanceSnapshotIfNecessary(formInfo, effectiveProcessInstanceId);
         formInfo.setAllowApprove(false);
         formInfo.setAllowReject(false);
         formInfo.setAllowDelegate(false);
@@ -1719,6 +1646,27 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         formInfo.setRequireSignature(false);
         formInfo.setAllowRejectToStart(false);
         return formInfo;
+    }
+
+    private String findActiveTaskDefinitionKey(String processInstanceId) {
+        if (isBlank(processInstanceId)) {
+            return null;
+        }
+        try {
+            Task task = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .active()
+                    .orderByTaskCreateTime()
+                    .asc()
+                    .list()
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+            return task == null ? null : task.getTaskDefinitionKey();
+        } catch (Exception e) {
+            log.debug("读取运行中任务定义Key失败: processInstanceId={}", processInstanceId);
+            return null;
+        }
     }
 
     private FlowBusiness resolveFlowBusiness(String processInstanceId, String businessKey) {
@@ -1767,6 +1715,44 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             }
         }
         return null;
+    }
+
+    private String resolveProcessDefinitionKey(String processDefinitionId, String fallbackProcessDefKey) {
+        String key = null;
+        if (!isBlank(processDefinitionId)) {
+            if (processDefinitionId.contains(":")) {
+                key = extractProcessKey(processDefinitionId);
+            }
+            if (isBlank(key) || Objects.equals(key, processDefinitionId)) {
+                try {
+                    ProcessDefinition definition = repositoryService.createProcessDefinitionQuery()
+                            .processDefinitionId(processDefinitionId)
+                            .singleResult();
+                    if (definition != null) {
+                        key = definition.getKey();
+                    }
+                } catch (Exception e) {
+                    log.debug("从流程定义ID解析流程定义Key失败: processDefinitionId={}", processDefinitionId);
+                }
+            }
+            if (isBlank(key) || Objects.equals(key, processDefinitionId)) {
+                try {
+                    BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinitionId);
+                    if (bpmnModel != null && bpmnModel.getMainProcess() != null) {
+                        key = bpmnModel.getMainProcess().getId();
+                    }
+                } catch (Exception e) {
+                    log.debug("从BPMN模型解析流程定义Key失败: processDefinitionId={}", processDefinitionId);
+                }
+            }
+        }
+        if (!isBlank(key) && !Objects.equals(key, processDefinitionId)) {
+            return key;
+        }
+        if (!isBlank(fallbackProcessDefKey) && fallbackProcessDefKey.contains(":")) {
+            return extractProcessKey(fallbackProcessDefKey);
+        }
+        return fallbackProcessDefKey;
     }
 
     private Map<String, Object> readProcessVariablesForForm(String processInstanceId) {
@@ -1822,10 +1808,16 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
                                         String taskDefKey) {
         FlowModel flowModel = !isBlank(processDefKey) ? flowModelService.getModelByKey(processDefKey) : null;
         FlowNode flowNode = resolveFormFlowNode(processDefinitionId, taskDefKey);
+        applyFormConfiguration(formInfo, flowModel, flowNode);
+    }
+
+    private void applyFormConfiguration(TaskFormInfo formInfo, FlowModel flowModel, FlowNode flowNode) {
         NodeFormConfig nodeForm = readNodeFormConfig(flowNode);
         formInfo.setFormFieldPermissions(nodeForm.formFieldPermissions);
 
-        if (!isBlank(nodeForm.formUrl)) {
+        if (isBusinessNodeForm(flowModel, nodeForm.formKey, nodeForm.formMode)) {
+            applyBusinessNodeFormConfiguration(formInfo, flowModel, nodeForm.formKey, nodeForm.formUrl);
+        } else if (!isBlank(nodeForm.formUrl)) {
             formInfo.setFormType("external");
             formInfo.setFormUrl(nodeForm.formUrl);
             formInfo.setFormTarget(!isBlank(nodeForm.formTarget) ? nodeForm.formTarget : "modal");
@@ -1834,21 +1826,95 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             formInfo.setFormKey(nodeForm.formKey);
             formInfo.setFormJson(resolveFormJson(nodeForm.formKey, nodeForm.formJson));
         } else if (flowModel != null) {
-            String formType = flowModel.getFormType();
-            formInfo.setFormType(formType);
-            if ("dynamic".equals(formType)) {
-                formInfo.setFormKey(flowModel.getFormId());
-                formInfo.setFormJson(resolveModelFormJson(flowModel.getFormId(), flowModel.getFormJson()));
-            } else if ("external".equals(formType)) {
-                formInfo.setFormUrl(flowModel.getFormId());
-                formInfo.setFormTarget("modal");
-            }
+            applyModelFormConfiguration(formInfo, flowModel);
         } else if (!isBlank(formInfo.getFormJson()) || !isBlank(formInfo.getFormKey())) {
             formInfo.setFormType("dynamic");
             formInfo.setFormJson(resolveFormJson(formInfo.getFormKey(), formInfo.getFormJson()));
         } else {
             formInfo.setFormType("none");
         }
+    }
+
+    private void applyModelFormConfiguration(TaskFormInfo formInfo, FlowModel flowModel) {
+        if (flowModel == null) {
+            formInfo.setFormType("none");
+            return;
+        }
+        String formType = flowModel.getFormType();
+        formInfo.setFormType(formType);
+        if ("dynamic".equals(formType)) {
+            formInfo.setFormKey(flowModel.getFormId());
+            formInfo.setFormJson(resolveModelFormJson(flowModel.getFormId(), flowModel.getFormJson()));
+            return;
+        }
+        if ("external".equals(formType)) {
+            formInfo.setFormUrl(flowModel.getFormId());
+            formInfo.setFormTarget("modal");
+            return;
+        }
+        if (FORM_TYPE_BUSINESS.equals(formType)) {
+            Map<String, Object> formRef = readBusinessGlobalFormRef(flowModel.getFormJson());
+            formInfo.setFormType(FORM_TYPE_BUSINESS);
+            formInfo.setFormKey(firstNonBlank(textValue(formRef.get("formKey")), flowModel.getFormId()));
+            formInfo.setFormUrl(textValue(formRef.get("formUrl")));
+            formInfo.setFormTarget("modal");
+            formInfo.setFormJson(flowModel.getFormJson());
+        }
+    }
+
+    private void applyBusinessNodeFormConfiguration(TaskFormInfo formInfo, FlowModel flowModel,
+                                                    String nodeFormKey, String nodeFormUrl) {
+        formInfo.setFormType(FORM_TYPE_BUSINESS);
+        Map<String, Object> formRef = flowModel == null ? Map.of() : readBusinessGlobalFormRef(flowModel.getFormJson());
+        formInfo.setFormKey(firstNonBlank(
+                nodeFormKey,
+                textValue(formRef.get("formKey")),
+                flowModel == null ? null : flowModel.getFormId()));
+        formInfo.setFormUrl(firstNonBlank(nodeFormUrl, textValue(formRef.get("formUrl"))));
+        formInfo.setFormTarget("modal");
+        formInfo.setFormJson(flowModel == null ? null : flowModel.getFormJson());
+    }
+
+    private boolean isBusinessNodeForm(FlowModel flowModel, String formKey, String formMode) {
+        String normalizedMode = normalizeFormMode(formMode);
+        if ("BUSINESS_CODE_FORM".equals(normalizedMode) || "BUSINESS_OBJECT_FORM".equals(normalizedMode)) {
+            return true;
+        }
+        if (flowModel == null || !FORM_TYPE_BUSINESS.equalsIgnoreCase(flowModel.getFormType())) {
+            return false;
+        }
+        Map<String, Object> formRef = readBusinessGlobalFormRef(flowModel.getFormJson());
+        String modelFormKey = firstNonBlank(textValue(formRef.get("formKey")), flowModel.getFormId());
+        return isBlank(formKey) || isBlank(modelFormKey) || Objects.equals(formKey, modelFormKey);
+    }
+
+    private String normalizeFormMode(String value) {
+        String mode = textValue(value);
+        return mode == null ? null : mode.toUpperCase(Locale.ROOT);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readBusinessGlobalFormRef(String formJson) {
+        if (isBlank(formJson)) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> root = OBJECT_MAPPER.readValue(formJson, Map.class);
+            Object nested = root.get("formRef");
+            if (nested instanceof Map<?, ?> nestedMap) {
+                Map<String, Object> merged = new LinkedHashMap<>((Map<String, Object>) nestedMap);
+                root.forEach(merged::putIfAbsent);
+                return merged;
+            }
+            return root;
+        } catch (Exception e) {
+            log.warn("解析流程全局业务表单引用失败: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private String textValue(Object value) {
+        return value == null ? null : String.valueOf(value).trim();
     }
 
     private FlowNode resolveFormFlowNode(String processDefinitionId, String taskDefKey) {
@@ -1894,6 +1960,10 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         config.formUrl = flowNode.getAttributeValue(FLOWABLE_NS, "formUrl");
         config.formJson = flowNode.getAttributeValue(FLOWABLE_NS, "formJson");
         config.formTarget = flowNode.getAttributeValue(FLOWABLE_NS, "formTarget");
+        config.formMode = firstNonBlank(
+                flowNode.getAttributeValue(FLOWABLE_NS, "formMode"),
+                flowNode.getAttributeValue(FLOWABLE_NS, "formType"),
+                flowNode.getAttributeValue(FLOWABLE_NS, "type"));
         config.formFieldPermissions = flowNode.getAttributeValue(FLOWABLE_NS, "formFieldPermissions");
 
         Map<String, List<ExtensionElement>> extensions = flowNode.getExtensionElements();
@@ -1912,12 +1982,32 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         if (isBlank(config.formTarget) && formTargetElements != null && !formTargetElements.isEmpty()) {
             config.formTarget = formTargetElements.get(0).getElementText();
         }
+        List<ExtensionElement> formModeElements = extensions.get("formMode");
+        if (isBlank(config.formMode) && formModeElements != null && !formModeElements.isEmpty()) {
+            config.formMode = formModeElements.get(0).getElementText();
+        }
+        List<ExtensionElement> formTypeElements = extensions.get("formType");
+        if (isBlank(config.formMode) && formTypeElements != null && !formTypeElements.isEmpty()) {
+            config.formMode = formTypeElements.get(0).getElementText();
+        }
         List<ExtensionElement> formFieldPermissionElements = extensions.get("formFieldPermissions");
         if (isBlank(config.formFieldPermissions) && formFieldPermissionElements != null
                 && !formFieldPermissionElements.isEmpty()) {
             config.formFieldPermissions = formFieldPermissionElements.get(0).getElementText();
         }
         return config;
+    }
+
+    private void hydrateFormInstanceSnapshotIfNecessary(TaskFormInfo formInfo, String processInstanceId) {
+        if (formInfo == null || FORM_TYPE_BUSINESS.equalsIgnoreCase(formInfo.getFormType())) {
+            return;
+        }
+        if (!"dynamic".equalsIgnoreCase(formInfo.getFormType())
+                && isBlank(formInfo.getFormKey())
+                && isBlank(formInfo.getFormJson())) {
+            return;
+        }
+        hydrateFormInstanceSnapshot(formInfo, processInstanceId);
     }
 
     private void hydrateFormInstanceSnapshot(TaskFormInfo formInfo, String processInstanceId) {
@@ -2079,6 +2169,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         private String formJson;
         private String formUrl;
         private String formTarget;
+        private String formMode;
         private String formFieldPermissions;
 
         private boolean hasForm() {

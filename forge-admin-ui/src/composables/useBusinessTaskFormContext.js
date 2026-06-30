@@ -18,6 +18,18 @@ export function useBusinessTaskFormContext(defaultQuery = {}, options = {}) {
   const fieldPermissions = computed(() => normalizeFieldPermissions(context.value?.fieldPermissions, { readOnly: readonly.value }))
 
   const permissionMap = computed(() => createFieldPermissionMap(fieldPermissions.value, { readOnly: readonly.value }))
+  const hasExplicitPermissions = computed(() => fieldPermissions.value.length > 0)
+  const fieldMap = computed(() => {
+    const map = new Map()
+    for (const item of fields.value) {
+      const field = String(item?.field || item?.fieldCode || item?.code || item?.name || '').trim()
+      if (!field)
+        continue
+      for (const key of fieldAliases(field))
+        map.set(key, item)
+    }
+    return map
+  })
 
   async function load(query = {}) {
     const params = compactParams({ ...defaultQuery, ...query })
@@ -42,6 +54,11 @@ export function useBusinessTaskFormContext(defaultQuery = {}, options = {}) {
     finally {
       loading.value = false
     }
+  }
+
+  function setContext(value) {
+    context.value = value || null
+    error.value = ''
   }
 
   async function save(data = {}, overrides = {}) {
@@ -82,7 +99,17 @@ export function useBusinessTaskFormContext(defaultQuery = {}, options = {}) {
     return key ? permissionMap.value.get(key) : null
   }
 
+  function fieldConfig(field) {
+    const key = String(field || '').trim()
+    return key ? fieldMap.value.get(key) : null
+  }
+
   function canShowField(field) {
+    const config = fieldConfig(field)
+    if (fieldMap.value.size && !config)
+      return false
+    if (config && (config.visible === false || config.readable === false))
+      return false
     const permission = fieldPermission(field)
     return permission ? permission.visible !== false : true
   }
@@ -90,7 +117,14 @@ export function useBusinessTaskFormContext(defaultQuery = {}, options = {}) {
   function canEditField(field) {
     if (readonly.value)
       return false
+    const config = fieldConfig(field)
+    if (fieldMap.value.size && !config)
+      return false
+    if (config && (config.writable === false || config.readonly === true || config.disabled === true))
+      return false
     const permission = fieldPermission(field)
+    if (hasExplicitPermissions.value && !permission)
+      return false
     return permission ? permission.editable !== false && permission.visible !== false : true
   }
 
@@ -103,12 +137,15 @@ export function useBusinessTaskFormContext(defaultQuery = {}, options = {}) {
     recordData,
     fields,
     fieldPermissions,
+    hasExplicitPermissions,
     loading,
     saving,
     error,
+    setContext,
     load,
     save,
     fieldPermission,
+    fieldConfig,
     canShowField,
     canEditField,
     isRequiredField,
@@ -126,4 +163,21 @@ function compactParams(source = {}) {
 
 function hasContextQuery(query = {}) {
   return Boolean(query.taskId || query.processInstanceId || query.businessKey || (query.objectCode && query.recordId))
+}
+
+function fieldAliases(field) {
+  const value = String(field || '').trim()
+  if (!value)
+    return []
+  return Array.from(new Set([value, snakeToCamel(value), camelToSnake(value)])).filter(Boolean)
+}
+
+function snakeToCamel(value) {
+  if (!value.includes('_'))
+    return value
+  return value.replace(/_([a-z0-9])/gi, (_, ch) => ch.toUpperCase())
+}
+
+function camelToSnake(value) {
+  return value.replace(/[A-Z]/g, ch => `_${ch.toLowerCase()}`)
 }

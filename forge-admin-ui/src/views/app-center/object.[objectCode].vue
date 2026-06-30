@@ -21,6 +21,12 @@
           </template>
           设计对象
         </n-button>
+        <n-button secondary :disabled="!object" @click="openObjectEditor">
+          <template #icon>
+            <n-icon><CreateOutline /></n-icon>
+          </template>
+          编辑业务单元
+        </n-button>
         <n-button secondary :disabled="!runtimeInfo?.canOpen" @click="openRuntime">
           <template #icon>
             <n-icon><OpenOutline /></n-icon>
@@ -37,13 +43,13 @@
           <template #icon>
             <n-icon><PowerOutline /></n-icon>
           </template>
-          {{ object?.status === 1 ? '停用对象' : '启用对象' }}
+          {{ object?.status === 1 ? '停用业务单元' : '启用业务单元' }}
         </n-button>
         <n-button secondary type="error" :disabled="!object" @click="deleteObject">
           <template #icon>
             <n-icon><TrashOutline /></n-icon>
           </template>
-          删除对象
+          删除业务单元
         </n-button>
         <n-button v-if="canAdvanced" secondary @click="openDesigner('advanced')">
           <template #icon>
@@ -171,6 +177,12 @@
       @saved="loadObject"
       @close="closeDesigner"
     />
+    <BusinessObjectEditorDrawer
+      v-model:show="objectEditorVisible"
+      :object="editingObject"
+      :suites="objectEditorSuites"
+      @saved="handleObjectEdited"
+    />
   </div>
 </template>
 
@@ -180,6 +192,7 @@ import {
   CheckmarkCircleOutline,
   CloudDownloadOutline,
   CloudUploadOutline,
+  CreateOutline,
   CubeOutline,
   OpenOutline,
   PowerOutline,
@@ -191,8 +204,10 @@ import { useMessage } from 'naive-ui'
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  businessObjectDetail,
   businessObjectList,
   businessObjectRuntimeInfo,
+  businessSuiteList,
   deleteBusinessObject,
   dynamicCrudExport,
   dynamicCrudImport,
@@ -204,6 +219,7 @@ import { useTabStore, useUserStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
 
 const BusinessBindingPanel = defineAsyncComponent(() => import('./components/BusinessBindingPanel.vue'))
+const BusinessObjectEditorDrawer = defineAsyncComponent(() => import('./components/BusinessObjectEditorDrawer.vue'))
 const ObjectRelationPanel = defineAsyncComponent(() => import('./components/ObjectRelationPanel.vue'))
 const ReadinessPanel = defineAsyncComponent(() => import('./components/ReadinessPanel.vue'))
 const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
@@ -223,6 +239,9 @@ const importing = ref(false)
 const exportLoading = ref(false)
 const designerVisible = ref(false)
 const designerPanel = ref('form')
+const objectEditorVisible = ref(false)
+const editingObject = ref(null)
+const objectEditorSuites = ref([])
 const objectCode = computed(() => route.params.objectCode)
 const suiteCode = computed(() => route.query.suiteCode || object.value?.suiteCode)
 const pageTitle = computed(() => object.value?.objectName || objectCode.value || '业务单元详情')
@@ -335,6 +354,37 @@ async function closeDesigner() {
   await loadObject()
 }
 
+async function openObjectEditor() {
+  if (!object.value?.id)
+    return
+  await loadObjectEditorSuites()
+  try {
+    const res = await businessObjectDetail(object.value.id)
+    editingObject.value = { ...object.value, ...(res.data || {}) }
+  }
+  catch {
+    editingObject.value = { ...object.value }
+  }
+  objectEditorVisible.value = true
+}
+
+async function loadObjectEditorSuites() {
+  if (objectEditorSuites.value.length)
+    return
+  const res = await businessSuiteList()
+  objectEditorSuites.value = res.data || []
+}
+
+async function handleObjectEdited(payload) {
+  if (payload?.suiteCode && payload.suiteCode !== suiteCode.value) {
+    await router.replace({
+      path: `/app-center/object/${payload.objectCode || objectCode.value}`,
+      query: { ...route.query, suiteCode: payload.suiteCode },
+    })
+  }
+  await loadObject()
+}
+
 function scrollToReadiness() {
   readinessSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
@@ -372,12 +422,28 @@ function handleReadinessAction(action) {
   }
 }
 
+async function applyObjectStatus(currentObject, nextStatus) {
+  await updateBusinessObjectStatus(currentObject.id, nextStatus)
+  message.success(nextStatus === 0 ? '业务单元已停用' : '业务单元已启用')
+  await loadObject()
+}
+
 async function toggleObject() {
   if (!object.value)
     return
-  await updateBusinessObjectStatus(object.value.id, object.value.status === 1 ? 0 : 1)
-  message.success(object.value.status === 1 ? '业务单元已停用' : '业务单元已启用')
-  await loadObject()
+  const currentObject = object.value
+  const nextStatus = currentObject.status === 1 ? 0 : 1
+  if (nextStatus === 0) {
+    window.$dialog?.warning({
+      title: '停用业务单元',
+      content: `确定停用“${currentObject.objectName || currentObject.objectCode}”吗？停用后关联配置仍保留，但用户不应继续进入该业务单元办理新业务。`,
+      positiveText: '停用',
+      negativeText: '取消',
+      onPositiveClick: () => applyObjectStatus(currentObject, nextStatus),
+    })
+    return
+  }
+  await applyObjectStatus(currentObject, nextStatus)
 }
 
 function deleteObject() {

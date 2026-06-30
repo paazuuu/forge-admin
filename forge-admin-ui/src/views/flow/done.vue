@@ -35,7 +35,7 @@
       <template #meta="{ row }">
         <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
         <span><span class="task-meta-label">完成时间</span> <span class="task-meta-value">{{ row.completeTime || '-' }}</span></span>
-        <span><span class="task-meta-label">处理节点</span> <span class="task-meta-value">{{ row.taskName || '-' }}</span></span>
+        <span><span class="task-meta-label">处理节点</span> <span class="task-meta-value">{{ getTaskDisplayName(row) }}</span></span>
       </template>
       <template #summary="{ row }">
         <span v-if="row.comment">审批意见：{{ row.comment }}</span>
@@ -52,7 +52,7 @@
     <FlowTaskDetailShell
       v-model:show="showDrawer"
       :title="currentTask ? getRowDisplayTitle(currentTask) : '审批详情'"
-      :subtitle="currentTask?.taskName ? `处理节点：${currentTask.taskName}` : ''"
+      :subtitle="getTaskDisplayName(currentTask, '') ? `处理节点：${getTaskDisplayName(currentTask)}` : ''"
       :status-text="getStatusText(currentTask?.status)"
       :status-class="getStatusTagClass(currentTask?.status)"
       :status-icon="getStatusIcon(currentTask?.status)"
@@ -69,7 +69,7 @@
           <div class="approval-field-grid">
             <div class="approval-field">
               <span class="approval-label">任务节点</span>
-              <span class="approval-value">{{ currentTask.taskName || '-' }}</span>
+              <span class="approval-value">{{ getTaskDisplayName(currentTask) }}</span>
             </div>
             <div class="approval-field">
               <span class="approval-label">审批结果</span>
@@ -173,13 +173,14 @@
               <div class="approval-form-title">
                 节点动态表单
               </div>
-              <FlowFormCreateRenderer
-                v-model="dynamicFormData"
-                :schema="taskFormInfo.formJson"
-                :field-permissions="taskFormInfo.formFieldPermissions"
+              <AiForm
+                v-model:value="dynamicFormData"
+                :schema="readonlyDynamicFormSchema"
+                :field-permissions="readonlyDynamicFormFieldPermissions"
+                :show-actions="false"
+                :show-feedback="false"
                 :grid-cols="2"
                 label-placement="top"
-                read-only
               />
             </div>
 
@@ -209,17 +210,17 @@ import { useRouter } from 'vue-router'
 import { businessTaskFormReadonlyContext } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import { AiForm } from '@/components/ai-form'
+import { formCreateToAiSchema } from '@/components/ai-form/adapters/formCreate'
 import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue'
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignatureImage from '@/components/flow/SignatureImage.vue'
-import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
-import { getBusinessFormDisplayTitle, getRowDisplayTitle } from './utils/processDisplay'
+import { getBusinessFormDisplayTitle, getRowDisplayTitle, getTaskDisplayName } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -262,6 +263,7 @@ const approvalHistory = ref([])
 const taskFormInfo = ref(null)
 const formInfoLoading = ref(false)
 const dynamicFormData = ref({})
+const dynamicFormSchema = computed(() => formCreateToAiSchema(taskFormInfo.value?.formJson || []))
 const businessFormContext = ref(null)
 const businessFormData = ref({})
 const businessFormLoading = ref(false)
@@ -276,7 +278,7 @@ const readonlyApprovalPolicy = {
   requireComment: false,
   requireSignature: false,
 }
-const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
+const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && dynamicFormSchema.value.length > 0)
 const useBusinessObjectForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-object')
 const useBusinessCodeForm = computed(() => businessFormContext.value?.configured === true && businessFormContext.value?.formType === 'business-code')
 const useBusinessManagedForm = computed(() => useBusinessObjectForm.value || useBusinessCodeForm.value)
@@ -296,8 +298,19 @@ const readonlyBusinessFormFieldPermissions = computed(() => {
     taskFormInfo.value?.formFieldPermissions,
   ], { readOnly: true })
 })
+const readonlyDynamicFormFieldPermissions = computed(() => {
+  return pickFirstNonEmptyFieldPermissions([
+    taskFormInfo.value?.fieldPermissions,
+    taskFormInfo.value?.formFieldPermissions,
+  ], { readOnly: true })
+})
+const readonlyDynamicFormSchema = computed(() => dynamicFormSchema.value.map(toReadonlyField))
 const readonlyBusinessFormFields = computed(() => {
-  return (businessFormContext.value?.fields || []).map(field => ({
+  return (businessFormContext.value?.fields || []).map(toReadonlyField)
+})
+
+function toReadonlyField(field = {}) {
+  return {
     ...field,
     writable: false,
     readonly: true,
@@ -307,8 +320,8 @@ const readonlyBusinessFormFields = computed(() => {
       disabled: true,
       readonly: true,
     },
-  }))
-})
+  }
+}
 const showNoFormContent = computed(() => {
   if (formInfoLoading.value || businessFormLoading.value)
     return false

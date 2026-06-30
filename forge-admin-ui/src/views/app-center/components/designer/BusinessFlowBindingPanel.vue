@@ -3,7 +3,7 @@
     <div class="flow-head">
       <div>
         <h3>流程与自动化</h3>
-        <p>绑定默认流程，配置标题模板，并告诉流程哪些业务字段可用于条件分支和审批人规则。</p>
+        <p>绑定默认流程并进入流程设计器配置节点；业务字段由表单设计自动提供给流程使用。</p>
       </div>
       <n-space size="small">
         <n-button size="small" secondary :loading="loading" @click="loadBinding">
@@ -178,24 +178,6 @@
             </div>
           </section>
 
-          <section class="flow-card">
-            <div class="flow-card-head">
-              <div>
-                <h4>让流程认识你的业务字段</h4>
-                <p>把业务字段交给流程条件和审批人规则使用；例如金额映射为 amount 后，条件线才能判断 ${amount > 10000}。</p>
-              </div>
-            </div>
-            <FlowVariableMappingEditor
-              v-model="form.variableMapping"
-              :field-options="fieldOptions"
-              :variable-options="variableOptions"
-              :suggestions="mappingSuggestions"
-              :warnings="variableWarnings"
-              :loading="variablesLoading"
-              @update:model-value="markDirty"
-            />
-          </section>
-
           <section class="flow-card flow-designer-entry-card">
             <div class="flow-card-head">
               <div>
@@ -209,7 +191,15 @@
 
             <n-spin :show="variablesLoading || formAssetsLoading">
               <div class="flow-designer-entry">
-                <div class="flow-designer-entry-main">
+                <div
+                  class="flow-designer-entry-main"
+                  :class="{ disabled: !selectedFlowModelId }"
+                  role="button"
+                  tabindex="0"
+                  @click="openFlowDesigner"
+                  @keydown.enter.prevent="openFlowDesigner"
+                  @keydown.space.prevent="openFlowDesigner"
+                >
                   <div class="flow-designer-entry-icon">
                     <i class="i-material-symbols:account-tree-outline" />
                   </div>
@@ -222,7 +212,7 @@
                   type="primary"
                   secondary
                   :disabled="!selectedFlowModelId"
-                  @click="openFlowDesigner"
+                  @click.stop="openFlowDesigner"
                 >
                   打开流程设计器
                 </n-button>
@@ -264,8 +254,8 @@
               <strong>{{ startModeLabel }}</strong>
             </div>
             <div>
-              <span>变量映射</span>
-              <strong>{{ validMappingCount }} 项</strong>
+              <span>业务字段</span>
+              <strong>{{ fieldOptions.length }} 项</strong>
             </div>
             <div>
               <span>业务绑定</span>
@@ -279,24 +269,40 @@
               <span>流程节点</span>
               <strong>{{ userTasks.length }} 个</strong>
             </div>
-            <div>
-              <span>变量候选</span>
-              <strong>{{ variableOptions.length }} 项</strong>
-            </div>
           </div>
         </section>
       </aside>
     </div>
+
+    <n-modal
+      v-model:show="flowDesignerVisible"
+      class="flow-designer-modal"
+      :mask-closable="false"
+      :auto-focus="false"
+    >
+      <section class="flow-designer-modal-shell">
+        <FlowDesignPage
+          v-if="flowDesignerVisible"
+          embedded
+          class="embedded-flow-design-page"
+          :model-id="selectedFlowModelId"
+          :business-object-code="objectCode"
+          :business-object-name="objectName || objectCode"
+          :code-app="codeApp"
+          @close="handleFlowDesignerClose"
+          @saved="handleFlowDesignerSaved"
+          @deployed="handleFlowDesignerSaved"
+        />
+      </section>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { useMessage } from 'naive-ui'
-import { computed, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue'
 import { businessFlowBinding, businessFlowFormAssets, businessFlowVariables, saveBusinessFlowBinding } from '@/api/business-app'
 import flowApi from '@/api/flow'
-import FlowVariableMappingEditor from './FlowVariableMappingEditor.vue'
 import TemplateVariableEditor from './TemplateVariableEditor.vue'
 
 const props = defineProps({
@@ -307,6 +313,10 @@ const props = defineProps({
   fields: {
     type: Array,
     default: () => [],
+  },
+  objectName: {
+    type: String,
+    default: '',
   },
   initialBinding: {
     type: Object,
@@ -320,8 +330,9 @@ const props = defineProps({
 
 const emit = defineEmits(['dirtyChange', 'saved', 'loaded'])
 
+const FlowDesignPage = defineAsyncComponent(() => import('@/views/flow/design.vue'))
+
 const message = useMessage()
-const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const flowModelsLoading = ref(false)
@@ -332,9 +343,8 @@ const variableOptions = ref([])
 const userTasks = ref([])
 const formAssets = ref([])
 const flowFieldCandidates = ref([])
-const mappingSuggestions = ref([])
-const variableWarnings = ref([])
 const formAssetWarnings = ref([])
+const flowDesignerVisible = ref(false)
 const form = reactive(createDefaultBinding())
 
 const startModeOptions = [
@@ -375,7 +385,6 @@ const fieldOptions = computed(() => {
   flowFieldCandidates.value.forEach(append)
   return options
 })
-const validMappingCount = computed(() => form.variableMapping.filter(item => item.formField && item.flowVariable).length)
 const selectedFlowModel = computed(() => flowModelOptions.value.find(item => item.value === form.flowModelKey) || null)
 const selectedFlowModelId = computed(() => selectedFlowModel.value?.id || '')
 const startModeLabel = computed(() => startModeOptions.find(item => item.value === form.startMode)?.label || '-')
@@ -501,15 +510,9 @@ function buildPayload() {
     flowModelName: form.flowModelName || selectedFlowName(),
     titleTemplate: form.titleTemplate || '',
     startMode: form.startMode || 'MANUAL',
-    variableMapping: form.variableMapping
-      .map(item => ({
-        formField: item.formField || '',
-        flowVariable: item.flowVariable || '',
-        label: item.label || fieldLabel(item.formField),
-      }))
-      .filter(item => item.formField && item.flowVariable),
+    variableMapping: buildAutomaticVariableMapping(),
     businessBinding: normalizeBusinessBinding(form.businessBinding),
-    nodeForms: normalizeNodeFormsForPayload(form.nodeForms),
+    nodeForms: [],
     conditionFlows: form.conditionFlows || [],
     options: { ...(form.options || {}) },
   }
@@ -590,8 +593,6 @@ function handleBusinessBindingModeChange(value) {
 async function loadVariableCandidates() {
   variableOptions.value = []
   flowFieldCandidates.value = []
-  mappingSuggestions.value = []
-  variableWarnings.value = []
   if (!form.flowModelKey)
     return
   variablesLoading.value = true
@@ -605,13 +606,11 @@ async function loadVariableCandidates() {
     })).filter(item => item.value)
     flowFieldCandidates.value = normalizeFlowFieldCandidates(data.fieldCandidates || [])
     userTasks.value = normalizeUserTasks(data.userTasks || [])
-    mappingSuggestions.value = data.mappingSuggestions || []
-    variableWarnings.value = data.warnings || []
   }
   catch (e) {
     flowFieldCandidates.value = []
     userTasks.value = []
-    variableWarnings.value = [e.message || '流程变量候选项加载失败']
+    message.warning(e.message || '流程变量候选项加载失败')
   }
   finally {
     variablesLoading.value = false
@@ -666,25 +665,6 @@ function normalizeNodeForm(value = {}) {
   }
 }
 
-function normalizeNodeFormsForPayload(list = []) {
-  return normalizeNodeForms(list)
-    .filter(item => item.taskDefKey)
-    .map((item) => {
-      return {
-        taskDefKey: item.taskDefKey,
-        taskName: item.taskName,
-        formMode: item.formMode || '',
-        formKey: item.formKey || '',
-        formName: item.formName || '',
-        providerKey: item.providerKey || '',
-        formUrl: item.formUrl || '',
-        viewKey: item.viewKey || 'default',
-        editMode: item.editMode || 'READONLY',
-        fieldPermissions: buildFieldPermissionsFromSelections(item),
-      }
-    })
-}
-
 function fieldsByPermission(fieldPermissions = [], permission) {
   if (permission === 'readable') {
     const hiddenMode = fieldPermissions.some(item => item.readable === false)
@@ -699,19 +679,6 @@ function normalizeFieldSelection(value = []) {
   return Array.from(new Set((Array.isArray(value) ? value : [])
     .map(item => normalizeText(item))
     .filter(Boolean)))
-}
-
-function buildFieldPermissionsFromSelections(nodeForm) {
-  const visible = new Set(nodeForm.visibleFields || [])
-  const writable = new Set(nodeForm.writableFields || [])
-  const required = new Set(nodeForm.requiredFields || [])
-  const fields = new Set([...visible, ...writable, ...required])
-  return Array.from(fields).map(field => ({
-    field,
-    readable: visible.size === 0 || visible.has(field),
-    writable: writable.has(field),
-    required: required.has(field),
-  }))
 }
 
 function createDefaultBusinessBinding() {
@@ -822,6 +789,23 @@ function fieldLabel(code) {
   return option?.label || code
 }
 
+function buildAutomaticVariableMapping() {
+  const used = new Set()
+  return fieldOptions.value
+    .map((option) => {
+      const code = normalizeText(option.value)
+      if (!code || used.has(code))
+        return null
+      used.add(code)
+      return {
+        formField: code,
+        flowVariable: code,
+        label: option.label || code,
+      }
+    })
+    .filter(Boolean)
+}
+
 function fieldCode(field = {}) {
   return field.fieldCode || field.field || field.code || ''
 }
@@ -831,15 +815,16 @@ function openFlowDesigner() {
     message.warning('请选择流程模型后再打开流程设计器')
     return
   }
-  router.push({
-    path: '/flow/design',
-    query: {
-      id: selectedFlowModelId.value,
-      businessObjectCode: props.objectCode,
-      codeApp: props.codeApp ? '1' : undefined,
-      source: 'appCenter',
-    },
-  })
+  flowDesignerVisible.value = true
+}
+
+async function handleFlowDesignerSaved() {
+  await loadVariableCandidates()
+}
+
+async function handleFlowDesignerClose() {
+  flowDesignerVisible.value = false
+  await loadVariableCandidates()
 }
 
 function normalizeStartMode(value) {
@@ -867,6 +852,7 @@ defineExpose({
   assignBinding,
   buildPayload,
   validateBeforeSave,
+  openNodeConfigDesigner: openFlowDesigner,
 })
 </script>
 
@@ -1004,6 +990,25 @@ defineExpose({
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
+  border-radius: 8px;
+  padding: 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.flow-designer-entry-main:hover,
+.flow-designer-entry-main:focus-visible {
+  background: #eff6ff;
+}
+
+.flow-designer-entry-main.disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.flow-designer-entry-main.disabled:hover,
+.flow-designer-entry-main.disabled:focus-visible {
+  background: transparent;
 }
 
 .flow-designer-entry-icon {
@@ -1065,6 +1070,26 @@ defineExpose({
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.flow-designer-modal-shell {
+  width: min(1720px, calc(100vw - 24px));
+  height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px);
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.28);
+}
+
+.embedded-flow-design-page {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
 }
 
 .mapping-row {

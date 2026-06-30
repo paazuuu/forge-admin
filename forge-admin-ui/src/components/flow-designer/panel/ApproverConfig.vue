@@ -19,8 +19,8 @@
  *   - update:config   增量 patch，外层 NodeConfigDrawer 合并到 draftNode.config
  */
 import { computed, ref } from 'vue'
-import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
 import { normalizeFieldPermissions } from '@/utils/field-permissions'
+import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
 import ApproverAssigneeForm from './ApproverAssigneeForm.vue'
 import BasicConfig from './BasicConfig.vue'
 import FormPermissionConfig from './FormPermissionConfig.vue'
@@ -136,17 +136,20 @@ function findFormAsset(partial = {}) {
     return null
   const providerKey = String(partial.providerKey || '')
   const formMode = normalizeFormMode(partial.formMode || partial.formRef?.type || config.value.formMode)
-  return normalizedFormAssetOptions.value.find(asset =>
+  const exactAsset = normalizedFormAssetOptions.value.find((asset) => {
+    return String(asset.formKey || asset.value || '') === formKey
+      && normalizeFormMode(asset.formMode || asset.type) === formMode
+      && String(asset.providerKey || '') === providerKey
+  })
+  if (exactAsset)
+    return exactAsset
+  const providerAsset = normalizedFormAssetOptions.value.find(asset =>
     String(asset.formKey || asset.value || '') === formKey
-    && normalizeFormMode(asset.formMode || asset.type) === formMode
     && String(asset.providerKey || '') === providerKey,
   )
-    || normalizedFormAssetOptions.value.find(asset =>
-      String(asset.formKey || asset.value || '') === formKey
-      && String(asset.providerKey || '') === providerKey,
-    )
-    || normalizedFormAssetOptions.value.find(asset => String(asset.formKey || asset.value || '') === formKey)
-    || null
+  if (providerAsset)
+    return providerAsset
+  return normalizedFormAssetOptions.value.find(asset => String(asset.formKey || asset.value || '') === formKey) || null
 }
 
 function buildFormFieldPermissionsForCatalog(currentPermissions, fieldCatalog = []) {

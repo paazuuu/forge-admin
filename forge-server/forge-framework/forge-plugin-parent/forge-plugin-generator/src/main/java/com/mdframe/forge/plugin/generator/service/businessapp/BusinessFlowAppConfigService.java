@@ -51,11 +51,21 @@ public class BusinessFlowAppConfigService {
         if (object == null) {
             return saveCodeAppConfig(code, dto);
         }
-        if (dto.getDocumentConfig() != null) {
+        boolean codeAppObject = isCodeAppObject(object);
+        if (codeAppObject && isDocumentEnabled(dto.getDocumentConfig())) {
+            throw new BusinessException("代码应用不能在低代码单据规则中启用单据模式，请通过业务代码或流程绑定维护状态回写");
+        }
+        if (!codeAppObject && dto.getDocumentConfig() != null) {
             documentConfigService.saveConfig(object.getId(), dto.getDocumentConfig());
         }
         if (dto.getFlowBinding() != null) {
+            if (codeAppObject) {
+                mergeCodeAppMetadata(dto);
+                normalizeCodeAppBinding(dto.getFlowBinding());
+            }
             flowService.saveFlowBinding(object.getObjectCode(), dto.getFlowBinding());
+        } else if (codeAppObject && hasCodeAppMetadata(dto)) {
+            flowService.saveCodeAppMetadata(object.getObjectCode(), dto.getOptions().get("codeAppMetadata"));
         }
         return buildConfig(object);
     }
@@ -69,8 +79,13 @@ public class BusinessFlowAppConfigService {
             throw new BusinessException("代码应用不能在低代码单据规则中启用单据模式，请通过业务代码或流程绑定维护状态回写");
         }
         if (dto.getFlowBinding() != null) {
+            mergeCodeAppMetadata(dto);
             normalizeCodeAppBinding(dto.getFlowBinding());
             flowService.saveFlowBinding(objectCode, dto.getFlowBinding());
+        } else if (hasCodeAppMetadata(dto)) {
+            if (!flowService.saveCodeAppMetadata(objectCode, dto.getOptions().get("codeAppMetadata"))) {
+                throw new BusinessException("请先为代码应用选择流程模型后再保存字段与视图配置");
+            }
         }
         return buildCodeAppConfig(objectCode);
     }
@@ -90,6 +105,16 @@ public class BusinessFlowAppConfigService {
         vo.setFlowBinding(flowBinding);
         vo.setFormAssets(formAssets);
         vo.setSummary(buildSummary(documentConfig, flowBinding, formAssets));
+        if (isCodeAppObject(object)) {
+            Map<String, Object> codeAppMetadata = flowService.getCodeAppMetadata(object.getObjectCode());
+            vo.getSummary().put("codeApp", true);
+            vo.getSummary().put("documentManaged", false);
+            vo.getSummary().put("metadataConfigured", !codeAppMetadata.isEmpty());
+            vo.getOptions().put("codeApp", true);
+            vo.getOptions().put("documentManaged", false);
+            vo.getOptions().put("codeAppMetadata", codeAppMetadata);
+            vo.getOptions().put("documentMessage", "代码应用由业务模块维护数据读写和状态流转；表单、列表和详情展示在应用设计器左侧对应面板配置，节点表单和字段权限在流程设计器中配置。");
+        }
         return vo;
     }
 
@@ -100,8 +125,10 @@ public class BusinessFlowAppConfigService {
         }
         BusinessFlowBindingVO flowBinding = flowService.getFlowBinding(objectCode);
         Map<String, Object> summary = buildSummary(null, flowBinding, formAssets);
+        Map<String, Object> codeAppMetadata = flowService.getCodeAppMetadata(objectCode);
         summary.put("codeApp", true);
         summary.put("documentManaged", false);
+        summary.put("metadataConfigured", !codeAppMetadata.isEmpty());
 
         BusinessFlowAppConfigVO vo = new BusinessFlowAppConfigVO();
         vo.setObjectCode(objectCode);
@@ -111,8 +138,23 @@ public class BusinessFlowAppConfigService {
         vo.setSummary(summary);
         vo.getOptions().put("codeApp", true);
         vo.getOptions().put("documentManaged", false);
-        vo.getOptions().put("documentMessage", "代码应用由业务模块维护列表、详情和状态字段，平台统一维护流程模型与节点表单策略。");
+        vo.getOptions().put("codeAppMetadata", codeAppMetadata);
+        vo.getOptions().put("documentMessage", "代码应用由业务模块维护数据读写和状态流转；表单、列表和详情展示在应用设计器左侧对应面板配置，节点表单和字段权限在流程设计器中配置。");
         return vo;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mergeCodeAppMetadata(BusinessFlowAppConfigDTO dto) {
+        Map<String, Object> options = dto.getOptions() == null ? new LinkedHashMap<>() : dto.getOptions();
+        Object metadata = options.get("codeAppMetadata");
+        if (!(metadata instanceof Map<?, ?>)) {
+            return;
+        }
+        Map<String, Object> bindingOptions = dto.getFlowBinding().getOptions() == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(dto.getFlowBinding().getOptions());
+        bindingOptions.put("codeAppMetadata", new LinkedHashMap<>((Map<String, Object>) metadata));
+        dto.getFlowBinding().setOptions(bindingOptions);
     }
 
     private Map<String, Object> buildSummary(BusinessDocumentConfigVO documentConfig,
@@ -162,6 +204,19 @@ public class BusinessFlowAppConfigService {
         return assets instanceof List<?> list && !list.isEmpty();
     }
 
+    private boolean isCodeAppObject(BusinessObjectVO object) {
+        if (object == null) {
+            return false;
+        }
+        String options = compactJsonText(object.getOptions());
+        String designerOptions = compactJsonText(object.getDesignerOptions());
+        return options.contains("\"codeApp\":true") || designerOptions.contains("\"codeApp\":true");
+    }
+
+    private String compactJsonText(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", "");
+    }
+
     private String resolveCodeAppName(String objectCode, Map<String, Object> formAssets) {
         Object objectName = formAssets == null ? null : formAssets.get("objectName");
         if (objectName != null && StringUtils.isNotBlank(String.valueOf(objectName))) {
@@ -191,6 +246,12 @@ public class BusinessFlowAppConfigService {
 
     private boolean isDocumentEnabled(BusinessDocumentConfigDTO documentConfig) {
         return documentConfig != null && Boolean.TRUE.equals(documentConfig.getDocumentEnabled());
+    }
+
+    private boolean hasCodeAppMetadata(BusinessFlowAppConfigDTO dto) {
+        return dto != null
+                && dto.getOptions() != null
+                && dto.getOptions().get("codeAppMetadata") instanceof Map<?, ?>;
     }
 
     private void normalizeCodeAppBinding(BusinessFlowBindingDTO binding) {

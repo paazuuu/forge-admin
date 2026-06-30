@@ -97,7 +97,8 @@ public class FlowCcController {
                 cc.getProcessInstanceId(),
                 cc.getBusinessKey(),
                 cc.getProcessDefKey(),
-                cc.getTaskId());
+                cc.getTaskId(),
+                null);
         return RespInfo.success(formInfo);
     }
 

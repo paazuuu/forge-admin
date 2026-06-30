@@ -175,9 +175,11 @@ const designFields = computed(() => effectiveModelSchema.value.fields || [])
 const editZone = computed(() => localSchema.value.zones?.find(zone => zone.zoneKey === 'edit') || null)
 const detailZone = computed(() => localSchema.value.zones?.find(zone => zone.zoneKey === 'detail') || null)
 const fieldMap = computed(() => new Map(designFields.value.map(field => [field.field, field])))
+const detailViewFieldRefs = computed(() => resolveDetailViewFieldRefs(props.viewSchema, fieldMap.value))
 const formFieldRefs = computed(() => {
-  return resolveFormFieldRefs(editZone.value, fieldMap.value)
+  const refs = resolveFormFieldRefs(editZone.value, fieldMap.value)
     .filter(ref => isPrimaryDetailField(fieldMap.value.get(ref)))
+  return refs.length ? refs : detailViewFieldRefs.value
 })
 const fieldPreviewRows = computed(() => formFieldRefs.value.map(ref => fieldMap.value.get(ref)).filter(Boolean))
 const relationRows = computed(() => normalizeRelationRows(props.relations || []))
@@ -273,6 +275,17 @@ function resolveFormFieldRefs(zone, fields) {
     .map(item => item.fieldRef)
   const refs = canvasRefs.length ? canvasRefs : (zone?.fieldRefs || [])
   return Array.from(new Set(refs.filter(ref => fields.has(ref))))
+}
+
+function resolveDetailViewFieldRefs(viewSchema = {}, fields) {
+  const sections = Array.isArray(viewSchema?.detail?.sections) ? viewSchema.detail.sections : []
+  const refs = sections
+    .filter(section => section?.visible !== false)
+    .flatMap(section => Array.isArray(section.fields) ? section.fields : [])
+    .filter(item => item?.visible !== false)
+    .map(item => item.fieldCode || item.field)
+    .filter(ref => ref && fields.has(ref) && isPrimaryDetailField(fields.get(ref)))
+  return Array.from(new Set(refs))
 }
 
 function compareCanvasItem(left, right) {
@@ -440,6 +453,20 @@ async function saveLayout() {
   }
 }
 
+function syncDesignerDraft() {
+  syncDetailSchema()
+  const schema = syncPageSchemaWithModel(localSchema.value, effectiveModelSchema.value)
+  const viewSchema = buildCurrentViewSchema(schema)
+  localSchema.value = schema
+  emit('update:modelValue', cloneSchema(schema))
+  emit('update:viewSchema', cloneSchema(viewSchema))
+  return {
+    dirty: !isSameSchema(schema, props.modelValue) || !isSameSchema(viewSchema, props.viewSchema || {}),
+    pageSchema: cloneSchema(schema),
+    viewSchema: cloneSchema(viewSchema),
+  }
+}
+
 function buildCurrentViewSchema(schema = localSchema.value) {
   return createViewSchemaFromPageSchema(schema, designFields.value, props.viewSchema || {})
 }
@@ -468,6 +495,7 @@ function toPageField(field) {
 
 defineExpose({
   saveLayout,
+  syncDesignerDraft,
 })
 </script>
 

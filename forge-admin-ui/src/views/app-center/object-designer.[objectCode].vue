@@ -28,7 +28,7 @@
       <div class="panel-head">
         <div>
           <h2>基本信息</h2>
-          <p>维护业务单元的名称、说明、显示字段和启停状态。</p>
+          <p>维护业务单元的名称、说明、默认标题字段和启停状态。</p>
         </div>
       </div>
       <n-form label-placement="top" :show-feedback="false" class="basic-form">
@@ -36,13 +36,13 @@
           <n-form-item-gi label="对象名称">
             <n-input v-model:value="draft.objectName" placeholder="例如：客户" @update:value="markDirty" />
           </n-form-item-gi>
-          <n-form-item-gi label="显示字段">
+          <n-form-item-gi label="默认标题字段">
             <n-select
               v-model:value="draft.displayField"
               :options="fieldOptions"
               clearable
               filterable
-              placeholder="选择运行态列表和关联回显字段"
+              placeholder="关联关系未单独配置时使用"
               @update:value="markDirty"
             />
           </n-form-item-gi>
@@ -80,12 +80,6 @@
       @updated="handleFieldsUpdated"
       @dirty-change="handleDirtyChange"
       @add-to-form="handleAddFieldToForm"
-    />
-
-    <BusinessFormFieldsReadonlyPanel
-      v-else-if="activePanel === 'form' && isCodeAppDesigner"
-      :object-code="draft.objectCode || objectCode"
-      :object-name="draft.objectName"
     />
 
     <section v-else-if="activePanel === 'form'" class="form-detail-panel">
@@ -213,21 +207,24 @@ import { useMessage } from 'naive-ui'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import {
+  businessFlowAppConfig,
   businessObjectDesigner,
   businessObjectList,
   businessObjectPublishCheck,
   businessObjectRuntimeInfo,
   publishBusinessObject,
+  saveBusinessFlowAppConfig,
   saveBusinessObjectDesigner,
 } from '@/api/business-app'
 import { cloneSchema } from '@/components/lowcode-builder/model/model-schema'
+import { createDefaultPageSchema } from '@/components/lowcode-builder/page/page-schema'
 import { useTabStore, useUserStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
 import BusinessObjectDesignerShell from './components/designer/BusinessObjectDesignerShell.vue'
 import DesignerAsyncLoader from './components/designer/DesignerAsyncLoader.vue'
 import { renameFormDesignerFieldRefs } from './components/designer/form-first/fieldReferenceUtils'
-import { normalizeMultiFormDesignerSchema } from './components/designer/form-first/formDesignerSchema'
-import { renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
+import { createDefaultFormDesignerSchema, normalizeMultiFormDesignerSchema } from './components/designer/form-first/formDesignerSchema'
+import { createDefaultViewSchema, renameViewSchemaFieldRefs, sanitizeViewSchemaFieldRefs } from './components/designer/form-first/viewSchema'
 
 const props = defineProps({
   embedded: {
@@ -262,7 +259,6 @@ const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./comp
 const BusinessDetailDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDetailDesigner.vue'))
 const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
 const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
-const BusinessFormFieldsReadonlyPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormFieldsReadonlyPanel.vue'))
 const BusinessFormDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFormDesigner.vue'))
 const BusinessListDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessListDesigner.vue'))
 const BusinessPermissionFlowPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPermissionFlowPanel.vue'))
@@ -330,7 +326,7 @@ const publishDisabled = computed(() => {
     return true
   return publishCheckState.value?.publishable === false
 })
-const designerNavPanels = computed(() => (isCodeAppDesigner.value ? ['form', 'flow-app'] : []))
+const designerNavPanels = computed(() => (isCodeAppDesigner.value ? ['form', 'list', 'flow-app'] : []))
 const closureSteps = computed(() => {
   if (isCodeAppDesigner.value || activePanel.value === 'flow-app')
     return []
@@ -453,19 +449,30 @@ watch(canAdvanced, (value) => {
     activePanel.value = 'form'
 }, { immediate: true })
 
-watch(isCodeAppDesigner, (value) => {
-  if (value && !['form', 'flow-app'].includes(activePanel.value))
-    activePanel.value = 'flow-app'
-}, { immediate: true })
-
 async function loadDesigner() {
   loading.value = true
   ready.value = false
   try {
+    if (isCodeAppRoute()) {
+      await applyCodeAppDesignerDraft()
+      await nextTick()
+      dirty.value = false
+      designerDraftDirty.value = false
+      ready.value = true
+      return
+    }
     const object = await resolveBusinessObject()
+    if (isCodeAppBusinessObject(object)) {
+      await applyCodeAppDesignerDraft(object)
+      await nextTick()
+      dirty.value = false
+      designerDraftDirty.value = false
+      ready.value = true
+      return
+    }
     if (!object?.id) {
-      if (shouldOpenCodeFlowApp()) {
-        applyCodeAppDesignerDraft()
+      if (shouldOpenCodeAppDesigner()) {
+        await applyCodeAppDesignerDraft()
         await nextTick()
         dirty.value = false
         designerDraftDirty.value = false
@@ -492,8 +499,17 @@ async function loadDesigner() {
 
 async function resolveBusinessObject() {
   const queryObjectId = props.embedded ? props.embeddedObjectId : route.query.objectId
-  if (queryObjectId)
-    return { id: Array.isArray(queryObjectId) ? queryObjectId[0] : queryObjectId }
+  const object = await findBusinessObjectByCode()
+  if (queryObjectId) {
+    const id = Array.isArray(queryObjectId) ? queryObjectId[0] : queryObjectId
+    return object?.id ? object : { id }
+  }
+  return object
+}
+
+async function findBusinessObjectByCode() {
+  if (!objectCode.value)
+    return null
   const res = await businessObjectList({
     suiteCode: suiteCode.value,
     objectCode: objectCode.value,
@@ -501,34 +517,87 @@ async function resolveBusinessObject() {
   return (res.data || [])[0] || null
 }
 
-function shouldOpenCodeFlowApp() {
-  return ['form', 'flow-app'].includes(activePanel.value)
-    && !props.embedded
-    && !!objectCode.value
-    && (route.query.codeApp === '1' || route.query.appType === 'code' || route.query.panel === 'flow-app')
+function isCodeAppRoute() {
+  if (props.embedded)
+    return false
+  return route.query.codeApp === '1' || route.query.appType === 'code'
 }
 
-function applyCodeAppDesignerDraft() {
+function shouldOpenCodeAppDesigner() {
+  return ['form', 'list', 'flow-app'].includes(activePanel.value)
+    && !props.embedded
+    && !!objectCode.value
+    && (isCodeAppRoute() || ['form', 'list', 'detail', 'flow-app'].includes(String(route.query.panel || '')))
+}
+
+function isCodeAppBusinessObject(object = {}) {
+  return hasCodeAppFlag(object?.options) || hasCodeAppFlag(object?.designerOptions)
+}
+
+function hasCodeAppFlag(value) {
+  if (!value)
+    return false
+  if (typeof value === 'object')
+    return value.codeApp === true
+  if (typeof value !== 'string')
+    return false
+  const compactValue = value.replace(/\s/g, '')
+  if (compactValue.includes('"codeApp":true'))
+    return true
+  try {
+    return JSON.parse(value)?.codeApp === true
+  }
+  catch {
+    return false
+  }
+}
+
+async function applyCodeAppDesignerDraft(sourceObject = null) {
   const code = String(objectCode.value || '').trim()
-  const name = String(route.query.name || route.query.objectName || code || '代码应用')
+  const res = await businessFlowAppConfig(code)
+  const config = res.data || {}
+  const name = String(sourceObject?.objectName || config.objectName || route.query.name || route.query.objectName || code || '代码应用')
+  const metadata = resolveCodeAppMetadata(config)
+  const providerCatalogAssets = collectCodeAppProviderCatalogAssets(config.formAssets?.providerCatalog || [])
+  const providerAssets = hydrateCodeAppProviderAssets(
+    normalizeCodeAppAssets(config.formAssets?.formAssets || []),
+    providerCatalogAssets,
+  )
+  const metadataAssets = normalizeCodeAppAssets(metadata.formAssets || [])
+  const baseProviderAssets = providerAssets.length ? providerAssets : providerCatalogAssets
+  const formAssets = mergeCodeAppAssets(baseProviderAssets, metadataAssets, code, name)
+  const providerFields = collectCodeAppAssetFields(baseProviderAssets.length ? baseProviderAssets : formAssets)
+  const configuredFields = metadata.fields?.length ? metadata.fields : collectCodeAppAssetFields(metadataAssets)
+  const fields = mergeCodeAppFields(providerFields, configuredFields)
+  const modelSchema = createCodeAppModelSchema(code, name, fields)
+  const pageSchema = createCodeAppPageSchema(metadata.pageSchema, modelSchema)
+  const viewSchema = createCodeAppViewSchema(metadata.viewSchema, fields)
+  const formDesignerSchema = createCodeAppFormDesignerSchema(metadata, formAssets, fields, code, name)
   const virtualDesigner = {
     objectId: null,
     objectCode: code,
-    objectName: name,
-    suiteCode: 'CODE_APP',
-    suiteName: '代码应用',
+    objectName: sourceObject?.objectName || config.objectName || name,
+    suiteCode: sourceObject?.suiteCode || config.suiteCode || 'CODE_APP',
+    suiteName: sourceObject?.suiteName || config.suiteName || '代码应用',
     designStatus: 'PUBLISHED',
     publishStatus: 'PUBLISHED',
     options: { codeApp: true },
-    designerOptions: { codeApp: true },
-    fields: [],
-    documentConfig: null,
+    designerOptions: {
+      codeApp: true,
+      codeAppAssets: formAssets,
+    },
+    fields,
+    modelSchema,
+    pageSchema,
+    formDesignerSchema,
+    viewSchema,
+    documentConfig: config.documentConfig || null,
   }
   designer.value = virtualDesigner
   runtimeInfo.value = null
   publishCheckState.value = null
-  if (!['form', 'flow-app'].includes(activePanel.value))
-    activePanel.value = 'flow-app'
+  if (!['form', 'list', 'flow-app'].includes(activePanel.value))
+    activePanel.value = 'form'
   Object.assign(draft, createDraftFromDesigner(virtualDesigner))
 }
 
@@ -547,6 +616,16 @@ async function handleSave() {
   try {
     if (activePanel.value === 'fields') {
       await fieldManagerRef.value?.saveSelectedField?.()
+      return
+    }
+    if (isCodeAppDesigner.value && activePanel.value === 'form') {
+      await syncActiveFormDraft()
+      await saveCodeAppDesignerDraft(true)
+      return
+    }
+    if (isCodeAppDesigner.value && activePanel.value === 'list') {
+      await syncActiveListDraft()
+      await saveCodeAppDesignerDraft(true)
       return
     }
     if (activePanel.value === 'form') {
@@ -573,8 +652,12 @@ async function handleSave() {
       return
     }
     if (activePanel.value === 'flow-app') {
-      await persistPendingDesignerDraft()
-      await flowAppConfigRef.value?.saveConfig?.()
+      const codeAppMetadata = isCodeAppDesigner.value && designerDraftDirty.value
+        ? buildCodeAppMetadataPayload()
+        : null
+      if (!isCodeAppDesigner.value)
+        await persistPendingDesignerDraft()
+      await flowAppConfigRef.value?.saveConfig?.({ codeAppMetadata })
       await loadDesigner()
       return
     }
@@ -626,10 +709,12 @@ async function handlePanelSwitch(panel) {
 }
 
 async function syncActiveFormDraft() {
-  if (activePanel.value !== 'form' || formDetailTab.value !== 'form')
+  if (activePanel.value !== 'form')
     return
   await nextTick()
-  const result = formDesignerRef.value?.syncDesignerDraft?.()
+  const result = formDetailTab.value === 'detail'
+    ? detailDesignerRef.value?.syncDesignerDraft?.()
+    : formDesignerRef.value?.syncDesignerDraft?.()
   if (result?.dirty)
     designerDraftDirty.value = true
   await nextTick()
@@ -648,6 +733,10 @@ async function syncActiveListDraft() {
 async function persistPendingDesignerDraft() {
   if (!designerDraftDirty.value)
     return
+  if (isCodeAppDesigner.value) {
+    await saveCodeAppDesignerDraft(false, { reload: false })
+    return
+  }
   await saveDesignerDraft(false, { reload: false })
 }
 
@@ -845,7 +934,7 @@ function handleRelationsUpdated(relations) {
 async function handleFlowAppSaved() {
   await loadDesigner()
   if (isCodeAppDesigner.value) {
-    if (!['form', 'flow-app'].includes(activePanel.value))
+    if (!['form', 'list', 'flow-app'].includes(activePanel.value))
       activePanel.value = 'flow-app'
     return
   }
@@ -926,6 +1015,8 @@ function handleDirtyChange(value) {
   dirty.value = !!value
   if (value && activePanel.value === 'form' && formDetailTab.value === 'form')
     designerDraftDirty.value = true
+  if (value && activePanel.value === 'form' && formDetailTab.value === 'detail')
+    designerDraftDirty.value = true
   if (value && activePanel.value === 'list')
     designerDraftDirty.value = true
 }
@@ -957,6 +1048,63 @@ function buildDesignerPayload() {
     viewSchema: cloneSchema(viewSchema),
     linkageSchema: cloneSchema(draft.linkageSchema || {}),
     designerOptions: cloneSchema(draft.designerOptions || {}),
+  }
+}
+
+async function saveCodeAppDesignerDraft(showMessage = true, options = {}) {
+  const code = draft.objectCode || objectCode.value
+  if (!code)
+    return
+  const reload = options.reload !== false
+  const metadata = buildCodeAppMetadataPayload()
+  await saveBusinessFlowAppConfig(code, {
+    documentConfig: null,
+    flowBinding: null,
+    options: {
+      codeAppMetadata: metadata,
+    },
+  })
+  dirty.value = false
+  designerDraftDirty.value = false
+  if (showMessage)
+    message.success('代码应用设计已保存')
+  emit('saved')
+  if (reload)
+    await loadDesigner()
+}
+
+function buildCodeAppMetadataPayload() {
+  const baseFields = normalizeCodeAppFields(draft.fields || [])
+  const assets = normalizeCodeAppAssets(draft.designerOptions?.codeAppAssets || [])
+  const fallbackAsset = {
+    formKey: `${draft.objectCode || objectCode.value || 'code_app'}_form`,
+    formName: `${draft.objectName || '代码业务'}表单`,
+    formMode: 'BUSINESS_CODE_FORM',
+    type: 'BUSINESS_CODE_FORM',
+    providerKey: '',
+    formUrl: '',
+  }
+  const sourceAssets = assets.length ? assets : [fallbackAsset]
+  const formDesignerSchema = cloneSchema(
+    draft.formDesignerSchema || createCodeAppFormDesignerSchema({}, sourceAssets, baseFields, draft.objectCode, draft.objectName),
+  )
+  const fields = applyCodeAppFormVisibility(baseFields, formDesignerSchema)
+  const formAssets = (assets.length ? assets : [fallbackAsset]).map(asset => ({
+    ...asset,
+    objectCode: draft.objectCode || objectCode.value,
+    objectName: draft.objectName,
+    fields,
+    fieldCatalog: fields,
+    fieldCount: fields.length,
+  }))
+  return {
+    objectCode: draft.objectCode || objectCode.value,
+    objectName: draft.objectName,
+    formAssets,
+    fields,
+    formDesignerSchema,
+    pageSchema: cloneSchema(draft.pageSchema || {}),
+    viewSchema: cloneSchema(createCodeAppViewSchema(draft.viewSchema, fields)),
   }
 }
 
@@ -1003,6 +1151,656 @@ function createDraftFromDesigner(value = {}) {
     documentConfig: cloneSchema(value?.documentConfig || null),
     designerOptions: cloneSchema(value?.designerOptions || {}),
   }
+}
+
+function resolveCodeAppMetadata(config = {}) {
+  return cloneSchema(config.options?.codeAppMetadata || config.formAssets?.codeAppMetadata || {})
+}
+
+function createCodeAppModelSchema(code, name, fields = []) {
+  return {
+    schemaVersion: 2,
+    object: {
+      code,
+      name,
+      description: '',
+    },
+    appType: 'SINGLE',
+    tableMode: 'CODE',
+    tableName: code,
+    businessName: name,
+    fields: fields.map(toCodeAppModelField),
+    relations: [],
+    indexes: [],
+    policies: {},
+    children: [],
+  }
+}
+
+function createCodeAppFormDesignerSchema(metadata = {}, assets = [], fields = [], code = '', name = '') {
+  const defaultSchema = () => createDefaultFormDesignerSchema({
+    objectCode: code,
+    objectName: name,
+    formKey: assets[0]?.formKey,
+    formName: assets[0]?.formName || name,
+    fields,
+    includeReadonlyFields: true,
+  })
+  let source = hasUsableCodeAppFormSchema(metadata.formDesignerSchema)
+    ? ensureCodeAppFormSchemaFields(cloneSchema(metadata.formDesignerSchema), fields, {
+        objectCode: code,
+        objectName: name,
+        formKey: assets[0]?.formKey,
+        formName: assets[0]?.formName || name,
+      })
+    : defaultSchema()
+  source = ensureCodeAppPrimaryFormSchema(source, fields, {
+    objectCode: code,
+    objectName: name,
+    formKey: assets[0]?.formKey,
+    formName: assets[0]?.formName || name,
+  })
+  const formAssets = normalizeCodeAppAssets(assets).map(asset => ({
+    ...asset,
+    schema: hasUsableCodeAppFormSchema(asset.schema)
+      ? ensureCodeAppFormSchemaFields(asset.schema, asset.fields?.length ? asset.fields : fields, {
+          objectCode: code,
+          objectName: name,
+          formKey: asset.formKey,
+          formName: asset.formName,
+        })
+      : createDefaultFormDesignerSchema({
+          objectCode: code,
+          objectName: name,
+          formKey: asset.formKey,
+          formName: asset.formName,
+          fields: asset.fields?.length ? asset.fields : fields,
+          includeReadonlyFields: true,
+        }),
+  }))
+  return normalizeMultiFormDesignerSchema({
+    ...source,
+    objectCode: code,
+    objectName: name,
+    settings: {
+      ...(source.settings || {}),
+      formAssets,
+    },
+    forms: Array.isArray(source.forms) && source.forms.length
+      ? source.forms
+      : formAssets.map(asset => ({
+          formKey: asset.formKey,
+          formName: asset.formName,
+          usage: ['create', 'edit', 'approve'],
+          schema: asset.schema,
+        })),
+  })
+}
+
+function mergeCodeAppAssets(providerAssets = [], metadataAssets = [], code = '', name = '') {
+  const metadataMap = new Map()
+  metadataAssets.forEach((asset) => {
+    assetKeys(asset).forEach(key => metadataMap.set(key, asset))
+  })
+  const result = []
+  const seenKeys = new Set()
+  const source = providerAssets.length ? providerAssets : metadataAssets
+  source.forEach((asset) => {
+    const configured = findCodeAppAsset(metadataMap, asset)
+    appendCodeAppAsset(result, seenKeys, buildMergedCodeAppAsset(asset, configured, code, name), configured)
+  })
+  metadataAssets.forEach((asset) => {
+    appendCodeAppAsset(result, seenKeys, buildMergedCodeAppAsset(asset, null, code, name), asset)
+  })
+  return result
+}
+
+function buildMergedCodeAppAsset(asset = {}, configured = null, code = '', name = '') {
+  const configuredConfig = pickCodeAppAssetConfig(configured)
+  const formMode = configuredConfig.formMode || configuredConfig.type || asset.formMode || asset.type || 'BUSINESS_CODE_FORM'
+  const type = configuredConfig.type || configuredConfig.formMode || asset.type || asset.formMode || 'BUSINESS_CODE_FORM'
+  const formKey = configuredConfig.formKey || asset.formKey || `${code || 'code_app'}_form`
+  const objectName = configuredConfig.objectName || asset.objectName || name
+  const businessName = configuredConfig.businessName || asset.businessName || objectName || name
+  const appName = configuredConfig.appName || asset.appName || businessName || objectName || name
+  const providerKey = configuredConfig.providerKey || asset.providerKey || ''
+  const providerName = configuredConfig.providerName || asset.providerName || ''
+  const formUrl = configuredConfig.formUrl || asset.formUrl || ''
+  const formName = configuredConfig.formName || asset.formName || formKey || name
+  const description = configuredConfig.description || asset.description || ''
+  const supportsSave = configured && Object.prototype.hasOwnProperty.call(configured, 'supportsSave')
+    ? configured.supportsSave !== false
+    : asset.supportsSave !== false
+  const fields = mergeCodeAppFields(
+    asset.fields?.length ? asset.fields : asset.fieldCatalog || [],
+    configured?.fields?.length ? configured.fields : configured?.fieldCatalog || [],
+  )
+  return {
+    ...asset,
+    ...configuredConfig,
+    appName,
+    objectCode: configuredConfig.objectCode || asset.objectCode || code,
+    objectName,
+    businessName,
+    formKey,
+    formName,
+    formMode,
+    type,
+    providerKey,
+    providerName,
+    formUrl,
+    description,
+    supportsSave,
+    fields,
+    fieldCatalog: fields,
+    fieldCount: fields.length,
+  }
+}
+
+function appendCodeAppAsset(result, seenKeys, asset = {}, configured = null) {
+  const keys = [...assetKeys(asset), ...assetKeys(configured)]
+  if (keys.some(key => seenKeys.has(key)))
+    return
+  keys.forEach(key => seenKeys.add(key))
+  result.push(asset)
+}
+
+function pickCodeAppAssetConfig(asset = {}) {
+  if (!asset)
+    return {}
+  const result = {}
+  ;['appName', 'objectCode', 'objectName', 'businessName', 'formKey', 'formName', 'formMode', 'type', 'providerKey', 'providerName', 'formUrl', 'description'].forEach((key) => {
+    if (asset[key] !== undefined && asset[key] !== null && asset[key] !== '')
+      result[key] = asset[key]
+  })
+  if (Object.prototype.hasOwnProperty.call(asset, 'supportsSave'))
+    result.supportsSave = asset.supportsSave !== false
+  return result
+}
+
+function createCodeAppPageSchema(source = {}, modelSchema = {}) {
+  const base = hasUsableCodeAppPageSchema(source)
+    ? cloneSchema(source)
+    : createDefaultPageSchema(modelSchema)
+  const fields = modelSchema?.fields || []
+  if (!fields.length)
+    return base
+  const fieldCodes = new Set(fields.map(field => field?.field).filter(Boolean))
+  const listRefs = collectCodeAppPageFieldRefs(base, ['table', 'list'])
+  const editRefs = collectCodeAppPageFieldRefs(base, ['edit', 'detail', 'form'])
+  const hasKnownListField = listRefs.some(ref => fieldCodes.has(ref))
+  const hasKnownEditField = editRefs.some(ref => fieldCodes.has(ref))
+  if (hasKnownListField && hasKnownEditField)
+    return base
+  const defaults = createDefaultPageSchema(modelSchema)
+  return {
+    ...base,
+    listLayoutMode: base.listLayoutMode || defaults.listLayoutMode,
+    listGridLayout: hasKnownListField ? base.listGridLayout : defaults.listGridLayout,
+    zones: mergeCodeAppPageZones(base.zones, defaults.zones, { keepList: hasKnownListField, keepEdit: hasKnownEditField }),
+    pages: hasKnownListField ? base.pages : defaults.pages,
+  }
+}
+
+function collectCodeAppPageFieldRefs(schema = {}, zones = []) {
+  const zoneSet = new Set(zones)
+  const result = []
+  function pushRefs(refs = []) {
+    ;(Array.isArray(refs) ? refs : []).forEach((ref) => {
+      if (ref && !result.includes(ref))
+        result.push(ref)
+    })
+  }
+  function visitGrid(grid = {}) {
+    ;(Array.isArray(grid.items) ? grid.items : []).forEach((item) => {
+      pushRefs(item.fieldRefs)
+      pushRefs(item.props?.fieldRefs)
+      if (item.fieldRef)
+        pushRefs([item.fieldRef])
+      visitGrid({ items: item.children || [] })
+      ;(Array.isArray(item.props?.cells) ? item.props.cells : []).forEach(cell => visitGrid({ items: cell.children || [] }))
+    })
+  }
+  ;(Array.isArray(schema.zones) ? schema.zones : [])
+    .filter(zone => zoneSet.has(zone.zoneKey))
+    .forEach((zone) => {
+      pushRefs(zone.fieldRefs)
+      pushRefs(zone.props?.fieldRefs)
+      visitGrid(zone.props?.canvas || {})
+    })
+  if (zoneSet.has('table') || zoneSet.has('list')) {
+    visitGrid(schema.listGridLayout || {})
+    ;(Array.isArray(schema.pages) ? schema.pages : [])
+      .filter(page => page.pageType === 'list' || page.pageKey === 'list')
+      .forEach(page => visitGrid(page.gridLayout || {}))
+  }
+  if (zoneSet.has('detail')) {
+    ;(Array.isArray(schema.pages) ? schema.pages : [])
+      .filter(page => page.pageType === 'detail' || page.pageKey === 'detail')
+      .forEach(page => visitGrid(page.gridLayout || {}))
+  }
+  return result
+}
+
+function mergeCodeAppPageZones(currentZones = [], defaultZones = [], options = {}) {
+  const current = Array.isArray(currentZones) ? currentZones : []
+  const defaults = Array.isArray(defaultZones) ? defaultZones : []
+  const currentMap = new Map(current.map(zone => [zone.zoneKey, zone]))
+  const result = defaults.map((zone) => {
+    if (['table', 'search'].includes(zone.zoneKey) && !options.keepList)
+      return zone
+    if (['edit', 'detail'].includes(zone.zoneKey) && !options.keepEdit)
+      return zone
+    return currentMap.get(zone.zoneKey) || zone
+  })
+  current.forEach((zone) => {
+    if (!result.some(item => item.zoneKey === zone.zoneKey))
+      result.push(zone)
+  })
+  return result
+}
+
+function findCodeAppAsset(metadataMap, asset = {}) {
+  for (const key of assetKeys(asset)) {
+    if (metadataMap.has(key))
+      return metadataMap.get(key)
+  }
+  return null
+}
+
+function assetKeys(asset = {}) {
+  return [
+    asset?.formKey ? `form:${asset.formKey}` : '',
+    asset?.providerKey ? `provider:${asset.providerKey}` : '',
+  ].filter(Boolean)
+}
+
+function mergeCodeAppFields(providerFields = [], configuredFields = []) {
+  const configuredMap = new Map()
+  normalizeCodeAppFields(configuredFields).forEach((field) => {
+    configuredMap.set(field.field, field)
+  })
+  const result = []
+  const seen = new Set()
+  normalizeCodeAppFields(providerFields).forEach((field) => {
+    const configured = configuredMap.get(field.field)
+    appendCodeAppDesignField(result, seen, configured ? { ...field, ...configured } : field)
+  })
+  normalizeCodeAppFields(configuredFields).forEach((field) => {
+    appendCodeAppDesignField(result, seen, field)
+  })
+  return result.sort(compareCodeAppFieldOrder)
+}
+
+function appendCodeAppDesignField(result, seen, field = {}) {
+  const code = field.field || field.fieldCode
+  if (!code || seen.has(code) || field.internal === true || field.systemField === true)
+    return
+  seen.add(code)
+  result.push({
+    ...field,
+    field: code,
+    fieldCode: code,
+  })
+}
+
+function compareCodeAppFieldOrder(left = {}, right = {}) {
+  const leftOrder = Number(left.sortOrder ?? left.order ?? Number.MAX_SAFE_INTEGER)
+  const rightOrder = Number(right.sortOrder ?? right.order ?? Number.MAX_SAFE_INTEGER)
+  if (leftOrder !== rightOrder)
+    return leftOrder - rightOrder
+  return 0
+}
+
+function createCodeAppViewSchema(source = {}, fields = []) {
+  const defaults = createDefaultViewSchema({ fields })
+  const current = sanitizeViewSchemaFieldRefs(source || {}, fields)
+  return sanitizeViewSchemaFieldRefs({
+    ...current,
+    search: {
+      ...current.search,
+      fields: mergeCodeAppViewItems(defaults.search.fields, current.search?.fields || []),
+    },
+    list: {
+      ...current.list,
+      columns: mergeCodeAppViewItems(defaults.list.columns, current.list?.columns || []),
+    },
+    detail: {
+      ...current.detail,
+      sections: mergeCodeAppDetailSections(defaults.detail.sections, current.detail?.sections || []),
+    },
+  }, fields)
+}
+
+function mergeCodeAppViewItems(defaultItems = [], currentItems = []) {
+  const result = Array.isArray(currentItems) ? [...currentItems] : []
+  const seen = new Set(result.map(item => item?.fieldCode || item?.field).filter(Boolean))
+  ;(Array.isArray(defaultItems) ? defaultItems : []).forEach((item) => {
+    const field = item?.fieldCode || item?.field
+    if (field && !seen.has(field)) {
+      seen.add(field)
+      result.push(item)
+    }
+  })
+  return result
+}
+
+function mergeCodeAppDetailSections(defaultSections = [], currentSections = []) {
+  if (!hasDetailViewFields(currentSections))
+    return defaultSections
+  const [defaultSection = { fields: [] }] = defaultSections
+  return currentSections.map((section, index) => {
+    if (index > 0)
+      return section
+    return {
+      ...section,
+      fields: mergeCodeAppViewItems(defaultSection.fields || [], section.fields || []),
+    }
+  })
+}
+
+function hasDetailViewFields(sections = []) {
+  return Array.isArray(sections) && sections.some(section => Array.isArray(section?.fields) && section.fields.length)
+}
+
+function hasUsableCodeAppPageSchema(schema = {}) {
+  if (!schema || typeof schema !== 'object')
+    return false
+  if (Array.isArray(schema.zones) && schema.zones.length)
+    return true
+  if (Array.isArray(schema.listGridLayout?.items) && schema.listGridLayout.items.length)
+    return true
+  return Array.isArray(schema.pages) && schema.pages.some(page => Array.isArray(page?.gridLayout?.items) && page.gridLayout.items.length)
+}
+
+function hasUsableCodeAppFormSchema(schema = {}) {
+  if (!schema || typeof schema !== 'object')
+    return false
+  if (hasCodeAppFieldComponents(schema.components))
+    return true
+  if (Array.isArray(schema.forms) && schema.forms.some(form => hasUsableCodeAppFormSchema(form?.schema || form)))
+    return true
+  const assets = schema.settings?.formAssets
+  return Array.isArray(assets) && assets.some(asset => hasUsableCodeAppFormSchema(asset?.schema || asset))
+}
+
+function hasCodeAppFieldComponents(components = []) {
+  return (Array.isArray(components) ? components : []).some((component) => {
+    if (!component || typeof component !== 'object')
+      return false
+    if (component.fieldBinding?.mode === 'field' && component.fieldBinding?.fieldCode)
+      return true
+    return hasCodeAppFieldComponents(component.children || [])
+  })
+}
+
+function ensureCodeAppFormSchemaFields(schema = {}, fields = [], options = {}) {
+  if (!hasUsableCodeAppFormSchema(schema))
+    return schema
+  const refs = collectCodeAppFormFieldRefs(schema)
+  const missingFields = (fields || [])
+    .filter(field => field && field.formVisible !== false && !field.internal && !field.systemField)
+    .filter(field => !refs.has(field.field || field.fieldCode))
+  if (!missingFields.length)
+    return schema
+  const appendSchema = createDefaultFormDesignerSchema({
+    objectCode: options.objectCode,
+    objectName: options.objectName,
+    formKey: options.formKey || schema.formKey,
+    formName: options.formName || schema.formName,
+    fields: missingFields,
+    includeReadonlyFields: true,
+  })
+  return {
+    ...schema,
+    components: [
+      ...(Array.isArray(schema.components) ? schema.components : []),
+      ...(appendSchema.components || []),
+    ],
+  }
+}
+
+function ensureCodeAppPrimaryFormSchema(schema = {}, fields = [], options = {}) {
+  if (hasCodeAppFieldComponents(schema.components))
+    return schema
+  const fallback = createDefaultFormDesignerSchema({
+    objectCode: options.objectCode,
+    objectName: options.objectName,
+    formKey: options.formKey || schema.formKey,
+    formName: options.formName || schema.formName,
+    fields,
+    includeReadonlyFields: true,
+  })
+  return {
+    ...schema,
+    formKey: schema.formKey || fallback.formKey,
+    formName: schema.formName || fallback.formName,
+    layout: {
+      ...(fallback.layout || {}),
+      ...(schema.layout || {}),
+    },
+    components: fallback.components || [],
+  }
+}
+
+function collectCodeAppFormFieldRefs(schema = {}) {
+  const result = new Set()
+  function visitSchema(value = {}) {
+    if (!value || typeof value !== 'object')
+      return
+    visitComponents(value.components || [])
+    ;(Array.isArray(value.forms) ? value.forms : []).forEach(form => visitSchema(form?.schema || form))
+    ;(Array.isArray(value.settings?.formAssets) ? value.settings.formAssets : []).forEach(asset => visitSchema(asset?.schema || asset))
+  }
+  function visitComponents(components = []) {
+    ;(Array.isArray(components) ? components : []).forEach((component) => {
+      if (!component || typeof component !== 'object')
+        return
+      const fieldCode = String(component.fieldBinding?.fieldCode || '').trim()
+      if (component.fieldBinding?.mode === 'field' && fieldCode)
+        result.add(fieldCode)
+      if (Array.isArray(component.children))
+        visitComponents(component.children)
+    })
+  }
+  visitSchema(schema)
+  return result
+}
+
+function applyCodeAppFormVisibility(fields = [], formDesignerSchema = {}) {
+  const visibility = collectCodeAppFormFieldVisibility(formDesignerSchema)
+  if (!visibility.touched)
+    return fields
+  return fields.map((field) => {
+    const code = field.field || field.fieldCode
+    const state = visibility.map.get(code)
+    return {
+      ...field,
+      formVisible: state ? state.visible !== false : false,
+      readonly: state?.readonly === true || field.readonly === true,
+      writable: state?.readonly === true ? false : field.writable,
+      label: state?.label || field.label,
+      fieldName: state?.label || field.fieldName,
+    }
+  })
+}
+
+function collectCodeAppFormFieldVisibility(schema = {}) {
+  const result = new Map()
+  function visitSchema(value = {}) {
+    if (!value || typeof value !== 'object')
+      return
+    visitComponents(value.components || [])
+    ;(Array.isArray(value.forms) ? value.forms : []).forEach(form => visitSchema(form?.schema || form))
+    ;(Array.isArray(value.settings?.formAssets) ? value.settings.formAssets : []).forEach(asset => visitSchema(asset?.schema || asset))
+  }
+  function visitComponents(components = []) {
+    ;(Array.isArray(components) ? components : []).forEach((component) => {
+      if (!component || typeof component !== 'object')
+        return
+      const fieldCode = String(component.fieldBinding?.fieldCode || '').trim()
+      if (component.fieldBinding?.mode === 'field' && fieldCode && !result.has(fieldCode)) {
+        result.set(fieldCode, {
+          visible: component.visibility?.hidden !== true,
+          readonly: component.visibility?.readonly === true,
+          label: component.label || '',
+        })
+      }
+      if (Array.isArray(component.children))
+        visitComponents(component.children)
+    })
+  }
+  visitSchema(schema)
+  return {
+    touched: result.size > 0,
+    map: result,
+  }
+}
+
+function normalizeCodeAppAssets(source = []) {
+  return (Array.isArray(source) ? source : [])
+    .filter(Boolean)
+    .map(asset => ({
+      ...cloneSchema(asset),
+      formMode: asset.formMode || asset.type || 'BUSINESS_CODE_FORM',
+      type: asset.type || asset.formMode || 'BUSINESS_CODE_FORM',
+      formKey: asset.formKey || 'default',
+      formName: asset.formName || asset.objectName || '代码业务表单',
+      providerKey: asset.providerKey || '',
+      formUrl: asset.formUrl || '',
+      fields: normalizeCodeAppFields(asset.fields?.length ? asset.fields : asset.fieldCatalog || []),
+      fieldCatalog: normalizeCodeAppFields(asset.fieldCatalog?.length ? asset.fieldCatalog : asset.fields || []),
+    }))
+}
+
+function collectCodeAppProviderCatalogAssets(source = []) {
+  return (Array.isArray(source) ? source : [])
+    .filter(Boolean)
+    .flatMap((provider) => {
+      const providerKey = String(provider?.providerKey || '').trim()
+      const providerName = String(provider?.providerName || providerKey || '').trim()
+      return normalizeCodeAppAssets(provider?.assets || []).map(asset => ({
+        ...asset,
+        providerKey: asset.providerKey || providerKey,
+        providerName: asset.providerName || providerName,
+      }))
+    })
+}
+
+function hydrateCodeAppProviderAssets(assets = [], catalogAssets = []) {
+  if (!assets.length)
+    return catalogAssets
+  const catalogMap = new Map(catalogAssets.flatMap(asset => assetKeys(asset).map(key => [key, asset])))
+  const result = []
+  const seen = new Set()
+  assets.forEach((asset) => {
+    const catalogAsset = findCodeAppAsset(catalogMap, asset)
+    const fields = asset.fields?.length || asset.fieldCatalog?.length
+      ? mergeCodeAppFields(asset.fields?.length ? asset.fields : asset.fieldCatalog, [])
+      : mergeCodeAppFields(catalogAsset?.fields?.length ? catalogAsset.fields : catalogAsset?.fieldCatalog || [], [])
+    appendCodeAppAsset(result, seen, {
+      ...(catalogAsset || {}),
+      ...asset,
+      fields,
+      fieldCatalog: fields,
+      fieldCount: fields.length,
+    }, catalogAsset)
+  })
+  catalogAssets.forEach(asset => appendCodeAppAsset(result, seen, asset))
+  return result
+}
+
+function collectCodeAppAssetFields(assets = []) {
+  const result = []
+  const seen = new Set()
+  assets.forEach((asset) => {
+    const fields = asset.fields?.length ? asset.fields : asset.fieldCatalog || []
+    fields.forEach((field) => {
+      const code = fieldCode(field)
+      if (!code || seen.has(code))
+        return
+      seen.add(code)
+      result.push(field)
+    })
+  })
+  return result
+}
+
+function normalizeCodeAppFields(source = []) {
+  const result = []
+  const seen = new Set()
+  ;(Array.isArray(source) ? source : []).forEach((field) => {
+    const code = fieldCode(field)
+    if (!code || seen.has(code))
+      return
+    seen.add(code)
+    const componentType = normalizeCodeAppComponentType(field.componentType || field.type || 'input')
+    result.push({
+      ...cloneSchema(field),
+      field: code,
+      fieldCode: code,
+      fieldName: field.fieldName || field.label || field.fieldLabel || code,
+      label: field.label || field.fieldLabel || field.fieldName || code,
+      componentType,
+      type: componentType,
+      visible: field.visible !== false,
+      writable: field.writable !== false && field.readonly !== true,
+      readonly: field.readonly === true || field.writable === false,
+      internal: field.internal === true,
+      systemField: field.systemField === true,
+      formVisible: field.formVisible !== false && field.visible !== false,
+      listVisible: field.listVisible !== false && field.visible !== false,
+      searchable: field.searchable === true,
+    })
+  })
+  return result
+}
+
+function toCodeAppModelField(field = {}) {
+  const code = field.field || field.fieldCode
+  return {
+    ...field,
+    field: code,
+    fieldCode: code,
+    label: field.label || field.fieldName || code,
+    columnName: field.columnName || code,
+    dataType: field.dataType || inferCodeAppDataType(field.componentType || field.type),
+    componentType: normalizeCodeAppComponentType(field.componentType || field.type),
+    fieldStatus: field.fieldStatus || 'NORMAL',
+    formVisible: field.formVisible !== false && field.visible !== false,
+    listVisible: field.listVisible !== false && field.visible !== false,
+    searchable: field.searchable === true,
+    readonly: field.readonly === true,
+    systemField: field.systemField === true,
+    required: field.required === true,
+  }
+}
+
+function fieldCode(field = {}) {
+  return String(field.field || field.fieldCode || field.code || field.name || '').trim()
+}
+
+function normalizeCodeAppComponentType(type) {
+  const value = String(type || 'input').trim()
+  const aliases = {
+    inputNumber: 'number',
+    integer: 'number',
+    file: 'fileUpload',
+    image: 'imageUpload',
+    upload: 'fileUpload',
+  }
+  return aliases[value] || value || 'input'
+}
+
+function inferCodeAppDataType(componentType) {
+  const type = normalizeCodeAppComponentType(componentType)
+  if (['number', 'money'].includes(type))
+    return 'decimal'
+  if (type === 'date')
+    return 'date'
+  if (type === 'datetime')
+    return 'datetime'
+  return 'varchar'
 }
 
 function toFieldPayload(field = {}) {

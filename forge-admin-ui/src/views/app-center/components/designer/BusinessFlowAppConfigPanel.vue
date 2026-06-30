@@ -93,6 +93,23 @@
           </section>
 
           <section
+            v-if="isCodeApp"
+            v-show="activeSection === 'assets'"
+            class="flow-config-panel"
+            data-section="assets"
+          >
+            <BusinessCodeAppFormAssetPanel
+              ref="codeFormAssetPanelRef"
+              :object-code="objectCode"
+              :object-name="objectName"
+              :form-asset-catalog="codeAppFormAssets"
+              :provider-catalog="codeAppProviderCatalog"
+              :metadata="codeAppMetadata"
+              @dirty-change="handleDirtyChange"
+            />
+          </section>
+
+          <section
             v-show="activeSection === 'flow'"
             class="flow-config-panel"
             data-section="flow"
@@ -100,6 +117,7 @@
             <BusinessFlowBindingPanel
               ref="flowBindingPanelRef"
               :object-code="objectCode"
+              :object-name="objectName"
               :fields="fields"
               :code-app="isCodeApp"
               @saved="handleFlowSaved"
@@ -116,6 +134,7 @@
 import { useMessage } from 'naive-ui'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { businessFlowAppConfig, saveBusinessFlowAppConfig } from '@/api/business-app'
+import BusinessCodeAppFormAssetPanel from './BusinessCodeAppFormAssetPanel.vue'
 import BusinessDocumentPanel from './BusinessDocumentPanel.vue'
 import BusinessFlowBindingPanel from './BusinessFlowBindingPanel.vue'
 
@@ -159,6 +178,7 @@ const emit = defineEmits(['dirtyChange', 'saved', 'openTrigger', 'openPublish'])
 const message = useMessage()
 const rootRef = ref(null)
 const documentPanelRef = ref(null)
+const codeFormAssetPanelRef = ref(null)
 const flowBindingPanelRef = ref(null)
 const loading = ref(false)
 const saving = ref(false)
@@ -173,14 +193,24 @@ const isCodeApp = computed(() => {
 })
 const codeAppMessage = computed(() => {
   return configState.value?.options?.documentMessage
-    || '业务数据、状态流转和列表详情由代码模块维护；平台只维护流程模型、流程可识别的业务字段和节点表单权限。'
+    || '业务数据和状态流转由代码模块维护；表单/列表/详情展示在左侧设计器配置，节点字段权限在流程设计器中配置。'
 })
 const flowBinding = computed(() => configState.value?.flowBinding || {})
 const documentConfig = computed(() => configState.value?.documentConfig || props.initialConfig || {})
-const nodeFormCount = computed(() => Number(configState.value?.summary?.nodeFormCount ?? (flowBinding.value?.nodeForms?.length || 0)))
 const assetCount = computed(() => {
   const assets = configState.value?.formAssets?.formAssets
   return Number(configState.value?.summary?.formAssetCount ?? (Array.isArray(assets) ? assets.length : 0))
+})
+const codeAppFormAssets = computed(() => {
+  const assets = configState.value?.formAssets?.formAssets
+  return Array.isArray(assets) ? assets : []
+})
+const codeAppProviderCatalog = computed(() => {
+  const providers = configState.value?.formAssets?.providerCatalog
+  return Array.isArray(providers) ? providers : []
+})
+const codeAppMetadata = computed(() => {
+  return configState.value?.options?.codeAppMetadata || configState.value?.formAssets?.codeAppMetadata || {}
 })
 const formWarnings = computed(() => {
   const warnings = configState.value?.summary?.warnings || configState.value?.formAssets?.warnings || []
@@ -190,9 +220,15 @@ const visibleSteps = computed(() => {
   if (isCodeApp.value) {
     return [
       {
+        key: 'assets',
+        label: '业务表单资产',
+        status: assetCount.value ? '已配置' : '未配置',
+        done: assetCount.value > 0,
+      },
+      {
         key: 'flow',
         label: '流程配置',
-        status: flowBinding.value?.flowModelKey ? `${nodeFormCount.value} 个节点` : '未选择',
+        status: flowBinding.value?.flowModelKey ? '已选择流程' : '未选择',
         done: !!flowBinding.value?.flowModelKey,
       },
     ]
@@ -207,7 +243,7 @@ const visibleSteps = computed(() => {
     {
       key: 'flow',
       label: '流程配置',
-      status: flowBinding.value?.flowModelKey ? `${nodeFormCount.value} 个节点` : '未选择',
+      status: flowBinding.value?.flowModelKey ? '已选择流程' : '未选择',
       done: !!flowBinding.value?.flowModelKey,
     },
   ]
@@ -216,11 +252,35 @@ const activeStepTitle = computed(() => {
   return visibleSteps.value.find(step => step.key === activeSection.value)?.label || '业务流程配置'
 })
 const defaultStageKey = computed(() => {
+  if (isCodeApp.value && activeSection.value === 'assets')
+    return 'form-assets'
   return isCodeApp.value || activeSection.value === 'flow' ? 'flow-model' : 'base'
 })
 const currentStageKey = computed(() => activeStageKey.value || defaultStageKey.value)
 const rootStageClass = computed(() => `stage-${currentStageKey.value}`)
 const activeStages = computed(() => {
+  if (isCodeApp.value && activeSection.value === 'assets') {
+    return [
+      {
+        key: 'form-assets',
+        index: 1,
+        title: '业务表单资产',
+        description: assetCount.value ? '维护流程可引用的业务表单' : '配置业务表单资产',
+        done: assetCount.value > 0,
+        active: isActiveStage('form-assets'),
+        section: 'assets',
+      },
+      {
+        key: 'flow-model',
+        index: 2,
+        title: '默认流程',
+        description: flowBinding.value?.flowModelKey ? '已选择流程模型' : '选择流程后进入节点配置',
+        done: !!flowBinding.value?.flowModelKey,
+        active: isActiveStage('flow-model'),
+        section: 'flow',
+      },
+    ]
+  }
   if (isCodeApp.value || activeSection.value === 'flow') {
     return [
       {
@@ -242,20 +302,11 @@ const activeStages = computed(() => {
         section: 'flow',
       },
       {
-        key: 'variable-mapping',
-        index: 3,
-        title: '让流程认识业务字段',
-        description: `${Array.isArray(flowBinding.value?.variableMapping) ? flowBinding.value.variableMapping.length : 0} 项字段可用于流程判断`,
-        done: Array.isArray(flowBinding.value?.variableMapping) && flowBinding.value.variableMapping.length > 0,
-        active: isActiveStage('variable-mapping'),
-        section: 'flow',
-      },
-      {
         key: 'node-forms',
-        index: 4,
+        index: 3,
         title: '节点配置',
-        description: `${nodeFormCount.value} 个节点策略`,
-        done: nodeFormCount.value > 0,
+        description: '在流程设计器中维护节点表单和字段权限',
+        done: !!flowBinding.value?.flowModelKey,
         active: isActiveStage('node-forms'),
         section: 'flow',
       },
@@ -318,8 +369,8 @@ function isActiveStage(key) {
 
 watch(isCodeApp, (value) => {
   if (value) {
-    activeSection.value = 'flow'
-    activeStageKey.value = 'flow-model'
+    activeSection.value = normalizeSection(props.initialSection, true)
+    activeStageKey.value = defaultStageKey.value
   }
 }, { immediate: true })
 
@@ -344,6 +395,7 @@ async function loadConfig() {
     const config = res.data || {}
     configState.value = config
     await nextTick()
+    codeFormAssetPanelRef.value?.assignDrafts?.()
     if (!isCodeAppConfig(config)) {
       documentPanelRef.value?.assignConfig?.(config.documentConfig || props.initialConfig || {})
     }
@@ -363,7 +415,7 @@ async function loadConfig() {
   }
 }
 
-async function saveConfig() {
+async function saveConfig(options = {}) {
   saving.value = true
   try {
     if (!props.objectCode) {
@@ -377,7 +429,8 @@ async function saveConfig() {
       return
     const documentConfig = isCodeApp.value ? null : documentPanelRef.value?.buildPayload?.()
     const flowBindingPayload = flowBindingPanelRef.value?.buildPayload?.()
-    const shouldSaveFlowBinding = isCodeApp.value || !!flowBindingPayload?.flowModelKey
+    const codeAppMetadataPayload = isCodeApp.value ? buildCodeAppMetadataPayload(options?.codeAppMetadata) : null
+    const shouldSaveFlowBinding = !!flowBindingPayload?.flowModelKey
     if (shouldSaveFlowBinding && flowBindingPanelRef.value?.validateBeforeSave?.() === false) {
       activeSection.value = 'flow'
       return
@@ -385,6 +438,7 @@ async function saveConfig() {
     const res = await saveBusinessFlowAppConfig(props.objectCode, {
       documentConfig,
       flowBinding: shouldSaveFlowBinding ? flowBindingPayload : null,
+      options: codeAppMetadataPayload ? { codeAppMetadata: codeAppMetadataPayload } : {},
     })
     const config = res.data || {}
     configState.value = config
@@ -395,6 +449,7 @@ async function saveConfig() {
     if (flowBindingPanelRef.value?.applyBindingConfig) {
       await flowBindingPanelRef.value.applyBindingConfig(config.flowBinding || flowBindingPayload || {}, config.formAssets || null)
     }
+    codeFormAssetPanelRef.value?.assignDrafts?.()
     message.success('业务流程配置已保存')
     emit('dirtyChange', false)
     emit('saved', config)
@@ -406,13 +461,17 @@ async function saveConfig() {
 
 function handleStepClick(step = {}) {
   activeSection.value = normalizeSection(step.key, isCodeApp.value)
-  activeStageKey.value = activeSection.value === 'flow' ? 'flow-model' : 'base'
+  activeStageKey.value = defaultStageKey.value
 }
 
 async function handleStageClick(stage = {}) {
   activeSection.value = normalizeSection(stage.section || activeSection.value, isCodeApp.value)
   activeStageKey.value = stage.key || ''
   await nextTick()
+  if (stage.key === 'node-forms') {
+    flowBindingPanelRef.value?.openNodeConfigDesigner?.()
+    return
+  }
   rootRef.value?.querySelector('.flow-config-workspace')?.scrollIntoView?.({
     behavior: 'smooth',
     block: 'start',
@@ -420,12 +479,19 @@ async function handleStageClick(stage = {}) {
 }
 
 function normalizeInitialSection(section) {
-  return section === 'flow' || section === 'nodeForms' ? 'flow' : 'document'
+  if (section === 'flow' || section === 'nodeForms')
+    return 'flow'
+  if (section === 'assets' || section === 'forms')
+    return 'assets'
+  return 'document'
 }
 
 function normalizeSection(section, codeApp) {
-  if (codeApp)
-    return 'flow'
+  if (codeApp) {
+    if (section === 'flow' || section === 'nodeForms')
+      return 'flow'
+    return 'assets'
+  }
   if (section === 'flow' || section === 'nodeForms')
     return 'flow'
   return 'document'
@@ -449,6 +515,15 @@ function handleFlowSaved(config) {
 
 function handleDirtyChange(value) {
   emit('dirtyChange', value)
+}
+
+function buildCodeAppMetadataPayload(incomingMetadata = null) {
+  const base = clonePlain(incomingMetadata || codeAppMetadata.value || {})
+  return codeFormAssetPanelRef.value?.buildMetadata?.(base) || base
+}
+
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value || {}))
 }
 
 defineExpose({
@@ -832,8 +907,7 @@ defineExpose({
   :deep(.n-spin-content > .document-section:nth-of-type(1)),
 .stage-flow-model .flow-config-panel[data-section='flow'] :deep(.flow-card:nth-child(1)),
 .stage-business-binding .flow-config-panel[data-section='flow'] :deep(.flow-card:nth-child(2)),
-.stage-variable-mapping .flow-config-panel[data-section='flow'] :deep(.flow-card:nth-child(3)),
-.stage-node-forms .flow-config-panel[data-section='flow'] :deep(.flow-card:nth-child(4)) {
+.stage-node-forms .flow-config-panel[data-section='flow'] :deep(.flow-card:nth-child(3)) {
   display: block;
 }
 

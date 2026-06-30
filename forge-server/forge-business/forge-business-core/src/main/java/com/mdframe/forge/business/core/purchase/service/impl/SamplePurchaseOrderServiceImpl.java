@@ -1,5 +1,7 @@
 package com.mdframe.forge.business.core.purchase.service.impl;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.incrementer.IdentifierGenerator;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -12,6 +14,7 @@ import com.mdframe.forge.business.core.purchase.dto.SamplePurchaseOrderTaskSaveD
 import com.mdframe.forge.business.core.purchase.mapper.SamplePurchaseOrderMapper;
 import com.mdframe.forge.business.core.purchase.service.SamplePurchaseOrderService;
 import com.mdframe.forge.business.core.purchase.support.SamplePurchaseOrderFlowBpmn;
+import com.mdframe.forge.business.core.purchase.support.SamplePurchaseOrderFlowDefinition;
 import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderFlowInitVO;
 import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderVO;
 import com.mdframe.forge.flow.client.FlowClient;
@@ -19,6 +22,8 @@ import com.mdframe.forge.flow.client.FlowResult;
 import com.mdframe.forge.flow.client.annotation.FlowBind;
 import com.mdframe.forge.flow.client.annotation.FlowCallback;
 import com.mdframe.forge.flow.client.annotation.FlowEventContext;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
+import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.session.SessionHelper;
@@ -56,11 +61,14 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
 
     private final FlowClient flowClient;
     private final IdentifierGenerator identifierGenerator;
+    private final BusinessBindingMapper businessBindingMapper;
 
     @Override
     public IPage<SamplePurchaseOrderVO> page(PageQuery pageQuery, SamplePurchaseOrderQuery query) {
         Page<SamplePurchaseOrderVO> page = new Page<>(pageQuery.getPageNum(), pageQuery.getPageSize());
-        return getBaseMapper().selectPage(page, resolveTenantId(), query);
+        IPage<SamplePurchaseOrderVO> result = getBaseMapper().selectPage(page, resolveTenantId(), query);
+        reconcileStatusesWithActiveTasks(result.getRecords());
+        return result;
     }
 
     @Override
@@ -72,6 +80,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         if (detail == null) {
             throw new BusinessException("采购单不存在");
         }
+        reconcileStatusesWithActiveTasks(List.of(detail));
         return detail;
     }
 
@@ -84,7 +93,9 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         if (normalizedIds.isEmpty()) {
             return List.of();
         }
-        return getBaseMapper().selectDetailsByIds(resolveTenantId(), normalizedIds);
+        List<SamplePurchaseOrderVO> details = getBaseMapper().selectDetailsByIds(resolveTenantId(), normalizedIds);
+        reconcileStatusesWithActiveTasks(details);
+        return details;
     }
 
     @Override
@@ -165,24 +176,25 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         String userName = resolveUsername();
 
         Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("businessKey", businessKey);
-        variables.put("objectCode", BUSINESS_TYPE);
-        variables.put("recordId", entity.getId());
-        variables.put("purchaseOrderId", entity.getId());
-        variables.put("orderNo", entity.getOrderNo());
-        variables.put("title", entity.getTitle());
-        variables.put("amountCent", entity.getAmountCent());
-        variables.put("initiator", userId);
-        variables.put("deptLeaderId", String.valueOf(dto.getDeptLeaderId()));
-        variables.put("engineeringManagerId", String.valueOf(dto.getEngineeringManagerId()));
-        variables.put("countersignUserList", countersignUserList);
-        variables.put("ccRoleKeys", ccRoleKeys);
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_BUSINESS_KEY, businessKey);
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_OBJECT_CODE, BUSINESS_TYPE);
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_RECORD_ID, entity.getId());
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_PURCHASE_ORDER_ID, entity.getId());
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_ORDER_NO, entity.getOrderNo());
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_TITLE, entity.getTitle());
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_AMOUNT_CENT, entity.getAmountCent());
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_INITIATOR, userId);
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_DEPT_LEADER_ID, String.valueOf(dto.getDeptLeaderId()));
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_ENGINEERING_MANAGER_ID, String.valueOf(dto.getEngineeringManagerId()));
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_COUNTERSIGN_USER_LIST, countersignUserList);
+        variables.put(SamplePurchaseOrderFlowDefinition.VAR_CC_ROLE_KEYS, ccRoleKeys);
 
+        String flowTitle = buildConfiguredFlowTitle(entity, businessKey, variables);
         FlowResult<String> result = flowClient.startProcess(
                 MODEL_KEY,
                 businessKey,
                 BUSINESS_TYPE,
-                "采购单审批-" + entity.getOrderNo(),
+                flowTitle,
                 variables,
                 userId,
                 userName,
@@ -198,7 +210,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         entity.setEngineeringManagerId(dto.getEngineeringManagerId());
         entity.setCountersignUserIds(joinLongs(dto.getCountersignUserIds()));
         entity.setCcRoleKeys(String.join(",", ccRoleKeys));
-        entity.setStatus(STATUS_IN_PROCESS);
+        markInProcess(entity);
         updateById(entity);
         return result.getData();
     }
@@ -212,7 +224,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         SamplePurchaseOrder entity = resolveTaskEntity(dto);
         String taskDefKey = StringUtils.hasText(dto.getTaskDefKey()) ? dto.getTaskDefKey() : "";
         switch (taskDefKey) {
-            case "applicant_modify" -> {
+            case SamplePurchaseOrderFlowDefinition.NODE_APPLICANT_MODIFY -> {
+                ensureApplicantModifyState(entity, dto);
                 if (StringUtils.hasText(dto.getTitle())) {
                     entity.setTitle(dto.getTitle().trim());
                 }
@@ -231,12 +244,19 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
                 entity.setPurchaseItems(dto.getPurchaseItems());
                 entity.setApplicantModifyRemark(dto.getApplicantModifyRemark());
             }
-            case "dept_leader_approve" -> {
+            case SamplePurchaseOrderFlowDefinition.NODE_DEPT_LEADER_APPROVE -> {
+                ensureApprovalState(entity, dto);
                 entity.setDeptLeaderRemark(dto.getDeptLeaderRemark());
                 entity.setArrivalListFileIds(dto.getArrivalListFileIds());
             }
-            case "engineering_manager_approve" -> entity.setEngineeringManagerRemark(dto.getEngineeringManagerRemark());
-            case "purchase_countersign" -> entity.setCountersignRemark(dto.getCountersignRemark());
+            case SamplePurchaseOrderFlowDefinition.NODE_ENGINEERING_MANAGER_APPROVE -> {
+                ensureApprovalState(entity, dto);
+                entity.setEngineeringManagerRemark(dto.getEngineeringManagerRemark());
+            }
+            case SamplePurchaseOrderFlowDefinition.NODE_PURCHASE_COUNTERSIGN -> {
+                ensureApprovalState(entity, dto);
+                entity.setCountersignRemark(dto.getCountersignRemark());
+            }
             default -> throw new BusinessException("当前节点不允许保存采购单字段: " + taskDefKey);
         }
         updateById(entity);
@@ -250,6 +270,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         Map<String, Object> model = current == null ? null : current.getData();
         boolean created = model == null || model.get("id") == null;
         boolean shouldDeploy = created;
+        boolean preserved = false;
 
         if (created) {
             FlowResult<Map<String, Object>> createdResult = flowClient.createModel(buildFlowModelPayload(null, bpmnXml));
@@ -261,14 +282,17 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         } else {
             String existingBpmnXml = Objects.toString(model.get("bpmnXml"), "");
             Integer status = toInteger(model.get("status"));
-            shouldDeploy = status == null || status != 1 || !existingBpmnXml.equals(bpmnXml);
-            if (!existingBpmnXml.equals(bpmnXml)) {
+            shouldDeploy = status == null || status != 1 || !StringUtils.hasText(Objects.toString(model.get("deploymentId"), ""));
+            if (!StringUtils.hasText(existingBpmnXml)) {
                 FlowResult<Map<String, Object>> updatedResult = flowClient.updateModel(buildFlowModelPayload(model.get("id"), bpmnXml));
                 if (updatedResult == null || !updatedResult.isSuccess() || updatedResult.getData() == null) {
                     throw new BusinessException("更新采购单测试流程失败: "
                             + (updatedResult == null ? "无返回结果" : updatedResult.getMsg()));
                 }
                 model = updatedResult.getData();
+                shouldDeploy = true;
+            } else {
+                preserved = true;
             }
         }
 
@@ -287,11 +311,14 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         vo.setModelId(Objects.toString(model.get("id"), null));
         vo.setDeploymentId(deploymentId);
         vo.setStatus(shouldDeploy ? 1 : toInteger(model.get("status")));
-        vo.setMessage(shouldDeploy ? "采购单测试流程已初始化并发布" : "采购单测试流程已存在，无需重复发布");
+        vo.setMessage(shouldDeploy
+                ? preserved ? "采购单测试流程已发布，已保留流程设计器中的节点配置" : "采购单测试流程已初始化并发布"
+                : preserved ? "采购单测试流程已存在，已保留流程设计器中的节点配置" : "采购单测试流程已存在，无需重复发布");
         return vo;
     }
 
     @FlowCallback(on = {
+            FlowCallback.ON_TASK_CREATED,
             FlowCallback.ON_TASK_COMPLETED,
             FlowCallback.ON_COMPLETED,
             FlowCallback.ON_REJECTED,
@@ -313,72 +340,314 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
             handleTaskCompleted(entity, context);
             return;
         }
+        if (FlowCallback.ON_TASK_CREATED.equals(context.getEvent())) {
+            handleTaskCreated(entity, context);
+            return;
+        }
         if (FlowCallback.ON_COMPLETED.equals(context.getEvent())) {
             copyFinishVariables(entity, context.getVariables());
-            entity.setStatus(STATUS_APPROVED);
+            markApproved(entity);
             updateById(entity);
             return;
         }
         if (FlowCallback.ON_REJECTED.equals(context.getEvent())) {
-            entity.setStatus(STATUS_REJECTED);
-            entity.setRejectReason(firstText(context.getLastComment(), context.getComment(), entity.getRejectReason()));
+            markRejected(entity, firstText(context.getLastComment(), context.getComment(), entity.getRejectReason()));
             updateById(entity);
             return;
         }
         if (FlowCallback.ON_CANCELED.equals(context.getEvent())) {
-            entity.setStatus(STATUS_CANCELED);
-            entity.setRejectReason(firstText(context.getLastComment(), context.getComment(), entity.getRejectReason()));
+            markCanceled(entity, firstText(context.getLastComment(), context.getComment(), entity.getRejectReason()));
             updateById(entity);
+        }
+    }
+
+    private void handleTaskCreated(SamplePurchaseOrder entity, FlowEventContext context) {
+        if (SamplePurchaseOrderFlowDefinition.isApplicantModifyNode(context.getTaskDefKey())) {
+            if (!STATUS_IN_PROCESS.equals(entity.getStatus())) {
+                return;
+            }
+            markNeedModify(entity, firstText(context.getComment(), context.getLastComment(), entity.getRejectReason()));
+            updateById(entity);
+            log.info("采购单进入申请人修改节点，状态自动切换为待修改: businessKey={}, taskId={}",
+                    entity.getBusinessKey(), context.getTaskId());
+            return;
+        }
+        if (SamplePurchaseOrderFlowDefinition.isApprovalNode(context.getTaskDefKey())
+                && STATUS_NEED_MODIFY.equals(entity.getStatus())) {
+            markInProcess(entity);
+            updateById(entity);
+            log.info("采购单进入审批节点，状态自动切换为审批中: businessKey={}, taskId={}, taskDefKey={}",
+                    entity.getBusinessKey(), context.getTaskId(), context.getTaskDefKey());
         }
     }
 
     private void handleTaskCompleted(SamplePurchaseOrder entity, FlowEventContext context) {
         Map<String, Object> variables = context.getVariables();
-        String approvalResult = variables == null ? null : Objects.toString(variables.get("approvalResult"), null);
         copyFinishVariables(entity, variables);
-        if ("reject".equalsIgnoreCase(approvalResult)) {
-            if ("applicant_modify".equals(context.getTaskDefKey())) {
-                entity.setStatus(STATUS_REJECTED);
+        if (isRejectAction(context)) {
+            if (SamplePurchaseOrderFlowDefinition.isApplicantModifyNode(context.getTaskDefKey())) {
+                markRejected(entity, firstText(context.getComment(), context.getLastComment(), entity.getRejectReason()));
             } else {
-                entity.setStatus(STATUS_NEED_MODIFY);
+                markNeedModify(entity, firstText(context.getComment(), context.getLastComment(), entity.getRejectReason()));
             }
-            entity.setRejectReason(firstText(context.getComment(), context.getLastComment(), entity.getRejectReason()));
             updateById(entity);
             return;
         }
-        if ("applicant_modify".equals(context.getTaskDefKey())) {
-            entity.setStatus(STATUS_IN_PROCESS);
+        if (SamplePurchaseOrderFlowDefinition.isApplicantModifyNode(context.getTaskDefKey())) {
+            markInProcess(entity);
             updateById(entity);
         }
+    }
+
+    private boolean isRejectAction(FlowEventContext context) {
+        if (context == null || context.getVariables() == null || context.getVariables().isEmpty()) {
+            return false;
+        }
+        Map<String, Object> variables = context.getVariables();
+        String approvalResult = Objects.toString(
+                variables.get(SamplePurchaseOrderFlowDefinition.VAR_APPROVAL_RESULT), null);
+        if (SamplePurchaseOrderFlowDefinition.isRejectAction(approvalResult)) {
+            return true;
+        }
+        Object approved = variables.get(SamplePurchaseOrderFlowDefinition.VAR_APPROVED);
+        if (approved instanceof Boolean value) {
+            return !value;
+        }
+        if (approved != null) {
+            return "false".equalsIgnoreCase(String.valueOf(approved))
+                    || "0".equals(String.valueOf(approved));
+        }
+        return false;
+    }
+
+    private void ensureApplicantModifyState(SamplePurchaseOrder entity, SamplePurchaseOrderTaskSaveDTO dto) {
+        if (STATUS_IN_PROCESS.equals(entity.getStatus())
+                && dto != null
+                && SamplePurchaseOrderFlowDefinition.isApplicantModifyNode(dto.getTaskDefKey())) {
+            markNeedModify(entity, entity.getRejectReason());
+            log.info("采购单申请人修改节点保存前修复待修改状态: businessKey={}, taskId={}",
+                    entity.getBusinessKey(), dto.getTaskId());
+            return;
+        }
+        if (!STATUS_NEED_MODIFY.equals(entity.getStatus())) {
+            throw new BusinessException("当前采购单不是待修改状态，不能执行申请人修改节点");
+        }
+    }
+
+    private void ensureApprovalState(SamplePurchaseOrder entity, SamplePurchaseOrderTaskSaveDTO dto) {
+        if (STATUS_NEED_MODIFY.equals(entity.getStatus())
+                && dto != null
+                && SamplePurchaseOrderFlowDefinition.isApprovalNode(dto.getTaskDefKey())) {
+            markInProcess(entity);
+            log.info("采购单审批节点保存前修复审批中状态: businessKey={}, taskId={}, taskDefKey={}",
+                    entity.getBusinessKey(), dto.getTaskId(), dto.getTaskDefKey());
+            return;
+        }
+        if (!STATUS_IN_PROCESS.equals(entity.getStatus())) {
+            throw new BusinessException("当前采购单不是审批中状态，不能保存审批节点字段");
+        }
+    }
+
+    private void markInProcess(SamplePurchaseOrder entity) {
+        entity.setStatus(STATUS_IN_PROCESS);
+    }
+
+    private void reconcileStatusesWithActiveTasks(List<SamplePurchaseOrderVO> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        Set<String> businessKeys = new LinkedHashSet<>();
+        for (SamplePurchaseOrderVO record : records) {
+            if (record == null || !isRunningStatus(record.getStatus()) || !StringUtils.hasText(record.getBusinessKey())) {
+                continue;
+            }
+            businessKeys.add(record.getBusinessKey());
+        }
+        if (businessKeys.isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> activeTasks = getBaseMapper().selectActiveTaskDefKeysByBusinessKeys(resolveTenantId(), businessKeys);
+        if (activeTasks == null || activeTasks.isEmpty()) {
+            return;
+        }
+        Map<String, String> activeTaskIndex = new LinkedHashMap<>();
+        for (Map<String, Object> task : activeTasks) {
+            String businessKey = Objects.toString(task.get("businessKey"), "");
+            String taskDefKey = Objects.toString(task.get("taskDefKey"), "");
+            if (StringUtils.hasText(businessKey) && StringUtils.hasText(taskDefKey)) {
+                activeTaskIndex.putIfAbsent(businessKey, taskDefKey);
+            }
+        }
+        for (SamplePurchaseOrderVO record : records) {
+            if (record == null || !isRunningStatus(record.getStatus())) {
+                continue;
+            }
+            String taskDefKey = activeTaskIndex.get(record.getBusinessKey());
+            String expectedStatus = expectedStatusByActiveTask(taskDefKey);
+            if (!StringUtils.hasText(expectedStatus) || Objects.equals(expectedStatus, record.getStatus())) {
+                continue;
+            }
+            SamplePurchaseOrder update = new SamplePurchaseOrder();
+            update.setId(record.getId());
+            update.setStatus(expectedStatus);
+            updateById(update);
+            record.setStatus(expectedStatus);
+            log.info("采购单状态按当前待办节点对账修复: businessKey={}, taskDefKey={}, status={}",
+                    record.getBusinessKey(), taskDefKey, expectedStatus);
+        }
+    }
+
+    private boolean isRunningStatus(String status) {
+        return STATUS_IN_PROCESS.equals(status) || STATUS_NEED_MODIFY.equals(status);
+    }
+
+    private String expectedStatusByActiveTask(String taskDefKey) {
+        if (SamplePurchaseOrderFlowDefinition.isApplicantModifyNode(taskDefKey)) {
+            return STATUS_NEED_MODIFY;
+        }
+        if (SamplePurchaseOrderFlowDefinition.isApprovalNode(taskDefKey)) {
+            return STATUS_IN_PROCESS;
+        }
+        return null;
+    }
+
+    private void markNeedModify(SamplePurchaseOrder entity, String rejectReason) {
+        entity.setStatus(STATUS_NEED_MODIFY);
+        entity.setRejectReason(rejectReason);
+    }
+
+    private void markApproved(SamplePurchaseOrder entity) {
+        entity.setStatus(STATUS_APPROVED);
+    }
+
+    private void markRejected(SamplePurchaseOrder entity, String rejectReason) {
+        entity.setStatus(STATUS_REJECTED);
+        entity.setRejectReason(rejectReason);
+    }
+
+    private void markCanceled(SamplePurchaseOrder entity, String rejectReason) {
+        entity.setStatus(STATUS_CANCELED);
+        entity.setRejectReason(rejectReason);
     }
 
     private void copyFinishVariables(SamplePurchaseOrder entity, Map<String, Object> variables) {
         if (variables == null || variables.isEmpty()) {
             return;
         }
-        Object arrivalListFileIds = variables.get("arrivalListFileIds");
+        Object arrivalListFileIds = variables.get(SamplePurchaseOrderFlowDefinition.FIELD_ARRIVAL_LIST_FILE_IDS);
         if (arrivalListFileIds != null) {
             entity.setArrivalListFileIds(String.valueOf(arrivalListFileIds));
         }
     }
 
     private Map<String, Object> buildFlowModelPayload(Object id, String bpmnXml) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        if (id != null) {
-            payload.put("id", id);
+        return SamplePurchaseOrderFlowDefinition.flowModelPayload(id, resolveTenantId(), bpmnXml);
+    }
+
+    private String buildConfiguredFlowTitle(SamplePurchaseOrder entity,
+                                            String businessKey,
+                                            Map<String, Object> variables) {
+        String fallback = "采购单审批-" + entity.getOrderNo();
+        JSONObject bindingConfig = loadFlowBindingConfig();
+        String template = trimToNull(bindingConfig.getString("titleTemplate"));
+        if (template == null) {
+            return fallback;
         }
-        payload.put("tenantId", resolveTenantId());
-        payload.put("modelKey", MODEL_KEY);
-        payload.put("modelName", "采购单审批测试流程");
-        payload.put("description", "用于验证业务模块与流程模块联动：部门负责人、工程部经理、会签、驳回修改、抄送。");
-        payload.put("category", "purchase");
-        payload.put("flowType", "purchase");
-        payload.put("designerType", "approval");
-        payload.put("formType", "none");
-        payload.put("formId", null);
-        payload.put("notifyType", "redis");
-        payload.put("bpmnXml", bpmnXml);
-        return payload;
+        Map<String, Object> titleData = new LinkedHashMap<>();
+        if (variables != null) {
+            titleData.putAll(variables);
+        }
+        titleData.put("id", entity.getId());
+        titleData.put("businessKey", businessKey);
+        titleData.put("objectCode", BUSINESS_TYPE);
+        titleData.put("businessType", BUSINESS_TYPE);
+        titleData.put("modelKey", MODEL_KEY);
+        titleData.put(SamplePurchaseOrderFlowDefinition.FIELD_ORDER_NO, entity.getOrderNo());
+        titleData.put(SamplePurchaseOrderFlowDefinition.FIELD_TITLE, entity.getTitle());
+        titleData.put(SamplePurchaseOrderFlowDefinition.FIELD_SUPPLIER_NAME, entity.getSupplierName());
+        titleData.put(SamplePurchaseOrderFlowDefinition.FIELD_AMOUNT_CENT, entity.getAmountCent());
+        titleData.put(SamplePurchaseOrderFlowDefinition.FIELD_NEED_DATE, entity.getNeedDate());
+        titleData.put(SamplePurchaseOrderFlowDefinition.FIELD_APPLICANT_NAME, entity.getApplicantName());
+        String title = template;
+        for (Map.Entry<String, Object> entry : titleData.entrySet()) {
+            title = replaceTemplateValue(title, entry.getKey(), entry.getValue());
+        }
+        return StringUtils.hasText(title) ? title : fallback;
+    }
+
+    private JSONObject loadFlowBindingConfig() {
+        AiBusinessBinding binding = businessBindingMapper.selectBindingByTypeAndCode(
+                resolveTenantId(), "OBJECT", BUSINESS_TYPE, "FLOW");
+        if (binding == null) {
+            binding = businessBindingMapper.selectBindingByTypeAndCode(
+                    resolveTenantId(), "OBJECT", BUSINESS_TYPE, "APPROVAL");
+        }
+        if (binding == null || !StringUtils.hasText(binding.getBindingConfig())) {
+            return new JSONObject();
+        }
+        try {
+            return JSON.parseObject(binding.getBindingConfig());
+        } catch (Exception e) {
+            log.warn("采购单流程标题模板配置解析失败: bindingId={}", binding.getId(), e);
+            return new JSONObject();
+        }
+    }
+
+    private String replaceTemplateValue(String template, String key, Object value) {
+        if (!StringUtils.hasText(template) || !StringUtils.hasText(key)) {
+            return template;
+        }
+        String text = value == null ? "" : String.valueOf(value);
+        String result = replaceTemplateToken(template, key, text);
+        result = replaceTemplateToken(result, snakeToCamel(key), text);
+        return replaceTemplateToken(result, camelToSnake(key), text);
+    }
+
+    private String replaceTemplateToken(String template, String key, String value) {
+        if (!StringUtils.hasText(key)) {
+            return template;
+        }
+        return template.replace("${" + key + "}", value)
+                .replace("{" + key + "}", value);
+    }
+
+    private String snakeToCamel(String value) {
+        if (!StringUtils.hasText(value) || !value.contains("_")) {
+            return value;
+        }
+        StringBuilder result = new StringBuilder();
+        boolean upperNext = false;
+        for (char ch : value.toCharArray()) {
+            if (ch == '_') {
+                upperNext = true;
+                continue;
+            }
+            result.append(upperNext ? Character.toUpperCase(ch) : ch);
+            upperNext = false;
+        }
+        return result.toString();
+    }
+
+    private String camelToSnake(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        StringBuilder result = new StringBuilder();
+        for (char ch : value.toCharArray()) {
+            if (Character.isUpperCase(ch)) {
+                result.append('_').append(Character.toLowerCase(ch));
+            } else {
+                result.append(ch);
+            }
+        }
+        return result.toString();
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void validateBase(SamplePurchaseOrderDTO dto) {
@@ -412,7 +681,11 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     }
 
     private void applyBaseFields(SamplePurchaseOrder entity, SamplePurchaseOrderDTO dto) {
-        BeanUtils.copyProperties(dto, entity, "id", "status", "businessKey", "processInstanceId");
+        BeanUtils.copyProperties(dto, entity,
+                SamplePurchaseOrderFlowDefinition.FIELD_ID,
+                SamplePurchaseOrderFlowDefinition.FIELD_STATUS,
+                SamplePurchaseOrderFlowDefinition.FIELD_BUSINESS_KEY,
+                SamplePurchaseOrderFlowDefinition.FIELD_PROCESS_INSTANCE_ID);
         if (StringUtils.hasText(dto.getTitle())) {
             entity.setTitle(dto.getTitle().trim());
         }
@@ -446,7 +719,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     }
 
     private String buildBusinessKey(Long id) {
-        return BUSINESS_TYPE + ":" + id;
+        return SamplePurchaseOrderFlowDefinition.businessKey(id);
     }
 
     private String generateOrderNo(Long id) {

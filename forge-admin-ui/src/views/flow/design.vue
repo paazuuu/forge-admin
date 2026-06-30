@@ -239,46 +239,59 @@
               </NTag>
             </div>
 
-            <label class="settings-field">
-              <span class="settings-field-label">表单类型</span>
-              <n-select
-                v-model:value="modelInfo.formType"
-                :options="formTypeOptions"
-                size="small"
-                @update:value="handleFormTypeChange"
-              />
-            </label>
-            <label v-if="modelInfo.formType === 'dynamic'" class="settings-field">
-              <span class="settings-field-label">已有表单</span>
-              <n-select
-                v-model:value="modelInfo.formId"
-                :options="formOptions"
-                placeholder="不选择则使用模型内表单"
-                clearable
-                size="small"
-                @update:value="handleFormSelect"
-              />
-            </label>
-            <label v-if="modelInfo.formType === 'external'" class="settings-field">
-              <span class="settings-field-label">外置表单</span>
-              <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
-            </label>
-            <div v-if="modelInfo.formType === 'dynamic'" class="settings-form-actions">
-              <n-button size="small" type="primary" @click="handleOpenFormDesigner">
-                <template #icon>
-                  <i class="i-material-symbols:edit-document" />
-                </template>
-                {{ modelInfo.formJson ? '编辑表单' : '设计表单' }}
-              </n-button>
-              <n-button size="small" :disabled="!formSchema.length" @click="showFormPreview = true">
-                <template #icon>
-                  <i class="i-material-symbols:visibility-outline" />
-                </template>
-                预览
-              </n-button>
-            </div>
+            <template v-if="businessContextActive">
+              <label class="settings-field">
+                <span class="settings-field-label">应用表单资产</span>
+                <BusinessFlowFormAssetSelect
+                  :node-form="businessGlobalFormNode"
+                  :form-assets="nodeFormAssetOptions"
+                  show-all-modes
+                  @update="handleBusinessGlobalFormUpdate"
+                />
+              </label>
+            </template>
+            <template v-else>
+              <label class="settings-field">
+                <span class="settings-field-label">表单类型</span>
+                <n-select
+                  v-model:value="modelInfo.formType"
+                  :options="formTypeOptions"
+                  size="small"
+                  @update:value="handleFormTypeChange"
+                />
+              </label>
+              <label v-if="modelInfo.formType === 'dynamic'" class="settings-field">
+                <span class="settings-field-label">已有表单</span>
+                <n-select
+                  v-model:value="modelInfo.formId"
+                  :options="formOptions"
+                  placeholder="不选择则使用模型内表单"
+                  clearable
+                  size="small"
+                  @update:value="handleFormSelect"
+                />
+              </label>
+              <label v-if="modelInfo.formType === 'external'" class="settings-field">
+                <span class="settings-field-label">外置表单</span>
+                <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
+              </label>
+              <div v-if="modelInfo.formType === 'dynamic'" class="settings-form-actions">
+                <n-button size="small" type="primary" @click="handleOpenFormDesigner">
+                  <template #icon>
+                    <i class="i-material-symbols:edit-document" />
+                  </template>
+                  {{ modelInfo.formJson ? '编辑表单' : '设计表单' }}
+                </n-button>
+                <n-button size="small" :disabled="!formSchema.length" @click="showFormPreview = true">
+                  <template #icon>
+                    <i class="i-material-symbols:visibility-outline" />
+                  </template>
+                  预览
+                </n-button>
+              </div>
+            </template>
             <div class="settings-tip">
-              发起节点不再单独配置表单；这里的表单会作为流程全局发起表单使用。
+              {{ businessContextActive ? '节点未单独选择表单时继承这里的应用表单资产；字段权限在节点抽屉维护。' : '发起节点不再单独配置表单；这里的表单会作为流程全局发起表单使用。' }}
             </div>
           </div>
 
@@ -703,6 +716,7 @@ import { DingFlowDesigner } from '@/components/flow-designer'
 import FlowPropertyPanelShell from '@/components/flow/FlowPropertyPanelShell.vue'
 import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
+import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
 import { buildLocalFormFieldCatalog } from './utils/form-field-catalog'
 import VersionHistory from './version.vue'
 
@@ -900,19 +914,6 @@ const currentModelLabel = computed(() => {
   return item.modelCode || item.label
 })
 
-const formConfigStatus = computed(() => {
-  if (modelInfo.formType === 'none')
-    return { label: '无表单', type: 'default' }
-  if (modelInfo.formType === 'external') {
-    return modelInfo.formUrl
-      ? { label: '已配置', type: 'success' }
-      : { label: '未配置', type: 'warning' }
-  }
-  if (modelInfo.formId || modelInfo.formJson || formSchema.value.length)
-    return { label: '已配置', type: 'success' }
-  return { label: '未配置', type: 'warning' }
-})
-
 const designerType = computed(() => normalizeDesignerType(modelInfo.designerType))
 const isApprovalDesigner = computed(() => designerType.value === 'approval')
 const isBusinessDesigner = computed(() => designerType.value === 'business')
@@ -956,6 +957,50 @@ const nodeFormAssetOptions = computed(() => {
     fieldCatalog: [],
     source: 'flowForm',
   })).filter(item => item.value)
+})
+
+const businessGlobalFormRef = computed(() => {
+  if (modelInfo.formType !== 'business')
+    return {}
+  return parseBusinessGlobalFormRef(modelInfo.formJson)
+})
+
+const businessGlobalFormNode = computed(() => {
+  const ref = businessGlobalFormRef.value
+  return {
+    formMode: ref.formMode || ref.type || 'BUSINESS_OBJECT_FORM',
+    formKey: ref.formKey || '',
+    formName: ref.formName || '',
+    providerKey: ref.providerKey || '',
+    formUrl: ref.formUrl || '',
+    viewKey: ref.viewKey || 'default',
+    formRef: ref.formRef || ref,
+  }
+})
+
+const selectedBusinessGlobalFormAsset = computed(() => {
+  if (!businessContextActive.value)
+    return null
+  const current = businessGlobalFormNode.value
+  return findBusinessFormAsset(current.formKey, current.providerKey)
+})
+
+const formConfigStatus = computed(() => {
+  if (businessContextActive.value) {
+    if (businessGlobalFormNode.value.formKey)
+      return { label: '已配置', type: 'success' }
+    return { label: '未配置', type: 'warning' }
+  }
+  if (modelInfo.formType === 'none')
+    return { label: '无表单', type: 'default' }
+  if (modelInfo.formType === 'external') {
+    return modelInfo.formUrl
+      ? { label: '已配置', type: 'success' }
+      : { label: '未配置', type: 'warning' }
+  }
+  if (modelInfo.formId || modelInfo.formJson || formSchema.value.length)
+    return { label: '已配置', type: 'success' }
+  return { label: '未配置', type: 'warning' }
 })
 
 const autoApprovalModeLabel = computed(() => {
@@ -1316,7 +1361,9 @@ async function refreshBusinessFormFieldCatalog() {
     const res = await businessFlowFormAssets(businessObjectCode.value)
     const assets = normalizeBusinessFormAssets(res.data?.formAssets || [])
     businessFormAssets.value = assets
-    formFieldCatalog.value = collectBusinessAssetFields(assets)
+    formFieldCatalog.value = collectBusinessAssetFields(selectedBusinessGlobalFormAsset.value
+      ? [selectedBusinessGlobalFormAsset.value]
+      : assets)
   }
   catch (error) {
     console.warn('[FlowDesign] 加载业务表单字段目录失败:', error?.message || error)
@@ -1340,6 +1387,97 @@ function normalizeBusinessFormAssets(assets = []) {
       }
     })
     .filter(asset => asset.formKey)
+}
+
+function handleBusinessGlobalFormUpdate(payload = {}) {
+  const formKey = routeQueryText(payload.formKey)
+  modelInfo.formType = 'business'
+  modelInfo.formId = null
+  modelInfo.formUrl = ''
+  formSchema.value = []
+
+  if (!formKey) {
+    modelInfo.formJson = ''
+    formFieldCatalog.value = collectBusinessAssetFields(businessFormAssets.value)
+    hasChanges.value = true
+    return
+  }
+
+  const asset = findBusinessFormAsset(formKey, payload.providerKey) || {}
+  const formMode = payload.formMode || asset.formMode || asset.type || 'BUSINESS_OBJECT_FORM'
+  const formRef = {
+    ...(payload.formRef || {}),
+    objectCode: businessObjectCode.value,
+    objectName: businessContextName.value,
+    type: formMode,
+    formMode,
+    formKey,
+    formName: payload.formName || asset.formName || formKey,
+    providerKey: payload.providerKey || asset.providerKey || '',
+    formUrl: payload.formUrl || asset.formUrl || '',
+    viewKey: payload.viewKey || asset.viewKey || 'default',
+  }
+  modelInfo.formJson = JSON.stringify({
+    type: formMode,
+    formMode,
+    objectCode: businessObjectCode.value,
+    objectName: businessContextName.value,
+    formKey,
+    formName: formRef.formName,
+    providerKey: formRef.providerKey,
+    formUrl: formRef.formUrl,
+    viewKey: formRef.viewKey,
+    formRef,
+  })
+  formFieldCatalog.value = collectBusinessAssetFields(asset.formKey ? [asset] : businessFormAssets.value)
+  hasChanges.value = true
+}
+
+function parseBusinessGlobalFormRef(value) {
+  const text = routeQueryText(value)
+  if (!text)
+    return {}
+  try {
+    const parsed = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return {}
+    const formRef = parsed.formRef && typeof parsed.formRef === 'object' && !Array.isArray(parsed.formRef)
+      ? parsed.formRef
+      : {}
+    return {
+      ...formRef,
+      ...parsed,
+      formRef: {
+        ...formRef,
+        objectCode: formRef.objectCode || parsed.objectCode || businessObjectCode.value,
+        formMode: formRef.formMode || formRef.type || parsed.formMode || parsed.type,
+        type: formRef.type || formRef.formMode || parsed.type || parsed.formMode,
+        formKey: formRef.formKey || parsed.formKey,
+        formName: formRef.formName || parsed.formName,
+        providerKey: formRef.providerKey || parsed.providerKey,
+        formUrl: formRef.formUrl || parsed.formUrl,
+        viewKey: formRef.viewKey || parsed.viewKey,
+      },
+    }
+  }
+  catch (error) {
+    console.warn('[FlowDesign] 解析业务全局表单引用失败:', error?.message || error)
+    return {}
+  }
+}
+
+function findBusinessFormAsset(formKey, providerKey = '') {
+  const key = routeQueryText(formKey)
+  const provider = routeQueryText(providerKey)
+  if (!key)
+    return null
+  return businessFormAssets.value.find((asset) => {
+    if (asset.formKey !== key)
+      return false
+    if (!provider)
+      return true
+    return String(asset.providerKey || '') === provider
+  }) || null
 }
 
 function collectBusinessAssetFields(assets = []) {
@@ -1395,6 +1533,10 @@ function routeQueryText(value) {
 }
 
 function goBackToBusinessApp() {
+  if (props.embedded) {
+    emit('close')
+    return
+  }
   if (businessEntryRoute.value) {
     router.push(normalizeBusinessEntryRoute(businessEntryRoute.value))
     return
@@ -1533,9 +1675,13 @@ async function loadModel(id) {
       bpmnXml.value = res.data.bpmnXml || ''
       applyProcessConfigFromXml(bpmnXml.value)
 
-      if (res.data.formJson) {
+      if (res.data.formType === 'business') {
+        formSchema.value = []
+      }
+      else if (res.data.formJson) {
         try {
-          formSchema.value = JSON.parse(res.data.formJson)
+          const parsedFormSchema = JSON.parse(res.data.formJson)
+          formSchema.value = Array.isArray(parsedFormSchema) ? parsedFormSchema : []
         }
         catch (e) {
           console.error('解析表单配置失败:', e)
@@ -2415,6 +2561,7 @@ async function handleSaveDraft() {
   try {
     saving.value = true
 
+    normalizeBusinessGlobalFormBeforeSave()
     const xml = await getXmlForSave()
 
     if (!xml) {
@@ -2455,6 +2602,18 @@ async function handleSaveDraft() {
   finally {
     saving.value = false
   }
+}
+
+function normalizeBusinessGlobalFormBeforeSave() {
+  if (!businessContextActive.value)
+    return
+  if (modelInfo.formType === 'business')
+    return
+  modelInfo.formType = 'business'
+  modelInfo.formId = null
+  modelInfo.formUrl = ''
+  modelInfo.formJson = ''
+  formSchema.value = []
 }
 
 async function handleDeploy() {

@@ -218,6 +218,43 @@
           AND target_code = #{objectCode}
     </select>
 
+    <update id="updateAppSuiteByObject">
+        UPDATE ai_business_app
+        SET suite_code = #{newSuiteCode},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND suite_code = #{oldSuiteCode}
+          AND object_code = #{objectCode}
+    </update>
+
+    <update id="updateDesignVersionSuiteByObject">
+        UPDATE ai_business_object_design_version
+        SET suite_code = #{newSuiteCode},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND object_id = #{objectId}
+          AND suite_code = #{oldSuiteCode}
+    </update>
+
+    <update id="updateTriggerSuiteByObject">
+        UPDATE ai_business_trigger
+        SET suite_code = #{newSuiteCode},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND suite_code = #{oldSuiteCode}
+          AND object_code = #{objectCode}
+    </update>
+
+    <update id="updateDocumentConfigSuiteByObject">
+        UPDATE ai_business_document_config
+        SET suite_code = #{newSuiteCode},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND suite_code = #{oldSuiteCode}
+          AND object_code = #{objectCode}
+          AND (object_id = #{objectId} OR object_id IS NULL)
+    </update>
+
     <select id="selectBySuiteCode" resultMap="BaseResultMap">
         SELECT
         <include refid="Base_Columns"/>

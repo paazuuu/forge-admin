@@ -51,6 +51,27 @@ public interface BusinessObjectMapper extends BaseMapper<AiBusinessObject> {
                                @Param("suiteCode") String suiteCode,
                                @Param("objectCode") String objectCode);
 
+    int updateAppSuiteByObject(@Param("tenantId") Long tenantId,
+                               @Param("oldSuiteCode") String oldSuiteCode,
+                               @Param("newSuiteCode") String newSuiteCode,
+                               @Param("objectCode") String objectCode);
+
+    int updateDesignVersionSuiteByObject(@Param("tenantId") Long tenantId,
+                                         @Param("objectId") Long objectId,
+                                         @Param("oldSuiteCode") String oldSuiteCode,
+                                         @Param("newSuiteCode") String newSuiteCode);
+
+    int updateTriggerSuiteByObject(@Param("tenantId") Long tenantId,
+                                   @Param("oldSuiteCode") String oldSuiteCode,
+                                   @Param("newSuiteCode") String newSuiteCode,
+                                   @Param("objectCode") String objectCode);
+
+    int updateDocumentConfigSuiteByObject(@Param("tenantId") Long tenantId,
+                                          @Param("objectId") Long objectId,
+                                          @Param("oldSuiteCode") String oldSuiteCode,
+                                          @Param("newSuiteCode") String newSuiteCode,
+                                          @Param("objectCode") String objectCode);
+
     List<AiBusinessObject> selectBySuiteCode(@Param("tenantId") Long tenantId,
                                              @Param("suiteCode") String suiteCode);
 }

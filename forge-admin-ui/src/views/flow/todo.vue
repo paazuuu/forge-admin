@@ -73,7 +73,7 @@
       <template #meta="{ row }">
         <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
         <span><span class="task-meta-label">提交时间</span> <span class="task-meta-value">{{ row.createTime || '-' }}</span></span>
-        <span><span class="task-meta-label">当前节点</span> <span class="task-meta-value">{{ row.taskName || '-' }}</span></span>
+        <span><span class="task-meta-label">当前节点</span> <span class="task-meta-value">{{ getTaskDisplayName(row) }}</span></span>
       </template>
       <template #actions="{ row }">
         <button v-if="row.status === 0 && !row.assignee" type="button" class="task-row-link-action info" aria-label="签收任务" @click="handleClaim(row)">
@@ -134,7 +134,7 @@
       v-model:show="showDrawer"
       :busy="approveLoading"
       :title="currentTask ? getRowDisplayTitle(currentTask) : '审批详情'"
-      :subtitle="currentTask?.taskName ? `当前节点：${currentTask.taskName}` : ''"
+      :subtitle="getTaskDisplayName(currentTask, '') ? `当前节点：${getTaskDisplayName(currentTask)}` : ''"
       :status-text="getLabel('flow_todo_status', currentTask?.status)"
       :status-class="currentTask?.status === 0 ? 'todo-status-pending' : 'todo-status-active'"
       :status-icon="currentTask?.status === 0 ? 'i-material-symbols:schedule' : 'i-material-symbols:assignment-ind'"
@@ -153,7 +153,7 @@
           <div class="approval-field-grid">
             <div class="approval-field">
               <span class="approval-label">当前节点</span>
-              <span class="approval-value">{{ currentTask.taskName || '-' }}</span>
+              <span class="approval-value">{{ getTaskDisplayName(currentTask) }}</span>
             </div>
             <div class="approval-field">
               <span class="approval-label">流程名称</span>
@@ -203,16 +203,17 @@
             <span>加载表单中...</span>
           </div>
 
-          <template v-else-if="useExternalForm">
+          <template v-else-if="useComponentTaskForm">
             <FlowBusinessForm
-              :form-url="taskFormInfo.formUrl"
-              :task-id="taskFormInfo.taskId"
-              :business-key="taskFormInfo.businessKey"
-              :process-instance-id="taskFormInfo.processInstanceId"
-              :task-def-key="taskFormInfo.taskDefKey"
-              :process-def-key="taskFormInfo.processDefKey"
-              :variables="taskFormInfo.variables || {}"
+              :form-url="componentTaskFormUrl"
+              :task-id="componentTaskFormInfo.taskId"
+              :business-key="componentTaskFormInfo.businessKey"
+              :process-instance-id="componentTaskFormInfo.processInstanceId"
+              :task-def-key="componentTaskFormInfo.taskDefKey"
+              :process-def-key="componentTaskFormInfo.processDefKey"
+              :variables="taskFormInfo?.variables || {}"
               :approval-policy="approvalPolicy"
+              :initial-task-context="businessFormContext"
               :read-only="false"
               :submitting="approveLoading"
               :submitting-action="approveForm.action"
@@ -296,11 +297,13 @@
               <div class="approval-form-title">
                 节点动态表单
               </div>
-              <FlowFormCreateRenderer
+              <AiForm
                 ref="dynamicFormRef"
-                v-model="dynamicFormData"
-                :schema="taskFormInfo.formJson"
-                :field-permissions="taskFormInfo.formFieldPermissions"
+                v-model:value="dynamicFormData"
+                :schema="dynamicFormSchema"
+                :field-permissions="dynamicFormFieldPermissions"
+                :show-actions="false"
+                :show-feedback="true"
                 :grid-cols="2"
                 label-placement="top"
               />
@@ -456,6 +459,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { businessTaskFormContext, saveBusinessTaskFormContext } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import { AiForm } from '@/components/ai-form'
+import { formCreateToAiSchema } from '@/components/ai-form/adapters/formCreate'
 import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import UserSelectModal from '@/components/common/UserSelectModal.vue'
@@ -463,11 +467,10 @@ import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignaturePad from '@/components/flow/SignaturePad.vue'
-import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
-import { getBusinessFormDisplayTitle, getRowDisplayTitle } from './utils/processDisplay'
+import { getBusinessFormDisplayTitle, getRowDisplayTitle, getTaskDisplayName } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const route = useRoute()
@@ -516,9 +519,10 @@ const approvalHistory = ref([])
 // 业务自定义表单
 const taskFormInfo = ref(null)
 const formInfoLoading = ref(false)
-const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && taskFormInfo.value?.formJson)
 const dynamicFormRef = ref(null)
 const dynamicFormData = ref({})
+const dynamicFormSchema = computed(() => formCreateToAiSchema(taskFormInfo.value?.formJson || []))
+const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && dynamicFormSchema.value.length > 0)
 const businessFormContext = ref(null)
 const businessFormData = ref({})
 const businessFormRef = ref(null)
@@ -532,8 +536,22 @@ const businessFormTitle = computed(() => getBusinessFormDisplayTitle(businessFor
 const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
 const businessFormHasWritableFields = computed(() => hasWritableBusinessFormFields(businessFormContext.value))
 const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
+const useBusinessCodeComponentForm = computed(() => useBusinessCodeForm.value && Boolean(businessCodeFormUrl.value))
+const useComponentTaskForm = computed(() => useExternalForm.value || useBusinessCodeComponentForm.value)
+const componentTaskFormUrl = computed(() => useBusinessCodeComponentForm.value ? businessCodeFormUrl.value : taskFormInfo.value?.formUrl)
+const componentTaskFormInfo = computed(() => ({
+  taskId: businessFormContext.value?.taskId || taskFormInfo.value?.taskId,
+  businessKey: businessFormContext.value?.businessKey || taskFormInfo.value?.businessKey,
+  processInstanceId: businessFormContext.value?.processInstanceId || taskFormInfo.value?.processInstanceId,
+  taskDefKey: businessFormContext.value?.taskDefKey || taskFormInfo.value?.taskDefKey,
+  processDefKey: businessFormContext.value?.processDefKey || taskFormInfo.value?.processDefKey,
+}))
 const businessFormFieldPermissions = computed(() => pickFirstNonEmptyFieldPermissions([
   businessFormContext.value?.fieldPermissions,
+  taskFormInfo.value?.fieldPermissions,
+  taskFormInfo.value?.formFieldPermissions,
+]))
+const dynamicFormFieldPermissions = computed(() => pickFirstNonEmptyFieldPermissions([
   taskFormInfo.value?.fieldPermissions,
   taskFormInfo.value?.formFieldPermissions,
 ]))
@@ -542,13 +560,14 @@ const businessFormRenderContext = computed(() => ({
   taskFormInfo: taskFormInfo.value,
   businessFormContext: businessFormContext.value,
 }))
-const canApprove = computed(() => taskFormInfo.value?.allowApprove !== false)
-const canReject = computed(() => taskFormInfo.value?.allowReject !== false)
-const canDelegate = computed(() => taskFormInfo.value?.allowDelegate !== false)
-const canReturn = computed(() => taskFormInfo.value?.allowReturn === true)
-const canTerminate = computed(() => taskFormInfo.value?.allowTerminate === true)
-const requireComment = computed(() => taskFormInfo.value?.requireComment !== false)
-const requireSignature = computed(() => taskFormInfo.value?.requireSignature === true)
+const taskPolicySource = computed(() => taskFormInfo.value || businessFormContext.value || {})
+const canApprove = computed(() => taskPolicySource.value?.allowApprove !== false)
+const canReject = computed(() => taskPolicySource.value?.allowReject !== false)
+const canDelegate = computed(() => taskPolicySource.value?.allowDelegate !== false)
+const canReturn = computed(() => taskPolicySource.value?.allowReturn === true)
+const canTerminate = computed(() => taskPolicySource.value?.allowTerminate === true)
+const requireComment = computed(() => taskPolicySource.value?.requireComment !== false)
+const requireSignature = computed(() => taskPolicySource.value?.requireSignature === true)
 const approvalPolicy = computed(() => ({
   allowApprove: canApprove.value,
   allowReject: canReject.value,
@@ -616,11 +635,12 @@ function resetBusinessTaskForm() {
 }
 
 function buildBusinessTaskFormQuery(row = {}, formInfo = {}) {
+  const taskId = formInfo.taskId || row.taskId || row.id
   return compactParams({
-    taskId: formInfo.taskId || row.taskId || row.id,
+    taskId,
     businessKey: formInfo.businessKey || row.businessKey,
     processInstanceId: formInfo.processInstanceId || row.processInstanceId,
-    processDefKey: formInfo.processDefKey || row.processDefKey || row.processDefinitionKey,
+    processDefKey: formInfo.processDefKey,
     taskDefKey: formInfo.taskDefKey || row.taskDefKey || row.taskDefinitionKey,
     objectCode: formInfo.objectCode || row.objectCode,
     recordId: formInfo.recordId || row.recordId,
@@ -673,6 +693,27 @@ async function loadBusinessTaskFormContext(row, formInfo) {
   finally {
     businessFormLoading.value = false
   }
+}
+
+async function loadTaskFormInfo(taskId) {
+  if (!taskId)
+    return null
+  try {
+    const res = await flowApi.getTaskFormInfo(taskId)
+    if (res.code === 200) {
+      taskFormInfo.value = res.data
+      dynamicFormData.value = { ...(res.data?.variables || {}) }
+      return taskFormInfo.value
+    }
+  }
+  catch (error) {
+    console.error('加载表单信息失败', error)
+  }
+  return null
+}
+
+function isConfiguredBusinessTaskForm(context) {
+  return context?.configured === true && ['business-object', 'business-code'].includes(context?.formType)
 }
 
 function buildBusinessTaskFormSavePayload() {
@@ -791,15 +832,12 @@ async function openDrawer(row) {
   if (taskId) {
     formInfoLoading.value = true
     promises.push(
-      flowApi.getTaskFormInfo(taskId)
-        .then(async (res) => {
-          if (res.code === 200) {
-            taskFormInfo.value = res.data
-            dynamicFormData.value = { ...(res.data?.variables || {}) }
-            await loadBusinessTaskFormContext(row, res.data || {})
-          }
+      loadBusinessTaskFormContext({}, { taskId })
+        .then((context) => {
+          if (isConfiguredBusinessTaskForm(context))
+            return null
+          return loadTaskFormInfo(taskId)
         })
-        .catch(e => console.error('加载表单信息失败', e))
         .finally(() => { formInfoLoading.value = false }),
     )
   }
@@ -1049,7 +1087,7 @@ async function submitQuickAction() {
         successCount += 1
       }
       catch (error) {
-        const taskName = row.title || row.taskName || row.taskId || row.id || '未知任务'
+        const taskName = getTaskDisplayName(row, row.title || row.taskId || row.id || '未知任务')
         errors.push(`${taskName}：${error?.message || '操作失败'}`)
       }
     }
@@ -1086,7 +1124,7 @@ async function collectDynamicFormVariables(action) {
   if (action === 'approve') {
     await dynamicFormRef.value.validate()
   }
-  return dynamicFormRef.value.getData()
+  return dynamicFormRef.value.getData?.() || dynamicFormRef.value.getFormData?.() || { ...dynamicFormData.value }
 }
 
 function handleDelegate() {
@@ -1282,7 +1320,7 @@ onMounted(async () => {
 watch(
   () => route.fullPath,
   async () => {
-    if (route.path === '/flow/todo')
+    if (route.path === '/flow/todo' || route.path === '/workspace/todo')
       await openTaskFromRoute()
   },
 )

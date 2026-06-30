@@ -28,6 +28,7 @@
       :process-def-key="processDefKey"
       :variables="variables"
       :approval-policy="approvalPolicy"
+      :initial-task-context="initialTaskContext"
       :read-only="readOnly"
       :submitting="submitting"
       :submitting-action="submittingAction"
@@ -81,6 +82,8 @@ const props = defineProps({
   variables: { type: Object, default: () => ({}) },
   /** 审批动作权限和办理要求 */
   approvalPolicy: { type: Object, default: () => ({}) },
+  /** 父级已加载的业务表单上下文，避免业务组件重复请求 */
+  initialTaskContext: { type: Object, default: null },
   /** 是否只读（已办/发起人查看） */
   readOnly: { type: Boolean, default: false },
   /** 父级审批提交中 */

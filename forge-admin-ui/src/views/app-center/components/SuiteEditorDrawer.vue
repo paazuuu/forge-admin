@@ -129,19 +129,41 @@ watch(() => props.show, (visible) => {
 
 async function save() {
   await formRef.value?.validate()
+  const payload = buildPayload()
+  if (props.suite?.status === 1 && payload.status === 0) {
+    if (!window.$dialog?.warning) {
+      await persist(payload)
+      return
+    }
+    window.$dialog.warning({
+      title: '停用业务域',
+      content: `确定停用“${payload.suiteName || payload.suiteCode}”吗？停用后该业务域下的业务单元和访问入口配置仍会保留。`,
+      positiveText: '停用并保存',
+      negativeText: '取消',
+      onPositiveClick: () => persist(payload),
+    })
+    return
+  }
+  await persist(payload)
+}
+
+function buildPayload() {
+  return {
+    id: form.id,
+    parentId: normalizeId(form.parentId),
+    suiteCode: normalizeCode(form.suiteCode),
+    suiteName: form.suiteName.trim(),
+    icon: trimToNull(form.icon),
+    description: trimToNull(form.description),
+    status: form.status,
+    sortOrder: Number(form.sortOrder || 0),
+    options: buildOptions(),
+  }
+}
+
+async function persist(payload) {
   saving.value = true
   try {
-    const payload = {
-      id: form.id,
-      parentId: normalizeId(form.parentId),
-      suiteCode: normalizeCode(form.suiteCode),
-      suiteName: form.suiteName.trim(),
-      icon: trimToNull(form.icon),
-      description: trimToNull(form.description),
-      status: form.status,
-      sortOrder: Number(form.sortOrder || 0),
-      options: buildOptions(),
-    }
     if (form.id)
       await updateBusinessSuite(payload)
     else

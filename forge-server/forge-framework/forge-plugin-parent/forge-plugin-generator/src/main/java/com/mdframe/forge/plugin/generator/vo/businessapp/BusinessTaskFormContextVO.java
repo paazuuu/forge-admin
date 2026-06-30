@@ -58,4 +58,20 @@ public class BusinessTaskFormContextVO {
     private Map<String, Object> recordData = new LinkedHashMap<>();
 
     private List<String> warnings = new ArrayList<>();
+
+    private Boolean allowApprove;
+
+    private Boolean allowDelegate;
+
+    private Boolean allowReject;
+
+    private Boolean allowRejectToStart;
+
+    private Boolean allowReturn;
+
+    private Boolean allowTerminate;
+
+    private Boolean requireSignature;
+
+    private Boolean requireComment;
 }

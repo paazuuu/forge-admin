@@ -255,6 +255,23 @@ public class FlowClient {
     }
 
     /**
+     * 获取流程关联表单信息，适用于只有流程实例/业务Key/节点Key的运行态场景。
+     */
+    public FlowResult<Map<String, Object>> getProcessFormInfo(String processInstanceId,
+                                                              String businessKey,
+                                                              String processDefKey,
+                                                              String taskId,
+                                                              String taskDefKey) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(flowServiceUrl + "/api/flow/task/form");
+        addQueryParamIfText(builder, "processInstanceId", processInstanceId);
+        addQueryParamIfText(builder, "businessKey", businessKey);
+        addQueryParamIfText(builder, "processDefKey", processDefKey);
+        addQueryParamIfText(builder, "taskId", taskId);
+        addQueryParamIfText(builder, "taskDefKey", taskDefKey);
+        return get(builder.toUriString(), new TypeReference<FlowResult<Map<String, Object>>>() {});
+    }
+
+    /**
      * 签收任务
      */
     public FlowResult<Void> claimTask(String taskId, String userId) {
@@ -399,6 +416,12 @@ public class FlowClient {
     }
 
     // ==================== HTTP 方法封装 ====================
+
+    private void addQueryParamIfText(UriComponentsBuilder builder, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            builder.queryParam(name, value);
+        }
+    }
 
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();

@@ -133,9 +133,18 @@ public class BusinessObjectService extends ServiceImpl<BusinessObjectMapper, AiB
         if (dto == null || dto.getId() == null) {
             throw new BusinessException("业务对象ID不能为空");
         }
+        Long tenantId = resolveTenantId();
         AiBusinessObject object = requireEntity(dto.getId());
+        String oldSuiteCode = object.getSuiteCode();
+        String oldObjectCode = object.getObjectCode();
         copyDtoToEntity(dto, object, false);
+        if (!StringUtils.equals(oldSuiteCode, object.getSuiteCode())) {
+            assertSuiteMoveAllowed(tenantId, oldSuiteCode, oldObjectCode);
+        }
         updateById(object);
+        if (!StringUtils.equals(oldSuiteCode, object.getSuiteCode())) {
+            syncSuiteMoveReferences(tenantId, object.getId(), oldSuiteCode, object.getSuiteCode(), object.getObjectCode());
+        }
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -217,6 +226,20 @@ public class BusinessObjectService extends ServiceImpl<BusinessObjectMapper, AiB
         object.setStatus(normalizeStatus(dto.getStatus()));
         object.setSortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder());
         object.setOptions(StringUtils.trimToNull(dto.getOptions()));
+    }
+
+    private void assertSuiteMoveAllowed(Long tenantId, String oldSuiteCode, String objectCode) {
+        if (baseMapper.countRelationsByObject(tenantId, oldSuiteCode, objectCode) > 0) {
+            throw new BusinessException("业务单元已配置对象关系，暂不支持跨业务域移动，请先调整或删除对象关系");
+        }
+    }
+
+    private void syncSuiteMoveReferences(Long tenantId, Long objectId, String oldSuiteCode,
+                                         String newSuiteCode, String objectCode) {
+        baseMapper.updateAppSuiteByObject(tenantId, oldSuiteCode, newSuiteCode, objectCode);
+        baseMapper.updateDesignVersionSuiteByObject(tenantId, objectId, oldSuiteCode, newSuiteCode);
+        baseMapper.updateTriggerSuiteByObject(tenantId, oldSuiteCode, newSuiteCode, objectCode);
+        baseMapper.updateDocumentConfigSuiteByObject(tenantId, objectId, oldSuiteCode, newSuiteCode, objectCode);
     }
 
     private String resolveModelCode(BusinessObjectDTO dto, AiBusinessObject object, String suiteCode,

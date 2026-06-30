@@ -151,6 +151,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   'openObject',
+  'editObject',
   'designObject',
   'statsObject',
   'toggleObject',
@@ -173,6 +174,10 @@ const objectOptions = computed(() => [
   {
     label: '打开详情',
     key: 'open',
+  },
+  {
+    label: '编辑业务单元',
+    key: 'edit',
   },
   {
     label: '业务流程配置',
@@ -279,6 +284,10 @@ function hasCodeAppFlag(value) {
 function handleObjectSelect(key) {
   if (key === 'open') {
     emit('openObject', props.unit.object)
+    return
+  }
+  if (key === 'edit') {
+    emit('editObject', props.unit.object)
     return
   }
   if (key === 'flow-app') {

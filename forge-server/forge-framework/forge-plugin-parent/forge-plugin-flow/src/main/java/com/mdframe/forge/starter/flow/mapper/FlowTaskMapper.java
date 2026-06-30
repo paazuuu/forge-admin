@@ -50,4 +50,19 @@ public interface FlowTaskMapper extends BaseMapper<FlowTask> {
      * 分页查询已逾期但仍未完成的任务。
      */
     IPage<FlowTask> selectOverduePendingTasks(Page<FlowTask> page, @Param("now") LocalDateTime now);
+
+    /**
+     * 统计工作台待办数。
+     */
+    Long countWorkspaceTodo(@Param("userId") String userId);
+
+    /**
+     * 统计指定时间后的已办数。
+     */
+    Long countWorkspaceDoneSince(@Param("userId") String userId, @Param("since") LocalDateTime since);
+
+    /**
+     * 统计我发起且仍在流转中的流程数。
+     */
+    Long countWorkspaceStartedRunning(@Param("userId") String userId);
 }

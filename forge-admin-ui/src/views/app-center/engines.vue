@@ -1,9 +1,7 @@
 <template>
   <div class="center-shell">
     <header>
-      <n-button text @click="router.push('/app-center')">
-        返回应用中心
-      </n-button>
+      <BusinessTopNav active="capability" />
       <h1>引擎中心</h1>
       <p>流程、报表、权限、消息和触发器能力统一挂接到业务单元或访问入口。</p>
     </header>
@@ -36,6 +34,7 @@ import {
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { businessBindingList } from '@/api/business-app'
+import BusinessTopNav from '@/components/business-top-nav/BusinessTopNav.vue'
 
 const router = useRouter()
 const bindings = ref([])

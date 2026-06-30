@@ -224,6 +224,39 @@ Vite dev server 的 `node_modules/.vite` 预构建缓存与浏览器中已加载
 
 ---
 
+## 7. 代码应用已有业务对象时设计器误走低代码空模型
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+采购审批这类代码应用在应用中心已经有 `ai_business_object` 占位对象，但没有低代码 `modelSchema.fields`。嵌入式对象设计器如果只按 `objectId` 调用普通 `businessObjectDesigner(object.id)`，左侧“表单设计 / 列表设计 / 详情设置”会加载到空低代码模型，看起来像字段没有导入。
+
+**根本原因**:
+嵌入式打开设计器时 URL 通常没有 `codeApp=1`，原逻辑又因为已经拿到 `objectId`，直接跳过代码应用虚拟设计器路径。代码应用字段真源应来自 `BusinessCodeFormProvider`、`businessFlowAppConfig.formAssets` 或 `providerCatalog`，不能从空低代码模型读取。
+
+**解决方案**:
+对象设计器解析到业务对象后必须检查 `options/designerOptions.codeApp=true`。命中代码应用时，强制走 `businessFlowAppConfig(objectCode)`，用 Provider/formAssets/providerCatalog 字段构造既有设计器需要的 `modelSchema/pageSchema/formDesignerSchema/viewSchema`。
+
+同时，已有 `ai_business_object` 的代码应用保存 `options.codeAppMetadata` 时，后台 `BusinessFlowAppConfigService#saveConfig` 也必须写入流程绑定 options，不能只在“对象不存在”的代码应用分支保存。
+
+---
+
+## 7. 示例流程初始化覆盖用户 BPMN 节点配置
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+采购审批示例在发起流程前会调用 `ensureFlowModel()` 初始化流程模型。旧逻辑只要发现数据库中的 BPMN XML 与代码里的 `SamplePurchaseOrderFlowBpmn.build()` 不一致，就调用 `updateModel` 覆盖模型并重新发布，导致用户在流程设计器节点抽屉中配置的 `formFieldPermissions` 被重置。
+
+**正确做法**:
+示例/seed 初始化只能在模型不存在或 BPMN XML 缺失时写入默认 XML。模型已存在且 XML 非空时，必须保留用户在流程设计器中保存的 BPMN；如模型未发布，可以发布当前已有模型，但不能用代码里的默认 BPMN 覆盖。
+
+**影响范围**:
+- 采购审批等内置示例流程。
+- 所有把流程设计器作为配置主数据源、同时又有代码 seed/init 的流程模型。
+
+---
+
 ## 7. 动态菜单路径高亮必须支持路由参数匹配
 
 **发现日期**: 2026-05-31
@@ -2313,3 +2346,108 @@ formFieldPermissions: []
 - 流程设计器节点抽屉“表单权限”页签。
 - `BusinessFlowFormAssetSelect` 卡片选择事件。
 - 任何未来把“选择资产”和“字段权限矩阵”放在同一配置块里的节点配置组件。
+
+## 86. 代码应用配置不能替代 Provider 当前字段基准
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+代码应用进入应用管理后，如果已经保存过 `codeAppMetadata.fields`，再次进入“表单设计 / 列表设计 / 详情设置”时只读取旧配置字段，Provider 或业务表后续新增的字段不会再出现。用户会感觉业务表单配置仍然“写死在代码里”，无法在应用管理扩展。
+
+**根本原因**:
+代码应用元数据加载时把 `metadata.fields` 当成唯一事实来源，忽略 Provider 当前返回的字段目录。`metadata` 应该只是用户显示配置覆盖层，不能代替代码 Provider 的字段基准。
+
+**解决方案**:
+- 设计器和后端 `getFormAssets` 都必须以 Provider 当前字段为基准。
+- `codeAppMetadata.fields/formAssets` 只覆盖 label、visible、formVisible、listVisible、排序、组件显示属性等用户配置。
+- Provider 新增公开字段应自动补进默认 `formDesignerSchema/viewSchema/pageSchema`。
+- 用户显式隐藏的字段要以 `visible=false` 或 `formVisible=false` 保留在 metadata 中，合并时不能被 Provider 重新带回运行态。
+
+**影响范围**:
+- 代码应用应用管理入口。
+- `BusinessCodeFormProvider` 字段目录。
+- `ai_business_binding.binding_config.options.codeAppMetadata`。
+- 采购审批等代码实现业务表单的列表、详情、待办表单。
+
+## 87. 代码表单资产只改设计器不改运行时会导致审批仍走写死 Provider 配置
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+代码应用在应用管理里维护了 `codeAppMetadata.formAssets` 后，如果只有 `BusinessFlowService#getFormAssets` 或前端设计器读取时合并 metadata，而待办运行时 `resolveBusinessTaskFormAsset/collectTaskFormAssets` 仍直接读取 `BusinessCodeFormProvider#formAssets`，流程设计器里看到的新 `formKey/formUrl/providerKey` 和审批页实际解析的表单资产会不一致。
+
+**解决方案**:
+代码表单资产配置必须同时覆盖两条链路：
+
+```java
+// 设计态：业务配置中心 / 流程设计器表单资产列表
+getFormAssets(objectCode) -> mergeCodeAppAssets(providerAssets, codeAppMetadata)
+
+// 运行态：待办上下文 / 节点字段权限解析
+collectTaskFormAssets(objectCode) -> mergeCodeAppAssets(providerAssets, codeAppMetadata)
+```
+
+`mergeCodeAppAssets` 不能只合并 `formName/description` 这类展示字段，也必须合并 `formKey/formUrl/providerKey/formMode/type/supportsSave` 等引用字段；否则用户在应用管理里改了表单资产，审批运行时仍会命中 Provider 里的默认硬编码值。
+
+**影响范围**:
+- 代码应用业务表单资产配置。
+- 流程设计器全局表单和节点表单资产选择。
+- 待办审批业务表单上下文解析。
+
+## 88. Flowable 流程定义标识不能直接字符串比较
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+待办业务表单加载时报错“流程定义与当前任务不匹配”。同一个流程在不同链路里可能出现三种表示：业务流程模型 Key、Flowable `key:version:id`、历史 UUID 型 `processDefinitionId`。如果业务侧直接比较字符串，会把同一流程误判为不匹配。
+
+**解决方案**:
+- 流程任务详情返回前尽量把 `processDefKey` 归一化为业务模型 Key。
+- 业务校验流程定义时先抽取 `key:version:id` 的 key，再比较；历史 UUID 型值只作为兼容旧任务的兜底，不作为唯一业务主键。
+- 待办详情首个业务表单上下文请求优先只传 `taskId`，由后端任务详情补齐流程实例、业务 Key、节点和流程定义；不要把列表行里的旧 `processDefKey` 当作可信身份字段。
+- 流程定义标识表示差异不要作为硬安全边界直接抛错，真正的访问边界应放在任务 ID、办理人/候选人、流程实例、业务 Key 和任务节点校验上。
+- 不要取消任务 ID、办理人、流程实例、业务 Key 和任务节点校验，流程定义兼容只解决标识表示差异。
+
+**影响范围**:
+- 待办审批业务表单上下文加载。
+- `BusinessFlowService#validateTaskAccess` 这类跨流程服务的任务身份校验。
+- `FlowTaskServiceImpl#getTaskDetail` 返回给业务侧的流程定义字段。
+
+## 89. 自定义业务表单不要重复请求父级已加载的待办上下文
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+待办审批详情中，父级抽屉为了判断业务表单类型已经加载 `/ai/business/flow/task-form-context`，自定义 Vue 业务表单组件挂载后如果再次调用同一上下文接口，再额外加载代码应用配置和业务详情，会让表单首屏出现明显延迟。
+
+**解决方案**:
+- 父级 `FlowBusinessForm` 应把已加载的业务表单上下文作为 `initialTaskContext` 透传给业务组件。
+- 业务组件待办模式优先用 `initialTaskContext.recordData` 渲染首屏；只有上下文缺失或记录数据为空时才补查业务详情。
+- 待办模式下字段显隐和标签优先使用上下文 `fields`，避免再请求代码应用 metadata。
+
+**影响范围**:
+- 待办详情里的代码业务表单。
+- `FlowBusinessForm` 动态组件加载协议。
+- 使用 `useBusinessTaskFormContext` 的自定义业务表单页面。
+
+## 90. 驳回到修改节点的业务状态不能只依赖 TASK_COMPLETED 变量
+
+**发现日期**: 2026-06-30
+
+**问题描述**:
+采购审批普通审批节点点击“驳回”后，流程已经进入“申请人修改”节点，但采购单业务状态仍停留在 `IN_PROCESS`。用户在申请人修改节点重新提交时，业务字段保存先校验状态，报“当前采购单不是待修改状态，不能执行申请人修改节点”。
+
+**根本原因**:
+业务状态只监听上一个审批任务的 `TASK_COMPLETED` 事件，并依赖事件变量中的 `approvalResult=reject` 或 `approved=false`。Flowable 任务完成事件与变量读取存在时序差异，或者事件回调已错过时，业务表状态不会同步为 `NEED_MODIFY`，但流程图已经真实流转到申请人修改节点。
+
+**解决方案**:
+- 审批动作变量仍应在 `completeTask` 前写入流程实例，保证网关和完成事件尽量读取到本次动作。
+- 业务状态机必须同时监听 `TASK_CREATED`：当新建任务节点为 `applicant_modify` 且业务单据仍为 `IN_PROCESS` 时，兜底同步为 `NEED_MODIFY`。
+- 对已经错过事件的存量待办，申请人修改节点保存字段时，如果状态仍为 `IN_PROCESS`，应在同一事务内先自愈为 `NEED_MODIFY`，避免重新提交被业务状态拦截。
+- 同一套状态机还必须覆盖反向流转：申请人修改后重新提交，进入任一普通审批节点时，如果业务单据仍为 `NEED_MODIFY`，必须兜底同步为 `IN_PROCESS`。
+- 对已经进入普通审批节点但业务状态仍为 `NEED_MODIFY` 的存量待办，审批节点保存字段时也要在同一事务内自愈为 `IN_PROCESS`。
+
+**影响范围**:
+- 采购审批示例。
+- 后续生成类似“驳回修改 / 申请人补正 / 重新提交”流程 skill 的业务状态机模板。
+- 所有依赖流程事件回写业务单据状态的代码表单 Provider。

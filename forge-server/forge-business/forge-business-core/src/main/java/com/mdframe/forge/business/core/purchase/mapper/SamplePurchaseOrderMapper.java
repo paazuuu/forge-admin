@@ -11,6 +11,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 采购单审批测试 Mapper。
@@ -30,4 +31,7 @@ public interface SamplePurchaseOrderMapper extends BaseMapper<SamplePurchaseOrde
 
     SamplePurchaseOrder selectByBusinessKey(@Param("tenantId") Long tenantId,
                                             @Param("businessKey") String businessKey);
+
+    List<Map<String, Object>> selectActiveTaskDefKeysByBusinessKeys(@Param("tenantId") Long tenantId,
+                                                                    @Param("businessKeys") Collection<String> businessKeys);
 }

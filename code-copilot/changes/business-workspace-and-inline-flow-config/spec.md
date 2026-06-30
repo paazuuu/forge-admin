@@ -1,5 +1,5 @@
 # 我的工作台 + 节点就地配置 + 渲染引擎收敛
-> status: confirmed (待 /apply 指令)
+> status: applying (2026-06-29 已执行工作台底座，并按用户纠偏修复应用中心/流程配置体验)
 > created: 2026-06-29
 > complexity: 🔴 复杂（结构性变更，3 个独立子迭代）
 > related:
@@ -297,7 +297,7 @@
 | Task | 状态 | 实际改动文件 | 备注 |
 | --- | --- | --- | --- |
 | Task 0 | propose | `spec.md`, `tasks.md`, `test-spec.md`, `execution-log.md` | SDD 提案，未涉及业务代码。 |
-| 子迭代 A | pending | — | 我的工作台导航 + 聚合首页 + 用户偏好默认页。 |
+| 子迭代 A | partial | `WorkspaceController.java`, `WorkspaceService.java`, `WorkspaceSummaryVO.java`, `FlowTaskMapper.xml`, `FlowCcMapper.xml`, `workspace/*`, `BusinessTopNav.vue`, `router/index.js` | A1/A2/A3 核心完成；用户偏好默认页、A4 toast、A5 菜单迁移待后续。 |
 | 子迭代 B | pending | — | 应用中心节点就地配置（含网关 B8）。 |
 | 子迭代 C | pending | — | 渲染引擎收敛到 AiForm（含 C7 form-create 完全清理）。 |
 
@@ -316,3 +316,18 @@
   - 子迭代发布顺序：**A → B → C**（含 C7 清理）；A 单独发布，B/C 视上线后反馈再决定是否并行。
   - **保留 `/flow/*` 旧路由 2 个大版本兼容期**，不删除。
   - **本轮仅完成 SDD 提案**，暂不进入编码（`/apply` 待后续指令）。
+
+## 14. 2026-06-29 用户纠偏后的执行结论
+
+> 本节覆盖 §3.B 中“应用中心节点就地配置”和 §9 中“工作台保持并列”的早期计划。以用户本轮 6 条反馈为准。
+
+| 用户反馈 | 执行结论 | 落地方式 |
+| --- | --- | --- |
+| 应用设计不要再出现“表单字段”配置 | 代码应用设计入口不展示独立表单字段面板 | `object-designer.[objectCode].vue` 的代码应用导航只保留 `flow-app` |
+| 点击节点配置应弹出流程设计页面，不要跳页 | 应用中心打开完整流程设计器弹窗，用户在真实流程图节点抽屉中配置 | `BusinessFlowBindingPanel.vue` 内嵌 `flow/design.vue`，设计器 `embedded` 模式关闭弹窗 |
+| 流程认识业务字段不需要人工配置 | 前端保存时自动按业务字段生成同名变量映射；后端启动流程时兜底注入全部业务字段变量 | `BusinessFlowBindingPanel.vue` 自动生成 `variableMapping`；`BusinessFlowService.buildFlowVariables()` 注入 camel/snake 变体 |
+| 审批动态表单样式乱，字段权限不好使 | 待办/已办动态表单统一切到 `AiForm` 渲染，复用字段权限解析 | 新增 `formCreateToAiSchema()`，`todo.vue` / `done.vue` 使用 `AiForm` |
+| 低代码应用保存后字段权限被覆盖 | 应用中心不再保存新的 `nodeForms` 副本，避免覆盖流程设计器节点配置 | `BusinessFlowBindingPanel.vue` 保存 payload 中 `nodeForms: []`，运行时以 BPMN 节点配置为准 |
+| 应用中心工作台入口重复 | 应用中心顶部暂时隐藏“我的工作台”，保留外部菜单入口 | `BusinessTopNav.vue` 只展示应用中心/能力中心，并停用 todo-count 轮询 |
+
+补充修复：`http://localhost:3000/dev-api/api/workspace/todo-count` 404 的直接原因是 Vite 3000 开发服务缺少 `/dev-api/api/workspace` 代理规则。本轮在 `vite.config.js` 中新增 workspace 专用代理，必须重启 3000 端口 Vite 后生效。

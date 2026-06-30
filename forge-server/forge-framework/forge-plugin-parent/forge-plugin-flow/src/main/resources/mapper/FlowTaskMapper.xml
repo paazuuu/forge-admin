@@ -99,4 +99,35 @@
         ORDER BY t.due_date ASC, t.create_time ASC
     </select>
 
+    <!-- 工作台待办数，条件与 selectTodoTasks 保持一致。 -->
+    <select id="countWorkspaceTodo" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_flow_task t
+        WHERE (t.assignee = #{userId}
+            OR (t.candidate_users IS NOT NULL AND t.candidate_users != ''
+                AND (t.candidate_users = #{userId}
+                    OR t.candidate_users LIKE CONCAT(#{userId}, ',%')
+                    OR t.candidate_users LIKE CONCAT('%,', #{userId})
+                    OR t.candidate_users LIKE CONCAT('%,', #{userId}, ',%')))
+            OR (t.candidate_groups IS NOT NULL AND t.candidate_groups != ''))
+          AND (t.status = 0 OR (t.assignee = #{userId} AND t.status = 1))
+    </select>
+
+    <!-- 工作台本周已办数。 -->
+    <select id="countWorkspaceDoneSince" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_flow_task t
+        WHERE t.assignee = #{userId}
+          AND t.status IN (2, 3, 4, 5, 7, 8)
+          AND t.complete_time &gt;= #{since}
+    </select>
+
+    <!-- 工作台我发起且仍在流转中的流程数。 -->
+    <select id="countWorkspaceStartedRunning" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_flow_task t
+        WHERE t.start_user_id = #{userId}
+          AND t.status IN (0, 1)
+    </select>
+
 </mapper>

@@ -166,4 +166,18 @@
         ORDER BY update_time DESC, id DESC
         LIMIT 1
     </select>
+
+    <select id="selectActiveTaskDefKeysByBusinessKeys" resultType="java.util.Map">
+        SELECT
+            business_key AS businessKey,
+            task_def_key AS taskDefKey
+        FROM sys_flow_task
+        WHERE tenant_id = #{tenantId}
+          AND status IN (0, 1)
+          AND business_key IN
+        <foreach collection="businessKeys" item="businessKey" open="(" separator="," close=")">
+            #{businessKey}
+        </foreach>
+        ORDER BY create_time DESC, id DESC
+    </select>
 </mapper>

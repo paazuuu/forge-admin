@@ -7,28 +7,28 @@
           <DictTag v-if="detail.status" dict-type="sample_purchase_order_status" :value="detail.status" size="small" />
         </div>
         <n-descriptions :column="2" bordered label-placement="left" size="small">
-          <n-descriptions-item label="采购单号">
+          <n-descriptions-item v-if="showDetailField('orderNo')" :label="detailFieldLabel('orderNo', '采购单号')">
             {{ detail.orderNo || '-' }}
           </n-descriptions-item>
-          <n-descriptions-item label="采购主题">
+          <n-descriptions-item v-if="showDetailField('title')" :label="detailFieldLabel('title', '采购主题')">
             {{ detail.title || '-' }}
           </n-descriptions-item>
-          <n-descriptions-item label="供应商">
+          <n-descriptions-item v-if="showDetailField('supplierName')" :label="detailFieldLabel('supplierName', '供应商')">
             {{ detail.supplierName || '-' }}
           </n-descriptions-item>
-          <n-descriptions-item label="采购金额">
+          <n-descriptions-item v-if="showDetailField('amountCent')" :label="detailFieldLabel('amountCent', '采购金额')">
             {{ formatMoney(detail.amountCent) }}
           </n-descriptions-item>
-          <n-descriptions-item label="申请人">
+          <n-descriptions-item v-if="showDetailField('applicantName')" :label="detailFieldLabel('applicantName', '申请人')">
             {{ detail.applicantName || '-' }}
           </n-descriptions-item>
-          <n-descriptions-item label="需求日期">
+          <n-descriptions-item v-if="showDetailField('needDate')" :label="detailFieldLabel('needDate', '需求日期')">
             {{ detail.needDate || '-' }}
           </n-descriptions-item>
-          <n-descriptions-item label="采购明细" :span="2">
+          <n-descriptions-item v-if="showDetailField('purchaseItems')" :label="detailFieldLabel('purchaseItems', '采购明细')" :span="2">
             <span class="preserve-text">{{ detail.purchaseItems || '-' }}</span>
           </n-descriptions-item>
-          <n-descriptions-item v-if="detail.rejectReason" label="最近驳回原因" :span="2">
+          <n-descriptions-item v-if="detail.rejectReason && showDetailField('rejectReason')" :label="detailFieldLabel('rejectReason', '最近驳回原因')" :span="2">
             <span class="text-error">{{ detail.rejectReason }}</span>
           </n-descriptions-item>
         </n-descriptions>
@@ -38,7 +38,7 @@
         <div class="section-title">
           <span>{{ currentNodeTitle }}</span>
           <n-tag size="small" :type="isModifyTask ? 'warning' : 'info'">
-            {{ currentTaskDefKey || '未知节点' }}
+            {{ currentNodeDisplayName }}
           </n-tag>
         </div>
 
@@ -66,9 +66,9 @@
                 style="width: 100%"
               >
                 <template #suffix>
-                元
-              </template>
-            </n-input-number>
+                  元
+                </template>
+              </n-input-number>
             </n-form-item-gi>
             <n-form-item-gi v-if="isModifyTask && canShowTaskField('needDate')" label="期望到货日期" path="needDate">
               <n-date-picker
@@ -279,13 +279,13 @@
     >
       <n-form ref="formRef" :model="formState" :rules="formRules" label-placement="top">
         <n-grid :cols="2" :x-gap="16" responsive="screen">
-          <n-form-item-gi label="采购主题" path="title">
+          <n-form-item-gi v-if="showFormModalField('title')" :label="formFieldLabel('title', '采购主题')" path="title">
             <n-input v-model:value="formState.title" :disabled="formReadonly" maxlength="128" show-count placeholder="请输入采购主题" />
           </n-form-item-gi>
-          <n-form-item-gi label="供应商" path="supplierName">
+          <n-form-item-gi v-if="showFormModalField('supplierName')" :label="formFieldLabel('supplierName', '供应商')" path="supplierName">
             <n-input v-model:value="formState.supplierName" :disabled="formReadonly" maxlength="128" show-count placeholder="请输入供应商" />
           </n-form-item-gi>
-          <n-form-item-gi label="采购金额" path="amountYuan">
+          <n-form-item-gi v-if="showFormModalField('amountCent')" :label="formFieldLabel('amountCent', '采购金额')" path="amountYuan">
             <n-input-number
               v-model:value="formState.amountYuan"
               :disabled="formReadonly"
@@ -299,7 +299,7 @@
               </template>
             </n-input-number>
           </n-form-item-gi>
-          <n-form-item-gi label="需求日期" path="needDate">
+          <n-form-item-gi v-if="showFormModalField('needDate')" :label="formFieldLabel('needDate', '需求日期')" path="needDate">
             <n-date-picker
               v-model:formatted-value="formState.needDate"
               :disabled="formReadonly"
@@ -309,7 +309,7 @@
               style="width: 100%"
             />
           </n-form-item-gi>
-          <n-form-item-gi label="采购明细" path="purchaseItems" :span="2">
+          <n-form-item-gi v-if="showFormModalField('purchaseItems')" :label="formFieldLabel('purchaseItems', '采购明细')" path="purchaseItems" :span="2">
             <n-input
               v-model:value="formState.purchaseItems"
               :disabled="formReadonly"
@@ -320,7 +320,7 @@
               placeholder="请输入采购内容、数量、用途等"
             />
           </n-form-item-gi>
-          <n-form-item-gi label="备注" path="remark" :span="2">
+          <n-form-item-gi v-if="showFormModalField('remark')" :label="formFieldLabel('remark', '备注')" path="remark" :span="2">
             <n-input v-model:value="formState.remark" :disabled="formReadonly" type="textarea" :rows="3" maxlength="500" show-count />
           </n-form-item-gi>
         </n-grid>
@@ -410,7 +410,9 @@ import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictTag from '@/components/DictTag.vue'
 import FileUpload from '@/components/file-upload/index.vue'
 import { useBusinessTaskFormContext } from '@/composables/useBusinessTaskFormContext'
+import { useCodeAppMetadata } from '@/composables/useCodeAppMetadata'
 import { useDict } from '@/composables/useDict'
+import { getTaskDisplayName } from '../flow/utils/processDisplay'
 
 defineOptions({ name: 'BusinessPurchaseOrderTest' })
 
@@ -422,6 +424,7 @@ const props = defineProps({
   processDefKey: { type: String, default: null },
   variables: { type: Object, default: () => ({}) },
   approvalPolicy: { type: Object, default: () => ({}) },
+  initialTaskContext: { type: Object, default: null },
   readOnly: { type: Boolean, default: false },
   submitting: { type: Boolean, default: false },
   submittingAction: { type: String, default: '' },
@@ -432,6 +435,7 @@ const emit = defineEmits(['submit', 'cancel'])
 const route = useRoute()
 const router = useRouter()
 const { dict } = useDict('sample_purchase_order_status')
+const codeAppMetadata = useCodeAppMetadata('sample_purchase_order')
 const statusOptions = computed(() => dict.value.sample_purchase_order_status || [])
 const taskRuntime = computed(() => ({
   taskId: props.taskId || route.query.taskId || '',
@@ -442,9 +446,9 @@ const taskRuntime = computed(() => ({
   readOnly: props.readOnly || route.query.readOnly === 'true',
 }))
 const isTaskFormMode = computed(() => Boolean(taskRuntime.value.taskId || taskRuntime.value.businessKey || taskRuntime.value.processInstanceId))
-const currentTaskDefKey = computed(() => taskRuntime.value.taskDefKey || '')
 const taskRuntimeReadonly = computed(() => taskRuntime.value.readOnly)
 const businessTaskForm = useBusinessTaskFormContext({}, { readonly: taskRuntimeReadonly })
+const currentTaskDefKey = computed(() => taskRuntime.value.taskDefKey || businessTaskForm.context.value?.taskDefKey || '')
 
 const query = reactive({
   orderNo: '',
@@ -473,17 +477,25 @@ const formModalTitle = computed(() => {
   return formState.id ? '编辑采购单' : '新建采购单'
 })
 
-const formRules = {
-  title: { required: true, message: '请输入采购主题', trigger: ['blur', 'input'] },
-  supplierName: { required: true, message: '请输入供应商', trigger: ['blur', 'input'] },
-  amountYuan: {
-    required: true,
-    type: 'number',
-    validator: (_, value) => Number(value) > 0,
-    message: '采购金额必须大于0',
-    trigger: ['blur', 'change'],
-  },
-}
+const formRules = computed(() => {
+  if (formReadonly.value)
+    return {}
+  const rules = {}
+  if (showBusinessFormField('title'))
+    rules.title = { required: true, message: '请输入采购主题', trigger: ['blur', 'input'] }
+  if (showBusinessFormField('supplierName'))
+    rules.supplierName = { required: true, message: '请输入供应商', trigger: ['blur', 'input'] }
+  if (showBusinessFormField('amountCent')) {
+    rules.amountYuan = {
+      required: true,
+      type: 'number',
+      validator: (_, value) => Number(value) > 0,
+      message: '采购金额必须大于0',
+      trigger: ['blur', 'change'],
+    }
+  }
+  return rules
+})
 
 const submitRules = {
   deptLeaderId: {
@@ -512,19 +524,27 @@ const ccRoleOptions = [
   { label: '总经理(general_manager)', value: 'general_manager' },
 ]
 
-const columns = computed(() => [
-  { title: '采购单号', key: 'orderNo', width: 190, ellipsis: { tooltip: true } },
-  { title: '采购主题', key: 'title', minWidth: 180, ellipsis: { tooltip: true } },
-  { title: '供应商', key: 'supplierName', minWidth: 150, ellipsis: { tooltip: true } },
-  { title: '金额', key: 'amountCent', width: 120, render: row => formatMoney(row.amountCent) },
-  {
-    title: '状态',
+const defaultFormFields = ['title', 'supplierName', 'amountCent', 'needDate', 'purchaseItems', 'remark']
+const defaultListFields = ['orderNo', 'title', 'supplierName', 'amountCent', 'status', 'applicantName', 'updateTime']
+const defaultDetailFields = ['orderNo', 'title', 'supplierName', 'amountCent', 'applicantName', 'needDate', 'purchaseItems', 'rejectReason']
+const columnBuilders = {
+  orderNo: () => ({ title: listFieldLabel('orderNo', '采购单号'), key: 'orderNo', width: 190, ellipsis: { tooltip: true } }),
+  title: () => ({ title: listFieldLabel('title', '采购主题'), key: 'title', minWidth: 180, ellipsis: { tooltip: true } }),
+  supplierName: () => ({ title: listFieldLabel('supplierName', '供应商'), key: 'supplierName', minWidth: 150, ellipsis: { tooltip: true } }),
+  amountCent: () => ({ title: listFieldLabel('amountCent', '金额'), key: 'amountCent', width: 120, render: row => formatMoney(row.amountCent) }),
+  status: () => ({
+    title: listFieldLabel('status', '状态'),
     key: 'status',
     width: 110,
     render: row => h(DictTag, { dictType: 'sample_purchase_order_status', value: row.status, size: 'small' }),
-  },
-  { title: '申请人', key: 'applicantName', width: 120, render: row => row.applicantName || '-' },
-  { title: '更新时间', key: 'updateTime', width: 170, render: row => formatDateTime(row.updateTime) },
+  }),
+  applicantName: () => ({ title: listFieldLabel('applicantName', '申请人'), key: 'applicantName', width: 120, render: row => row.applicantName || '-' }),
+  updateTime: () => ({ title: listFieldLabel('updateTime', '更新时间'), key: 'updateTime', width: 170, render: row => formatDateTime(row.updateTime) }),
+}
+const columns = computed(() => [
+  ...codeAppMetadata.viewFields('LIST', defaultListFields)
+    .map(field => columnBuilders[field]?.())
+    .filter(Boolean),
   {
     title: '操作',
     key: 'actions',
@@ -573,13 +593,19 @@ const currentNodeTitle = computed(() => {
     return '申请人修改'
   return '采购单审批'
 })
+const currentNodeDisplayName = computed(() => getTaskDisplayName({
+  taskName: businessTaskForm.context.value?.taskName || currentTaskDefKey.value,
+  taskDefKey: currentTaskDefKey.value,
+}, currentNodeTitle.value || '未知节点'))
 const canApprove = computed(() => props.approvalPolicy?.allowApprove !== false)
 const canReject = computed(() => props.approvalPolicy?.allowReject !== false)
 const requireComment = computed(() => props.approvalPolicy?.requireComment !== false)
 const taskFormDisabled = computed(() => taskRuntime.value.readOnly || props.submitting || localSubmitting.value)
 
 function canShowTaskField(field) {
-  return businessTaskForm.canShowField(field)
+  if (isTaskFormMode.value)
+    return businessTaskForm.canShowField(field)
+  return codeAppMetadata.isFormFieldVisible(field, true) && businessTaskForm.canShowField(field)
 }
 
 function canEditTaskField(field) {
@@ -593,6 +619,41 @@ function isTaskFieldDisabled(field) {
 function isTaskFieldRequired(field, fallback = false) {
   const permission = businessTaskForm.fieldPermission(field)
   return permission ? permission.required === true : fallback
+}
+
+function listFieldLabel(field, fallback) {
+  return codeAppMetadata.viewFieldLabel('LIST', field, fallback)
+}
+
+function detailFieldLabel(field, fallback) {
+  if (isTaskFormMode.value)
+    return businessTaskForm.fieldConfig(field)?.label || fallback
+  return codeAppMetadata.viewFieldLabel('DETAIL', field, fallback)
+}
+
+function formFieldLabel(field, fallback) {
+  if (isTaskFormMode.value)
+    return businessTaskForm.fieldConfig(field)?.label || fallback
+  return codeAppMetadata.viewFieldLabel('FORM', field, fallback)
+}
+
+function showBusinessFormField(field) {
+  return codeAppMetadata.formFields(defaultFormFields).includes(field)
+}
+
+function showFormModalField(field) {
+  if (formReadonly.value)
+    return codeAppMetadata.viewFields('DETAIL', defaultDetailFields).includes(field)
+  return showBusinessFormField(field)
+}
+
+function showDetailField(field) {
+  if (isTaskFormMode.value)
+    return businessTaskForm.canShowField(field)
+  const visibleInDetailView = codeAppMetadata.viewFields('DETAIL', defaultDetailFields).includes(field)
+  if (!visibleInDetailView)
+    return false
+  return true
 }
 
 function shouldValidateTaskField(field, fallbackRequired = false) {
@@ -649,8 +710,10 @@ watch(() => [
 }, { immediate: true })
 
 onMounted(() => {
-  if (!isTaskFormMode.value)
+  if (!isTaskFormMode.value) {
+    codeAppMetadata.load()
     loadData()
+  }
 })
 
 async function loadData() {
@@ -822,12 +885,14 @@ async function handleRemove(row) {
 }
 
 async function loadTaskDetail() {
-  const query = resolveRecordQuery()
-  if (!query)
-    return
   detailLoading.value = true
   try {
-    await loadBusinessTaskContext()
+    const context = await loadBusinessTaskContext()
+    if (applyTaskContextRecord(context))
+      return
+    const query = resolveRecordQuery(context)
+    if (!query)
+      return
     const res = await purchaseOrderDetail(query)
     if (res.code !== 200) {
       window.$message.error(res.message || '采购单详情加载失败')
@@ -844,6 +909,11 @@ async function loadTaskDetail() {
 }
 
 async function loadBusinessTaskContext() {
+  const initialContext = resolveInitialTaskContext()
+  if (initialContext) {
+    businessTaskForm.setContext(initialContext)
+    return initialContext
+  }
   try {
     return await businessTaskForm.load({
       taskId: taskRuntime.value.taskId,
@@ -857,6 +927,45 @@ async function loadBusinessTaskContext() {
     window.$message.warning(error?.message || '字段权限加载失败，将使用默认节点规则')
     return null
   }
+}
+
+function resolveInitialTaskContext() {
+  const context = props.initialTaskContext
+  if (!context || typeof context !== 'object')
+    return null
+  if (!matchesTaskRuntime(context))
+    return null
+  return context
+}
+
+function matchesTaskRuntime(context) {
+  const runtime = taskRuntime.value
+  const pairs = [
+    ['taskId', runtime.taskId],
+    ['businessKey', runtime.businessKey],
+    ['processInstanceId', runtime.processInstanceId],
+    ['taskDefKey', runtime.taskDefKey],
+  ]
+  for (const [key, expected] of pairs) {
+    if (expected && context[key] && String(context[key]) !== String(expected))
+      return false
+  }
+  return Boolean(context.configured || context.recordData || context.recordId || context.businessKey)
+}
+
+function applyTaskContextRecord(context) {
+  const recordData = context?.recordData && typeof context.recordData === 'object' ? context.recordData : null
+  if (!recordData || Object.keys(recordData).length === 0)
+    return false
+  const nextDetail = { ...recordData }
+  if (context.recordId && !nextDetail.id)
+    nextDetail.id = context.recordId
+  if (context.businessKey && !nextDetail.businessKey)
+    nextDetail.businessKey = context.businessKey
+  Object.keys(detail).forEach(key => delete detail[key])
+  Object.assign(detail, nextDetail)
+  Object.assign(taskForm, detailToTaskForm(detail))
+  return true
 }
 
 async function saveTaskFields() {
@@ -939,14 +1048,17 @@ async function submitTask(action) {
   }
 }
 
-function resolveRecordQuery() {
-  const businessKey = cleanBusinessKey(taskRuntime.value.businessKey || props.variables?.businessKey)
+function resolveRecordQuery(context = businessTaskForm.context.value) {
+  const businessKey = cleanBusinessKey(
+    taskRuntime.value.businessKey || props.variables?.businessKey || context?.businessKey,
+  )
   if (businessKey)
     return { businessKey }
 
   const id = normalizeSnowflakeId(props.variables?.purchaseOrderId)
     || normalizeSnowflakeId(extractIdFromBusinessKey(taskRuntime.value.businessKey || props.variables?.businessKey))
     || normalizeSnowflakeId(props.variables?.recordId)
+    || normalizeSnowflakeId(context?.recordId)
     || normalizeSnowflakeId(route.query.recordId)
   return id ? { id } : null
 }

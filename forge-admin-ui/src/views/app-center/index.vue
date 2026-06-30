@@ -6,12 +6,7 @@
         <p>按业务域查看业务单元、访问入口和底座能力。</p>
       </div>
       <n-space class="head-actions" :wrap="true">
-        <n-button secondary @click="router.push('/app-center/engines')">
-          <template #icon>
-            <n-icon><HardwareChipOutline /></n-icon>
-          </template>
-          能力中心
-        </n-button>
+        <BusinessTopNav active="appCenter" />
         <n-dropdown trigger="click" :options="createOptions" @select="handleCreateSelect">
           <n-button type="primary">
             <template #icon>
@@ -246,6 +241,7 @@
                 :unit="unit"
                 :show-suite="!suiteCode"
                 @open-object="openObject"
+                @edit-object="openObjectEditor"
                 @design-object="openObjectDesigner"
                 @stats-object="openObjectStats"
                 @toggle-object="toggleObject"
@@ -291,6 +287,12 @@
       :default-suite-code="suiteCode"
       @saved="handleObjectSaved"
     />
+    <BusinessObjectEditorDrawer
+      v-model:show="objectEditorVisible"
+      :object="editingObject"
+      :suites="suites"
+      @saved="handleObjectEdited"
+    />
     <SuiteEditorDrawer
       v-model:show="suiteEditorVisible"
       :suite="editingSuite"
@@ -318,7 +320,6 @@ import {
   ChevronForwardOutline,
   EllipsisVertical,
   GridOutline,
-  HardwareChipOutline,
   RefreshOutline,
   SearchOutline,
 } from '@vicons/ionicons5'
@@ -329,6 +330,7 @@ import {
   businessAppDetail,
   businessAppList,
   businessAppOpenInfo,
+  businessObjectDetail,
   businessObjectList,
   businessSuiteSummary,
   deleteBusinessApp,
@@ -338,12 +340,14 @@ import {
   updateBusinessObjectStatus,
   updateBusinessSuiteStatus,
 } from '@/api/business-app'
+import BusinessTopNav from '@/components/business-top-nav/BusinessTopNav.vue'
 import IconRenderer from '@/components/IconRenderer.vue'
 import AppFilterBar from './components/AppFilterBar.vue'
 import BusinessUnitCard from './components/BusinessUnitCard.vue'
 
 const AppCodePanel = defineAsyncComponent(() => import('./components/AppCodePanel.vue'))
 const AppEditorDrawer = defineAsyncComponent(() => import('./components/AppEditorDrawer.vue'))
+const BusinessObjectEditorDrawer = defineAsyncComponent(() => import('./components/BusinessObjectEditorDrawer.vue'))
 const BusinessObjectWizardDrawer = defineAsyncComponent(() => import('./components/BusinessObjectWizardDrawer.vue'))
 const SuiteEditorDrawer = defineAsyncComponent(() => import('./components/SuiteEditorDrawer.vue'))
 const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
@@ -369,6 +373,8 @@ const editingApp = ref(null)
 const codePanelVisible = ref(false)
 const codingApp = ref(null)
 const objectWizardVisible = ref(false)
+const objectEditorVisible = ref(false)
+const editingObject = ref(null)
 const suiteEditorVisible = ref(false)
 const editingSuite = ref(null)
 const designerVisible = ref(false)
@@ -953,6 +959,19 @@ function openObjectWizard() {
   objectWizardVisible.value = true
 }
 
+async function openObjectEditor(object) {
+  if (!object?.id)
+    return
+  try {
+    const res = await businessObjectDetail(object.id)
+    editingObject.value = { ...object, ...(res.data || {}) }
+  }
+  catch {
+    editingObject.value = { ...object }
+  }
+  objectEditorVisible.value = true
+}
+
 function openSuiteEditor(suite) {
   editingSuite.value = suite ? { ...suite } : null
   suiteEditorVisible.value = true
@@ -962,6 +981,11 @@ async function handleObjectSaved(payload) {
   suiteCode.value = payload?.suiteCode || suiteCode.value
   await loadAll()
   openObjectDesigner(payload, payload?.designerPanel || 'form')
+}
+
+async function handleObjectEdited(payload) {
+  suiteCode.value = payload?.suiteCode || suiteCode.value
+  await loadAll()
 }
 
 async function handleSuiteSaved(payload) {
@@ -1016,20 +1040,50 @@ async function toggleApp(app) {
   await loadAll()
 }
 
+async function applyObjectStatus(object, nextStatus) {
+  await updateBusinessObjectStatus(object.id, nextStatus)
+  message.success(nextStatus === 0 ? '业务单元已停用' : '业务单元已启用')
+  await loadAll()
+}
+
 async function toggleObject(object) {
   if (!object?.id)
     return
-  await updateBusinessObjectStatus(object.id, object.status === 1 ? 0 : 1)
-  message.success(object.status === 1 ? '业务单元已停用' : '业务单元已启用')
+  const nextStatus = object.status === 1 ? 0 : 1
+  if (nextStatus === 0) {
+    window.$dialog?.warning({
+      title: '停用业务单元',
+      content: `确定停用“${object.objectName || object.objectCode}”吗？停用后关联访问入口和流程配置仍保留，但用户不应继续进入该业务单元办理新业务。`,
+      positiveText: '停用',
+      negativeText: '取消',
+      onPositiveClick: () => applyObjectStatus(object, nextStatus),
+    })
+    return
+  }
+  await applyObjectStatus(object, nextStatus)
+}
+
+async function applySuiteStatus(suite, nextStatus) {
+  await updateBusinessSuiteStatus(suite.id, nextStatus)
+  message.success(nextStatus === 0 ? '业务域已停用' : '业务域已启用')
   await loadAll()
 }
 
 async function toggleSuite(suite) {
   if (!suite?.id)
     return
-  await updateBusinessSuiteStatus(suite.id, suite.status === 1 ? 0 : 1)
-  message.success(suite.status === 1 ? '业务域已停用' : '业务域已启用')
-  await loadAll()
+  const nextStatus = suite.status === 1 ? 0 : 1
+  if (nextStatus === 0) {
+    window.$dialog?.warning({
+      title: '停用业务域',
+      content: `确定停用“${suite.suiteName || suite.suiteCode}”吗？停用后该业务域下的业务单元和访问入口配置仍会保留。`,
+      positiveText: '停用',
+      negativeText: '取消',
+      onPositiveClick: () => applySuiteStatus(suite, nextStatus),
+    })
+    return
+  }
+  await applySuiteStatus(suite, nextStatus)
 }
 
 function deleteSuite(suite) {

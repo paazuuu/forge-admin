@@ -9,7 +9,7 @@ import lombok.experimental.UtilityClass;
 public class SamplePurchaseOrderFlowBpmn {
 
     public static String build() {
-        return """
+        String xml = """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                                   xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -17,13 +17,13 @@ public class SamplePurchaseOrderFlowBpmn {
                                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                                   xmlns:flowable="http://flowable.org/bpmn"
-                                  id="Definitions_sample_purchase_order_approval"
+                                  id="Definitions_@MODEL_KEY@"
                                   targetNamespace="http://forge.mdframe.com/bpmn">
-                  <bpmn:process id="sample_purchase_order_approval" name="采购单审批测试流程" isExecutable="true">
-                    <bpmn:startEvent id="StartEvent_1" name="提交采购单" flowable:initiator="initiator">
+                  <bpmn:process id="@MODEL_KEY@" name="@MODEL_NAME@" isExecutable="true">
+                    <bpmn:startEvent id="StartEvent_1" name="提交采购单" flowable:initiator="@VAR_INITIATOR@">
                       <bpmn:outgoing>Flow_001</bpmn:outgoing>
                     </bpmn:startEvent>
-                    <bpmn:userTask id="dept_leader_approve" name="部门负责人审批" flowable:assignee="${deptLeaderId}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"arrivalListFileIds","label":"上传清单","readable":true,"writable":true,"required":false},{"field":"deptLeaderRemark","label":"部门负责人意见","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
+                    <bpmn:userTask id="@NODE_DEPT_LEADER@" name="部门负责人审批" flowable:assignee="@EXPR_DEPT_LEADER@" flowable:formKey="@FORM_KEY@" flowable:formFieldPermissions='@PERM_DEPT_LEADER@' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_001</bpmn:incoming>
                       <bpmn:incoming>Flow_012</bpmn:incoming>
                       <bpmn:outgoing>Flow_002</bpmn:outgoing>
@@ -33,7 +33,7 @@ public class SamplePurchaseOrderFlowBpmn {
                       <bpmn:outgoing>Flow_003</bpmn:outgoing>
                       <bpmn:outgoing>Flow_004</bpmn:outgoing>
                     </bpmn:exclusiveGateway>
-                    <bpmn:userTask id="engineering_manager_approve" name="工程部经理审批" flowable:assignee="${engineeringManagerId}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"engineeringManagerRemark","label":"工程部经理意见","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
+                    <bpmn:userTask id="@NODE_ENGINEERING@" name="工程部经理审批" flowable:assignee="@EXPR_ENGINEERING@" flowable:formKey="@FORM_KEY@" flowable:formFieldPermissions='@PERM_ENGINEERING@' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_003</bpmn:incoming>
                       <bpmn:outgoing>Flow_005</bpmn:outgoing>
                     </bpmn:userTask>
@@ -42,11 +42,11 @@ public class SamplePurchaseOrderFlowBpmn {
                       <bpmn:outgoing>Flow_006</bpmn:outgoing>
                       <bpmn:outgoing>Flow_007</bpmn:outgoing>
                     </bpmn:exclusiveGateway>
-                    <bpmn:userTask id="purchase_countersign" name="采购会签" flowable:assignee="${assignee}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"countersignRemark","label":"会签意见","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
+                    <bpmn:userTask id="@NODE_COUNTERSIGN@" name="采购会签" flowable:assignee="@EXPR_ASSIGNEE@" flowable:formKey="@FORM_KEY@" flowable:formFieldPermissions='@PERM_COUNTERSIGN@' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="true" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_006</bpmn:incoming>
                       <bpmn:outgoing>Flow_008</bpmn:outgoing>
-                      <bpmn:multiInstanceLoopCharacteristics isSequential="false" flowable:collection="${countersignUserList}" flowable:elementVariable="assignee">
-                        <bpmn:completionCondition xsi:type="bpmn:tFormalExpression"><![CDATA[${approved == false || nrOfCompletedInstances == nrOfInstances}]]></bpmn:completionCondition>
+                      <bpmn:multiInstanceLoopCharacteristics isSequential="false" flowable:collection="@EXPR_COUNTERSIGN_USER_LIST@" flowable:elementVariable="@VAR_ASSIGNEE@">
+                        <bpmn:completionCondition xsi:type="bpmn:tFormalExpression"><![CDATA[@COUNTERSIGN_COMPLETION@]]></bpmn:completionCondition>
                       </bpmn:multiInstanceLoopCharacteristics>
                     </bpmn:userTask>
                     <bpmn:exclusiveGateway id="Gateway_countersign_result" name="会签审批结果" default="Flow_009">
@@ -54,7 +54,7 @@ public class SamplePurchaseOrderFlowBpmn {
                       <bpmn:outgoing>Flow_009</bpmn:outgoing>
                       <bpmn:outgoing>Flow_010</bpmn:outgoing>
                     </bpmn:exclusiveGateway>
-                    <bpmn:userTask id="applicant_modify" name="申请人修改" flowable:assignee="${initiator}" flowable:formKey="sample_purchase_order_approval_form" flowable:formFieldPermissions='[{"field":"title","label":"采购主题","readable":true,"writable":true,"required":true},{"field":"supplierName","label":"供应商","readable":true,"writable":true,"required":true},{"field":"amountCent","label":"采购金额分","readable":true,"writable":true,"required":true},{"field":"purchaseItems","label":"采购明细","readable":true,"writable":true,"required":false},{"field":"needDate","label":"期望到货日期","readable":true,"writable":true,"required":false},{"field":"applicantModifyRemark","label":"申请人修改说明","readable":true,"writable":true,"required":false}]' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="false" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
+                    <bpmn:userTask id="@NODE_APPLICANT_MODIFY@" name="申请人修改" flowable:assignee="@EXPR_INITIATOR@" flowable:formKey="@FORM_KEY@" flowable:formFieldPermissions='@PERM_APPLICANT_MODIFY@' flowable:allowApprove="true" flowable:allowReject="true" flowable:allowDelegate="false" flowable:allowReturn="false" flowable:allowTerminate="false" flowable:requireComment="true">
                       <bpmn:incoming>Flow_004</bpmn:incoming>
                       <bpmn:incoming>Flow_007</bpmn:incoming>
                       <bpmn:incoming>Flow_010</bpmn:incoming>
@@ -71,39 +71,39 @@ public class SamplePurchaseOrderFlowBpmn {
                     <bpmn:endEvent id="EndEvent_rejected" name="申请人终止">
                       <bpmn:incoming>Flow_013</bpmn:incoming>
                     </bpmn:endEvent>
-                    <bpmn:sequenceFlow id="Flow_001" sourceRef="StartEvent_1" targetRef="dept_leader_approve" />
-                    <bpmn:sequenceFlow id="Flow_002" sourceRef="dept_leader_approve" targetRef="Gateway_dept_result" />
-                    <bpmn:sequenceFlow id="Flow_003" name="通过" sourceRef="Gateway_dept_result" targetRef="engineering_manager_approve" />
-                    <bpmn:sequenceFlow id="Flow_004" name="驳回修改" sourceRef="Gateway_dept_result" targetRef="applicant_modify">
-                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[${approvalResult == 'reject'}]]></bpmn:conditionExpression>
+                    <bpmn:sequenceFlow id="Flow_001" sourceRef="StartEvent_1" targetRef="@NODE_DEPT_LEADER@" />
+                    <bpmn:sequenceFlow id="Flow_002" sourceRef="@NODE_DEPT_LEADER@" targetRef="Gateway_dept_result" />
+                    <bpmn:sequenceFlow id="Flow_003" name="通过" sourceRef="Gateway_dept_result" targetRef="@NODE_ENGINEERING@" />
+                    <bpmn:sequenceFlow id="Flow_004" name="驳回修改" sourceRef="Gateway_dept_result" targetRef="@NODE_APPLICANT_MODIFY@">
+                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[@REJECT_CONDITION@]]></bpmn:conditionExpression>
                     </bpmn:sequenceFlow>
-                    <bpmn:sequenceFlow id="Flow_005" sourceRef="engineering_manager_approve" targetRef="Gateway_engineering_result" />
-                    <bpmn:sequenceFlow id="Flow_006" name="通过" sourceRef="Gateway_engineering_result" targetRef="purchase_countersign" />
-                    <bpmn:sequenceFlow id="Flow_007" name="驳回修改" sourceRef="Gateway_engineering_result" targetRef="applicant_modify">
-                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[${approvalResult == 'reject'}]]></bpmn:conditionExpression>
+                    <bpmn:sequenceFlow id="Flow_005" sourceRef="@NODE_ENGINEERING@" targetRef="Gateway_engineering_result" />
+                    <bpmn:sequenceFlow id="Flow_006" name="通过" sourceRef="Gateway_engineering_result" targetRef="@NODE_COUNTERSIGN@" />
+                    <bpmn:sequenceFlow id="Flow_007" name="驳回修改" sourceRef="Gateway_engineering_result" targetRef="@NODE_APPLICANT_MODIFY@">
+                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[@REJECT_CONDITION@]]></bpmn:conditionExpression>
                     </bpmn:sequenceFlow>
-                    <bpmn:sequenceFlow id="Flow_008" sourceRef="purchase_countersign" targetRef="Gateway_countersign_result" />
+                    <bpmn:sequenceFlow id="Flow_008" sourceRef="@NODE_COUNTERSIGN@" targetRef="Gateway_countersign_result" />
                     <bpmn:sequenceFlow id="Flow_009" name="通过" sourceRef="Gateway_countersign_result" targetRef="EndEvent_approved" />
-                    <bpmn:sequenceFlow id="Flow_010" name="驳回修改" sourceRef="Gateway_countersign_result" targetRef="applicant_modify">
-                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[${approvalResult == 'reject'}]]></bpmn:conditionExpression>
+                    <bpmn:sequenceFlow id="Flow_010" name="驳回修改" sourceRef="Gateway_countersign_result" targetRef="@NODE_APPLICANT_MODIFY@">
+                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[@REJECT_CONDITION@]]></bpmn:conditionExpression>
                     </bpmn:sequenceFlow>
-                    <bpmn:sequenceFlow id="Flow_011" sourceRef="applicant_modify" targetRef="Gateway_modify_result" />
-                    <bpmn:sequenceFlow id="Flow_012" name="重新提交" sourceRef="Gateway_modify_result" targetRef="dept_leader_approve" />
+                    <bpmn:sequenceFlow id="Flow_011" sourceRef="@NODE_APPLICANT_MODIFY@" targetRef="Gateway_modify_result" />
+                    <bpmn:sequenceFlow id="Flow_012" name="重新提交" sourceRef="Gateway_modify_result" targetRef="@NODE_DEPT_LEADER@" />
                     <bpmn:sequenceFlow id="Flow_013" name="终止申请" sourceRef="Gateway_modify_result" targetRef="EndEvent_rejected">
-                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[${approvalResult == 'reject'}]]></bpmn:conditionExpression>
+                      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[@REJECT_CONDITION@]]></bpmn:conditionExpression>
                     </bpmn:sequenceFlow>
                   </bpmn:process>
-                  <bpmndi:BPMNDiagram id="BPMNDiagram_sample_purchase_order_approval">
-                    <bpmndi:BPMNPlane id="BPMNPlane_sample_purchase_order_approval" bpmnElement="sample_purchase_order_approval">
+                  <bpmndi:BPMNDiagram id="BPMNDiagram_@MODEL_KEY@">
+                    <bpmndi:BPMNPlane id="BPMNPlane_@MODEL_KEY@" bpmnElement="@MODEL_KEY@">
                       <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1"><dc:Bounds x="80" y="192" width="36" height="36" /></bpmndi:BPMNShape>
-                      <bpmndi:BPMNShape id="dept_leader_approve_di" bpmnElement="dept_leader_approve"><dc:Bounds x="220" y="170" width="140" height="80" /></bpmndi:BPMNShape>
+                      <bpmndi:BPMNShape id="@NODE_DEPT_LEADER@_di" bpmnElement="@NODE_DEPT_LEADER@"><dc:Bounds x="220" y="170" width="140" height="80" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNShape id="Gateway_dept_result_di" bpmnElement="Gateway_dept_result" isMarkerVisible="true"><dc:Bounds x="420" y="185" width="50" height="50" /></bpmndi:BPMNShape>
-                      <bpmndi:BPMNShape id="engineering_manager_approve_di" bpmnElement="engineering_manager_approve"><dc:Bounds x="530" y="170" width="140" height="80" /></bpmndi:BPMNShape>
+                      <bpmndi:BPMNShape id="@NODE_ENGINEERING@_di" bpmnElement="@NODE_ENGINEERING@"><dc:Bounds x="530" y="170" width="140" height="80" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNShape id="Gateway_engineering_result_di" bpmnElement="Gateway_engineering_result" isMarkerVisible="true"><dc:Bounds x="730" y="185" width="50" height="50" /></bpmndi:BPMNShape>
-                      <bpmndi:BPMNShape id="purchase_countersign_di" bpmnElement="purchase_countersign"><dc:Bounds x="840" y="170" width="140" height="80" /></bpmndi:BPMNShape>
+                      <bpmndi:BPMNShape id="@NODE_COUNTERSIGN@_di" bpmnElement="@NODE_COUNTERSIGN@"><dc:Bounds x="840" y="170" width="140" height="80" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNShape id="Gateway_countersign_result_di" bpmnElement="Gateway_countersign_result" isMarkerVisible="true"><dc:Bounds x="1040" y="185" width="50" height="50" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNShape id="EndEvent_approved_di" bpmnElement="EndEvent_approved"><dc:Bounds x="1160" y="192" width="36" height="36" /></bpmndi:BPMNShape>
-                      <bpmndi:BPMNShape id="applicant_modify_di" bpmnElement="applicant_modify"><dc:Bounds x="540" y="330" width="140" height="80" /></bpmndi:BPMNShape>
+                      <bpmndi:BPMNShape id="@NODE_APPLICANT_MODIFY@_di" bpmnElement="@NODE_APPLICANT_MODIFY@"><dc:Bounds x="540" y="330" width="140" height="80" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNShape id="Gateway_modify_result_di" bpmnElement="Gateway_modify_result" isMarkerVisible="true"><dc:Bounds x="740" y="345" width="50" height="50" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNShape id="EndEvent_rejected_di" bpmnElement="EndEvent_rejected"><dc:Bounds x="880" y="352" width="36" height="36" /></bpmndi:BPMNShape>
                       <bpmndi:BPMNEdge id="Flow_001_di" bpmnElement="Flow_001"><di:waypoint x="116" y="210" /><di:waypoint x="220" y="210" /></bpmndi:BPMNEdge>
@@ -123,5 +123,36 @@ public class SamplePurchaseOrderFlowBpmn {
                   </bpmndi:BPMNDiagram>
                 </bpmn:definitions>
                 """;
+        return xml
+                .replace("@MODEL_KEY@", SamplePurchaseOrderFlowDefinition.MODEL_KEY)
+                .replace("@MODEL_NAME@", SamplePurchaseOrderFlowDefinition.MODEL_NAME)
+                .replace("@VAR_INITIATOR@", SamplePurchaseOrderFlowDefinition.VAR_INITIATOR)
+                .replace("@FORM_KEY@", SamplePurchaseOrderFlowDefinition.FORM_KEY)
+                .replace("@NODE_DEPT_LEADER@", SamplePurchaseOrderFlowDefinition.NODE_DEPT_LEADER_APPROVE)
+                .replace("@NODE_ENGINEERING@", SamplePurchaseOrderFlowDefinition.NODE_ENGINEERING_MANAGER_APPROVE)
+                .replace("@NODE_COUNTERSIGN@", SamplePurchaseOrderFlowDefinition.NODE_PURCHASE_COUNTERSIGN)
+                .replace("@NODE_APPLICANT_MODIFY@", SamplePurchaseOrderFlowDefinition.NODE_APPLICANT_MODIFY)
+                .replace("@VAR_ASSIGNEE@", SamplePurchaseOrderFlowDefinition.VAR_ASSIGNEE)
+                .replace("@EXPR_DEPT_LEADER@",
+                        SamplePurchaseOrderFlowDefinition.variableExpression(SamplePurchaseOrderFlowDefinition.VAR_DEPT_LEADER_ID))
+                .replace("@EXPR_ENGINEERING@",
+                        SamplePurchaseOrderFlowDefinition.variableExpression(SamplePurchaseOrderFlowDefinition.VAR_ENGINEERING_MANAGER_ID))
+                .replace("@EXPR_ASSIGNEE@",
+                        SamplePurchaseOrderFlowDefinition.variableExpression(SamplePurchaseOrderFlowDefinition.VAR_ASSIGNEE))
+                .replace("@EXPR_COUNTERSIGN_USER_LIST@",
+                        SamplePurchaseOrderFlowDefinition.variableExpression(SamplePurchaseOrderFlowDefinition.VAR_COUNTERSIGN_USER_LIST))
+                .replace("@EXPR_INITIATOR@",
+                        SamplePurchaseOrderFlowDefinition.variableExpression(SamplePurchaseOrderFlowDefinition.VAR_INITIATOR))
+                .replace("@COUNTERSIGN_COMPLETION@",
+                        SamplePurchaseOrderFlowDefinition.countersignCompletionConditionExpression())
+                .replace("@REJECT_CONDITION@", SamplePurchaseOrderFlowDefinition.rejectConditionExpression())
+                .replace("@PERM_DEPT_LEADER@",
+                        SamplePurchaseOrderFlowDefinition.nodeFieldPermissionsJson(SamplePurchaseOrderFlowDefinition.NODE_DEPT_LEADER_APPROVE))
+                .replace("@PERM_ENGINEERING@",
+                        SamplePurchaseOrderFlowDefinition.nodeFieldPermissionsJson(SamplePurchaseOrderFlowDefinition.NODE_ENGINEERING_MANAGER_APPROVE))
+                .replace("@PERM_COUNTERSIGN@",
+                        SamplePurchaseOrderFlowDefinition.nodeFieldPermissionsJson(SamplePurchaseOrderFlowDefinition.NODE_PURCHASE_COUNTERSIGN))
+                .replace("@PERM_APPLICANT_MODIFY@",
+                        SamplePurchaseOrderFlowDefinition.nodeFieldPermissionsJson(SamplePurchaseOrderFlowDefinition.NODE_APPLICANT_MODIFY));
     }
 }

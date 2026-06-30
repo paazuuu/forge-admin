@@ -39,7 +39,7 @@
         {{ getRowDisplayTitle(row) }}
       </template>
       <template #meta="{ row }">
-        <span><span class="task-meta-label">当前任务</span> <span class="task-meta-value">{{ row.taskName || '已结束' }}</span></span>
+        <span><span class="task-meta-label">当前任务</span> <span class="task-meta-value">{{ getTaskDisplayName(row, '已结束') }}</span></span>
         <span><span class="task-meta-label">处理人</span> <span class="task-meta-value">{{ row.assigneeName || '-' }}</span></span>
         <span><span class="task-meta-label">发起时间</span> <span class="task-meta-value">{{ row.createTime || '-' }}</span></span>
       </template>
@@ -56,7 +56,7 @@
       v-model:show="showDrawer"
       :busy="withdrawLoading"
       :title="currentTask ? getRowDisplayTitle(currentTask) : '流程详情'"
-      :subtitle="currentTask?.taskName ? `当前任务：${currentTask.taskName}` : '流程已结束'"
+      :subtitle="getTaskDisplayName(currentTask, '') ? `当前任务：${getTaskDisplayName(currentTask)}` : '流程已结束'"
       :status-text="getStatusText(currentTask?.status)"
       :status-class="getStatusTagClass(currentTask?.status)"
       :status-icon="getStatusIcon(currentTask?.status)"
@@ -73,7 +73,7 @@
           <div class="approval-field-grid">
             <div class="approval-field">
               <span class="approval-label">当前任务</span>
-              <span class="approval-value">{{ currentTask.taskName || '已结束' }}</span>
+              <span class="approval-value">{{ getTaskDisplayName(currentTask, '已结束') }}</span>
             </div>
             <div class="approval-field">
               <span class="approval-label">流程状态</span>
@@ -139,7 +139,7 @@ import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
-import { getRowDisplayTitle } from './utils/processDisplay'
+import { getRowDisplayTitle, getTaskDisplayName } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const { dict, getLabel } = useDict('flow_started_status')

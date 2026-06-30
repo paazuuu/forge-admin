@@ -26,7 +26,7 @@ export default defineConfig(({ mode, command }) => {
             src: 'src/views',
             path: '',
             // 排除不需要生成路由的文件
-            exclude: ['**/components/**', '**/api/**'],
+            exclude: ['**/components/**', '**/api/**', '**/workspace/**'],
           },
         ],
         dts: false,
@@ -118,6 +118,13 @@ export default defineConfig(({ mode, command }) => {
       proxy: {
         // 流程服务代理 - 必须在主代理之前，匹配更具体的路径
         [`${VITE_REQUEST_PREFIX}/api/flow`]: {
+          target: VITE_FLOW_PROXY_TARGET || 'http://localhost:8081',
+          changeOrigin: true,
+          secure: false,
+          rewrite: path => path.replace(/^\/[^/]+/, ''),
+        },
+        // 工作台接口由流程服务提供，需在主代理之前匹配
+        [`${VITE_REQUEST_PREFIX}/api/workspace`]: {
           target: VITE_FLOW_PROXY_TARGET || 'http://localhost:8081',
           changeOrigin: true,
           secure: false,

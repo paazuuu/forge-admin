@@ -8,9 +8,11 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 代码业务表单 Provider 注册表。
@@ -68,6 +70,83 @@ public class BusinessCodeFormProviderRegistry {
             }
         });
         return result;
+    }
+
+    public List<Map<String, Object>> listProviderCatalog(String objectCode) {
+        return listProviderCatalog(objectCode, false);
+    }
+
+    public List<Map<String, Object>> listProviderCatalog(String objectCode, boolean includeInternal) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        providers.orderedStream().forEach(provider -> {
+            List<Map<String, Object>> assets = normalizeProviderAssets(provider, provider.formAssets(objectCode), objectCode, includeInternal);
+            if (assets.isEmpty() && StringUtils.isNotBlank(objectCode)) {
+                assets = normalizeProviderAssets(provider, provider.formAssets(null), objectCode, includeInternal);
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("providerKey", provider.providerKey());
+            item.put("providerName", provider.providerName());
+            item.put("assets", assets);
+            item.put("assetCount", assets.size());
+            if (!assets.isEmpty()) {
+                Map<String, Object> firstAsset = assets.get(0);
+                item.put("defaultFormKey", firstAsset.get("formKey"));
+                item.put("defaultFormName", firstAsset.get("formName"));
+                item.put("defaultFormUrl", firstAsset.get("formUrl"));
+                item.put("fieldCount", firstAsset.get("fieldCount"));
+                item.put("fieldPreview", firstAsset.get("fieldPreview"));
+            } else {
+                item.put("fieldCount", 0);
+                item.put("fieldPreview", List.of());
+            }
+            result.add(item);
+        });
+        return result;
+    }
+
+    private List<Map<String, Object>> normalizeProviderAssets(BusinessCodeFormProvider provider,
+                                                              List<Map<String, Object>> sourceAssets,
+                                                              String objectCode,
+                                                              boolean includeInternal) {
+        if (sourceAssets == null || sourceAssets.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Map<String, Object> source : sourceAssets) {
+            if (source == null) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>(source);
+            item.putIfAbsent("type", "BUSINESS_CODE_FORM");
+            item.putIfAbsent("formMode", "BUSINESS_CODE_FORM");
+            item.putIfAbsent("objectCode", objectCode);
+            item.putIfAbsent("providerKey", provider.providerKey());
+            item.putIfAbsent("providerName", provider.providerName());
+            item.putIfAbsent("supportsSave", true);
+            item.putIfAbsent("sourceType", "codeProvider");
+            List<Map<String, Object>> fields = normalizePublicFields(
+                    item.get("fields") == null ? item.get("fieldCatalog") : item.get("fields"), includeInternal);
+            item.put("fields", fields);
+            item.put("fieldCatalog", fields);
+            item.put("fieldCount", fields.size());
+            item.put("fieldPreview", buildFieldPreview(fields));
+            String key = assetKey(item);
+            if (StringUtils.isNotBlank(key) && !seen.add(key)) {
+                continue;
+            }
+            result.add(item);
+        }
+        return result;
+    }
+
+    private String assetKey(Map<String, Object> asset) {
+        String formKey = StringUtils.trimToNull(asset.get("formKey") == null ? null : String.valueOf(asset.get("formKey")));
+        if (StringUtils.isNotBlank(formKey)) {
+            return "form:" + formKey;
+        }
+        String providerKey = StringUtils.trimToNull(asset.get("providerKey") == null ? null : String.valueOf(asset.get("providerKey")));
+        return StringUtils.isBlank(providerKey) ? null : "provider:" + providerKey;
     }
 
     private List<Map<String, Object>> normalizePublicFields(Object source, boolean includeInternal) {

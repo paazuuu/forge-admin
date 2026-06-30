@@ -291,3 +291,30 @@
   10. `/workspace/todo` → 待办列表（AiForm 渲染） → 字段权限三态生效
   11. （C1-C6 完成后）切换 feature flag `flow.form.engine=formCreate` → 重新打开待办 → form-create 渲染 → 切回 ai → 视觉一致
   12. （C7 完成后）feature flag 配置项已移除；form-create 目录不存在；测试环境跑回滚演练 `FormSchemaRebuildFromFormJsonJob` → 重建结果等价
+
+## 7. 本轮增量验证记录（2026-06-29 /apply A1-A3）
+
+| 范围 | 命令 | 结果 | 备注 |
+|------|------|------|------|
+| 后端 flow 基线 | `mvn -pl forge-framework/forge-plugin-parent/forge-plugin-flow test -DskipITs` | 通过但测试跳过 | Maven `BUILD SUCCESS`，输出 `Tests are skipped`。 |
+| 前端基线 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm test --run` | 失败 | 项目脚本不接受额外 `--run`，改跑 `pnpm test`。 |
+| 前端单测 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm test` | 通过 | 40 个测试文件、360 个用例通过；存在既有 Vue warning。 |
+| 后端编译 | `JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -pl forge-flow/forge-flow-server -am compile -DskipTests` | 通过 | 覆盖新增 `WorkspaceController`、`WorkspaceService` 和 Mapper XML。 |
+| 前端构建 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build` | 通过 | `✓ built in 1m 48s`；存在既有 chunk/CSS warning。 |
+| Diff 检查 | `git diff --check` | 通过 | 无空白错误。 |
+| 前端本地服务 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm exec vite --host 127.0.0.1 --port 5174 --strictPort` | 已启动 | `http://127.0.0.1:5174/`，PID `6596`，保留给用户验证。 |
+
+## 8. 本轮增量验证记录（2026-06-29 用户纠偏修复）
+
+| 范围 | 命令 | 结果 | 备注 |
+|------|------|------|------|
+| 前端定向 ESLint | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm exec eslint src/views/flow/todo.vue src/views/flow/done.vue src/views/flow/design.vue src/views/app-center/components/designer/BusinessFlowBindingPanel.vue src/views/app-center/components/designer/BusinessFlowAppConfigPanel.vue 'src/views/app-center/object-designer.[objectCode].vue' src/components/business-top-nav/BusinessTopNav.vue src/components/ai-form/adapters/formCreate.js` | 通过 | 覆盖弹窗流程设计器、AiForm 动态表单、隐藏字段面板、隐藏工作台入口等前端改动。 |
+| 后端 generator 编译 | `JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home PATH=/opt/homebrew/Cellar/openjdk@17/17.0.13/libexec/openjdk.jdk/Contents/Home/bin:$PATH mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests` | 通过 | 覆盖 `BusinessFlowService` 全字段变量注入和 `BusinessFlowAppConfigService` 文案调整。 |
+| 前端构建 | `source ~/.nvm/nvm.sh && nvm use v20.19.0 && pnpm build` | 通过 | `✓ built in 1m 35s`；存在既有 chunk/CSS warning，不阻断。 |
+| Diff 检查 | `git diff --check` | 通过 | 无空白错误。 |
+| 3000 workspace 代理 | `curl -i -s http://127.0.0.1:3000/dev-api/api/workspace/todo-count | head -n 40` | 通过 | 返回 `HTTP/1.1 200 OK` + `{"code":401,"message":"未提供登录凭证"...}`，证明已代理到后端鉴权链路，不再是前端 404。 |
+
+**跳过/待补充**：
+
+- 未执行浏览器点击验证；需要登录态和后端 dev 服务配合验证应用中心弹窗内节点配置保存回读。
+- `/dev-api/api/workspace/todo-count` 已完成无登录态代理验证；带登录 token 的业务数值验证待浏览器登录后补充。

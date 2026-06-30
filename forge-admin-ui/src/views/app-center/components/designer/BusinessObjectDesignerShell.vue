@@ -249,7 +249,6 @@ const navItems = [
   { key: 'advanced', label: '高级配置', icon: SettingsOutline },
 ]
 
-const codeAppNavMode = computed(() => props.navPanels?.includes('form') && props.navPanels?.includes('flow-app'))
 const filteredNavItems = computed(() => {
   const whitelist = props.navPanels || []
   return navItems.filter((item) => {
@@ -260,14 +259,6 @@ const filteredNavItems = computed(() => {
     if (item.key === 'advanced')
       return props.showAdvanced
     return true
-  }).map((item) => {
-    if (item.key === 'form' && codeAppNavMode.value) {
-      return {
-        ...item,
-        label: '表单字段',
-      }
-    }
-    return item
   })
 })
 const moreOptions = computed(() => {

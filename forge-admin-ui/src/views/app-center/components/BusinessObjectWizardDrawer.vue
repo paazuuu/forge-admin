@@ -124,9 +124,6 @@
               <n-form-item-gi label="对象类型" required>
                 <DictSelect v-model:value="form.objectType" dict-type="ai_business_object_type" />
               </n-form-item-gi>
-              <n-form-item-gi label="显示字段">
-                <n-input v-model:value="form.displayField" placeholder="例如：customerName" />
-              </n-form-item-gi>
               <n-form-item-gi label="图标">
                 <IconSelector v-model="form.icon" />
               </n-form-item-gi>
@@ -352,7 +349,6 @@ async function saveObject() {
       objectCode,
       modelCode: buildModelCode(suiteCode, objectCode),
       objectType: form.objectType,
-      displayField: trimToNull(form.displayField),
       icon: trimToNull(form.icon),
       description: trimToNull(form.description),
       status: form.status,
@@ -636,7 +632,6 @@ function defaultForm() {
     objectName: '',
     objectCode: '',
     objectType: 'MASTER',
-    displayField: '',
     icon: '',
     description: '',
     status: 1,

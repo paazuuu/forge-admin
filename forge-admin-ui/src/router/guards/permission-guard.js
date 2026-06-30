@@ -13,6 +13,10 @@ const AUTH_ROUTE_ALLOWLIST = new Set([
   '/403',
 ])
 
+const AUTH_ROUTE_PREFIX_ALLOWLIST = [
+  '/workspace',
+]
+
 const PASSWORD_CHANGE_ROUTE = '/profile'
 
 function normalizeRoutePath(path) {
@@ -51,8 +55,11 @@ function canAccessRoute(to, permissionStore) {
   const targetPath = normalizeRoutePath(to.path)
   if (!targetPath)
     return true
-  if (WHITE_LIST.includes(targetPath) || AUTH_ROUTE_ALLOWLIST.has(targetPath))
+  if (WHITE_LIST.includes(targetPath)
+    || AUTH_ROUTE_ALLOWLIST.has(targetPath)
+    || AUTH_ROUTE_PREFIX_ALLOWLIST.some(prefix => targetPath === prefix || targetPath.startsWith(`${prefix}/`))) {
     return true
+  }
   return (permissionStore.accessRoutes || []).some(route => isSameRoutePath(route.path, targetPath))
 }
 

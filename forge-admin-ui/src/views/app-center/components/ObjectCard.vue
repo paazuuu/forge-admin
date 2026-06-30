@@ -53,12 +53,16 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['open', 'design', 'stats', 'toggle', 'delete'])
+const emit = defineEmits(['open', 'edit', 'design', 'stats', 'toggle', 'delete'])
 
 const codeAppObject = computed(() => isCodeAppMeta(props.object))
 const primaryDesignPanel = computed(() => codeAppObject.value ? 'flow-app' : 'form')
 const primaryDesignText = computed(() => codeAppObject.value ? '业务流程配置' : '设计对象')
 const moreOptions = computed(() => [
+  {
+    label: '编辑业务单元',
+    key: 'edit',
+  },
   {
     label: '业务流程配置',
     key: 'flow-app',
@@ -86,6 +90,10 @@ const moreOptions = computed(() => [
 ])
 
 function handleMoreSelect(key) {
+  if (key === 'edit') {
+    emit('edit', props.object)
+    return
+  }
   if (key === 'flow-app') {
     emit('design', props.object, key)
     return
