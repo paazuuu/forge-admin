@@ -1139,7 +1139,7 @@ public class BusinessObjectPublishService {
         Map<String, Object> adminMenu = mapValue(options.get("adminMenu"));
         Object menuResourceId = firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId"));
         String mountTarget = StringUtils.defaultIfBlank(text(options.get("mountTarget")), "ADMIN");
-        boolean syncEnabled = !isFalse(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")));
+        boolean syncEnabled = isTrue(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")));
         if ("ADMIN".equalsIgnoreCase(mountTarget) && syncEnabled
                 && (menuResourceId == null || StringUtils.isBlank(String.valueOf(menuResourceId)))) {
             add(items, "APP_MENU_MISSING", "APP_ENTRY", BusinessPublishCheckLevel.WARN,
@@ -1843,6 +1843,10 @@ public class BusinessObjectPublishService {
 
     private boolean isFalse(Object value) {
         return Boolean.FALSE.equals(value) || "false".equalsIgnoreCase(text(value)) || "0".equals(text(value));
+    }
+
+    private boolean isTrue(Object value) {
+        return Boolean.TRUE.equals(value) || "true".equalsIgnoreCase(text(value)) || "1".equals(text(value));
     }
 
     private boolean hasPermission(String permission) {

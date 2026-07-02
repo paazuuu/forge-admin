@@ -4,17 +4,24 @@
 
     <!-- 分页查询流程模型（支持父级分类查询子级数据） -->
     <select id="selectModelPage" resultType="com.mdframe.forge.starter.flow.entity.FlowModel">
-        SELECT m.* FROM sys_flow_model m
+        SELECT m.*, c.category_name AS category_name
+        FROM sys_flow_model m
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         <where>
             m.del_flag = '0'
             <if test="modelName != null and modelName != ''">
                 AND m.model_name LIKE CONCAT('%', #{modelName}, '%')
             </if>
             <if test="category != null and category != ''">
-                AND m.category IN (
-                    SELECT c.id FROM sys_flow_category c
-                    WHERE c.id = #{category}
-                       OR c.ancestors LIKE CONCAT('%', #{category}, '/%')
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
                 )
             </if>
             <if test="status != null">

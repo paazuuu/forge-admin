@@ -1246,8 +1246,6 @@ async function saveLayout() {
         modelSchema: cloneSchema(nextModelSchema || {}),
         pageSchema: cloneSchema(schema || {}),
         formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
-        syncDdl: true,
-        confirmSyncDdl: true,
       })
     }
     await saveBusinessObjectFormLayout(props.objectId, {
@@ -1263,7 +1261,7 @@ async function saveLayout() {
     if (formSchema)
       emit('fieldsUpdated', normalizedFields, { persisted: true })
     emit('dirtyChange', false)
-    message.success(createdFields.length ? `表单布局已保存，已自动创建 ${createdFields.length} 个字段并同步表结构` : '表单布局已保存，表结构已检查同步')
+    message.success(createdFields.length ? `表单布局已保存，已自动创建 ${createdFields.length} 个字段` : '表单布局已保存')
   }
   finally {
     saving.value = false
@@ -1271,25 +1269,27 @@ async function saveLayout() {
 }
 
 function syncDesignerDraft() {
-  const { formSchema, createdFields, normalizedFields, schema } = buildCurrentDesignerDraft()
+  const { formSchema, createdFields, normalizedFields, nextModelSchema, schema } = buildCurrentDesignerDraft()
   const baseline = buildDesignerDraftFromFormSchema(localFormDesignerSchema.value)
   const formChanged = formSchema && !isSameSchema(formSchema, baseline.formSchema)
   const fieldsChanged = !isSameSchema(normalizedFields, baseline.normalizedFields)
   const pageChanged = !isSameSchema(schema, baseline.schema)
+  const fieldsCreated = createdFields.length > 0
   if (formChanged)
     localFormDesignerSchema.value = cloneSchema(formSchema)
   if (pageChanged)
     assignLocalSchema(schema, { markDirty: false })
-  if (fieldsChanged)
+  if (fieldsChanged || fieldsCreated)
     emit('fieldsUpdated', normalizedFields, { persisted: false })
-  if (formChanged || fieldsChanged || pageChanged)
+  if (formChanged || fieldsChanged || pageChanged || fieldsCreated)
     emit('dirtyChange', true)
   return {
     pageSchema: cloneSchema(schema),
     formDesignerSchema: cloneSchema(formSchema || localFormDesignerSchema.value || {}),
+    modelSchema: cloneSchema(nextModelSchema || {}),
     fields: cloneSchema(normalizedFields),
     createdFields: cloneSchema(createdFields),
-    dirty: formChanged || fieldsChanged || pageChanged,
+    dirty: formChanged || fieldsChanged || pageChanged || fieldsCreated,
   }
 }
 

@@ -246,7 +246,7 @@
               </label>
               <label>
                 <NSwitch
-                  :value="!!tableZone?.props?.showImport"
+                  :value="tableZone?.props?.showImport !== false"
                   size="small"
                   @update:value="updateTableProp('showImport', $event)"
                 />
@@ -254,7 +254,7 @@
               </label>
               <label>
                 <NSwitch
-                  :value="!!tableZone?.props?.showExport"
+                  :value="tableZone?.props?.showExport !== false"
                   size="small"
                   @update:value="updateTableProp('showExport', $event)"
                 />
@@ -1240,6 +1240,7 @@ const crudPreviewBlock = computed(() => {
   ])
   const tableProps = tableZone.value?.props || {}
   const searchProps = searchZone.value?.props || {}
+  const formOpenMode = resolveTableFormOpenMode(tableProps)
   return {
     id: 'structured_crud_preview',
     blockType: 'AiCrudPage',
@@ -1260,9 +1261,9 @@ const crudPreviewBlock = computed(() => {
       listTotalField: tableProps.listTotalField || 'total',
       showSearch: searchZone.value?.enabled !== false,
       showPagination: tableProps.showPagination !== false,
-      showImport: tableProps.showImport === true,
-      showExport: tableProps.showExport === true,
-      enableCustomQuery: tableProps.enableCustomQuery === true,
+      showImport: tableProps.showImport !== false,
+      showExport: tableProps.showExport !== false,
+      enableCustomQuery: tableProps.enableCustomQuery !== false,
       hideBatchDelete: tableProps.hideBatchDelete === true,
       hideSelection: tableProps.hideSelection === true,
       showRenderModeSwitch: tableProps.showRenderModeSwitch !== false,
@@ -1276,9 +1277,9 @@ const crudPreviewBlock = computed(() => {
       searchLabelWidth: tableProps.searchLabelWidth || 'auto',
       searchMaxVisibleFields: tableProps.searchMaxVisibleFields || 3,
       searchEnableCollapse: tableProps.searchEnableCollapse !== false,
-      formOpenMode: tableProps.formOpenMode || tableProps.modalType || 'modal',
+      formOpenMode,
       tabWorkspace: tableProps.tabWorkspace || {},
-      modalType: tableProps.modalType || 'modal',
+      modalType: resolveTableModalType(formOpenMode, tableProps),
       drawerPlacement: tableProps.drawerPlacement || 'right',
       modalWidth: tableProps.modalWidth || '800px',
       detailModalWidth: tableProps.detailModalWidth || 'min(1080px, 92vw)',
@@ -1430,6 +1431,22 @@ function normalizeFormOpenModePatch(value) {
     formOpenMode,
     modalType: ['modal', 'drawer'].includes(formOpenMode) ? formOpenMode : 'modal',
   }
+}
+
+function resolveTableFormOpenMode(tableProps = {}) {
+  const value = tableProps.formOpenMode || tableProps.modalType || 'modal'
+  const mode = String(value || '').trim()
+  if (mode === 'tabWorkspace' || mode.toLowerCase() === 'tabworkspace')
+    return 'tabWorkspace'
+  const normalized = mode.toLowerCase()
+  return ['modal', 'drawer', 'flat'].includes(normalized) ? normalized : 'modal'
+}
+
+function resolveTableModalType(formOpenMode, tableProps = {}) {
+  if (['modal', 'drawer'].includes(formOpenMode))
+    return formOpenMode
+  const normalized = String(tableProps.modalType || '').trim().toLowerCase()
+  return ['modal', 'drawer'].includes(normalized) ? normalized : 'modal'
 }
 
 function updateTableFormOpenMode(value) {

@@ -237,8 +237,9 @@ export function createForgeFieldTemplateComponent(template = {}, schema = {}) {
   const componentKey = template.componentKey || 'input'
   const label = template.label || '字段'
   const fieldCode = reserveTemplateFieldCode(componentKey, label, schema)
+  const componentId = reserveTemplateComponentId(`cmp_${fieldCode}`, schema)
   return {
-    id: `cmp_${fieldCode}`,
+    id: componentId,
     componentKey,
     label,
     fieldBinding: {
@@ -363,6 +364,19 @@ function reserveTemplateFieldCode(componentKey = '', label = '', schema = {}) {
   return `${base}${Date.now().toString(36)}`
 }
 
+function reserveTemplateComponentId(baseId = '', schema = {}) {
+  const usedIds = collectSchemaComponentIds(schema)
+  const base = String(baseId || 'cmp_field').trim() || 'cmp_field'
+  if (!usedIds.has(base))
+    return base
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${base}_${index}`
+    if (!usedIds.has(candidate))
+      return candidate
+  }
+  return `${base}_${Date.now().toString(36)}`
+}
+
 function buildTemplateFieldCodeBase(componentKey = '', label = '') {
   const generated = generateFieldCode(label)
   if (generated && !isGenericDesignerFieldCode(generated))
@@ -395,6 +409,26 @@ function collectSchemaFieldCodes(schema = {}) {
   return codes
 }
 
+function collectSchemaComponentIds(schema = {}) {
+  const ids = new Set()
+  const walk = (components = []) => {
+    ;(Array.isArray(components) ? components : []).forEach((component) => {
+      if (component?.id)
+        ids.add(String(component.id))
+      if (Array.isArray(component?.children))
+        walk(component.children)
+    })
+  }
+  walk(schema?.components || [])
+  ;(Array.isArray(schema?.settings?.formAssets) ? schema.settings.formAssets : []).forEach((asset) => {
+    walk(asset?.schema?.components || asset?.components || [])
+  })
+  ;(Array.isArray(schema?.forms) ? schema.forms : []).forEach((form) => {
+    walk(form?.schema?.components || form?.components || [])
+  })
+  return ids
+}
+
 function isGenericDesignerFieldCode(value = '') {
   const text = String(value || '').trim()
   if (!text)
@@ -407,7 +441,7 @@ function isGenericDesignerFieldCode(value = '') {
 function buildTemplatePlaceholder(componentKey, label) {
   if (['select', 'dictSelect', 'radio', 'radioButton', 'checkbox', 'transfer', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'userSelect', 'orgTreeSelect', 'regionTreeSelect', 'treeSelect', 'customSelect', 'color'].includes(componentKey))
     return `请选择${label}`
-  return `请输入${label}`
+  return `请填写${label}`
 }
 
 function clampGridColumns(value, fallback = 2) {

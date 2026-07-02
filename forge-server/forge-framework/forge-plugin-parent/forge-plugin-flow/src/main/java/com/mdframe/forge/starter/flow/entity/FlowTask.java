@@ -66,6 +66,18 @@ public class FlowTask {
     private String businessType;
 
     /**
+     * 流程分类ID或编码（来自流程模型，仅用于展示）
+     */
+    @TableField(exist = false)
+    private String category;
+
+    /**
+     * 流程分类名称（来自流程分类，仅用于展示）
+     */
+    @TableField(exist = false)
+    private String categoryName;
+
+    /**
      * 流程名称（来自流程模型，仅用于展示）
      */
     @TableField(exist = false)

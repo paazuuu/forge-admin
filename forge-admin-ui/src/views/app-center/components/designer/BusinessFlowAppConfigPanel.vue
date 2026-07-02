@@ -89,6 +89,7 @@
               @saved="handleDocumentSaved"
               @configure-flow="activeSection = 'flow'"
               @dirty-change="handleDirtyChange"
+              @update-field-generation="handleFieldGenerationUpdate"
             />
           </section>
 
@@ -173,7 +174,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['dirtyChange', 'saved', 'openTrigger', 'openPublish'])
+const emit = defineEmits(['dirtyChange', 'saved', 'openTrigger', 'openPublish', 'updateFieldGeneration'])
 
 const message = useMessage()
 const rootRef = ref(null)
@@ -332,7 +333,10 @@ const activeStages = computed(() => {
       index: 2,
       title: '编号生成',
       description: documentConfig.value?.options?.documentNoField ? '定义单据编号规则' : '选择编号字段和规则',
-      done: !!documentConfig.value?.options?.documentNoField && !!documentConfig.value?.noRuleTemplate,
+      done: !!documentConfig.value?.options?.documentNoField
+        && !!(documentConfig.value?.options?.codeRuleCode
+          || documentConfig.value?.options?.documentNoRuleName
+          || documentConfig.value?.noRuleTemplate),
       active: isActiveStage('number-rule'),
       section: 'document',
     },
@@ -515,6 +519,11 @@ function handleFlowSaved(config) {
 
 function handleDirtyChange(value) {
   emit('dirtyChange', value)
+}
+
+function handleFieldGenerationUpdate(payload) {
+  emit('updateFieldGeneration', payload)
+  emit('dirtyChange', true)
 }
 
 function buildCodeAppMetadataPayload(incomingMetadata = null) {

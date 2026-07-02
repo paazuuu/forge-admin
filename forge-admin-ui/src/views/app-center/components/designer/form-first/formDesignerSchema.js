@@ -394,7 +394,7 @@ export function createDefaultFormDesignerSchema(options = {}) {
       labelWidth: 'auto',
       size: 'medium',
       modalType: options.modalType || 'modal',
-      formOpenMode: options.formOpenMode || options.modalType || 'modal',
+      formOpenMode: normalizeFormOpenMode(options.formOpenMode || options.modalType),
       showFeedback: true,
       gridColumns,
       rowGap: 16,
@@ -409,7 +409,7 @@ export function createDefaultFormDesignerSchema(options = {}) {
 export function normalizeFormDesignerSchema(source = {}) {
   const schema = isPlainObject(source) ? cloneValue(source) : {}
   const components = Array.isArray(schema.components) ? schema.components : []
-  const usedIds = collectReservedComponentIds(components)
+  const usedIds = new Set()
   return {
     schemaVersion: schema.schemaVersion || FORM_DESIGNER_SCHEMA_VERSION,
     formKey: schema.formKey || buildFormKey(schema.objectCode),
@@ -944,8 +944,13 @@ function collectReservedComponentIds(components = [], ids = new Set()) {
 }
 
 function resolveNormalizedComponentId(sourceId, componentKey, fieldBinding, fieldComponent, index, usedIds = new Set()) {
-  if (sourceId && !isTemporaryDesignerRef(sourceId) && !isGenericDesignerComponentId(sourceId, componentKey))
-    return sourceId
+  if (sourceId && !isTemporaryDesignerRef(sourceId) && !isGenericDesignerComponentId(sourceId, componentKey)) {
+    if (!usedIds.has(sourceId)) {
+      usedIds.add(sourceId)
+      return sourceId
+    }
+    return reserveComponentId(sourceId, usedIds)
+  }
   const base = fieldComponent
     ? `cmp_${fieldBinding?.fieldCode || index}`
     : `cmp_${componentKey || 'layout'}_${index}`
@@ -1088,9 +1093,11 @@ function normalizeFormSize(value) {
 }
 
 function normalizeFormOpenMode(value) {
-  if (value === 'tabWorkspace')
+  const mode = String(value || '').trim()
+  if (mode === 'tabWorkspace' || mode.toLowerCase() === 'tabworkspace')
     return 'tabWorkspace'
-  return ['modal', 'drawer', 'flat'].includes(value) ? value : 'modal'
+  const normalized = mode.toLowerCase()
+  return ['modal', 'drawer', 'flat'].includes(normalized) ? normalized : 'modal'
 }
 
 function resolveNumber(value, fallback) {
@@ -1197,7 +1204,7 @@ function clampGridColumns(value, fallback = 2) {
 function buildPlaceholder(componentKey, label) {
   if (['select', 'radio', 'radioButton', 'checkbox', 'dictSelect', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'regionTreeSelect', 'orgTreeSelect', 'treeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference', 'customSelect', 'color'].includes(componentKey))
     return `请选择${label}`
-  return `请输入${label}`
+  return `请填写${label}`
 }
 
 function buildRequiredMessage(componentKey, label) {

@@ -331,19 +331,19 @@
           :edit-y-gap="block.props?.editYGap ?? 8"
           :modal-width="block.props?.modalWidth || '800px'"
           :detail-modal-width="block.props?.detailModalWidth || 'min(1080px, 92vw)'"
-          :form-open-mode="block.props?.formOpenMode || block.props?.modalType || 'modal'"
+          :form-open-mode="resolveEffectiveFormOpenMode(block.props || {}, {})"
           :tab-workspace="block.props?.tabWorkspace || {}"
-          :modal-type="block.props?.modalType || 'modal'"
+          :modal-type="resolveEffectiveModalType(block.props || {}, {})"
           :drawer-placement="block.props?.drawerPlacement || 'right'"
           :hide-modal-footer="block.props?.hideModalFooter === true"
           :hide-default-detail-content="block.props?.hideDefaultDetailContent === true"
           :hide-toolbar="block.props?.hideToolbar === true"
           :hide-add="block.props?.hideAdd === true"
           :hide-batch-delete="block.props?.hideBatchDelete === true"
-          :show-import="block.props?.showImport === true"
-          :show-export="block.props?.showExport === true"
+          :show-import="block.props?.showImport !== false"
+          :show-export="block.props?.showExport !== false"
           :show-export-tasks="block.props?.showExportTasks !== false"
-          :enable-custom-query="block.props?.enableCustomQuery === true"
+          :enable-custom-query="block.props?.enableCustomQuery !== false"
           :add-button-text="block.props?.addButtonText || '新增'"
           :export-button-text="block.props?.exportButtonText || '导出'"
           :export-file-name="block.props?.exportFileName || ''"
@@ -1502,19 +1502,19 @@ const effectiveRuntimeCrudProps = computed(() => {
     editYGap: blockProps.editYGap ?? props.runtimeCrudProps.editYGap,
     modalWidth: blockProps.modalWidth || props.runtimeCrudProps.modalWidth,
     detailModalWidth: blockProps.detailModalWidth || props.runtimeCrudProps.detailModalWidth,
-    formOpenMode: blockProps.formOpenMode || props.runtimeCrudProps.formOpenMode || blockProps.modalType || props.runtimeCrudProps.modalType,
+    formOpenMode: resolveEffectiveFormOpenMode(blockProps, props.runtimeCrudProps),
     tabWorkspace: blockProps.tabWorkspace || props.runtimeCrudProps.tabWorkspace,
-    modalType: blockProps.modalType || props.runtimeCrudProps.modalType,
+    modalType: resolveEffectiveModalType(blockProps, props.runtimeCrudProps),
     drawerPlacement: blockProps.drawerPlacement || props.runtimeCrudProps.drawerPlacement,
     hideModalFooter: blockProps.hideModalFooter ?? props.runtimeCrudProps.hideModalFooter,
     hideDefaultDetailContent: blockProps.hideDefaultDetailContent ?? props.runtimeCrudProps.hideDefaultDetailContent,
     hideToolbar: blockProps.hideToolbar ?? props.runtimeCrudProps.hideToolbar,
     hideAdd: blockProps.hideAdd ?? props.runtimeCrudProps.hideAdd,
     hideBatchDelete: blockProps.hideBatchDelete ?? props.runtimeCrudProps.hideBatchDelete,
-    showImport: blockProps.showImport ?? props.runtimeCrudProps.showImport,
-    showExport: blockProps.showExport ?? props.runtimeCrudProps.showExport,
+    showImport: blockProps.showImport ?? props.runtimeCrudProps.showImport ?? true,
+    showExport: blockProps.showExport ?? props.runtimeCrudProps.showExport ?? true,
     showExportTasks: blockProps.showExportTasks ?? props.runtimeCrudProps.showExportTasks,
-    enableCustomQuery: blockProps.enableCustomQuery ?? props.runtimeCrudProps.enableCustomQuery,
+    enableCustomQuery: blockProps.enableCustomQuery ?? props.runtimeCrudProps.enableCustomQuery ?? true,
     addButtonText: blockProps.addButtonText || props.runtimeCrudProps.addButtonText,
     exportButtonText: blockProps.exportButtonText || props.runtimeCrudProps.exportButtonText,
     exportFileName: blockProps.exportFileName || props.runtimeCrudProps.exportFileName,
@@ -1551,6 +1551,37 @@ const effectiveRuntimeCrudProps = computed(() => {
     },
   }
 })
+
+function resolveEffectiveFormOpenMode(blockProps = {}, runtimeProps = {}) {
+  const blockMode = normalizeFormOpenMode(blockProps.formOpenMode)
+  const runtimeMode = normalizeFormOpenMode(runtimeProps.formOpenMode)
+  if (runtimeMode && runtimeMode !== 'modal')
+    return runtimeMode
+  if (blockMode && blockMode !== 'modal')
+    return blockMode
+  return runtimeMode || blockMode || normalizeModalType(runtimeProps.modalType) || normalizeModalType(blockProps.modalType) || 'modal'
+}
+
+function resolveEffectiveModalType(blockProps = {}, runtimeProps = {}) {
+  const formOpenMode = resolveEffectiveFormOpenMode(blockProps, runtimeProps)
+  if (['modal', 'drawer'].includes(formOpenMode))
+    return formOpenMode
+  return normalizeModalType(runtimeProps.modalType) || normalizeModalType(blockProps.modalType) || 'modal'
+}
+
+function normalizeFormOpenMode(value) {
+  const mode = String(value || '').trim()
+  if (mode === 'tabWorkspace' || mode.toLowerCase() === 'tabworkspace')
+    return 'tabWorkspace'
+  const normalized = mode.toLowerCase()
+  return ['modal', 'drawer', 'flat'].includes(normalized) ? normalized : ''
+}
+
+function normalizeModalType(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  return ['modal', 'drawer'].includes(normalized) ? normalized : ''
+}
+
 const designerCrudHookHandlers = computed(() => {
   const rules = normalizeCrudHookRules(props.block.props?.crudHookRules || {}, props.block.props?.beforeSubmitRules || [])
   return CRUD_HOOK_RULE_TARGETS.reduce((handlers, target) => {

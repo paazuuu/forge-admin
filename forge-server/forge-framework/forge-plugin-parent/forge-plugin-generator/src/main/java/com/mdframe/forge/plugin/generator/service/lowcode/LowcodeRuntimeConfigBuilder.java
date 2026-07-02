@@ -159,13 +159,13 @@ public class LowcodeRuntimeConfigBuilder {
         LowcodePageZone editZone = findZone(pageSchema, "edit");
         Map<String, Object> editProps = editZone == null || editZone.getProps() == null ? Map.of() : editZone.getProps();
         Map<String, Object> crudBlockProps = resolveGridBlockProps(pageSchema, List.of("AiCrudPage"));
-        String formOpenMode = resolveFormOpenMode(firstPresent(
+        String formOpenMode = resolveFormOpenMode(firstNonBlank(
                 editProps.get("formOpenMode"),
                 crudBlockProps.get("formOpenMode"),
                 editProps.get("modalType"),
                 crudBlockProps.get("modalType")));
         options.put("formOpenMode", formOpenMode);
-        options.put("modalType", resolveModalType(firstPresent(
+        options.put("modalType", resolveModalType(firstNonBlank(
                 editProps.get("modalType"),
                 crudBlockProps.get("modalType"),
                 formOpenMode)));
@@ -221,14 +221,25 @@ public class LowcodeRuntimeConfigBuilder {
             copyOption(tableProps, options, "tableSize");
             copyOption(tableProps, options, "bordered");
             copyOption(tableProps, options, "striped");
-            copyOption(tableProps, options, "formOpenMode");
-            copyOption(tableProps, options, "modalType");
             copyOption(tableProps, options, "drawerPlacement");
             copyOption(tableProps, options, "tabWorkspace");
             options.put("tableRowGap", intValue(tableProps.get("rowGap"), 8));
         }
-        options.put("formOpenMode", resolveFormOpenMode(options.get("formOpenMode")));
-        options.put("modalType", resolveModalType(options.get("modalType")));
+        formOpenMode = resolveFormOpenMode(firstNonBlank(
+                editProps.get("formOpenMode"),
+                crudBlockProps.get("formOpenMode"),
+                tableProps.get("formOpenMode"),
+                editProps.get("modalType"),
+                crudBlockProps.get("modalType"),
+                tableProps.get("modalType"),
+                options.get("formOpenMode")));
+        options.put("formOpenMode", formOpenMode);
+        options.put("modalType", resolveModalType(firstNonBlank(
+                Set.of("modal", "drawer").contains(formOpenMode) ? formOpenMode : null,
+                editProps.get("modalType"),
+                crudBlockProps.get("modalType"),
+                tableProps.get("modalType"),
+                options.get("modalType"))));
         Set<String> toolbarActions = resolveToolbarStandardActions(pageSchema);
         if (!toolbarActions.isEmpty()) {
             options.put("hideAdd", !toolbarActions.contains("add"));
@@ -2131,6 +2142,18 @@ public class LowcodeRuntimeConfigBuilder {
         }
         for (Object value : values) {
             if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private Object firstNonBlank(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            if (StringUtils.isNotBlank(text(value))) {
                 return value;
             }
         }

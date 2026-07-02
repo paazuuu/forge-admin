@@ -74,6 +74,7 @@
         <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
         <span><span class="task-meta-label">提交时间</span> <span class="task-meta-value">{{ row.createTime || '-' }}</span></span>
         <span><span class="task-meta-label">当前节点</span> <span class="task-meta-value">{{ getTaskDisplayName(row) }}</span></span>
+        <span><span class="task-meta-label">流程分类</span> <span class="task-meta-value">{{ getCategoryDisplayName(row) }}</span></span>
       </template>
       <template #actions="{ row }">
         <button v-if="row.status === 0 && !row.assignee" type="button" class="task-row-link-action info" aria-label="签收任务" @click="handleClaim(row)">
@@ -138,7 +139,7 @@
       :status-text="getLabel('flow_todo_status', currentTask?.status)"
       :status-class="currentTask?.status === 0 ? 'todo-status-pending' : 'todo-status-active'"
       :status-icon="currentTask?.status === 0 ? 'i-material-symbols:schedule' : 'i-material-symbols:assignment-ind'"
-      :priority-text="currentTask?.priority >= 2 ? getPriorityText(currentTask?.priority) : ''"
+      :priority-text="getPriorityText(currentTask?.priority)"
       :priority-class="getPriorityClass(currentTask?.priority)"
       :records="approvalHistory"
       record-title="审批记录"
@@ -158,6 +159,10 @@
             <div class="approval-field">
               <span class="approval-label">流程名称</span>
               <span class="approval-value">{{ getProcessDisplayName(currentTask) }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">流程分类</span>
+              <span class="approval-value">{{ getCategoryDisplayName(currentTask) }}</span>
             </div>
             <div class="approval-field">
               <span class="approval-label">发起人</span>
@@ -470,6 +475,8 @@ import SignaturePad from '@/components/flow/SignaturePad.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
+import { buildFlowCategoryTreeOptions, resolveFlowCategoryLabel } from './utils/categoryOptions'
+import { FLOW_PRIORITY_LABEL_FALLBACK, getFlowPriorityClass, isUrgentFlowPriority, resolveFlowPriorityLevel, shouldShowFlowPriority } from './utils/priority'
 import { getBusinessFormDisplayTitle, getRowDisplayTitle, getTaskDisplayName } from './utils/processDisplay'
 
 const userStore = useUserStore()
@@ -496,17 +503,7 @@ const pagination = reactive({
 })
 
 const queryParams = reactive({ title: '', category: '', status: null })
-const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
-
-function buildTreeSelectOptions(treeData) {
-  return treeData.map(item => ({
-    label: item.categoryName,
-    value: item.id,
-    key: item.id,
-    children: item.children && item.children.length > 0 ? buildTreeSelectOptions(item.children) : undefined,
-  }))
-}
 
 const urgentCount = ref(0)
 const selectedTaskKeys = ref([])
@@ -606,18 +603,22 @@ const isApprovalBusy = computed(() => approveLoading.value || delegateLoading.va
 
 // 优先级
 function getPriorityClass(p) {
-  if (p >= 3)
-    return 'urgent'
-  if (p === 2)
-    return 'high'
-  return ''
+  return getFlowPriorityClass(p)
 }
 function getPriorityText(p) {
-  return getLabel('flow_priority', p) || '普通'
+  if (!shouldShowFlowPriority(p))
+    return ''
+  const level = resolveFlowPriorityLevel(p)
+  const label = getLabel('flow_priority', level)
+  return String(label) === String(level) ? FLOW_PRIORITY_LABEL_FALLBACK[level] : label
 }
 
 function getProcessDisplayName(task) {
   return task?.processName || task?.processTitle || task?.modelName || task?.businessType || '-'
+}
+
+function getCategoryDisplayName(row) {
+  return row?.categoryName || resolveFlowCategoryLabel(row?.category, categoryTreeOptions.value, '-') || '-'
 }
 
 function toNumberOptions(options = []) {
@@ -1223,7 +1224,7 @@ async function loadData() {
     if (res.code === 200 && res.data) {
       dataSource.value = res.data.records || []
       pagination.itemCount = res.data.total || 0
-      urgentCount.value = dataSource.value.filter(r => r.priority >= 3).length
+      urgentCount.value = dataSource.value.filter(r => isUrgentFlowPriority(r.priority)).length
     }
   }
   catch {
@@ -1289,8 +1290,7 @@ async function loadCategories() {
   try {
     const res = await flowApi.getCategoryTreeSelect(false)
     if (res.code === 200 && res.data) {
-      categoryTreeOptions.value = buildTreeSelectOptions(res.data)
-      categoryOptions.value = res.data.map(item => ({ label: item.categoryName, value: item.id }))
+      categoryTreeOptions.value = buildFlowCategoryTreeOptions(res.data)
     }
   }
   catch {

@@ -13,7 +13,7 @@
         </div>
         <div>
           <span>编号规则</span>
-          <strong>{{ form.noRuleTemplate || form.documentNoRule || '-' }}</strong>
+          <strong>{{ ruleText }}</strong>
         </div>
         <div>
           <span>状态映射</span>
@@ -47,7 +47,7 @@
           <span />
           状态字段
         </li>
-        <li :class="{ ok: !noRulePreview || noRulePreview.valid !== false }">
+        <li :class="{ ok: ruleConfigured && (!noRulePreview || noRulePreview.valid !== false) }">
           <span />
           编号规则
         </li>
@@ -82,6 +82,19 @@ defineEmits(['configureFlow'])
 
 const mainFlow = computed(() => props.form.mainFlowSummary || {})
 const statusCount = computed(() => (props.form.statusMappingRows || []).filter(row => row.standardStatus && row.statusValue).length)
+const ruleConfigured = computed(() => !!(
+  props.form.options?.documentNoRuleName
+  || props.form.options?.codeRuleCode
+  || props.form.noRuleTemplate
+  || props.form.documentNoRule
+))
+const ruleText = computed(() => {
+  return props.form.options?.documentNoRuleName
+    || props.form.options?.codeRuleCode
+    || props.form.noRuleTemplate
+    || props.form.documentNoRule
+    || '-'
+})
 </script>
 
 <style scoped>

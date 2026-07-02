@@ -6544,11 +6544,11 @@ function isAiCrudToolbarSwitchOn(block = {}, key) {
   if (key === 'batchDelete')
     return props.hideBatchDelete !== true
   if (key === 'import')
-    return props.showImport === true
+    return props.showImport !== false
   if (key === 'export')
-    return props.showExport === true
+    return props.showExport !== false
   if (key === 'customQuery')
-    return props.enableCustomQuery === true
+    return props.enableCustomQuery !== false
   if (key === 'exportTasks')
     return props.showExportTasks !== false
   return false
@@ -9954,7 +9954,7 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 .list-grid-designer {
   position: relative;
   display: grid;
-  grid-template-columns: 256px minmax(0, 1fr) 320px;
+  grid-template-columns: 224px minmax(0, 1fr) 320px;
   gap: 0;
   height: 100%;
   min-height: 0;
@@ -9967,7 +9967,7 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 }
 
 .list-grid-designer.right-collapsed {
-  grid-template-columns: 256px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
 }
 
 .list-grid-designer.left-collapsed.right-collapsed {
@@ -10016,7 +10016,7 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 
 .palette-panel {
   min-height: 0;
-  padding: 12px;
+  padding: 10px;
   border-right: 1px solid #e4e4e7;
   background: #fcfcfc;
 }
@@ -10094,8 +10094,8 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 .palette-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .palette-stats span,
@@ -10115,15 +10115,15 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 }
 
 .palette-groups {
-  margin-top: 12px;
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   overflow-y: auto;
 }
 
 .palette-search {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .palette-empty {
@@ -10165,17 +10165,17 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 
 .palette-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
 }
 
 .palette-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 7px 8px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 7px;
   border: 1px solid #e4e4e7;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.9);
@@ -10187,7 +10187,7 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 .palette-item:hover:not(.is-disabled) {
   border-color: #c7d2fe;
   background: #f8faff;
-  box-shadow: 0 8px 18px rgba(49, 83, 216, 0.08);
+  box-shadow: 0 6px 14px rgba(49, 83, 216, 0.08);
   transform: translateY(-1px);
 }
 
@@ -10215,7 +10215,7 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 
 .item-main {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
@@ -10253,17 +10253,17 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
 }
 
 .item-desc {
-  min-height: 30px;
   overflow: hidden;
   font-size: 11px;
   color: #71717a;
   line-height: 15px;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-lock-reason {
-  grid-column: 2;
-  justify-self: start;
+  grid-column: 3;
+  justify-self: end;
   padding: 1px 6px;
   border-radius: 999px;
   background: #e2e8f0;

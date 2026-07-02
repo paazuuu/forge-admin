@@ -314,7 +314,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
             return false;
         }
         String mountTarget = StringUtils.defaultIfBlank(options.getString("mountTarget"), deriveMountTarget(app));
-        boolean syncEnabled = readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), true);
+        boolean syncEnabled = readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), false);
         return "ADMIN".equalsIgnoreCase(mountTarget) && syncEnabled;
     }
 
@@ -417,7 +417,7 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         boolean codeDownloadRuntime = "RUNTIME".equals(StringUtils.defaultString(vo.getEntryMode()).toUpperCase())
                 && BusinessAppMode.isCodeDownload(options.get("appMode"));
         vo.setAdminMenuSyncEnabled(!codeDownloadRuntime
-                && readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), true));
+                && readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), false));
         vo.setSuiteAsMenuParent(suiteAsParent);
         vo.setMenuSort(readInteger(firstNonNull(adminMenu.get("sort"), options.get("menuSort")), vo.getSortOrder()));
     }

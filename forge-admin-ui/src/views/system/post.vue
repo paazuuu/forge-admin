@@ -1,33 +1,123 @@
 <template>
   <div class="system-post-page">
-    <AiCrudPage
-      ref="crudRef"
-      api="/system/post"
-      :api-config="{
-        list: 'get@/system/post/page',
-        detail: 'post@/system/post/getById',
-        add: 'post@/system/post/add',
-        update: 'post@/system/post/edit',
-        delete: 'post@/system/post/removeBatch',
-      }"
-      :search-schema="searchSchema"
-      :columns="tableColumns"
-      :edit-schema="editSchema"
-      :before-submit="beforeSubmit"
-      :before-load-list="beforeLoadList"
-      :before-render-form="beforeRenderForm"
-      row-key="id"
-      :edit-grid-cols="2"
-      modal-width="800px"
-      add-button-text="新增岗位"
-      :hide-selection="false"
-    />
+    <div class="post-layout">
+      <div class="org-tree-panel" :class="{ 'is-collapsed': leftOrgPanelCollapsed }">
+        <div class="org-tree-header">
+          <div class="header-title">
+            <div class="header-icon">
+              <i class="i-material-symbols:account-tree-rounded" />
+            </div>
+            <div v-if="!leftOrgPanelCollapsed" class="header-copy">
+              <span>组织架构</span>
+              <small>{{ orgTreeSummaryText }}</small>
+            </div>
+          </div>
+          <div class="header-actions">
+            <n-button
+              v-if="!leftOrgPanelCollapsed"
+              quaternary
+              circle
+              size="small"
+              title="展开或折叠树节点"
+              @click="toggleOrgExpandAll"
+            >
+              <template #icon>
+                <i :class="leftOrgExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
+              </template>
+            </n-button>
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :title="leftOrgPanelCollapsed ? '展开左侧组织树' : '收起左侧组织树'"
+              @click="toggleLeftOrgPanel"
+            >
+              <template #icon>
+                <i :class="leftOrgPanelCollapsed ? 'i-material-symbols:chevron-right-rounded' : 'i-material-symbols:left-panel-close-rounded'" />
+              </template>
+            </n-button>
+          </div>
+        </div>
+
+        <div v-show="!leftOrgPanelCollapsed" class="org-tree-content">
+          <n-spin :show="leftOrgTreeLoading">
+            <div
+              class="org-tree-all-node"
+              :class="{ 'is-selected': isShowAllPosts }"
+              @click="handleSelectAllPosts"
+            >
+              <i class="i-material-symbols:work-outline-rounded" />
+              <span>全部岗位</span>
+            </div>
+            <PremiumTree
+              v-if="leftOrgTreeData.length > 0"
+              :data="leftOrgTreeData"
+              :selected-keys="selectedOrgKeys"
+              :expanded-keys="leftOrgExpandedKeys"
+              key-field="id"
+              label-field="orgName"
+              children-field="children"
+              :get-node-icon="getLeftOrgNodeIcon"
+              :get-node-tone="getLeftOrgNodeTone"
+              @update:selected-keys="handleOrgNodeSelect"
+              @update:expanded-keys="handleLeftOrgExpandedKeysChange"
+            />
+            <n-empty v-else description="暂无组织数据" size="small" />
+          </n-spin>
+        </div>
+
+        <div
+          v-show="leftOrgPanelCollapsed"
+          class="org-tree-collapsed-hint"
+          :class="{ 'has-active-filter': selectedOrgNode && !isShowAllPosts }"
+          @click="toggleLeftOrgPanel"
+        >
+          <i class="i-material-symbols:group-work-outline-rounded" />
+          <span>组织筛选</span>
+        </div>
+      </div>
+
+      <div class="post-list-panel">
+        <AiCrudPage
+          ref="crudRef"
+          api="/system/post"
+          :api-config="{
+            list: 'get@/system/post/page',
+            detail: 'post@/system/post/getById',
+            add: 'post@/system/post/add',
+            update: 'post@/system/post/edit',
+            delete: 'post@/system/post/removeBatch',
+          }"
+          :search-schema="searchSchema"
+          :columns="tableColumns"
+          :edit-schema="editSchema"
+          :before-submit="beforeSubmit"
+          :before-load-list="beforeLoadList"
+          :before-search="beforeSearch"
+          :before-render-form="beforeRenderForm"
+          row-key="id"
+          :edit-grid-cols="2"
+          modal-width="800px"
+          add-button-text="新增岗位"
+          :hide-selection="false"
+        >
+          <template #toolbar-start>
+            <div v-if="selectedOrgNode && !isShowAllPosts" class="org-filter-tip">
+              <n-tag type="info" size="small" closable @close="handleClearOrgFilter">
+                当前筛选：{{ selectedOrgNode.orgName }}
+              </n-tag>
+            </div>
+          </template>
+        </AiCrudPage>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import PremiumTree from '@/components/common/PremiumTree.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
@@ -41,6 +131,14 @@ const NORMAL_DISABLE_DICT = 'sys_normal_disable'
 const crudRef = ref(null)
 const userStore = useUserStore()
 const tenantOptions = ref([])
+const leftOrgTreeData = ref([])
+const leftOrgTreeLoading = ref(false)
+const leftOrgExpandAll = ref(true)
+const leftOrgExpandedKeys = ref([])
+const leftOrgPanelCollapsed = ref(false)
+const selectedOrgKeys = ref([])
+const selectedOrgNode = ref(null)
+const isShowAllPosts = ref(true)
 
 const { dict } = useDict(POST_TYPE_DICT, NORMAL_DISABLE_DICT)
 
@@ -120,6 +218,12 @@ const tableColumns = computed(() => [
     prop: 'postName',
     label: '岗位名称',
     width: 180,
+  },
+  {
+    prop: 'orgName',
+    label: '所属组织',
+    minWidth: 180,
+    render: row => row.orgName || '-',
   },
   {
     prop: 'postType',
@@ -210,6 +314,7 @@ const editSchema = computed(() => [
     optionSource: {
       type: 'tree',
       api: 'get@/system/org/tree',
+      // eslint-disable-next-line no-template-curly-in-string
       params: { tenantId: '${tenantId}' },
       valueField: 'id',
       keyField: 'id',
@@ -283,7 +388,15 @@ function toNumberOptions(options = []) {
 
 // 组件挂载时加载租户选项
 onMounted(() => {
+  loadLeftOrgTree()
   loadTenantOptions()
+})
+
+const orgTreeSummaryText = computed(() => {
+  const total = countTreeNodes(leftOrgTreeData.value)
+  if (!total)
+    return '未加载组织'
+  return `${total} 个组织节点`
 })
 
 function buildTenantParams(tenantId) {
@@ -299,6 +412,17 @@ function resolveSelectedTenantId(row) {
 
 function beforeLoadList(params) {
   Object.assign(params, buildTenantParams(params.tenantId))
+  if (selectedOrgNode.value && !isShowAllPosts.value) {
+    params.orgId = selectedOrgNode.value.id
+  }
+  return params
+}
+
+async function beforeSearch(params) {
+  selectedOrgKeys.value = []
+  selectedOrgNode.value = null
+  isShowAllPosts.value = true
+  await loadLeftOrgTree(params?.tenantId)
   return params
 }
 
@@ -318,6 +442,7 @@ function beforeRenderForm(row) {
   }
   return {
     tenantId: resolveSelectedTenantId(),
+    orgId: selectedOrgNode.value?.id,
   }
 }
 
@@ -335,6 +460,153 @@ async function loadTenantOptions() {
   catch (error) {
     console.error('加载租户选项失败:', error)
   }
+}
+
+function getAllKeys(list, keys = []) {
+  list.forEach((item) => {
+    keys.push(item.id)
+    if (item.children && item.children.length > 0)
+      getAllKeys(item.children, keys)
+  })
+  return keys
+}
+
+function countTreeNodes(list = []) {
+  return list.reduce((total, item) => total + 1 + countTreeNodes(item.children || []), 0)
+}
+
+function isSameKey(left, right) {
+  return String(left) === String(right)
+}
+
+function getLeftOrgNodeIcon(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'i-material-symbols:account-tree-rounded'
+  if (node.children?.length)
+    return 'i-material-symbols:corporate-fare-rounded'
+  return 'i-material-symbols:groups-rounded'
+}
+
+function getLeftOrgNodeTone(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'folder'
+  return node.children?.length ? 'folder' : 'menu'
+}
+
+function normalizeOrgTreeNodes(list = []) {
+  return (list || []).map(item => ({
+    ...item,
+    children: Array.isArray(item.children) ? normalizeOrgTreeNodes(item.children) : [],
+  }))
+}
+
+async function fetchOrgRootNodes(tenantId) {
+  const res = await request.get('/system/org/lazyTree', {
+    params: {
+      parentId: 0,
+      ...buildTenantParams(tenantId),
+    },
+  })
+  if (res.code !== 200)
+    return []
+  return normalizeOrgTreeNodes(res.data || [])
+}
+
+async function fetchOrgChildrenNodes(parentId, tenantId) {
+  const res = await request.get(`/system/org/children/${parentId}`, {
+    params: buildTenantParams(tenantId),
+  })
+  if (res.code !== 200)
+    return []
+  return normalizeOrgTreeNodes(res.data || [])
+}
+
+async function hydrateOrgTreeNodes(nodes, tenantId) {
+  await Promise.all((nodes || []).map(async (node) => {
+    if (!node?.hasChildren) {
+      node.children = Array.isArray(node.children) ? node.children : []
+      return
+    }
+    const children = await fetchOrgChildrenNodes(node.id, tenantId)
+    node.children = children
+    if (children.length > 0)
+      await hydrateOrgTreeNodes(children, tenantId)
+  }))
+}
+
+async function loadCompleteOrgTree(tenantId) {
+  const roots = await fetchOrgRootNodes(tenantId)
+  await hydrateOrgTreeNodes(roots, tenantId)
+  return roots
+}
+
+async function loadLeftOrgTree(tenantId) {
+  try {
+    leftOrgTreeLoading.value = true
+    leftOrgTreeData.value = await loadCompleteOrgTree(tenantId)
+    if (leftOrgExpandAll.value)
+      leftOrgExpandedKeys.value = getAllKeys(leftOrgTreeData.value)
+  }
+  catch (error) {
+    console.error('加载组织树失败:', error)
+    window.$message.error('加载组织树失败')
+  }
+  finally {
+    leftOrgTreeLoading.value = false
+  }
+}
+
+function findOrgNode(treeData, orgId) {
+  for (const node of treeData) {
+    if (isSameKey(node.id, orgId))
+      return node
+    if (node.children && node.children.length > 0) {
+      const found = findOrgNode(node.children, orgId)
+      if (found)
+        return found
+    }
+  }
+  return null
+}
+
+function handleOrgNodeSelect(keys) {
+  selectedOrgKeys.value = keys
+
+  if (keys.length > 0) {
+    isShowAllPosts.value = false
+    selectedOrgNode.value = findOrgNode(leftOrgTreeData.value, keys[0])
+  }
+  else {
+    selectedOrgNode.value = null
+  }
+  crudRef.value?.refresh()
+}
+
+function handleLeftOrgExpandedKeysChange(keys) {
+  leftOrgExpandedKeys.value = keys
+}
+
+function toggleOrgExpandAll() {
+  leftOrgExpandAll.value = !leftOrgExpandAll.value
+  leftOrgExpandedKeys.value = leftOrgExpandAll.value ? getAllKeys(leftOrgTreeData.value) : []
+}
+
+function toggleLeftOrgPanel() {
+  leftOrgPanelCollapsed.value = !leftOrgPanelCollapsed.value
+}
+
+function handleClearOrgFilter() {
+  selectedOrgKeys.value = []
+  selectedOrgNode.value = null
+  isShowAllPosts.value = true
+  crudRef.value?.refresh()
+}
+
+function handleSelectAllPosts() {
+  isShowAllPosts.value = true
+  selectedOrgKeys.value = []
+  selectedOrgNode.value = null
+  crudRef.value?.refresh()
 }
 
 // 编辑
@@ -368,5 +640,363 @@ function handleDelete(row) {
 <style scoped>
 .system-post-page {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.post-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+
+.org-tree-panel {
+  width: 248px;
+  min-width: 248px;
+  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 18%, #ffffff 100%);
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    width 0.24s ease,
+    min-width 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+.org-tree-panel.is-collapsed {
+  width: 72px;
+  min-width: 72px;
+}
+
+.org-tree-panel.is-collapsed .org-tree-header {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 12px 8px;
+}
+
+.org-tree-panel.is-collapsed .header-title,
+.org-tree-panel.is-collapsed .header-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.org-tree-header {
+  padding: 14px 12px 12px;
+  border-bottom: 1px solid #e8eef5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.08) 0%,
+    rgba(59, 130, 246, 0.02) 55%,
+    rgba(255, 255, 255, 0.96) 100%
+  );
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.header-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.header-icon i {
+  font-size: 18px;
+}
+
+.header-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header-copy span {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.header-copy small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.org-tree-header :deep(.n-button) {
+  color: #475569;
+}
+
+.org-tree-header :deep(.n-button:hover) {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+}
+
+.org-tree-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 8px 12px;
+}
+
+.org-tree-content :deep(.n-spin-content) {
+  width: 100%;
+  align-items: stretch;
+}
+
+.org-tree-all-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.org-tree-all-node:hover {
+  border-color: #dbe4f0;
+  background-color: #f8fafc;
+}
+
+.org-tree-all-node.is-selected {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
+  color: #2563eb;
+}
+
+.org-tree-all-node i {
+  font-size: 18px;
+}
+
+.org-tree-content :deep(.premium-tree) {
+  padding-top: 2px;
+}
+
+.org-tree-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.org-tree-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.org-tree-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.org-tree-content::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.org-tree-collapsed-hint {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 6px;
+  color: #64748b;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.org-tree-collapsed-hint i {
+  font-size: 22px;
+}
+
+.org-tree-collapsed-hint span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  writing-mode: vertical-rl;
+}
+
+.org-tree-collapsed-hint:hover {
+  background: rgba(37, 99, 235, 0.06);
+  color: #2563eb;
+}
+
+.org-tree-collapsed-hint.has-active-filter {
+  color: #2563eb;
+}
+
+.post-list-panel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+}
+
+.post-list-panel :deep(.ai-crud-page) {
+  height: 100%;
+}
+
+.org-filter-tip {
+  margin-right: 12px;
+}
+
+.org-filter-tip :deep(.n-tag) {
+  font-size: 13px;
+}
+
+.dark .org-tree-panel {
+  border-color: #334155 !important;
+  background: #0f172a !important;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
+}
+
+.dark .org-tree-header {
+  border-bottom-color: #334155;
+  background: linear-gradient(
+    135deg,
+    rgba(37, 99, 235, 0.18) 0%,
+    rgba(30, 41, 59, 0.94) 58%,
+    rgba(15, 23, 42, 0.96) 100%
+  );
+}
+
+.dark .org-tree-header .header-copy span {
+  color: #f1f5f9;
+}
+
+.dark .org-tree-header .header-copy small {
+  color: #94a3b8;
+}
+
+.dark .header-icon {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+}
+
+.dark .org-tree-content {
+  background: #0f172a;
+}
+
+.dark .org-tree-all-node {
+  color: #e2e8f0;
+}
+
+.dark .org-tree-all-node:hover {
+  border-color: #334155;
+  background-color: #162033;
+}
+
+.dark .org-tree-all-node.is-selected {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.12) 100%) !important;
+  color: #60a5fa;
+}
+
+.dark .org-tree-collapsed-hint {
+  color: #94a3b8;
+}
+
+.dark .org-tree-collapsed-hint:hover,
+.dark .org-tree-collapsed-hint.has-active-filter {
+  background: rgba(37, 99, 235, 0.14);
+  color: #60a5fa;
+}
+
+.dark .org-tree-header :deep(.n-button) {
+  color: #cbd5e1;
+}
+
+.dark .org-tree-header :deep(.n-button:hover) {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+}
+
+.dark .org-tree-content::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark .org-tree-content::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark .org-tree-content::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.dark .post-list-panel {
+  border-color: #334155 !important;
+  background: #0f172a !important;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
+}
+
+.dark .org-filter-tip :deep(.n-tag) {
+  border-color: #334155;
+  background: #1e293b;
+}
+
+@media (max-width: 1200px) {
+  .org-tree-panel {
+    width: 224px;
+    min-width: 224px;
+  }
+}
+
+@media (max-width: 960px) {
+  .post-layout {
+    flex-direction: column;
+  }
+
+  .org-tree-panel,
+  .org-tree-panel.is-collapsed {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .org-tree-collapsed-hint {
+    flex-direction: row;
+    padding: 12px;
+  }
+
+  .org-tree-collapsed-hint span {
+    letter-spacing: 0;
+    writing-mode: initial;
+  }
 }
 </style>

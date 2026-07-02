@@ -1656,7 +1656,7 @@ function normalizePreviewFieldType(componentKey = '') {
 function buildPreviewPlaceholder(componentKey = '', label = '') {
   if (['select', 'dictSelect', 'radio', 'radioButton', 'checkbox', 'transfer', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'userSelect', 'orgTreeSelect', 'regionTreeSelect', 'treeSelect', 'customSelect', 'color'].includes(componentKey))
     return `请选择${label}`
-  return `请输入${label}`
+  return `请填写${label}`
 }
 
 function buildPreviewOptions(componentKey = '') {

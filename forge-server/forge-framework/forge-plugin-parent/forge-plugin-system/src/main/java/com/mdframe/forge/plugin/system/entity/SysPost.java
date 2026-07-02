@@ -33,6 +33,12 @@ public class SysPost extends TenantEntity {
     private Long orgId;
 
     /**
+     * 所属组织名称（列表展示用）
+     */
+    @TableField(exist = false)
+    private String orgName;
+
+    /**
      * 岗位名称
      */
     private String postName;

@@ -165,6 +165,7 @@
       @dirty-change="handleDirtyChange"
       @open-trigger="openTriggerConfig"
       @open-publish="handlePanelSwitch('publish')"
+      @update-field-generation="handleFieldGenerationUpdate"
     />
 
     <BusinessPermissionFlowPanel
@@ -216,7 +217,7 @@ import {
   saveBusinessFlowAppConfig,
   saveBusinessObjectDesigner,
 } from '@/api/business-app'
-import { cloneSchema } from '@/components/lowcode-builder/model/model-schema'
+import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import { createDefaultPageSchema } from '@/components/lowcode-builder/page/page-schema'
 import { useTabStore, useUserStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
@@ -715,8 +716,11 @@ async function syncActiveFormDraft() {
   const result = formDetailTab.value === 'detail'
     ? detailDesignerRef.value?.syncDesignerDraft?.()
     : formDesignerRef.value?.syncDesignerDraft?.()
-  if (result?.dirty)
+  const changed = applyDesignerDraftSyncResult(result)
+  if (result?.dirty || changed) {
+    dirty.value = true
     designerDraftDirty.value = true
+  }
   await nextTick()
 }
 
@@ -725,9 +729,76 @@ async function syncActiveListDraft() {
     return
   await nextTick()
   const result = listDesignerRef.value?.syncDesignerDraft?.()
-  if (result?.dirty)
+  const changed = applyDesignerDraftSyncResult(result)
+  if (result?.dirty || changed) {
+    dirty.value = true
     designerDraftDirty.value = true
+  }
   await nextTick()
+}
+
+function applyDesignerDraftSyncResult(result = {}) {
+  if (!result || typeof result !== 'object')
+    return false
+  let changed = false
+  let fieldsChanged = false
+
+  if (hasOwn(result, 'fields') && Array.isArray(result.fields)) {
+    const nextFields = cloneSchema(result.fields)
+    fieldsChanged = !isSameSchema(nextFields, draft.fields)
+    if (fieldsChanged) {
+      draft.fields = nextFields
+      changed = true
+    }
+  }
+
+  if (hasOwn(result, 'modelSchema') && result.modelSchema) {
+    const nextModelSchema = cloneSchema(result.modelSchema)
+    if (!isSameSchema(nextModelSchema, draft.modelSchema)) {
+      draft.modelSchema = nextModelSchema
+      changed = true
+    }
+  }
+  else if (fieldsChanged) {
+    syncDraftModelFields(draft.fields)
+  }
+
+  if (hasOwn(result, 'pageSchema')) {
+    const nextPageSchema = cloneSchema(result.pageSchema || null)
+    if (!isSameSchema(nextPageSchema, draft.pageSchema)) {
+      draft.pageSchema = nextPageSchema
+      changed = true
+    }
+  }
+
+  if (hasOwn(result, 'formDesignerSchema')) {
+    const nextFormDesignerSchema = cloneSchema(result.formDesignerSchema || null)
+    if (!isSameSchema(nextFormDesignerSchema, draft.formDesignerSchema)) {
+      draft.formDesignerSchema = nextFormDesignerSchema
+      changed = true
+    }
+  }
+
+  if (hasOwn(result, 'viewSchema')) {
+    const nextViewSchema = sanitizeViewSchemaFieldRefs(result.viewSchema || {}, draft.fields)
+    if (!isSameSchema(nextViewSchema, draft.viewSchema)) {
+      draft.viewSchema = cloneSchema(nextViewSchema)
+      changed = true
+    }
+  }
+  else if (fieldsChanged && draft.viewSchema) {
+    const nextViewSchema = sanitizeViewSchemaFieldRefs(draft.viewSchema || {}, draft.fields)
+    if (!isSameSchema(nextViewSchema, draft.viewSchema)) {
+      draft.viewSchema = cloneSchema(nextViewSchema)
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key)
 }
 
 async function persistPendingDesignerDraft() {
@@ -947,6 +1018,34 @@ async function handleFlowAppSaved() {
     return
   }
   activePanel.value = 'publish'
+}
+
+function handleFieldGenerationUpdate(payload = {}) {
+  const fieldCode = String(payload.fieldCode || '').trim()
+  if (!fieldCode)
+    return
+  const generation = cloneSchema(payload.generation || { enabled: false })
+  draft.fields = (draft.fields || []).map((field) => {
+    const code = field.fieldCode || field.field
+    if (code !== fieldCode)
+      return field
+    return {
+      ...field,
+      readonly: generation.enabled === true ? true : field.readonly,
+      basicProps: {
+        ...(field.basicProps || {}),
+        generation,
+      },
+      advancedProps: {
+        ...(field.advancedProps || {}),
+        generation,
+      },
+    }
+  })
+  syncDraftModelFields(draft.fields)
+  draft.formDesignerSchema = updateFormDesignerFieldGeneration(draft.formDesignerSchema || {}, fieldCode, generation)
+  dirty.value = true
+  designerDraftDirty.value = true
 }
 
 function handleActionsUpdated(actions) {
@@ -1906,6 +2005,41 @@ function syncDraftModelFields(fields = []) {
         advancedProps: cloneSchema(field.advancedProps || {}),
       }
     }),
+  }
+}
+
+function updateFormDesignerFieldGeneration(schema = {}, fieldCode = '', generation = {}) {
+  const next = cloneSchema(schema || {})
+  visitFormDesignerSchema(next)
+  return next
+
+  function visitFormDesignerSchema(value = {}) {
+    if (!value || typeof value !== 'object')
+      return
+    visitFormDesignerComponents(value.components || [])
+    ;(Array.isArray(value.forms) ? value.forms : []).forEach(form => visitFormDesignerSchema(form?.schema || form))
+    ;(Array.isArray(value.settings?.formAssets) ? value.settings.formAssets : []).forEach(asset => visitFormDesignerSchema(asset?.schema || asset))
+  }
+
+  function visitFormDesignerComponents(components = []) {
+    ;(Array.isArray(components) ? components : []).forEach((component) => {
+      if (!component || typeof component !== 'object')
+        return
+      if (component.fieldBinding?.mode === 'field' && component.fieldBinding?.fieldCode === fieldCode) {
+        component.props = {
+          ...(component.props || {}),
+          generation,
+        }
+        if (generation.enabled === true) {
+          component.visibility = {
+            ...(component.visibility || {}),
+            readonly: true,
+          }
+        }
+      }
+      if (Array.isArray(component.children))
+        visitFormDesignerComponents(component.children)
+    })
   }
 }
 

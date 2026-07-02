@@ -717,6 +717,7 @@ import FlowPropertyPanelShell from '@/components/flow/FlowPropertyPanelShell.vue
 import FlowFormCreateDesigner from '@/components/form-create/FlowFormCreateDesigner.vue'
 import FlowFormCreateRenderer from '@/components/form-create/FlowFormCreateRenderer.vue'
 import BusinessFlowFormAssetSelect from '@/views/app-center/components/designer/BusinessFlowFormAssetSelect.vue'
+import { buildFlowCategoryTreeOptions, resolveFlowCategoryValue } from './utils/categoryOptions'
 import { buildLocalFormFieldCatalog } from './utils/form-field-catalog'
 import VersionHistory from './version.vue'
 
@@ -822,7 +823,6 @@ const formFieldCatalog = ref([])
 const showFormPreview = ref(false)
 const businessFormAssets = ref([])
 
-const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
 const modelerInstance = ref(null)
 const dockedElement = ref(null)
@@ -831,15 +831,6 @@ const designerTypeOptions = [
   { label: '审批流程', value: 'approval' },
   { label: '业务流程', value: 'business' },
 ]
-
-function buildTreeSelectOptions(treeData) {
-  return treeData.map(item => ({
-    label: item.categoryName,
-    value: item.id,
-    key: item.id,
-    children: item.children && item.children.length > 0 ? buildTreeSelectOptions(item.children) : undefined,
-  }))
-}
 
 const formTypeOptions = [
   { label: '动态表单', value: 'dynamic' },
@@ -1281,11 +1272,7 @@ async function loadCategories() {
   try {
     const res = await flowApi.getCategoryTreeSelect(false)
     if (res.code === 200) {
-      categoryTreeOptions.value = buildTreeSelectOptions(res.data || [])
-      categoryOptions.value = (res.data || []).map(item => ({
-        label: item.categoryName,
-        value: item.id,
-      }))
+      categoryTreeOptions.value = buildFlowCategoryTreeOptions(res.data || [])
     }
   }
   catch (error) {
@@ -1672,6 +1659,7 @@ async function loadModel(id) {
       dockedElement.value = null
       Object.assign(modelInfo, res.data)
       modelInfo.designerType = normalizeDesignerType(res.data.designerType)
+      modelInfo.category = resolveFlowCategoryValue(res.data.category, categoryTreeOptions.value)
       bpmnXml.value = res.data.bpmnXml || ''
       applyProcessConfigFromXml(bpmnXml.value)
 
@@ -2039,7 +2027,7 @@ async function handleApplyAiDraft() {
       modelInfo.modelKey = aiDraft.value.modelKey
     }
     if (aiDraft.value.category) {
-      modelInfo.category = aiDraft.value.category
+      modelInfo.category = resolveFlowCategoryValue(aiDraft.value.category, categoryTreeOptions.value)
     }
     if (aiDraft.value.flowType) {
       modelInfo.flowType = aiDraft.value.flowType

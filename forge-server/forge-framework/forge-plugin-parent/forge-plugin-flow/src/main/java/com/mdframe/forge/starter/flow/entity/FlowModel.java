@@ -37,7 +37,13 @@ public class FlowModel {
      * 分类
      */
     private String category;
-    
+
+    /**
+     * 分类名称（列表展示用）
+     */
+    @TableField(exist = false)
+    private String categoryName;
+
     /**
      * 流程类型（leave-请假/expense-报销/approval-审批）
      */

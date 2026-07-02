@@ -36,6 +36,7 @@
         <span><span class="task-meta-label">申请人</span> <span class="task-meta-value">{{ row.startUserName || '-' }}</span></span>
         <span><span class="task-meta-label">完成时间</span> <span class="task-meta-value">{{ row.completeTime || '-' }}</span></span>
         <span><span class="task-meta-label">处理节点</span> <span class="task-meta-value">{{ getTaskDisplayName(row) }}</span></span>
+        <span><span class="task-meta-label">流程分类</span> <span class="task-meta-value">{{ getCategoryDisplayName(row) }}</span></span>
       </template>
       <template #summary="{ row }">
         <span v-if="row.comment">审批意见：{{ row.comment }}</span>
@@ -74,6 +75,10 @@
             <div class="approval-field">
               <span class="approval-label">审批结果</span>
               <span class="approval-value">{{ getStatusText(currentTask.status) }}</span>
+            </div>
+            <div class="approval-field">
+              <span class="approval-label">流程分类</span>
+              <span class="approval-value">{{ getCategoryDisplayName(currentTask) }}</span>
             </div>
             <div class="approval-field">
               <span class="approval-label">发起人</span>
@@ -220,6 +225,7 @@ import SignatureImage from '@/components/flow/SignatureImage.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
+import { buildFlowCategoryTreeOptions, resolveFlowCategoryLabel } from './utils/categoryOptions'
 import { getBusinessFormDisplayTitle, getRowDisplayTitle, getTaskDisplayName } from './utils/processDisplay'
 
 const userStore = useUserStore()
@@ -245,17 +251,7 @@ const pagination = reactive({
 })
 
 const queryParams = reactive({ title: '', category: '', status: null })
-const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
-
-function buildTreeSelectOptions(treeData) {
-  return treeData.map(item => ({
-    label: item.categoryName,
-    value: item.id,
-    key: item.id,
-    children: item.children && item.children.length > 0 ? buildTreeSelectOptions(item.children) : undefined,
-  }))
-}
 
 const showDrawer = ref(false)
 const currentTask = ref(null)
@@ -347,6 +343,10 @@ function getStatusIcon(status) {
 
 function getStatusText(status) {
   return getLabel('flow_done_status', status) || '未知'
+}
+
+function getCategoryDisplayName(row) {
+  return row?.categoryName || resolveFlowCategoryLabel(row?.category, categoryTreeOptions.value, '-') || '-'
 }
 
 function toNumberOptions(options = []) {
@@ -543,8 +543,7 @@ async function loadCategories() {
   try {
     const res = await flowApi.getCategoryTreeSelect(false)
     if (res.code === 200 && res.data) {
-      categoryTreeOptions.value = buildTreeSelectOptions(res.data)
-      categoryOptions.value = res.data.map(item => ({ label: item.categoryName, value: item.id }))
+      categoryTreeOptions.value = buildFlowCategoryTreeOptions(res.data)
     }
   }
   catch (e) {

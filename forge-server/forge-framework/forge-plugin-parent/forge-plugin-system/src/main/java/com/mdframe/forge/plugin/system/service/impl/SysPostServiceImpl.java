@@ -18,7 +18,6 @@ import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -37,17 +36,15 @@ public class SysPostServiceImpl extends ServiceImpl<SysPostMapper, SysPost> impl
 
     @Override
     public IPage<SysPost> selectPostPage(SysPostQuery query) {
-        query = normalizePostQueryTenant(query);
-        LambdaQueryWrapper<SysPost> wrapper = buildQueryWrapper(query);
-        Page<SysPost> page = new Page<>(query.getPageNum(), query.getPageSize());
-        return TenantContextHolder.executeIgnore(() -> postMapper.selectPage(page, wrapper));
+        SysPostQuery finalQuery = normalizePostQueryTenant(query);
+        Page<SysPost> page = new Page<>(finalQuery.getPageNum(), finalQuery.getPageSize());
+        return TenantContextHolder.executeIgnore(() -> postMapper.selectPostPage(page, finalQuery));
     }
 
     @Override
     public List<SysPost> selectPostList(SysPostQuery query) {
-        query = normalizePostQueryTenant(query);
-        LambdaQueryWrapper<SysPost> wrapper = buildQueryWrapper(query);
-        return TenantContextHolder.executeIgnore(() -> postMapper.selectList(wrapper));
+        SysPostQuery finalQuery = normalizePostQueryTenant(query);
+        return TenantContextHolder.executeIgnore(() -> postMapper.selectPostList(finalQuery));
     }
 
     @Override
@@ -100,22 +97,6 @@ public class SysPostServiceImpl extends ServiceImpl<SysPostMapper, SysPost> impl
             deletePostById(id);
         }
         return true;
-    }
-
-    private LambdaQueryWrapper<SysPost> buildQueryWrapper(SysPostQuery query) {
-        LambdaQueryWrapper<SysPost> wrapper = new LambdaQueryWrapper<>();
-        // 添加空值检查,防止NPE
-        if (query != null) {
-            wrapper.eq(query.getTenantId() != null, SysPost::getTenantId, query.getTenantId())
-                    .eq(StringUtils.isNotBlank(query.getPostCode()), SysPost::getPostCode, query.getPostCode())
-                    .eq(query.getOrgId() != null, SysPost::getOrgId, query.getOrgId())
-                    .like(StringUtils.isNotBlank(query.getPostName()), SysPost::getPostName, query.getPostName())
-                    .eq(query.getPostStatus() != null, SysPost::getPostStatus, query.getPostStatus())
-                    .eq(query.getPostType() != null, SysPost::getPostType, query.getPostType());
-        }
-        wrapper.orderByAsc(SysPost::getSort)
-                .orderByDesc(SysPost::getCreateTime);
-        return wrapper;
     }
 
     private SysPostQuery normalizePostQueryTenant(SysPostQuery query) {

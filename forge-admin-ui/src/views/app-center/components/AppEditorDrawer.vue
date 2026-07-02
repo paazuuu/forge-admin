@@ -624,7 +624,7 @@ function hydrateOptions() {
     )
     form.actualMenuParentId = actualMenuParentId
     form.suiteMenuResourceId = suiteMenuResourceId
-    form.adminMenuSyncEnabled = normalizeBoolean(props.app?.adminMenuSyncEnabled ?? adminMenu.syncEnabled ?? options.adminMenuSyncEnabled, true)
+    form.adminMenuSyncEnabled = normalizeBoolean(props.app?.adminMenuSyncEnabled ?? adminMenu.syncEnabled ?? options.adminMenuSyncEnabled, false)
     form.suiteAsMenuParent = suiteAsMenuParent
     form.menuSort = Number(props.app?.menuSort ?? adminMenu.sort ?? options.menuSort ?? form.sortOrder ?? 0)
     form.runtimeOpenMode = normalizeRuntimeOpenMode(props.app?.runtimeOpenMode || options.runtimeOpenMode || inferRuntimeOpenMode())
@@ -648,7 +648,7 @@ function hydrateOptions() {
     form.adminMenuParentId = null
     form.actualMenuParentId = null
     form.suiteMenuResourceId = null
-    form.adminMenuSyncEnabled = true
+    form.adminMenuSyncEnabled = false
     form.suiteAsMenuParent = true
     form.menuSort = Number(form.sortOrder || 0)
     form.runtimeOpenMode = inferRuntimeOpenMode()
@@ -1059,7 +1059,7 @@ function defaultForm() {
     adminMenuParentId: null,
     actualMenuParentId: null,
     suiteMenuResourceId: null,
-    adminMenuSyncEnabled: true,
+    adminMenuSyncEnabled: false,
     suiteAsMenuParent: true,
     menuSort: 0,
     allowedDomains: '',

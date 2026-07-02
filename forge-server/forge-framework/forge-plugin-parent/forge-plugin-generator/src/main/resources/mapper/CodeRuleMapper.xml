@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.CodeRuleMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiCodeRule">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="rule_code" property="ruleCode"/>
+        <result column="rule_name" property="ruleName"/>
+        <result column="scene" property="scene"/>
+        <result column="template" property="template"/>
+        <result column="reset_policy" property="resetPolicy"/>
+        <result column="seq_length" property="seqLength"/>
+        <result column="status" property="status"/>
+        <result column="builtin" property="builtin"/>
+        <result column="remark" property="remark"/>
+        <result column="options" property="options"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        rule_code,
+        rule_name,
+        scene,
+        template,
+        reset_policy,
+        seq_length,
+        status,
+        builtin,
+        remark,
+        options,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectRulePage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+        <if test="ruleCode != null and ruleCode != ''">
+            AND rule_code LIKE CONCAT('%', #{ruleCode}, '%')
+        </if>
+        <if test="ruleName != null and ruleName != ''">
+            AND rule_name LIKE CONCAT('%', #{ruleName}, '%')
+        </if>
+        <if test="scene != null and scene != ''">
+            AND scene = #{scene}
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY builtin DESC, update_time DESC, id DESC
+    </select>
+
+    <select id="selectEnabledList" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND status = 1
+        <if test="scene != null and scene != ''">
+            AND (scene = #{scene} OR scene = 'COMMON')
+        </if>
+        ORDER BY builtin DESC, rule_code ASC
+    </select>
+
+    <select id="selectByRuleCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND rule_code = #{ruleCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectByRuleId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="countByRuleCode" resultType="int">
+        SELECT COUNT(1)
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND rule_code = #{ruleCode}
+        <if test="excludeId != null">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
+</mapper>

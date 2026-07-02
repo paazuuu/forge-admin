@@ -822,6 +822,7 @@ const crudProps = computed(() => {
     return {}
   const cfg = renderConfig.value
   const options = cfg.options || {}
+  const formOpenMode = resolveRuntimeFormOpenMode(options, cfg)
   const treeTable = isTreeTableRuntime(cfg, runtimeEffectiveLayoutType.value)
   const treeConfig = options.treeConfig || {}
   const gridCrudProps = runtimeAiCrudBlockProps.value || {}
@@ -870,9 +871,9 @@ const crudProps = computed(() => {
     apiConfig,
     options,
     rowKey: cfg.rowKey || 'id',
-    formOpenMode: options.formOpenMode || cfg.formOpenMode || options.modalType || cfg.modalType || 'modal',
+    formOpenMode,
     tabWorkspace: options.tabWorkspace || cfg.tabWorkspace || {},
-    modalType: options.modalType || cfg.modalType || 'modal',
+    modalType: resolveRuntimeModalType(formOpenMode, options, cfg),
     modalWidth: options.modalWidth || cfg.modalWidth || '800px',
     editGridCols: options.editGridCols || cfg.editGridCols || 1,
     editLabelWidth: options.editLabelWidth || cfg.editLabelWidth || 'auto',
@@ -918,6 +919,22 @@ const crudProps = computed(() => {
     formOnlySuccessDescription: '单据已保存',
   }
 })
+
+function resolveRuntimeFormOpenMode(options = {}, cfg = {}) {
+  const value = options.formOpenMode || cfg.formOpenMode || options.modalType || cfg.modalType || 'modal'
+  const mode = String(value || '').trim()
+  if (mode === 'tabWorkspace' || mode.toLowerCase() === 'tabworkspace')
+    return 'tabWorkspace'
+  const normalized = mode.toLowerCase()
+  return ['modal', 'drawer', 'flat'].includes(normalized) ? normalized : 'modal'
+}
+
+function resolveRuntimeModalType(formOpenMode, options = {}, cfg = {}) {
+  if (['modal', 'drawer'].includes(formOpenMode))
+    return formOpenMode
+  const modalType = String(options.modalType || cfg.modalType || '').trim().toLowerCase()
+  return ['modal', 'drawer'].includes(modalType) ? modalType : 'modal'
+}
 
 function resolveDefaultSortParams(defaultSort = {}) {
   const orderByColumn = defaultSort.orderByColumn || defaultSort.field || 'id'

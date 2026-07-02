@@ -182,6 +182,7 @@ import flowApi from '@/api/flow'
 import DictTag from '@/components/DictTag.vue'
 import { DingFlowDesigner } from '@/components/flow-designer'
 import { useDict } from '@/composables/useDict'
+import { buildFlowCategoryTreeOptions, flattenFlowCategoryOptions, resolveFlowCategoryLabel, resolveFlowCategoryValue } from './utils/categoryOptions'
 
 const router = useRouter()
 
@@ -193,15 +194,6 @@ const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])
 // 分类选项
 const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
-
-function buildTreeSelectOptions(treeData) {
-  return treeData.map(item => ({
-    label: item.categoryName,
-    value: item.id,
-    key: item.id,
-    children: item.children && item.children.length > 0 ? buildTreeSelectOptions(item.children) : undefined,
-  }))
-}
 
 // 查询参数
 const queryParams = reactive({
@@ -226,6 +218,7 @@ const columns = [
     title: '分类',
     key: 'category',
     width: 100,
+    render: row => getCategoryDisplayName(row.category),
   },
   {
     title: '表单类型',
@@ -312,6 +305,10 @@ function toNumberOptions(options = []) {
     ...item,
     value: Number(item.value),
   }))
+}
+
+function getCategoryDisplayName(category) {
+  return resolveFlowCategoryLabel(category, categoryTreeOptions.value, category || '-')
 }
 
 // 数据源
@@ -416,10 +413,10 @@ async function loadCategories() {
   try {
     const res = await flowApi.getCategoryTreeSelect(false)
     if (res.data) {
-      categoryTreeOptions.value = buildTreeSelectOptions(res.data)
-      categoryOptions.value = res.data.map(item => ({
-        label: item.categoryName,
-        value: item.id,
+      categoryTreeOptions.value = buildFlowCategoryTreeOptions(res.data)
+      categoryOptions.value = flattenFlowCategoryOptions(categoryTreeOptions.value).map(item => ({
+        label: item.label,
+        value: item.value,
       }))
     }
   }
@@ -471,6 +468,7 @@ async function handleEdit(row) {
     const res = await flowApi.getTemplateDetail(row.id)
     if (res.data) {
       Object.assign(formData, res.data)
+      formData.category = resolveFlowCategoryValue(res.data.category, categoryTreeOptions.value)
       showModal.value = true
     }
   }

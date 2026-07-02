@@ -4,17 +4,21 @@
 
     <!-- 根据任务ID查询任务（带流程名称） -->
     <select id="selectByTaskId" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*, m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
+        SELECT t.*, m.category AS category, c.category_name AS category_name,
+               m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         WHERE t.task_id = #{taskId}
     </select>
 
     <!-- 根据 Flowable 任务ID或流程任务记录ID查询任务（带流程名称） -->
     <select id="selectByIdOrTaskId" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*, m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
+        SELECT t.*, m.category AS category, c.category_name AS category_name,
+               m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         WHERE t.task_id = #{taskId} OR t.id = #{taskId}
         ORDER BY CASE WHEN t.task_id = #{taskId} THEN 0 ELSE 1 END
         LIMIT 1
@@ -22,9 +26,11 @@
 
     <!-- 待办任务列表（带分类关联查询） -->
     <select id="selectTodoTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*, m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
+        SELECT t.*, m.category AS category, c.category_name AS category_name,
+               m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         <where>
             AND (t.assignee = #{userId}
                 OR (t.candidate_users IS NOT NULL AND t.candidate_users != ''
@@ -38,7 +44,16 @@
                 AND t.title LIKE CONCAT('%', #{title}, '%')
             </if>
             <if test="category != null and category != ''">
-                AND m.category = #{category}
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
+                )
             </if>
             <if test="status != null">
                 AND t.status = #{status}
@@ -49,9 +64,11 @@
 
     <!-- 已办任务列表（带分类关联查询） -->
     <select id="selectDoneTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*, m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
+        SELECT t.*, m.category AS category, c.category_name AS category_name,
+               m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         <where>
             AND t.assignee = #{userId}
             AND t.status IN (2, 3, 4, 5, 7, 8)
@@ -59,7 +76,16 @@
                 AND t.title LIKE CONCAT('%', #{title}, '%')
             </if>
             <if test="category != null and category != ''">
-                AND m.category = #{category}
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
+                )
             </if>
             <if test="status != null">
                 AND t.status = #{status}
@@ -70,16 +96,27 @@
 
     <!-- 我发起的任务列表（带分类关联查询） -->
     <select id="selectStartedTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*, m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
+        SELECT t.*, m.category AS category, c.category_name AS category_name,
+               m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         <where>
             AND t.start_user_id = #{userId}
             <if test="title != null and title != ''">
                 AND t.title LIKE CONCAT('%', #{title}, '%')
             </if>
             <if test="category != null and category != ''">
-                AND m.category = #{category}
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
+                )
             </if>
             <if test="status != null">
                 AND t.status = #{status}
@@ -90,9 +127,11 @@
 
     <!-- 已逾期且仍待办理的任务 -->
     <select id="selectOverduePendingTasks" resultType="com.mdframe.forge.starter.flow.entity.FlowTask">
-        SELECT t.*, m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
+        SELECT t.*, m.category AS category, c.category_name AS category_name,
+               m.model_name AS process_name, COALESCE(NULLIF(m.model_name, ''), t.process_def_key) AS process_definition_name
         FROM sys_flow_task t
         LEFT JOIN sys_flow_model m ON t.process_def_key = m.model_key
+        LEFT JOIN sys_flow_category c ON c.id = m.category OR c.category_code = m.category
         WHERE t.due_date IS NOT NULL
           AND t.due_date &lt;= #{now}
           AND t.status IN (0, 1)

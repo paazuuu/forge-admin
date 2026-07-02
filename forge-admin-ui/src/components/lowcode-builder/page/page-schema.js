@@ -1305,11 +1305,13 @@ export function bootstrapGridLayoutFromZones(zones, modelSchema, options = {}) {
   }
 
   const tableActions = []
-  if (table?.props?.showImport)
+  if (table && table.props?.showImport !== false)
     tableActions.push('import')
-  if (table?.props?.showExport)
+  if (table && table.props?.showExport !== false)
     tableActions.push('export')
-  if (table?.props?.enableCustomQuery !== false)
+  if (table && table.props?.hideBatchDelete !== true)
+    tableActions.push('batch-delete')
+  if (table && table.props?.enableCustomQuery !== false)
     tableActions.push('custom-query')
   tableActions.unshift('add')
 
@@ -1405,10 +1407,10 @@ export function applyGridLayoutToZones(zones, gridLayout, modelSchema) {
         ...(zone.props || {}),
         ...pickRuntimeTableProps(sourceProps),
         fieldSettings: sanitizeFieldSettings(sourceProps.fieldSettings || zone.props?.fieldSettings, new Set(refs)),
-        showImport: toolbar ? actions.includes('import') : sourceProps.showImport === true,
-        showExport: toolbar ? actions.includes('export') : sourceProps.showExport === true,
+        showImport: toolbar ? actions.includes('import') : sourceProps.showImport !== false,
+        showExport: toolbar ? actions.includes('export') : sourceProps.showExport !== false,
         hideBatchDelete: toolbar ? !actions.includes('batch-delete') : sourceProps.hideBatchDelete === true,
-        enableCustomQuery: toolbar ? actions.includes('custom-query') : sourceProps.enableCustomQuery === true,
+        enableCustomQuery: toolbar ? actions.includes('custom-query') : sourceProps.enableCustomQuery !== false,
         customActions: toolbar ? (toolbar.props?.customActions || sourceProps.customActions || []) : (sourceProps.customActions || []),
         defaultSortField: sourceProps.defaultSortField || zone.props?.defaultSortField || 'id',
         defaultSortOrder: sourceProps.defaultSortOrder || zone.props?.defaultSortOrder || 'desc',
@@ -1757,7 +1759,7 @@ export function createGridBlock(blockType, modelSchema, position = {}) {
     base.props = { ...base.props, fieldSettings: {}, defaultSortField: 'id', defaultSortOrder: 'desc' }
   }
   if (blockType === 'toolbar') {
-    base.props = { ...base.props, actions: ['add', 'import', 'export', 'custom-query'], customActions: [] }
+    base.props = { ...base.props, actions: ['add', 'batch-delete', 'import', 'export', 'custom-query'], customActions: [] }
   }
   if (blockType === 'AiCrudPage') {
     base.props = {
@@ -2242,10 +2244,10 @@ function createDefaultAiCrudPageProps() {
     hideToolbar: false,
     hideAdd: false,
     hideBatchDelete: false,
-    showImport: false,
-    showExport: false,
+    showImport: true,
+    showExport: true,
     showExportTasks: true,
-    enableCustomQuery: false,
+    enableCustomQuery: true,
     addButtonText: '新增',
     exportButtonText: '导出',
     exportFileName: '',
@@ -2674,9 +2676,9 @@ function syncZoneBusinessProps(zone, canvas) {
   const componentKeys = new Set((canvas?.items || []).map(item => item.componentKey))
   if (zone?.zoneKey === 'table') {
     return {
-      showImport: componentKeys.has('import-button'),
-      showExport: componentKeys.has('export-button'),
-      enableCustomQuery: componentKeys.has('custom-query'),
+      showImport: componentKeys.size ? componentKeys.has('import-button') : zone?.props?.showImport !== false,
+      showExport: componentKeys.size ? componentKeys.has('export-button') : zone?.props?.showExport !== false,
+      enableCustomQuery: componentKeys.size ? componentKeys.has('custom-query') : zone?.props?.enableCustomQuery !== false,
     }
   }
   if (zone?.zoneKey === 'edit' || zone?.zoneKey === 'search' || zone?.zoneKey === 'detail') {

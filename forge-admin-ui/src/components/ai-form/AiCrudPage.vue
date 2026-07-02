@@ -425,7 +425,7 @@
 
     <!-- 新增/编辑/详情弹窗 - Modal 模式。详情默认使用弹窗，避免动态页详情占用右侧抽屉。 -->
     <n-modal
-      v-if="!formOnly && !usesInlineFormWorkspace && (modalType === 'modal' || isDetailMode)"
+      v-if="!formOnly && !usesInlineFormWorkspace && (resolvedFormOpenMode === 'modal' || isDetailMode)"
       v-model:show="modalVisible"
       :title="modalTitle"
       preset="card"
@@ -535,7 +535,7 @@
 
     <!-- 新增/编辑抽屉 - Drawer 模式 -->
     <n-drawer
-      v-else-if="!formOnly && !usesInlineFormWorkspace && !isDetailMode"
+      v-else-if="!formOnly && !usesInlineFormWorkspace && !isDetailMode && resolvedFormOpenMode === 'drawer'"
       v-model:show="modalVisible"
       :width="modalWidth"
       :placement="drawerPlacement"
@@ -1986,9 +1986,12 @@ const isDetailMode = computed(() => modalStatus.value === 'detail')
 
 const resolvedFormOpenMode = computed(() => {
   const configured = String(props.formOpenMode || '').trim()
-  if (['modal', 'drawer', 'flat', 'tabWorkspace'].includes(configured))
-    return configured
-  return props.modalType === 'drawer' ? 'drawer' : 'modal'
+  if (configured === 'tabWorkspace' || configured.toLowerCase() === 'tabworkspace')
+    return 'tabWorkspace'
+  const normalized = configured.toLowerCase()
+  if (['modal', 'drawer', 'flat'].includes(normalized))
+    return normalized
+  return String(props.modalType || '').trim().toLowerCase() === 'drawer' ? 'drawer' : 'modal'
 })
 
 const usesInlineFormWorkspace = computed(() => ['flat', 'tabWorkspace'].includes(resolvedFormOpenMode.value))

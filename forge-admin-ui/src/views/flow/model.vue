@@ -94,6 +94,9 @@
               <span class="designer-type-badge" :class="designerTypeClass(item.designerType)">
                 {{ designerTypeLabel(item.designerType) }}
               </span>
+              <span v-if="getCategoryDisplayName(item)" class="category-badge">
+                {{ getCategoryDisplayName(item) }}
+              </span>
             </div>
             <div class="card-binding" :class="{ empty: !item.businessBindings?.length }">
               <i class="i-material-symbols:apps" />
@@ -407,6 +410,7 @@ import flowApi from '@/api/flow'
 import FlowModelStats from '@/components/flow/FlowModelStats.vue'
 import { useDict } from '@/composables/useDict'
 import DesignerAsyncLoader from '@/views/app-center/components/designer/DesignerAsyncLoader.vue'
+import { buildFlowCategoryTreeOptions, resolveFlowCategoryLabel, resolveFlowCategoryValue } from './utils/categoryOptions'
 
 const router = useRouter()
 
@@ -474,7 +478,6 @@ const VersionHistory = defineAsyncComponent({
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_model_status))
 const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])
-const categoryOptions = ref([])
 const categoryTreeOptions = ref([])
 const designerTypeOptions = [
   {
@@ -490,15 +493,6 @@ const designerTypeOptions = [
     desc: '适合完整 BPMN 工作流、服务任务、事件和复杂业务编排。',
   },
 ]
-
-function buildTreeSelectOptions(treeData) {
-  return treeData.map(item => ({
-    label: item.categoryName,
-    value: item.id,
-    key: item.id,
-    children: item.children && item.children.length > 0 ? buildTreeSelectOptions(item.children) : undefined,
-  }))
-}
 
 function statusClass(status) {
   const cls = { 0: 'designing', 1: 'deployed', 2: 'suspended', 3: 'disabled' }
@@ -557,6 +551,10 @@ function designerTypeLabel(value) {
 
 function designerTypeClass(value) {
   return normalizeDesignerType(value) === 'business' ? 'business' : 'approval'
+}
+
+function getCategoryDisplayName(row) {
+  return row?.categoryName || resolveFlowCategoryLabel(row?.category, categoryTreeOptions.value, '')
 }
 
 function getActionOptions(row) {
@@ -627,11 +625,7 @@ async function fetchCategories() {
   try {
     const res = await flowApi.getCategoryTreeSelect(false)
     if (res.code === 200) {
-      categoryTreeOptions.value = buildTreeSelectOptions(res.data || [])
-      categoryOptions.value = (res.data || []).map(item => ({
-        label: item.categoryName,
-        value: item.categoryCode,
-      }))
+      categoryTreeOptions.value = buildFlowCategoryTreeOptions(res.data || [])
     }
   }
   catch {
@@ -728,7 +722,10 @@ function handleAdd() {
 function handleEdit(row) {
   isEdit.value = true
   modalTitle.value = '编辑模型'
-  Object.assign(formData, row, { designerType: normalizeDesignerType(row.designerType) })
+  Object.assign(formData, row, {
+    designerType: normalizeDesignerType(row.designerType),
+    category: resolveFlowCategoryValue(row.category, categoryTreeOptions.value),
+  })
   showModal.value = true
 }
 
@@ -1336,6 +1333,24 @@ onMounted(() => {
   color: #047857;
   background: #ecfdf5;
   border-color: #bbf7d0;
+}
+
+.category-badge {
+  display: inline-flex;
+  max-width: 120px;
+  height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-binding {

@@ -26,7 +26,7 @@
             <strong>单据模式</strong>
             <em>{{ form.documentEnabled ? '运行态已启用' : '普通数据管理' }}</em>
           </div>
-          <div :class="{ active: !!form.options.documentNoField && !!form.noRuleTemplate }">
+          <div :class="{ active: !!form.options.documentNoField && (!!selectedDocumentRuleCode || !!form.noRuleTemplate) }">
             <span>02</span>
             <strong>编号生成</strong>
             <em>{{ form.options.documentNoField || '待选择字段' }}</em>
@@ -116,25 +116,58 @@
               <n-form label-placement="top" size="small" :show-feedback="false">
                 <n-form-item label="编号字段">
                   <n-select
-                    v-model:value="form.options.documentNoField"
+                    :value="form.options.documentNoField"
                     :disabled="!form.documentEnabled"
                     :options="documentNoFieldOptions"
                     clearable
                     filterable
                     placeholder="选择申请单号/单据编号字段"
-                    @update:value="markDirty"
+                    @update:value="handleDocumentNoFieldChange"
                   />
                 </n-form-item>
               </n-form>
-              <DocumentNoRuleEditor
-                v-model="form.noRuleTemplate"
-                :disabled="!form.documentEnabled"
-                :suite-code="effectiveSuiteCode"
-                :object-code="effectiveObjectCode"
-                :field-options="fieldOptions"
-                @preview="handleNoRulePreview"
-                @update:model-value="markDirty"
-              />
+              <div class="document-code-rule-box">
+                <div class="code-rule-row">
+                  <span>自动编号规则</span>
+                  <n-select
+                    :value="selectedDocumentRuleCode"
+                    :disabled="!form.documentEnabled || !form.options.documentNoField"
+                    :options="codeRuleOptions"
+                    :loading="codeRuleLoading"
+                    clearable
+                    filterable
+                    placeholder="选择后会写回字段自动编号配置"
+                    @update:value="updateDocumentFieldRule"
+                  />
+                </div>
+                <div v-if="selectedDocumentRule" class="code-rule-summary">
+                  <strong>{{ selectedDocumentRule.ruleName }}</strong>
+                  <code>{{ selectedDocumentRule.template }}</code>
+                </div>
+                <n-alert v-else-if="form.options.documentNoField" type="warning" :bordered="false">
+                  当前编号字段还没有自动编号规则，请选择一个编码规则；规则会保存到表单设计字段上。
+                </n-alert>
+                <n-alert v-else type="default" :bordered="false">
+                  先选择编号写入字段，再绑定自动编号规则。
+                </n-alert>
+                <div v-if="form.noRuleTemplate && !selectedDocumentRuleCode" class="legacy-rule-note">
+                  检测到旧单据模板：{{ form.noRuleTemplate }}。选择自动编号规则后将以字段配置为准。
+                </div>
+                <div class="code-rule-preview">
+                  <n-button
+                    size="small"
+                    secondary
+                    :disabled="!selectedDocumentRuleCode"
+                    :loading="previewingCodeRule"
+                    @click="previewDocumentCodeRule"
+                  >
+                    预览
+                  </n-button>
+                  <strong :class="{ invalid: noRulePreview?.valid === false }">
+                    {{ noRulePreview?.previewCode || noRulePreview?.previewNo || '选择规则后可预览' }}
+                  </strong>
+                </div>
+              </div>
             </section>
           </div>
 
@@ -198,11 +231,10 @@
 
 <script setup>
 import { useMessage } from 'naive-ui'
-import { computed, reactive, ref, watch } from 'vue'
-import { businessDocumentConfig, saveBusinessDocumentConfig } from '@/api/business-app'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { businessDocumentConfig, codeRuleList, previewCodeRule, saveBusinessDocumentConfig } from '@/api/business-app'
 import { getDictData } from '@/composables/useDict'
 import DocumentConfigSummary from './DocumentConfigSummary.vue'
-import DocumentNoRuleEditor from './DocumentNoRuleEditor.vue'
 import DocumentStatusMappingTable from './DocumentStatusMappingTable.vue'
 
 const props = defineProps({
@@ -232,12 +264,15 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['dirtyChange', 'saved', 'loaded', 'configureFlow'])
+const emit = defineEmits(['dirtyChange', 'saved', 'loaded', 'configureFlow', 'updateFieldGeneration'])
 
 const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
 const noRulePreview = ref(null)
+const previewingCodeRule = ref(false)
+const codeRuleLoading = ref(false)
+const codeRules = ref([])
 const statusOptionsLoading = ref(false)
 const statusValueOptions = ref([])
 const form = reactive(createDefaultConfig())
@@ -262,6 +297,14 @@ const statusFieldOptions = computed(() => activeFields.value.map((field) => {
   }
 }))
 const selectedStatusField = computed(() => fieldMap.value.get(form.statusField) || null)
+const selectedDocumentNoField = computed(() => fieldMap.value.get(form.options.documentNoField) || null)
+const selectedDocumentGeneration = computed(() => resolveFieldGeneration(selectedDocumentNoField.value))
+const selectedDocumentRuleCode = computed(() => selectedDocumentGeneration.value?.ruleCode || form.options.codeRuleCode || '')
+const selectedDocumentRule = computed(() => codeRules.value.find(rule => rule.ruleCode === selectedDocumentRuleCode.value) || null)
+const codeRuleOptions = computed(() => codeRules.value.map(rule => ({
+  label: `${rule.ruleName || rule.ruleCode}（${rule.ruleCode}）`,
+  value: rule.ruleCode,
+})))
 const documentNoFieldOptions = computed(() => {
   const inferred = inferDocumentNoField()
   return activeFields.value
@@ -270,6 +313,10 @@ const documentNoFieldOptions = computed(() => {
       label: `${field.fieldName || field.label || fieldCode(field)}（${fieldCode(field)}）${fieldCode(field) === inferred ? ' - 推荐' : ''}`,
       value: fieldCode(field),
     }))
+})
+
+onMounted(() => {
+  loadCodeRules()
 })
 
 watch(() => props.objectId, () => {
@@ -298,6 +345,11 @@ watch(selectedStatusField, async (field) => {
 watch(activeFields, () => {
   ensureDocumentNoField()
 }, { deep: true, immediate: true })
+
+watch(selectedDocumentRuleCode, () => {
+  if (selectedDocumentRuleCode.value)
+    previewDocumentCodeRule()
+}, { immediate: true })
 
 async function loadConfig() {
   if (!props.objectId) {
@@ -348,6 +400,10 @@ function validateBeforeSave() {
     message.warning('配置编号规则后必须选择编号字段')
     return false
   }
+  if (form.documentEnabled && form.options.documentNoField && !selectedDocumentRuleCode.value && !form.noRuleTemplate) {
+    message.warning('编号字段必须绑定自动编号规则')
+    return false
+  }
   if (noRulePreview.value?.valid === false) {
     message.warning('编号规则存在错误，请先修正预览提示')
     return false
@@ -357,11 +413,12 @@ function validateBeforeSave() {
 
 function buildPayload() {
   const statusMappingRows = normalizeStatusRows(form.statusMappingRows)
+  const legacyNoRuleTemplate = selectedDocumentRuleCode.value ? '' : (form.noRuleTemplate || '')
   return {
     documentEnabled: !!form.documentEnabled,
     documentName: form.documentName || defaultDocumentName.value,
-    documentNoRule: form.noRuleTemplate || '',
-    noRuleTemplate: form.noRuleTemplate || '',
+    documentNoRule: legacyNoRuleTemplate,
+    noRuleTemplate: legacyNoRuleTemplate,
     statusField: form.statusField || '',
     starterField: form.starterField || '',
     ownerField: form.ownerField || '',
@@ -372,6 +429,8 @@ function buildPayload() {
     options: {
       ...(form.options || {}),
       documentNoField: form.options?.documentNoField || '',
+      codeRuleCode: selectedDocumentRuleCode.value || '',
+      documentNoRuleName: selectedDocumentRule.value?.ruleName || '',
     },
   }
 }
@@ -382,6 +441,7 @@ function assignConfig(value = {}) {
     ...(value.options || {}),
   }
   options.documentNoField = options.documentNoField || value.documentNoField || ''
+  options.codeRuleCode = options.codeRuleCode || ''
   options.detailFlowTimelineVisible = readBoolean(options.detailFlowTimelineVisible, true)
   options.detailFlowDiagramVisible = readBoolean(options.detailFlowDiagramVisible, true)
   Object.assign(form, {
@@ -403,12 +463,15 @@ function updateStatusRows(rows) {
   markDirty()
 }
 
-function handleNoRulePreview(preview) {
-  noRulePreview.value = preview
-}
-
 function handleDocumentEnabledChange() {
   ensureDocumentNoField()
+  markDirty()
+}
+
+function handleDocumentNoFieldChange(value = '') {
+  form.options.documentNoField = value || ''
+  form.options.codeRuleCode = resolveFieldGeneration(fieldMap.value.get(value))?.ruleCode || ''
+  noRulePreview.value = null
   markDirty()
 }
 
@@ -488,6 +551,85 @@ function ensureDocumentNoField() {
   if (!form.documentEnabled || form.options.documentNoField)
     return
   form.options.documentNoField = inferDocumentNoField()
+  form.options.codeRuleCode = resolveFieldGeneration(fieldMap.value.get(form.options.documentNoField))?.ruleCode || ''
+}
+
+async function loadCodeRules() {
+  if (codeRules.value.length || codeRuleLoading.value)
+    return
+  codeRuleLoading.value = true
+  try {
+    const res = await codeRuleList({ scene: 'COMMON' })
+    codeRules.value = Array.isArray(res.data) ? res.data : []
+  }
+  finally {
+    codeRuleLoading.value = false
+  }
+}
+
+function updateDocumentFieldRule(ruleCode = '') {
+  form.options.codeRuleCode = ruleCode || ''
+  const fieldCodeValue = form.options.documentNoField
+  if (!fieldCodeValue) {
+    markDirty()
+    return
+  }
+  const generation = ruleCode
+    ? {
+        enabled: true,
+        type: 'CODE_RULE',
+        mode: 'CODE_RULE',
+        ruleCode,
+        trigger: 'ON_CREATE',
+        fillPolicy: 'EMPTY_ONLY',
+        readonly: true,
+      }
+    : { ...(selectedDocumentGeneration.value || {}), enabled: false }
+  emit('updateFieldGeneration', {
+    fieldCode: fieldCodeValue,
+    generation,
+  })
+  if (ruleCode)
+    previewDocumentCodeRule(ruleCode)
+  else
+    noRulePreview.value = null
+  markDirty()
+}
+
+async function previewDocumentCodeRule(ruleCode = selectedDocumentRuleCode.value) {
+  if (!ruleCode)
+    return
+  await loadCodeRules()
+  previewingCodeRule.value = true
+  try {
+    const fieldCodeValue = form.options.documentNoField || 'code'
+    const res = await previewCodeRule({
+      ruleCode,
+      sequence: 1,
+      context: {
+        suiteCode: effectiveSuiteCode.value || 'SUITE',
+        objectCode: effectiveObjectCode.value || 'OBJECT',
+        fieldCode: fieldCodeValue,
+        sampleData: buildSampleData(),
+      },
+    })
+    noRulePreview.value = res.data || null
+  }
+  finally {
+    previewingCodeRule.value = false
+  }
+}
+
+function buildSampleData() {
+  return fieldOptions.value.slice(0, 8).reduce((result, field) => {
+    result[field.value] = field.label?.split('（')?.[0] || field.value
+    return result
+  }, {})
+}
+
+function resolveFieldGeneration(field = {}) {
+  const generation = field?.basicProps?.generation || field?.props?.generation || field?.generation || field?.advancedProps?.generation
+  return generation && generation.enabled === true ? generation : null
 }
 
 function inferDocumentNoField() {
@@ -752,6 +894,79 @@ defineExpose({
   font-size: 12px;
   line-height: 1.55;
   padding: 4px 8px;
+}
+
+.document-code-rule-box {
+  display: grid;
+  gap: 10px;
+}
+
+.code-rule-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.code-rule-row span {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.code-rule-summary {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 10px 12px;
+}
+
+.code-rule-summary strong {
+  color: #1e3a8a;
+  font-size: 13px;
+}
+
+.code-rule-summary code {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legacy-rule-note {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 7px 10px;
+}
+
+.code-rule-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 8px;
+}
+
+.code-rule-preview strong {
+  overflow: hidden;
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-rule-preview strong.invalid {
+  color: #dc2626;
 }
 
 .display-switches {

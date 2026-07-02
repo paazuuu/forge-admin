@@ -371,6 +371,26 @@ export function businessDocumentRuntimeBatch(objectCode, recordIds = []) {
   return request.post(`/ai/business/document/${objectCode}/runtime/batch`, { recordIds })
 }
 
+export function codeRulePage(params) {
+  return request.get('/ai/code-rule/page', { params })
+}
+
+export function codeRuleList(params = {}) {
+  return request.get('/ai/code-rule/list', { params })
+}
+
+export function codeRuleTokens() {
+  return request.get('/ai/code-rule/tokens')
+}
+
+export function previewCodeRule(data) {
+  return request.post('/ai/code-rule/preview', data)
+}
+
+export function generateCodeRule(data) {
+  return request.post('/ai/code-rule/generate', data)
+}
+
 export function businessFlowBinding(objectCode) {
   return request.get(`/ai/business/flow/binding/${objectCode}`)
 }

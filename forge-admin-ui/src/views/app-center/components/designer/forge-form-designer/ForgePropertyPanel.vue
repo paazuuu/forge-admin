@@ -626,12 +626,91 @@
                     />
                   </n-form-item>
                   <n-form-item label="默认值">
+                    <n-select
+                      v-if="defaultValueSelectEnabled"
+                      :value="selectedDefaultValueForSelect"
+                      :options="defaultValueSelectOptions"
+                      :multiple="defaultValueSelectMultiple"
+                      :loading="defaultValueOptionsLoading"
+                      filterable
+                      clearable
+                      placeholder="请选择默认值"
+                      @update:value="updateDefaultValue"
+                    />
                     <n-input
+                      v-else
                       :value="selectedComponent.props?.defaultValue"
                       clearable
                       placeholder="请输入"
-                      @update:value="updateComponent({ props: { defaultValue: $event } })"
+                      @update:value="updateDefaultValue"
                     />
+                  </n-form-item>
+                  <n-form-item label="自动编号">
+                    <div class="auto-code-config">
+                      <div class="switch-line compact">
+                        <span>新增时自动生成</span>
+                        <n-switch
+                          size="small"
+                          :value="selectedGenerationEnabled"
+                          @update:value="handleGenerationEnabled"
+                        />
+                      </div>
+                      <template v-if="selectedGenerationEnabled">
+                        <n-select
+                          :value="selectedGenerationRuleCode"
+                          :options="codeRuleOptions"
+                          :loading="codeRuleLoading"
+                          clearable
+                          filterable
+                          placeholder="选择编码规则"
+                          @update:value="updateGenerationRule"
+                        />
+                        <div class="option-editor-row two-columns">
+                          <n-select
+                            :value="selectedGenerationConfig.fillPolicy || 'EMPTY_ONLY'"
+                            :options="generationFillPolicyOptions"
+                            @update:value="updateGenerationConfig({ fillPolicy: $event || 'EMPTY_ONLY' })"
+                          />
+                          <n-select
+                            :value="selectedGenerationConfig.trigger || 'ON_CREATE'"
+                            :options="generationTriggerOptions"
+                            @update:value="updateGenerationConfig({ trigger: $event || 'ON_CREATE' })"
+                          />
+                        </div>
+                        <div class="switch-line compact">
+                          <span>运行态只读</span>
+                          <n-switch
+                            size="small"
+                            :value="selectedGenerationConfig.readonly !== false"
+                            @update:value="updateGenerationReadonly"
+                          />
+                        </div>
+                        <div v-if="selectedGenerationRule" class="auto-code-rule-summary">
+                          <span>{{ selectedGenerationRule.ruleName }}</span>
+                          <code>{{ selectedGenerationRule.template }}</code>
+                        </div>
+                        <div class="auto-code-preview-row">
+                          <n-button
+                            size="small"
+                            secondary
+                            :disabled="!selectedGenerationRuleCode"
+                            :loading="codeRulePreviewing"
+                            @click="previewSelectedGenerationRule"
+                          >
+                            预览编号
+                          </n-button>
+                          <strong :class="{ invalid: codeRulePreview?.valid === false }">
+                            {{ codeRulePreview?.previewCode || '选择规则后可预览' }}
+                          </strong>
+                        </div>
+                        <div v-if="codeRulePreview?.errors?.length" class="auto-code-issue error">
+                          {{ codeRulePreview.errors[0].message }}
+                        </div>
+                        <div v-else-if="codeRulePreview?.warnings?.length" class="auto-code-issue warning">
+                          {{ codeRulePreview.warnings[0].message }}
+                        </div>
+                      </template>
+                    </div>
                   </n-form-item>
                   <n-form-item label="组件尺寸">
                     <n-select
@@ -3865,9 +3944,11 @@ import {
 } from '@vicons/ionicons5'
 import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
+import { codeRuleList, previewCodeRule } from '@/api/business-app'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
+import { getDictData } from '@/composables/useDict'
 import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
 
@@ -3952,6 +4033,12 @@ const schemaCodeDraft = ref('')
 const schemaCodeDirty = ref(false)
 const sourceError = ref('')
 const sourceModalVisible = ref(false)
+const dictDefaultOptions = ref({})
+const dictDefaultOptionsLoading = ref({})
+const codeRules = ref([])
+const codeRuleLoading = ref(false)
+const codeRulePreview = ref(null)
+const codeRulePreviewing = ref(false)
 const selectedComponent = computed(() => getDesignerComponent(props.schema, props.selectedId))
 const isField = computed(() => selectedComponent.value ? isFieldComponent(selectedComponent.value) : false)
 const isLayout = computed(() => selectedComponent.value ? isLayoutComponent(selectedComponent.value) : false)
@@ -4481,11 +4568,79 @@ const isFieldInsideCrud = computed(() => isField.value && hasAncestorComponent(p
 const selectedCrudFieldConfig = computed(() => isFieldInsideCrud.value ? selectedComponent.value?.props?.__crudConfig || {} : null)
 const isOptionField = computed(() => ['select', 'radio', 'radioButton', 'checkbox', 'transfer', 'cascader', 'treeSelect'].includes(selectedComponent.value?.componentKey || ''))
 const isManualOptionField = computed(() => isOptionField.value && !selectedComponent.value?.props?.dictType && selectedComponent.value?.props?.dataSourceType !== 'remote')
+const defaultValueSelectMultiple = computed(() => ['checkbox'].includes(selectedComponent.value?.componentKey || ''))
+const defaultValueSelectEnabled = computed(() => {
+  const key = selectedComponent.value?.componentKey || ''
+  if (!['select', 'dictSelect', 'radio', 'radioButton', 'checkbox'].includes(key))
+    return false
+  return selectedComponent.value?.props?.dataSourceType !== 'remote'
+})
+const selectedDictType = computed(() => String(selectedComponent.value?.props?.dictType || '').trim())
+const defaultValueOptionsLoading = computed(() => {
+  const dictType = selectedDictType.value
+  return dictType ? dictDefaultOptionsLoading.value[dictType] === true : false
+})
+const defaultValueSelectOptions = computed(() => {
+  const staticOptions = normalizeDefaultValueOptions(selectedOptions.value || [])
+  if (staticOptions.length)
+    return staticOptions
+  const dictType = selectedDictType.value
+  return dictType ? dictDefaultOptions.value[dictType] || [] : []
+})
+const selectedDefaultValueForSelect = computed(() => {
+  const value = selectedComponent.value?.props?.defaultValue
+  if (!defaultValueSelectMultiple.value)
+    return value ?? null
+  if (Array.isArray(value))
+    return value
+  if (value === undefined || value === null || value === '')
+    return []
+  return [value]
+})
+const selectedGenerationConfig = computed(() => selectedComponent.value?.props?.generation || {})
+const selectedGenerationEnabled = computed(() => selectedGenerationConfig.value.enabled === true)
+const selectedGenerationRuleCode = computed(() => selectedGenerationConfig.value.ruleCode || '')
+const codeRuleOptions = computed(() => codeRules.value.map(rule => ({
+  label: `${rule.ruleName || rule.ruleCode}（${rule.ruleCode}）`,
+  value: rule.ruleCode,
+  rule,
+})))
+const selectedGenerationRule = computed(() => {
+  const ruleCode = selectedGenerationRuleCode.value
+  return codeRules.value.find(rule => rule.ruleCode === ruleCode) || null
+})
 const activePropGroups = computed(() => buildNaivePropGroups(selectedComponent.value?.componentKey || ''))
 const runtimeRuleFieldOptions = computed(() => collectRuntimeRuleFieldOptions(props.schema?.components || []))
 const isDictLikeField = computed(() => {
   const key = selectedComponent.value?.componentKey || ''
   return ['select', 'dictSelect', 'radio', 'checkbox', 'cascader'].includes(key)
+})
+
+const generationFillPolicyOptions = [
+  { label: '为空时生成', value: 'EMPTY_ONLY' },
+  { label: '总是覆盖', value: 'OVERWRITE' },
+]
+
+const generationTriggerOptions = [
+  { label: '新增时', value: 'ON_CREATE' },
+]
+
+watch(
+  selectedDictType,
+  (dictType) => {
+    loadDefaultValueDictOptions(dictType)
+  },
+  { immediate: true },
+)
+
+watch(() => props.selectedId, () => {
+  codeRulePreview.value = null
+  if (selectedGenerationEnabled.value)
+    loadCodeRuleOptions()
+})
+
+watch(selectedGenerationRuleCode, () => {
+  codeRulePreview.value = null
 })
 
 function collectRuntimeRuleFieldOptions(components = []) {
@@ -4553,12 +4708,116 @@ function updateCodeColor(value = '') {
 }
 
 function updateDictType(value = '') {
+  loadDefaultValueDictOptions(value)
   updateComponent({
     props: {
       dictType: value || '',
       options: [],
+      defaultValue: undefined,
     },
   })
+}
+
+async function loadCodeRuleOptions() {
+  if (codeRules.value.length || codeRuleLoading.value)
+    return
+  codeRuleLoading.value = true
+  try {
+    const res = await codeRuleList({ scene: 'COMMON' })
+    codeRules.value = Array.isArray(res.data) ? res.data : []
+  }
+  finally {
+    codeRuleLoading.value = false
+  }
+}
+
+function normalizeGenerationConfig(patch = {}) {
+  return {
+    enabled: true,
+    type: 'CODE_RULE',
+    mode: 'CODE_RULE',
+    ruleCode: selectedGenerationRuleCode.value || codeRules.value[0]?.ruleCode || '',
+    trigger: 'ON_CREATE',
+    fillPolicy: 'EMPTY_ONLY',
+    readonly: true,
+    ...(selectedGenerationConfig.value || {}),
+    ...(patch || {}),
+  }
+}
+
+async function handleGenerationEnabled(value) {
+  if (value) {
+    await loadCodeRuleOptions()
+    const next = normalizeGenerationConfig({
+      enabled: true,
+      ruleCode: selectedGenerationRuleCode.value || codeRules.value[0]?.ruleCode || '',
+      readonly: true,
+    })
+    updateComponent({
+      props: {
+        generation: next,
+        defaultValue: undefined,
+      },
+      visibility: { readonly: true },
+    })
+    if (next.ruleCode)
+      previewSelectedGenerationRule(next.ruleCode)
+    return
+  }
+  updateComponent({
+    props: {
+      generation: {
+        ...(selectedGenerationConfig.value || {}),
+        enabled: false,
+      },
+    },
+  })
+  codeRulePreview.value = null
+}
+
+function updateGenerationConfig(patch = {}) {
+  const next = normalizeGenerationConfig(patch)
+  updateComponent({
+    props: { generation: next },
+    ...(next.readonly !== false ? { visibility: { readonly: true } } : {}),
+  })
+}
+
+function updateGenerationRule(ruleCode = '') {
+  updateGenerationConfig({ ruleCode: ruleCode || '' })
+  if (ruleCode)
+    previewSelectedGenerationRule(ruleCode)
+}
+
+function updateGenerationReadonly(value) {
+  updateGenerationConfig({ readonly: value !== false })
+  updateComponent({ visibility: { readonly: value !== false } })
+}
+
+async function previewSelectedGenerationRule(ruleCode = selectedGenerationRuleCode.value) {
+  if (!ruleCode)
+    return
+  await loadCodeRuleOptions()
+  codeRulePreviewing.value = true
+  try {
+    const fieldCode = selectedComponent.value?.fieldBinding?.fieldCode || selectedComponent.value?.field || 'code'
+    const res = await previewCodeRule({
+      ruleCode,
+      sequence: 1,
+      context: {
+        suiteCode: props.schema?.suiteCode || props.schema?.settings?.suiteCode || 'SUITE',
+        objectCode: props.schema?.objectCode || props.schema?.settings?.objectCode || 'OBJECT',
+        fieldCode,
+        sampleData: {
+          [fieldCode]: selectedComponent.value?.label || fieldCode,
+        },
+      },
+    })
+    codeRulePreview.value = res.data || null
+  }
+  finally {
+    codeRulePreviewing.value = false
+  }
 }
 
 function updateFieldBindingCode(value = '') {
@@ -4921,20 +5180,202 @@ function collectBoundFieldOptions(components = [], result = []) {
 }
 
 function updateLabel(value) {
+  const component = selectedComponent.value
   const patch = { label: value }
+  let propsPatch = null
   if (isCrudBlock.value) {
-    patch.props = {
+    propsPatch = {
       title: value,
     }
   }
   else if (isLayout.value) {
-    patch.props = {
+    propsPatch = {
       header: value,
       title: value,
       label: value,
     }
   }
+  else if (isField.value && shouldSyncPlaceholder(component, value)) {
+    propsPatch = {
+      placeholder: buildDefaultPlaceholder(component?.componentKey, value),
+    }
+  }
+  if (propsPatch)
+    patch.props = propsPatch
   updateComponent(patch)
+}
+
+function shouldSyncPlaceholder(component) {
+  if (!component)
+    return false
+  const currentPlaceholder = component.props?.placeholder
+  if (currentPlaceholder === undefined || currentPlaceholder === null)
+    return true
+  const currentText = String(currentPlaceholder).trim()
+  if (!currentText)
+    return true
+  return isAutoGeneratedPlaceholder(component, currentText)
+}
+
+function buildDefaultPlaceholder(componentKey = '', label = '') {
+  const cleanLabel = String(label || '').trim()
+  const prefix = isChoicePlaceholderComponent(componentKey) ? '请选择' : '请填写'
+  return cleanLabel ? `${prefix}${cleanLabel}` : prefix
+}
+
+function buildAutoPlaceholderCandidates(componentKey = '', label = '') {
+  const cleanLabel = String(label || '').trim()
+  const prefixes = isChoicePlaceholderComponent(componentKey)
+    ? ['请选择']
+    : ['请填写', '请输入', '请填入']
+  return prefixes.map(prefix => cleanLabel ? `${prefix}${cleanLabel}` : prefix)
+}
+
+function isAutoGeneratedPlaceholder(component = {}, placeholder = '') {
+  const text = String(placeholder || '').trim()
+  if (!text)
+    return true
+  const labels = resolveAutoPlaceholderLabels(component)
+  return labels.some(label => buildAutoPlaceholderCandidates(component.componentKey, label).includes(text))
+}
+
+function resolveAutoPlaceholderLabels(component = {}) {
+  const labels = [
+    component.label,
+    component.props?.label,
+    component.props?.title,
+    component.props?.header,
+    component.fieldBinding?.fieldName,
+    component.fieldBinding?.fieldCode,
+    component.field,
+    component.name,
+    resolveComponentDefaultLabel(component.componentKey),
+    '字段',
+  ]
+  return Array.from(new Set(labels.map(label => String(label || '').trim()).filter(Boolean)))
+}
+
+function resolveComponentDefaultLabel(componentKey = '') {
+  const labelMap = {
+    input: '输入框',
+    textarea: '多行文本',
+    number: '数字',
+    money: '金额',
+    slider: '滑块',
+    rate: '评分',
+    color: '颜色选择',
+    select: '静态下拉',
+    dictSelect: '字典下拉',
+    radio: '单选',
+    radioButton: '按钮单选',
+    checkbox: '多选',
+    transfer: '穿梭框',
+    cascader: '级联选择',
+    treeSelect: '树形选择',
+    customSelect: '远程选择',
+    date: '日期',
+    datetime: '日期时间',
+    time: '时间',
+    daterange: '日期范围',
+    datetimerange: '日期时间范围',
+    timerange: '时间范围',
+    fileUpload: '文件上传',
+    imageUpload: '图片上传',
+    userSelect: '人员选择',
+    orgTreeSelect: '组织选择',
+    regionTreeSelect: '区域选择',
+  }
+  return labelMap[componentKey] || ''
+}
+
+function isChoicePlaceholderComponent(componentKey = '') {
+  const key = String(componentKey || '').toLowerCase()
+  return [
+    'select',
+    'dictselect',
+    'radio',
+    'radiobutton',
+    'checkbox',
+    'cascader',
+    'treeselect',
+    'dateselect',
+    'datepicker',
+    'timepicker',
+    'time',
+    'date',
+    'datetime',
+    'upload',
+    'fileupload',
+    'imageupload',
+    'userselect',
+    'deptselect',
+    'transfer',
+  ].includes(key)
+}
+
+async function loadDefaultValueDictOptions(dictType = '') {
+  const normalizedType = String(dictType || '').trim()
+  if (!normalizedType || dictDefaultOptions.value[normalizedType] || dictDefaultOptionsLoading.value[normalizedType])
+    return
+  dictDefaultOptionsLoading.value = {
+    ...dictDefaultOptionsLoading.value,
+    [normalizedType]: true,
+  }
+  try {
+    const data = await getDictData(normalizedType)
+    dictDefaultOptions.value = {
+      ...dictDefaultOptions.value,
+      [normalizedType]: normalizeDefaultValueOptions(data),
+    }
+  }
+  finally {
+    const nextLoading = { ...dictDefaultOptionsLoading.value }
+    delete nextLoading[normalizedType]
+    dictDefaultOptionsLoading.value = nextLoading
+  }
+}
+
+function normalizeDefaultValueOptions(options = []) {
+  return (Array.isArray(options) ? options : [])
+    .map((option) => {
+      if (option == null)
+        return null
+      if (typeof option !== 'object') {
+        return {
+          label: String(option),
+          value: option,
+        }
+      }
+      const value = option.value ?? option.dictValue ?? option.key
+      if (value === undefined || value === null)
+        return null
+      const label = option.label ?? option.dictLabel ?? option.title ?? String(value)
+      return {
+        label: formatDefaultValueOptionLabel(label, value),
+        value,
+        disabled: option.disabled === true,
+      }
+    })
+    .filter(Boolean)
+}
+
+function formatDefaultValueOptionLabel(label, value) {
+  const labelText = String(label ?? '')
+  const valueText = String(value ?? '')
+  return labelText && valueText && labelText !== valueText ? `${labelText}（${valueText}）` : labelText || valueText
+}
+
+function updateDefaultValue(value) {
+  if (defaultValueSelectMultiple.value) {
+    const nextValue = Array.isArray(value)
+      ? value
+      : value === undefined || value === null || value === ''
+        ? []
+        : [value]
+    updateComponent({ props: { defaultValue: nextValue.length ? nextValue : undefined } })
+    return
+  }
+  updateComponent({ props: { defaultValue: value === null || value === undefined || value === '' ? undefined : value } })
 }
 
 function addLayoutChild(componentKey = '') {
@@ -6428,6 +6869,7 @@ function handleOpenSourcePanel() {
 
 onMounted(() => {
   window.addEventListener('forge-form-designer:open-source-panel', handleOpenSourcePanel)
+  loadCodeRuleOptions()
 })
 
 onBeforeUnmount(() => {
@@ -6892,6 +7334,65 @@ onBeforeUnmount(() => {
   color: #3f3f46;
   font-size: 12px;
   font-weight: 600;
+}
+
+.auto-code-config {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.auto-code-rule-summary {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eff6ff;
+  padding: 8px 10px;
+}
+
+.auto-code-rule-summary span {
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auto-code-rule-summary code {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-code-preview-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.auto-code-preview-row strong {
+  overflow: hidden;
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-code-preview-row strong.invalid,
+.auto-code-issue.error {
+  color: #dc2626;
+}
+
+.auto-code-issue {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auto-code-issue.warning {
+  color: #b45309;
 }
 
 .linkage-action-list {

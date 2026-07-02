@@ -118,8 +118,8 @@
           <n-input
             :value="activeDesignerPage.routePath"
             size="small"
-            placeholder="路由片段/页面标识，如 detail/:id"
-            title="当前多页面仍由业务对象运行页统一承载，这里用于事件跳转、弹窗页和详情页识别，不是单独前端路由文件"
+            placeholder="路由片段/页面标识，如 dialog/customer"
+            title="当前多页面仍由业务对象运行页统一承载，这里用于事件跳转、弹窗页和自定义页面识别，不是单独前端路由文件"
             @update:value="patchActivePage({ routePath: $event })"
           />
           <n-input
@@ -159,30 +159,6 @@
           <n-button class="page-param-add-button" size="tiny" dashed @click="addActivePageParam">
             + 参数
           </n-button>
-        </div>
-        <div v-if="activeDesignerPage?.pageType === 'detail'" class="page-data-row">
-          <div class="page-param-title">
-            详情数据
-          </div>
-          <n-select
-            :value="activeDesignerPage.detailMethod || 'get'"
-            :options="requestMethodOptions"
-            size="small"
-            class="page-method-select"
-            @update:value="patchActivePage({ detailMethod: $event || 'get' })"
-          />
-          <n-input
-            :value="activeDesignerPage.detailApi || ''"
-            size="small"
-            placeholder="详情接口，如 get@/api/customer/:id 或 /api/customer/:id"
-            @update:value="patchActivePage({ detailApi: $event })"
-          />
-          <n-input
-            :value="activeDesignerPage.detailDataField || 'data'"
-            size="small"
-            placeholder="数据字段，如 data"
-            @update:value="patchActivePage({ detailDataField: $event || 'data' })"
-          />
         </div>
         <div class="page-settings-footer">
           <n-button size="tiny" secondary title="复制页面" @click="duplicateActivePage">
@@ -310,7 +286,6 @@ import {
   buildPageDesignModelSchema,
   createDefaultListGridLayout,
   createDefaultPageSchema,
-  createGridBlock,
   createPageModelRef,
   isPageFieldVisible,
   LIST_PAGE_DESIGN_WIDTH,
@@ -367,6 +342,7 @@ const activePageKey = ref('list')
 const pageSettingsExpanded = ref(false)
 const HISTORY_LIMIT = 50
 let applyingExternalSchema = false
+const VALID_PAGE_TYPES = new Set(['list', 'create', 'edit', 'dialog', 'drawer', 'custom'])
 
 const baseModelSchema = computed(() => {
   const modelFields = props.modelSchema?.fields || []
@@ -387,16 +363,11 @@ const templateSelectValue = ref(resolveTemplateSelectValue(localSchema.value.lay
 const listCustomActions = ref([])
 const pageTypeOptions = [
   { label: '列表页', value: 'list' },
-  { label: '详情页', value: 'detail' },
   { label: '新增页', value: 'create' },
   { label: '编辑页', value: 'edit' },
   { label: '弹窗页', value: 'dialog' },
   { label: '抽屉页', value: 'drawer' },
   { label: '自定义页', value: 'custom' },
-]
-const requestMethodOptions = [
-  { label: 'GET', value: 'get' },
-  { label: 'POST', value: 'post' },
 ]
 const listTemplateOptions = [
   { label: '标准列表模板', key: 'simple-crud', icon: renderMenuIcon(ListOutline) },
@@ -462,6 +433,8 @@ function resolveTemplateSelectValue(layoutType = '') {
 }
 
 function renderMenuIcon(icon) {
+  if (!icon)
+    return undefined
   return () => h(NaiveIcon, null, { default: () => h(icon) })
 }
 
@@ -579,10 +552,10 @@ function createCleanTemplateGridLayout(layoutType, schema = localSchema.value) {
           ...normalizedPreviousProps,
           title: normalizedPreviousProps.title || normalizedTableProps.title || item.props?.title,
           showSearch: searchZone.enabled !== false,
-          showImport: normalizedPreviousProps.showImport ?? normalizedTableProps.showImport ?? (hasPreviousToolbar ? toolbarActions.includes('import') : item.props?.showImport),
-          showExport: normalizedPreviousProps.showExport ?? normalizedTableProps.showExport ?? (hasPreviousToolbar ? toolbarActions.includes('export') : item.props?.showExport),
-          hideBatchDelete: normalizedPreviousProps.hideBatchDelete ?? normalizedTableProps.hideBatchDelete ?? (hasPreviousToolbar ? !toolbarActions.includes('batch-delete') : item.props?.hideBatchDelete),
-          enableCustomQuery: normalizedPreviousProps.enableCustomQuery ?? normalizedTableProps.enableCustomQuery ?? (hasPreviousToolbar ? toolbarActions.includes('custom-query') : item.props?.enableCustomQuery),
+          showImport: normalizedPreviousProps.showImport ?? normalizedTableProps.showImport ?? (hasPreviousToolbar ? toolbarActions.includes('import') : item.props?.showImport ?? true),
+          showExport: normalizedPreviousProps.showExport ?? normalizedTableProps.showExport ?? (hasPreviousToolbar ? toolbarActions.includes('export') : item.props?.showExport ?? true),
+          hideBatchDelete: normalizedPreviousProps.hideBatchDelete ?? normalizedTableProps.hideBatchDelete ?? (hasPreviousToolbar ? !toolbarActions.includes('batch-delete') : item.props?.hideBatchDelete ?? false),
+          enableCustomQuery: normalizedPreviousProps.enableCustomQuery ?? normalizedTableProps.enableCustomQuery ?? (hasPreviousToolbar ? toolbarActions.includes('custom-query') : item.props?.enableCustomQuery ?? true),
           defaultSortField: normalizedPreviousProps.defaultSortField || normalizedTableProps.defaultSortField || 'id',
           defaultSortOrder: normalizedPreviousProps.defaultSortOrder || normalizedTableProps.defaultSortOrder || 'desc',
           fieldSettings: {
@@ -739,7 +712,7 @@ function duplicateActivePage() {
   const copy = cloneSchema(source)
   copy.pageKey = pageKey
   copy.pageName = `${source.pageName || '页面'} 副本`
-  copy.pageType = source.pageType === 'list' || source.pageType === 'detail' ? 'custom' : source.pageType || 'custom'
+  copy.pageType = source.pageType === 'list' ? 'custom' : normalizeDesignerPageType(source.pageType || 'custom')
   copy.routePath = ''
   setLocalSchema({
     ...localSchema.value,
@@ -766,14 +739,12 @@ function resetActivePageLayout() {
   const page = activeDesignerPage.value
   if (!page)
     return
-  const gridLayout = page.pageKey === 'detail' || page.pageType === 'detail'
-    ? createDefaultDetailGridLayout(effectiveModelSchema.value, localSchema.value.layoutType)
-    : page.pageKey === 'list' || page.pageType === 'list'
-      ? createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: localSchema.value.layoutType })
-      : {
-          ...createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: localSchema.value.layoutType }),
-          items: [],
-        }
+  const gridLayout = page.pageKey === 'list' || page.pageType === 'list'
+    ? createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: localSchema.value.layoutType })
+    : {
+        ...createDefaultListGridLayout(effectiveModelSchema.value, { layoutType: localSchema.value.layoutType }),
+        items: [],
+      }
   const pages = updateDesignerPageGrid(localSchema.value.pages || [], page.pageKey, gridLayout)
   const nextSchema = {
     ...localSchema.value,
@@ -906,6 +877,11 @@ function isProtectedPage(pageKey = '') {
 
 function pageTypeText(pageType = 'custom') {
   return pageTypeOptions.find(item => item.value === pageType)?.label || '自定义页'
+}
+
+function normalizeDesignerPageType(pageType = 'custom') {
+  const value = String(pageType || 'custom')
+  return VALID_PAGE_TYPES.has(value) ? value : 'custom'
 }
 
 function rewritePageEventTargets(schema, oldKey, nextKey) {
@@ -1071,6 +1047,8 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
   const editFields = buildDesignerEditSchema(editZone, fieldMap)
   const hookHandlers = buildDesignerCrudHookHandlers(tableProps)
   const runtimeActions = normalizeListCustomActions(customActions)
+  const resolvedFormOpenMode = resolveDesignerFormOpenMode(tableProps, editProps)
+  const resolvedModalType = resolveDesignerModalType(resolvedFormOpenMode, tableProps, editProps)
   return {
     lazy: true,
     loadDetailOnEdit: false,
@@ -1106,19 +1084,19 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
     editYGap: editProps.editYGap ?? editProps.rowGap ?? tableProps.editYGap ?? 8,
     modalWidth: tableProps.modalWidth || editProps.modalWidth || '800px',
     detailModalWidth: tableProps.detailModalWidth || 'min(1080px, 92vw)',
-    formOpenMode: tableProps.formOpenMode || editProps.formOpenMode || tableProps.modalType || editProps.modalType || 'modal',
+    formOpenMode: resolvedFormOpenMode,
     tabWorkspace: tableProps.tabWorkspace || editProps.tabWorkspace || {},
-    modalType: tableProps.modalType || editProps.modalType || 'modal',
+    modalType: resolvedModalType,
     drawerPlacement: tableProps.drawerPlacement || 'right',
     hideModalFooter: tableProps.hideModalFooter === true,
     hideDefaultDetailContent: tableProps.hideDefaultDetailContent === true,
     hideToolbar: tableProps.hideToolbar === true,
     hideAdd: tableProps.hideAdd === true,
     hideBatchDelete: tableProps.hideBatchDelete === true,
-    showImport: tableProps.showImport === true,
-    showExport: tableProps.showExport === true,
+    showImport: tableProps.showImport !== false,
+    showExport: tableProps.showExport !== false,
     showExportTasks: tableProps.showExportTasks !== false,
-    enableCustomQuery: tableProps.enableCustomQuery === true,
+    enableCustomQuery: tableProps.enableCustomQuery !== false,
     addButtonText: tableProps.addButtonText || '新增',
     exportButtonText: tableProps.exportButtonText || '导出',
     exportFileName: tableProps.exportFileName || '',
@@ -1144,6 +1122,23 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
     runtimeActions: runtimeActions.filter(action => (action.position || 'row') === 'row'),
     ...hookHandlers,
   }
+}
+
+function resolveDesignerFormOpenMode(tableProps = {}, editProps = {}) {
+  const value = editProps.formOpenMode || tableProps.formOpenMode || editProps.modalType || tableProps.modalType || 'modal'
+  const mode = String(value || '').trim()
+  if (mode === 'tabWorkspace' || mode.toLowerCase() === 'tabworkspace')
+    return 'tabWorkspace'
+  const normalized = mode.toLowerCase()
+  return ['modal', 'drawer', 'flat'].includes(normalized) ? normalized : 'modal'
+}
+
+function resolveDesignerModalType(formOpenMode = 'modal', tableProps = {}, editProps = {}) {
+  if (['modal', 'drawer'].includes(formOpenMode))
+    return formOpenMode
+  const value = editProps.modalType || tableProps.modalType || 'modal'
+  const normalized = String(value || '').trim().toLowerCase()
+  return ['modal', 'drawer'].includes(normalized) ? normalized : 'modal'
 }
 
 function buildDesignerCrudHookHandlers(tableProps = {}) {
@@ -1802,9 +1797,9 @@ function resolveSchema(pageSchema, modelSchema) {
 function ensureGridListSchema(schema = {}, modelSchema = effectiveModelSchema.value) {
   const listPageGrid = (schema.pages || []).find(page => page?.pageKey === 'list')?.gridLayout
   const sourceGrid = listPageGrid || schema.listGridLayout
-  const fallbackGrid = sourceGrid?.items?.length
+  const fallbackGrid = sourceGrid?.items?.length && isStandardListGridLayout(sourceGrid)
     ? sourceGrid
-    : bootstrapGridLayoutFromZones(schema.zones || [], modelSchema, { layoutType: schema.layoutType })
+    : createDefaultListGridLayout(modelSchema, { layoutType: schema.layoutType })
   const syncedGrid = syncGridLayoutWithModel(fallbackGrid, modelSchema, { layoutType: schema.layoutType })
   return {
     ...schema,
@@ -1815,12 +1810,13 @@ function ensureGridListSchema(schema = {}, modelSchema = effectiveModelSchema.va
   }
 }
 
+function isStandardListGridLayout(gridLayout = {}) {
+  return Array.isArray(gridLayout.items) && gridLayout.items.some(item => item?.blockType === 'AiCrudPage')
+}
+
 function ensureDesignerPages(schema, modelSchema) {
   const sourcePages = Array.isArray(schema.pages) ? schema.pages : []
-  const removedPageSet = new Set(schema.removedPageKeys || [])
   const listPage = sourcePages.find(page => page.pageKey === 'list')
-  const detailPage = sourcePages.find(page => page.pageKey === 'detail')
-  const hasExplicitDetailGrid = detailPage && Object.prototype.hasOwnProperty.call(detailPage, 'gridLayout')
   const listGridLayout = listPage?.gridLayout
     || schema.listGridLayout
     || createDefaultListGridLayout(modelSchema, { layoutType: schema.layoutType })
@@ -1837,26 +1833,12 @@ function ensureDesignerPages(schema, modelSchema) {
       detailDataField: 'data',
       gridLayout: listGridLayout,
     }),
-    ...(!removedPageSet.has('detail') || detailPage
-      ? [normalizeDesignerPage(detailPage, {
-          pageKey: 'detail',
-          pageName: '详情页',
-          pageType: 'detail',
-          routePath: 'detail/:id',
-          description: '业务详情页面',
-          params: [{ name: 'id', value: ':id' }],
-          detailMethod: detailPage?.detailMethod || 'get',
-          detailApi: detailPage?.detailApi || '',
-          detailDataField: detailPage?.detailDataField || 'data',
-          gridLayout: hasExplicitDetailGrid ? detailPage.gridLayout : createDefaultDetailGridLayout(modelSchema, schema.layoutType),
-        })]
-      : []),
     ...sourcePages
       .filter(page => !['list', 'detail'].includes(page.pageKey))
       .map(page => normalizeDesignerPage(page, {
         pageKey: page.pageKey,
         pageName: page.pageName || '自定义页面',
-        pageType: page.pageType || 'custom',
+        pageType: normalizeDesignerPageType(page.pageType || 'custom'),
         routePath: page.routePath || '',
         description: page.description || '',
         params: page.params || [],
@@ -1877,7 +1859,7 @@ function normalizeDesignerPage(page, defaults) {
     ...(page || {}),
     pageKey: page?.pageKey || defaults.pageKey,
     pageName: page?.pageName || defaults.pageName,
-    pageType: page?.pageType || defaults.pageType || 'custom',
+    pageType: normalizeDesignerPageType(page?.pageType || defaults.pageType || 'custom'),
     routePath: page?.routePath ?? defaults.routePath ?? '',
     description: page?.description ?? defaults.description ?? '',
     params: Array.isArray(page?.params) ? page.params : defaults.params || [],
@@ -1894,11 +1876,11 @@ function updateDesignerPageGrid(pages = [], pageKey = 'list', gridLayout) {
       ...pages,
       {
         pageKey,
-        pageName: pageKey === 'detail' ? '详情页' : '列表页',
-        pageType: pageKey,
-        routePath: pageKey === 'detail' ? 'detail/:id' : '',
+        pageName: pageKey === 'list' ? '列表页' : '页面',
+        pageType: pageKey === 'list' ? 'list' : 'custom',
+        routePath: '',
         description: '',
-        params: pageKey === 'detail' ? [{ name: 'id', value: ':id' }] : [],
+        params: [],
         detailMethod: 'get',
         detailApi: '',
         detailDataField: 'data',
@@ -1909,47 +1891,6 @@ function updateDesignerPageGrid(pages = [], pageKey = 'list', gridLayout) {
   return pages.map(page => page.pageKey === pageKey
     ? { ...page, gridLayout }
     : page)
-}
-
-function createDefaultDetailGridLayout(modelSchema, layoutType = 'simple-crud') {
-  const back = createGridBlock('back-button', modelSchema, { gridX: 0, gridY: 0 })
-  const title = createGridBlock('page-title', modelSchema, { gridX: 2, gridY: 0 })
-  const detail = createGridBlock('detail-info', modelSchema, { gridX: 0, gridY: 2 })
-  if (back) {
-    back.gridW = 2
-    back.gridH = 1
-  }
-  if (title) {
-    title.label = '详情页标题'
-    title.gridW = 10
-    title.gridH = 2
-    title.props = {
-      ...(title.props || {}),
-      title: '详情信息',
-      subtitle: '查看当前业务记录的完整信息',
-      statusText: '详情',
-      statusType: 'info',
-    }
-  }
-  if (detail) {
-    detail.label = '详情信息'
-    detail.gridW = 12
-    detail.gridH = 8
-    detail.props = {
-      ...(detail.props || {}),
-      title: '基础信息',
-      columnCount: 2,
-      bordered: false,
-    }
-  }
-  return {
-    cols: 12,
-    rowHeight: 32,
-    gap: 8,
-    designWidth: LIST_PAGE_DESIGN_WIDTH,
-    layoutType,
-    items: [back, title, detail].filter(Boolean),
-  }
 }
 
 function setLocalSchema(schema, options = {}) {
