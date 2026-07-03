@@ -825,31 +825,33 @@ function handlePreview() {
 
 async function handlePublish(options = {}) {
   const publishOptions = options && typeof options === 'object' && !('target' in options) ? options : {}
-  if (!objectId.value)
+  if (!objectId.value || publishing.value)
     return
-  await syncActiveFormDraft()
-  await syncActiveListDraft()
-  await persistPendingDesignerDraft()
-  if (dirty.value) {
-    await handleSave()
-  }
-  const latestCheck = await refreshPublishCheckState()
-  if (latestCheck?.publishable === false) {
-    message.warning(formatPublishBlockMessage(latestCheck))
-    activePanel.value = 'publish'
-    await nextTick()
-    await publishChecklistRef.value?.refresh?.()
-    return
-  }
-  if (hasTableSyncIssue(latestCheck) && !publishOptions.syncTable) {
-    message.warning('发布前请在发布检查中确认同步数据表结构')
-    activePanel.value = 'publish'
-    await nextTick()
-    await publishChecklistRef.value?.refresh?.()
-    return
-  }
   publishing.value = true
   try {
+    window.$loading?.show?.('正在发布业务单元，请稍候...')
+    await waitForSaveLoadingPaint()
+    await syncActiveFormDraft()
+    await syncActiveListDraft()
+    await persistPendingDesignerDraft()
+    if (dirty.value) {
+      await handleSave()
+    }
+    const latestCheck = await refreshPublishCheckState()
+    if (latestCheck?.publishable === false) {
+      message.warning(formatPublishBlockMessage(latestCheck))
+      activePanel.value = 'publish'
+      await nextTick()
+      await publishChecklistRef.value?.refresh?.()
+      return
+    }
+    if (hasTableSyncIssue(latestCheck) && !publishOptions.syncTable) {
+      message.warning('发布前请在发布检查中确认同步数据表结构')
+      activePanel.value = 'publish'
+      await nextTick()
+      await publishChecklistRef.value?.refresh?.()
+      return
+    }
     const res = await publishBusinessObject(objectId.value, {
       publishMode: 'PUBLISH',
       syncTable: !!publishOptions.syncTable,
@@ -867,6 +869,7 @@ async function handlePublish(options = {}) {
       await publishChecklistRef.value?.refresh?.()
   }
   finally {
+    window.$loading?.close?.()
     publishing.value = false
   }
 }
@@ -1029,9 +1032,12 @@ function handleFieldGenerationUpdate(payload = {}) {
     const code = field.fieldCode || field.field
     if (code !== fieldCode)
       return field
+    const enabled = generation.enabled === true
     return {
       ...field,
-      readonly: generation.enabled === true ? true : field.readonly,
+      readonly: enabled ? true : field.readonly,
+      required: enabled ? false : field.required,
+      formVisible: enabled ? false : field.formVisible,
       basicProps: {
         ...(field.basicProps || {}),
         generation,
@@ -2001,6 +2007,7 @@ function syncDraftModelFields(fields = []) {
         referenceObjectCode: field.referenceObjectCode,
         referenceDisplayField: field.referenceDisplayField,
         sortOrder: field.sortOrder,
+        formulaConfig: cloneSchema(field.formulaConfig || null),
         basicProps: cloneSchema(field.basicProps || {}),
         advancedProps: cloneSchema(field.advancedProps || {}),
       }
@@ -2031,9 +2038,15 @@ function updateFormDesignerFieldGeneration(schema = {}, fieldCode = '', generati
           generation,
         }
         if (generation.enabled === true) {
+          component.validation = {
+            ...(component.validation || {}),
+            required: false,
+            requiredMessage: '',
+          }
           component.visibility = {
             ...(component.visibility || {}),
             readonly: true,
+            hidden: true,
           }
         }
       }

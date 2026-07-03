@@ -11,6 +11,7 @@ import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessDocumentConfig
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessFlowInstanceLink;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessObject;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessActionExecuteDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowBindingDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowCallbackDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowResubmitDTO;
@@ -88,6 +89,7 @@ public class BusinessFlowService {
     private final BusinessCodeFormProviderRegistry codeFormProviderRegistry;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ObjectProvider<RedissonClient> redissonClientProvider;
+    private final ObjectProvider<BusinessActionExecutionService> actionExecutionServiceProvider;
     private final Map<String, ReentrantLock> localFlowStartLocks = new ConcurrentHashMap<>();
 
     /**
@@ -2440,6 +2442,10 @@ public class BusinessFlowService {
         Map<String, Object> currentData = StringUtils.isBlank(configKey)
                 ? null
                 : dynamicCrudService.selectById(configKey, link.getRecordId());
+        executeFlowCallbackAction(link, bindingConfig, result, dto);
+        if (StringUtils.isNotBlank(configKey)) {
+            currentData = dynamicCrudService.selectById(configKey, link.getRecordId());
+        }
         if (documentConfig != null) {
             publishFlowResultEvent(link, documentConfig, result, previousData, currentData, dto);
         } else if (runtimeConfig != null) {
@@ -2535,6 +2541,81 @@ public class BusinessFlowService {
             return StringUtils.defaultIfBlank(statusMapping.getString(statusKey), statusKey);
         }
         return statusKey;
+    }
+
+    private void executeFlowCallbackAction(AiBusinessFlowInstanceLink link,
+                                           JSONObject bindingConfig,
+                                           String result,
+                                           BusinessFlowCallbackDTO dto) {
+        String actionCode = resolveFlowCallbackActionCode(bindingConfig, result);
+        if (StringUtils.isBlank(actionCode)) {
+            return;
+        }
+        BusinessActionExecutionService actionExecutionService = actionExecutionServiceProvider.getIfAvailable();
+        if (actionExecutionService == null) {
+            throw new BusinessException("动作执行服务未启用，无法执行流程回调动作");
+        }
+        BusinessActionExecuteDTO request = new BusinessActionExecuteDTO();
+        request.setObjectCode(link.getObjectCode());
+        request.setRecordId(link.getRecordId() == null ? null : String.valueOf(link.getRecordId()));
+        request.setActionCode(actionCode);
+        request.setIdempotencyKey(buildFlowCallbackActionIdempotencyKey(link, result, actionCode));
+        request.setContext(buildFlowCallbackActionContext(link, result, dto));
+        try {
+            actionExecutionService.execute(request);
+        } catch (BusinessException e) {
+            log.warn("[低代码流程回调] 动作执行失败: objectCode={}, recordId={}, result={}, actionCode={}, error={}",
+                    link.getObjectCode(), link.getRecordId(), result, actionCode, e.getMessage());
+            throw new BusinessException("流程回调动作执行失败: " + e.getMessage());
+        }
+    }
+
+    private String resolveFlowCallbackActionCode(JSONObject bindingConfig, String result) {
+        if (bindingConfig == null || StringUtils.isBlank(result)) {
+            return null;
+        }
+        JSONObject options = bindingConfig.getJSONObject("options");
+        JSONObject callbackActions = options == null ? null : options.getJSONObject("callbackActions");
+        if (callbackActions == null || callbackActions.isEmpty()) {
+            callbackActions = bindingConfig.getJSONObject("callbackActions");
+        }
+        if (callbackActions == null || callbackActions.isEmpty()) {
+            return null;
+        }
+        String normalizedResult = StringUtils.defaultString(result).toUpperCase();
+        return StringUtils.firstNonBlank(
+                callbackActions.getString(normalizedResult),
+                callbackActions.getString(normalizedResult.toLowerCase()),
+                switch (normalizedResult) {
+                    case "APPROVED" -> callbackActions.getString("approvedActionCode");
+                    case "REJECTED" -> callbackActions.getString("rejectedActionCode");
+                    case "CANCELED" -> callbackActions.getString("canceledActionCode");
+                    default -> null;
+                }
+        );
+    }
+
+    private String buildFlowCallbackActionIdempotencyKey(AiBusinessFlowInstanceLink link, String result, String actionCode) {
+        return "flowCallback:"
+                + StringUtils.defaultString(link.getProcessInstanceId(), link.getBusinessKey())
+                + ":" + StringUtils.defaultString(result)
+                + ":" + StringUtils.defaultString(actionCode);
+    }
+
+    private Map<String, Object> buildFlowCallbackActionContext(AiBusinessFlowInstanceLink link,
+                                                               String result,
+                                                               BusinessFlowCallbackDTO dto) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("source", "FLOW_CALLBACK");
+        context.put("flowResult", result);
+        context.put("processInstanceId", link.getProcessInstanceId());
+        context.put("businessKey", link.getBusinessKey());
+        context.put("flowModelKey", link.getFlowModelKey());
+        context.put("operatorId", dto.getOperatorId() != null ? dto.getOperatorId() : link.getStartUserId());
+        if (dto.getVariables() != null && !dto.getVariables().isEmpty()) {
+            context.put("variables", dto.getVariables());
+        }
+        return context;
     }
 
     private void validateBusinessBindingRuntimeTable(BusinessFlowBindingDTO.BusinessBindingDTO businessBinding,

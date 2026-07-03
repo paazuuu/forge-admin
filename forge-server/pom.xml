@@ -65,6 +65,9 @@
         <maven-compiler-plugin.verison>3.11.0</maven-compiler-plugin.verison>
         <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
         <flatten-maven-plugin.version>1.3.0</flatten-maven-plugin.version>
+        <forge.compiler.skip>true</forge.compiler.skip>
+        <forge.tests.skip>true</forge.tests.skip>
+        <forge.test.groups>${profiles.active}</forge.test.groups>
     </properties>
     
     <profiles>
@@ -94,6 +97,31 @@
                 <profiles.active>prod</profiles.active>
                 <logging.level>warn</logging.level>
             </properties>
+        </profile>
+        <profile>
+            <id>enable-tests</id>
+            <properties>
+                <forge.compiler.skip>false</forge.compiler.skip>
+                <forge.tests.skip>false</forge.tests.skip>
+                <forge.test.groups></forge.test.groups>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <testExcludes>
+                                <testExclude>**/DataScopeInterceptorTest.java</testExclude>
+                                <testExclude>**/FormulaExecutionEngineTest.java</testExclude>
+                                <testExclude>**/DynamicCrudRepositoryTest.java</testExclude>
+                                <testExclude>**/DbAggregateDataProviderTest.java</testExclude>
+                                <testExclude>**/BusinessObjectPublishServiceFormulaTest.java</testExclude>
+                            </testExcludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
     
@@ -151,7 +179,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.verison}</version>
                 <configuration>
-                    <skip>true</skip>
+                    <skip>${forge.compiler.skip}</skip>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
@@ -193,10 +221,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
-                    <skipTests>true</skipTests>
+                    <skipTests>${forge.tests.skip}</skipTests>
                     <argLine>-Dfile.encoding=UTF-8</argLine>
                     <!-- 根据打包环境执行对应的@Tag测试方法 -->
-                    <groups>${profiles.active}</groups>
+                    <groups>${forge.test.groups}</groups>
                     <!-- 排除标签 -->
                     <excludedGroups>exclude</excludedGroups>
                 </configuration>

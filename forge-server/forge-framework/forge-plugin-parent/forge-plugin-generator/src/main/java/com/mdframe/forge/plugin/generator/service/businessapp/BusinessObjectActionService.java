@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.constant.BusinessObjectDesignStatus;
 import com.mdframe.forge.plugin.generator.constant.BusinessReadinessStatus;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessObject;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessObjectActionDTO;
 import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
+import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessObjectActionVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessPermissionSummaryVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessReadinessItemVO;
@@ -34,17 +36,40 @@ public class BusinessObjectActionService {
 
     private static final String DESIGNER_ACTIONS_KEY = "actions";
     private static final Set<String> ACTION_POSITIONS = Set.of("TOOLBAR", "ROW", "DETAIL");
-    private static final Set<String> ACTION_TYPES = Set.of("OPEN_PAGE", "CALL_API", "START_FLOW", "START_APPROVAL", "TRIGGER", "OPEN_EXTERNAL");
+    private static final Set<String> ACTION_TYPES = Set.of("OPEN_PAGE", "CALL_API", "START_FLOW", "START_APPROVAL", "TRIGGER", "OPEN_EXTERNAL", "COMMAND");
     private static final String PERMISSION_PATTERN = "^[A-Za-z0-9:_-]{3,128}$";
 
     private final ObjectMapper objectMapper;
     private final BusinessObjectDesignerService designerService;
     private final BusinessBindingMapper bindingMapper;
+    private final BusinessObjectMapper businessObjectMapper;
     private final BusinessPermissionService permissionService;
 
     public List<BusinessObjectActionVO> listActions(Long objectId) {
         BusinessObjectDesignerService.DesignerContext context = designerService.loadContext(objectId);
         return readActions(context.getObject().getDesignerOptions());
+    }
+
+    public ResolvedBusinessAction resolveAction(String suiteCode, String objectCode, String actionCode) {
+        String normalizedObjectCode = StringUtils.trimToNull(objectCode);
+        String normalizedActionCode = normalizeActionCode(actionCode);
+        if (StringUtils.isBlank(normalizedObjectCode)) {
+            throw new BusinessException("业务对象编码不能为空");
+        }
+        AiBusinessObject object = StringUtils.isNotBlank(suiteCode)
+                ? businessObjectMapper.selectByObjectCode(resolveTenantId(), suiteCode.trim(), normalizedObjectCode)
+                : businessObjectMapper.selectFirstByObjectCode(resolveTenantId(), normalizedObjectCode);
+        if (object == null) {
+            throw new BusinessException("业务对象不存在: " + normalizedObjectCode);
+        }
+        BusinessObjectActionVO action = readActions(object.getDesignerOptions()).stream()
+                .filter(item -> normalizedActionCode.equalsIgnoreCase(item.getActionCode()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException("业务动作不存在: " + normalizedActionCode));
+        if (Integer.valueOf(0).equals(action.getStatus())) {
+            throw new BusinessException("业务动作已停用: " + action.getActionName());
+        }
+        return new ResolvedBusinessAction(object, action);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -254,6 +279,7 @@ public class BusinessObjectActionService {
             actualPermission = switch (actionType) {
                 case "START_FLOW" -> "ai:businessFlow:start";
                 case "TRIGGER" -> "ai:businessTrigger:execute";
+                case "COMMAND" -> "ai:businessAction:execute";
                 default -> null;
             };
         }
@@ -321,5 +347,8 @@ public class BusinessObjectActionService {
             tenantId = null;
         }
         return tenantId != null ? tenantId : 1L;
+    }
+
+    public record ResolvedBusinessAction(AiBusinessObject object, BusinessObjectActionVO action) {
     }
 }

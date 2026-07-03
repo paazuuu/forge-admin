@@ -81,7 +81,7 @@ public class BusinessObjectDesignerService {
             "switch", "select", "radio", "checkbox", "dictSelect", "cascader",
             "regionTreeSelect", "orgTreeSelect", "orgSelect", "departmentSelect", "departmentTreeSelect",
             "deptSelect", "deptTreeSelect", "elTreeSelect", "orgName", "deptName", "userSelect",
-            "userPicker", "userName", "fileUpload", "imageUpload", "upload", "objectReference"
+            "userPicker", "userName", "fileUpload", "imageUpload", "upload", "objectReference", "recordSelector"
     );
     private static final Set<String> DICT_FIELD_TYPES = Set.of("DICT", "SELECT", "RADIO", "CHECKBOX", "MULTI_SELECT");
     private static final Set<String> DICT_COMPONENT_TYPES = Set.of("dictSelect", "select", "radio", "checkbox", "cascader");
@@ -105,7 +105,8 @@ public class BusinessObjectDesignerService {
             Map.entry("userSelect", new ComponentFieldDefaults("USER", "bigint", null, null, "eq")),
             Map.entry("fileUpload", new ComponentFieldDefaults("FILE", "varchar", 512, 2, "eq")),
             Map.entry("imageUpload", new ComponentFieldDefaults("IMAGE", "varchar", 512, 2, "eq")),
-            Map.entry("objectReference", new ComponentFieldDefaults("REFERENCE", "bigint", null, null, "eq"))
+            Map.entry("objectReference", new ComponentFieldDefaults("REFERENCE", "bigint", null, null, "eq")),
+            Map.entry("recordSelector", new ComponentFieldDefaults("RECORD_SELECTOR", "bigint", null, null, "eq"))
     );
 
     private final ObjectMapper objectMapper;
@@ -663,6 +664,11 @@ public class BusinessObjectDesignerService {
                 basicProps.putIfAbsent("options", props.get("options"));
                 field.setBasicProps(basicProps);
             }
+            if (props.containsKey("recordSelector")) {
+                Map<String, Object> basicProps = new LinkedHashMap<>(mapValue(field.getBasicProps()));
+                basicProps.put("recordSelector", props.get("recordSelector"));
+                field.setBasicProps(basicProps);
+            }
             if (props.containsKey("referenceObjectCode")) {
                 field.setReferenceObjectCode(text(props.get("referenceObjectCode")));
             }
@@ -955,6 +961,7 @@ public class BusinessObjectDesignerService {
         props.put("showInDetail", readBoolean(config.get("showInDetail"), true));
         props.put("inlineCreateEnabled", readBoolean(config.get("inlineCreateEnabled"), true));
         props.put("inlineEditEnabled", readBoolean(config.get("inlineEditEnabled"), true));
+        props.put("saveMode", normalizeChildSaveMode(config.get("saveMode")));
         if (StringUtils.isNotBlank(text(config.get("defaultFilter")))) {
             props.put("defaultFilter", text(config.get("defaultFilter")));
         }
@@ -966,6 +973,10 @@ public class BusinessObjectDesignerService {
         if (StringUtils.isNotBlank(value)) {
             target.put(key, value);
         }
+    }
+
+    private String normalizeChildSaveMode(Object value) {
+        return "merge".equalsIgnoreCase(text(value)) ? "merge" : "replace";
     }
 
     private Map<String, Object> toLookupRelationProps(AiBusinessObjectRelation relation) {
@@ -1635,6 +1646,7 @@ public class BusinessObjectDesignerService {
             case "forgeFileUpload" -> "fileUpload";
             case "forgeImageUpload" -> "imageUpload";
             case "forgeObjectReference" -> "objectReference";
+            case "forgeRecordSelector" -> "recordSelector";
             default -> null;
         };
         if (StringUtils.isNotBlank(componentKey)) {
@@ -1853,6 +1865,9 @@ public class BusinessObjectDesignerService {
                 || Set.of("FILE", "ATTACHMENT").contains(businessType)) {
             return "fileUpload";
         }
+        if ("recordSelector".equals(componentType) || "RECORD_SELECTOR".equals(businessType)) {
+            return "recordSelector";
+        }
         if ("REFERENCE".equals(businessType)) {
             return "objectReference";
         }
@@ -1865,7 +1880,7 @@ public class BusinessObjectDesignerService {
     private String buildFormPlaceholder(String componentKey, String label) {
         if (Set.of("select", "radio", "checkbox", "dictSelect", "date", "datetime", "time",
                 "regionTreeSelect", "orgTreeSelect", "userSelect", "fileUpload", "imageUpload",
-                "objectReference").contains(componentKey)) {
+                "objectReference", "recordSelector").contains(componentKey)) {
             return "请选择" + label;
         }
         return "请输入" + label;

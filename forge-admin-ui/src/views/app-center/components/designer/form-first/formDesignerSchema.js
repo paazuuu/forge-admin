@@ -58,6 +58,7 @@ const FIELD_COMPONENT_KEYS = new Set([
   'imageUpload',
   'upload',
   'objectReference',
+  'recordSelector',
   'customSelect',
   'text',
 ])
@@ -166,6 +167,7 @@ const GENERIC_COMPONENT_ID_SUFFIXES = new Set([
   'imageupload',
   'upload',
   'objectreference',
+  'recordselector',
   'customselect',
   'text',
   'fcrow',
@@ -1162,6 +1164,8 @@ function resolveComponentKey(field = {}) {
     return 'imageUpload'
   if (['fileUpload', 'upload'].includes(componentType) || ['FILE', 'ATTACHMENT'].includes(businessType))
     return 'fileUpload'
+  if (componentType === 'recordSelector' || businessType === 'RECORD_SELECTOR')
+    return 'recordSelector'
   if (businessType === 'REFERENCE')
     return 'objectReference'
   if (componentType === 'customSelect')
@@ -1202,7 +1206,7 @@ function clampGridColumns(value, fallback = 2) {
 }
 
 function buildPlaceholder(componentKey, label) {
-  if (['select', 'radio', 'radioButton', 'checkbox', 'dictSelect', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'regionTreeSelect', 'orgTreeSelect', 'treeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference', 'customSelect', 'color'].includes(componentKey))
+  if (['select', 'radio', 'radioButton', 'checkbox', 'dictSelect', 'date', 'datetime', 'daterange', 'datetimerange', 'month', 'year', 'time', 'timerange', 'regionTreeSelect', 'orgTreeSelect', 'treeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference', 'recordSelector', 'customSelect', 'color'].includes(componentKey))
     return `请选择${label}`
   return `请填写${label}`
 }

@@ -172,6 +172,60 @@
             />
           </div>
         </n-form-item>
+        <n-form-item v-if="isScheduledTrigger && formData.developerMode !== 1" label="分层提醒">
+          <div class="tier-rule-list">
+            <div v-for="(rule, index) in scheduleConfig.tierRules" :key="rule.clientKey" class="tier-rule-row">
+              <n-input
+                :value="rule.ruleName"
+                placeholder="规则名称"
+                @update:value="value => updateTierRuleField(index, 'ruleName', value)"
+              />
+              <n-select
+                :value="rule.metricField"
+                :options="fieldOptions"
+                clearable
+                filterable
+                placeholder="指标字段"
+                @update:value="value => updateTierRuleField(index, 'metricField', value || '')"
+              />
+              <n-input-number
+                :value="rule.minValue"
+                placeholder="最小值"
+                style="width: 100%"
+                @update:value="value => updateTierRuleField(index, 'minValue', value)"
+              />
+              <n-input-number
+                :value="rule.maxValue"
+                placeholder="最大值"
+                style="width: 100%"
+                @update:value="value => updateTierRuleField(index, 'maxValue', value)"
+              />
+              <n-input-number
+                :value="rule.lookAheadDays"
+                :min="0"
+                :max="365"
+                placeholder="提前天数"
+                style="width: 100%"
+                @update:value="value => updateTierRuleField(index, 'lookAheadDays', value || 0)"
+              />
+              <n-select
+                :value="rule.receiverRule"
+                :options="receiverRuleOptions"
+                clearable
+                placeholder="接收人"
+                @update:value="value => updateTierRuleField(index, 'receiverRule', value || '')"
+              />
+              <n-button quaternary circle size="small" @click="removeTierRule(index)">
+                <template #icon>
+                  <n-icon><TrashOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+            <n-button dashed size="small" @click="addTierRule">
+              添加分层规则
+            </n-button>
+          </div>
+        </n-form-item>
         <n-form-item label="开发者模式">
           <NSwitch v-model:value="formData.developerMode" :checked-value="1" :unchecked-value="0" />
         </n-form-item>
@@ -208,6 +262,7 @@
           :field-options="fieldOptions"
           :object-options="objectOptions"
           :receiver-rule-options="receiverRuleOptions"
+          :action-options="actionOptions"
         />
 
         <n-form-item label="描述">
@@ -254,10 +309,12 @@
 
 <script setup>
 import { NButton, NPopconfirm, NSpace, NSwitch, NTag, useMessage } from 'naive-ui'
+import { TrashOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   businessObjectFields,
+  businessObjectActions,
   businessObjectList,
   businessTriggerLogs,
   businessTriggerPage,
@@ -294,7 +351,9 @@ const logPagination = ref({ pageNum: 1, pageSize: 10, total: 0 })
 const formRef = ref(null)
 const formData = ref(initFormData())
 const fieldOptions = ref([])
+const actionOptions = ref([])
 const objectFieldsCache = ref({})
+const objectActionsCache = ref({})
 
 const enabledCount = computed(() => triggers.value.filter(t => t.status === 1).length)
 const scheduledCount = computed(() => triggers.value.filter(isScheduleRow).length)
@@ -351,6 +410,7 @@ const eventTypeOptions = [
   { label: '到期提醒', value: 'SCHEDULED_DUE' },
 ]
 const actionTypeOptions = [
+  { label: '执行对象动作', value: 'BUSINESS_ACTION' },
   { label: '发起主流程', value: 'START_FLOW' },
   { label: '发送消息', value: 'SEND_MESSAGE' },
   { label: '创建记录', value: 'CREATE_RECORD' },
@@ -534,6 +594,7 @@ function openEditor(trigger) {
   editorVisible.value = true
   if (formData.value.objectCode) {
     loadFieldOptions(formData.value.objectCode)
+    loadActionOptions(formData.value.objectCode)
   }
 }
 
@@ -692,13 +753,42 @@ async function loadFieldOptions(objectCode) {
   }
 }
 
+async function loadActionOptions(objectCode) {
+  if (objectActionsCache.value[objectCode]) {
+    actionOptions.value = objectActionsCache.value[objectCode]
+    return
+  }
+  try {
+    const obj = businessObjects.value.find(o => o.objectCode === objectCode)
+      || (await businessObjectList({ objectCode })).data?.find(o => o.objectCode === objectCode)
+    if (!obj)
+      return
+    const res = await businessObjectActions(obj.id)
+    const options = (res.data || [])
+      .filter(action => action && action.status !== 0 && isExecutableAction(action))
+      .map(action => ({
+        label: `${action.actionName || action.actionCode}（${action.actionCode}）`,
+        value: action.actionCode,
+      }))
+      .filter(item => item.value)
+    objectActionsCache.value[objectCode] = options
+    actionOptions.value = options
+  }
+  catch {
+    actionOptions.value = []
+  }
+}
+
 function handleObjectCodeChange(value) {
   formData.value.objectCode = value || null
   fieldOptions.value = []
+  actionOptions.value = []
   formData.value.eventCondition = ''
   formData.value.actionConfig = ''
-  if (value)
+  if (value) {
     loadFieldOptions(value)
+    loadActionOptions(value)
+  }
 }
 
 function handleActionTypeChange() {
@@ -761,6 +851,13 @@ function normalizeTriggerType(value) {
   return type === 'SCHEDULED' ? 'SCHEDULE' : type
 }
 
+function isExecutableAction(action = {}) {
+  const actionConfig = action.actionConfig || {}
+  return String(action.actionType || '').toUpperCase() === 'COMMAND'
+    || Array.isArray(actionConfig.steps)
+    || Array.isArray(actionConfig.stepList)
+}
+
 function readScheduleConfig() {
   const condition = safeParseObject(formData.value.eventCondition)
   const schedule = condition.schedule && typeof condition.schedule === 'object'
@@ -772,17 +869,92 @@ function readScheduleConfig() {
     lookBehindDays: Number(schedule.lookBehindDays || 0),
     batchSize: Number(schedule.batchSize || 50),
     minIntervalMinutes: Math.max(Number(schedule.minIntervalMinutes || 5), 5),
+    tierRules: normalizeTierRules(schedule.tierRules || schedule.reminderRules || []),
   }
 }
 
 function updateScheduleField(key, value) {
+  updateScheduleConfig((schedule) => {
+    schedule[key] = value
+  })
+}
+
+function updateScheduleConfig(updater) {
   const condition = safeParseObject(formData.value.eventCondition)
   const schedule = condition.schedule && typeof condition.schedule === 'object'
     ? { ...condition.schedule }
     : {}
-  schedule[key] = value
+  updater(schedule)
   condition.schedule = schedule
   formData.value.eventCondition = JSON.stringify(condition)
+}
+
+function addTierRule() {
+  updateScheduleConfig((schedule) => {
+    const tierRules = normalizeTierRules(schedule.tierRules || [])
+    tierRules.push({
+      clientKey: `tier_${Date.now()}`,
+      ruleCode: `tier_${Date.now()}`,
+      ruleName: '分层提醒',
+      metricField: '',
+      minValue: null,
+      maxValue: null,
+      lookAheadDays: Number(schedule.lookAheadDays || 0),
+      receiverRule: '',
+    })
+    schedule.tierRules = tierRules.map(toTierRulePayload)
+  })
+}
+
+function updateTierRuleField(index, key, value) {
+  updateScheduleConfig((schedule) => {
+    const tierRules = normalizeTierRules(schedule.tierRules || [])
+    if (!tierRules[index])
+      return
+    tierRules[index] = {
+      ...tierRules[index],
+      [key]: value,
+    }
+    schedule.tierRules = tierRules.map(toTierRulePayload)
+  })
+}
+
+function removeTierRule(index) {
+  updateScheduleConfig((schedule) => {
+    const tierRules = normalizeTierRules(schedule.tierRules || [])
+    tierRules.splice(index, 1)
+    schedule.tierRules = tierRules.map(toTierRulePayload)
+  })
+}
+
+function normalizeTierRules(list = []) {
+  if (!Array.isArray(list))
+    return []
+  return list.map((item, index) => {
+    const ruleCode = String(item.ruleCode || `tier_${index + 1}`).trim()
+    return {
+      clientKey: ruleCode || `tier_${index + 1}`,
+      ruleCode,
+      ruleName: String(item.ruleName || ruleCode || '分层提醒').trim(),
+      metricField: item.metricField || '',
+      minValue: item.minValue === undefined || item.minValue === null || item.minValue === '' ? null : Number(item.minValue),
+      maxValue: item.maxValue === undefined || item.maxValue === null || item.maxValue === '' ? null : Number(item.maxValue),
+      lookAheadDays: Number(item.lookAheadDays || 0),
+      receiverRule: item.receiverRule || '',
+    }
+  })
+}
+
+function toTierRulePayload(rule = {}) {
+  return {
+    ruleCode: rule.ruleCode,
+    ruleName: rule.ruleName,
+    metricField: rule.metricField || '',
+    minValue: rule.minValue,
+    maxValue: rule.maxValue,
+    lookAheadDays: Number(rule.lookAheadDays || 0),
+    receiverRule: rule.receiverRule || '',
+  }
 }
 
 function safeParseObject(value) {
@@ -807,10 +979,14 @@ function stringifyJson(value) {
 
 // 监听 objectCode 变化加载字段
 watch(() => formData.value.objectCode, (val) => {
-  if (val)
+  if (val) {
     loadFieldOptions(val)
-  else
+    loadActionOptions(val)
+  }
+  else {
     fieldOptions.value = []
+    actionOptions.value = []
+  }
 })
 
 watch(() => route.query.objectCode, () => {
@@ -977,6 +1153,19 @@ function normalizeQueryValue(value) {
   width: 100%;
 }
 
+.tier-rule-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.tier-rule-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.2fr) 96px 96px 96px minmax(120px, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
 @media (max-width: 720px) {
   .trigger-title-row,
   .trigger-toolbar,
@@ -994,6 +1183,10 @@ function normalizeQueryValue(value) {
   }
 
   .schedule-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tier-rule-row {
     grid-template-columns: 1fr;
   }
 }

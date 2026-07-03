@@ -42,6 +42,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -80,7 +81,18 @@ public class DynamicCrudService {
                                         String tableAlias,
                                         String childFkColumn,
                                         String mainColumn,
-                                        Map<String, RuntimeFieldRef> fields) {
+                                        String saveMode,
+                                        Map<String, RuntimeFieldRef> fields,
+                                        Map<String, RuntimeChildFieldRule> fieldRules) {
+    }
+
+    private record RuntimeChildFieldRule(String fieldName,
+                                         String sourceField,
+                                         String columnName,
+                                         String label,
+                                         boolean required,
+                                         BigDecimal minValue,
+                                         BigDecimal maxValue) {
     }
 
     private record RuntimeJoinContext(Map<String, RuntimeFieldRef> fields,
@@ -967,7 +979,14 @@ public class DynamicCrudService {
             if (relationValue == null) {
                 continue;
             }
-            childrenChanged = true;
+            if (isMergeChildSaveMode(relation)) {
+                childrenChanged = mergeMasterDetailChildRows(
+                        relation,
+                        relationValue,
+                        normalizeChildRows(childrenPayload.get(relation.modelCode()))
+                ) || childrenChanged;
+                continue;
+            }
             repository.deleteByColumn(
                     relation.tableName(),
                     relation.childFkColumn(),
@@ -979,8 +998,10 @@ public class DynamicCrudService {
                 if (!hasWritableChildData(childData)) {
                     continue;
                 }
+                validateChildRow(relation, row, true);
                 childData.put(relation.childFkColumn(), relationValue);
                 repository.insert(relation.tableName(), childData);
+                childrenChanged = true;
             }
         }
 
@@ -1031,6 +1052,156 @@ public class DynamicCrudService {
             }
         }
         return childData;
+    }
+
+    private boolean mergeMasterDetailChildRows(RuntimeChildRelation relation,
+                                               Object relationValue,
+                                               List<Map<String, Object>> childRows) {
+        boolean changed = false;
+        for (Map<String, Object> row : childRows) {
+            Object rowId = resolveChildRowId(row);
+            if (isDeletedChildRow(row)) {
+                if (rowId != null) {
+                    assertChildRowBelongsToMain(relation, rowId, relationValue);
+                    int affected = repository.deleteById(relation.tableName(), "id", rowId,
+                            repository.hasDelFlag(relation.tableName()), null);
+                    if (affected <= 0) {
+                        throw new BusinessException("子表行删除失败或数据不存在");
+                    }
+                    changed = true;
+                }
+                continue;
+            }
+
+            Map<String, Object> childData = filterChildWriteData(row, relation);
+            if (rowId == null) {
+                if (!hasWritableChildData(childData)) {
+                    continue;
+                }
+                validateChildRow(relation, row, true);
+                childData.put(relation.childFkColumn(), relationValue);
+                repository.insert(relation.tableName(), childData);
+                changed = true;
+                continue;
+            }
+
+            assertChildRowBelongsToMain(relation, rowId, relationValue);
+            if (!hasWritableChildData(childData)) {
+                continue;
+            }
+            validateChildRow(relation, row, false);
+            int affected = repository.updateById(relation.tableName(), "id", rowId, childData, null);
+            if (affected <= 0) {
+                throw new BusinessException("子表行更新失败或数据不存在");
+            }
+            changed = true;
+        }
+        return changed;
+    }
+
+    private void assertChildRowBelongsToMain(RuntimeChildRelation relation, Object rowId, Object relationValue) {
+        Map<String, Object> existing = repository.selectById(relation.tableName(), "id", rowId, null);
+        if (existing == null || !sameValue(existing.get(relation.childFkColumn()), relationValue)) {
+            throw new BusinessException("子表行不存在或不属于当前主记录");
+        }
+    }
+
+    private Object resolveChildRowId(Map<String, Object> row) {
+        return firstPresent(row, "id");
+    }
+
+    private boolean isDeletedChildRow(Map<String, Object> row) {
+        Object deleted = firstPresent(row, "_deleted", "__deleted");
+        if (deleted instanceof Boolean flag) {
+            return flag;
+        }
+        return deleted != null && Set.of("true", "1", "yes", "y")
+                .contains(String.valueOf(deleted).trim().toLowerCase(Locale.ROOT));
+    }
+
+    private void validateChildRow(RuntimeChildRelation relation, Map<String, Object> row, boolean create) {
+        if (relation == null || row == null || relation.fieldRules() == null || relation.fieldRules().isEmpty()) {
+            return;
+        }
+        for (RuntimeChildFieldRule rule : relation.fieldRules().values()) {
+            Object value = firstPresent(row, rule.sourceField(), rule.fieldName(), rule.columnName());
+            boolean provided = containsAnyKey(row, rule.sourceField(), rule.fieldName(), rule.columnName());
+            if (rule.required() && (create || provided) && isBlankChildValue(value)) {
+                throw new BusinessException(StringUtils.defaultIfBlank(rule.label(), rule.sourceField()) + "不能为空");
+            }
+            if (!isBlankChildValue(value)) {
+                validateChildNumberRange(rule, value);
+            }
+        }
+    }
+
+    private void validateChildNumberRange(RuntimeChildFieldRule rule, Object value) {
+        if (rule.minValue() == null && rule.maxValue() == null) {
+            return;
+        }
+        BigDecimal number = toBigDecimal(value);
+        if (number == null) {
+            throw new BusinessException(StringUtils.defaultIfBlank(rule.label(), rule.sourceField()) + "必须为有效数字");
+        }
+        if (rule.minValue() != null && number.compareTo(rule.minValue()) < 0) {
+            throw new BusinessException(StringUtils.defaultIfBlank(rule.label(), rule.sourceField()) + "不能小于" + rule.minValue());
+        }
+        if (rule.maxValue() != null && number.compareTo(rule.maxValue()) > 0) {
+            throw new BusinessException(StringUtils.defaultIfBlank(rule.label(), rule.sourceField()) + "不能大于" + rule.maxValue());
+        }
+    }
+
+    private boolean containsAnyKey(Map<String, Object> row, String... keys) {
+        if (row == null || keys == null) {
+            return false;
+        }
+        for (String key : keys) {
+            if (StringUtils.isNotBlank(key) && row.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isBlankChildValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String text) {
+            return StringUtils.isBlank(text);
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.isEmpty();
+        }
+        return false;
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(String.valueOf(number));
+        }
+        if (value instanceof String text && StringUtils.isNotBlank(text)) {
+            try {
+                return new BigDecimal(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private boolean sameValue(Object left, Object right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return String.valueOf(left).equals(String.valueOf(right));
+    }
+
+    private boolean isMergeChildSaveMode(RuntimeChildRelation relation) {
+        return relation != null && "merge".equalsIgnoreCase(StringUtils.defaultString(relation.saveMode()));
     }
 
     @SuppressWarnings("unchecked")
@@ -2266,6 +2437,7 @@ public class DynamicCrudService {
         }
 
         Map<String, RuntimeFieldRef> childFields = new LinkedHashMap<>();
+        Map<String, RuntimeChildFieldRule> childFieldRules = new LinkedHashMap<>();
         for (Map<String, Object> source : ref.getFields()) {
             String sourceField = StringUtils.defaultIfBlank(text(source.get("sourceField")), text(source.get("field")));
             if (StringUtils.isBlank(sourceField)) {
@@ -2280,13 +2452,46 @@ public class DynamicCrudService {
                     fieldName, ref.getModelCode(), sourceField, columnName, ref.getTableName(), tableAlias, false);
             fields.putIfAbsent(fieldName, fieldRef);
             childFields.put(fieldName, fieldRef);
+            childFieldRules.put(fieldName, buildChildFieldRule(source, fieldRef));
             fieldColumnMapping.put(fieldName, tableAlias + "." + columnName);
             selectFields.add(new DynamicCrudRepository.JoinField(fieldName, tableAlias, columnName));
         }
         if (childFields.isEmpty()) {
             return null;
         }
-        return new RuntimeChildRelation(ref.getModelCode(), ref.getTableName(), tableAlias, childColumn, mainColumn, childFields);
+        String saveMode = normalizeChildSaveMode(firstMap(ref.getProps()).get("saveMode"));
+        return new RuntimeChildRelation(ref.getModelCode(), ref.getTableName(), tableAlias, childColumn, mainColumn,
+                saveMode, childFields, childFieldRules);
+    }
+
+    private RuntimeChildFieldRule buildChildFieldRule(Map<String, Object> source, RuntimeFieldRef fieldRef) {
+        Map<String, Object> props = firstMap(source.get("props"), source.get("basicProps"));
+        return new RuntimeChildFieldRule(
+                fieldRef.fieldName(),
+                fieldRef.sourceField(),
+                fieldRef.columnName(),
+                StringUtils.defaultIfBlank(text(source.get("label")), text(source.get("rawLabel"))),
+                readBoolean(source.get("required"), false),
+                firstDecimal(source.get("min"), source.get("minimum"), props.get("min")),
+                firstDecimal(source.get("max"), source.get("maximum"), props.get("max"))
+        );
+    }
+
+    private BigDecimal firstDecimal(Object... values) {
+        if (values == null) {
+            return null;
+        }
+        for (Object value : values) {
+            BigDecimal decimal = toBigDecimal(value);
+            if (decimal != null) {
+                return decimal;
+            }
+        }
+        return null;
+    }
+
+    private String normalizeChildSaveMode(Object value) {
+        return "merge".equalsIgnoreCase(text(value)) ? "merge" : "replace";
     }
 
     private boolean shouldPreferInferredChildRelation(LowcodeRelationSchema primaryRelation,

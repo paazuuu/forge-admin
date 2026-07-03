@@ -32,7 +32,7 @@
 | 仅文档/Spec/Task | `git diff --check` | 关键文档链接和状态一致性检查 |
 | Java 后端 | 相关 Maven 模块 `compile` 或 `package -DskipTests` | 涉及业务逻辑时补单测；涉及主应用装配时跑 `forge-admin-server` package |
 | Mapper XML / SQL 查询 | 后端编译 + Mapper XML 语法检查 | 有数据库时执行接口或 SQL 验证 |
-| Flyway 脚本 | SQL 防重复检查 + 后端启动或 Flyway 实跑 | 有 dev 库时检查 `forge_schema_history` 和核心表/列/数据 |
+| Flyway 脚本 | SQL 防重复检查 + Flyway placeholder 静态扫描 + 后端启动或 Flyway 实跑 | 有 dev 库时检查 `forge_schema_history` 和核心表/列/数据 |
 | 前端 JS/Vue | `pnpm build` | 改 UI/交互时启动 Vite 并用浏览器或 Playwright 截图/点击验证 |
 | API 协议 | 后端启动 + curl 验证变更接口 | 涉及鉴权/加密时验证普通调用和 `X-Inner-Call` 调用边界 |
 | 流程/消息/触发器 | 后端 + Flow 服务 + 主路径接口验证 | 验证关联表、任务表、日志表或消息表落库 |
@@ -93,6 +93,14 @@ mvn -pl forge-admin-server -am package -DskipTests
 ```bash
 mvn -pl forge-framework/forge-plugin-parent/forge-plugin-generator -am compile -DskipTests
 ```
+
+Flyway 脚本变更必须先跑低成本静态检查，确认迁移脚本中没有会被 Flyway 解析的业务 `${...}` 占位符：
+
+```bash
+rg -n '\$\{[^}]+\}' forge-server/db/migration
+```
+
+该命令应无输出；确需入库 `${...}` 模板时，用 SQL `CONCAT('$', '{token}')` 形式拼接。
 
 ### 前端
 

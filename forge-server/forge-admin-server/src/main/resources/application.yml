@@ -69,6 +69,7 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1.0.0
     table: forge_schema_history
+    placeholder-replacement: false
   ai:
     chat:
       observations:

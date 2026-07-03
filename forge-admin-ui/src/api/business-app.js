@@ -345,6 +345,26 @@ export function businessTriggerScenarioTemplates() {
   return request.get('/ai/business/trigger/scenario-templates')
 }
 
+// ==================== 通用业务动作 ====================
+
+export function executeBusinessAction(data) {
+  return request.post('/ai/business/action/execute', data || {})
+}
+
+export function previewBusinessAction(data) {
+  return request.post('/ai/business/action/preview', data || {})
+}
+
+export function businessActionLogs(params) {
+  return request.get('/ai/business/action/logs', { params })
+}
+
+// ==================== 通用记录选择器 ====================
+
+export function queryBusinessRecordSelector(data, params = {}) {
+  return request.post('/ai/business/selector/query', data || {}, { params })
+}
+
 // ==================== 单据与流程 ====================
 
 export function businessDocumentConfig(objectId) {

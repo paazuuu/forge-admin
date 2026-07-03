@@ -192,9 +192,13 @@
       <ForgePropertyPanel
         v-if="rightOpen"
         :schema="normalizedSchema"
+        :fields="fields"
+        :relations="relations"
+        :object-code="objectCode"
         :selected-id="selectedId"
         @update:schema="updateSchema"
         @update:selected-id="selectedId = $event"
+        @field-asset-updated="emit('fieldAssetUpdated', $event)"
         @close="rightOpen = false"
       />
     </aside>
@@ -451,13 +455,17 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  relations: {
+    type: Array,
+    default: () => [],
+  },
   extraMoreOptions: {
     type: Array,
     default: () => [],
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'dirtyChange', 'moreSelect'])
+const emit = defineEmits(['update:modelValue', 'dirtyChange', 'moreSelect', 'fieldAssetUpdated'])
 
 const selectedId = ref('')
 const leftCollapsed = ref(false)

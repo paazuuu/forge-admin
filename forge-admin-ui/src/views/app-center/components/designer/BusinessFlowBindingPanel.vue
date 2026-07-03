@@ -178,6 +178,37 @@
             </div>
           </section>
 
+          <section class="flow-card">
+            <div class="flow-card-head">
+              <div>
+                <h4>流程结果动作</h4>
+                <p>流程结束后按结果执行对象动作，动作步骤、事务和日志复用通用动作引擎。</p>
+              </div>
+              <n-tag :type="callbackActionCount ? 'success' : 'default'" :bordered="false">
+                {{ callbackActionCount ? `${callbackActionCount} 个动作` : '未配置' }}
+              </n-tag>
+            </div>
+            <n-form label-placement="top" size="small" :show-feedback="false">
+              <n-grid :cols="3" :x-gap="14" :y-gap="4" responsive="screen">
+                <n-form-item-gi
+                  v-for="item in callbackResultOptions"
+                  :key="item.value"
+                  :label="item.label"
+                >
+                  <n-select
+                    v-model:value="form.options.callbackActions[item.value]"
+                    :options="callbackActionOptions"
+                    :loading="actionLoading"
+                    clearable
+                    filterable
+                    placeholder="选择对象动作"
+                    @update:value="markDirty"
+                  />
+                </n-form-item-gi>
+              </n-grid>
+            </n-form>
+          </section>
+
           <section class="flow-card flow-designer-entry-card">
             <div class="flow-card-head">
               <div>
@@ -269,6 +300,10 @@
               <span>流程节点</span>
               <strong>{{ userTasks.length }} 个</strong>
             </div>
+            <div>
+              <span>回调动作</span>
+              <strong>{{ callbackActionCount }} 个</strong>
+            </div>
           </div>
         </section>
       </aside>
@@ -301,11 +336,15 @@
 <script setup>
 import { useMessage } from 'naive-ui'
 import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue'
-import { businessFlowBinding, businessFlowFormAssets, businessFlowVariables, saveBusinessFlowBinding } from '@/api/business-app'
+import { businessFlowBinding, businessFlowFormAssets, businessFlowVariables, businessObjectActions, saveBusinessFlowBinding } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import TemplateVariableEditor from './TemplateVariableEditor.vue'
 
 const props = defineProps({
+  objectId: {
+    type: [Number, String],
+    default: null,
+  },
   objectCode: {
     type: String,
     default: '',
@@ -338,12 +377,14 @@ const saving = ref(false)
 const flowModelsLoading = ref(false)
 const variablesLoading = ref(false)
 const formAssetsLoading = ref(false)
+const actionLoading = ref(false)
 const flowModelOptions = ref([])
 const variableOptions = ref([])
 const userTasks = ref([])
 const formAssets = ref([])
 const flowFieldCandidates = ref([])
 const formAssetWarnings = ref([])
+const actionOptions = ref([])
 const flowDesignerVisible = ref(false)
 const form = reactive(createDefaultBinding())
 
@@ -403,6 +444,13 @@ const businessBindingSummary = computed(() => {
   const tableName = form.businessBinding.tableName || '-'
   return `${businessBindingModeLabel.value} · ${tableName}`
 })
+const callbackResultOptions = [
+  { label: '审批通过后', value: 'APPROVED' },
+  { label: '审批驳回后', value: 'REJECTED' },
+  { label: '流程取消后', value: 'CANCELED' },
+]
+const callbackActionOptions = computed(() => actionOptions.value)
+const callbackActionCount = computed(() => Object.values(form.options?.callbackActions || {}).filter(Boolean).length)
 const businessBindingMessage = computed(() => {
   if (businessBindingAdapterMode.value)
     return '代码适配器接管状态回写和节点表单权限，平台不会直接更新业务表字段。'
@@ -430,6 +478,7 @@ async function loadBinding() {
       businessFlowBinding(props.objectCode),
       loadFlowModels(),
       loadFormAssets(),
+      loadActionOptions(),
     ])
     assignBinding(bindingRes.data || props.initialBinding || createDefaultBinding())
     await loadVariableCandidates()
@@ -438,6 +487,30 @@ async function loadBinding() {
   }
   finally {
     loading.value = false
+  }
+}
+
+async function loadActionOptions() {
+  if (!props.objectId) {
+    actionOptions.value = []
+    return
+  }
+  actionLoading.value = true
+  try {
+    const res = await businessObjectActions(props.objectId)
+    actionOptions.value = (res.data || [])
+      .filter(action => action && action.status !== 0 && isExecutableAction(action))
+      .map(action => ({
+        label: `${action.actionName || action.actionCode}（${action.actionCode}）`,
+        value: action.actionCode,
+      }))
+      .filter(item => item.value)
+  }
+  catch {
+    actionOptions.value = []
+  }
+  finally {
+    actionLoading.value = false
   }
 }
 
@@ -514,7 +587,7 @@ function buildPayload() {
     businessBinding: normalizeBusinessBinding(form.businessBinding),
     nodeForms: [],
     conditionFlows: form.conditionFlows || [],
-    options: { ...(form.options || {}) },
+    options: normalizeFlowOptions(form.options || {}),
   }
 }
 
@@ -527,7 +600,7 @@ function assignBinding(value = {}) {
     businessBinding: normalizeBusinessBinding(value.businessBinding),
     nodeForms: normalizeNodeForms(value.nodeForms || []),
     conditionFlows: Array.isArray(value.conditionFlows) ? value.conditionFlows : [],
-    options: { ...(value.options || {}) },
+    options: normalizeFlowOptions(value.options || {}),
   })
 }
 
@@ -567,8 +640,43 @@ function createDefaultBinding() {
     businessBinding: createDefaultBusinessBinding(),
     nodeForms: [],
     conditionFlows: [],
-    options: {},
+    options: createDefaultFlowOptions(),
   }
+}
+
+function createDefaultFlowOptions() {
+  return {
+    callbackActions: {
+      APPROVED: '',
+      REJECTED: '',
+      CANCELED: '',
+    },
+  }
+}
+
+function normalizeFlowOptions(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+  const callbackActions = normalizeCallbackActions(source.callbackActions || source.flowCallbackActions || {})
+  return {
+    ...source,
+    callbackActions,
+  }
+}
+
+function normalizeCallbackActions(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+  return {
+    APPROVED: normalizeText(source.APPROVED || source.approved || source.approvedActionCode),
+    REJECTED: normalizeText(source.REJECTED || source.rejected || source.rejectedActionCode),
+    CANCELED: normalizeText(source.CANCELED || source.CANCELLED || source.canceled || source.cancelled || source.canceledActionCode),
+  }
+}
+
+function isExecutableAction(action = {}) {
+  const actionConfig = action.actionConfig || {}
+  return String(action.actionType || '').toUpperCase() === 'COMMAND'
+    || Array.isArray(actionConfig.steps)
+    || Array.isArray(actionConfig.stepList)
 }
 
 function handleFlowChange(value) {

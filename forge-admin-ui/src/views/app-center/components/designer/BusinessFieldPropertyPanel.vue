@@ -1,7 +1,7 @@
 <template>
-  <aside class="property-panel">
+  <aside class="property-panel" :class="{ 'formula-only-panel': formulaOnly }">
     <template v-if="field">
-      <div class="property-head">
+      <div v-if="!formulaOnly" class="property-head">
         <div>
           <h3>{{ form.fieldName || '字段属性' }}</h3>
           <p>{{ developerMode ? (form.fieldCode || '保存后自动生成字段编码和列名') : '维护表单展示、校验和视图可见性' }}</p>
@@ -11,9 +11,41 @@
         </n-tag>
       </div>
 
-      <div class="property-body">
-        <n-tabs type="line" animated class="property-tabs">
-          <n-tab-pane name="basic" tab="基础属性">
+      <div class="property-body" :class="{ 'formula-only-body': formulaOnly }">
+        <n-form v-if="formulaOnly" label-placement="top" size="small" :show-feedback="false" class="formula-only-form">
+          <FormulaConfigPanel
+            :form="form"
+            :field="field"
+            :all-fields="allFields"
+            :relations="relations"
+            :saving="saving"
+            :formula-validating="formulaValidating"
+            :formula-previewing="formulaPreviewing"
+            :formula-validate-result="formulaValidateResult"
+            :formula-feedback-lines="formulaFeedbackLines"
+            :can-open-formula-debugger="canOpenFormulaDebugger"
+            :has-formula-tool-fields="hasFormulaToolFields"
+            :preview-disabled="!canOpenFormulaPreview"
+            @toggle-enabled="updateFormulaEnabled"
+            @type-change="onFormulaTypeChange"
+            @insert-token="insertFormulaToken"
+            @insert-string-token="insertStringToken"
+            @condition-expression-change="onConditionExpressionChange"
+            @condition-mode-change="onConditionModeChange"
+            @condition-rule-compiled="onConditionRuleCompiled"
+            @condition-rule-validation="onConditionRuleValidation"
+            @trigger-mode="setFormulaTriggerMode"
+            @save="$emit('save', payload)"
+            @validate="handleValidateFormula"
+            @preview="openFormulaPreview"
+            @open-debugger="formulaDebuggerVisible = true"
+            @open-log="formulaLogVisible = true"
+            @open-graph="formulaGraphVisible = true"
+          />
+        </n-form>
+
+        <n-tabs v-else v-model:value="activeTab" type="line" animated class="property-tabs">
+          <n-tab-pane v-if="isTabVisible('basic')" name="basic" tab="基础属性">
             <n-form label-placement="top" size="small" :show-feedback="false">
               <n-grid :cols="2" :x-gap="12">
                 <n-form-item-gi label="字段名称">
@@ -79,13 +111,91 @@
                 />
               </n-form-item>
 
+              <section v-if="isRecordSelectorField" class="record-selector-config">
+                <div class="record-selector-config-head">
+                  <strong>记录选择器</strong>
+                  <n-tag size="small" :bordered="false">
+                    通用对象
+                  </n-tag>
+                </div>
+                <n-grid :cols="2" :x-gap="12">
+                  <n-form-item-gi label="套件编码">
+                    <n-input
+                      v-model:value="form.recordSelectorSuiteCode"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="可为空"
+                    />
+                  </n-form-item-gi>
+                  <n-form-item-gi label="对象编码">
+                    <n-input
+                      v-model:value="form.recordSelectorObjectCode"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="必填"
+                    />
+                  </n-form-item-gi>
+                  <n-form-item-gi label="值字段">
+                    <n-input
+                      v-model:value="form.recordSelectorValueField"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="id"
+                    />
+                  </n-form-item-gi>
+                  <n-form-item-gi label="回显来源字段">
+                    <n-input
+                      v-model:value="form.recordSelectorLabelField"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="name"
+                    />
+                  </n-form-item-gi>
+                  <n-form-item-gi label="回显目标字段">
+                    <n-input
+                      v-model:value="form.recordSelectorTargetLabelField"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="可为空"
+                    />
+                  </n-form-item-gi>
+                </n-grid>
+                <n-form-item label="显示字段">
+                  <n-input
+                    v-model:value="form.recordSelectorDisplayFieldsText"
+                    :disabled="field.systemField"
+                    type="textarea"
+                    :autosize="{ minRows: 2, maxRows: 5 }"
+                    placeholder="field:显示名，每行一个"
+                  />
+                </n-form-item>
+                <n-form-item label="搜索字段">
+                  <n-input
+                    v-model:value="form.recordSelectorKeywordFieldsText"
+                    :disabled="field.systemField"
+                    type="textarea"
+                    :autosize="{ minRows: 1, maxRows: 3 }"
+                    placeholder="字段编码，逗号或换行分隔"
+                  />
+                </n-form-item>
+                <n-form-item label="字段映射">
+                  <n-input
+                    v-model:value="form.recordSelectorMappingsText"
+                    :disabled="field.systemField"
+                    type="textarea"
+                    :autosize="{ minRows: 2, maxRows: 6 }"
+                    placeholder="source=target，每行一个"
+                  />
+                </n-form-item>
+              </section>
+
               <n-form-item label="备注">
                 <n-input v-model:value="form.remark" type="textarea" :rows="4" placeholder="字段说明，业务用户可见" />
               </n-form-item>
             </n-form>
           </n-tab-pane>
 
-          <n-tab-pane name="display" tab="显示与校验">
+          <n-tab-pane v-if="isTabVisible('display')" name="display" tab="显示与校验">
             <n-form label-placement="top" size="small" :show-feedback="false">
               <section v-if="needsDict" class="cascade-config">
                 <div class="cascade-config-head">
@@ -161,7 +271,7 @@
             </n-form>
           </n-tab-pane>
 
-          <n-tab-pane v-if="developerMode" name="advanced" tab="开发者属性">
+          <n-tab-pane v-if="developerMode && isTabVisible('advanced')" name="advanced" tab="开发者属性">
             <n-form label-placement="top" size="small" :show-feedback="false">
               <n-grid :cols="2" :x-gap="12">
                 <n-form-item-gi label="字段英文名">
@@ -195,7 +305,7 @@
             </n-form>
           </n-tab-pane>
 
-          <n-tab-pane name="formula" tab="公式与调试" class="formula-tab-pane">
+          <n-tab-pane v-if="isTabVisible('formula')" name="formula" tab="公式与调试" class="formula-tab-pane">
             <n-form label-placement="top" size="small" :show-feedback="false" class="formula-tab-form">
               <FormulaConfigPanel
                 :form="form"
@@ -231,7 +341,7 @@
         </n-tabs>
       </div>
 
-      <div class="property-footer">
+      <div v-if="!formulaOnly" class="property-footer">
         <n-button secondary :disabled="!changed" @click="resetForm">
           还原
         </n-button>
@@ -390,10 +500,29 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  defaultActiveTab: {
+    type: String,
+    default: 'basic',
+  },
+  visibleTabs: {
+    type: Array,
+    default: () => [],
+  },
+  mode: {
+    type: String,
+    default: 'property',
+  },
 })
 
 const emit = defineEmits(['save', 'dirtyChange'])
 
+const activeTab = ref(props.defaultActiveTab || 'basic')
+const defaultVisibleTabs = ['basic', 'display', 'advanced', 'formula']
+const enabledTabs = computed(() => {
+  const tabs = (props.visibleTabs || []).filter(Boolean)
+  return tabs.length ? tabs : defaultVisibleTabs
+})
+const formulaOnly = computed(() => props.mode === 'formula')
 const form = reactive(createFieldForm())
 let baseline = ''
 let resetting = false
@@ -415,6 +544,7 @@ const fieldTypeOptions = [
   { label: '部门', value: 'DEPT' },
   { label: '地区', value: 'REGION' },
   { label: '引用对象', value: 'REFERENCE' },
+  { label: '记录选择器', value: 'RECORD_SELECTOR' },
 ]
 
 const componentOptions = [
@@ -434,6 +564,7 @@ const componentOptions = [
   { label: '部门树', value: 'orgTreeSelect' },
   { label: '地区树', value: 'regionTreeSelect' },
   { label: '引用对象', value: 'objectReference' },
+  { label: '记录选择器', value: 'recordSelector' },
 ]
 
 const queryTypeOptions = [
@@ -508,6 +639,7 @@ const canOpenFormulaDebugger = computed(() => Boolean(selectedFormulaField.value
 const hasFormulaToolFields = computed(() => formulaToolFields.value.some(item => item?.formulaConfig?.type))
 const changed = computed(() => JSON.stringify(payload.value) !== baseline)
 const needsDict = computed(() => ['DICT', 'RADIO', 'CHECKBOX'].includes(form.fieldType) || ['select', 'radio', 'checkbox', 'dictSelect'].includes(form.componentType))
+const isRecordSelectorField = computed(() => form.fieldType === 'RECORD_SELECTOR' || form.componentType === 'recordSelector')
 const normalizedDataType = computed(() => String(form.dataType || '').toLowerCase())
 const supportsLength = computed(() => ['varchar', 'char', 'decimal'].includes(normalizedDataType.value))
 const supportsPrecision = computed(() => normalizedDataType.value === 'decimal')
@@ -577,6 +709,21 @@ watch(
   () => props.field,
   () => resetForm(),
   { immediate: true, deep: true },
+)
+
+watch(
+  () => props.defaultActiveTab,
+  (value) => {
+    activeTab.value = normalizeActiveTab(value || 'basic')
+  },
+)
+
+watch(
+  enabledTabs,
+  () => {
+    activeTab.value = normalizeActiveTab(activeTab.value)
+  },
+  { immediate: true },
 )
 
 watch(
@@ -664,6 +811,7 @@ function resetForm() {
 function createFieldForm(field) {
   const currentField = field || {}
   const basicProps = { ...(currentField.basicProps || {}) }
+  const recordSelector = createDefaultRecordSelector(currentField.recordSelector || basicProps.recordSelector || currentField.props?.recordSelector)
   return {
     fieldName: currentField.fieldName || '',
     fieldCode: currentField.fieldCode || '',
@@ -730,7 +878,26 @@ function createFieldForm(field) {
     formulaCrossObjectTargetObjectCode: currentField.formulaConfig?.crossObject?.targetObjectCode || '',
     formulaCrossObjectReturnField: currentField.formulaConfig?.crossObject?.returnField || '',
     formulaCrossObjectRecomputeMode: currentField.formulaConfig?.crossObject?.recomputeMode || 'ASYNC',
+    recordSelectorSuiteCode: recordSelector.suiteCode,
+    recordSelectorObjectCode: recordSelector.objectCode,
+    recordSelectorValueField: recordSelector.valueField,
+    recordSelectorLabelField: recordSelector.labelField,
+    recordSelectorTargetLabelField: recordSelector.targetLabelField,
+    recordSelectorDisplayFieldsText: listToLines(recordSelector.displayFields),
+    recordSelectorKeywordFieldsText: listToLines(recordSelector.keywordFields),
+    recordSelectorMappingsText: mappingsToLines(recordSelector.fieldMappings),
   }
+}
+
+function isTabVisible(tab) {
+  return enabledTabs.value.includes(tab)
+}
+
+function normalizeActiveTab(tab = '') {
+  const candidate = tab || props.defaultActiveTab || 'basic'
+  if (isTabVisible(candidate))
+    return candidate
+  return enabledTabs.value[0] || 'basic'
 }
 
 function cloneConditionRule(rule) {
@@ -761,6 +928,7 @@ function createDefaultConditionRule() {
 
 function normalizePayload(source) {
   const cascade = normalizeCascade(source.basicProps?.cascade)
+  const recordSelector = buildRecordSelectorConfig(source)
   const basicProps = {
     ...(source.basicProps || {}),
     placeholder: source.placeholder || '',
@@ -769,6 +937,10 @@ function normalizePayload(source) {
     basicProps.cascade = cascade
   else
     delete basicProps.cascade
+  if (recordSelector)
+    basicProps.recordSelector = recordSelector
+  else
+    delete basicProps.recordSelector
   return {
     fieldName: source.fieldName,
     fieldCode: source.fieldCode,
@@ -1436,6 +1608,115 @@ function normalizeCascade(source = {}) {
   return cascade
 }
 
+function createDefaultRecordSelector(source = {}) {
+  const config = source && typeof source === 'object' ? source : {}
+  return {
+    suiteCode: config.suiteCode || '',
+    objectCode: config.objectCode || '',
+    valueField: config.valueField || 'id',
+    labelField: config.labelField || config.labelSourceField || '',
+    targetLabelField: config.targetLabelField || config.labelTargetField || '',
+    displayFields: normalizeTextList(config.displayFields),
+    keywordFields: normalizeTextList(config.keywordFields),
+    fieldMappings: normalizeMappingList(config.fieldMappings || config.mappings),
+  }
+}
+
+function buildRecordSelectorConfig(source) {
+  if (source.fieldType !== 'RECORD_SELECTOR' && source.componentType !== 'recordSelector')
+    return null
+  const config = createDefaultRecordSelector({
+    suiteCode: source.recordSelectorSuiteCode,
+    objectCode: source.recordSelectorObjectCode,
+    valueField: source.recordSelectorValueField,
+    labelField: source.recordSelectorLabelField,
+    targetLabelField: source.recordSelectorTargetLabelField,
+    displayFields: parseTextList(source.recordSelectorDisplayFieldsText),
+    keywordFields: parseTextList(source.recordSelectorKeywordFieldsText),
+    fieldMappings: parseMappingLines(source.recordSelectorMappingsText),
+  })
+  if (!config.objectCode)
+    return null
+  return pruneRecordSelectorConfig(config)
+}
+
+function pruneRecordSelectorConfig(config = {}) {
+  const result = {}
+  ;['suiteCode', 'objectCode', 'valueField', 'labelField', 'targetLabelField'].forEach((key) => {
+    if (config[key])
+      result[key] = config[key]
+  })
+  if (config.displayFields?.length)
+    result.displayFields = config.displayFields
+  if (config.keywordFields?.length)
+    result.keywordFields = config.keywordFields
+  if (config.fieldMappings?.length)
+    result.fieldMappings = config.fieldMappings
+  return result
+}
+
+function normalizeTextList(value) {
+  if (Array.isArray(value))
+    return value.map(item => String(item || '').trim()).filter(Boolean)
+  if (typeof value === 'string')
+    return parseTextList(value)
+  return []
+}
+
+function parseTextList(value) {
+  return String(value || '')
+    .split(/[\n,，]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeMappingList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => ({
+        sourceField: String(item?.sourceField || item?.source || '').trim(),
+        targetField: String(item?.targetField || item?.target || '').trim(),
+      }))
+      .filter(item => item.sourceField && item.targetField)
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .map(([sourceField, targetField]) => ({
+        sourceField: String(sourceField || '').trim(),
+        targetField: String(targetField || '').trim(),
+      }))
+      .filter(item => item.sourceField && item.targetField)
+  }
+  if (typeof value === 'string')
+    return parseMappingLines(value)
+  return []
+}
+
+function parseMappingLines(value) {
+  return String(value || '')
+    .split(/\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const parts = item.split(/\s*(?:=>|=|:)\s*/, 2)
+      return {
+        sourceField: String(parts[0] || '').trim(),
+        targetField: String(parts[1] || '').trim(),
+      }
+    })
+    .filter(item => item.sourceField && item.targetField)
+}
+
+function listToLines(value) {
+  return normalizeTextList(value).join('\n')
+}
+
+function mappingsToLines(value) {
+  return normalizeMappingList(value)
+    .map(item => `${item.sourceField}=${item.targetField}`)
+    .join('\n')
+}
+
 function applyFieldTypeDefaults(fieldType) {
   const defaults = {
     TEXT: { dataType: 'varchar', componentType: 'input', length: 128, precision: 2, queryType: 'like' },
@@ -1454,6 +1735,7 @@ function applyFieldTypeDefaults(fieldType) {
     DEPT: { dataType: 'bigint', componentType: 'orgTreeSelect', length: null, precision: null, queryType: 'eq' },
     REGION: { dataType: 'varchar', componentType: 'regionTreeSelect', length: 32, precision: 2, queryType: 'eq' },
     REFERENCE: { dataType: 'bigint', componentType: 'objectReference', length: null, precision: null, queryType: 'eq' },
+    RECORD_SELECTOR: { dataType: 'bigint', componentType: 'recordSelector', length: null, precision: null, queryType: 'eq' },
   }[fieldType]
   if (!defaults)
     return
@@ -1464,6 +1746,7 @@ function applyFieldTypeDefaults(fieldType) {
 
 defineExpose({
   resetForm,
+  openTab: tab => (activeTab.value = normalizeActiveTab(tab || 'basic')),
   getPayload: () => payload.value,
   hasChanges: () => changed.value,
 })
@@ -1478,6 +1761,11 @@ defineExpose({
   min-width: 0;
   height: 100%;
   background: #fbfcfe;
+}
+
+.property-panel.formula-only-panel {
+  grid-template-rows: minmax(0, 1fr);
+  background: #fff;
 }
 
 .property-head {
@@ -1509,6 +1797,18 @@ defineExpose({
   overflow: hidden;
   background: #fff;
   padding: 0 16px 16px;
+}
+
+.property-body.formula-only-body {
+  overflow: auto;
+  padding: 0;
+}
+
+.formula-only-form {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .property-tabs {
@@ -1632,6 +1932,28 @@ defineExpose({
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
+}
+
+.record-selector-config {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.record-selector-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-selector-config-head strong {
+  color: #111827;
+  font-size: 13px;
 }
 
 .property-footer {

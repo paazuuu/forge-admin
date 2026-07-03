@@ -247,6 +247,7 @@ const fieldTemplateGroups = [
       { componentKey: 'orgTreeSelect', label: '部门选择', icon: BusinessOutline },
       { componentKey: 'regionTreeSelect', label: '行政区划', icon: LocationOutline },
       { componentKey: 'objectReference', label: '对象引用', icon: BrowsersOutline },
+      { componentKey: 'recordSelector', label: '记录选择器', icon: SearchOutline },
       { componentKey: 'fileUpload', label: '文件上传', icon: CloudUploadOutline },
       { componentKey: 'imageUpload', label: '图片上传', icon: ImageOutline },
       { componentKey: 'text', label: '文本展示', icon: TextOutline },

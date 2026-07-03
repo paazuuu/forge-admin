@@ -173,6 +173,16 @@
         LIMIT 1
     </select>
 
+    <select id="selectFirstByObjectCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_object
+        WHERE tenant_id = #{tenantId}
+          AND object_code = #{objectCode}
+        ORDER BY status DESC, update_time DESC, id DESC
+        LIMIT 1
+    </select>
+
     <select id="selectByConfigKey" resultMap="BaseResultMap">
         SELECT
         <include refid="Base_Columns"/>

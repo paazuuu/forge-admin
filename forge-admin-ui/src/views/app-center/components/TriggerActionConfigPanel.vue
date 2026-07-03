@@ -1,6 +1,19 @@
 <template>
   <div class="trigger-action-config">
-    <template v-if="actionType === 'START_FLOW'">
+    <template v-if="actionType === 'BUSINESS_ACTION'">
+      <n-form-item label="对象动作">
+        <n-select
+          v-model:value="config.actionCode"
+          :options="actionOptions"
+          clearable
+          filterable
+          placeholder="选择要执行的对象动作"
+          @update:value="emitConfig"
+        />
+      </n-form-item>
+    </template>
+
+    <template v-else-if="actionType === 'START_FLOW'">
       <n-alert type="info" :bordered="false">
         使用“流程与自动化”中配置的主流程。触发条件满足后自动发起，不需要在这里再次选择流程。
       </n-alert>
@@ -118,6 +131,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  actionOptions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -151,6 +168,7 @@ function normalizeConfig(actionType, value) {
     templateCode: source.templateCode || '',
     receiverRule: source.receiverRule || null,
     receiverIds: source.receiverIds || '',
+    actionCode: source.actionCode || source.businessActionCode || '',
     targetObjectCode: source.targetObjectCode || null,
     fieldMapping: normalizeFieldMapping(source.fieldMapping || []),
     targetField: source.targetField || '',
@@ -162,6 +180,11 @@ function normalizeConfig(actionType, value) {
 }
 
 function configPayload(value, actionType) {
+  if (actionType === 'BUSINESS_ACTION') {
+    return {
+      actionCode: value.actionCode || '',
+    }
+  }
   if (actionType === 'START_FLOW') {
     return {
       useMainFlow: true,

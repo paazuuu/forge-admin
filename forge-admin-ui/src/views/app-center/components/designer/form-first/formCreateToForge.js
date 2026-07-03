@@ -498,13 +498,13 @@ function resolveRequiredMessage(requiredFromSwitch, requiredRule, componentKey, 
 }
 
 function resolveRequiredTrigger(componentKey) {
-  return ['select', 'radio', 'checkbox', 'dictSelect', 'cascader', 'date', 'datetime', 'time', 'regionTreeSelect', 'orgTreeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference'].includes(componentKey)
+  return ['select', 'radio', 'checkbox', 'dictSelect', 'cascader', 'date', 'datetime', 'time', 'regionTreeSelect', 'orgTreeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference', 'recordSelector'].includes(componentKey)
     ? 'change'
     : ['blur', 'change']
 }
 
 function buildRequiredMessage(componentKey, label) {
-  const prefix = ['select', 'radio', 'checkbox', 'dictSelect', 'cascader', 'date', 'datetime', 'time', 'regionTreeSelect', 'orgTreeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference'].includes(componentKey)
+  const prefix = ['select', 'radio', 'checkbox', 'dictSelect', 'cascader', 'date', 'datetime', 'time', 'regionTreeSelect', 'orgTreeSelect', 'userSelect', 'fileUpload', 'imageUpload', 'objectReference', 'recordSelector'].includes(componentKey)
     ? '请选择'
     : '请输入'
   return `${prefix}${label || '字段'}`

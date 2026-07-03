@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.generator.service.businessapp;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessTrigger;
@@ -18,10 +19,13 @@ import org.springframework.stereotype.Service;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -155,7 +159,7 @@ public class BusinessTriggerSchedulerService {
 
         LocalDate today = LocalDate.now();
         LocalDateTime windowStart = today.minusDays(config.lookBehindDays()).atStartOfDay();
-        LocalDateTime windowEnd = today.plusDays(config.lookAheadDays()).plusDays(1).atStartOfDay().minusNanos(1);
+        LocalDateTime windowEnd = today.plusDays(config.maxLookAheadDays()).plusDays(1).atStartOfDay().minusNanos(1);
         List<Map<String, Object>> rows = dynamicCrudService.selectScheduledCandidateRows(
                 configKey, config.dueField(), windowStart, windowEnd, config.batchSize());
         if (rows == null || rows.isEmpty()) {
@@ -172,7 +176,11 @@ public class BusinessTriggerSchedulerService {
                     BusinessEvent.SCHEDULED_DUE, dedupeSince)) {
                 continue;
             }
-            BusinessEvent event = buildScheduledEvent(trigger, configKey, recordId, row);
+            ReminderTierRule tierRule = matchTierRule(config, row, today);
+            if (!config.tierRules().isEmpty() && tierRule == null) {
+                continue;
+            }
+            BusinessEvent event = buildScheduledEvent(trigger, configKey, recordId, row, tierRule);
             if (!triggerExecutor.matchesCondition(trigger, event)) {
                 continue;
             }
@@ -275,8 +283,9 @@ public class BusinessTriggerSchedulerService {
                 DEFAULT_MIN_INTERVAL_MINUTES);
         int lookAheadDays = clamp(readInt(schedule, "lookAheadDays", 0), 0, 365);
         int lookBehindDays = clamp(readInt(schedule, "lookBehindDays", 0), 0, 30);
+        List<ReminderTierRule> tierRules = readTierRules(schedule, lookAheadDays);
         return new ScheduledTriggerConfig(dueField, configKey, lookAheadDays, lookBehindDays,
-                batchSize, minIntervalMinutes);
+                batchSize, minIntervalMinutes, tierRules);
     }
 
     private String resolveConfigKey(AiBusinessTrigger trigger, ScheduledTriggerConfig config) {
@@ -289,10 +298,19 @@ public class BusinessTriggerSchedulerService {
     }
 
     private BusinessEvent buildScheduledEvent(AiBusinessTrigger trigger, String configKey,
-                                              String recordId, Map<String, Object> row) {
+                                              String recordId, Map<String, Object> row,
+                                              ReminderTierRule tierRule) {
         Map<String, Object> eventData = new LinkedHashMap<>(row);
         eventData.put("scheduledTriggerId", trigger.getId());
         eventData.put("scheduledTriggerName", trigger.getTriggerName());
+        if (tierRule != null) {
+            eventData.put("reminderRuleCode", tierRule.ruleCode());
+            eventData.put("reminderRuleName", tierRule.ruleName());
+            eventData.put("reminderLookAheadDays", tierRule.lookAheadDays());
+            eventData.put("reminderReceiverRule", tierRule.receiverRule());
+            eventData.put("reminderMetricField", tierRule.metricField());
+            eventData.put("reminderMetricValue", tierRule.metricValue());
+        }
         return BusinessEvent.builder()
                 .eventType(BusinessEvent.SCHEDULED_DUE)
                 .suiteCode(trigger.getSuiteCode())
@@ -323,6 +341,153 @@ public class BusinessTriggerSchedulerService {
         return value == null ? null : String.valueOf(value);
     }
 
+    private ReminderTierRule matchTierRule(ScheduledTriggerConfig config, Map<String, Object> row, LocalDate today) {
+        if (config.tierRules().isEmpty()) {
+            return null;
+        }
+        LocalDate dueDate = toLocalDate(readRowValue(row, config.dueField()));
+        if (dueDate == null) {
+            return null;
+        }
+        long daysUntilDue = ChronoUnit.DAYS.between(today, dueDate);
+        if (daysUntilDue < -config.lookBehindDays()) {
+            return null;
+        }
+        for (ReminderTierRule rule : config.tierRules()) {
+            if (daysUntilDue > rule.lookAheadDays()) {
+                continue;
+            }
+            BigDecimal metricValue = StringUtils.isBlank(rule.metricField())
+                    ? null
+                    : toDecimal(readRowValue(row, rule.metricField()));
+            if (StringUtils.isNotBlank(rule.metricField()) && metricValue == null) {
+                continue;
+            }
+            if (metricValue == null && (rule.minValue() != null || rule.maxValue() != null)) {
+                continue;
+            }
+            if (rule.minValue() != null && metricValue.compareTo(rule.minValue()) < 0) {
+                continue;
+            }
+            if (rule.maxValue() != null && metricValue.compareTo(rule.maxValue()) > 0) {
+                continue;
+            }
+            return rule.withMetricValue(metricValue);
+        }
+        return null;
+    }
+
+    private List<ReminderTierRule> readTierRules(JSONObject schedule, int defaultLookAheadDays) {
+        JSONArray rules = schedule == null ? null : schedule.getJSONArray("tierRules");
+        if (rules == null) {
+            rules = schedule == null ? null : schedule.getJSONArray("reminderRules");
+        }
+        if (rules == null || rules.isEmpty()) {
+            return List.of();
+        }
+        List<ReminderTierRule> result = new ArrayList<>();
+        for (int i = 0; i < rules.size(); i++) {
+            JSONObject rule = rules.getJSONObject(i);
+            if (rule == null) {
+                continue;
+            }
+            String ruleCode = StringUtils.defaultIfBlank(rule.getString("ruleCode"), "rule_" + (i + 1));
+            int lookAheadDays = clamp(readInt(rule, "lookAheadDays", defaultLookAheadDays), 0, 365);
+            result.add(new ReminderTierRule(
+                    ruleCode,
+                    StringUtils.defaultIfBlank(rule.getString("ruleName"), ruleCode),
+                    StringUtils.trimToNull(rule.getString("metricField")),
+                    readDecimal(rule, "minValue", "min", "gte"),
+                    readDecimal(rule, "maxValue", "max", "lte"),
+                    lookAheadDays,
+                    StringUtils.trimToNull(rule.getString("receiverRule")),
+                    null
+            ));
+        }
+        return result;
+    }
+
+    private Object readRowValue(Map<String, Object> row, String field) {
+        if (row == null || StringUtils.isBlank(field)) {
+            return null;
+        }
+        Object value = row.get(field);
+        if (value != null) {
+            return value;
+        }
+        String snake = field.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
+        value = row.get(snake);
+        if (value != null || !field.contains("_")) {
+            return value;
+        }
+        StringBuilder camel = new StringBuilder();
+        boolean upperNext = false;
+        for (char ch : field.toCharArray()) {
+            if (ch == '_') {
+                upperNext = true;
+                continue;
+            }
+            camel.append(upperNext ? Character.toUpperCase(ch) : ch);
+            upperNext = false;
+        }
+        return row.get(camel.toString());
+    }
+
+    private BigDecimal readDecimal(JSONObject source, String... keys) {
+        if (source == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = source.get(key);
+            BigDecimal decimal = toDecimal(value);
+            if (decimal != null) {
+                return decimal;
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal toDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        try {
+            return new BigDecimal(String.valueOf(value).trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDate date) {
+            return date;
+        }
+        if (value instanceof LocalDateTime dateTime) {
+            return dateTime.toLocalDate();
+        }
+        String text = StringUtils.trimToNull(String.valueOf(value));
+        if (text == null) {
+            return null;
+        }
+        try {
+            if (text.length() >= 10) {
+                return LocalDate.parse(text.substring(0, 10));
+            }
+            return LocalDate.parse(text);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private JSONObject readJson(String json) {
         if (StringUtils.isBlank(json)) {
             return new JSONObject();
@@ -351,6 +516,31 @@ public class BusinessTriggerSchedulerService {
                                           int lookAheadDays,
                                           int lookBehindDays,
                                           int batchSize,
-                                          int minIntervalMinutes) {
+                                          int minIntervalMinutes,
+                                          List<ReminderTierRule> tierRules) {
+
+        private int maxLookAheadDays() {
+            return tierRules == null || tierRules.isEmpty()
+                    ? lookAheadDays
+                    : Math.max(lookAheadDays, tierRules.stream()
+                            .mapToInt(ReminderTierRule::lookAheadDays)
+                            .max()
+                            .orElse(lookAheadDays));
+        }
+    }
+
+    private record ReminderTierRule(String ruleCode,
+                                    String ruleName,
+                                    String metricField,
+                                    BigDecimal minValue,
+                                    BigDecimal maxValue,
+                                    int lookAheadDays,
+                                    String receiverRule,
+                                    BigDecimal metricValue) {
+
+        private ReminderTierRule withMetricValue(BigDecimal value) {
+            return new ReminderTierRule(ruleCode, ruleName, metricField, minValue, maxValue,
+                    lookAheadDays, receiverRule, value);
+        }
     }
 }

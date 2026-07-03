@@ -117,6 +117,7 @@
           >
             <BusinessFlowBindingPanel
               ref="flowBindingPanelRef"
+              :object-id="objectId"
               :object-code="objectCode"
               :object-name="objectName"
               :fields="fields"

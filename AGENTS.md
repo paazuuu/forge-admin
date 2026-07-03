@@ -13,7 +13,7 @@
 - **核心能力**: RBAC 权限、多租户隔离、AI 代码生成、Flowable 工作流、消息中心、AI 数据大屏
 
 ```
-forge/                          # 后端根目录
+forge-server/                          # 后端根目录
 ├── forge-admin-server/         # 主应用入口（Spring Boot）
 ├── forge-report-server/        # 大屏报表服务
 ├── forge-app-server/           # App 接口服务

@@ -1441,14 +1441,23 @@ fcDesigner / form-create 会给布局 rule 生成 `ref_...` 临时 `id/name/titl
 **发现日期**: 2026-06-02
 
 **问题描述**:
-Flyway 执行 SQL 脚本时会处理 `${...}` 占位符，即使它出现在 SQL 字符串或注释里也可能触发 placeholder 解析。低代码 seed 脚本中如果把消息模板、流程标题模板写成 `${field}`，会被 Flyway 当成配置占位符，导致迁移失败。
+Flyway 执行 SQL 脚本时会处理 `${...}` 占位符，即使它出现在 SQL 字符串或注释里也可能触发 placeholder 解析。低代码 seed 脚本中如果把消息模板、流程标题模板、编码规则模板写成 `${field}`、`WL${yyyyMMddHHmmss}${seq:3}` 这类字符串，会被 Flyway 当成配置占位符，导致迁移失败。
+
+典型错误：
+
+```text
+No value provided for placeholder: ${yyyyMMddHHmmss}. Check your configuration!
+```
 
 **解决方案**:
-Flyway 脚本中的内置模板优先使用 `{field}` 这类不触发 Flyway placeholder 的格式；运行时模板引擎可以兼容 `{field}` 和历史 `${field}`。如果必须保留 `${...}`，需要明确关闭或转义 Flyway placeholder，但项目 seed 脚本默认不走这条路。
+- Flyway 脚本中的内置模板优先使用 `{field}` 这类不触发 Flyway placeholder 的格式；运行时模板引擎可以兼容 `{field}` 和历史 `${field}`。
+- 如果业务必须保留 `${...}` 入库，SQL 原文不要出现连续的 `${`，用 SQL 拼接生成最终值，例如 `CONCAT('WL', '$', '{yyyyMMddHHmmss}', '$', '{seq:3}')`。
+- 不建议为单个业务模板关闭或修改全局 Flyway placeholder 行为，避免影响现有配置约定。
+- Flyway 脚本变更后必须执行静态检查：`rg -n '\$\{[^}]+\}' forge-server/db/migration`，结果应为空。
 
 **影响范围**:
-- `forge/db/migration/` 中所有包含 JSON、消息模板、流程标题模板的 SQL 脚本
-- 触发器动作配置、消息模板、流程变量标题模板初始化脚本
+- `forge-server/db/migration/` 中所有包含 JSON、消息模板、流程标题模板、编码规则模板的 SQL 脚本
+- 触发器动作配置、消息模板、流程变量标题模板、编码规则初始化脚本
 
 ## 42. Flowable 节点表达式变量必须由低代码映射提供
 
@@ -2451,3 +2460,35 @@ collectTaskFormAssets(objectCode) -> mergeCodeAppAssets(providerAssets, codeAppM
 - 采购审批示例。
 - 后续生成类似“驳回修改 / 申请人补正 / 重新提交”流程 skill 的业务状态机模板。
 - 所有依赖流程事件回写业务单据状态的代码表单 Provider。
+
+## 91. MySQL 唯一索引遇到 NULL 不能作为幂等防线
+
+**发现日期**: 2026-07-03
+
+**问题描述**:
+动作执行日志用 `tenant_id + object_code + record_id + action_code + idempotency_key` 做唯一键防重复提交时，如果 `record_id` 允许为 `NULL`，MySQL 唯一索引会允许多条 `NULL` 组合记录，导致同一幂等键仍可能重复写入和重复执行。
+
+**解决方案**:
+- 幂等唯一键中的业务维度字段尽量设为 `NOT NULL DEFAULT ''`，服务端也要把空值归一化为空字符串。
+- 执行业务副作用前先以独立事务写入 `RUNNING` 预占日志，再进入真实步骤事务。
+- 重复请求命中 `RUNNING`、`FAILED` 等既有幂等记录时只返回/抛出对应结果，不要再尝试写一条新的失败日志。
+
+**影响范围**:
+- 动作执行日志、数量流水、锁定记录等所有依赖数据库唯一键实现幂等的表。
+- 任何包含可空业务 ID、详情 ID、来源 ID 的唯一索引设计。
+
+## 92. 根 POM 固定 skip 会让定向测试看起来通过但实际未执行
+
+**发现日期**: 2026-07-03
+
+**问题描述**:
+执行 `mvn -Dtest=SomeTest test -DskipTests=false -Dmaven.test.skip=false` 时，如果根 POM 的 compiler/surefire 插件配置固定读取项目属性并默认 skip，Maven 日志可能显示构建成功，但实际出现 `Not compiling test sources`、`Tests are skipped`，新增测试没有运行。
+
+**解决方案**:
+- 先看 Maven 日志里是否有 `T E S T S` 和具体 `Tests run` 汇总，不能只看 `BUILD SUCCESS`。
+- 为项目提供显式启用测试的 profile，例如 `-Penable-tests` 同时打开 testCompile 和 surefire。
+- 如果启用测试后被历史坏测试阻断，先在 profile 中临时 exclude 无关旧测试，并在执行日志中说明原因，避免本变更的定向测试继续被跳过。
+
+**影响范围**:
+- `forge-server` 后端 Maven 定向单测。
+- SDD `/test`、阶段收尾验证、Review 修复验证和归档前验收。

@@ -25,6 +25,7 @@ const FIELD_DEFAULTS = {
   fileUpload: { fieldType: 'FILE', dataType: 'varchar', componentType: 'fileUpload', length: 512, precision: 2, queryType: 'eq' },
   imageUpload: { fieldType: 'IMAGE', dataType: 'varchar', componentType: 'imageUpload', length: 512, precision: 2, queryType: 'eq' },
   objectReference: { fieldType: 'REFERENCE', dataType: 'bigint', componentType: 'objectReference', length: null, precision: null, queryType: 'eq' },
+  recordSelector: { fieldType: 'RECORD_SELECTOR', dataType: 'bigint', componentType: 'recordSelector', length: null, precision: null, queryType: 'eq' },
 }
 
 export function buildAutoFieldAssets(schema = {}, existingFields = []) {
@@ -100,6 +101,7 @@ export function createFieldFromComponent(component = {}, index = 0) {
     remark: component.label || '',
     sortOrder: Number(component.props?.sortOrder ?? component.layout?.order ?? index + 1),
     fieldBinding: basicProps.fieldBinding,
+    formulaConfig: props.formulaConfig ?? component.advancedProps?.formulaConfig ?? null,
     basicProps,
     advancedProps: {
       ...(component.advancedProps || {}),

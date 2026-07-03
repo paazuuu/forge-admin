@@ -678,6 +678,14 @@
                           />
                         </div>
                         <div class="switch-line compact">
+                          <span>表单填写隐藏</span>
+                          <n-switch
+                            size="small"
+                            :value="!!selectedComponent.visibility?.hidden"
+                            @update:value="updateComponentHidden"
+                          />
+                        </div>
+                        <div class="switch-line compact">
                           <span>运行态只读</span>
                           <n-switch
                             size="small"
@@ -710,6 +718,17 @@
                           {{ codeRulePreview.warnings[0].message }}
                         </div>
                       </template>
+                    </div>
+                  </n-form-item>
+                  <n-form-item label="公式配置">
+                    <div class="formula-config-entry">
+                      <div>
+                        <strong>{{ selectedFormulaConfig?.type ? `${selectedFormulaConfig.type} 公式` : '未启用公式' }}</strong>
+                        <span>{{ selectedFormulaSummary }}</span>
+                      </div>
+                      <n-button size="small" secondary @click="openFieldFormulaPanel">
+                        配置公式
+                      </n-button>
                     </div>
                   </n-form-item>
                   <n-form-item label="组件尺寸">
@@ -2133,7 +2152,7 @@
                   <n-switch
                     size="small"
                     :value="!!selectedComponent.visibility?.hidden"
-                    @update:value="updateComponent({ visibility: { hidden: $event } })"
+                    @update:value="updateComponentHidden"
                   />
                 </label>
               </div>
@@ -2406,7 +2425,7 @@
                   <n-switch
                     size="small"
                     :value="!!selectedComponent.visibility?.hidden"
-                    @update:value="updateComponent({ visibility: { hidden: $event } })"
+                    @update:value="updateComponentHidden"
                   />
                 </label>
                 <label v-if="isField">
@@ -3884,6 +3903,28 @@
       </n-tab-pane>
     </n-tabs>
 
+    <n-modal
+      v-model:show="fieldFormulaPanelVisible"
+      preset="card"
+      class="field-formula-modal"
+      :bordered="false"
+      :mask-closable="false"
+      style="width: min(1120px, calc(100vw - 40px))"
+      :title="`字段公式：${selectedFieldAsset?.fieldName || selectedFieldCode || '未绑定字段'}`"
+    >
+      <BusinessFieldPropertyPanel
+        v-if="selectedFieldAsset"
+        class="field-formula-property-panel"
+        :field="selectedFieldAsset"
+        :all-fields="formulaPanelFields"
+        :relations="relations"
+        :object-code="objectCode"
+        default-active-tab="formula"
+        mode="formula"
+        @save="handleFieldAssetSave"
+      />
+    </n-modal>
+
     <n-modal v-model:show="sourceModalVisible" preset="card" class="form-source-modal" :bordered="false" title="源码编辑">
       <section class="panel-item source-panel">
         <div class="panel-title-row">
@@ -3949,6 +3990,7 @@ import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.v
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
 import { getDictData } from '@/composables/useDict'
+import BusinessFieldPropertyPanel from '../BusinessFieldPropertyPanel.vue'
 import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
 
@@ -3961,9 +4003,21 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  fields: {
+    type: Array,
+    default: () => [],
+  },
+  relations: {
+    type: Array,
+    default: () => [],
+  },
+  objectCode: {
+    type: String,
+    default: '',
+  },
 })
 
-const emit = defineEmits(['update:schema', 'update:selectedId', 'close'])
+const emit = defineEmits(['update:schema', 'update:selectedId', 'close', 'fieldAssetUpdated'])
 
 function createBitableSvgIcon(name, children = []) {
   return {
@@ -4014,6 +4068,7 @@ const BitableLookupIcon = createBitableSvgIcon('BitableLookupIcon', [
 const advancedConfigVisible = ref(false)
 const componentPropsVisible = ref(false)
 const crudFieldDrawerVisible = ref(false)
+const fieldFormulaPanelVisible = ref(false)
 const crudDescriptionFieldPanelOpen = ref(false)
 const editingCrudFieldId = ref('')
 const propertyActiveTab = ref('basic')
@@ -4064,6 +4119,47 @@ const formPermissionConfig = computed(() => formGovernanceSettings.value.permiss
 const formFieldRuleRows = computed(() => Array.isArray(formGovernanceSettings.value.fieldRules) ? formGovernanceSettings.value.fieldRules : [])
 const formEventRows = computed(() => Array.isArray(formGovernanceSettings.value.events) ? formGovernanceSettings.value.events : [])
 const formFieldOptions = computed(() => collectBoundFieldOptions(props.schema.components || []))
+const selectedFieldCode = computed(() => String(
+  selectedComponent.value?.fieldBinding?.fieldCode
+  || selectedComponent.value?.field
+  || selectedComponent.value?.props?.fieldCode
+  || '',
+).trim())
+const selectedFieldAsset = computed(() => {
+  if (!isField.value || !selectedFieldCode.value)
+    return null
+  const matched = (props.fields || []).find((field) => {
+    const code = field?.fieldCode || field?.field
+    return code === selectedFieldCode.value
+  })
+  return normalizeSelectedFieldAsset(matched || createFieldAssetFromSelectedComponent())
+})
+const selectedFormulaConfig = computed(() => selectedFieldAsset.value?.formulaConfig || null)
+const selectedFormulaSummary = computed(() => {
+  const config = selectedFormulaConfig.value
+  if (!config?.type)
+    return '字段资产级计算逻辑，可用于金额、状态、跨对象取值等场景。'
+  if (config.type === 'LOOKUP')
+    return `查找 ${config.lookup?.returnField || '目标字段'}`
+  if (config.type === 'AGGREGATE')
+    return `${config.aggregate?.function || '聚合'} ${config.aggregate?.targetField || ''}`.trim()
+  return config.expression || config.condition?.expression || '已配置公式'
+})
+const formulaPanelFields = computed(() => {
+  const current = selectedFieldAsset.value
+  const fields = Array.isArray(props.fields) ? props.fields : []
+  if (!current)
+    return fields
+  let matched = false
+  const merged = fields.map((field) => {
+    const code = field?.fieldCode || field?.field
+    if (code !== current.fieldCode)
+      return field
+    matched = true
+    return { ...field, ...current }
+  })
+  return matched ? merged : [current, ...merged]
+})
 const formUsageOptions = [
   { label: '新增', value: 'create' },
   { label: '编辑', value: 'edit' },
@@ -4245,7 +4341,7 @@ const buttonTypeOptions = [
 ]
 const propertySearchIndex = [
   { keys: ['标识', '名称', '绑定字段', 'field', '字段编码'], label: '基础配置 / 标识', selectedTab: 'basic', selectedExpand: ['identity'], formTab: 'basic', formExpand: ['assets'] },
-  { keys: ['字段', '字段组件', '占位', 'placeholder', '默认', '默认值', '字典', 'dict', '组件属性', '标签', '标题'], label: '基础配置 / 字段组件', selectedTab: 'basic', selectedExpand: ['field'] },
+  { keys: ['字段', '字段组件', '占位', 'placeholder', '默认', '默认值', '字典', 'dict', '组件属性', '标签', '标题', '公式', 'formula', '计算'], label: '基础配置 / 字段组件', selectedTab: 'basic', selectedExpand: ['field'] },
   { keys: ['选项', 'option', '新增选项', '静态选项', '标签', '值'], label: '基础配置 / 选项配置', selectedTab: 'basic', selectedExpand: ['options'] },
   { keys: ['按钮', 'button', '块级', '禁用', '类型', '文案', '动作'], label: '基础配置 / 按钮组件', selectedTab: 'basic', selectedExpand: ['button'] },
   { keys: ['说明', '说明文本', '角标', '辅助', 'badge'], label: '基础配置 / 辅助展示', selectedTab: 'basic', selectedExpand: ['assist'] },
@@ -4625,6 +4721,30 @@ const generationTriggerOptions = [
   { label: '新增时', value: 'ON_CREATE' },
 ]
 
+const componentFieldDefaults = {
+  input: { fieldType: 'TEXT', dataType: 'varchar', componentType: 'input', length: 128, precision: 2, queryType: 'like' },
+  textarea: { fieldType: 'MULTILINE', dataType: 'text', componentType: 'textarea', length: null, precision: 2, queryType: 'like' },
+  number: { fieldType: 'NUMBER', dataType: 'int', componentType: 'number', length: 11, precision: 0, queryType: 'eq' },
+  inputNumber: { fieldType: 'NUMBER', dataType: 'int', componentType: 'number', length: 11, precision: 0, queryType: 'eq' },
+  integer: { fieldType: 'NUMBER', dataType: 'int', componentType: 'number', length: 11, precision: 0, queryType: 'eq' },
+  money: { fieldType: 'MONEY', dataType: 'decimal', componentType: 'number', length: 18, precision: 2, queryType: 'eq' },
+  date: { fieldType: 'DATE', dataType: 'date', componentType: 'date', length: null, precision: null, queryType: 'eq' },
+  datetime: { fieldType: 'DATETIME', dataType: 'datetime', componentType: 'datetime', length: null, precision: null, queryType: 'eq' },
+  switch: { fieldType: 'SWITCH', dataType: 'tinyint', componentType: 'switch', length: 1, precision: 0, queryType: 'eq' },
+  select: { fieldType: 'DICT', dataType: 'varchar', componentType: 'select', length: 64, precision: 2, queryType: 'eq' },
+  radio: { fieldType: 'RADIO', dataType: 'varchar', componentType: 'radio', length: 64, precision: 2, queryType: 'eq' },
+  checkbox: { fieldType: 'CHECKBOX', dataType: 'varchar', componentType: 'checkbox', length: 255, precision: 2, queryType: 'in' },
+  dictSelect: { fieldType: 'DICT', dataType: 'varchar', componentType: 'dictSelect', length: 64, precision: 2, queryType: 'eq' },
+  cascader: { fieldType: 'DICT', dataType: 'varchar', componentType: 'cascader', length: 128, precision: 2, queryType: 'eq' },
+  regionTreeSelect: { fieldType: 'REGION', dataType: 'varchar', componentType: 'regionTreeSelect', length: 32, precision: 2, queryType: 'eq' },
+  orgTreeSelect: { fieldType: 'DEPT', dataType: 'bigint', componentType: 'orgTreeSelect', length: null, precision: null, queryType: 'eq' },
+  userSelect: { fieldType: 'USER', dataType: 'bigint', componentType: 'userSelect', length: null, precision: null, queryType: 'eq' },
+  fileUpload: { fieldType: 'FILE', dataType: 'varchar', componentType: 'fileUpload', length: 512, precision: 2, queryType: 'eq' },
+  imageUpload: { fieldType: 'IMAGE', dataType: 'varchar', componentType: 'imageUpload', length: 512, precision: 2, queryType: 'eq' },
+  objectReference: { fieldType: 'REFERENCE', dataType: 'bigint', componentType: 'objectReference', length: null, precision: null, queryType: 'eq' },
+  recordSelector: { fieldType: 'RECORD_SELECTOR', dataType: 'bigint', componentType: 'recordSelector', length: null, precision: null, queryType: 'eq' },
+}
+
 watch(
   selectedDictType,
   (dictType) => {
@@ -4669,6 +4789,149 @@ function updateComponent(patch) {
   if (!props.selectedId)
     return
   emit('update:schema', updateDesignerComponent(props.schema, props.selectedId, patch))
+}
+
+function updateComponentHidden(value) {
+  const hidden = value === true
+  updateComponent({
+    visibility: { hidden },
+    ...(hidden
+      ? {
+          validation: {
+            required: false,
+            requiredMessage: '',
+          },
+        }
+      : {}),
+  })
+}
+
+function openFieldFormulaPanel() {
+  if (!selectedFieldAsset.value)
+    return
+  fieldFormulaPanelVisible.value = true
+}
+
+function handleFieldAssetSave(payload = {}) {
+  const fieldCode = payload.fieldCode || selectedFieldCode.value
+  if (!fieldCode)
+    return
+  const formulaConfig = payload.formulaConfig ?? null
+  updateComponent(buildFieldAssetComponentPatch(payload, formulaConfig, fieldCode))
+  emit('fieldAssetUpdated', {
+    ...payload,
+    fieldCode,
+    formulaConfig,
+  })
+  fieldFormulaPanelVisible.value = false
+}
+
+function buildFieldAssetComponentPatch(payload = {}, formulaConfig = null, fieldCode = '') {
+  const propsPatch = {
+    formulaConfig,
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'placeholder'))
+    propsPatch.placeholder = payload.placeholder || ''
+  if (Object.prototype.hasOwnProperty.call(payload, 'defaultValue'))
+    propsPatch.defaultValue = payload.defaultValue
+  if (Object.prototype.hasOwnProperty.call(payload, 'dictType'))
+    propsPatch.dictType = payload.dictType || ''
+  if (Object.prototype.hasOwnProperty.call(payload, 'referenceObjectCode'))
+    propsPatch.referenceObjectCode = payload.referenceObjectCode || ''
+  if (Object.prototype.hasOwnProperty.call(payload, 'referenceDisplayField'))
+    propsPatch.referenceDisplayField = payload.referenceDisplayField || ''
+  if (payload.basicProps && Object.prototype.hasOwnProperty.call(payload.basicProps, 'recordSelector'))
+    propsPatch.recordSelector = payload.basicProps.recordSelector || undefined
+
+  const patch = {
+    label: payload.fieldName || selectedComponent.value?.label || fieldCode,
+    props: propsPatch,
+    advancedProps: {
+      ...(selectedComponent.value?.advancedProps || {}),
+      ...(payload.advancedProps || {}),
+      formulaConfig,
+    },
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'required')) {
+    patch.validation = {
+      required: Boolean(payload.required),
+      requiredMessage: payload.required ? `${payload.fieldName || selectedComponent.value?.label || fieldCode}不能为空` : '',
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'formVisible') || Object.prototype.hasOwnProperty.call(payload, 'readonly')) {
+    patch.visibility = {
+      ...(Object.prototype.hasOwnProperty.call(payload, 'formVisible') ? { hidden: payload.formVisible === false } : {}),
+      ...(Object.prototype.hasOwnProperty.call(payload, 'readonly') ? { readonly: Boolean(payload.readonly) } : {}),
+    }
+  }
+  return patch
+}
+
+function normalizeSelectedFieldAsset(source = {}) {
+  const component = selectedComponent.value || {}
+  const fieldCode = source.fieldCode || source.field || selectedFieldCode.value
+  const formulaConfig = source.formulaConfig ?? component.props?.formulaConfig ?? component.advancedProps?.formulaConfig ?? null
+  return {
+    ...source,
+    field: source.field || fieldCode,
+    fieldCode,
+    fieldName: source.fieldName || source.label || component.label || fieldCode,
+    columnName: source.columnName || component.fieldBinding?.columnName || camelToSnake(fieldCode),
+    formulaConfig,
+  }
+}
+
+function createFieldAssetFromSelectedComponent() {
+  const component = selectedComponent.value || {}
+  const fieldCode = selectedFieldCode.value
+  const defaults = componentFieldDefaults[component.componentKey] || componentFieldDefaults.input
+  const fieldBinding = {
+    mode: 'field',
+    fieldCode,
+    columnName: component.fieldBinding?.columnName || camelToSnake(fieldCode),
+    createIfMissing: true,
+    source: 'designer',
+    locked: false,
+    ...(component.fieldBinding || {}),
+  }
+  return {
+    field: fieldCode,
+    fieldName: component.label || fieldCode,
+    fieldCode,
+    columnName: fieldBinding.columnName,
+    fieldType: defaults.fieldType,
+    dataType: defaults.dataType,
+    length: defaults.length,
+    precision: defaults.precision,
+    required: Boolean(component.validation?.required),
+    defaultValue: component.props?.defaultValue ?? '',
+    searchable: false,
+    listVisible: true,
+    formVisible: component.visibility?.hidden !== true,
+    importable: true,
+    exportable: true,
+    componentType: defaults.componentType,
+    queryType: defaults.queryType,
+    dictType: component.props?.dictType || '',
+    sortable: false,
+    systemField: false,
+    readonly: Boolean(component.visibility?.readonly),
+    fieldStatus: 'ENABLED',
+    referenceObjectCode: component.props?.referenceObjectCode || '',
+    referenceDisplayField: component.props?.referenceDisplayField || '',
+    placeholder: component.props?.placeholder || '',
+    remark: component.label || '',
+    sortOrder: Number(component.props?.sortOrder ?? component.layout?.order ?? 0),
+    fieldBinding,
+    basicProps: {
+      ...(component.props || {}),
+      fieldBinding,
+    },
+    advancedProps: {
+      ...(component.advancedProps || {}),
+    },
+    formulaConfig: component.props?.formulaConfig ?? component.advancedProps?.formulaConfig ?? null,
+  }
 }
 
 function updatePageWidgetOptionSource(patch = {}) {
@@ -4758,7 +5021,14 @@ async function handleGenerationEnabled(value) {
         generation: next,
         defaultValue: undefined,
       },
-      visibility: { readonly: true },
+      validation: {
+        required: false,
+        requiredMessage: '',
+      },
+      visibility: {
+        readonly: true,
+        hidden: true,
+      },
     })
     if (next.ruleCode)
       previewSelectedGenerationRule(next.ruleCode)
@@ -7340,6 +7610,45 @@ onBeforeUnmount(() => {
   display: grid;
   width: 100%;
   gap: 8px;
+}
+
+.formula-config-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  border: 1px solid #e4e4e7;
+  border-radius: 7px;
+  background: #fafafa;
+  padding: 9px 10px;
+}
+
+.formula-config-entry > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.formula-config-entry strong {
+  color: #18181b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.formula-config-entry span {
+  overflow: hidden;
+  color: #71717a;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-formula-property-panel {
+  height: min(760px, calc(100vh - 136px));
+  border: 0;
+  border-radius: 0;
 }
 
 .auto-code-rule-summary {

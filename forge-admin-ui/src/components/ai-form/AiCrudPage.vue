@@ -636,6 +636,34 @@
       </template>
     </n-modal>
 
+    <n-modal
+      v-model:show="commandActionModalVisible"
+      :title="commandActionTitle"
+      preset="card"
+      style="width: min(720px, calc(100vw - 32px))"
+      :mask-closable="false"
+    >
+      <AiForm
+        ref="commandActionFormRef"
+        v-model:value="commandActionFormData"
+        :schema="commandActionFormSchema"
+        :grid-cols="2"
+        :show-actions="false"
+        :context="commandActionFormContext"
+      />
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button :disabled="commandActionSubmitting" @click="closeCommandActionModal">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="commandActionSubmitting" @click="submitCommandAction">
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <!-- 导出任务抽屉 -->
     <n-drawer
       v-model:show="exportTaskDrawerVisible"
@@ -704,6 +732,7 @@ import { NButton, NDropdown, NProgress, NTag } from 'naive-ui'
 import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
+import { executeBusinessAction } from '@/api/business-app'
 import { previewFormula } from '@/api/formula'
 import AuthImage from '@/components/common/AuthImage.vue'
 import DictTag from '@/components/DictTag.vue'
@@ -755,6 +784,7 @@ const searchRef = ref(null)
 const tableRef = ref(null)
 const formRef = ref(null)
 const childFormRef = ref(null)
+const commandActionFormRef = ref(null)
 
 /**
  * ==================== 响应式数据 ====================
@@ -798,6 +828,20 @@ const detailRuntimeLoading = ref(false)
 const detailActiveTab = ref('business')
 const actionLoadingKeys = ref(new Set())
 const flowStartPageLoading = ref(false)
+const commandActionModalVisible = ref(false)
+const commandActionSubmitting = ref(false)
+const commandActionFormData = ref({})
+const commandActionContext = ref(null)
+const commandActionTitle = computed(() => commandActionContext.value?.action?.label || commandActionContext.value?.action?.actionName || '业务动作')
+const commandActionFormSchema = computed(() => {
+  const config = normalizeCommandActionRuntimeConfig(commandActionContext.value?.action || {})
+  return Array.isArray(config.formSchema) ? config.formSchema : []
+})
+const commandActionFormContext = computed(() => ({
+  row: commandActionContext.value?.row || null,
+  action: commandActionContext.value?.action || null,
+  mode: 'businessAction',
+}))
 const formulaRuntimeTimers = new Map()
 const formulaRuntimeSequences = new Map()
 let inlineFormTabSequence = 0
@@ -1134,6 +1178,10 @@ async function handleConfiguredAction(action, row) {
   emit('custom-action', { action, row })
   if (action.confirmText && !(await confirmConfiguredAction(resolveActionText(action.confirmText, row))))
     return
+  if (normalizedActionType === 'COMMAND') {
+    await handleCommandAction(action, row)
+    return
+  }
   if (actionType === 'refresh') {
     loadList()
     return
@@ -1244,6 +1292,134 @@ async function callConfiguredApiAction(action, row) {
   finally {
     setActionLoading(loadingKey, false)
   }
+}
+
+async function handleCommandAction(action, row) {
+  const config = normalizeCommandActionRuntimeConfig(action)
+  if (Array.isArray(config.formSchema) && config.formSchema.length) {
+    commandActionContext.value = { action, row }
+    commandActionFormData.value = buildCommandActionInitialData(config, row)
+    commandActionModalVisible.value = true
+    await nextTick()
+    commandActionFormRef.value?.restoreValidation?.()
+    return
+  }
+  await executeCommandAction(action, row, {})
+}
+
+async function submitCommandAction() {
+  const context = commandActionContext.value
+  if (!context?.action)
+    return
+  commandActionSubmitting.value = true
+  try {
+    await nextTick()
+    await commandActionFormRef.value?.validate?.()
+    const latestFormData = commandActionFormRef.value?.getFormData?.() || commandActionFormData.value || {}
+    const success = await executeCommandAction(context.action, context.row, latestFormData, { fromModal: true })
+    if (success)
+      closeCommandActionModal()
+  }
+  finally {
+    commandActionSubmitting.value = false
+  }
+}
+
+function closeCommandActionModal() {
+  if (commandActionSubmitting.value)
+    return
+  commandActionModalVisible.value = false
+  commandActionFormData.value = {}
+  commandActionContext.value = null
+}
+
+async function executeCommandAction(action, row, formData = {}, options = {}) {
+  const config = normalizeCommandActionRuntimeConfig(action)
+  const objectCode = action.objectCode || props.businessObjectCode || row?._runtimeObjectCode || row?.objectCode
+  const recordId = action.recordId || resolveRowKeyValue(row)
+  const actionCode = action.actionCode || action.key
+  if (!objectCode || !actionCode) {
+    window.$message?.warning('缺少业务对象或动作编码，无法执行')
+    return false
+  }
+  const loadingKey = getActionLoadingKey({ ...action, actionType: 'COMMAND', objectCode, recordId }, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message?.info(resolveActionTextValue(action.loadingReason, row) || '操作正在执行，请稍候')
+    return false
+  }
+  setActionLoading(loadingKey, true)
+  try {
+    const response = await executeBusinessAction({
+      suiteCode: action.suiteCode || config.suiteCode || '',
+      objectCode,
+      recordId: recordId === undefined || recordId === null ? '' : String(recordId),
+      actionCode,
+      formData: formData || {},
+      context: {
+        routeQuery: { ...route.query },
+        row,
+      },
+      idempotencyKey: config.idempotencyKey || '',
+    })
+    const result = response?.data || {}
+    if (String(result.executeStatus || '').toUpperCase() === 'FAILED') {
+      throw new Error(result.message || action.failureMessage || '动作执行失败')
+    }
+    const successMessage = action.successMessage || result.message || config.successMessage || '操作成功'
+    if (successMessage)
+      window.$message?.success(resolveActionText(successMessage, row))
+    const successBehavior = action.successBehavior || config.successBehavior || 'refreshList'
+    if (successBehavior && successBehavior !== 'none')
+      handleConfiguredActionSuccess({ ...action, successBehavior })
+    else if (!options.fromModal)
+      await loadList()
+    return true
+  }
+  catch (error) {
+    const failureMessage = action.failureMessage || config.failureMessage || error?.message || '动作执行失败'
+    window.$message?.error(resolveActionText(failureMessage, row))
+    return false
+  }
+  finally {
+    setActionLoading(loadingKey, false)
+  }
+}
+
+function normalizeCommandActionRuntimeConfig(action = {}) {
+  const config = parseActionConfig(action.actionConfig)
+  return {
+    ...config,
+    formSchema: Array.isArray(config.formSchema) ? config.formSchema : [],
+    steps: Array.isArray(config.steps) ? config.steps : [],
+    successBehavior: action.successBehavior || config.successBehavior || 'refreshList',
+    successMessage: action.successMessage || config.successMessage || '',
+    failureMessage: action.failureMessage || config.failureMessage || '',
+  }
+}
+
+function buildCommandActionInitialData(config = {}, row = {}) {
+  const defaults = {}
+  const defaultValues = config.defaultValues && typeof config.defaultValues === 'object' ? config.defaultValues : {}
+  Object.entries(defaultValues).forEach(([key, value]) => {
+    defaults[key] = typeof value === 'string' && value.startsWith('row.')
+      ? resolveConditionValue(row, value.slice(4))
+      : value
+  })
+  return defaults
+}
+
+function parseActionConfig(config) {
+  if (!config)
+    return {}
+  if (typeof config === 'string') {
+    try {
+      return JSON.parse(config) || {}
+    }
+    catch {
+      return {}
+    }
+  }
+  return typeof config === 'object' ? { ...config } : {}
 }
 
 async function sendConfiguredApiRequest(requestInfo) {

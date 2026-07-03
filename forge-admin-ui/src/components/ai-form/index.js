@@ -13,6 +13,7 @@ import AiSearch from './AiSearch.vue'
 import AiTable from './AiTable.vue'
 import AiTableFilter from './AiTableFilter.vue'
 import AiToolbarAction from './AiToolbarAction.vue'
+import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
 import { createField, FIELD_TYPES, FieldFactory } from './config.js'
 import * as SchemaHelper from './schemaHelper.js'
 
@@ -25,6 +26,7 @@ export {
   AiFormGroupTitle,
   AiFormItem,
   AiFormSectionTitle,
+  AiRecordSelectorModal,
   AiSearch,
   AiTable,
   AiTableFilter,

@@ -54,7 +54,8 @@ public class BusinessFieldSchemaService {
             Map.entry("USER", new FieldDefaults("bigint", "userSelect", null, null, "eq", 140)),
             Map.entry("DEPT", new FieldDefaults("bigint", "orgTreeSelect", null, null, "eq", 140)),
             Map.entry("REGION", new FieldDefaults("varchar", "regionTreeSelect", 32, 2, "eq", 160)),
-            Map.entry("REFERENCE", new FieldDefaults("bigint", "objectReference", null, null, "eq", 160))
+            Map.entry("REFERENCE", new FieldDefaults("bigint", "objectReference", null, null, "eq", 160)),
+            Map.entry("RECORD_SELECTOR", new FieldDefaults("bigint", "recordSelector", null, null, "eq", 180))
     );
 
     private final LowcodeModelSchemaNormalizer schemaNormalizer;
@@ -246,6 +247,23 @@ public class BusinessFieldSchemaService {
                 && !designerDraftField) {
             throw new BusinessException("引用对象字段必须配置目标对象和回显字段");
         }
+        if ("RECORD_SELECTOR".equals(fieldType)
+                && !hasRecordSelectorObject(dto)
+                && !designerDraftField) {
+            throw new BusinessException("记录选择器字段必须配置目标对象编码");
+        }
+    }
+
+    private boolean hasRecordSelectorObject(BusinessFieldDTO dto) {
+        if (dto == null) {
+            return false;
+        }
+        Object config = copyProps(dto.getBasicProps()).get("recordSelector");
+        if (config instanceof Map<?, ?> map) {
+            Object objectCode = map.get("objectCode");
+            return objectCode != null && StringUtils.isNotBlank(String.valueOf(objectCode));
+        }
+        return false;
     }
 
     private boolean hasInlineOptions(BusinessFieldDTO dto) {
@@ -377,6 +395,9 @@ public class BusinessFieldSchemaService {
     private String inferFieldType(LowcodeFieldSchema schema) {
         if (StringUtils.isNotBlank(schema.getReferenceObjectCode())) {
             return "REFERENCE";
+        }
+        if ("recordSelector".equals(schema.getComponentType())) {
+            return "RECORD_SELECTOR";
         }
         if (StringUtils.isNotBlank(schema.getDictType())) {
             return "DICT";

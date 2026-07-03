@@ -525,6 +525,7 @@ public class LowcodeRuntimeConfigBuilder {
             child.put("showInCreate", booleanWithDefault(refProps.get("inlineCreateEnabled"), true));
             child.put("showInEdit", booleanWithDefault(refProps.get("inlineEditEnabled"), true));
             child.put("showInDetail", booleanWithDefault(refProps.get("showInDetail"), true));
+            child.put("saveMode", normalizeChildSaveMode(refProps.get("saveMode")));
             putIfNotBlank(child, "tabTitle", text(refProps.get("tabTitle")));
             putIfNotBlank(child, "relationName", text(refProps.get("relationName")));
             child.put("fields", childFields);
@@ -532,6 +533,10 @@ public class LowcodeRuntimeConfigBuilder {
         }
         config.put("children", children);
         return config;
+    }
+
+    private String normalizeChildSaveMode(Object value) {
+        return "merge".equalsIgnoreCase(text(value)) ? "merge" : "replace";
     }
 
     private LowcodePageModelRef resolvePrimaryRef(LowcodeModelSchema modelSchema, LowcodePageSchema pageSchema) {
@@ -1828,6 +1833,7 @@ public class LowcodeRuntimeConfigBuilder {
             case "forgeFileUpload" -> "fileUpload";
             case "forgeImageUpload" -> "imageUpload";
             case "forgeObjectReference" -> "objectReference";
+            case "forgeRecordSelector" -> "recordSelector";
             case "forgeSubTable" -> "subTable";
             default -> null;
         };
@@ -2645,7 +2651,8 @@ public class LowcodeRuntimeConfigBuilder {
                 || "userSelect".equals(componentType)
                 || "regionTreeSelect".equals(componentType)
                 || "cascader".equals(componentType)
-                || "objectReference".equals(componentType);
+                || "objectReference".equals(componentType)
+                || "recordSelector".equals(componentType);
     }
 
     private String buildPlaceholder(String componentType, String label) {
@@ -2654,7 +2661,7 @@ public class LowcodeRuntimeConfigBuilder {
                 || "daterange".equals(componentType) || "datetimerange".equals(componentType) || "timerange".equals(componentType)
                 || "dictSelect".equals(componentType) || "treeSelect".equals(componentType) || "orgTreeSelect".equals(componentType)
                 || "userSelect".equals(componentType) || "regionTreeSelect".equals(componentType) || "cascader".equals(componentType)
-                || "objectReference".equals(componentType) || "fileUpload".equals(componentType)
+                || "objectReference".equals(componentType) || "recordSelector".equals(componentType) || "fileUpload".equals(componentType)
                 || "imageUpload".equals(componentType) || "upload".equals(componentType)) {
             return "请选择" + label;
         }

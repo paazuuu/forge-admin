@@ -68,8 +68,10 @@
             :fields="primaryDesignFields"
             :object-code="objectCode"
             :object-name="objectName"
+            :relations="relations"
             :extra-more-options="formDesignerMoreOptions"
             @dirty-change="emit('dirtyChange', $event)"
+            @field-asset-updated="handleFieldAssetUpdated"
             @more-select="handleFormDesignerMoreSelect"
           />
         </template>
@@ -319,6 +321,7 @@ const FORM_FIELD_COMPONENT_KEYS = new Set([
   'imageUpload',
   'upload',
   'objectReference',
+  'recordSelector',
 ])
 
 const DICT_FIELD_TYPES = new Set(['DICT', 'SELECT', 'RADIO', 'CHECKBOX', 'MULTI_SELECT'])
@@ -344,6 +347,7 @@ const COMPONENT_FIELD_DEFAULTS = {
   fileUpload: { fieldType: 'FILE', businessFieldType: 'FILE', dataType: 'varchar', componentType: 'fileUpload', length: 512, precision: 2, queryType: 'eq' },
   imageUpload: { fieldType: 'IMAGE', businessFieldType: 'IMAGE', dataType: 'varchar', componentType: 'imageUpload', length: 512, precision: 2, queryType: 'eq' },
   objectReference: { fieldType: 'REFERENCE', businessFieldType: 'REFERENCE', dataType: 'bigint', componentType: 'objectReference', length: null, precision: null, queryType: 'eq' },
+  recordSelector: { fieldType: 'RECORD_SELECTOR', businessFieldType: 'RECORD_SELECTOR', dataType: 'bigint', componentType: 'recordSelector', length: null, precision: null, queryType: 'eq' },
 }
 
 const message = useMessage()
@@ -577,7 +581,7 @@ function buildFormDesignerEditZone(zone, schema, fields = primaryDesignFields.va
   const layout = normalizedSchema.layout || {}
   const gridColumns = clampNumber(layout.gridColumns, 1, 4, 2)
   const defaultLabelWidth = resolveNumber(layout.labelWidth, 100)
-  const fieldSet = new Set((fields || []).map(field => field.field || field.fieldCode).filter(Boolean))
+  const fieldSet = buildVisibleFormFieldSet(fields)
   const { rules, options } = forgeSchemaToFormCreate({
     schema: normalizedSchema,
     fields,
@@ -616,6 +620,13 @@ function buildFormDesignerEditZone(zone, schema, fields = primaryDesignFields.va
 
 function resolveSelectedRelationFieldRefs(zone = {}) {
   return (zone?.fieldRefs || []).filter(ref => relationFieldSet.value.has(ref))
+}
+
+function buildVisibleFormFieldSet(fields = []) {
+  return new Set((fields || [])
+    .filter(field => field?.formVisible !== false)
+    .map(field => field.field || field.fieldCode)
+    .filter(Boolean))
 }
 
 function buildFormRuntimeFieldSettings(schema, fieldSet, gridColumns, defaultLabelWidth) {
@@ -1293,6 +1304,25 @@ function syncDesignerDraft() {
   }
 }
 
+function handleFieldAssetUpdated(payload = {}) {
+  const fieldCode = payload.fieldCode || payload.field
+  if (!fieldCode)
+    return
+  const normalizedPayload = normalizeBusinessFieldAsset(payload)
+  let matched = false
+  const nextFields = primaryBusinessFieldAssets.value.map((field) => {
+    const code = field.fieldCode || field.field
+    if (code !== fieldCode)
+      return field
+    matched = true
+    return mergeBusinessFieldAsset(field, normalizedPayload)
+  })
+  if (!matched)
+    nextFields.push(normalizedPayload)
+  emit('fieldsUpdated', nextFields, { persisted: false })
+  emit('dirtyChange', true)
+}
+
 function buildCurrentDesignerDraft() {
   const formSchema = activeFormDesignerRef.value?.flushDesigner?.() || localFormDesignerSchema.value
   return buildDesignerDraftFromFormSchema(formSchema)
@@ -1520,6 +1550,26 @@ function normalizeBusinessFieldAsset(field = {}) {
   }
 }
 
+function mergeBusinessFieldAsset(field = {}, payload = {}) {
+  return normalizeBusinessFieldAsset({
+    ...field,
+    ...payload,
+    field: payload.field || payload.fieldCode || field.field || field.fieldCode,
+    label: payload.fieldName || payload.label || field.label || field.fieldName,
+    basicProps: {
+      ...(field.basicProps || {}),
+      ...(payload.basicProps || {}),
+    },
+    advancedProps: {
+      ...(field.advancedProps || {}),
+      ...(payload.advancedProps || {}),
+    },
+    formulaConfig: Object.prototype.hasOwnProperty.call(payload, 'formulaConfig')
+      ? payload.formulaConfig
+      : field.formulaConfig,
+  })
+}
+
 function buildFormFieldComponentMap(schema = {}) {
   const map = new Map()
   collectFormFieldComponents(normalizeFormDesignerSchema(schema).components, map)
@@ -1568,6 +1618,7 @@ function mergeFieldWithFormComponent(field = {}, formComponent = null, component
     dictType: props.dictType ?? field.dictType,
     referenceObjectCode: props.referenceObjectCode ?? field.referenceObjectCode,
     referenceDisplayField: props.referenceDisplayField ?? field.referenceDisplayField,
+    formulaConfig: props.formulaConfig ?? field.formulaConfig ?? formComponent.advancedProps?.formulaConfig ?? null,
     basicProps: {
       ...(field.basicProps || {}),
       ...(props || {}),
@@ -1752,6 +1803,7 @@ function toPageField(field) {
     listVisible: field.listVisible,
     formVisible: field.formVisible,
     fieldStatus: field.fieldStatus,
+    formulaConfig: field.formulaConfig ?? null,
     basicProps: { ...(field.basicProps || {}) },
     advancedProps: { ...(field.advancedProps || {}) },
   }
@@ -1787,6 +1839,7 @@ function toBusinessFieldPayload(field = {}) {
     placeholder: field.placeholder || field.basicProps?.placeholder || '',
     remark: field.remark,
     sortOrder: field.sortOrder,
+    formulaConfig: field.formulaConfig ?? null,
     fieldBinding: { ...(field.fieldBinding || field.basicProps?.fieldBinding || {}) },
     basicProps: { ...(field.basicProps || {}) },
     advancedProps: { ...(field.advancedProps || {}) },

@@ -1230,7 +1230,9 @@ function designerActionToListAction(action = {}, index = 0) {
       ? (config.url || action.routePath || '')
       : actionType === 'TRIGGER'
         ? (config.triggerCode || action.routePath || '')
-        : config.targetPath || action.routePath || ''
+        : actionType === 'COMMAND'
+          ? ''
+          : config.targetPath || action.routePath || ''
   return {
     clientKey: action.clientKey || config.clientKey || key,
     key,
@@ -1312,6 +1314,15 @@ function buildDesignerActionConfig(action = {}, actionType = 'OPEN_PAGE', option
       params,
     }
   }
+  if (actionType === 'COMMAND') {
+    return {
+      ...config,
+      formSchema: Array.isArray(config.formSchema) ? config.formSchema : [],
+      steps: Array.isArray(config.steps) ? config.steps : [],
+      successBehavior: action.successBehavior || config.successBehavior || 'refreshList',
+      params,
+    }
+  }
   if (actionType === 'OPEN_EXTERNAL') {
     return {
       ...config,
@@ -1386,6 +1397,15 @@ function normalizeListActionConfig(actionType = 'route', config = {}) {
     return {
       ...source,
       useMainFlow: true,
+    }
+  }
+  if (actionType === 'COMMAND') {
+    return {
+      ...source,
+      formSchema: Array.isArray(source.formSchema) ? source.formSchema : [],
+      steps: Array.isArray(source.steps) ? source.steps : [],
+      successBehavior: String(source.successBehavior || '').trim() || 'refreshList',
+      params: normalizeActionParams(source.params || []),
     }
   }
   return {
@@ -1468,6 +1488,8 @@ function normalizeDesignerActionType(value = '') {
     return 'OPEN_EXTERNAL'
   if (normalized === 'TRIGGER')
     return 'TRIGGER'
+  if (normalized === 'COMMAND')
+    return 'COMMAND'
   return 'OPEN_PAGE'
 }
 
@@ -1478,6 +1500,8 @@ function designerActionTypeToListType(actionType = 'OPEN_PAGE') {
     return 'START_FLOW'
   if (actionType === 'TRIGGER')
     return 'TRIGGER'
+  if (actionType === 'COMMAND')
+    return 'COMMAND'
   if (actionType === 'OPEN_EXTERNAL')
     return 'external'
   return 'route'
@@ -1491,6 +1515,8 @@ function listActionTypeToDesignerType(actionType = 'route') {
     return 'START_FLOW'
   if (normalized === 'TRIGGER')
     return 'TRIGGER'
+  if (normalized === 'COMMAND')
+    return 'COMMAND'
   if (normalized === 'external')
     return 'OPEN_EXTERNAL'
   return 'OPEN_PAGE'
@@ -1505,6 +1531,8 @@ function normalizeListActionType(value = '') {
     return 'START_FLOW'
   if (upper === 'TRIGGER')
     return 'TRIGGER'
+  if (upper === 'COMMAND')
+    return 'COMMAND'
   if (upper === 'EXTERNAL')
     return 'external'
   if (upper === 'REFRESH')
@@ -1537,6 +1565,8 @@ function resolveDefaultActionButtonType(actionType = 'OPEN_PAGE') {
     return 'primary'
   if (actionType === 'TRIGGER')
     return 'warning'
+  if (actionType === 'COMMAND')
+    return 'success'
   return 'default'
 }
 
@@ -1547,6 +1577,8 @@ function resolveDefaultListButtonType(actionType = 'route') {
     return 'primary'
   if (actionType === 'TRIGGER')
     return 'warning'
+  if (actionType === 'COMMAND')
+    return 'success'
   return 'default'
 }
 
@@ -1557,6 +1589,8 @@ function resolveListActionRoutePath(actionType = 'route', config = {}) {
     return config.url || ''
   if (actionType === 'TRIGGER')
     return config.triggerCode || ''
+  if (actionType === 'COMMAND')
+    return ''
   return config.targetPath || ''
 }
 

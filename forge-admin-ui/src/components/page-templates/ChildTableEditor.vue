@@ -12,9 +12,14 @@
             <div class="child-table-title">
               {{ child.tabTitle || child.relationName || child.modelName || child.modelCode || '子表明细' }}
             </div>
-            <n-button v-if="!props.readonly" size="small" type="primary" secondary @click="addRow(child)">
-              {{ resolveAddButtonText(child) }}
-            </n-button>
+            <n-space v-if="!props.readonly" size="small">
+              <n-button v-if="hasRecordSelector(child)" size="small" secondary @click="openRecordSelector(child)">
+                {{ resolveSelectorButtonText(child) }}
+              </n-button>
+              <n-button size="small" type="primary" secondary @click="addRow(child)">
+                {{ resolveAddButtonText(child) }}
+              </n-button>
+            </n-space>
           </div>
 
           <div class="child-table-scroll">
@@ -36,7 +41,7 @@
               </thead>
               <tbody>
                 <tr
-                  v-for="(row, rowIndex) in rowsFor(child)"
+                  v-for="{ row, rowIndex } in visibleRowsFor(child)"
                   :key="row.__rowKey"
                 >
                   <td v-for="field in child.fields" :key="field.field">
@@ -129,7 +134,7 @@
                     </n-button>
                   </td>
                 </tr>
-                <tr v-if="!rowsFor(child).length">
+                <tr v-if="!visibleRowsFor(child).length">
                   <td :colspan="props.readonly ? child.fields.length : child.fields.length + 1" class="empty-cell">
                     <n-empty size="small" description="暂无明细" />
                   </td>
@@ -140,12 +145,27 @@
         </div>
       </n-tab-pane>
     </n-tabs>
+
+    <AiRecordSelectorModal
+      v-model:show="selectorVisible"
+      :title="activeSelectorTitle"
+      :suite-code="activeSelectorConfig.suiteCode"
+      :object-code="activeSelectorConfig.objectCode"
+      :multiple="true"
+      :display-fields="activeSelectorConfig.displayFields"
+      :keyword-fields="activeSelectorConfig.keywordFields"
+      :field-mappings="activeSelectorConfig.fieldMappings"
+      :search-params="activeSelectorConfig.searchParams"
+      @confirm="handleSelectorConfirm"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AiRecordSelectorModal from '@/components/ai-form/AiRecordSelectorModal.vue'
 import AiFormItem from '@/components/ai-form/AiFormItem.vue'
+import { applyRecordFieldMappings } from '@/components/ai-form/record-selector-utils'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 
 const props = defineProps({
@@ -166,6 +186,8 @@ const props = defineProps({
 const emit = defineEmits(['update:value'])
 
 const localValue = ref({})
+const selectorVisible = ref(false)
+const activeSelectorChild = ref(null)
 
 const normalizedChildren = computed(() => (props.childrenConfig || [])
   .map(child => ({
@@ -191,9 +213,26 @@ function resolveAddButtonText(child) {
   return `新增${title}`
 }
 
+const activeSelectorConfig = computed(() => normalizeRecordSelectorConfig(activeSelectorChild.value))
+const activeSelectorTitle = computed(() => activeSelectorConfig.value.title || `选择${activeSelectorChild.value?.modelName || activeSelectorChild.value?.tabTitle || '记录'}`)
+
+function hasRecordSelector(child) {
+  return Boolean(normalizeRecordSelectorConfig(child).objectCode)
+}
+
+function resolveSelectorButtonText(child) {
+  return normalizeRecordSelectorConfig(child).buttonText || '选择记录'
+}
+
 function rowsFor(child) {
   const key = resolveChildKey(child)
   return Array.isArray(localValue.value[key]) ? localValue.value[key] : []
+}
+
+function visibleRowsFor(child) {
+  return rowsFor(child)
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(item => !isDeletedRow(item.row))
 }
 
 function addRow(child) {
@@ -205,11 +244,42 @@ function addRow(child) {
   commit()
 }
 
-function removeRow(child, rowIndex) {
+function openRecordSelector(child) {
+  activeSelectorChild.value = child
+  selectorVisible.value = true
+}
+
+function handleSelectorConfirm({ rows = [], mappings = {} } = {}) {
+  const child = activeSelectorChild.value
+  if (!child || !rows.length)
+    return
   const key = resolveChildKey(child)
+  const nextRows = rows.map(row => ({
+    ...createEmptyRow(child),
+    ...applyRecordFieldMappings(row, mappings || activeSelectorConfig.value.fieldMappings),
+  }))
   localValue.value = {
     ...localValue.value,
-    [key]: rowsFor(child).filter((_row, index) => index !== rowIndex),
+    [key]: [...rowsFor(child), ...nextRows],
+  }
+  commit()
+}
+
+function removeRow(child, rowIndex) {
+  const key = resolveChildKey(child)
+  const rows = rowsFor(child)
+  const row = rows[rowIndex]
+  if (isMergeSaveMode(child) && hasPersistedRowId(row)) {
+    localValue.value = {
+      ...localValue.value,
+      [key]: rows.map((item, index) => index === rowIndex ? { ...item, _deleted: true } : item),
+    }
+    commit()
+    return
+  }
+  localValue.value = {
+    ...localValue.value,
+    [key]: rows.filter((_row, index) => index !== rowIndex),
   }
   commit()
 }
@@ -312,6 +382,24 @@ function createEmptyRow(child) {
   return row
 }
 
+function normalizeRecordSelectorConfig(child = {}) {
+  const config = {
+    ...(child.recordSelector || {}),
+    ...(child.selector || {}),
+  }
+  return {
+    ...config,
+    suiteCode: config.suiteCode || child.suiteCode || '',
+    objectCode: config.objectCode || child.targetObjectCode || child.objectCode || '',
+    title: config.title || config.selectorTitle || '',
+    buttonText: config.buttonText || '',
+    displayFields: Array.isArray(config.displayFields) ? config.displayFields : [],
+    keywordFields: Array.isArray(config.keywordFields) ? config.keywordFields : [],
+    fieldMappings: config.fieldMappings || config.mappings || [],
+    searchParams: config.searchParams || {},
+  }
+}
+
 function normalizeInputValue(value) {
   const source = value && typeof value === 'object' ? value : {}
   const result = {}
@@ -334,7 +422,7 @@ function getValue() {
   normalizedChildren.value.forEach((child) => {
     const key = resolveChildKey(child)
     result[key] = rowsFor(child)
-      .filter(row => !isEmptyRow(row, child.fields))
+      .filter(row => isDeletedRow(row) || !isEmptyRow(row, child.fields))
       .map(row => stripInternalFields(row))
   })
   return result
@@ -359,7 +447,25 @@ function stripInternalFields(row) {
 }
 
 function isEmptyRow(row, fields) {
+  if (isDeletedRow(row))
+    return false
   return !(fields || []).some(field => !isEmptyValue(row?.[field.field]))
+}
+
+function isMergeSaveMode(child) {
+  return String(child?.saveMode || '').toLowerCase() === 'merge'
+}
+
+function hasPersistedRowId(row) {
+  const id = row?.id ?? row?.ID
+  return id !== null && id !== undefined && String(id).trim() !== ''
+}
+
+function isDeletedRow(row) {
+  const value = row?._deleted ?? row?.__deleted
+  if (typeof value === 'boolean')
+    return value
+  return ['true', '1', 'yes', 'y'].includes(String(value || '').trim().toLowerCase())
 }
 
 function isEmptyValue(value) {
@@ -374,14 +480,14 @@ function isEmptyValue(value) {
 
 function validate() {
   for (const child of normalizedChildren.value) {
-    const rows = rowsFor(child)
-    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-      const row = rows[rowIndex]
+    const rows = visibleRowsFor(child)
+    for (let index = 0; index < rows.length; index++) {
+      const { row } = rows[index]
       if (isEmptyRow(row, child.fields))
         continue
       for (const field of child.fields) {
         if (field.required && isEmptyValue(row[field.field])) {
-          throw new Error(`${child.modelName || '子表'}第${rowIndex + 1}行请填写${field.label || field.field}`)
+          throw new Error(`${child.modelName || '子表'}第${index + 1}行请填写${field.label || field.field}`)
         }
       }
     }

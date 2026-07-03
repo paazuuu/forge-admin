@@ -5,8 +5,10 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessTrigger;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessTriggerLog;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessActionExecuteDTO;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudService;
 import com.mdframe.forge.plugin.generator.util.DynamicQueryGenerator;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessActionExecuteResultVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessFlowRuntimeVO;
 import com.mdframe.forge.plugin.message.domain.dto.MessageSendRequestDTO;
 import com.mdframe.forge.plugin.message.domain.entity.SysMessage;
@@ -16,6 +18,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,6 +42,7 @@ public class BusinessTriggerExecutor {
     private final BusinessFlowService flowService;
     private final DynamicCrudService dynamicCrudService;
     private final BusinessMessageChannelService messageChannelService;
+    private final BusinessActionExecutionService actionExecutionService;
 
     /**
      * 异步执行触发器匹配和动作
@@ -329,10 +334,17 @@ public class BusinessTriggerExecutor {
      * 执行触发器动作
      */
     private JSONObject executeAction(AiBusinessTrigger trigger, BusinessEvent event) {
-        String actionType = trigger.getActionType();
+        String actionType = StringUtils.defaultString(trigger.getActionType()).toUpperCase(Locale.ROOT);
         JSONObject actionConfig = JSON.parseObject(trigger.getActionConfig());
         if (actionConfig == null) {
             actionConfig = new JSONObject();
+        }
+        String actionCode = StringUtils.firstNonBlank(
+                actionConfig.getString("actionCode"),
+                actionConfig.getString("businessActionCode"),
+                actionConfig.getString("commandActionCode"));
+        if (StringUtils.isNotBlank(actionCode) || Set.of("BUSINESS_ACTION", "ACTION", "COMMAND").contains(actionType)) {
+            return executeBusinessAction(trigger, actionConfig, event, actionCode);
         }
 
         return switch (actionType) {
@@ -346,6 +358,86 @@ public class BusinessTriggerExecutor {
                 yield null;
             }
         };
+    }
+
+    private JSONObject executeBusinessAction(AiBusinessTrigger trigger,
+                                             JSONObject config,
+                                             BusinessEvent event,
+                                             String configuredActionCode) {
+        String actionCode = StringUtils.trimToNull(configuredActionCode);
+        if (actionCode == null) {
+            throw new RuntimeException("触发器业务动作缺少 actionCode");
+        }
+        BusinessActionExecuteDTO dto = new BusinessActionExecuteDTO();
+        dto.setSuiteCode(StringUtils.firstNonBlank(trigger.getSuiteCode(), event.getSuiteCode()));
+        dto.setObjectCode(event.getObjectCode());
+        dto.setRecordId(event.getRecordId());
+        dto.setActionCode(actionCode);
+        dto.setIdempotencyKey(StringUtils.firstNonBlank(
+                StringUtils.trimToNull(config.getString("idempotencyKey")),
+                buildTriggerActionIdempotencyKey(trigger, event, actionCode)));
+        dto.setFormData(toPlainMap(config.getJSONObject("formData")));
+        dto.setContext(buildTriggerActionContext(trigger, event));
+        BusinessActionExecuteResultVO actionResult = actionExecutionService.execute(dto);
+
+        JSONObject result = new JSONObject();
+        result.put("status", actionResult.getExecuteStatus());
+        result.put("actionCode", actionResult.getActionCode());
+        result.put("actionName", actionResult.getActionName());
+        result.put("actionLogId", actionResult.getLogId());
+        result.put("correlationId", actionResult.getCorrelationId());
+        result.put("message", actionResult.getMessage());
+        result.put("idempotentHit", actionResult.getIdempotentHit());
+        return result;
+    }
+
+    private Map<String, Object> buildTriggerActionContext(AiBusinessTrigger trigger, BusinessEvent event) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("source", "TRIGGER");
+        context.put("triggerId", trigger.getId());
+        context.put("triggerName", trigger.getTriggerName());
+        context.put("eventType", event.getEventType());
+        context.put("objectCode", event.getObjectCode());
+        context.put("recordId", event.getRecordId());
+        context.put("operatorId", event.getOperatorId());
+        context.put("operatorName", event.getOperatorName());
+        return context;
+    }
+
+    private String buildTriggerActionIdempotencyKey(AiBusinessTrigger trigger, BusinessEvent event, String actionCode) {
+        String raw = "trigger:"
+                + StringUtils.defaultString(trigger.getId() == null ? null : String.valueOf(trigger.getId()))
+                + ":" + StringUtils.defaultString(event.getEventType())
+                + ":" + StringUtils.defaultString(event.getObjectCode())
+                + ":" + StringUtils.defaultString(event.getRecordId())
+                + ":" + StringUtils.defaultString(actionCode);
+        if (raw.length() <= 128) {
+            return raw;
+        }
+        return StringUtils.left(raw, 88) + ":" + sha256(raw).substring(0, 32);
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(StringUtils.defaultString(value).getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (Exception e) {
+            return "00000000000000000000000000000000";
+        }
+    }
+
+    private Map<String, Object> toPlainMap(JSONObject source) {
+        if (source == null || source.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        source.forEach(result::put);
+        return result;
     }
 
     /**
@@ -397,7 +489,9 @@ public class BusinessTriggerExecutor {
      */
     private JSONObject executeSendMessageAction(JSONObject config, BusinessEvent event) {
         String templateCode = config.getString("templateCode");
-        String receiverRule = config.getString("receiverRule");
+        String receiverRule = StringUtils.firstNonBlank(
+                readRecordValueAsText(event.getRecordData(), "reminderReceiverRule"),
+                config.getString("receiverRule"));
         String channelCode = StringUtils.firstNonBlank(config.getString("channelCode"), config.getString("channel"));
         BusinessMessageChannelStatus channelStatus = messageChannelService.resolveChannel(channelCode);
         if (Boolean.TRUE.equals(channelStatus.getTodo())) {
@@ -449,6 +543,11 @@ public class BusinessTriggerExecutor {
             log.error("消息发送失败: templateCode={}, error={}", templateCode, e.getMessage());
             throw new RuntimeException("消息发送失败: " + e.getMessage(), e);
         }
+    }
+
+    private String readRecordValueAsText(Map<String, Object> recordData, String field) {
+        Object value = readRecordValue(recordData, field);
+        return value == null ? null : StringUtils.trimToNull(String.valueOf(value));
     }
 
     /**

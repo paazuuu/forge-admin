@@ -132,6 +132,14 @@
                           @update:value="value => updateInlineEdit(relation, value)"
                         />
                       </n-form-item-gi>
+                      <n-form-item-gi label="子表保存模式">
+                        <n-select
+                          v-model:value="relation.saveMode"
+                          :options="childSaveModeOptions"
+                          :disabled="!canInlineEdit(relation)"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
                       <n-form-item-gi label="启用状态">
                         <n-switch
                           :value="relation.status !== 0"
@@ -393,6 +401,11 @@ const relationTypeOptions = [
   { label: '拥有多条目标记录', value: 'CHILD_LIST' },
   { label: '包含明细记录', value: 'DETAIL' },
   { label: '当前对象与目标对象多对多关联', value: 'MANY_TO_MANY' },
+]
+
+const childSaveModeOptions = [
+  { label: '全量替换', value: 'replace' },
+  { label: '行级合并', value: 'merge' },
 ]
 
 const linkageTypeOptions = [
@@ -726,6 +739,7 @@ function normalizeRelation(relation = {}) {
     showInDetail: config.showInDetail !== false,
     inlineCreateEnabled: canInlineEdit(relation) && config.inlineCreateEnabled !== false && config.inlineCreateEnabled !== 'false',
     inlineEditEnabled: canInlineEdit(relation) && config.inlineEditEnabled !== false && config.inlineEditEnabled !== 'false',
+    saveMode: normalizeChildSaveMode(config.saveMode),
     defaultFilter: config.defaultFilter || '',
     displayField: config.displayField || '',
     status: relation.status ?? 1,
@@ -757,6 +771,7 @@ function buildRelationConfig(relation) {
   config.showInDetail = relation.showInDetail !== false
   config.inlineCreateEnabled = canInlineEdit(relation) && relation.inlineCreateEnabled === true
   config.inlineEditEnabled = canInlineEdit(relation) && relation.inlineEditEnabled === true
+  config.saveMode = normalizeChildSaveMode(relation.saveMode)
   if (relation.defaultFilter)
     config.defaultFilter = relation.defaultFilter
   if (relation.displayField)
@@ -776,6 +791,10 @@ function parseRelationConfig(value) {
       defaultFilter: value,
     }
   }
+}
+
+function normalizeChildSaveMode(value) {
+  return String(value || '').toLowerCase() === 'merge' ? 'merge' : 'replace'
 }
 
 function normalizeLinkageRuleDraft(rule = {}) {

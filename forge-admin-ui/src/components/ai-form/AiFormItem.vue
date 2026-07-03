@@ -623,6 +623,22 @@
           v-on="getComponentEvents(field)"
         />
 
+        <!-- 通用业务记录选择器 -->
+        <n-input-group v-else-if="field.type === 'recordSelector'">
+          <n-input
+            :value="recordSelectorDisplayText"
+            :placeholder="getPlaceholder(field)"
+            :disabled="disabledHandler(field)"
+            readonly
+            clearable
+            v-bind="field.props"
+            @clear="clearRecordSelectorValue"
+          />
+          <n-button :disabled="disabledHandler(field)" @click="openRecordSelector">
+            选择
+          </n-button>
+        </n-input-group>
+
         <!-- 纯文本展示 -->
         <div
           v-else-if="field.type === 'text'"
@@ -680,6 +696,20 @@
       </p>
     </div>
   </n-form-item>
+
+  <AiRecordSelectorModal
+    v-if="field.type === 'recordSelector'"
+    v-model:show="recordSelectorVisible"
+    :title="field.props?.selectorTitle || field.selectorTitle || `选择${field.label || '记录'}`"
+    :suite-code="recordSelectorConfig.suiteCode"
+    :object-code="recordSelectorConfig.objectCode"
+    :multiple="false"
+    :display-fields="recordSelectorConfig.displayFields"
+    :keyword-fields="recordSelectorConfig.keywordFields"
+    :field-mappings="recordSelectorConfig.fieldMappings"
+    :search-params="recordSelectorConfig.searchParams"
+    @confirm="handleRecordSelectorConfirm"
+  />
 </template>
 
 <script setup>
@@ -698,9 +728,11 @@ import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runti
 import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
 import { getDictData } from '@/composables/useDict'
 import { request } from '@/utils'
+import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
 import AiCustomSelect from './AiCustomSelect.vue'
 import AiFormGroupTitle from './AiFormGroupTitle.vue'
 import AiFormSectionTitle from './AiFormSectionTitle.vue'
+import { applyRecordFieldMappings, extractSelectorRawRecord } from './record-selector-utils'
 
 const props = defineProps({
   field: {
@@ -729,6 +761,7 @@ const remoteOptions = ref([])
 const remoteLoading = ref(false)
 const dictOptions = ref([])
 const sourceDictOptions = ref([])
+const recordSelectorVisible = ref(false)
 const pickerDefaultTimestamp = Date.now()
 let remoteRequestSeq = 0
 
@@ -830,6 +863,24 @@ const componentControlClass = computed(() => [
   `ai-form-control--${props.field?.type || 'input'}`,
   props.field?.componentClass,
 ].filter(Boolean))
+const recordSelectorConfig = computed(() => ({
+  ...(props.field?.recordSelector || {}),
+  ...(props.field?.basicProps?.recordSelector || {}),
+  ...(props.field?.props?.recordSelector || {}),
+  suiteCode: props.field?.suiteCode || props.field?.props?.suiteCode || props.field?.recordSelector?.suiteCode || props.field?.basicProps?.recordSelector?.suiteCode || props.field?.props?.recordSelector?.suiteCode || '',
+  objectCode: props.field?.objectCode || props.field?.props?.objectCode || props.field?.recordSelector?.objectCode || props.field?.basicProps?.recordSelector?.objectCode || props.field?.props?.recordSelector?.objectCode || '',
+  displayFields: props.field?.displayFields || props.field?.props?.displayFields || props.field?.recordSelector?.displayFields || props.field?.basicProps?.recordSelector?.displayFields || props.field?.props?.recordSelector?.displayFields || [],
+  keywordFields: props.field?.keywordFields || props.field?.props?.keywordFields || props.field?.recordSelector?.keywordFields || props.field?.basicProps?.recordSelector?.keywordFields || props.field?.props?.recordSelector?.keywordFields || [],
+  fieldMappings: props.field?.fieldMappings || props.field?.props?.fieldMappings || props.field?.recordSelector?.fieldMappings || props.field?.basicProps?.recordSelector?.fieldMappings || props.field?.props?.recordSelector?.fieldMappings || [],
+  searchParams: props.field?.searchParams || props.field?.props?.searchParams || props.field?.recordSelector?.searchParams || props.field?.basicProps?.recordSelector?.searchParams || props.field?.props?.recordSelector?.searchParams || {},
+}))
+const recordSelectorDisplayText = computed(() => {
+  const config = recordSelectorConfig.value
+  const labelField = props.field?.labelField || props.field?.props?.labelField || props.field?.props?.targetLabelField || config.targetLabelField || config.labelTargetField
+  if (labelField && props.formData?.[labelField])
+    return props.formData[labelField]
+  return normalizeDisplayText(props.value)
+})
 const fieldDescription = computed(() => props.field?.props?.description || props.field?.description || '')
 const fieldBadge = computed(() => props.field?.props?.badge || props.field?.badge || '')
 const isSectionTitleField = computed(() => {
@@ -1657,6 +1708,43 @@ function getComponentEvents(field) {
  */
 function handleUpdate(newValue) {
   emit('update:value', newValue)
+}
+
+function openRecordSelector() {
+  if (!recordSelectorConfig.value.objectCode) {
+    window.$message?.warning('未配置选择器业务对象')
+    return
+  }
+  recordSelectorVisible.value = true
+}
+
+function clearRecordSelectorValue() {
+  const config = recordSelectorConfig.value
+  const labelField = props.field?.labelField || props.field?.props?.labelField || props.field?.props?.targetLabelField || config.targetLabelField || config.labelTargetField
+  const patch = { [props.field.field]: undefined }
+  if (labelField)
+    patch[labelField] = undefined
+  props.context?.patchFormData?.(patch)
+  emit('update:value', null)
+}
+
+function handleRecordSelectorConfirm({ rows = [], mappings = {} } = {}) {
+  const selected = rows[0]
+  if (!selected)
+    return
+  const rawRecord = extractSelectorRawRecord(selected)
+  const config = recordSelectorConfig.value
+  const valueField = props.field?.valueField || props.field?.props?.valueField || config.valueField || 'id'
+  const labelField = props.field?.labelField || props.field?.props?.labelField || props.field?.props?.targetLabelField || config.targetLabelField || config.labelTargetField
+  const labelSourceField = props.field?.labelSourceField || props.field?.props?.labelSourceField || config.labelField || config.labelSourceField
+  const patch = {
+    ...applyRecordFieldMappings(selected, mappings || config.fieldMappings),
+    [props.field.field]: rawRecord[valueField] ?? selected[valueField] ?? selected.id,
+  }
+  if (labelField && labelSourceField)
+    patch[labelField] = rawRecord[labelSourceField] ?? selected[labelSourceField]
+  props.context?.patchFormData?.(patch)
+  emit('update:value', patch[props.field.field])
 }
 
 function handleRuntimePageWidgetUpdate(nextProps = {}) {

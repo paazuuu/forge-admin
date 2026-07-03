@@ -44,7 +44,7 @@ public class LowcodeSchemaValidator {
     private static final Set<String> COMPONENT_TYPES = Set.of(
             "input", "textarea", "select", "radio", "checkbox", "switch", "date", "datetime", "time",
             "number", "upload", "imageUpload", "fileUpload", "cascader", "treeSelect",
-            "dictSelect", "orgTreeSelect", "userSelect", "regionTreeSelect", "objectReference"
+            "dictSelect", "orgTreeSelect", "userSelect", "regionTreeSelect", "objectReference", "recordSelector"
     );
     private static final Set<String> QUERY_TYPES = Set.of(
             "eq", "ne", "like", "left_like", "right_like", "gt", "ge", "gte", "lt", "le", "lte", "in", "between"

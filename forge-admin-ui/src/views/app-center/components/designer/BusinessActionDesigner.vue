@@ -101,6 +101,50 @@
                       </div>
                     </n-form-item-gi>
                   </template>
+                  <template v-else-if="action.actionType === 'COMMAND'">
+                    <n-form-item-gi label="成功后">
+                      <n-select
+                        v-model:value="action.actionConfig.successBehavior"
+                        :options="successBehaviorOptions"
+                        clearable
+                        placeholder="刷新列表"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi :span="3" label="动作表单 Schema">
+                      <n-input
+                        v-model:value="action.actionConfig.formSchemaText"
+                        type="textarea"
+                        :autosize="{ minRows: 3, maxRows: 8 }"
+                        placeholder="[]"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi :span="3" label="动作步骤">
+                      <div class="command-step-panel">
+                        <div class="command-step-toolbar">
+                          <n-space size="small">
+                            <n-button size="small" secondary @click="insertQuantityStep(action)">
+                              <template #icon>
+                                <n-icon><AddOutline /></n-icon>
+                              </template>
+                              数量台账步骤
+                            </n-button>
+                            <n-button size="small" secondary @click="formatCommandSteps(action)">
+                              格式化
+                            </n-button>
+                          </n-space>
+                        </div>
+                        <n-input
+                          v-model:value="action.actionConfig.stepsText"
+                          type="textarea"
+                          :autosize="{ minRows: 4, maxRows: 10 }"
+                          placeholder="[]"
+                          @update:value="markDirty"
+                        />
+                      </div>
+                    </n-form-item-gi>
+                  </template>
                   <n-form-item-gi v-else-if="action.actionType === 'OPEN_EXTERNAL'" :span="3" label="外部链接">
                     <n-input v-model:value="action.actionConfig.url" placeholder="https://example.com" @update:value="markDirty" />
                   </n-form-item-gi>
@@ -271,6 +315,7 @@ const actionTypeOptions = [
   { label: '打开页面', value: 'OPEN_PAGE' },
   { label: '调用 API', value: 'CALL_API' },
   { label: '发起主流程', value: 'START_FLOW' },
+  { label: '通用动作', value: 'COMMAND' },
   { label: '执行触发器', value: 'TRIGGER' },
   { label: '打开外部链接', value: 'OPEN_EXTERNAL' },
 ]
@@ -431,6 +476,11 @@ async function saveActions() {
     message.warning(`请为“${invalidApiAction.actionName || '自定义操作'}”配置接口地址或能力标识`)
     return
   }
+  const invalidCommandAction = localActions.value.find(action => action.status !== 0 && isInvalidCommandAction(action))
+  if (invalidCommandAction) {
+    message.warning(`请为“${invalidCommandAction.actionName || '通用动作'}”配置至少一个动作步骤`)
+    return
+  }
   saving.value = true
   try {
     await saveBusinessObjectActions(props.objectId, localActions.value.map(toActionPayload))
@@ -496,6 +546,8 @@ function normalizeActionConfig(actionType, config = {}) {
   const normalizedType = normalizeActionType(actionType)
   if (normalizedType === 'CALL_API')
     return normalizeApiActionConfig(source)
+  if (normalizedType === 'COMMAND')
+    return normalizeCommandActionConfig(source)
   if (normalizedType !== 'START_FLOW')
     return source
   return {
@@ -508,6 +560,8 @@ function normalizeActionConfigForPayload(actionType, config = {}) {
   const normalizedType = normalizeActionType(actionType)
   if (normalizedType === 'CALL_API')
     return normalizeApiActionConfigForPayload(source)
+  if (normalizedType === 'COMMAND')
+    return normalizeCommandActionConfigForPayload(source)
   if (normalizedType !== 'START_FLOW')
     return source
   return {
@@ -585,6 +639,73 @@ function isInvalidApiAction(action = {}) {
   return !config.url && !config.capabilityCode
 }
 
+function normalizeCommandActionConfig(config = {}) {
+  const formSchema = parseJsonArray(config.formSchemaText, config.formSchema)
+  const steps = parseJsonArray(config.stepsText, config.steps || config.stepList)
+  return {
+    ...config,
+    successBehavior: String(config.successBehavior || '').trim() || 'refreshList',
+    formSchema,
+    steps,
+    formSchemaText: typeof config.formSchemaText === 'string' ? config.formSchemaText : stringifyJson(formSchema),
+    stepsText: typeof config.stepsText === 'string' ? config.stepsText : stringifyJson(steps),
+  }
+}
+
+function normalizeCommandActionConfigForPayload(config = {}) {
+  const normalized = normalizeCommandActionConfig(config)
+  const {
+    formSchemaText,
+    stepsText,
+    stepList,
+    ...rest
+  } = normalized
+  return {
+    ...rest,
+    formSchema: parseJsonArray(formSchemaText, normalized.formSchema),
+    steps: parseJsonArray(stepsText, normalized.steps || stepList),
+  }
+}
+
+function isInvalidCommandAction(action = {}) {
+  if (normalizeActionType(action.actionType) !== 'COMMAND')
+    return false
+  const config = normalizeCommandActionConfigForPayload(action.actionConfig)
+  return !Array.isArray(config.steps) || config.steps.length === 0
+}
+
+function insertQuantityStep(action) {
+  action.actionConfig = normalizeCommandActionConfig(action.actionConfig)
+  const steps = parseJsonArray(action.actionConfig.stepsText, action.actionConfig.steps)
+  steps.push({
+    stepCode: `quantity_${Date.now()}`,
+    stepName: '数量台账',
+    stepType: 'DOMAIN_ACTION',
+    rollbackOnFailure: true,
+    stepConfig: {
+      actionType: 'QUANTITY',
+      operationType: 'INBOUND',
+      params: {
+        accountCode: '',
+        itemCode: '${itemCode}',
+        dimensionKey: '',
+        quantity: '${quantity}',
+      },
+    },
+  })
+  action.actionConfig.steps = steps
+  action.actionConfig.stepsText = stringifyJson(steps)
+  markDirty()
+}
+
+function formatCommandSteps(action) {
+  action.actionConfig = normalizeCommandActionConfig(action.actionConfig)
+  const steps = parseJsonArray(action.actionConfig.stepsText, action.actionConfig.steps)
+  action.actionConfig.steps = steps
+  action.actionConfig.stepsText = stringifyJson(steps)
+  markDirty()
+}
+
 function addApiParam(action) {
   action.actionConfig = normalizeApiActionConfig(action.actionConfig)
   action.actionConfig.params.push(normalizeApiParam({
@@ -620,6 +741,28 @@ function safeParseJson(value) {
   }
   catch {
     return {}
+  }
+}
+
+function parseJsonArray(text, fallback = []) {
+  if (typeof text === 'string' && text.trim()) {
+    try {
+      const parsed = JSON.parse(text)
+      return Array.isArray(parsed) ? parsed : []
+    }
+    catch {
+      return Array.isArray(fallback) ? fallback : []
+    }
+  }
+  return Array.isArray(fallback) ? fallback : []
+}
+
+function stringifyJson(value) {
+  try {
+    return JSON.stringify(Array.isArray(value) ? value : [], null, 2)
+  }
+  catch {
+    return '[]'
   }
 }
 
@@ -805,6 +948,17 @@ defineExpose({
 .api-param-list {
   display: grid;
   gap: 8px;
+}
+
+.command-step-panel {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.command-step-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .api-param-row {
