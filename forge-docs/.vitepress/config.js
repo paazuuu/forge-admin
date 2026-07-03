@@ -18,6 +18,14 @@ export default defineConfig({
     sidebar: {
       '/guide/': [
         {
+          text: '入门',
+          items: [
+            { text: '快速入门', link: '/guide/quick-start' },
+            { text: '环境搭建指南', link: '/guide/environment-setup' },
+            { text: '部署指南', link: '/guide/deployment-guide' },
+          ]
+        },
+        {
           text: '开发指南',
           items: [
             { text: '渐进式 SDD 开发流程', link: '/guide/sdd-workflow' },
