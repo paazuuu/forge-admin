@@ -24,6 +24,8 @@ export default defineConfig({
             { text: '项目编码规范', link: '/guide/conventions' },
             { text: '业务数据源配置教程', link: '/guide/business-datasource-routing' },
             { text: '低代码 CRUD 搭建器', link: '/guide/lowcode-crud-builder' },
+            { text: '权限体系完整配置指南', link: '/guide/permission-guide' },
+            { text: '二次开发实战教程', link: '/guide/development-tutorial' },
           ]
         }
       ],
