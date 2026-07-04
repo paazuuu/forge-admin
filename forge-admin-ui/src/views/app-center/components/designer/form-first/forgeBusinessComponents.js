@@ -342,7 +342,7 @@ function createFieldBindingRules(fields = []) {
   return [
     selectRule('fieldBinding>fieldCode', '组件字段ID', buildFieldOptions(fields), undefined, {
       filterable: true,
-      clearable: true,
+      clearable: false,
       allowCreate: true,
       defaultFirstOption: false,
       placeholder: '选择已有字段或输入新字段ID',

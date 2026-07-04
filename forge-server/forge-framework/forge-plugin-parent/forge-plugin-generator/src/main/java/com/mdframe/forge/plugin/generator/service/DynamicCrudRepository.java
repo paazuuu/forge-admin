@@ -39,6 +39,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DynamicCrudRepository {
 
+    private static final String OR_LIKE_SEARCH_KEY = "__orLike";
+
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final RuntimeJdbcTemplateProvider jdbcTemplateProvider;
     private final RuntimeDatabaseDialectFactory dialectFactory;
@@ -543,6 +545,10 @@ public class DynamicCrudRepository {
         for (Map.Entry<String, Object> entry : searchParams.entrySet()) {
             String fieldName = entry.getKey();
             Object value = entry.getValue();
+            if (OR_LIKE_SEARCH_KEY.equals(fieldName)) {
+                appendOrLikeConditions(whereClause, params, value, allowedSearchFields, columnMapping);
+                continue;
+            }
             if (shouldSkipSearchField(fieldName, value, allowedSearchFields)) {
                 continue;
             }
@@ -555,6 +561,44 @@ public class DynamicCrudRepository {
             appendWhereJoiner(whereClause);
             addSearchCondition(whereClause, params, columnName, resolveSearchType(fieldName, searchTypeMap), value);
         }
+    }
+
+    private void appendOrLikeConditions(StringBuilder whereClause,
+                                        MapSqlParameterSource params,
+                                        Object rawConditions,
+                                        Set<String> allowedSearchFields,
+                                        Map<String, String> columnMapping) {
+        if (!(rawConditions instanceof List<?> conditions) || conditions.isEmpty()) {
+            return;
+        }
+        StringBuilder orClause = new StringBuilder();
+        int index = 0;
+        for (Object rawCondition : conditions) {
+            if (!(rawCondition instanceof Map<?, ?> condition)) {
+                continue;
+            }
+            String fieldName = StringUtils.trimToNull(String.valueOf(condition.get("field")));
+            Object value = condition.get("value");
+            if (shouldSkipSearchField(fieldName, value, allowedSearchFields)) {
+                continue;
+            }
+            String columnName = resolveSearchColumn(fieldName, columnMapping);
+            if (columnName == null || !isKnownColumn(columnName, columnMapping)) {
+                continue;
+            }
+            if (orClause.length() > 0) {
+                orClause.append(" OR ");
+            }
+            String paramName = "or_like_" + index + "_" + columnName.replace(".", "_");
+            orClause.append(columnName).append(" LIKE :").append(paramName);
+            params.addValue(paramName, "%" + value + "%");
+            index++;
+        }
+        if (orClause.length() == 0) {
+            return;
+        }
+        appendWhereJoiner(whereClause);
+        whereClause.append("(").append(orClause).append(")");
     }
 
     private void appendCustomConditions(StringBuilder whereClause, MapSqlParameterSource params,

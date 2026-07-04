@@ -284,6 +284,13 @@ public class BusinessDocumentRuntimeService {
             vo.setRuntimeActions(runtimeActions);
             return;
         }
+        Map<String, Object> options = configVO == null ? null : configVO.getOptions();
+        if (!readBoolean(options == null ? null : options.get("showStartFlowAction"), true)
+                || !readBoolean(options == null ? null : options.get("showRuntimeStartFlowAction"), true)
+                || readBoolean(options == null ? null : options.get("hideStartFlowAction"), false)) {
+            vo.setRuntimeActions(runtimeActions);
+            return;
+        }
 
         BusinessDocumentRuntimeVO.RuntimeActionVO action = new BusinessDocumentRuntimeVO.RuntimeActionVO();
         action.setKey("START_FLOW");

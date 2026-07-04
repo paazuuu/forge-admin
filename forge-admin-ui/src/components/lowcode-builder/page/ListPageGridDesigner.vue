@@ -1606,13 +1606,13 @@
                             </div>
                           </div>
                           <div
-                            v-if="firstExpandPanel(selectedBlock)?.dataSource?.type === 'api'"
+                            v-if="['api', 'quantity'].includes(firstExpandPanel(selectedBlock)?.dataSource?.type)"
                             class="crud-expand-config-section"
                           >
                             <div class="crud-expand-section-title">
-                              接口参数
+                              {{ firstExpandPanel(selectedBlock)?.dataSource?.type === 'quantity' ? '数量查询参数' : '接口参数' }}
                             </div>
-                            <label class="crud-expand-config-field">
+                            <label v-if="firstExpandPanel(selectedBlock)?.dataSource?.type === 'api'" class="crud-expand-config-field">
                               <span>
                                 接口地址
                               </span>
@@ -1631,7 +1631,7 @@
                                 :value="stringifyJsonProp(firstExpandPanel(selectedBlock)?.dataSource?.paramsMap || {})"
                                 type="textarea"
                                 :autosize="{ minRows: 2, maxRows: 4 }"
-                                placeholder="例如 {&quot;orderId&quot;:&quot;row.id&quot;}"
+                                placeholder="例如 {&quot;sourceRecordId&quot;:&quot;${row.id}&quot;}"
                                 @update:value="value => updateFirstAiCrudExpandParamsMap(value)"
                               />
                             </label>
@@ -5073,12 +5073,16 @@ const expandPanelTypeOptions = [
   { label: '描述信息', value: 'descriptions' },
   { label: '子表表格', value: 'table' },
   { label: '只读表单', value: 'form' },
+  { label: '数量余额', value: 'quantity-balance' },
+  { label: '数量流水', value: 'quantity-ledger' },
+  { label: '数量锁定', value: 'quantity-lock' },
   { label: '多面板 Tabs', value: 'tabs' },
   { label: '自定义插槽', value: 'custom' },
 ]
 const expandDataSourceTypeOptions = [
   { label: '当前行数据', value: 'row' },
   { label: '接口加载', value: 'api' },
+  { label: '数量台账', value: 'quantity' },
   { label: '静态数据', value: 'static' },
 ]
 const requestMethodOptions = [
@@ -6470,13 +6474,15 @@ function createDefaultAiCrudExpandPanel(block = {}) {
 
 function normalizeAiCrudExpandPanelPatch(panel = {}) {
   const type = panel.type || 'descriptions'
-  const key = panel.key || (type === 'table' ? 'detailTable' : 'summary')
+  const quantityPanel = ['quantity-balance', 'quantity-ledger', 'quantity-lock'].includes(type)
+  const key = panel.key || (type === 'table' ? 'detailTable' : quantityPanel ? type : 'summary')
   return {
     ...panel,
     key,
-    title: panel.title || (type === 'table' ? '明细' : '概览'),
+    title: panel.title || (type === 'table' ? '明细' : quantityPanel ? expandPanelTypeOptions.find(item => item.value === type)?.label : '概览'),
     type,
-    dataSource: panel.dataSource || { type: 'row' },
+    dataSource: quantityPanel ? { ...(panel.dataSource || {}), type: 'quantity', queryType: type } : panel.dataSource || { type: 'row' },
+    quantity: quantityPanel ? { ...(panel.quantity || {}), queryType: type } : panel.quantity,
     descriptions: panel.descriptions || { columns: 3, fields: resolveAiCrudDefaultDescriptionFields(selectedBlock.value) },
     table: panel.table || { rowKey: 'id', columns: [], pagination: false, maxHeight: 320 },
   }

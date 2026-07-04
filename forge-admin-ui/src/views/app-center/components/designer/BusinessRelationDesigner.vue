@@ -152,6 +152,172 @@
                       <n-form-item-gi label="默认筛选">
                         <n-input v-model:value="relation.defaultFilter" placeholder="可选，运行态自动带入" @update:value="markDirty" />
                       </n-form-item-gi>
+                      <n-form-item-gi v-if="canInlineEdit(relation)" :span="3" label="子表选择器">
+                        <section class="relation-selector-config">
+                          <div class="relation-selector-config-head">
+                            <div>
+                              <strong>{{ relation.selectorEnabled ? '已启用选择器按钮' : '未启用选择器按钮' }}</strong>
+                              <span>从候选对象批量选择记录并按映射写入子表行。</span>
+                            </div>
+                            <n-switch
+                              :value="relation.selectorEnabled === true"
+                              @update:value="value => updateRelationSelectorEnabled(relation, value)"
+                            />
+                          </div>
+                          <template v-if="relation.selectorEnabled">
+                            <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
+                              <n-form-item-gi label="候选对象">
+                                <n-select
+                                  v-model:value="relation.selectorObjectCode"
+                                  :options="targetObjectOptions"
+                                  clearable
+                                  filterable
+                                  placeholder="选择弹窗里查询的对象"
+                                  @update:value="value => updateSelectorObject(relation, value)"
+                                />
+                              </n-form-item-gi>
+                              <n-form-item-gi label="按钮文案">
+                                <n-input v-model:value="relation.selectorButtonText" placeholder="选择记录" @update:value="markDirty" />
+                              </n-form-item-gi>
+                              <n-form-item-gi label="选择器标题">
+                                <n-input v-model:value="relation.selectorTitle" placeholder="可为空" @update:value="markDirty" />
+                              </n-form-item-gi>
+                            </n-grid>
+                            <div class="selector-preset-bar">
+                              <div>
+                                <strong>选择器配置</strong>
+                                <span>选择字段后会自动生成弹窗列、查询条件和写入子表的映射。</span>
+                              </div>
+                              <n-button size="tiny" secondary @click="applySelectorDefaults(relation)">
+                                智能补齐
+                              </n-button>
+                            </div>
+                            <n-grid :cols="2" :x-gap="12" :y-gap="4" responsive="screen">
+                              <n-form-item-gi label="弹窗展示字段">
+                                <n-select
+                                  v-model:value="relation.selectorDisplayFields"
+                                  :options="selectorCandidateFieldOptions(relation)"
+                                  :loading="targetFieldLoadingMap[selectorCandidateObjectCode(relation)]"
+                                  multiple
+                                  clearable
+                                  filterable
+                                  placeholder="选择用户在弹窗里看到的字段"
+                                  @update:value="markDirty"
+                                />
+                              </n-form-item-gi>
+                              <n-form-item-gi label="关键词搜索字段">
+                                <n-select
+                                  v-model:value="relation.selectorKeywordFields"
+                                  :options="selectorCandidateFieldOptions(relation)"
+                                  :loading="targetFieldLoadingMap[selectorCandidateObjectCode(relation)]"
+                                  multiple
+                                  clearable
+                                  filterable
+                                  placeholder="选择编号、名称等可搜索字段"
+                                  @update:value="markDirty"
+                                />
+                              </n-form-item-gi>
+                            </n-grid>
+                            <section class="selector-structured-panel">
+                              <div class="selector-structured-head">
+                                <div>
+                                  <strong>选中后写入子表</strong>
+                                  <span>左侧是候选对象字段，右侧是子表字段。</span>
+                                </div>
+                                <n-button size="tiny" secondary @click="addSelectorMapping(relation)">
+                                  <template #icon>
+                                    <n-icon><AddOutline /></n-icon>
+                                  </template>
+                                  添加映射
+                                </n-button>
+                              </div>
+                              <div v-if="relation.selectorMappings.length" class="selector-mapping-list">
+                                <div v-for="(mapping, mappingIndex) in relation.selectorMappings" :key="mapping.clientKey" class="selector-mapping-row">
+                                  <n-select
+                                    v-model:value="mapping.sourceField"
+                                    :options="selectorCandidateFieldOptions(relation, mapping.sourceField)"
+                                    :loading="targetFieldLoadingMap[selectorCandidateObjectCode(relation)]"
+                                    clearable
+                                    filterable
+                                    placeholder="候选字段"
+                                    @update:value="markDirty"
+                                  />
+                                  <span class="selector-mapping-arrow">写入</span>
+                                  <n-select
+                                    v-model:value="mapping.targetField"
+                                    :options="selectorTargetFieldOptions(relation, mapping.targetField)"
+                                    :loading="targetFieldLoadingMap[relation.targetObjectCode]"
+                                    clearable
+                                    filterable
+                                    placeholder="子表字段"
+                                    @update:value="markDirty"
+                                  />
+                                  <n-button quaternary circle size="small" @click="removeSelectorMapping(relation, mappingIndex)">
+                                    <template #icon>
+                                      <n-icon><TrashOutline /></n-icon>
+                                    </template>
+                                  </n-button>
+                                </div>
+                              </div>
+                              <n-empty v-else size="small" description="还没有字段映射，点击添加映射" />
+                            </section>
+                            <section class="selector-structured-panel">
+                              <div class="selector-structured-head">
+                                <div>
+                                  <strong>筛选候选记录</strong>
+                                  <span>用于按当前表单、记录或固定值过滤弹窗数据。</span>
+                                </div>
+                                <n-button size="tiny" secondary @click="addSelectorSearchParam(relation)">
+                                  <template #icon>
+                                    <n-icon><AddOutline /></n-icon>
+                                  </template>
+                                  添加筛选
+                                </n-button>
+                              </div>
+                              <div v-if="relation.selectorSearchParams.length" class="selector-filter-list">
+                                <div v-for="(param, paramIndex) in relation.selectorSearchParams" :key="param.clientKey" class="selector-filter-row">
+                                  <n-select
+                                    v-model:value="param.paramKey"
+                                    :options="selectorCandidateFieldOptions(relation, param.paramKey)"
+                                    :loading="targetFieldLoadingMap[selectorCandidateObjectCode(relation)]"
+                                    clearable
+                                    filterable
+                                    placeholder="候选对象筛选字段"
+                                    @update:value="markDirty"
+                                  />
+                                  <n-select
+                                    v-model:value="param.sourceType"
+                                    :options="selectorFilterSourceOptions"
+                                    @update:value="value => updateSelectorSearchParamSource(param, value)"
+                                  />
+                                  <n-select
+                                    v-if="param.sourceType !== 'static'"
+                                    v-model:value="param.sourceField"
+                                    :options="selectorContextFieldOptions(param)"
+                                    clearable
+                                    filterable
+                                    placeholder="选择来源字段"
+                                    @update:value="markDirty"
+                                  />
+                                  <n-input
+                                    v-else
+                                    v-model:value="param.staticValue"
+                                    clearable
+                                    placeholder="固定值"
+                                    @update:value="markDirty"
+                                  />
+                                  <n-button quaternary circle size="small" @click="removeSelectorSearchParam(relation, paramIndex)">
+                                    <template #icon>
+                                      <n-icon><TrashOutline /></n-icon>
+                                    </template>
+                                  </n-button>
+                                </div>
+                              </div>
+                              <n-empty v-else size="small" description="未设置筛选条件，弹窗展示全部候选记录" />
+                            </section>
+                          </template>
+                        </section>
+                      </n-form-item-gi>
                       <n-form-item-gi :span="3" label="说明">
                         <n-input
                           v-model:value="relation.description"
@@ -337,7 +503,7 @@
 </template>
 
 <script setup>
-import { TrashOutline } from '@vicons/ionicons5'
+import { AddOutline, TrashOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import {
@@ -408,6 +574,15 @@ const childSaveModeOptions = [
   { label: '行级合并', value: 'merge' },
 ]
 
+const selectorFilterSourceOptions = [
+  { label: '固定值', value: 'static' },
+  { label: '当前表单字段', value: 'formData' },
+  { label: '当前记录字段', value: 'record' },
+  { label: '当前行字段', value: 'row' },
+  { label: '路由查询参数', value: 'query' },
+  { label: '路由路径参数', value: 'params' },
+]
+
 const linkageTypeOptions = [
   { label: '字典父子(parent_dict_code)', value: 'parentDictCode' },
   { label: '关联字典(linked_dict_type/value)', value: 'linkedDict' },
@@ -430,7 +605,7 @@ const methodOptions = [
 const sourceFieldOptions = computed(() => {
   const fields = (props.fields || []).map(toPageField).filter(field => field.field && !isInactiveField(field))
   return fields.map(field => ({
-    label: businessFieldLabel(field),
+    label: businessFieldOptionLabel(field),
     value: field.field,
   }))
 })
@@ -490,7 +665,10 @@ async function loadRelations() {
     relationsLoaded.value = true
     relationDirty.value = false
     emit('updated', localRelations.value)
-    localRelations.value.forEach(relation => loadTargetFields(relation.targetObjectCode))
+    localRelations.value.forEach((relation) => {
+      loadTargetFields(relation.targetObjectCode)
+      loadTargetFields(selectorCandidateObjectCode(relation))
+    })
   }
   catch (error) {
     message.error(error?.message || '关系配置加载失败')
@@ -506,7 +684,10 @@ async function loadBusinessObjects() {
       suiteCode: props.suiteCode || undefined,
     })
     businessObjects.value = res.data || []
-    localRelations.value.forEach(relation => loadTargetFields(relation.targetObjectCode))
+    localRelations.value.forEach((relation) => {
+      loadTargetFields(relation.targetObjectCode)
+      loadTargetFields(selectorCandidateObjectCode(relation))
+    })
   }
   catch {
     businessObjects.value = []
@@ -549,6 +730,15 @@ async function addRelation() {
     inlineCreateEnabled: canInlineEdit({ relationType }),
     inlineEditEnabled: canInlineEdit({ relationType }),
     defaultFilter: '',
+    selectorEnabled: false,
+    selectorSuiteCode: props.suiteCode || '',
+    selectorObjectCode: target.value,
+    selectorTitle: '',
+    selectorButtonText: '选择记录',
+    selectorDisplayFields: [],
+    selectorKeywordFields: [],
+    selectorMappings: [],
+    selectorSearchParams: [],
     description: '',
     status: 1,
     sortOrder: localRelations.value.length * 10 + 10,
@@ -619,6 +809,10 @@ async function updateTargetObject(relation, value) {
   relation.sourceFieldCode = firstSourceField(relation.relationType, value, relation.sourceFieldCode)
   relation.targetFieldCode = firstTargetField(value, relation.relationType)
   relation.displayField = firstDisplayField(value, relation.targetFieldCode)
+  if (!relation.selectorObjectCode)
+    relation.selectorObjectCode = value || ''
+  if (relation.selectorEnabled)
+    await applySelectorDefaults(relation, false)
   markDirty()
 }
 
@@ -639,6 +833,57 @@ function updateInlineEdit(relation, value) {
 
 function updateInlineCreate(relation, value) {
   relation.inlineCreateEnabled = canInlineEdit(relation) && !!value
+  markDirty()
+}
+
+function updateRelationSelectorEnabled(relation, value) {
+  relation.selectorEnabled = canInlineEdit(relation) && !!value
+  if (relation.selectorEnabled && !relation.selectorObjectCode)
+    relation.selectorObjectCode = relation.targetObjectCode || ''
+  if (relation.selectorEnabled)
+    applySelectorDefaults(relation, false)
+  markDirty()
+}
+
+async function updateSelectorObject(relation, value) {
+  relation.selectorObjectCode = value || ''
+  await loadTargetFields(selectorCandidateObjectCode(relation))
+  await applySelectorDefaults(relation, false)
+  markDirty()
+}
+
+function updateSelectorSearchParamSource(param, value) {
+  param.sourceType = value || 'static'
+  if (param.sourceType === 'static')
+    param.sourceField = ''
+  else
+    param.staticValue = ''
+  markDirty()
+}
+
+function addSelectorMapping(relation) {
+  relation.selectorMappings = [
+    ...(relation.selectorMappings || []),
+    createSelectorMappingRow(),
+  ]
+  markDirty()
+}
+
+function removeSelectorMapping(relation, index) {
+  relation.selectorMappings.splice(index, 1)
+  markDirty()
+}
+
+function addSelectorSearchParam(relation) {
+  relation.selectorSearchParams = [
+    ...(relation.selectorSearchParams || []),
+    createSelectorSearchParamRow(),
+  ]
+  markDirty()
+}
+
+function removeSelectorSearchParam(relation, index) {
+  relation.selectorSearchParams.splice(index, 1)
   markDirty()
 }
 
@@ -695,6 +940,11 @@ async function saveRelations() {
       message.warning(`请先为「${missingDisplayRelation.relationName || relationLabel(missingDisplayRelation)}」选择目标对象回显字段`)
       return
     }
+    const invalidSelectorRelation = localRelations.value.find(relation => relation.selectorEnabled && !relation.selectorObjectCode)
+    if (invalidSelectorRelation) {
+      message.warning(`请先为「${invalidSelectorRelation.relationName || relationLabel(invalidSelectorRelation)}」选择子表选择器候选对象`)
+      return
+    }
   }
   saving.value = true
   try {
@@ -727,6 +977,7 @@ async function saveRelations() {
 
 function normalizeRelation(relation = {}) {
   const config = parseRelationConfig(relation.relationConfig)
+  const selector = normalizeRelationSelector(config.recordSelector || config.selector)
   return {
     ...relation,
     clientKey: relation.id || createClientKey(),
@@ -742,6 +993,19 @@ function normalizeRelation(relation = {}) {
     saveMode: normalizeChildSaveMode(config.saveMode),
     defaultFilter: config.defaultFilter || '',
     displayField: config.displayField || '',
+    selectorEnabled: Boolean(selector.objectCode),
+    selectorSuiteCode: selector.suiteCode,
+    selectorObjectCode: selector.objectCode,
+    selectorTitle: selector.title,
+    selectorButtonText: selector.buttonText,
+    selectorDisplayFields: normalizeDisplayFieldCodes(selector.displayFields),
+    selectorKeywordFields: normalizeTextList(selector.keywordFields),
+    selectorMappings: createSelectorMappingRows(selector.fieldMappings),
+    selectorSearchParams: createSelectorSearchParamRows(selector.searchParams),
+    selectorDisplayFieldsText: listToLines(selector.displayFields),
+    selectorKeywordFieldsText: listToLines(selector.keywordFields),
+    selectorMappingsText: mappingsToLines(selector.fieldMappings),
+    selectorSearchParamsText: searchParamsToLines(selector.searchParams),
     status: relation.status ?? 1,
     sortOrder: relation.sortOrder ?? 0,
   }
@@ -776,6 +1040,9 @@ function buildRelationConfig(relation) {
     config.defaultFilter = relation.defaultFilter
   if (relation.displayField)
     config.displayField = relation.displayField
+  const selector = buildRelationSelectorConfig(relation)
+  if (selector)
+    config.recordSelector = selector
   return Object.keys(config).length ? JSON.stringify(config) : ''
 }
 
@@ -791,6 +1058,283 @@ function parseRelationConfig(value) {
       defaultFilter: value,
     }
   }
+}
+
+function normalizeRelationSelector(value) {
+  const config = value && typeof value === 'object' ? value : {}
+  return {
+    suiteCode: String(config.suiteCode || '').trim(),
+    objectCode: String(config.objectCode || '').trim(),
+    title: String(config.title || config.selectorTitle || '').trim(),
+    buttonText: String(config.buttonText || '').trim(),
+    displayFields: normalizeTextList(config.displayFields),
+    keywordFields: normalizeTextList(config.keywordFields),
+    fieldMappings: normalizeMappingList(config.fieldMappings || config.mappings),
+    searchParams: normalizeSearchParams(config.searchParams),
+  }
+}
+
+function normalizeDisplayFieldCodes(value) {
+  return normalizeTextList(value)
+    .map(item => String(item || '').split(/\s*[:：]\s*/, 1)[0].trim())
+    .filter(Boolean)
+}
+
+function createSelectorMappingRow(source = {}) {
+  return {
+    clientKey: createClientKey(),
+    sourceField: String(source.sourceField || source.source || '').trim(),
+    targetField: String(source.targetField || source.target || '').trim(),
+  }
+}
+
+function createSelectorMappingRows(value) {
+  return normalizeMappingList(value).map(createSelectorMappingRow)
+}
+
+function createSelectorSearchParamRow(source = {}) {
+  const row = normalizeSelectorSearchParamRow(source)
+  return {
+    clientKey: createClientKey(),
+    ...row,
+  }
+}
+
+function createSelectorSearchParamRows(value) {
+  return Object.entries(normalizeSearchParams(value)).map(([key, item]) => createSelectorSearchParamRow({
+    paramKey: key,
+    value: item,
+  }))
+}
+
+function normalizeSelectorSearchParamRow(source = {}) {
+  const paramKey = String(source.paramKey || source.key || '').trim()
+  const sourceType = String(source.sourceType || '').trim()
+  if (sourceType) {
+    return {
+      paramKey,
+      sourceType,
+      sourceField: String(source.sourceField || '').trim(),
+      staticValue: source.staticValue ?? '',
+    }
+  }
+  return {
+    paramKey,
+    ...parseSelectorParamValue(source.value ?? source.staticValue),
+  }
+}
+
+function parseSelectorParamValue(value) {
+  const textValue = String(value ?? '').trim()
+  const matched = textValue.match(/^\$\{(formData|form|record|row|query|routeQuery|params)\.([^}]+)\}$/)
+  if (!matched) {
+    return {
+      sourceType: 'static',
+      sourceField: '',
+      staticValue: textValue,
+    }
+  }
+  const sourceTypeAlias = {
+    form: 'formData',
+    routeQuery: 'query',
+  }
+  return {
+    sourceType: sourceTypeAlias[matched[1]] || matched[1],
+    sourceField: matched[2],
+    staticValue: '',
+  }
+}
+
+function buildRelationSelectorConfig(relation = {}) {
+  if (!relation.selectorEnabled)
+    return null
+  const selector = normalizeRelationSelector({
+    suiteCode: relation.selectorSuiteCode || props.suiteCode,
+    objectCode: relation.selectorObjectCode || relation.targetObjectCode,
+    title: relation.selectorTitle,
+    buttonText: relation.selectorButtonText,
+    displayFields: buildSelectorDisplayFields(relation),
+    keywordFields: normalizeTextList(relation.selectorKeywordFields?.length ? relation.selectorKeywordFields : relation.selectorKeywordFieldsText),
+    fieldMappings: buildSelectorMappings(relation),
+    searchParams: buildSelectorSearchParams(relation),
+  })
+  if (!selector.objectCode)
+    return null
+  const result = {
+    objectCode: selector.objectCode,
+  }
+  if (selector.suiteCode)
+    result.suiteCode = selector.suiteCode
+  if (selector.title)
+    result.title = selector.title
+  if (selector.buttonText)
+    result.buttonText = selector.buttonText
+  if (selector.displayFields.length)
+    result.displayFields = selector.displayFields
+  if (selector.keywordFields.length)
+    result.keywordFields = selector.keywordFields
+  if (selector.fieldMappings.length)
+    result.fieldMappings = selector.fieldMappings
+  if (Object.keys(selector.searchParams).length)
+    result.searchParams = selector.searchParams
+  return result
+}
+
+function buildSelectorDisplayFields(relation = {}) {
+  const codes = normalizeDisplayFieldCodes((relation.selectorDisplayFields || []).length
+    ? relation.selectorDisplayFields
+    : relation.selectorDisplayFieldsText)
+  if (!codes.length)
+    return []
+  const fieldMap = new Map((targetFieldsMap.value[selectorCandidateObjectCode(relation)] || []).map(field => [field.field, field]))
+  return codes.map((fieldCode) => {
+    const field = fieldMap.get(fieldCode)
+    const label = field ? businessFieldLabel(field) : ''
+    return label && label !== fieldCode ? `${fieldCode}:${label}` : fieldCode
+  })
+}
+
+function buildSelectorMappings(relation = {}) {
+  const rows = Array.isArray(relation.selectorMappings) && relation.selectorMappings.length
+    ? relation.selectorMappings
+    : createSelectorMappingRows(relation.selectorMappingsText)
+  return rows
+    .map(row => ({
+      sourceField: String(row.sourceField || '').trim(),
+      targetField: String(row.targetField || '').trim(),
+    }))
+    .filter(row => row.sourceField && row.targetField)
+}
+
+function buildSelectorSearchParams(relation = {}) {
+  const rows = Array.isArray(relation.selectorSearchParams) && relation.selectorSearchParams.length
+    ? relation.selectorSearchParams
+    : createSelectorSearchParamRows(relation.selectorSearchParamsText)
+  return rows.reduce((result, row) => {
+    const paramKey = String(row.paramKey || '').trim()
+    if (!paramKey)
+      return result
+    const sourceType = row.sourceType || 'static'
+    if (sourceType === 'static') {
+      if (row.staticValue !== undefined && row.staticValue !== null && String(row.staticValue).trim() !== '')
+        result[paramKey] = row.staticValue
+      return result
+    }
+    const sourceField = String(row.sourceField || '').trim()
+    if (sourceField)
+      result[paramKey] = `\${${sourceType}.${sourceField}}`
+    return result
+  }, {})
+}
+
+function normalizeTextList(value) {
+  if (Array.isArray(value))
+    return value.map(item => String(item || '').trim()).filter(Boolean)
+  if (typeof value === 'string')
+    return parseTextList(value)
+  return []
+}
+
+function parseTextList(value) {
+  return String(value || '')
+    .split(/[\n,，]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeMappingList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => ({
+        sourceField: String(item?.sourceField || item?.source || '').trim(),
+        targetField: String(item?.targetField || item?.target || '').trim(),
+      }))
+      .filter(item => item.sourceField && item.targetField)
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .map(([sourceField, targetField]) => ({
+        sourceField: String(sourceField || '').trim(),
+        targetField: String(targetField || '').trim(),
+      }))
+      .filter(item => item.sourceField && item.targetField)
+  }
+  if (typeof value === 'string')
+    return parseMappingLines(value)
+  return []
+}
+
+function parseMappingLines(value) {
+  return String(value || '')
+    .split(/\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const parts = item.split(/\s*(?:=>|=|:)\s*/, 2)
+      return {
+        sourceField: String(parts[0] || '').trim(),
+        targetField: String(parts[1] || '').trim(),
+      }
+    })
+    .filter(item => item.sourceField && item.targetField)
+}
+
+function normalizeSearchParams(value) {
+  if (!value)
+    return {}
+  if (typeof value === 'string')
+    return parseSearchParamLines(value)
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.entries(value).reduce((result, [key, item]) => {
+      const paramKey = String(key || '').trim()
+      if (paramKey && item !== undefined && item !== null && item !== '')
+        result[paramKey] = item
+      return result
+    }, {})
+  }
+  return {}
+}
+
+function parseSearchParamLines(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  if (text.startsWith('{')) {
+    try {
+      return normalizeSearchParams(JSON.parse(text))
+    }
+    catch {
+      return {}
+    }
+  }
+  return text
+    .split(/\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .reduce((result, item) => {
+      const parts = item.split(/\s*(?:=>|=|:)\s*/, 2)
+      const key = String(parts[0] || '').trim()
+      const paramValue = String(parts[1] || '').trim()
+      if (key && paramValue)
+        result[key] = paramValue
+      return result
+    }, {})
+}
+
+function listToLines(value) {
+  return normalizeTextList(value).join('\n')
+}
+
+function mappingsToLines(value) {
+  return normalizeMappingList(value)
+    .map(item => `${item.sourceField}=${item.targetField}`)
+    .join('\n')
+}
+
+function searchParamsToLines(value) {
+  return Object.entries(normalizeSearchParams(value))
+    .map(([key, item]) => `${key}=${item}`)
+    .join('\n')
 }
 
 function normalizeChildSaveMode(value) {
@@ -965,7 +1509,7 @@ function targetFieldOptions(relation) {
   const options = fields
     .filter(field => field.field && !isInactiveField(field))
     .map(field => ({
-      label: businessFieldLabel(field),
+      label: businessFieldOptionLabel(field),
       value: field.field,
     }))
   if (relation.targetFieldCode && !options.some(item => item.value === relation.targetFieldCode)) {
@@ -982,13 +1526,53 @@ function targetDisplayFieldOptions(relation) {
   const options = fields
     .filter(field => field.field && !isInactiveField(field) && !field.systemField && field.field !== relation.targetFieldCode)
     .map(field => ({
-      label: businessFieldLabel(field),
+      label: businessFieldOptionLabel(field),
       value: field.field,
     }))
   if (relation.displayField && !options.some(item => item.value === relation.displayField)) {
     options.unshift({
       label: `已配置字段：${relation.displayField}`,
       value: relation.displayField,
+    })
+  }
+  return options
+}
+
+function selectorCandidateObjectCode(relation = {}) {
+  return relation.selectorObjectCode || relation.targetObjectCode || ''
+}
+
+function selectorCandidateFieldOptions(relation, currentValue = '') {
+  return fieldOptionsForObject(selectorCandidateObjectCode(relation), currentValue)
+}
+
+function selectorTargetFieldOptions(relation, currentValue = '') {
+  return fieldOptionsForObject(relation.targetObjectCode, currentValue)
+}
+
+function selectorContextFieldOptions(param = {}) {
+  if (['query', 'params'].includes(param.sourceType)) {
+    return [
+      { label: 'id', value: 'id' },
+      { label: 'recordId', value: 'recordId' },
+      { label: 'objectCode', value: 'objectCode' },
+    ]
+  }
+  return sourceFieldOptions.value
+}
+
+function fieldOptionsForObject(objectCode, currentValue = '') {
+  const fields = targetFieldsMap.value[objectCode] || []
+  const options = fields
+    .filter(field => field.field && !isInactiveField(field))
+    .map(field => ({
+      label: businessFieldOptionLabel(field),
+      value: field.field,
+    }))
+  if (currentValue && !options.some(item => item.value === currentValue)) {
+    options.unshift({
+      label: `已配置字段：${currentValue}`,
+      value: currentValue,
     })
   }
   return options
@@ -1077,6 +1661,90 @@ function firstDisplayField(objectCode, relationField = '') {
   return matched?.field || ''
 }
 
+async function applySelectorDefaults(relation, force = true) {
+  const candidateObjectCode = selectorCandidateObjectCode(relation)
+  await loadTargetFields(candidateObjectCode)
+  await loadTargetFields(relation.targetObjectCode)
+  const candidateFields = selectorActiveFields(candidateObjectCode)
+  const targetFields = selectorActiveFields(relation.targetObjectCode)
+  if (force || !(relation.selectorDisplayFields || []).length)
+    relation.selectorDisplayFields = inferSelectorDisplayFields(candidateFields)
+  if (force || !(relation.selectorKeywordFields || []).length)
+    relation.selectorKeywordFields = inferSelectorKeywordFields(candidateFields, relation.selectorDisplayFields)
+  if (force || !(relation.selectorMappings || []).some(item => item.sourceField && item.targetField))
+    relation.selectorMappings = inferSelectorMappings(candidateFields, targetFields)
+  if (!relation.selectorButtonText)
+    relation.selectorButtonText = '选择记录'
+  if (!relation.selectorTitle) {
+    const objectName = objectNameMap.value.get(candidateObjectCode) || candidateObjectCode
+    relation.selectorTitle = objectName ? `选择${objectName}` : ''
+  }
+  markDirty()
+}
+
+function selectorActiveFields(objectCode) {
+  return (targetFieldsMap.value[objectCode] || [])
+    .filter(field => field.field && !isInactiveField(field) && !field.systemField)
+}
+
+function inferSelectorDisplayFields(fields = []) {
+  const preferred = ['code', 'no', 'number', 'name', 'title']
+  const matched = fields.filter(field => preferred.some(key => normalizedFieldToken(field).includes(key)))
+  return (matched.length ? matched : fields).slice(0, 4).map(field => field.field)
+}
+
+function inferSelectorKeywordFields(fields = [], displayFields = []) {
+  const displaySet = new Set(displayFields || [])
+  const preferred = fields.filter((field) => {
+    const token = normalizedFieldToken(field)
+    return token.includes('code') || token.includes('no') || token.includes('number')
+      || token.includes('name') || token.includes('title') || displaySet.has(field.field)
+  })
+  return (preferred.length ? preferred : fields).slice(0, 3).map(field => field.field)
+}
+
+function inferSelectorMappings(candidateFields = [], targetFields = []) {
+  const candidateByField = new Map(candidateFields.map(field => [field.field, field]))
+  const candidateByToken = new Map(candidateFields.map(field => [normalizedFieldToken(field), field]))
+  const rows = []
+  const usedTargets = new Set()
+  targetFields.forEach((target) => {
+    const source = candidateByField.get(target.field)
+      || candidateByToken.get(normalizedFieldToken(target))
+      || findSemanticSourceField(candidateFields, target)
+    if (source && !usedTargets.has(target.field)) {
+      rows.push(createSelectorMappingRow({
+        sourceField: source.field,
+        targetField: target.field,
+      }))
+      usedTargets.add(target.field)
+    }
+  })
+  return rows.slice(0, 8)
+}
+
+function findSemanticSourceField(candidateFields = [], target = {}) {
+  const targetToken = normalizedFieldToken(target)
+  const semanticGroups = [
+    ['id', 'recordid'],
+    ['code', 'no', 'number', 'sn'],
+    ['name', 'title', 'label'],
+    ['price', 'amount', 'cost', 'fee'],
+    ['unit', 'uom'],
+    ['spec', 'model', 'type'],
+  ]
+  const group = semanticGroups.find(items => items.some(item => targetToken.includes(item)))
+  if (!group)
+    return null
+  return candidateFields.find(field => group.some(item => normalizedFieldToken(field).includes(item))) || null
+}
+
+function normalizedFieldToken(field = {}) {
+  return `${field.field || ''}_${field.label || ''}_${field.fieldName || ''}`
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+}
+
 function isInactiveField(field = {}) {
   const status = String(field.fieldStatus || '').toUpperCase()
   return status === 'DISABLED' || status === 'HIDDEN'
@@ -1097,6 +1765,12 @@ function businessFieldLabel(field = {}) {
   if (fieldName === 'createDept')
     return '创建部门'
   return field.label || field.fieldName || fieldName
+}
+
+function businessFieldOptionLabel(field = {}) {
+  const code = field.field || field.fieldCode || ''
+  const label = businessFieldLabel(field)
+  return label && code && label !== code ? `${label}（${code}）` : label || code
 }
 
 function relationLabel(relation) {
@@ -1390,6 +2064,111 @@ defineExpose({
   padding: 8px;
 }
 
+.relation-selector-config {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.relation-selector-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.relation-selector-config-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relation-selector-config-head strong {
+  color: #111827;
+  font-size: 13px;
+}
+
+.relation-selector-config-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.selector-preset-bar,
+.selector-structured-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 8px 10px;
+}
+
+.selector-preset-bar > div,
+.selector-structured-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.selector-preset-bar strong,
+.selector-structured-head strong {
+  color: #111827;
+  font-size: 13px;
+}
+
+.selector-preset-bar span,
+.selector-structured-head span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.selector-structured-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.selector-mapping-list,
+.selector-filter-list {
+  display: grid;
+  gap: 8px;
+}
+
+.selector-mapping-row,
+.selector-filter-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.selector-mapping-row {
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) 32px;
+}
+
+.selector-filter-row {
+  grid-template-columns: minmax(160px, 1fr) 132px minmax(160px, 1fr) 32px;
+}
+
+.selector-mapping-arrow {
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #334155;
+  font-size: 12px;
+  line-height: 24px;
+  text-align: center;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
 @media (max-width: 1100px) {
   .relation-designer-body {
     grid-template-columns: 1fr;
@@ -1398,6 +2177,15 @@ defineExpose({
   .relation-summary-pane {
     border-left: 0;
     border-top: 1px solid #e5e7eb;
+  }
+
+  .selector-mapping-row,
+  .selector-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .selector-mapping-arrow {
+    width: max-content;
   }
 }
 </style>

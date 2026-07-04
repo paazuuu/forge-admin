@@ -186,7 +186,6 @@
       :publishing="publishing"
       @check-updated="handlePublishCheckUpdated"
       @fix="handleFixTarget"
-      @publish="handlePublish"
       @open-runtime="openRuntime"
       @rolled-back="loadDesigner"
     />
@@ -824,7 +823,11 @@ function handlePreview() {
 }
 
 async function handlePublish(options = {}) {
-  const publishOptions = options && typeof options === 'object' && !('target' in options) ? options : {}
+  const explicitOptions = options && typeof options === 'object' && !('target' in options) ? options : {}
+  const checklistOptions = activePanel.value === 'publish'
+    ? publishChecklistRef.value?.getPublishOptions?.() || {}
+    : {}
+  const publishOptions = { ...checklistOptions, ...explicitOptions }
   if (!objectId.value || publishing.value)
     return
   publishing.value = true

@@ -68,4 +68,51 @@
         LIMIT 1
     </select>
 
+    <select id="selectLedgerPage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLedgerVO">
+        SELECT
+            id,
+            operation_type AS operationType,
+            account_code AS accountCode,
+            item_code AS itemCode,
+            dimension_key AS dimensionKey,
+            quantity_delta AS quantityDelta,
+            balance_quantity AS balanceQuantity,
+            locked_quantity AS lockedQuantity,
+            target_account_code AS targetAccountCode,
+            target_item_code AS targetItemCode,
+            target_dimension_key AS targetDimensionKey,
+            source_object_code AS sourceObjectCode,
+            source_record_id AS sourceRecordId,
+            source_detail_id AS sourceDetailId,
+            lock_id AS lockId,
+            correlation_id AS correlationId,
+            remark,
+            extra_data AS extraData,
+            create_time AS createTime
+        FROM ai_business_quantity_ledger
+        WHERE tenant_id = #{tenantId}
+        <if test="query.operationType != null and query.operationType != ''">
+          AND operation_type = #{query.operationType}
+        </if>
+        <if test="query.accountCode != null and query.accountCode != ''">
+          AND account_code = #{query.accountCode}
+        </if>
+        <if test="query.itemCode != null and query.itemCode != ''">
+          AND item_code = #{query.itemCode}
+        </if>
+        <if test="query.dimensionKey != null and query.dimensionKey != ''">
+          AND dimension_key = #{query.dimensionKey}
+        </if>
+        <if test="query.sourceObjectCode != null and query.sourceObjectCode != ''">
+          AND source_object_code = #{query.sourceObjectCode}
+        </if>
+        <if test="query.sourceRecordId != null and query.sourceRecordId != ''">
+          AND source_record_id = #{query.sourceRecordId}
+        </if>
+        <if test="query.sourceDetailId != null and query.sourceDetailId != ''">
+          AND source_detail_id = #{query.sourceDetailId}
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
 </mapper>

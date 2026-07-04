@@ -1,5 +1,6 @@
 package com.mdframe.forge.plugin.generator.dto.lowcode;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -14,8 +15,10 @@ import java.util.Map;
 public class LowcodePageZone {
 
     /** search/table/edit/detail/toolbar */
+    @JsonAlias("key")
     private String zoneKey;
 
+    @JsonAlias("type")
     private String componentKey;
 
     private Boolean enabled;

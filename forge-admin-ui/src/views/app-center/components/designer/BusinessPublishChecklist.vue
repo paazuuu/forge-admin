@@ -9,9 +9,6 @@
         <n-button size="small" secondary :loading="checking" @click="refresh">
           重新检查
         </n-button>
-        <n-button size="small" type="success" :loading="publishing" :disabled="!publishable" @click="handlePublish">
-          {{ publishing ? '发布中' : '发布对象' }}
-        </n-button>
       </n-space>
     </div>
 
@@ -29,9 +26,6 @@
               同步数据表结构
             </n-checkbox>
             <n-space size="small">
-              <n-button size="small" type="success" :loading="publishing" :disabled="!publishable" @click="handlePublish">
-                {{ publishing ? '发布中' : '发布对象' }}
-              </n-button>
               <n-button size="small" secondary :disabled="!runtimeInfo?.canOpen" @click="$emit('openRuntime')">
                 打开应用
               </n-button>
@@ -176,7 +170,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['checkUpdated', 'fix', 'publish', 'openRuntime', 'rolledBack'])
+const emit = defineEmits(['checkUpdated', 'fix', 'openRuntime', 'rolledBack'])
 
 const message = useMessage()
 const checking = ref(false)
@@ -314,18 +308,6 @@ async function rollbackVersion(versionId) {
   await refresh()
 }
 
-function handlePublish() {
-  if (!publishable.value) {
-    message.warning('存在阻断项，修复后再发布')
-    return
-  }
-  if (requiresTableSync.value && !syncTable.value) {
-    message.warning('请先确认同步数据表结构')
-    return
-  }
-  emit('publish', { syncTable: syncTable.value })
-}
-
 function resolveFixPanel(item = {}) {
   const target = item.fixTarget || item.zoneKey || ''
   if (['fields', 'field', 'FIELD'].includes(target) || item.category === 'FIELD')
@@ -399,10 +381,17 @@ function createEmptyCheck() {
   }
 }
 
+function getPublishOptions() {
+  return {
+    syncTable: syncTable.value,
+  }
+}
+
 defineExpose({
   refresh,
   loadCheck,
   loadVersions,
+  getPublishOptions,
   publishable,
 })
 </script>

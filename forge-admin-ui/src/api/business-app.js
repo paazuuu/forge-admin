@@ -365,6 +365,20 @@ export function queryBusinessRecordSelector(data, params = {}) {
   return request.post('/ai/business/selector/query', data || {}, { params })
 }
 
+// ==================== 通用数量台账查询 ====================
+
+export function queryBusinessQuantityBalance(data) {
+  return request.post('/ai/business/quantity/query/balance', data || {})
+}
+
+export function queryBusinessQuantityLedger(data) {
+  return request.post('/ai/business/quantity/query/ledger', data || {})
+}
+
+export function queryBusinessQuantityLock(data) {
+  return request.post('/ai/business/quantity/query/lock', data || {})
+}
+
 // ==================== 单据与流程 ====================
 
 export function businessDocumentConfig(objectId) {

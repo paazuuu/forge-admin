@@ -69,6 +69,26 @@ class BusinessActionExecutionServiceTest {
         verify(logMapper, times(1)).insert(any(AiBusinessActionExecutionLog.class));
     }
 
+    @Test
+    @DisplayName("resolves object code aliases and runtime row context")
+    void resolvesObjectCodeAliasesAndRuntimeRowContext() {
+        BusinessActionExecuteDTO dto = new BusinessActionExecuteDTO();
+        dto.setBusinessObjectCode("purchase_order");
+        assertEquals("purchase_order", service.resolveObjectCode(dto));
+
+        dto = new BusinessActionExecuteDTO();
+        dto.setTargetObjectCode("supplier");
+        assertEquals("supplier", service.resolveObjectCode(dto));
+
+        dto = new BusinessActionExecuteDTO();
+        dto.setContext(Map.of("row", Map.of("_runtimeObjectCode", "outbound_order")));
+        assertEquals("outbound_order", service.resolveObjectCode(dto));
+
+        dto = new BusinessActionExecuteDTO();
+        dto.setFormData(Map.of("businessObjectCode", "transfer_order"));
+        assertEquals("transfer_order", service.resolveObjectCode(dto));
+    }
+
     private AiBusinessObject businessObject() {
         AiBusinessObject object = new AiBusinessObject();
         object.setTenantId(1L);

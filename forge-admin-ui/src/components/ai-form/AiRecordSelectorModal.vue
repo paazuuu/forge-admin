@@ -53,7 +53,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { queryBusinessRecordSelector } from '@/api/business-app'
-import { normalizeSelectorMappings } from './record-selector-utils'
+import { normalizeSelectorMappings, resolveSelectorSearchParams } from './record-selector-utils'
 
 const props = defineProps({
   show: {
@@ -65,6 +65,38 @@ const props = defineProps({
     default: '选择记录',
   },
   objectCode: {
+    type: String,
+    default: '',
+  },
+  businessObjectCode: {
+    type: String,
+    default: '',
+  },
+  targetObjectCode: {
+    type: String,
+    default: '',
+  },
+  targetEntityCode: {
+    type: String,
+    default: '',
+  },
+  candidateObjectCode: {
+    type: String,
+    default: '',
+  },
+  referenceObjectCode: {
+    type: String,
+    default: '',
+  },
+  refObjectCode: {
+    type: String,
+    default: '',
+  },
+  sourceObjectCode: {
+    type: String,
+    default: '',
+  },
+  targetCode: {
     type: String,
     default: '',
   },
@@ -92,6 +124,10 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  runtimeContext: {
+    type: Object,
+    default: () => ({}),
+  },
   pageSize: {
     type: Number,
     default: 10,
@@ -115,6 +151,18 @@ const pagination = ref({
 })
 
 const placeholder = computed(() => props.keywordFields?.length ? '输入关键词查询' : '输入关键词')
+const resolvedSearchParams = computed(() => resolveSelectorSearchParams(props.searchParams, props.runtimeContext))
+const effectiveObjectCode = computed(() => firstText(
+  props.objectCode,
+  props.businessObjectCode,
+  props.targetObjectCode,
+  props.targetEntityCode,
+  props.candidateObjectCode,
+  props.referenceObjectCode,
+  props.refObjectCode,
+  props.sourceObjectCode,
+  props.targetCode,
+))
 const tableColumns = computed(() => [
   {
     type: 'selection',
@@ -136,7 +184,7 @@ watch(() => props.show, (visible) => {
 })
 
 async function reload() {
-  if (!props.objectCode) {
+  if (!effectiveObjectCode.value) {
     records.value = []
     columns.value = []
     pagination.value.itemCount = 0
@@ -146,10 +194,18 @@ async function reload() {
   try {
     const res = await queryBusinessRecordSelector({
       suiteCode: props.suiteCode,
-      objectCode: props.objectCode,
+      objectCode: effectiveObjectCode.value,
+      businessObjectCode: props.businessObjectCode || effectiveObjectCode.value,
+      targetObjectCode: props.targetObjectCode || effectiveObjectCode.value,
+      targetEntityCode: props.targetEntityCode || effectiveObjectCode.value,
+      candidateObjectCode: props.candidateObjectCode,
+      referenceObjectCode: props.referenceObjectCode,
+      refObjectCode: props.refObjectCode,
+      sourceObjectCode: props.sourceObjectCode,
+      targetCode: props.targetCode,
       keyword: keyword.value,
       keywordFields: props.keywordFields,
-      searchParams: props.searchParams,
+      searchParams: resolvedSearchParams.value,
       displayFields: props.displayFields,
       fieldMappings: toMappingArray(props.fieldMappings),
     }, {
@@ -200,6 +256,15 @@ function toMappingArray(mappings = []) {
   if (Array.isArray(mappings))
     return mappings
   return Object.entries(mappings || {}).map(([sourceField, targetField]) => ({ sourceField, targetField }))
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text)
+      return text
+  }
+  return ''
 }
 </script>
 

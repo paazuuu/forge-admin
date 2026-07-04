@@ -494,7 +494,10 @@ function resolveRuntimeButtonType(action = {}, actionType = '') {
 function transformFields(fields, fieldMetaMap = new Map()) {
   return (fields || []).map((field) => {
     const newField = { ...field }
-    applyRuntimeFieldMeta(newField, fieldMetaMap.get(field.field || field.fieldCode))
+    const fieldMeta = fieldMetaMap.get(field.field || field.fieldCode)
+    applyRuntimeFieldMeta(newField, fieldMeta)
+    applyRuntimeFieldValidation(newField, fieldMeta)
+    applyRuntimeFieldLength(newField, fieldMeta)
 
     if (field.dictType && ['select', 'radio', 'checkbox'].includes(field.type)) {
       const options = dictCache.value[field.dictType] || []
@@ -529,6 +532,30 @@ function transformFields(fields, fieldMetaMap = new Map()) {
 
     return newField
   })
+}
+
+function applyRuntimeFieldValidation(field = {}, meta = {}) {
+  const validation = field.validation || field.props?.validation || meta?.validation || meta?.basicProps?.validation || meta?.advancedProps?.validation
+  if (validation && typeof validation === 'object')
+    field.validation = validation
+}
+
+function applyRuntimeFieldLength(field = {}, meta = {}) {
+  const length = Number(field.maxlength || field.props?.maxlength || field.length || meta?.length || 0)
+  if (!length || !isRuntimeTextField(field))
+    return
+  field.maxlength = length
+  field.showCount = field.showCount ?? field.props?.showCount ?? true
+  field.props = {
+    ...(field.props || {}),
+    maxlength: length,
+    showCount: field.showCount,
+  }
+}
+
+function isRuntimeTextField(field = {}) {
+  const type = String(field.type || field.componentType || '').toLowerCase()
+  return ['input', 'textarea'].includes(type)
 }
 
 function buildRuntimeFormProfile(cfg = {}, requestedFormKey = '') {
@@ -644,6 +671,7 @@ function buildRuntimeFieldFromDesignerComponent(component = {}, baseFieldMap = n
     disabled: visibility.readonly ?? base.disabled,
     defaultValue: props.defaultValue ?? base.defaultValue,
     dictType: props.dictType || base.dictType,
+    validation,
     props,
   }
 }
@@ -868,6 +896,7 @@ const crudProps = computed(() => {
     }),
     editSchema: transformEditFields(activeRuntimeFormProfile.value.editSchema, activeRuntimeFormProfile.value.editFormLayout || options.editFormLayout, buildRuntimeFieldMetaMap(cfg.modelSchema)),
     childrenConfig: transformChildrenConfig(masterDetailConfig.children || []),
+    detailPanels: options.detailPanels || cfg.detailPanels || [],
     apiConfig,
     options,
     rowKey: cfg.rowKey || 'id',
@@ -1308,9 +1337,18 @@ function resolveBusinessObjectCode(cfg = {}) {
   const options = cfg.options || {}
   const modelSchema = cfg.modelSchema || {}
   return cfg.businessObjectCode
+    || cfg.targetObjectCode
+    || cfg.referenceObjectCode
+    || cfg.candidateObjectCode
     || options.businessObjectCode
+    || options.targetObjectCode
+    || options.referenceObjectCode
+    || options.candidateObjectCode
     || modelSchema.objectCode
+    || modelSchema.businessObjectCode
+    || modelSchema.targetObjectCode
     || modelSchema.object?.code
+    || modelSchema.object?.objectCode
     || cfg.objectCode
     || options.objectCode
     || modelSchema.modelCode

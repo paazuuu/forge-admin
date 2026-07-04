@@ -129,6 +129,7 @@ import { computed, nextTick, ref, useSlots, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runtime-rules'
 import { createFieldPermissionMap } from '@/utils/field-permissions'
+import { normalizeRulePattern, normalizeValidationRules } from '@/utils/validation-presets'
 import AiFormLayoutNodes from './AiFormLayoutNodes.vue'
 
 const props = defineProps({
@@ -297,15 +298,37 @@ const visibleFieldSchema = computed(() => flattenFieldNodes(conditionVisibleSche
 const formRules = computed(() => {
   const rules = {}
   visibleFieldSchema.value.forEach((field) => {
-    if (field.rules) {
-      rules[field.field] = withRequiredRule(field, normalizeFieldRules(field, field.rules))
+    const normalizedField = normalizeFieldValidationState(field)
+    const fieldRules = collectRuntimeFieldRules(normalizedField)
+    if (fieldRules.length) {
+      rules[normalizedField.field] = withRequiredRule(normalizedField, normalizeFieldRules(normalizedField, fieldRules))
     }
-    else if (field.required) {
-      rules[field.field] = buildRequiredRule(field)
+    else if (normalizedField.required) {
+      rules[normalizedField.field] = buildRequiredRule(normalizedField)
     }
   })
   return rules
 })
+
+function normalizeFieldValidationState(field = {}) {
+  const validation = field.validation || field.props?.validation || {}
+  if (!validation.required)
+    return field
+  return {
+    ...field,
+    required: true,
+    requiredMessage: field.requiredMessage || validation.requiredMessage,
+  }
+}
+
+function collectRuntimeFieldRules(field = {}) {
+  const rules = []
+  if (field.rules)
+    rules.push(...(Array.isArray(field.rules) ? field.rules : [field.rules]))
+  const validation = field.validation || field.props?.validation || {}
+  rules.push(...normalizeValidationRules(validation))
+  return rules.filter(Boolean)
+}
 
 function buildRequiredRule(field) {
   const inputTypes = ['input', 'textarea', 'number', 'inputNumber']
@@ -385,7 +408,7 @@ function normalizeFieldRules(field, fieldRules) {
   const needsCustomEmptyValidator = isDateLikeType(field.type) || isSelectionLikeType(field.type) || field.type === 'number' || field.type === 'inputNumber'
 
   const normalizedRules = rules.map((sourceRule) => {
-    const withKeyRule = { ...(sourceRule || {}), key: sourceRule?.key || field.field }
+    const withKeyRule = normalizeRulePattern({ ...(sourceRule || {}), key: sourceRule?.key || field.field })
     if (!needsCustomEmptyValidator || !sourceRule?.required || sourceRule.validator)
       return withKeyRule
     const rule = withKeyRule

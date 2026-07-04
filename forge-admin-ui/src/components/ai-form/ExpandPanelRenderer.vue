@@ -1,6 +1,6 @@
 <template>
   <ExpandTablePanel
-    v-if="panel.type === 'table'"
+    v-if="isTableLikePanel"
     :panel="panel"
     :data="data"
     :row="row"
@@ -72,4 +72,6 @@ const fallbackPanel = computed(() => ({
   ...props.panel,
   descriptions: props.panel.descriptions || { fields: [] },
 }))
+
+const isTableLikePanel = computed(() => ['table', 'quantity-balance', 'quantity-ledger', 'quantity-lock'].includes(props.panel.type))
 </script>

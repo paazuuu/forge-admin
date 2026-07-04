@@ -212,6 +212,12 @@ public class BusinessAppService extends ServiceImpl<BusinessAppMapper, AiBusines
         JSONObject options = readOptions(app.getOptions());
         JSONObject adminMenu = readAdminMenu(options);
         Long menuResourceId = readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId")));
+        if (!Integer.valueOf(1).equals(app.getStatus())) {
+            if (menuResourceId != null) {
+                menuRegisterAdapter.disableMenu(menuResourceId);
+            }
+            return;
+        }
         if (!isManagementMenuEnabled(app, options, adminMenu)) {
             detachManagementMenuIfExists(menuResourceId);
             adminMenu.remove("menuResourceId");

@@ -70,7 +70,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'success'])
 
-const visible = ref(false)
+const visible = ref(props.show)
 const loading = ref(false)
 const submitLoading = ref(false)
 const aiLoading = ref(false)
@@ -266,7 +266,7 @@ watch(() => props.show, (val) => {
     loadColumns()
     loadDictTypes()
   }
-})
+}, { immediate: true })
 
 watch(visible, (val) => {
   emit('update:show', val)

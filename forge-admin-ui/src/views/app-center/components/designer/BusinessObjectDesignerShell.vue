@@ -235,7 +235,7 @@ const emit = defineEmits([
   'openFields',
   'openFunctionMarket',
 ])
-const navCollapsed = ref(true)
+const navCollapsed = ref(false)
 
 const navItems = [
   { key: 'basic', label: '基本信息', icon: OptionsOutline },

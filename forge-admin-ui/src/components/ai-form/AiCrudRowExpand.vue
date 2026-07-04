@@ -94,7 +94,21 @@
         </header>
         <div class="expand-panel-body">
           <n-spin :show="panelState(panel).loading">
+            <n-alert
+              v-if="panelState(panel).error"
+              type="error"
+              size="small"
+              :show-icon="false"
+            >
+              {{ panelState(panel).error }}
+              <template #action>
+                <n-button text size="small" @click="reloadPanel(panel)">
+                  重试
+                </n-button>
+              </template>
+            </n-alert>
             <ExpandPanelRenderer
+              v-else
               :panel="panel"
               :row="row"
               :data="panelState(panel).data"

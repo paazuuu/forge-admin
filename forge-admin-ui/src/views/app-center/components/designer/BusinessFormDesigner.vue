@@ -50,8 +50,32 @@
         </div>
       </div>
 
-      <div class="form-builder-grid" :class="{ 'relation-mode': !isPrimaryObjectActive }">
+      <div class="form-builder-grid" :class="{ 'relation-mode': !isPrimaryObjectActive, 'has-relation-summary': isPrimaryObjectActive }">
         <template v-if="isPrimaryObjectActive">
+          <section class="relation-overview-bar">
+            <div class="relation-overview-main">
+              <strong>关系与级联</strong>
+              <span v-if="relationFormRows.length">
+                已配置 {{ relationFormRows.length }} 个关联子表，可继续维护内嵌新增、编辑和详情展示。
+              </span>
+              <span v-else>
+                未配置关联子表，可在这里维护主子表关系、级联和内嵌表单。
+              </span>
+            </div>
+            <div v-if="relationFormRows.length" class="relation-overview-tags">
+              <n-tag
+                v-for="row in relationFormRows"
+                :key="row.key"
+                size="small"
+                :bordered="false"
+              >
+                {{ row.title }} · {{ row.selectedCount || 0 }}/{{ row.fieldCount || 0 }} 字段
+              </n-tag>
+            </div>
+            <n-button size="small" type="primary" secondary @click="$emit('openRelations')">
+              配置关系与级联
+            </n-button>
+          </section>
           <BusinessFormCreateDesigner
             v-if="useLegacyFormCreateDesigner"
             ref="formCreateDesignerRef"
@@ -1166,6 +1190,15 @@ function booleanFlag(value) {
   return value === true || value === 'true'
 }
 
+function firstNonBlank(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text)
+      return text
+  }
+  return ''
+}
+
 function normalizeRelationFormRows(relations = [], groups = []) {
   return (relations || [])
     .map((relation, index) => {
@@ -1612,21 +1645,29 @@ function mergeFieldWithFormComponent(field = {}, formComponent = null, component
     return field
   const props = formComponent.props || {}
   const defaults = COMPONENT_FIELD_DEFAULTS[componentType] || {}
+  const mergedDictType = firstNonBlank(
+    props.dictType,
+    field.dictType,
+    field.basicProps?.dictType,
+    field.advancedProps?.dictType,
+    formComponent.advancedProps?.dictType,
+  )
   return {
     ...applyComponentFieldDefaults(field, defaults),
     componentType: componentType || field.componentType,
-    dictType: props.dictType ?? field.dictType,
+    dictType: mergedDictType || field.dictType,
     referenceObjectCode: props.referenceObjectCode ?? field.referenceObjectCode,
     referenceDisplayField: props.referenceDisplayField ?? field.referenceDisplayField,
     formulaConfig: props.formulaConfig ?? field.formulaConfig ?? formComponent.advancedProps?.formulaConfig ?? null,
     basicProps: {
       ...(field.basicProps || {}),
       ...(props || {}),
+      ...(mergedDictType ? { dictType: mergedDictType } : {}),
     },
     advancedProps: {
       ...(field.advancedProps || {}),
       ...(formComponent.advancedProps || {}),
-      ...(props.dictType !== undefined ? { dictType: props.dictType } : {}),
+      ...(mergedDictType ? { dictType: mergedDictType } : {}),
     },
   }
 }
@@ -1641,11 +1682,17 @@ function syncDesignerFieldWithFormComponent(field = {}, formComponent = null) {
 
   const props = formComponent.props || {}
   const label = formComponent.label || field.fieldName || field.label || field.fieldCode || field.field || '字段'
+  const maxLength = resolveNumber(props.maxlength, null)
   return {
     ...field,
     fieldName: label,
     label,
+    length: maxLength || field.length,
     required: Boolean(formComponent.validation?.required),
+    validation: {
+      ...(field.validation || {}),
+      ...(formComponent.validation || {}),
+    },
     readonly: Boolean(formComponent.visibility?.readonly),
     defaultValue: Object.prototype.hasOwnProperty.call(props, 'defaultValue') ? props.defaultValue : field.defaultValue,
     formVisible: formComponent.visibility?.hidden !== true,
@@ -1988,8 +2035,50 @@ defineExpose({
   padding: 0;
 }
 
+.form-builder-grid.has-relation-summary {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .form-builder-grid.relation-mode {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.relation-overview-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #f8fbff;
+  padding: 10px 12px;
+}
+
+.relation-overview-main {
+  min-width: 0;
+}
+
+.relation-overview-main strong,
+.relation-overview-main span {
+  display: block;
+}
+
+.relation-overview-main strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.relation-overview-main span {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.relation-overview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 420px;
 }
 
 .relation-object-workbench {
@@ -2338,6 +2427,16 @@ defineExpose({
 @container (max-width: 860px) {
   .form-builder-grid {
     grid-template-columns: 1fr;
+  }
+
+  .relation-overview-bar {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+  }
+
+  .relation-overview-tags {
+    justify-content: flex-start;
+    max-width: none;
   }
 
   .relation-canvas-grid {

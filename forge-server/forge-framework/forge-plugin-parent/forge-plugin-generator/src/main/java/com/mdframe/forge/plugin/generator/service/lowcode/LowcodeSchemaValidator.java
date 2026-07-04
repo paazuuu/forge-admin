@@ -43,7 +43,8 @@ public class LowcodeSchemaValidator {
     );
     private static final Set<String> COMPONENT_TYPES = Set.of(
             "input", "textarea", "select", "radio", "checkbox", "switch", "date", "datetime", "time",
-            "number", "upload", "imageUpload", "fileUpload", "cascader", "treeSelect",
+            "number", "input-number", "inputNumber", "inputnumber",
+            "upload", "imageUpload", "fileUpload", "cascader", "treeSelect",
             "dictSelect", "orgTreeSelect", "userSelect", "regionTreeSelect", "objectReference", "recordSelector"
     );
     private static final Set<String> QUERY_TYPES = Set.of(
@@ -237,6 +238,9 @@ public class LowcodeSchemaValidator {
         }
         if (StringUtils.isBlank(zone.getZoneKey()) || !ZONE_KEYS.contains(zone.getZoneKey())) {
             throw new BusinessException("不支持的页面区域: " + zone.getZoneKey());
+        }
+        if ("toolbar".equals(zone.getZoneKey())) {
+            return;
         }
         List<String> refs = zone.getFieldRefs();
         if (refs == null) {

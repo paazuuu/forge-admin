@@ -645,6 +645,46 @@
                       @update:value="updateDefaultValue"
                     />
                   </n-form-item>
+                  <n-form-item label="字段约束">
+                    <div class="field-constraint-config">
+                      <div v-if="supportsFieldMaxLength" class="option-editor-row two-columns">
+                        <n-input-number
+                          :value="selectedFieldMaxLength"
+                          :min="1"
+                          :max="2048"
+                          :show-button="false"
+                          clearable
+                          placeholder="最大长度"
+                          @update:value="updateFieldMaxLength"
+                        />
+                        <n-switch
+                          :value="selectedComponent.props?.showCount === true"
+                          size="small"
+                          @update:value="updateComponent({ props: { showCount: $event } })"
+                        >
+                          <template #checked>
+                            计数
+                          </template>
+                          <template #unchecked>
+                            计数
+                          </template>
+                        </n-switch>
+                      </div>
+                      <n-select
+                        :value="selectedComponent.validation?.preset || ''"
+                        :options="commonValidationOptions"
+                        clearable
+                        placeholder="常用校验：手机号、邮箱、身份证等"
+                        @update:value="updateValidationPreset"
+                      />
+                      <n-input
+                        :value="selectedComponent.validation?.pattern || ''"
+                        clearable
+                        placeholder="正则表达式会随常用校验自动填入"
+                        @update:value="updateComponent({ validation: { pattern: $event || undefined } })"
+                      />
+                    </div>
+                  </n-form-item>
                   <n-form-item label="自动编号">
                     <div class="auto-code-config">
                       <div class="switch-line compact">
@@ -1199,6 +1239,23 @@
                       clearable
                       placeholder="为空时使用默认提示"
                       @update:value="updateComponent({ validation: { requiredMessage: $event } })"
+                    />
+                  </n-form-item>
+                  <n-form-item label="常用校验">
+                    <n-select
+                      :value="selectedComponent.validation?.preset || ''"
+                      :options="commonValidationOptions"
+                      clearable
+                      placeholder="选择手机号、邮箱等规则"
+                      @update:value="updateValidationPreset"
+                    />
+                  </n-form-item>
+                  <n-form-item v-if="selectedComponent.validation?.preset" label="校验提示">
+                    <n-input
+                      :value="selectedComponent.validation?.message || ''"
+                      clearable
+                      placeholder="为空时使用规则默认提示"
+                      @update:value="updateComponent({ validation: { message: $event || undefined } })"
                     />
                   </n-form-item>
                   <n-form-item label="正则表达式 Pattern">
@@ -2656,11 +2713,11 @@
                     </label>
                   </div>
                 </div>
-                <div v-if="firstCrudExpandPanel?.dataSource?.type === 'api'" class="crud-expand-config-section">
+                <div v-if="['api', 'quantity'].includes(firstCrudExpandPanel?.dataSource?.type)" class="crud-expand-config-section">
                   <div class="crud-expand-section-title">
-                    接口参数
+                    {{ firstCrudExpandPanel?.dataSource?.type === 'quantity' ? '数量查询参数' : '接口参数' }}
                   </div>
-                  <label class="crud-expand-config-field">
+                  <label v-if="firstCrudExpandPanel?.dataSource?.type === 'api'" class="crud-expand-config-field">
                     <span>
                       接口地址
                     </span>
@@ -2680,7 +2737,7 @@
                       :value="stringifyJsonProp(firstCrudExpandPanel?.dataSource?.paramsMap || {})"
                       type="textarea"
                       :autosize="{ minRows: 2, maxRows: 4 }"
-                      placeholder="例如 {&quot;orderId&quot;:&quot;row.id&quot;}"
+                      placeholder="例如 {&quot;sourceRecordId&quot;:&quot;${row.id}&quot;}"
                       @update:value="updateFirstCrudExpandParamsMap"
                     />
                   </label>
@@ -3990,6 +4047,7 @@ import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.v
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
 import { getDictData } from '@/composables/useDict'
+import { COMMON_VALIDATION_PRESETS, getValidationPreset } from '@/utils/validation-presets'
 import BusinessFieldPropertyPanel from '../BusinessFieldPropertyPanel.vue'
 import { cloneValue, findDesignerComponentPath, getDesignerComponent, isFieldComponent, isLayoutComponent, normalizeFormDesignerSchema, updateDesignerComponent, updateDesignerLayout } from '../form-first/formDesignerSchema'
 import { camelToSnake } from '../form-first/namingUtils'
@@ -4080,6 +4138,10 @@ const formStyleExpandedNames = ref(['position', 'layout', 'typography', 'appeara
 const allSelectedBasicExpandNames = ['identity', 'gridQuick', 'field', 'button', 'options', 'crud-field', 'temporal', 'assist', 'validation']
 const allFormBasicExpandNames = ['assets', 'layout', 'permissions', 'events', 'spacing', 'actions']
 const allFormStyleExpandNames = ['position', 'spacing', 'typography', 'appearance', 'custom-style']
+const commonValidationOptions = COMMON_VALIDATION_PRESETS.map(item => ({
+  label: item.label,
+  value: item.value,
+}))
 const propertySearchKeyword = ref('')
 const propertySearchHit = ref('')
 const selectedCodeDraft = ref('')
@@ -4133,6 +4195,13 @@ const selectedFieldAsset = computed(() => {
     return code === selectedFieldCode.value
   })
   return normalizeSelectedFieldAsset(matched || createFieldAssetFromSelectedComponent())
+})
+const supportsFieldMaxLength = computed(() => ['input', 'textarea'].includes(selectedComponent.value?.componentKey))
+const selectedFieldMaxLength = computed(() => {
+  const fromProps = normalizePositiveInteger(selectedComponent.value?.props?.maxlength)
+  if (fromProps)
+    return fromProps
+  return normalizePositiveInteger(selectedFieldAsset.value?.length)
 })
 const selectedFormulaConfig = computed(() => selectedFieldAsset.value?.formulaConfig || null)
 const selectedFormulaSummary = computed(() => {
@@ -4470,12 +4539,16 @@ const expandPanelTypeOptions = [
   { label: '描述信息', value: 'descriptions' },
   { label: '子表表格', value: 'table' },
   { label: '只读表单', value: 'form' },
+  { label: '数量余额', value: 'quantity-balance' },
+  { label: '数量流水', value: 'quantity-ledger' },
+  { label: '数量锁定', value: 'quantity-lock' },
   { label: '多面板 Tabs', value: 'tabs' },
   { label: '自定义插槽', value: 'custom' },
 ]
 const expandDataSourceTypeOptions = [
   { label: '当前行数据', value: 'row' },
   { label: '接口加载', value: 'api' },
+  { label: '数量台账', value: 'quantity' },
   { label: '静态数据', value: 'static' },
 ]
 const modalContentModeOptions = [
@@ -4806,6 +4879,64 @@ function updateComponentHidden(value) {
   })
 }
 
+function updateValidationPreset(value) {
+  const preset = getValidationPreset(value)
+  const nextValidation = {
+    ...(selectedComponent.value?.validation || {}),
+    preset: value || '',
+    pattern: value ? preset?.pattern || '' : undefined,
+    message: value ? preset?.message || '' : undefined,
+  }
+  if (!value) {
+    nextValidation.pattern = ''
+    nextValidation.message = ''
+  }
+  updateComponent({ validation: nextValidation })
+  const asset = selectedFieldAsset.value
+  if (!asset || !selectedFieldCode.value)
+    return
+  emit('fieldAssetUpdated', {
+    ...asset,
+    fieldCode: selectedFieldCode.value,
+    validation: nextValidation,
+  })
+}
+
+function normalizePositiveInteger(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number) || number <= 0)
+    return null
+  return Math.floor(number)
+}
+
+function updateFieldMaxLength(value) {
+  const maxLength = normalizePositiveInteger(value)
+  updateComponent({
+    props: {
+      maxlength: maxLength || undefined,
+      showCount: maxLength ? true : undefined,
+    },
+  })
+  const asset = selectedFieldAsset.value
+  if (!asset || !selectedFieldCode.value)
+    return
+  const basicProps = { ...(asset.basicProps || {}) }
+  if (maxLength) {
+    basicProps.maxlength = maxLength
+    basicProps.showCount = true
+  }
+  else {
+    delete basicProps.maxlength
+    delete basicProps.showCount
+  }
+  emit('fieldAssetUpdated', {
+    ...asset,
+    fieldCode: selectedFieldCode.value,
+    length: maxLength || null,
+    basicProps,
+  })
+}
+
 function openFieldFormulaPanel() {
   if (!selectedFieldAsset.value)
     return
@@ -4843,6 +4974,9 @@ function buildFieldAssetComponentPatch(payload = {}, formulaConfig = null, field
   if (payload.basicProps && Object.prototype.hasOwnProperty.call(payload.basicProps, 'recordSelector'))
     propsPatch.recordSelector = payload.basicProps.recordSelector || undefined
 
+  const payloadValidation = payload.validation && typeof payload.validation === 'object'
+    ? { ...payload.validation }
+    : null
   const patch = {
     label: payload.fieldName || selectedComponent.value?.label || fieldCode,
     props: propsPatch,
@@ -4852,8 +4986,15 @@ function buildFieldAssetComponentPatch(payload = {}, formulaConfig = null, field
       formulaConfig,
     },
   }
+  if (payloadValidation) {
+    patch.validation = {
+      ...(selectedComponent.value?.validation || {}),
+      ...payloadValidation,
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'required')) {
     patch.validation = {
+      ...(patch.validation || selectedComponent.value?.validation || {}),
       required: Boolean(payload.required),
       requiredMessage: payload.required ? `${payload.fieldName || selectedComponent.value?.label || fieldCode}不能为空` : '',
     }
@@ -4877,6 +5018,7 @@ function normalizeSelectedFieldAsset(source = {}) {
     fieldCode,
     fieldName: source.fieldName || source.label || component.label || fieldCode,
     columnName: source.columnName || component.fieldBinding?.columnName || camelToSnake(fieldCode),
+    validation: source.validation || component.validation || {},
     formulaConfig,
   }
 }
@@ -4919,6 +5061,7 @@ function createFieldAssetFromSelectedComponent() {
     fieldStatus: 'ENABLED',
     referenceObjectCode: component.props?.referenceObjectCode || '',
     referenceDisplayField: component.props?.referenceDisplayField || '',
+    validation: component.validation || {},
     placeholder: component.props?.placeholder || '',
     remark: component.label || '',
     sortOrder: Number(component.props?.sortOrder ?? component.layout?.order ?? 0),
@@ -6346,12 +6489,14 @@ function createDefaultCrudExpandPanel() {
 
 function normalizeCrudExpandPanelPatch(panel = {}) {
   const type = panel.type || 'descriptions'
+  const quantityPanel = ['quantity-balance', 'quantity-ledger', 'quantity-lock'].includes(type)
   return {
     ...panel,
-    key: panel.key || (type === 'table' ? 'detailTable' : 'summary'),
-    title: panel.title || (type === 'table' ? '明细' : '概览'),
+    key: panel.key || (type === 'table' ? 'detailTable' : quantityPanel ? type : 'summary'),
+    title: panel.title || (type === 'table' ? '明细' : quantityPanel ? expandPanelTypeOptions.find(item => item.value === type)?.label : '概览'),
     type,
-    dataSource: panel.dataSource || { type: 'row' },
+    dataSource: quantityPanel ? { ...(panel.dataSource || {}), type: 'quantity', queryType: type } : panel.dataSource || { type: 'row' },
+    quantity: quantityPanel ? { ...(panel.quantity || {}), queryType: type } : panel.quantity,
     descriptions: panel.descriptions || { columns: 3, fields: resolveDefaultCrudDescriptionFields() },
     table: panel.table || { rowKey: 'id', columns: [], pagination: false, maxHeight: 320 },
   }
@@ -7590,6 +7735,16 @@ onBeforeUnmount(() => {
 .validation-panel {
   display: grid;
   gap: 10px;
+}
+
+.field-constraint-config {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #f8fbff;
+  padding: 10px;
 }
 
 .switch-line.compact {

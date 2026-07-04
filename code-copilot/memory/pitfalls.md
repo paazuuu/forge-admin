@@ -241,6 +241,31 @@ Vite dev server 的 `node_modules/.vite` 预构建缓存与浏览器中已加载
 
 ---
 
+## 8. 异步弹窗使用 v-if 首次打开无响应
+
+**发现日期**: 2026-07-03
+
+**问题描述**:
+`/generator/table` 页面点击“字段”“预览”没有弹窗响应。父组件使用 `v-if="showXxxModal"` 懒加载弹窗，并通过 `v-model:show` 传入 `show=true`；子弹窗内部如果写 `const visible = ref(false)` 且监听 `props.show` 未开启 `immediate`，组件创建时不会把首个 `show=true` 同步到内部 `visible`。
+
+**解决方案**:
+这类弹窗内部可直接用父级初始值初始化，并让 `props.show` watcher 立即执行：
+
+```js
+const visible = ref(props.show)
+
+watch(() => props.show, (val) => {
+  visible.value = val
+}, { immediate: true })
+```
+
+**影响范围**:
+- 使用 `defineAsyncComponent` 懒加载的弹窗
+- 父组件用 `v-if + v-model:show` 控制挂载和显示的弹窗
+- 首次打开时需要立即加载数据的弹窗，例如字段配置、代码预览、导入表、AI 建表
+
+---
+
 ## 7. 示例流程初始化覆盖用户 BPMN 节点配置
 
 **发现日期**: 2026-06-30
@@ -2492,3 +2517,80 @@ collectTaskFormAssets(objectCode) -> mergeCodeAppAssets(providerAssets, codeAppM
 **影响范围**:
 - `forge-server` 后端 Maven 定向单测。
 - SDD `/test`、阶段收尾验证、Review 修复验证和归档前验收。
+
+## 93. 低代码设计器 zone props 保存成功不代表运行态可见
+
+**发现日期**: 2026-07-03
+
+**问题描述**:
+详情设计器已经把数量区块保存到 `detail` zone props 的 `quantityPanels`，行展开组件也支持数量面板渲染，但发布后的真实运行页详情弹窗仍不展示数量区块。原因是设计器协议只留在 page schema 中，没有经 `LowcodeRuntimeConfigBuilder` 发布到 `options`，前端运行页、预览页和页面块也没有把该 prop 传给 `AiCrudPage`。
+
+**解决方案**:
+- 新增低代码设计器配置项时，必须同时检查保存协议、后端运行配置构建、真实运行页、低代码预览页、页面块渲染器和基础组件 props 六个入口。
+- 对详情区块这类 runtime-only 配置，后端建议统一发布到 `options` 下的通用字段，例如 `options.detailPanels`，前端再透传给 `AiCrudPage`。
+- 验收不能只看设计器保存成功，还要检查发布运行态 `crudProps` 是否能读到同名配置。
+
+**影响范围**:
+- `BusinessDetailDesigner`、`LowcodeRuntimeConfigBuilder`、`views/ai/crud-page.vue`。
+- `LowcodePreviewPane`、`GridBlockRenderer` 和所有依赖 `AiCrudPage` 的低代码运行态页面。
+
+## 94. 低代码自动编号不能只依赖配置迁移
+
+**发现日期**: 2026-07-03
+
+**问题描述**:
+物料新增时报 `Column 'material_code' cannot be null`。前端表单已经把“物料编号”设计为自动生成，但实际新增请求里仍可能带 `materialCode=null`，如果后端只在字段 JSON 中显式存在 `generation` 配置时才生成编号，配置迁移未执行、旧配置未补齐或协议路径不一致时，空值会直接进入动态 `INSERT`。
+
+**解决方案**:
+- 自动编号的最终生成必须在后端新增链路完成，前端只负责配置和展示。
+- `DynamicCrudService` 除读取显式 `generation` 配置外，还应对 `Code` / `No`、`_code` / `_no`、标签含“编号/单号”的字段做平台级约定兜底。
+- 兜底只在字段无值且存在对应编码规则时生效；编码规则不存在时跳过，避免误伤普通 code 字段。
+- 字段显式配置了 `generation`，即使是 `enabled=false`，也必须尊重显式配置，不再走约定兜底。
+- 定向单测必须检查 `Tests run`，根 POM 默认 skip 时要使用 `-Penable-tests`。
+
+**影响范围**:
+- `DynamicCrudService` 低代码新增链路。
+- 所有业务对象的编号、单号、编码字段。
+- 采购仓储、CRM、合同财务等通过低代码运行配置发布的业务应用。
+
+## 95. 业务对象设计器重建字段必须保留运行态元数据
+
+**发现日期**: 2026-07-03
+
+**问题描述**:
+采购仓储对象进入设计器保存后，原本配置好的状态字典下拉、仓库/供应商记录选择器和自动编号配置退化成普通输入框或数字输入框，发布时继续报“选择器缺少业务对象编码”“字典字段必须配置字典类型”，新增时也会要求用户手填编号。
+
+**根本原因**:
+设计器保存会按表单/页面协议重新构造模型字段。如果只根据本次前端 payload 生成字段，而不合并数据库里已有 `model_schema`、旧运行态 `edit_schema/search_schema/columns_schema` 和 `page_schema.fieldSettings`，就会丢掉 `dictType`、`basicProps.recordSelector`、`basicProps.generation`、引用字段、公式配置等运行态关键元数据。
+
+**解决方案**:
+- `BusinessObjectDesignerService` 在 `BusinessFieldSchemaService.buildFieldSchema()` 前就要把旧字段元数据合并回 `BusinessFieldDTO`，否则字典校验会先失败。
+- 旧运行态 schema 需要桥接回 `page_schema.fieldSettings`，发布和预览都以 `page_schema` 作为更完整的配置源。
+- 组件类型从具体业务组件退化成通用 input/number 时，应保留旧的业务组件类型和 props，除非用户显式改了字段类型。
+
+**影响范围**:
+- 所有低代码业务对象设计器保存/发布链路。
+- 字典字段、记录选择器、自动编号、公式字段、对象引用字段。
+- 采购仓储、CRM、合同财务、人事等存量低代码应用。
+
+## 96. 表单设计器 schema 归一化不能丢弃校验预设字段
+
+**发现日期**: 2026-07-04
+
+**问题描述**:
+低代码表单设计属性面板中，“常用校验”下拉选择后短暂生效，但重新选中组件或保存回显后看起来没有选上。
+
+**根本原因**:
+`formDesignerSchema.normalizeValidation()` 如果只保留 `required/requiredMessage/rules`，会在每次 `normalizeFormDesignerSchema()` 时丢弃 `preset/pattern/message`。属性面板虽然已经发出 `updateComponent({ validation: ... })`，下一轮 schema 归一化仍会把常用校验字段清掉。
+
+另一个容易漏掉的点是字段组件绑定了字段资产时，只更新画布组件不够；字段资产回写或重新选择组件时会用字段资产覆盖组件配置。
+
+**解决方案**:
+- `normalizeValidation()` 必须保留 `preset`、`pattern`、`message` 等 UI 配置字段。
+- 属性面板更新常用校验时，同时 emit `fieldAssetUpdated` 写回字段资产。
+- 清空常用校验时要写入空字符串覆盖旧值，不能删除 key，因为组件 patch 合并逻辑会保留旧字段。
+
+**影响范围**:
+- `ForgePropertyPanel.vue`
+- `form-first/formDesignerSchema.js`
+- 后续所有扩展到 `validation` 对象里的设计态配置

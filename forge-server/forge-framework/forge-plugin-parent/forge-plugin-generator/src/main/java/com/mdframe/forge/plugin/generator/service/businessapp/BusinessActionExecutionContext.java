@@ -29,4 +29,6 @@ public class BusinessActionExecutionContext {
     private Map<String, Object> formData = new LinkedHashMap<>();
 
     private Map<String, Object> extraContext = new LinkedHashMap<>();
+
+    private Map<String, Object> scopedVariables = new LinkedHashMap<>();
 }

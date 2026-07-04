@@ -1952,6 +1952,7 @@ public class DynamicCrudService {
         }
         List<AutoGenerationField> autoFields = collectAutoGenerationFields(config);
         if (autoFields.isEmpty()) {
+            applyConventionalCodeRuleFields(config, data, allowedFields);
             return;
         }
         Map<String, Object> mainPayload = extractMainPayload(data);
@@ -1980,6 +1981,7 @@ public class DynamicCrudService {
                 mainPayload.put(alias, generatedCode);
             }
         }
+        applyConventionalCodeRuleFields(config, data, allowedFields);
     }
 
     private List<AutoGenerationField> collectAutoGenerationFields(AiCrudConfig config) {
@@ -2057,6 +2059,150 @@ public class DynamicCrudService {
                 StringUtils.defaultIfBlank(text(generation.get("fillPolicy")), "EMPTY_ONLY").trim(),
                 true
         );
+    }
+
+    private void applyConventionalCodeRuleFields(AiCrudConfig config, Map<String, Object> data, Set<String> allowedFields) {
+        List<AutoGenerationField> fields = collectConventionalCodeRuleFields(config);
+        if (fields.isEmpty()) {
+            return;
+        }
+        Map<String, Object> mainPayload = extractMainPayload(data);
+        for (AutoGenerationField field : fields) {
+            Set<String> writableAliases = resolveDocumentNoWritableAliases(config,
+                    StringUtils.firstNonBlank(field.fieldName(), field.columnName()));
+            if (writableAliases.isEmpty() || hasFieldValue(mainPayload, writableAliases)) {
+                continue;
+            }
+            String generatedCode = tryGenerateConventionalCode(config, mainPayload, field);
+            if (StringUtils.isBlank(generatedCode)) {
+                continue;
+            }
+            if (allowedFields != null) {
+                allowedFields.addAll(writableAliases);
+            }
+            for (String alias : writableAliases) {
+                mainPayload.put(alias, generatedCode);
+            }
+        }
+    }
+
+    private List<AutoGenerationField> collectConventionalCodeRuleFields(AiCrudConfig config) {
+        if (config == null) {
+            return List.of();
+        }
+        Map<String, AutoGenerationField> fields = new LinkedHashMap<>();
+        Set<String> generationConfiguredAliases = new LinkedHashSet<>();
+        LowcodeModelSchema modelSchema = parseModelSchema(config);
+        if (modelSchema != null && modelSchema.getFields() != null) {
+            for (LowcodeFieldSchema field : modelSchema.getFields()) {
+                if (field != null && hasGenerationConfig(field.getBasicProps(), field.getAdvancedProps())) {
+                    addFieldAliases(generationConfiguredAliases, field.getField(), field.getColumnName());
+                    continue;
+                }
+                AutoGenerationField candidate = buildConventionalCodeRuleField(field);
+                putAutoGenerationField(fields, candidate);
+            }
+        }
+        for (Map<String, Object> editField : readEditSchemaFields(config)) {
+            String fieldName = text(editField.get("field"));
+            String columnName = StringUtils.firstNonBlank(text(editField.get("columnName")), text(editField.get("fieldCode")));
+            Map<String, Object> props = mapFrom(editField.get("props"));
+            Map<String, Object> advancedProps = mapFrom(editField.get("advancedProps"));
+            if (!firstMap(props.get("generation"), editField.get("generation"), advancedProps.get("generation")).isEmpty()) {
+                addFieldAliases(generationConfiguredAliases, fieldName, columnName);
+                continue;
+            }
+            if (matchesAnyAlias(fieldName, generationConfiguredAliases)
+                    || matchesAnyAlias(columnName, generationConfiguredAliases)) {
+                continue;
+            }
+            AutoGenerationField candidate = buildConventionalCodeRuleField(
+                    fieldName,
+                    columnName,
+                    StringUtils.firstNonBlank(text(editField.get("label")), text(editField.get("title"))),
+                    props,
+                    advancedProps
+            );
+            putAutoGenerationField(fields, candidate);
+        }
+        return new ArrayList<>(fields.values());
+    }
+
+    private AutoGenerationField buildConventionalCodeRuleField(LowcodeFieldSchema field) {
+        if (field == null || Boolean.TRUE.equals(field.getSystemField())
+                || "DISABLED".equalsIgnoreCase(StringUtils.defaultString(field.getFieldStatus()))
+                || "HIDDEN".equalsIgnoreCase(StringUtils.defaultString(field.getFieldStatus()))) {
+            return null;
+        }
+        return buildConventionalCodeRuleField(
+                field.getField(),
+                field.getColumnName(),
+                field.getLabel(),
+                field.getBasicProps(),
+                field.getAdvancedProps()
+        );
+    }
+
+    private AutoGenerationField buildConventionalCodeRuleField(String fieldName,
+                                                               String columnName,
+                                                               String label,
+                                                               Map<String, Object> basicProps,
+                                                               Map<String, Object> advancedProps) {
+        if (hasGenerationConfig(basicProps, advancedProps)) {
+            return null;
+        }
+        if (!isConventionalCodeField(fieldName, columnName, label)) {
+            return null;
+        }
+        String ruleCode = StringUtils.firstNonBlank(columnName, DynamicQueryGenerator.camelToSnake(fieldName));
+        if (StringUtils.isBlank(ruleCode)) {
+            return null;
+        }
+        return new AutoGenerationField(
+                StringUtils.trimToNull(fieldName),
+                StringUtils.trimToNull(columnName),
+                StringUtils.trimToNull(label),
+                ruleCode.trim(),
+                "ON_CREATE",
+                "EMPTY_ONLY",
+                true
+        );
+    }
+
+    private boolean hasGenerationConfig(Map<String, Object> basicProps, Map<String, Object> advancedProps) {
+        return !firstMap(
+                basicProps == null ? null : basicProps.get("generation"),
+                advancedProps == null ? null : advancedProps.get("generation")
+        ).isEmpty();
+    }
+
+    private void addFieldAliases(Set<String> aliases, String fieldName, String columnName) {
+        aliases.addAll(documentNoAliasSet(fieldName));
+        aliases.addAll(documentNoAliasSet(columnName));
+    }
+
+    private boolean isConventionalCodeField(String fieldName, String columnName, String label) {
+        String field = StringUtils.defaultString(fieldName);
+        String column = StringUtils.defaultString(columnName);
+        String fieldLower = field.toLowerCase(Locale.ROOT);
+        String columnLower = column.toLowerCase(Locale.ROOT);
+        return fieldLower.endsWith("code")
+                || fieldLower.endsWith("no")
+                || columnLower.endsWith("_code")
+                || columnLower.endsWith("_no")
+                || StringUtils.containsAny(StringUtils.defaultString(label), "编号", "单号");
+    }
+
+    private String tryGenerateConventionalCode(AiCrudConfig config,
+                                               Map<String, Object> mainPayload,
+                                               AutoGenerationField field) {
+        try {
+            return codeRuleService.generate(field.ruleCode(), buildCodeRuleContext(config, mainPayload, field));
+        } catch (BusinessException e) {
+            log.debug("[DynamicCrudService] 未使用约定编码规则生成字段, configKey={}, field={}, ruleCode={}, reason={}",
+                    config.getConfigKey(), field.fieldName(), field.ruleCode(), e.getMessage());
+            return null;
+        }
     }
 
     @SuppressWarnings("unchecked")

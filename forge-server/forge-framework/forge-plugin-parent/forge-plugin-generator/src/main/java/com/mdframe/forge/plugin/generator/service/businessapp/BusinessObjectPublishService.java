@@ -249,7 +249,7 @@ public class BusinessObjectPublishService {
 
     private LowcodePageSchema buildPublishPageSchema(BusinessObjectDesignerService.DesignerContext context) {
         LowcodePageSchema pageSchema = context.getPageSchema();
-        List<Map<String, Object>> customActions = buildRuntimeCustomActions(readDesignerOptions(context));
+        List<Map<String, Object>> customActions = buildRuntimeCustomActions(context, readDesignerOptions(context));
         if (pageSchema == null || customActions.isEmpty()) {
             return pageSchema;
         }
@@ -278,7 +278,8 @@ public class BusinessObjectPublishService {
         return zone;
     }
 
-    private List<Map<String, Object>> buildRuntimeCustomActions(Map<String, Object> designerOptions) {
+    private List<Map<String, Object>> buildRuntimeCustomActions(BusinessObjectDesignerService.DesignerContext context,
+                                                                Map<String, Object> designerOptions) {
         List<Map<String, Object>> actions = listOfMap(designerOptions.get(DESIGNER_ACTIONS_KEY));
         if (actions.isEmpty()) {
             return List.of();
@@ -298,10 +299,18 @@ public class BusinessObjectPublishService {
             }
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("key", StringUtils.defaultIfBlank(actionCode, "custom_" + result.size()));
+            item.put("actionCode", StringUtils.defaultIfBlank(actionCode, "custom_" + result.size()));
             item.put("label", StringUtils.defaultIfBlank(actionName, "自定义操作"));
             item.put("position", position);
             item.put("type", resolveActionButtonType(actionType));
             item.put("actionType", resolveRuntimeActionType(actionType));
+            AiBusinessObject object = context == null ? null : context.getObject();
+            if (object != null) {
+                putIfNotBlank(item, "suiteCode", object.getSuiteCode());
+                putIfNotBlank(item, "objectCode", object.getObjectCode());
+                putIfNotBlank(item, "businessObjectCode", object.getObjectCode());
+                putIfNotBlank(item, "targetObjectCode", object.getObjectCode());
+            }
             putIfNotBlank(item, "routePath", resolveActionRoutePath(actionType, config));
             putIfNotBlank(item, "targetFormKey", text(config.get("targetFormKey")));
             putIfNotBlank(item, "openTarget", StringUtils.defaultIfBlank(text(config.get("openTarget")), "_self"));
@@ -367,6 +376,8 @@ public class BusinessObjectPublishService {
     private String resolveRuntimeActionType(String actionType) {
         return switch (actionType) {
             case "START_FLOW" -> "START_FLOW";
+            case "START_APPROVAL" -> "START_FLOW";
+            case "COMMAND" -> "COMMAND";
             case "OPEN_EXTERNAL" -> "external";
             case "TRIGGER" -> "TRIGGER";
             case "CALL_API" -> "CALL_API";
@@ -457,6 +468,9 @@ public class BusinessObjectPublishService {
         if (pageSchema.getZones() != null) {
             for (LowcodePageZone zone : pageSchema.getZones()) {
                 if (zone == null || zone.getFieldRefs() == null) {
+                    continue;
+                }
+                if ("toolbar".equals(zone.getZoneKey())) {
                     continue;
                 }
                 for (String ref : zone.getFieldRefs()) {

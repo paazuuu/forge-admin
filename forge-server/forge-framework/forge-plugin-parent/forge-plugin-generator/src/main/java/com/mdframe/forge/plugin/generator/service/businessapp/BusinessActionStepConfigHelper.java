@@ -70,6 +70,14 @@ final class BusinessActionStepConfigHelper {
 
     static Object resolvePath(String sourceField, BusinessActionExecutionContext context) {
         String field = StringUtils.trimToEmpty(sourceField);
+        if (context != null && context.getScopedVariables() != null) {
+            String root = rootSegment(field);
+            if (context.getScopedVariables().containsKey(root)) {
+                Object scoped = context.getScopedVariables().get(root);
+                String nestedPath = field.equals(root) ? "" : field.substring(root.length() + 1);
+                return readPath(scoped, nestedPath);
+            }
+        }
         if (field.startsWith("formData.")) {
             return readPath(context.getFormData(), field.substring("formData.".length()));
         }
@@ -90,6 +98,32 @@ final class BusinessActionStepConfigHelper {
             return formValue;
         }
         return readPath(context.getRecordData(), field);
+    }
+
+    static Object readPath(Object source, String path) {
+        if (source == null) {
+            return null;
+        }
+        if (StringUtils.isBlank(path)) {
+            return source;
+        }
+        Object cursor = source;
+        for (String part : path.split("\\.")) {
+            if (StringUtils.isBlank(part)) {
+                continue;
+            }
+            if (!(cursor instanceof Map<?, ?> map)) {
+                return null;
+            }
+            cursor = map.get(part);
+            if (cursor == null) {
+                cursor = map.get(camelToSnake(part));
+            }
+            if (cursor == null) {
+                cursor = map.get(snakeToCamel(part));
+            }
+        }
+        return cursor;
     }
 
     static Map<String, Object> asMap(Object value) {
@@ -134,26 +168,13 @@ final class BusinessActionStepConfigHelper {
     }
 
     static Object readPath(Map<String, Object> source, String path) {
-        if (source == null || StringUtils.isBlank(path)) {
-            return null;
-        }
-        Object cursor = source;
-        for (String part : path.split("\\.")) {
-            if (StringUtils.isBlank(part)) {
-                continue;
-            }
-            if (!(cursor instanceof Map<?, ?> map)) {
-                return null;
-            }
-            cursor = map.get(part);
-            if (cursor == null) {
-                cursor = map.get(camelToSnake(part));
-            }
-            if (cursor == null) {
-                cursor = map.get(snakeToCamel(part));
-            }
-        }
-        return cursor;
+        return readPath((Object) source, path);
+    }
+
+    private static String rootSegment(String path) {
+        String value = StringUtils.trimToEmpty(path);
+        int dotIndex = value.indexOf('.');
+        return dotIndex < 0 ? value : value.substring(0, dotIndex);
     }
 
     private static Object resolveSystemValue(String sourceField, BusinessActionExecutionContext context) {

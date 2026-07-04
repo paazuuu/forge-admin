@@ -17,6 +17,22 @@ public class BusinessRecordSelectorQueryDTO {
 
     private String objectCode;
 
+    private String businessObjectCode;
+
+    private String targetObjectCode;
+
+    private String targetEntityCode;
+
+    private String candidateObjectCode;
+
+    private String referenceObjectCode;
+
+    private String refObjectCode;
+
+    private String sourceObjectCode;
+
+    private String targetCode;
+
     private String keyword;
 
     private List<String> keywordFields = new ArrayList<>();

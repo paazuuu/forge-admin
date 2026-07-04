@@ -1060,6 +1060,9 @@ function normalizeValidation(validation = {}) {
   return {
     required: Boolean(source.required),
     requiredMessage: source.requiredMessage || '',
+    preset: source.preset || source.presetCode || source.commonRule || '',
+    pattern: source.pattern || '',
+    message: source.message || '',
     rules: Array.isArray(source.rules) ? source.rules : [],
   }
 }

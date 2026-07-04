@@ -66,6 +66,8 @@
           v-model:value="childFormData"
           :children-config="visibleChildrenConfig"
           :readonly="isDetailMode"
+          :parent-form-data="formData"
+          :context="formContext"
         />
       </div>
       <footer class="form-only-footer">
@@ -363,6 +365,16 @@
                   v-model:value="childFormData"
                   :children-config="visibleChildrenConfig"
                   :readonly="isDetailMode"
+                  :parent-form-data="formData"
+                  :context="formContext"
+                />
+                <AiCrudRowExpand
+                  v-if="showDetailPanels"
+                  class="ai-crud-detail-panels"
+                  :config="normalizedDetailPanelConfig"
+                  :row="formData"
+                  :row-key-value="detailPanelRowKeyValue"
+                  :context="formContext"
                 />
               </n-tab-pane>
               <n-tab-pane name="flow" tab="流程进度" display-directive="show:lazy">
@@ -403,6 +415,16 @@
                 v-model:value="childFormData"
                 :children-config="visibleChildrenConfig"
                 :readonly="isDetailMode"
+                :parent-form-data="formData"
+                :context="formContext"
+              />
+              <AiCrudRowExpand
+                v-if="showDetailPanels"
+                class="ai-crud-detail-panels"
+                :config="normalizedDetailPanelConfig"
+                :row="formData"
+                :row-key-value="detailPanelRowKeyValue"
+                :context="formContext"
               />
             </template>
           </div>
@@ -472,6 +494,16 @@
             v-model:value="childFormData"
             :children-config="visibleChildrenConfig"
             :readonly="isDetailMode"
+            :parent-form-data="formData"
+            :context="formContext"
+          />
+          <AiCrudRowExpand
+            v-if="showDetailPanels"
+            class="ai-crud-detail-panels"
+            :config="normalizedDetailPanelConfig"
+            :row="formData"
+            :row-key-value="detailPanelRowKeyValue"
+            :context="formContext"
           />
         </n-tab-pane>
         <n-tab-pane name="flow" tab="流程进度" display-directive="show:lazy">
@@ -513,6 +545,16 @@
           v-model:value="childFormData"
           :children-config="visibleChildrenConfig"
           :readonly="isDetailMode"
+          :parent-form-data="formData"
+          :context="formContext"
+        />
+        <AiCrudRowExpand
+          v-if="showDetailPanels"
+          class="ai-crud-detail-panels"
+          :config="normalizedDetailPanelConfig"
+          :row="formData"
+          :row-key-value="detailPanelRowKeyValue"
+          :context="formContext"
         />
       </template>
 
@@ -572,6 +614,8 @@
           v-model:value="childFormData"
           :children-config="visibleChildrenConfig"
           :readonly="isDetailMode"
+          :parent-form-data="formData"
+          :context="formContext"
         />
 
         <!-- 抽屉底部按钮 -->
@@ -1026,9 +1070,36 @@ function normalizeRuntimeAction(action, row) {
     key,
     label: action.label || key,
     actionType: action.actionType || key,
-    objectCode: action.objectCode || row?._runtimeObjectCode,
+    objectCode: resolveRuntimeObjectCode(action, row),
     recordId: action.recordId || resolveRowKeyValue(row),
   }
+}
+
+function resolveRuntimeObjectCode(action = {}, row = {}) {
+  return firstNonBlankText(
+    action.objectCode,
+    action.businessObjectCode,
+    action.targetObjectCode,
+    action.referenceObjectCode,
+    action.candidateObjectCode,
+    action.props?.objectCode,
+    action.props?.businessObjectCode,
+    props.businessObjectCode,
+    row?._runtimeObjectCode,
+    row?.objectCode,
+    row?.businessObjectCode,
+    row?.targetObjectCode,
+    row?.referenceObjectCode,
+  )
+}
+
+function firstNonBlankText(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text)
+      return text
+  }
+  return ''
 }
 
 function sameAction(left, right) {
@@ -1216,7 +1287,7 @@ function handleConfiguredActionSuccess(action = {}) {
 }
 
 async function startFlowAction(action, row) {
-  const objectCode = action.objectCode || row?._runtimeObjectCode || row?.objectCode
+  const objectCode = resolveRuntimeObjectCode(action, row)
   const recordId = action.recordId || resolveRowKeyValue(row)
   if (!objectCode || !recordId) {
     window.$message.warning('缺少业务对象或记录ID，无法发起主流程')
@@ -1335,7 +1406,7 @@ function closeCommandActionModal() {
 
 async function executeCommandAction(action, row, formData = {}, options = {}) {
   const config = normalizeCommandActionRuntimeConfig(action)
-  const objectCode = action.objectCode || props.businessObjectCode || row?._runtimeObjectCode || row?.objectCode
+  const objectCode = resolveRuntimeObjectCode(action, row)
   const recordId = action.recordId || resolveRowKeyValue(row)
   const actionCode = action.actionCode || action.key
   if (!objectCode || !actionCode) {
@@ -1651,7 +1722,7 @@ function confirmConfiguredAction(message, options = {}) {
 function getActionLoadingKey(action, row) {
   const actionType = String(action?.actionType || action?.key || '').toUpperCase()
   const actionKey = action?.key || action?.actionCode || action?.label || ''
-  const objectCode = action?.objectCode || row?._runtimeObjectCode || row?.objectCode || ''
+  const objectCode = resolveRuntimeObjectCode(action, row)
   const recordId = action?.recordId || resolveRowKeyValue(row) || ''
   return `${actionType}:${actionKey}:${objectCode}:${recordId}`
 }
@@ -2249,6 +2320,24 @@ const showDefaultDetailContent = computed(() => {
 
 const showDefaultDetailChildren = computed(() => {
   return hasChildrenConfig.value && showDefaultDetailContent.value
+})
+const normalizedDetailPanelConfig = computed(() => normalizeExpandConfig({
+  enabled: isDetailMode.value && Array.isArray(props.detailPanels) && props.detailPanels.length > 0,
+  lazy: true,
+  cache: false,
+  layout: {
+    mode: props.detailPanels?.length > 1 ? 'tabs' : 'single',
+    density: 'compact',
+    padding: 12,
+  },
+  panels: props.detailPanels || [],
+}, props.childrenConfig))
+const showDetailPanels = computed(() => isDetailMode.value && normalizedDetailPanelConfig.value.enabled && normalizedDetailPanelConfig.value.panels.length > 0)
+const detailPanelRowKeyValue = computed(() => {
+  const value = resolveRowKeyValue(formData.value)
+  if (isUsableKeyValue(value))
+    return value
+  return resolveRowKeyValue(currentRow.value) || `detail_${modalStatus.value || 'current'}`
 })
 const hasSearchSchema = computed(() => !props.formOnly && props.showSearch && props.searchSchema.length > 0)
 
@@ -3616,7 +3705,7 @@ async function handleDetail(row) {
 }
 
 async function loadDetailRuntime(row) {
-  const objectCode = props.businessObjectCode || row?._runtimeObjectCode || row?.objectCode
+  const objectCode = resolveRuntimeObjectCode({}, row)
   const recordId = resolveRowKeyValue(row)
   if (!objectCode || !recordId) {
     return
@@ -5048,6 +5137,12 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-crud-detail-panels {
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 /* 响应式设计 */

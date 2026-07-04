@@ -541,6 +541,7 @@ function buildRuntimeCrudProps(cfg) {
     editSchema: transformEditFields(cfg.editSchema, options.editFormLayout, fieldMetaMap),
     childrenConfig: transformChildrenConfig(options.masterDetailConfig?.children || []),
     expandConfig: options.expandConfig || cfg.expandConfig || {},
+    detailPanels: options.detailPanels || cfg.detailPanels || [],
     apiConfig: cfg.apiConfig || {},
     options,
     rowKey: cfg.rowKey || 'id',

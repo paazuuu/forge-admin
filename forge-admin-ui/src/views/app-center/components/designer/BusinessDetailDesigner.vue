@@ -93,6 +93,71 @@
             </label>
           </div>
         </section>
+
+        <section class="detail-section">
+          <div class="detail-section-head">
+            <div>
+              <h4>数量区块</h4>
+              <p>按当前记录映射查询参数，展示通用数量余额、流水或锁定记录。</p>
+            </div>
+            <n-space size="small">
+              <n-button size="small" secondary @click="addQuantityPanel('quantity-balance')">
+                添加余额
+              </n-button>
+              <n-button size="small" secondary @click="addQuantityPanel('quantity-ledger')">
+                添加流水
+              </n-button>
+              <n-button size="small" secondary @click="addQuantityPanel('quantity-lock')">
+                添加锁定
+              </n-button>
+            </n-space>
+          </div>
+
+          <div v-if="detailOptions.quantityPanels.length" class="quantity-panel-list">
+            <article v-for="(panel, index) in detailOptions.quantityPanels" :key="panel.key" class="quantity-panel-item">
+              <div class="quantity-panel-head">
+                <strong>{{ panel.title || quantityPanelTypeLabel(panel.type) }}</strong>
+                <n-button text type="error" size="small" @click="removeQuantityPanel(index)">
+                  移除
+                </n-button>
+              </div>
+              <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
+                <n-form-item-gi label="区块类型">
+                  <n-select
+                    v-model:value="panel.type"
+                    :options="quantityPanelTypeOptions"
+                    @update:value="value => updateQuantityPanelType(panel, value)"
+                  />
+                </n-form-item-gi>
+                <n-form-item-gi label="区块标题">
+                  <n-input v-model:value="panel.title" placeholder="数量余额 / 数量流水" @update:value="markDirty" />
+                </n-form-item-gi>
+                <n-form-item-gi label="每页条数">
+                  <n-input-number v-model:value="panel.pageSize" :min="1" :max="200" style="width: 100%" @update:value="markDirty" />
+                </n-form-item-gi>
+                <n-form-item-gi :span="3" label="查询参数映射">
+                  <n-input
+                    v-model:value="panel.paramsText"
+                    type="textarea"
+                    :autosize="{ minRows: 2, maxRows: 6 }"
+                    placeholder="sourceRecordId=${row.id}，每行一个"
+                    @update:value="markDirty"
+                  />
+                </n-form-item-gi>
+                <n-form-item-gi :span="3" label="展示字段">
+                  <n-input
+                    v-model:value="panel.displayFieldsText"
+                    type="textarea"
+                    :autosize="{ minRows: 2, maxRows: 6 }"
+                    placeholder="field:显示名，每行一个；留空使用默认列"
+                    @update:value="markDirty"
+                  />
+                </n-form-item-gi>
+              </n-grid>
+            </article>
+          </div>
+          <n-empty v-else description="暂无数量区块" />
+        </section>
       </main>
 
       <aside class="detail-summary-pane">
@@ -109,6 +174,10 @@
           <div class="source-row">
             <span>编辑关联数据</span>
             <strong>{{ inlineRelationText }}</strong>
+          </div>
+          <div class="source-row">
+            <span>数量区块</span>
+            <strong>{{ detailOptions.quantityPanels.length }} 个</strong>
           </div>
         </section>
       </aside>
@@ -185,6 +254,11 @@ const fieldPreviewRows = computed(() => formFieldRefs.value.map(ref => fieldMap.
 const relationRows = computed(() => normalizeRelationRows(props.relations || []))
 const inlineRelationCount = computed(() => relationRows.value.filter(item => item.inlineEditEnabled).length)
 const inlineRelationText = computed(() => inlineRelationCount.value ? `${inlineRelationCount.value} 个` : '未启用')
+const quantityPanelTypeOptions = [
+  { label: '数量余额', value: 'quantity-balance' },
+  { label: '数量流水', value: 'quantity-ledger' },
+  { label: '数量锁定', value: 'quantity-lock' },
+]
 const detailOptions = ref(resolveDetailOptions(detailZone.value))
 
 watch(
@@ -264,7 +338,93 @@ function resolveDetailOptions(zone) {
   return {
     showOperationLog: zoneProps.showOperationLog !== false,
     showApprovalLog: zoneProps.showApprovalLog !== false,
+    quantityPanels: normalizeQuantityPanels(zoneProps.quantityPanels),
   }
+}
+
+function normalizeQuantityPanels(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((panel, index) => normalizeQuantityPanel(panel, index))
+    .filter(Boolean)
+}
+
+function normalizeQuantityPanel(panel = {}, index = 0) {
+  const type = normalizeQuantityPanelType(panel.type || panel.quantity?.queryType || panel.dataSource?.queryType)
+  const paramsMap = panel.quantity?.paramsMap || panel.dataSource?.paramsMap || panel.dataSource?.params || {}
+  const columns = panel.table?.columns || []
+  return {
+    key: panel.key || `${type}_${Date.now()}_${index}`,
+    type,
+    title: panel.title || quantityPanelTypeLabel(type),
+    pageSize: Number(panel.quantity?.pageSize || panel.dataSource?.pageSize || 20),
+    paramsText: searchParamsToLines(paramsMap),
+    displayFieldsText: columnsToLines(columns),
+  }
+}
+
+function normalizeQuantityPanelType(type) {
+  return quantityPanelTypeOptions.some(item => item.value === type) ? type : 'quantity-balance'
+}
+
+function quantityPanelTypeLabel(type) {
+  return quantityPanelTypeOptions.find(item => item.value === type)?.label || '数量区块'
+}
+
+function addQuantityPanel(type = 'quantity-balance') {
+  const normalizedType = normalizeQuantityPanelType(type)
+  detailOptions.value.quantityPanels.push({
+    key: `${normalizedType}_${Date.now()}`,
+    type: normalizedType,
+    title: quantityPanelTypeLabel(normalizedType),
+    pageSize: 20,
+    paramsText: 'sourceRecordId=${row.id}',
+    displayFieldsText: '',
+  })
+  markDirty()
+}
+
+function removeQuantityPanel(index) {
+  detailOptions.value.quantityPanels.splice(index, 1)
+  markDirty()
+}
+
+function updateQuantityPanelType(panel, type) {
+  panel.type = normalizeQuantityPanelType(type)
+  if (!panel.title || quantityPanelTypeOptions.some(item => item.label === panel.title))
+    panel.title = quantityPanelTypeLabel(panel.type)
+  markDirty()
+}
+
+function buildQuantityPanelPayload(panel = {}) {
+  const type = normalizeQuantityPanelType(panel.type)
+  const paramsMap = parseSearchParamLines(panel.paramsText)
+  const columns = parseColumnLines(panel.displayFieldsText)
+  const result = {
+    key: panel.key || `${type}_${Date.now()}`,
+    type,
+    title: panel.title || quantityPanelTypeLabel(type),
+    dataSource: {
+      type: 'quantity',
+      queryType: type,
+      paramsMap,
+      pageSize: Number(panel.pageSize || 20),
+    },
+    quantity: {
+      queryType: type,
+      paramsMap,
+      pageNum: 1,
+      pageSize: Number(panel.pageSize || 20),
+    },
+  }
+  if (columns.length) {
+    result.table = {
+      rowKey: 'id',
+      columns,
+      pagination: false,
+      maxHeight: 320,
+    }
+  }
+  return result
 }
 
 function resolveFormFieldRefs(zone, fields) {
@@ -331,6 +491,66 @@ function parseRelationConfig(value) {
   }
 }
 
+function parseSearchParamLines(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    }
+    catch {
+      return {}
+    }
+  }
+  return text
+    .split(/\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .reduce((result, item) => {
+      const parts = item.split(/\s*(?:=>|=|:)\s*/, 2)
+      const key = String(parts[0] || '').trim()
+      const paramValue = String(parts[1] || '').trim()
+      if (key && paramValue)
+        result[key] = paramValue
+      return result
+    }, {})
+}
+
+function searchParamsToLines(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  return Object.entries(source)
+    .map(([key, item]) => `${key}=${item}`)
+    .join('\n')
+}
+
+function parseColumnLines(value) {
+  return String(value || '')
+    .split(/\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const parts = item.split(/\s*(?:=>|=|:)\s*/, 2)
+      const field = String(parts[0] || '').trim()
+      const label = String(parts[1] || field).trim()
+      return field ? { prop: field, label, minWidth: 120 } : null
+    })
+    .filter(Boolean)
+}
+
+function columnsToLines(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((column) => {
+      const field = column.prop || column.field || column.key
+      if (!field)
+        return ''
+      return `${field}:${column.label || column.title || field}`
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
 function relationSentence(relation = {}) {
   const source = relation.sourceObjectName || relation.sourceObjectCode || '当前对象'
   const target = relation.targetObjectName || relation.targetObjectCode || '目标对象'
@@ -392,6 +612,7 @@ function buildDetailZone(currentZone) {
       showRelationTab: relationRows.value.length > 0,
       showOperationLog: detailOptions.value.showOperationLog,
       showApprovalLog: detailOptions.value.showApprovalLog,
+      quantityPanels: detailOptions.value.quantityPanels.map(buildQuantityPanelPayload),
     },
   }
 }
@@ -613,6 +834,7 @@ defineExpose({
 
 .relation-preview-list,
 .detail-toggle-list,
+.quantity-panel-list,
 .detail-summary-pane {
   display: grid;
   gap: 10px;
@@ -629,6 +851,27 @@ defineExpose({
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.quantity-panel-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #fdfefe;
+  padding: 12px;
+}
+
+.quantity-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quantity-panel-head strong {
+  color: #111827;
+  font-size: 13px;
 }
 
 .detail-summary-pane {

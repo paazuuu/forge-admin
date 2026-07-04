@@ -1,12 +1,19 @@
 package com.mdframe.forge.plugin.generator.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessQuantityLock;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessQuantityQueryDTO;
+import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLockVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface BusinessQuantityLockMapper extends BaseMapper<AiBusinessQuantityLock> {
+
+    Page<BusinessQuantityLockVO> selectLockPage(Page<BusinessQuantityLockVO> page,
+                                                @Param("tenantId") Long tenantId,
+                                                @Param("query") BusinessQuantityQueryDTO query);
 
     AiBusinessQuantityLock selectByIdempotencyKey(@Param("tenantId") Long tenantId,
                                                  @Param("idempotencyKey") String idempotencyKey);

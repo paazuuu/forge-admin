@@ -1,8 +1,14 @@
 import { request } from '@/utils'
 import { postEncrypt } from '@/utils/encrypt-request'
+import {
+  queryBusinessQuantityBalance,
+  queryBusinessQuantityLedger,
+  queryBusinessQuantityLock,
+} from '@/api/business-app'
 
 const DEFAULT_DATA_FIELD = 'records'
 const DEFAULT_TOTAL_FIELD = 'total'
+const QUANTITY_PANEL_TYPES = ['quantity-balance', 'quantity-ledger', 'quantity-lock']
 
 export function normalizeExpandConfig(config = {}, childrenConfig = []) {
   if (!config || config.enabled !== true)
@@ -45,7 +51,8 @@ function normalizeExpandPanel(panel, index, childrenConfig = []) {
     type,
     title: panel.title || childConfig?.title || childConfig?.label || defaultPanelTitle(type, index),
     dataSource: normalizeDataSource(panel.dataSource, type, childConfig),
-    table: normalizeTableConfig(panel.table, childConfig),
+    table: normalizeTableConfig(panel.table, childConfig, type),
+    quantity: normalizeQuantityConfig(panel.quantity, type),
     descriptions: normalizeDescriptionsConfig(panel.descriptions),
     form: normalizeFormConfig(panel.form),
     panels: Array.isArray(panel.panels)
@@ -65,6 +72,8 @@ function normalizeDataSource(dataSource, type, childConfig) {
   const source = dataSource || childConfig?.dataSource || {}
   if (source.type)
     return source
+  if (isQuantityPanelType(type))
+    return { ...source, type: 'quantity', queryType: type }
   if (source.api || source.url)
     return { ...source, type: 'api' }
   if (childConfig?.api || childConfig?.listApi)
@@ -74,11 +83,19 @@ function normalizeDataSource(dataSource, type, childConfig) {
   return { ...source, type: 'row' }
 }
 
-function normalizeTableConfig(table = {}, childConfig) {
+function normalizeTableConfig(table = {}, childConfig, type = '') {
   const source = table || {}
+  const configuredColumns = Array.isArray(source.columns) && source.columns.length
+    ? source.columns
+    : Array.isArray(childConfig?.columns) && childConfig.columns.length
+      ? childConfig.columns
+      : Array.isArray(childConfig?.schema) && childConfig.schema.length
+        ? childConfig.schema
+        : null
+  const columns = configuredColumns || defaultQuantityColumns(type)
   return {
     rowKey: source.rowKey || childConfig?.rowKey || 'id',
-    columns: source.columns || childConfig?.columns || childConfig?.schema || [],
+    columns,
     pagination: source.pagination === true ? {} : false,
     maxHeight: source.maxHeight ?? 320,
     scrollX: source.scrollX,
@@ -88,6 +105,54 @@ function normalizeTableConfig(table = {}, childConfig) {
     hideSelection: source.hideSelection !== false,
     showToolbar: source.showToolbar === true,
     showRenderModeSwitch: false,
+  }
+}
+
+function defaultQuantityColumns(type = '') {
+  if (type === 'quantity-balance') {
+    return [
+      { prop: 'accountCode', label: '账户', minWidth: 120 },
+      { prop: 'itemCode', label: '数量项', minWidth: 120 },
+      { prop: 'dimensionKey', label: '维度', minWidth: 140 },
+      { prop: 'quantity', label: '余额', width: 120 },
+      { prop: 'lockedQuantity', label: '锁定', width: 120 },
+      { prop: 'availableQuantity', label: '可用', width: 120 },
+    ]
+  }
+  if (type === 'quantity-ledger') {
+    return [
+      { prop: 'operationType', label: '操作', width: 120 },
+      { prop: 'accountCode', label: '账户', minWidth: 120 },
+      { prop: 'itemCode', label: '数量项', minWidth: 120 },
+      { prop: 'dimensionKey', label: '维度', minWidth: 140 },
+      { prop: 'quantityDelta', label: '变动', width: 120 },
+      { prop: 'balanceQuantity', label: '余额', width: 120 },
+      { prop: 'sourceRecordId', label: '来源记录', minWidth: 140 },
+      { prop: 'createTime', label: '发生时间', minWidth: 160 },
+    ]
+  }
+  if (type === 'quantity-lock') {
+    return [
+      { prop: 'lockCode', label: '锁定号', minWidth: 140 },
+      { prop: 'accountCode', label: '账户', minWidth: 120 },
+      { prop: 'itemCode', label: '数量项', minWidth: 120 },
+      { prop: 'dimensionKey', label: '维度', minWidth: 140 },
+      { prop: 'lockQuantity', label: '锁定数量', width: 120 },
+      { prop: 'remainingQuantity', label: '剩余', width: 120 },
+      { prop: 'lockStatus', label: '状态', width: 120 },
+    ]
+  }
+  return []
+}
+
+function normalizeQuantityConfig(config = {}, type = '') {
+  if (!isQuantityPanelType(type))
+    return config || {}
+  return {
+    queryType: type,
+    pageNum: 1,
+    pageSize: 20,
+    ...(config || {}),
   }
 }
 
@@ -116,6 +181,9 @@ function defaultPanelTitle(type, index) {
     form: '详情',
     tabs: '更多',
     custom: '扩展',
+    'quantity-balance': '数量余额',
+    'quantity-ledger': '数量流水',
+    'quantity-lock': '数量锁定',
   }
   return titleMap[type] || `面板 ${index + 1}`
 }
@@ -158,6 +226,9 @@ export function resolveExpressionValue(expression, context = {}) {
     return undefined
   if ((text.startsWith('\'') && text.endsWith('\'')) || (text.startsWith('"') && text.endsWith('"')))
     return text.slice(1, -1)
+  const templateMatched = text.match(/^\$\{(.+)\}$/)
+  if (templateMatched)
+    return resolveExpressionValue(templateMatched[1], context)
   if (/^-?\d+(?:\.\d+)?$/.test(text))
     return Number(text)
   return text.split('.').reduce((value, key) => {
@@ -179,6 +250,8 @@ export async function loadExpandPanelData(panel, row, context = {}) {
     return dataSource.data
   if (dataSource.type === 'api')
     return loadApiExpandData(panel, row, context)
+  if (dataSource.type === 'quantity' || isQuantityPanelType(panel?.type))
+    return loadQuantityExpandData(panel, row, context)
   return row
 }
 
@@ -253,4 +326,23 @@ export function extractExpandTotal(response, panel = {}) {
   if (!payload || typeof payload !== 'object')
     return 0
   return Number(payload[totalField] || payload.total || payload.count || 0)
+}
+
+function isQuantityPanelType(type = '') {
+  return QUANTITY_PANEL_TYPES.includes(String(type || ''))
+}
+
+async function loadQuantityExpandData(panel, row, context = {}) {
+  const queryType = panel?.quantity?.queryType || panel?.dataSource?.queryType || panel?.type
+  const paramsMap = panel?.quantity?.paramsMap || panel?.dataSource?.paramsMap || panel?.dataSource?.params || {}
+  const params = {
+    ...buildExpandParams(paramsMap, row, context),
+    pageNum: panel?.quantity?.pageNum || panel?.dataSource?.pageNum || 1,
+    pageSize: panel?.quantity?.pageSize || panel?.dataSource?.pageSize || 20,
+  }
+  if (queryType === 'quantity-ledger')
+    return extractExpandData(await queryBusinessQuantityLedger(params), panel)
+  if (queryType === 'quantity-lock')
+    return extractExpandData(await queryBusinessQuantityLock(params), panel)
+  return extractExpandData(await queryBusinessQuantityBalance(params), panel)
 }

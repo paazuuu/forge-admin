@@ -29,6 +29,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class BusinessRecordSelectorService {
 
+    static final String OR_LIKE_SEARCH_KEY = "__orLike";
+
     private static final Set<String> SYSTEM_FIELDS = Set.of(
             "tenantId", "tenant_id", "createBy", "create_by", "createTime", "create_time",
             "createDept", "create_dept", "updateBy", "update_by", "updateTime", "update_time",
@@ -41,7 +43,9 @@ public class BusinessRecordSelectorService {
 
     public BusinessRecordSelectorResultVO query(BusinessRecordSelectorQueryDTO dto, PageQuery pageQuery) {
         BusinessRecordSelectorQueryDTO query = dto == null ? new BusinessRecordSelectorQueryDTO() : dto;
-        if (StringUtils.isBlank(query.getObjectCode())) {
+        String objectCode = resolveObjectCode(query);
+        query.setObjectCode(objectCode);
+        if (StringUtils.isBlank(objectCode)) {
             throw new BusinessException("选择器缺少业务对象编码");
         }
         AiBusinessObject object = resolveObject(query);
@@ -81,6 +85,22 @@ public class BusinessRecordSelectorService {
         return result;
     }
 
+    String resolveObjectCode(BusinessRecordSelectorQueryDTO query) {
+        if (query == null) {
+            return null;
+        }
+        return StringUtils.firstNonBlank(
+                StringUtils.trimToNull(query.getObjectCode()),
+                StringUtils.trimToNull(query.getBusinessObjectCode()),
+                StringUtils.trimToNull(query.getTargetObjectCode()),
+                StringUtils.trimToNull(query.getTargetEntityCode()),
+                StringUtils.trimToNull(query.getCandidateObjectCode()),
+                StringUtils.trimToNull(query.getReferenceObjectCode()),
+                StringUtils.trimToNull(query.getRefObjectCode()),
+                StringUtils.trimToNull(query.getSourceObjectCode()),
+                StringUtils.trimToNull(query.getTargetCode()));
+    }
+
     private AiBusinessObject resolveObject(BusinessRecordSelectorQueryDTO query) {
         AiBusinessObject object = StringUtils.isNotBlank(query.getSuiteCode())
                 ? businessObjectMapper.selectByObjectCode(resolveTenantId(), query.getSuiteCode().trim(), query.getObjectCode().trim())
@@ -107,15 +127,40 @@ public class BusinessRecordSelectorService {
         Map<String, Object> params = new LinkedHashMap<>();
         if (query.getSearchParams() != null) {
             query.getSearchParams().forEach((key, value) -> {
-                if (StringUtils.isNotBlank(key) && !isEmpty(value)) {
-                    params.put(key, value);
+                String field = normalizeField(key);
+                if (StringUtils.isNotBlank(field) && !isInternalField(field) && !isEmpty(value)) {
+                    params.put(field, value);
                 }
             });
         }
-        if (StringUtils.isNotBlank(query.getKeyword()) && query.getKeywordFields() != null && query.getKeywordFields().size() == 1) {
-            params.put(query.getKeywordFields().get(0), query.getKeyword().trim());
+        String keyword = StringUtils.trimToNull(query.getKeyword());
+        List<String> keywordFields = normalizeKeywordFields(query.getKeywordFields());
+        if (keyword != null && keywordFields.size() == 1) {
+            params.put(keywordFields.get(0), keyword);
+        } else if (keyword != null && keywordFields.size() > 1) {
+            List<Map<String, Object>> orLikeConditions = keywordFields.stream()
+                    .map(field -> {
+                        Map<String, Object> condition = new LinkedHashMap<>();
+                        condition.put("field", field);
+                        condition.put("value", keyword);
+                        return condition;
+                    })
+                    .toList();
+            params.put(OR_LIKE_SEARCH_KEY, orLikeConditions);
         }
         return params;
+    }
+
+    private List<String> normalizeKeywordFields(List<String> keywordFields) {
+        if (keywordFields == null || keywordFields.isEmpty()) {
+            return List.of();
+        }
+        return keywordFields.stream()
+                .map(this::normalizeField)
+                .filter(StringUtils::isNotBlank)
+                .filter(field -> !isInternalField(field))
+                .distinct()
+                .toList();
     }
 
     private List<BusinessRecordSelectorResultVO.SelectorColumnVO> resolveColumns(BusinessRecordSelectorQueryDTO query,
@@ -205,7 +250,9 @@ public class BusinessRecordSelectorService {
             query.getKeywordFields().forEach(field -> addAllowedField(fields, field));
         }
         if (query.getSearchParams() != null) {
-            query.getSearchParams().keySet().forEach(field -> addAllowedField(fields, field));
+            query.getSearchParams().keySet().stream()
+                    .filter(field -> !OR_LIKE_SEARCH_KEY.equals(field))
+                    .forEach(field -> addAllowedField(fields, field));
         }
         if (query.getFieldMappings() != null) {
             query.getFieldMappings().forEach(mapping -> {

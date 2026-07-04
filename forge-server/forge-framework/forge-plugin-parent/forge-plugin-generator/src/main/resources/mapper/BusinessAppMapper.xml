@@ -195,6 +195,25 @@
                  id DESC
     </select>
 
+    <select id="selectAppsBySuiteCodes" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_app
+        WHERE tenant_id = #{tenantId}
+        <choose>
+          <when test="suiteCodes != null and suiteCodes.size() > 0">
+            AND suite_code IN
+            <foreach collection="suiteCodes" item="suiteCode" open="(" close=")" separator=",">
+              #{suiteCode}
+            </foreach>
+          </when>
+          <otherwise>
+            AND 1 = 0
+          </otherwise>
+        </choose>
+        ORDER BY suite_code ASC, sort_order ASC, id ASC
+    </select>
+
     <select id="countByAppCode" resultType="java.lang.Long">
         SELECT COUNT(1)
         FROM ai_business_app

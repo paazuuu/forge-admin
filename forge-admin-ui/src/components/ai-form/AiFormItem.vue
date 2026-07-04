@@ -703,11 +703,20 @@
     :title="field.props?.selectorTitle || field.selectorTitle || `选择${field.label || '记录'}`"
     :suite-code="recordSelectorConfig.suiteCode"
     :object-code="recordSelectorConfig.objectCode"
+    :business-object-code="recordSelectorConfig.businessObjectCode"
+    :target-object-code="recordSelectorConfig.targetObjectCode"
+    :target-entity-code="recordSelectorConfig.targetEntityCode"
+    :candidate-object-code="recordSelectorConfig.candidateObjectCode"
+    :reference-object-code="recordSelectorConfig.referenceObjectCode"
+    :ref-object-code="recordSelectorConfig.refObjectCode"
+    :source-object-code="recordSelectorConfig.sourceObjectCode"
+    :target-code="recordSelectorConfig.targetCode"
     :multiple="false"
     :display-fields="recordSelectorConfig.displayFields"
     :keyword-fields="recordSelectorConfig.keywordFields"
     :field-mappings="recordSelectorConfig.fieldMappings"
     :search-params="recordSelectorConfig.searchParams"
+    :runtime-context="recordSelectorRuntimeContext"
     @confirm="handleRecordSelectorConfirm"
   />
 </template>
@@ -732,7 +741,7 @@ import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
 import AiCustomSelect from './AiCustomSelect.vue'
 import AiFormGroupTitle from './AiFormGroupTitle.vue'
 import AiFormSectionTitle from './AiFormSectionTitle.vue'
-import { applyRecordFieldMappings, extractSelectorRawRecord } from './record-selector-utils'
+import { applyRecordFieldMappings, extractSelectorRawRecord, normalizeRecordSelectorConfig } from './record-selector-utils'
 
 const props = defineProps({
   field: {
@@ -863,16 +872,22 @@ const componentControlClass = computed(() => [
   `ai-form-control--${props.field?.type || 'input'}`,
   props.field?.componentClass,
 ].filter(Boolean))
-const recordSelectorConfig = computed(() => ({
-  ...(props.field?.recordSelector || {}),
-  ...(props.field?.basicProps?.recordSelector || {}),
-  ...(props.field?.props?.recordSelector || {}),
-  suiteCode: props.field?.suiteCode || props.field?.props?.suiteCode || props.field?.recordSelector?.suiteCode || props.field?.basicProps?.recordSelector?.suiteCode || props.field?.props?.recordSelector?.suiteCode || '',
-  objectCode: props.field?.objectCode || props.field?.props?.objectCode || props.field?.recordSelector?.objectCode || props.field?.basicProps?.recordSelector?.objectCode || props.field?.props?.recordSelector?.objectCode || '',
-  displayFields: props.field?.displayFields || props.field?.props?.displayFields || props.field?.recordSelector?.displayFields || props.field?.basicProps?.recordSelector?.displayFields || props.field?.props?.recordSelector?.displayFields || [],
-  keywordFields: props.field?.keywordFields || props.field?.props?.keywordFields || props.field?.recordSelector?.keywordFields || props.field?.basicProps?.recordSelector?.keywordFields || props.field?.props?.recordSelector?.keywordFields || [],
-  fieldMappings: props.field?.fieldMappings || props.field?.props?.fieldMappings || props.field?.recordSelector?.fieldMappings || props.field?.basicProps?.recordSelector?.fieldMappings || props.field?.props?.recordSelector?.fieldMappings || [],
-  searchParams: props.field?.searchParams || props.field?.props?.searchParams || props.field?.recordSelector?.searchParams || props.field?.basicProps?.recordSelector?.searchParams || props.field?.props?.recordSelector?.searchParams || {},
+const recordSelectorConfig = computed(() => normalizeRecordSelectorConfig(props.field))
+const recordSelectorRuntimeContext = computed(() => ({
+  ...(props.context || {}),
+  formData: props.formData || {},
+  form: props.formData || {},
+  record: props.context?.record || props.formData || {},
+  row: props.context?.currentRow || props.context?.row || props.formData || {},
+  query: route.query || {},
+  params: route.params || {},
+  route: {
+    query: route.query || {},
+    params: route.params || {},
+    path: route.path,
+    fullPath: route.fullPath,
+    name: route.name,
+  },
 }))
 const recordSelectorDisplayText = computed(() => {
   const config = recordSelectorConfig.value

@@ -78,7 +78,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show'])
 
-const visible = ref(false)
+const visible = ref(props.show)
 const loading = ref(false)
 const selectedFile = ref('')
 const fileMap = ref({})
@@ -96,7 +96,7 @@ watch(() => props.show, (val) => {
   if (val && props.tableName) {
     loadPreview()
   }
-})
+}, { immediate: true })
 
 watch(visible, (val) => {
   emit('update:show', val)

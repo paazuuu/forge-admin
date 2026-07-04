@@ -79,6 +79,7 @@ public class BusinessFieldSchemaService {
         String fieldType = normalizeFieldType(dto.getFieldType(), fieldName);
         validateFieldTypeOptions(fieldType, dto, dtoFieldBinding);
         FieldDefaults defaults = FIELD_DEFAULTS.getOrDefault(fieldType, FIELD_DEFAULTS.get("TEXT"));
+        String dictType = resolveDictType(dto);
 
         String fieldCode = normalizeFieldCode(StringUtils.defaultIfBlank(
                 StringUtils.defaultIfBlank(dto.getFieldCode(), bindingFieldCode),
@@ -102,7 +103,7 @@ public class BusinessFieldSchemaService {
         schema.setFormVisible(dto.getFormVisible() == null || Boolean.TRUE.equals(dto.getFormVisible()));
         schema.setComponentType(StringUtils.defaultIfBlank(dto.getComponentType(), defaults.componentType()));
         schema.setQueryType(StringUtils.defaultIfBlank(dto.getQueryType(), defaults.queryType()));
-        schema.setDictType(StringUtils.defaultString(dto.getDictType()));
+        schema.setDictType(StringUtils.defaultString(dictType));
         schema.setSensitiveType(resolveSensitiveType(fieldType, dto.getSensitiveType()));
         schema.setEncryptAlgorithm(StringUtils.defaultString(dto.getEncryptAlgorithm()));
         schema.setSortable(Boolean.TRUE.equals(dto.getSortable()));
@@ -236,7 +237,7 @@ public class BusinessFieldSchemaService {
         boolean designerDraftField = "designer".equalsIgnoreCase(StringUtils.defaultString(mapText(fieldBinding, "source")))
                 && readBoolean(fieldBinding.get("createIfMissing"), false);
         if (DICT_FIELD_TYPES.contains(fieldType)
-                && StringUtils.isBlank(dto.getDictType())
+                && StringUtils.isBlank(resolveDictType(dto))
                 && !designerDraftField
                 && !hasInlineOptions(dto)) {
             throw new BusinessException("字典字段必须配置字典类型");
@@ -258,10 +259,35 @@ public class BusinessFieldSchemaService {
         if (dto == null) {
             return false;
         }
-        Object config = copyProps(dto.getBasicProps()).get("recordSelector");
-        if (config instanceof Map<?, ?> map) {
-            Object objectCode = map.get("objectCode");
-            return objectCode != null && StringUtils.isNotBlank(String.valueOf(objectCode));
+        Map<String, Object> basicProps = copyProps(dto.getBasicProps());
+        Map<String, Object> advancedProps = copyProps(dto.getAdvancedProps());
+        Object[] configs = new Object[] {
+                basicProps.get("recordSelector"),
+                basicProps.get("selector"),
+                basicProps.get("selectorConfig"),
+                basicProps.get("recordSelectorConfig"),
+                advancedProps.get("recordSelector"),
+                advancedProps.get("selector"),
+                advancedProps.get("selectorConfig"),
+                advancedProps.get("recordSelectorConfig")
+        };
+        for (Object config : configs) {
+            if (!(config instanceof Map<?, ?> map)) {
+                continue;
+            }
+            String objectCode = StringUtils.firstNonBlank(
+                    text(map.get("objectCode")),
+                    text(map.get("businessObjectCode")),
+                    text(map.get("targetObjectCode")),
+                    text(map.get("targetEntityCode")),
+                    text(map.get("candidateObjectCode")),
+                    text(map.get("referenceObjectCode")),
+                    text(map.get("refObjectCode")),
+                    text(map.get("targetCode"))
+            );
+            if (StringUtils.isNotBlank(objectCode)) {
+                return true;
+            }
         }
         return false;
     }
@@ -274,6 +300,19 @@ public class BusinessFieldSchemaService {
         Map<String, Object> advancedProps = dto.getAdvancedProps();
         return hasOptionItems(basicProps == null ? null : basicProps.get("options"))
                 || hasOptionItems(advancedProps == null ? null : advancedProps.get("options"));
+    }
+
+    private String resolveDictType(BusinessFieldDTO dto) {
+        if (dto == null) {
+            return null;
+        }
+        Map<String, Object> basicProps = copyProps(dto.getBasicProps());
+        Map<String, Object> advancedProps = copyProps(dto.getAdvancedProps());
+        return StringUtils.firstNonBlank(
+                StringUtils.trimToNull(dto.getDictType()),
+                mapText(basicProps, "dictType"),
+                mapText(advancedProps, "dictType")
+        );
     }
 
     private boolean hasOptionItems(Object options) {
@@ -503,6 +542,10 @@ public class BusinessFieldSchemaService {
             return null;
         }
         return StringUtils.trimToNull(String.valueOf(source.get(key)));
+    }
+
+    private String text(Object value) {
+        return value == null ? null : StringUtils.trimToNull(String.valueOf(value));
     }
 
     private Map<String, Object> copyProps(Map<String, Object> source) {

@@ -355,6 +355,14 @@ export const aiCrudPageProps = {
     default: false,
   },
   /**
+   * 详情扩展面板配置，支持数量台账等只读区块
+   * @type {Array<object>}
+   */
+  detailPanels: {
+    type: Array,
+    default: () => [],
+  },
+  /**
    * 是否隐藏弹窗底部按钮
    * @type {boolean}
    */

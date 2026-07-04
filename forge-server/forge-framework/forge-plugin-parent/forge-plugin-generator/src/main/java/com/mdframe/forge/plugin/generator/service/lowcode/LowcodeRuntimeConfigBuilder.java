@@ -255,6 +255,12 @@ public class LowcodeRuntimeConfigBuilder {
         if (masterDetailRuntime) {
             options.put("masterDetailConfig", buildMasterDetailConfig(modelSchema, pageSchema));
         }
+        LowcodePageZone detailZone = findZone(pageSchema, "detail");
+        Map<String, Object> detailProps = detailZone == null || detailZone.getProps() == null ? Map.of() : detailZone.getProps();
+        Object quantityPanels = detailProps.get("quantityPanels");
+        if (quantityPanels instanceof List<?> panels && !panels.isEmpty()) {
+            options.put("detailPanels", panels);
+        }
         if (isTreeRuntime(modelSchema, pageSchema)) {
             options.put("treeConfig", buildTreeConfig(modelSchema, pageSchema, extractTreeConfigOverrides(pageSchema)));
         }
@@ -526,6 +532,10 @@ public class LowcodeRuntimeConfigBuilder {
             child.put("showInEdit", booleanWithDefault(refProps.get("inlineEditEnabled"), true));
             child.put("showInDetail", booleanWithDefault(refProps.get("showInDetail"), true));
             child.put("saveMode", normalizeChildSaveMode(refProps.get("saveMode")));
+            Object recordSelector = refProps.get("recordSelector");
+            if (recordSelector instanceof Map<?, ?> selector && !selector.isEmpty()) {
+                child.put("recordSelector", selector);
+            }
             putIfNotBlank(child, "tabTitle", text(refProps.get("tabTitle")));
             putIfNotBlank(child, "relationName", text(refProps.get("relationName")));
             child.put("fields", childFields);
@@ -1575,9 +1585,14 @@ public class LowcodeRuntimeConfigBuilder {
         copyBasicProp(field.getBasicProps(), props, "referenceObjectCode");
         copyBasicProp(field.getBasicProps(), props, "referenceDisplayField");
         copyBasicProp(field.getBasicProps(), props, "targetObjectCode");
+        copyBasicProp(field.getBasicProps(), props, "recordSelector");
+        copyBasicProp(field.getBasicProps(), props, "recordSelectorConfig");
+        copyBasicProp(field.getBasicProps(), props, "selector");
+        copyBasicProp(field.getBasicProps(), props, "selectorConfig");
         copyBasicProp(field.getBasicProps(), props, "relationKey");
         copyBasicProp(field.getBasicProps(), props, "inlineCreateEnabled");
         copyBasicProp(field.getBasicProps(), props, "showInDetail");
+        copyBasicProp(field.getBasicProps(), props, "validation");
         return props;
     }
 
@@ -1632,13 +1647,26 @@ public class LowcodeRuntimeConfigBuilder {
                 if (!(propsValue instanceof Map<?, ?> props)) {
                     continue;
                 }
+                String globalAlign = "table".equals(zoneKey) ? normalizeAlign(text(props.get("globalAlign"))) : null;
                 Object settingsValue = props.get("fieldSettings");
                 if (!(settingsValue instanceof Map<?, ?> settings)) {
+                    if (StringUtils.isNotBlank(globalAlign)) {
+                        return Map.of("align", globalAlign);
+                    }
                     continue;
                 }
                 Object value = settings.get(fieldName);
                 if (value instanceof Map<?, ?> map) {
-                    return (Map<String, Object>) map;
+                    Map<String, Object> result = new LinkedHashMap<>((Map<String, Object>) map);
+                    if (StringUtils.isNotBlank(globalAlign)
+                            && StringUtils.isBlank(normalizeAlign(StringUtils.defaultIfBlank(
+                            text(result.get("align")), text(result.get("textAlign")))))) {
+                        result.put("align", globalAlign);
+                    }
+                    return result;
+                }
+                if (StringUtils.isNotBlank(globalAlign)) {
+                    return Map.of("align", globalAlign);
                 }
             }
         }
@@ -2290,6 +2318,13 @@ public class LowcodeRuntimeConfigBuilder {
             action.put("type", StringUtils.defaultIfBlank(text(source.get("type")), "default"));
             action.put("position", position);
             action.put("actionType", StringUtils.defaultIfBlank(text(source.get("actionType")), "route"));
+            putIfNotBlank(action, "actionCode", text(source.get("actionCode")));
+            putIfNotBlank(action, "suiteCode", text(source.get("suiteCode")));
+            putIfNotBlank(action, "objectCode", text(source.get("objectCode")));
+            putIfNotBlank(action, "businessObjectCode", text(source.get("businessObjectCode")));
+            putIfNotBlank(action, "targetObjectCode", text(source.get("targetObjectCode")));
+            putIfNotBlank(action, "targetEntityCode", text(source.get("targetEntityCode")));
+            putIfNotBlank(action, "referenceObjectCode", text(source.get("referenceObjectCode")));
             Map<String, Object> actionConfig = mapValue(source.get("actionConfig"));
             if (!actionConfig.isEmpty()) {
                 action.put("actionConfig", actionConfig);
@@ -2558,12 +2593,16 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private String resolveSearchComponentType(LowcodeFieldSchema field, String queryType, Map<String, Object> pageSetting) {
+        if (hasRecordSelectorConfig(field, pageSetting)) {
+            return "recordSelector";
+        }
         String configuredType = StringUtils.defaultIfBlank(text(pageSetting.get("componentType")), text(pageSetting.get("type")));
         if (StringUtils.isNotBlank(configuredType)) {
             return normalizeEditComponentType(configuredType);
         }
         String componentType = StringUtils.defaultIfBlank(field.getComponentType(), field.getDataType());
         componentType = StringUtils.defaultIfBlank(componentType, "input");
+        componentType = normalizeEditComponentType(componentType);
         if (isBusinessSelectComponent(componentType)) {
             return componentType;
         }
@@ -2603,18 +2642,47 @@ public class LowcodeRuntimeConfigBuilder {
     }
 
     private String resolveEditComponentType(LowcodeFieldSchema field) {
+        if (hasRecordSelectorConfig(field, Map.of())) {
+            return "recordSelector";
+        }
         return normalizeEditComponentType(StringUtils.defaultIfBlank(field.getComponentType(), "input"));
     }
 
     private String resolveEditComponentType(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
+        if (hasRecordSelectorConfig(field, pageSetting)) {
+            return "recordSelector";
+        }
         String componentType = StringUtils.defaultIfBlank(text(pageSetting.get("componentType")), text(pageSetting.get("type")));
         componentType = StringUtils.defaultIfBlank(componentType, field.getComponentType());
         return normalizeEditComponentType(StringUtils.defaultIfBlank(componentType, "input"));
     }
 
+    private boolean hasRecordSelectorConfig(LowcodeFieldSchema field, Map<String, Object> pageSetting) {
+        if (field != null && field.getBasicProps() != null) {
+            Object selector = firstPresent(
+                    field.getBasicProps().get("recordSelector"),
+                    field.getBasicProps().get("recordSelectorConfig"),
+                    field.getBasicProps().get("selector"),
+                    field.getBasicProps().get("selectorConfig"));
+            if (selector instanceof Map<?, ?> map && !map.isEmpty()) {
+                return true;
+            }
+        }
+        Object props = pageSetting == null ? null : pageSetting.get("props");
+        if (props instanceof Map<?, ?> propsMap) {
+            Object selector = firstPresent(
+                    propsMap.get("recordSelector"),
+                    propsMap.get("recordSelectorConfig"),
+                    propsMap.get("selector"),
+                    propsMap.get("selectorConfig"));
+            return selector instanceof Map<?, ?> map && !map.isEmpty();
+        }
+        return false;
+    }
+
     private String normalizeEditComponentType(String componentType) {
         return switch (StringUtils.defaultString(componentType)) {
-            case "inputNumber" -> "number";
+            case "inputNumber", "input-number", "inputnumber", "integer", "money" -> "number";
             case "orgSelect", "organizationSelect", "departmentSelect", "deptSelect",
                     "departmentTreeSelect", "deptTreeSelect", "elTreeSelect", "orgName", "deptName",
                     "forgeOrgTreeSelect" -> "orgTreeSelect";

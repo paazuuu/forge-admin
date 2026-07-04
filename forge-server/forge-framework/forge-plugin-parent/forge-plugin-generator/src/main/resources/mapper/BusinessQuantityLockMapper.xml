@@ -60,6 +60,51 @@
         LIMIT 1
     </select>
 
+    <select id="selectLockPage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLockVO">
+        SELECT
+            id,
+            lock_code AS lockCode,
+            account_code AS accountCode,
+            item_code AS itemCode,
+            dimension_key AS dimensionKey,
+            lock_quantity AS lockQuantity,
+            released_quantity AS releasedQuantity,
+            committed_quantity AS committedQuantity,
+            lock_quantity - released_quantity - committed_quantity AS remainingQuantity,
+            lock_status AS lockStatus,
+            source_object_code AS sourceObjectCode,
+            source_record_id AS sourceRecordId,
+            source_detail_id AS sourceDetailId,
+            correlation_id AS correlationId,
+            remark,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM ai_business_quantity_lock
+        WHERE tenant_id = #{tenantId}
+        <if test="query.lockStatus != null and query.lockStatus != ''">
+          AND lock_status = #{query.lockStatus}
+        </if>
+        <if test="query.accountCode != null and query.accountCode != ''">
+          AND account_code = #{query.accountCode}
+        </if>
+        <if test="query.itemCode != null and query.itemCode != ''">
+          AND item_code = #{query.itemCode}
+        </if>
+        <if test="query.dimensionKey != null and query.dimensionKey != ''">
+          AND dimension_key = #{query.dimensionKey}
+        </if>
+        <if test="query.sourceObjectCode != null and query.sourceObjectCode != ''">
+          AND source_object_code = #{query.sourceObjectCode}
+        </if>
+        <if test="query.sourceRecordId != null and query.sourceRecordId != ''">
+          AND source_record_id = #{query.sourceRecordId}
+        </if>
+        <if test="query.sourceDetailId != null and query.sourceDetailId != ''">
+          AND source_detail_id = #{query.sourceDetailId}
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
     <select id="selectByLockCode" resultMap="BaseResultMap">
         SELECT
         <include refid="Base_Columns"/>

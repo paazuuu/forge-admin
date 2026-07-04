@@ -52,6 +52,19 @@ class BusinessFieldSchemaServiceTest {
         assertEquals("字典字段必须配置字典类型", error.getMessage());
     }
 
+    @Test
+    @DisplayName("dict type can be resolved from basic props")
+    void dictTypeCanBeResolvedFromBasicProps() {
+        BusinessFieldDTO dto = baseDictField();
+        dto.setDictType("");
+        dto.getBasicProps().put("dictType", "pw_common_status");
+
+        LowcodeFieldSchema schema = service.buildFieldSchema(dto);
+
+        assertEquals("pw_common_status", schema.getDictType());
+        assertEquals("DICT", schema.getBusinessFieldType());
+    }
+
     private BusinessFieldDTO baseDictField() {
         BusinessFieldDTO dto = new BusinessFieldDTO();
         dto.setFieldName("跟进方式");

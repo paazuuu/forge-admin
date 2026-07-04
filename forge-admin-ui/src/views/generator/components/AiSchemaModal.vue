@@ -105,7 +105,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'success'])
 
-const visible = ref(false)
+const visible = ref(props.show)
 const loading = ref(false)
 const refineLoading = ref(false)
 const description = ref('')
@@ -161,7 +161,7 @@ watch(() => props.show, (val) => {
     schemaResult.value = null
     description.value = ''
   }
-})
+}, { immediate: true })
 
 watch(visible, (val) => {
   emit('update:show', val)

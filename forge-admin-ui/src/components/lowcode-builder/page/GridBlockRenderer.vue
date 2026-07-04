@@ -1529,6 +1529,7 @@ const effectiveRuntimeCrudProps = computed(() => {
     scrollX: blockProps.scrollX || props.runtimeCrudProps.scrollX,
     resizable: blockProps.resizable ?? props.runtimeCrudProps.resizable,
     expandConfig: blockProps.expandConfig || props.runtimeCrudProps.expandConfig || {},
+    detailPanels: blockProps.detailPanels || props.runtimeCrudProps.detailPanels || [],
     listMethod: blockProps.listMethod || props.runtimeCrudProps.listMethod,
     listDataField: blockProps.listDataField || props.runtimeCrudProps.listDataField,
     listTotalField: blockProps.listTotalField || props.runtimeCrudProps.listTotalField,
@@ -1748,7 +1749,10 @@ function hasAction(key) {
 
 function fieldAlign(fieldName) {
   const align = props.block.props?.fieldSettings?.[fieldName]?.align
-  return ['left', 'center', 'right'].includes(align) ? align : 'left'
+  if (['left', 'center', 'right'].includes(align))
+    return align
+  const globalAlign = props.block.props?.globalAlign
+  return ['left', 'center', 'right'].includes(globalAlign) ? globalAlign : 'left'
 }
 
 function toOptionalNumber(value) {

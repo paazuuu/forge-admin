@@ -61,22 +61,12 @@
                 </n-form-item-gi>
               </n-grid>
 
-              <n-grid :cols="developerMode && showStorageOptions ? 3 : 1" :x-gap="12">
+              <n-grid v-if="developerMode" :cols="supportsPrecision ? 2 : 1" :x-gap="12">
                 <n-form-item-gi v-if="developerMode" label="字段英文名">
                   <n-input
                     v-model:value="form.fieldCode"
                     :disabled="field.systemField"
                     placeholder="例如：customerLevel"
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi v-if="developerMode && supportsLength" label="字段长度">
-                  <n-input-number
-                    v-model:value="form.length"
-                    :min="1"
-                    :max="lengthMax"
-                    :show-button="false"
-                    :disabled="field.systemField"
-                    class="full-input"
                   />
                 </n-form-item-gi>
                 <n-form-item-gi v-if="developerMode && supportsPrecision" label="小数位">
@@ -110,6 +100,53 @@
                   :disabled="field.systemField"
                 />
               </n-form-item>
+
+              <section class="field-constraint-config">
+                <div class="field-constraint-head">
+                  <strong>字段约束</strong>
+                  <span>最大长度和常用格式校验会随字段配置保存。</span>
+                </div>
+                <n-grid :cols="supportsLength ? 2 : 1" :x-gap="12">
+                  <n-form-item-gi v-if="supportsLength" label="最大长度">
+                    <n-input-number
+                      v-model:value="form.length"
+                      :min="1"
+                      :max="lengthMax"
+                      :show-button="false"
+                      :disabled="field.systemField"
+                      class="full-input"
+                    />
+                  </n-form-item-gi>
+                  <n-form-item-gi label="常用校验">
+                    <n-select
+                      v-model:value="form.validationPreset"
+                      :options="commonValidationOptions"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="选择手机号、邮箱等规则"
+                      @update:value="onValidationPresetChange"
+                    />
+                  </n-form-item-gi>
+                </n-grid>
+                <n-grid :cols="2" :x-gap="12">
+                  <n-form-item-gi label="校验提示">
+                    <n-input
+                      v-model:value="form.validationMessage"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="为空时使用规则默认提示"
+                    />
+                  </n-form-item-gi>
+                  <n-form-item-gi label="正则表达式">
+                    <n-input
+                      v-model:value="form.validationPattern"
+                      :disabled="field.systemField"
+                      clearable
+                      placeholder="选择常用校验后自动填充"
+                    />
+                  </n-form-item-gi>
+                </n-grid>
+              </section>
 
               <section v-if="isRecordSelectorField" class="record-selector-config">
                 <div class="record-selector-config-head">
@@ -185,6 +222,15 @@
                     type="textarea"
                     :autosize="{ minRows: 2, maxRows: 6 }"
                     placeholder="source=target，每行一个"
+                  />
+                </n-form-item>
+                <n-form-item label="过滤参数">
+                  <n-input
+                    v-model:value="form.recordSelectorSearchParamsText"
+                    :disabled="field.systemField"
+                    type="textarea"
+                    :autosize="{ minRows: 2, maxRows: 6 }"
+                    placeholder="warehouseId=${formData.warehouseId}，每行一个"
                   />
                 </n-form-item>
               </section>
@@ -469,6 +515,7 @@ import { previewFormula, validateFormula } from '@/api/formula'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import FieldTypeSelect from '@/components/lowcode-builder/shared/FieldTypeSelect.vue'
 import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
+import { COMMON_VALIDATION_PRESETS, getValidationPreset } from '@/utils/validation-presets'
 import { camelToSnake } from './form-first/namingUtils'
 import FormulaConfigPanel from './formula/FormulaConfigPanel.vue'
 import FormulaDebuggerPanel from './formula/FormulaDebuggerPanel.vue'
@@ -588,6 +635,10 @@ const sensitiveOptions = [
   { label: '银行卡', value: 'BANK_CARD' },
   { label: '邮箱', value: 'EMAIL' },
 ]
+const commonValidationOptions = COMMON_VALIDATION_PRESETS.map(item => ({
+  label: item.label,
+  value: item.value,
+}))
 
 // 公式校验/预览状态
 const formulaValidating = ref(false)
@@ -643,7 +694,6 @@ const isRecordSelectorField = computed(() => form.fieldType === 'RECORD_SELECTOR
 const normalizedDataType = computed(() => String(form.dataType || '').toLowerCase())
 const supportsLength = computed(() => ['varchar', 'char', 'decimal'].includes(normalizedDataType.value))
 const supportsPrecision = computed(() => normalizedDataType.value === 'decimal')
-const showStorageOptions = computed(() => supportsLength.value || supportsPrecision.value)
 const formulaEnabled = computed(() => !!form.formulaType)
 const formulaFeedbackLines = computed(() => {
   const result = formulaValidateResult.value
@@ -811,6 +861,7 @@ function resetForm() {
 function createFieldForm(field) {
   const currentField = field || {}
   const basicProps = { ...(currentField.basicProps || {}) }
+  const validation = currentField.validation || basicProps.validation || currentField.advancedProps?.validation || {}
   const recordSelector = createDefaultRecordSelector(currentField.recordSelector || basicProps.recordSelector || currentField.props?.recordSelector)
   return {
     fieldName: currentField.fieldName || '',
@@ -878,6 +929,9 @@ function createFieldForm(field) {
     formulaCrossObjectTargetObjectCode: currentField.formulaConfig?.crossObject?.targetObjectCode || '',
     formulaCrossObjectReturnField: currentField.formulaConfig?.crossObject?.returnField || '',
     formulaCrossObjectRecomputeMode: currentField.formulaConfig?.crossObject?.recomputeMode || 'ASYNC',
+    validationPreset: validation.preset || validation.presetCode || validation.commonRule || '',
+    validationPattern: validation.pattern || '',
+    validationMessage: validation.message || validation.patternMessage || '',
     recordSelectorSuiteCode: recordSelector.suiteCode,
     recordSelectorObjectCode: recordSelector.objectCode,
     recordSelectorValueField: recordSelector.valueField,
@@ -886,6 +940,7 @@ function createFieldForm(field) {
     recordSelectorDisplayFieldsText: listToLines(recordSelector.displayFields),
     recordSelectorKeywordFieldsText: listToLines(recordSelector.keywordFields),
     recordSelectorMappingsText: mappingsToLines(recordSelector.fieldMappings),
+    recordSelectorSearchParamsText: searchParamsToLines(recordSelector.searchParams),
   }
 }
 
@@ -929,6 +984,7 @@ function createDefaultConditionRule() {
 function normalizePayload(source) {
   const cascade = normalizeCascade(source.basicProps?.cascade)
   const recordSelector = buildRecordSelectorConfig(source)
+  const validation = buildValidationConfig(source)
   const basicProps = {
     ...(source.basicProps || {}),
     placeholder: source.placeholder || '',
@@ -941,6 +997,10 @@ function normalizePayload(source) {
     basicProps.recordSelector = recordSelector
   else
     delete basicProps.recordSelector
+  if (validation)
+    basicProps.validation = validation
+  else
+    delete basicProps.validation
   return {
     fieldName: source.fieldName,
     fieldCode: source.fieldCode,
@@ -972,8 +1032,41 @@ function normalizePayload(source) {
     sortOrder: source.sortOrder,
     basicProps,
     advancedProps: { ...(source.advancedProps || {}) },
+    validation,
     formulaConfig: buildFormulaConfigPayload(source),
   }
+}
+
+function buildValidationConfig(source) {
+  const validation = {}
+  if (source.validationPreset)
+    validation.preset = source.validationPreset
+  if (source.validationPattern)
+    validation.pattern = source.validationPattern
+  if (source.validationMessage)
+    validation.message = source.validationMessage
+  return Object.keys(validation).length ? validation : null
+}
+
+function onValidationPresetChange(value) {
+  const preset = getValidationPreset(value)
+  if (!value) {
+    form.validationPattern = ''
+    form.validationMessage = ''
+    return
+  }
+  if (!preset)
+    return
+  form.validationPattern = preset.pattern || ''
+  form.validationMessage = preset.message || ''
+  if (value === 'PHONE' && !form.sensitiveType)
+    form.sensitiveType = 'PHONE'
+  if (value === 'EMAIL' && !form.sensitiveType)
+    form.sensitiveType = 'EMAIL'
+  if (value === 'ID_CARD' && !form.sensitiveType)
+    form.sensitiveType = 'ID_CARD'
+  if (value === 'BANK_CARD' && !form.sensitiveType)
+    form.sensitiveType = 'BANK_CARD'
 }
 
 function buildFormulaConfigPayload(source) {
@@ -1619,6 +1712,7 @@ function createDefaultRecordSelector(source = {}) {
     displayFields: normalizeTextList(config.displayFields),
     keywordFields: normalizeTextList(config.keywordFields),
     fieldMappings: normalizeMappingList(config.fieldMappings || config.mappings),
+    searchParams: normalizeSearchParams(config.searchParams),
   }
 }
 
@@ -1634,6 +1728,7 @@ function buildRecordSelectorConfig(source) {
     displayFields: parseTextList(source.recordSelectorDisplayFieldsText),
     keywordFields: parseTextList(source.recordSelectorKeywordFieldsText),
     fieldMappings: parseMappingLines(source.recordSelectorMappingsText),
+    searchParams: parseSearchParamLines(source.recordSelectorSearchParamsText),
   })
   if (!config.objectCode)
     return null
@@ -1652,6 +1747,8 @@ function pruneRecordSelectorConfig(config = {}) {
     result.keywordFields = config.keywordFields
   if (config.fieldMappings?.length)
     result.fieldMappings = config.fieldMappings
+  if (config.searchParams && Object.keys(config.searchParams).length)
+    result.searchParams = config.searchParams
   return result
 }
 
@@ -1692,6 +1789,21 @@ function normalizeMappingList(value) {
   return []
 }
 
+function normalizeSearchParams(value) {
+  if (!value)
+    return {}
+  if (typeof value === 'string')
+    return parseSearchParamLines(value)
+  if (value && typeof value === 'object' && !Array.isArray(value))
+    return Object.entries(value).reduce((result, [key, item]) => {
+      const paramKey = String(key || '').trim()
+      if (paramKey && item !== undefined && item !== null && item !== '')
+        result[paramKey] = item
+      return result
+    }, {})
+  return {}
+}
+
 function parseMappingLines(value) {
   return String(value || '')
     .split(/\n/)
@@ -1707,6 +1819,33 @@ function parseMappingLines(value) {
     .filter(item => item.sourceField && item.targetField)
 }
 
+function parseSearchParamLines(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text)
+      return normalizeSearchParams(parsed)
+    }
+    catch {
+      return {}
+    }
+  }
+  return text
+    .split(/\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .reduce((result, item) => {
+      const parts = item.split(/\s*(?:=>|=|:)\s*/, 2)
+      const key = String(parts[0] || '').trim()
+      const value = String(parts[1] || '').trim()
+      if (key && value)
+        result[key] = value
+      return result
+    }, {})
+}
+
 function listToLines(value) {
   return normalizeTextList(value).join('\n')
 }
@@ -1714,6 +1853,12 @@ function listToLines(value) {
 function mappingsToLines(value) {
   return normalizeMappingList(value)
     .map(item => `${item.sourceField}=${item.targetField}`)
+    .join('\n')
+}
+
+function searchParamsToLines(value) {
+  return Object.entries(normalizeSearchParams(value))
+    .map(([key, item]) => `${key}=${item}`)
     .join('\n')
 }
 
@@ -1893,6 +2038,32 @@ defineExpose({
 
 .dict-property-item :deep(.create-dict-button) {
   width: 72px;
+}
+
+.field-constraint-config {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.field-constraint-head strong,
+.field-constraint-head span {
+  display: block;
+}
+
+.field-constraint-head strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.field-constraint-head span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .cascade-config {

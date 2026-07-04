@@ -4,9 +4,12 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.generator.constant.BusinessAppMode;
+import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessApp;
 import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessSuite;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessSuiteDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessSuiteQueryDTO;
+import com.mdframe.forge.plugin.generator.mapper.BusinessAppMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessSuiteMapper;
 import com.mdframe.forge.plugin.generator.service.MenuRegisterAdapter;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessSuiteSummaryVO;
@@ -37,6 +40,7 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
     private static final Pattern CODE_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9_]{1,63}$");
 
     private final MenuRegisterAdapter menuRegisterAdapter;
+    private final BusinessAppMapper businessAppMapper;
 
     public Page<BusinessSuiteVO> page(Integer pageNum, Integer pageSize, BusinessSuiteQueryDTO query) {
         Page<BusinessSuiteVO> page = new Page<>(normalizePageNum(pageNum), normalizePageSize(pageSize));
@@ -67,7 +71,7 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
         AiBusinessSuite suite = new AiBusinessSuite();
         copyDtoToEntity(dto, suite, true);
         save(suite);
-        syncMenuDirectory(suite);
+        syncMenuStatusBySuiteStatus(suite);
         return suite.getId();
     }
 
@@ -79,7 +83,7 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
         AiBusinessSuite suite = requireEntity(dto.getId());
         copyDtoToEntity(dto, suite, false);
         updateById(suite);
-        syncMenuDirectory(suite);
+        syncMenuStatusBySuiteStatus(suite);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -87,7 +91,7 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
         AiBusinessSuite suite = requireEntity(id);
         suite.setStatus(normalizeStatus(status));
         updateById(suite);
-        syncMenuDirectory(suite);
+        syncMenuStatusBySuiteStatus(suite);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -172,6 +176,17 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
         resolveOrCreateSuiteMenuDirectory(suite, parentId, new HashSet<>());
     }
 
+    private void syncMenuStatusBySuiteStatus(AiBusinessSuite suite) {
+        if (Integer.valueOf(1).equals(suite.getStatus())) {
+            syncMenuDirectory(suite);
+            restoreEnabledAppMenus(resolveSuiteTreeCodes(suite));
+            return;
+        }
+        List<String> suiteCodes = resolveSuiteTreeCodes(suite);
+        disableSuiteMenus(suiteCodes);
+        disableAppMenus(suiteCodes);
+    }
+
     public Long resolveOrCreateSuiteMenuDirectory(String suiteCode, Long rootParentId) {
         AiBusinessSuite suite = requireByCode(suiteCode);
         return resolveOrCreateSuiteMenuDirectory(suite, rootParentId, new HashSet<>());
@@ -200,6 +215,214 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
             resolvingIds.remove(suite.getId());
         }
         return menuResourceId;
+    }
+
+    private List<String> resolveSuiteTreeCodes(AiBusinessSuite root) {
+        if (root == null || StringUtils.isBlank(root.getSuiteCode())) {
+            return List.of();
+        }
+        List<AiBusinessSuite> suites = baseMapper.selectSuiteList(resolveTenantId(), new BusinessSuiteQueryDTO())
+                .stream()
+                .map(this::toEntity)
+                .toList();
+        Set<Long> descendantIds = new HashSet<>();
+        if (root.getId() != null) {
+            collectSuiteDescendantIds(root.getId(), suites, descendantIds);
+        }
+        return suites.stream()
+                .filter(item -> item != null && StringUtils.isNotBlank(item.getSuiteCode()))
+                .filter(item -> StringUtils.equals(item.getSuiteCode(), root.getSuiteCode())
+                        || (item.getId() != null && descendantIds.contains(item.getId())))
+                .map(AiBusinessSuite::getSuiteCode)
+                .distinct()
+                .toList();
+    }
+
+    private void collectSuiteDescendantIds(Long parentId, List<AiBusinessSuite> suites, Set<Long> result) {
+        if (parentId == null || suites == null || suites.isEmpty()) {
+            return;
+        }
+        for (AiBusinessSuite suite : suites) {
+            if (suite == null || suite.getId() == null || !Objects.equals(parentId, suite.getParentId())
+                    || !result.add(suite.getId())) {
+                continue;
+            }
+            collectSuiteDescendantIds(suite.getId(), suites, result);
+        }
+    }
+
+    private void disableSuiteMenus(List<String> suiteCodes) {
+        if (suiteCodes == null || suiteCodes.isEmpty()) {
+            return;
+        }
+        List<AiBusinessSuite> suites = baseMapper.selectSuiteList(resolveTenantId(), new BusinessSuiteQueryDTO())
+                .stream()
+                .map(this::toEntity)
+                .filter(item -> suiteCodes.contains(item.getSuiteCode()))
+                .toList();
+        for (AiBusinessSuite suite : suites) {
+            Long menuResourceId = readConfiguredMenuResourceId(suite);
+            if (menuResourceId != null) {
+                menuRegisterAdapter.disableMenu(menuResourceId);
+            }
+        }
+    }
+
+    private void disableAppMenus(List<String> suiteCodes) {
+        for (AiBusinessApp app : selectAppsBySuiteCodes(suiteCodes)) {
+            Long menuResourceId = readAppMenuResourceId(app);
+            if (menuResourceId != null) {
+                menuRegisterAdapter.disableMenu(menuResourceId);
+            }
+        }
+    }
+
+    private void restoreEnabledAppMenus(List<String> suiteCodes) {
+        for (AiBusinessApp app : selectAppsBySuiteCodes(suiteCodes)) {
+            if (!Integer.valueOf(1).equals(app.getStatus())) {
+                continue;
+            }
+            JSONObject options = readOptions(app.getOptions());
+            JSONObject adminMenu = readAdminMenu(options);
+            Long menuResourceId = readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId")));
+            if (menuResourceId == null || !isAppManagementMenuEnabled(app, options, adminMenu)) {
+                continue;
+            }
+            Long parentId = resolveAppMenuParentId(app, options, adminMenu, menuResourceId);
+            Integer sort = readInteger(firstNonNull(adminMenu.get("sort"), options.get("menuSort")), app.getSortOrder());
+            menuRegisterAdapter.updateAppMenu(
+                    menuResourceId,
+                    app.getAppName(),
+                    parentId,
+                    resolveAppMenuPath(app, options),
+                    resolveAppMenuComponent(app, options),
+                    buildAppMenuPerms(app),
+                    app.getIcon(),
+                    sort,
+                    true
+            );
+        }
+    }
+
+    private List<AiBusinessApp> selectAppsBySuiteCodes(List<String> suiteCodes) {
+        if (suiteCodes == null || suiteCodes.isEmpty()) {
+            return List.of();
+        }
+        return businessAppMapper.selectAppsBySuiteCodes(resolveTenantId(), suiteCodes);
+    }
+
+    private Long resolveAppMenuParentId(AiBusinessApp app, JSONObject options, JSONObject adminMenu, Long menuResourceId) {
+        Long originalParentId = readLong(firstNonNull(
+                adminMenu.get("originalParentId"),
+                firstNonNull(adminMenu.get("parentId"), options.get("adminMenuParentId"))));
+        boolean suiteAsParent = readBoolean(firstNonNull(adminMenu.get("suiteAsParent"), options.get("suiteAsMenuParent")), true);
+        if (!suiteAsParent) {
+            return normalizeSuiteMenuParentId(
+                    originalParentId,
+                    readLong(adminMenu.get("suiteMenuResourceId")),
+                    readLong(adminMenu.get("actualParentId")),
+                    menuResourceId);
+        }
+        Long normalizedParentId = normalizeSuiteMenuParentId(
+                originalParentId,
+                readLong(adminMenu.get("suiteMenuResourceId")),
+                readLong(adminMenu.get("actualParentId")),
+                menuResourceId);
+        return resolveOrCreateSuiteMenuDirectory(app.getSuiteCode(), normalizedParentId);
+    }
+
+    private boolean isAppManagementMenuEnabled(AiBusinessApp app, JSONObject options, JSONObject adminMenu) {
+        if (isCodeDownloadRuntime(app, options)) {
+            return false;
+        }
+        String mountTarget = StringUtils.defaultIfBlank(options.getString("mountTarget"), deriveMountTarget(app));
+        boolean syncEnabled = readBoolean(firstNonNull(adminMenu.get("syncEnabled"), options.get("adminMenuSyncEnabled")), false);
+        return "ADMIN".equalsIgnoreCase(mountTarget) && syncEnabled;
+    }
+
+    private String resolveAppMenuPath(AiBusinessApp app, JSONObject options) {
+        String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
+        if ("RUNTIME".equals(entryMode) && StringUtils.isNotBlank(app.getConfigKey())) {
+            String runtimeOpenMode = resolveRuntimeOpenMode(options == null ? null : options.get("runtimeOpenMode"));
+            StringBuilder path = new StringBuilder("/ai/crud-page/")
+                    .append(app.getConfigKey())
+                    .append("?appId=")
+                    .append(app.getId())
+                    .append("&runtimeOpenMode=")
+                    .append(runtimeOpenMode);
+            if ("CREATE_FORM".equals(runtimeOpenMode)) {
+                path.append("&mode=create");
+            } else if ("DETAIL".equals(runtimeOpenMode)) {
+                path.append("&mode=detail");
+            }
+            return path.toString();
+        }
+        return "/app-center/app/" + app.getId();
+    }
+
+    private String resolveAppMenuComponent(AiBusinessApp app, JSONObject options) {
+        String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
+        if ("RUNTIME".equals(entryMode) && StringUtils.isNotBlank(app.getConfigKey())) {
+            return "ai/crud-page";
+        }
+        return "app-center/app-entry";
+    }
+
+    private boolean isCodeDownloadRuntime(AiBusinessApp app, JSONObject options) {
+        String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
+        return "RUNTIME".equals(entryMode) && BusinessAppMode.isCodeDownload(options == null ? null : options.get("appMode"));
+    }
+
+    private String buildAppMenuPerms(AiBusinessApp app) {
+        String appCode = StringUtils.defaultIfBlank(app.getAppCode(), String.valueOf(app.getId()));
+        return "ai:businessApp:open:" + StringUtils.lowerCase(appCode);
+    }
+
+    private String deriveMountTarget(AiBusinessApp app) {
+        String appType = StringUtils.defaultString(app.getAppType()).toUpperCase();
+        String entryMode = StringUtils.defaultString(app.getEntryMode()).toUpperCase();
+        if ("MOBILE".equals(appType) || "H5".equals(entryMode)) {
+            return "MOBILE";
+        }
+        if ("INTEGRATION".equals(appType) || "API".equals(entryMode)) {
+            return "API";
+        }
+        return "ADMIN";
+    }
+
+    private String resolveRuntimeOpenMode(Object value) {
+        String mode = StringUtils.defaultIfBlank(value == null ? null : String.valueOf(value), "LIST").toUpperCase();
+        return Set.of("LIST", "CREATE_FORM", "DETAIL").contains(mode) ? mode : "LIST";
+    }
+
+    private Long readConfiguredMenuResourceId(AiBusinessSuite suite) {
+        if (suite == null) {
+            return null;
+        }
+        JSONObject options = readOptions(suite.getOptions());
+        return readLong(readAdminMenu(options).get("menuResourceId"));
+    }
+
+    private Long readAppMenuResourceId(AiBusinessApp app) {
+        if (app == null) {
+            return null;
+        }
+        JSONObject options = readOptions(app.getOptions());
+        JSONObject adminMenu = readAdminMenu(options);
+        return readLong(firstNonNull(adminMenu.get("menuResourceId"), options.get("menuResourceId")));
+    }
+
+    private Long normalizeSuiteMenuParentId(Long parentId, Long suiteMenuResourceId, Long actualParentId,
+                                            Long menuResourceId) {
+        if (parentId == null) {
+            return null;
+        }
+        if (Objects.equals(parentId, suiteMenuResourceId)
+                || Objects.equals(parentId, actualParentId)
+                || Objects.equals(parentId, menuResourceId)) {
+            return null;
+        }
+        return parentId;
     }
 
     private Long normalizeParentId(Long parentId, Long currentId) {
@@ -317,6 +540,10 @@ public class BusinessSuiteService extends ServiceImpl<BusinessSuiteMapper, AiBus
             return null;
         }
         return options.toJSONString();
+    }
+
+    private Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
     }
 
     private Long readLong(Object value) {

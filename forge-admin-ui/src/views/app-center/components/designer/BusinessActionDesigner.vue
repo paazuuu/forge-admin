@@ -130,6 +130,12 @@
                               </template>
                               数量台账步骤
                             </n-button>
+                            <n-button size="small" secondary @click="insertForeachQuantityStep(action)">
+                              <template #icon>
+                                <n-icon><AddOutline /></n-icon>
+                              </template>
+                              循环明细步骤
+                            </n-button>
                             <n-button size="small" secondary @click="formatCommandSteps(action)">
                               格式化
                             </n-button>
@@ -691,6 +697,44 @@ function insertQuantityStep(action) {
         dimensionKey: '',
         quantity: '${quantity}',
       },
+    },
+  })
+  action.actionConfig.steps = steps
+  action.actionConfig.stepsText = stringifyJson(steps)
+  markDirty()
+}
+
+function insertForeachQuantityStep(action) {
+  action.actionConfig = normalizeCommandActionConfig(action.actionConfig)
+  const steps = parseJsonArray(action.actionConfig.stepsText, action.actionConfig.steps)
+  steps.push({
+    stepCode: `foreach_quantity_${Date.now()}`,
+    stepName: '循环明细数量动作',
+    stepType: 'FOREACH',
+    rollbackOnFailure: true,
+    stepConfig: {
+      collectionPath: 'formData.items',
+      itemAlias: 'item',
+      indexAlias: 'index',
+      steps: [
+        {
+          stepCode: 'quantity_by_item',
+          stepName: '逐行数量台账',
+          stepType: 'DOMAIN_ACTION',
+          rollbackOnFailure: true,
+          stepConfig: {
+            actionType: 'QUANTITY',
+            operationType: 'INBOUND',
+            params: {
+              accountCode: '${record.accountCode}',
+              itemCode: '${item.itemCode}',
+              dimensionKey: '${item.dimensionKey}',
+              quantity: '${item.quantity}',
+              sourceDetailId: '${item.id}',
+            },
+          },
+        },
+      ],
     },
   })
   action.actionConfig.steps = steps

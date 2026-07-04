@@ -135,14 +135,16 @@ public class BusinessActionExecutionService {
         if (dto == null) {
             throw new BusinessException("动作执行参数不能为空");
         }
-        if (StringUtils.isBlank(dto.getObjectCode())) {
+        String objectCode = resolveObjectCode(dto);
+        if (StringUtils.isBlank(objectCode)) {
             throw new BusinessException("业务对象编码不能为空");
         }
+        dto.setObjectCode(objectCode);
         if (StringUtils.isBlank(dto.getActionCode())) {
             throw new BusinessException("动作编码不能为空");
         }
         BusinessObjectActionService.ResolvedBusinessAction resolved =
-                actionService.resolveAction(dto.getSuiteCode(), dto.getObjectCode(), dto.getActionCode());
+                actionService.resolveAction(dto.getSuiteCode(), objectCode, dto.getActionCode());
         AiBusinessObject object = resolved.object();
         BusinessActionExecutionContext context = new BusinessActionExecutionContext();
         context.setTenantId(resolveTenantId());
@@ -157,6 +159,57 @@ public class BusinessActionExecutionService {
             context.setRecordData(record == null ? new LinkedHashMap<>() : new LinkedHashMap<>(record));
         }
         return context;
+    }
+
+    String resolveObjectCode(BusinessActionExecuteDTO dto) {
+        if (dto == null) {
+            return null;
+        }
+        return StringUtils.firstNonBlank(
+                StringUtils.trimToNull(dto.getObjectCode()),
+                StringUtils.trimToNull(dto.getBusinessObjectCode()),
+                StringUtils.trimToNull(dto.getTargetObjectCode()),
+                StringUtils.trimToNull(dto.getTargetEntityCode()),
+                StringUtils.trimToNull(dto.getCandidateObjectCode()),
+                StringUtils.trimToNull(dto.getReferenceObjectCode()),
+                StringUtils.trimToNull(dto.getRefObjectCode()),
+                StringUtils.trimToNull(dto.getSourceObjectCode()),
+                StringUtils.trimToNull(dto.getTargetCode()),
+                mapText(dto.getContext(), "objectCode"),
+                mapText(dto.getContext(), "businessObjectCode"),
+                mapText(dto.getContext(), "targetObjectCode"),
+                nestedMapText(dto.getContext(), "row", "_runtimeObjectCode"),
+                nestedMapText(dto.getContext(), "row", "objectCode"),
+                nestedMapText(dto.getContext(), "row", "businessObjectCode"),
+                nestedMapText(dto.getContext(), "currentRow", "_runtimeObjectCode"),
+                nestedMapText(dto.getContext(), "currentRow", "objectCode"),
+                mapText(dto.getFormData(), "objectCode"),
+                mapText(dto.getFormData(), "businessObjectCode"));
+    }
+
+    private String mapText(Map<String, Object> source, String key) {
+        if (source == null || !source.containsKey(key)) {
+            return null;
+        }
+        Object value = source.get(key);
+        return value == null ? null : StringUtils.trimToNull(String.valueOf(value));
+    }
+
+    private String nestedMapText(Map<String, Object> source, String firstKey, String secondKey) {
+        if (source == null) {
+            return null;
+        }
+        Object value = source.get(firstKey);
+        if (!(value instanceof Map<?, ?> map) || !map.containsKey(secondKey)) {
+            return null;
+        }
+        Object nestedValue = map.get(secondKey);
+        return nestedValue == null ? null : StringUtils.trimToNull(String.valueOf(nestedValue));
+    }
+
+    List<BusinessActionStepResultVO> executeNestedSteps(BusinessActionExecutionContext context, List<BusinessActionStepDTO> steps) {
+        StepExecutionOutcome outcome = executeSteps(context, steps);
+        return outcome == null ? List.of() : outcome.stepResults();
     }
 
     private StepExecutionOutcome executeSteps(BusinessActionExecutionContext context, List<BusinessActionStepDTO> steps) {
@@ -192,8 +245,16 @@ public class BusinessActionExecutionService {
         if (!(rawSteps instanceof List<?> list)) {
             rawSteps = actionConfig.get("stepList");
         }
+        return normalizeSteps(rawSteps, "业务动作未配置执行步骤", "业务动作未配置有效执行步骤");
+    }
+
+    List<BusinessActionStepDTO> normalizeNestedSteps(Object rawSteps) {
+        return normalizeSteps(rawSteps, "循环动作未配置子步骤", "循环动作未配置有效子步骤");
+    }
+
+    private List<BusinessActionStepDTO> normalizeSteps(Object rawSteps, String missingMessage, String emptyMessage) {
         if (!(rawSteps instanceof List<?> list)) {
-            throw new BusinessException("业务动作未配置执行步骤");
+            throw new BusinessException(missingMessage);
         }
         List<BusinessActionStepDTO> steps = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
@@ -212,7 +273,7 @@ public class BusinessActionExecutionService {
             steps.add(step);
         }
         if (steps.isEmpty()) {
-            throw new BusinessException("业务动作未配置有效执行步骤");
+            throw new BusinessException(emptyMessage);
         }
         steps.sort(Comparator.comparing(step -> step.getSortOrder() == null ? Integer.MAX_VALUE : step.getSortOrder()));
         return steps;

@@ -47,6 +47,36 @@
         LIMIT 1
     </select>
 
+    <select id="selectBalancePage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityBalanceVO">
+        SELECT
+            id,
+            account_code AS accountCode,
+            item_code AS itemCode,
+            dimension_key AS dimensionKey,
+            quantity,
+            locked_quantity AS lockedQuantity,
+            quantity - locked_quantity AS availableQuantity,
+            status,
+            remark,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM ai_business_quantity_balance
+        WHERE tenant_id = #{tenantId}
+        <if test="query.accountCode != null and query.accountCode != ''">
+          AND account_code = #{query.accountCode}
+        </if>
+        <if test="query.itemCode != null and query.itemCode != ''">
+          AND item_code = #{query.itemCode}
+        </if>
+        <if test="query.dimensionKey != null and query.dimensionKey != ''">
+          AND dimension_key = #{query.dimensionKey}
+        </if>
+        <if test="query.status != null">
+          AND status = #{query.status}
+        </if>
+        ORDER BY update_time DESC, id DESC
+    </select>
+
     <update id="increaseQuantity">
         UPDATE ai_business_quantity_balance
         SET quantity = quantity + #{quantity},

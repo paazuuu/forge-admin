@@ -255,6 +255,14 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
             resource.setSort(sort);
             changed = true;
         }
+        if (!Integer.valueOf(1).equals(existing.getMenuStatus())) {
+            resource.setMenuStatus(1);
+            changed = true;
+        }
+        if (!Integer.valueOf(1).equals(existing.getVisible())) {
+            resource.setVisible(1);
+            changed = true;
+        }
         if (changed) {
             resourceService.updateById(resource);
         }
@@ -289,6 +297,14 @@ public class MenuRegisterAdapterImpl implements MenuRegisterAdapter {
         }
         if (sort != null && !sort.equals(existing.getSort())) {
             resource.setSort(sort);
+            changed = true;
+        }
+        if (!Integer.valueOf(1).equals(existing.getMenuStatus())) {
+            resource.setMenuStatus(1);
+            changed = true;
+        }
+        if (!Integer.valueOf(1).equals(existing.getVisible())) {
+            resource.setVisible(1);
             changed = true;
         }
         if (changed) {

@@ -899,7 +899,9 @@ function isTypingTarget(target) {
   const tagName = target?.tagName?.toLowerCase()
   return ['input', 'textarea', 'select'].includes(tagName)
     || target?.isContentEditable
-    || Boolean(target?.closest?.('[contenteditable="true"], .n-input, .n-input-number'))
+    || Boolean(target?.closest?.(
+      '[contenteditable="true"], .n-input, .n-input-number, .n-select, .n-base-selection, .n-dropdown, .n-popover, .n-modal, .property-panel, .forge-property-panel',
+    ))
 }
 
 async function loadDictOptions(types) {

@@ -151,11 +151,20 @@
       :title="activeSelectorTitle"
       :suite-code="activeSelectorConfig.suiteCode"
       :object-code="activeSelectorConfig.objectCode"
+      :business-object-code="activeSelectorConfig.businessObjectCode"
+      :target-object-code="activeSelectorConfig.targetObjectCode"
+      :target-entity-code="activeSelectorConfig.targetEntityCode"
+      :candidate-object-code="activeSelectorConfig.candidateObjectCode"
+      :reference-object-code="activeSelectorConfig.referenceObjectCode"
+      :ref-object-code="activeSelectorConfig.refObjectCode"
+      :source-object-code="activeSelectorConfig.sourceObjectCode"
+      :target-code="activeSelectorConfig.targetCode"
       :multiple="true"
       :display-fields="activeSelectorConfig.displayFields"
       :keyword-fields="activeSelectorConfig.keywordFields"
       :field-mappings="activeSelectorConfig.fieldMappings"
       :search-params="activeSelectorConfig.searchParams"
+      :runtime-context="activeSelectorRuntimeContext"
       @confirm="handleSelectorConfirm"
     />
   </div>
@@ -163,9 +172,10 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AiRecordSelectorModal from '@/components/ai-form/AiRecordSelectorModal.vue'
 import AiFormItem from '@/components/ai-form/AiFormItem.vue'
-import { applyRecordFieldMappings } from '@/components/ai-form/record-selector-utils'
+import { applyRecordFieldMappings, normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 
 const props = defineProps({
@@ -181,10 +191,19 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  parentFormData: {
+    type: Object,
+    default: () => ({}),
+  },
+  context: {
+    type: Object,
+    default: () => ({}),
+  },
 })
 
 const emit = defineEmits(['update:value'])
 
+const route = useRoute()
 const localValue = ref({})
 const selectorVisible = ref(false)
 const activeSelectorChild = ref(null)
@@ -192,7 +211,7 @@ const activeSelectorChild = ref(null)
 const normalizedChildren = computed(() => (props.childrenConfig || [])
   .map(child => ({
     ...child,
-    fields: (child.fields || []).filter(field => field && field.field),
+    fields: (child.fields || []).filter(field => field && field.field && isChildEditorFieldVisible(field)),
   }))
   .filter(child => child.fields.length))
 
@@ -215,6 +234,22 @@ function resolveAddButtonText(child) {
 
 const activeSelectorConfig = computed(() => normalizeRecordSelectorConfig(activeSelectorChild.value))
 const activeSelectorTitle = computed(() => activeSelectorConfig.value.title || `选择${activeSelectorChild.value?.modelName || activeSelectorChild.value?.tabTitle || '记录'}`)
+const activeSelectorRuntimeContext = computed(() => ({
+  ...(props.context || {}),
+  formData: props.parentFormData || {},
+  form: props.parentFormData || {},
+  record: props.context?.record || props.parentFormData || {},
+  row: props.context?.row || props.parentFormData || {},
+  query: route.query || {},
+  params: route.params || {},
+  route: {
+    query: route.query || {},
+    params: route.params || {},
+    path: route.path,
+    fullPath: route.fullPath,
+    name: route.name,
+  },
+}))
 
 function hasRecordSelector(child) {
   return Boolean(normalizeRecordSelectorConfig(child).objectCode)
@@ -222,6 +257,50 @@ function hasRecordSelector(child) {
 
 function resolveSelectorButtonText(child) {
   return normalizeRecordSelectorConfig(child).buttonText || '选择记录'
+}
+
+function isChildEditorFieldVisible(field = {}) {
+  if (field.hidden === true || field.visible === false || field.formVisible === false)
+    return false
+  if (field.props?.hidden === true || field.props?.visible === false || field.props?.formVisible === false)
+    return false
+  if (field.basicProps?.hidden === true || field.basicProps?.visible === false || field.basicProps?.formVisible === false)
+    return false
+  const explicitChildVisible = readOptionalBoolean(
+    field.showInChildEditor,
+    field.props?.showInChildEditor,
+    field.basicProps?.showInChildEditor,
+  )
+  if (explicitChildVisible !== null)
+    return explicitChildVisible
+  if (isInternalIdField(field))
+    return false
+  return true
+}
+
+function readOptionalBoolean(...values) {
+  for (const value of values) {
+    if (value === true || value === 'true')
+      return true
+    if (value === false || value === 'false')
+      return false
+  }
+  return null
+}
+
+function isInternalIdField(field = {}) {
+  const fieldKey = String(field.field || field.fieldCode || field.prop || '').trim()
+  const columnKey = String(field.columnName || field.column || field.dbColumn || '').trim()
+  const label = String(field.label || field.title || field.fieldName || '').trim()
+  if (!fieldKey)
+    return false
+  if (fieldKey.toLowerCase() === 'id')
+    return true
+  if (fieldKey.endsWith('Id') || fieldKey.endsWith('ID'))
+    return true
+  if (/_id$/i.test(fieldKey) || /_id$/i.test(columnKey))
+    return true
+  return Boolean(label) && label.toUpperCase().replace(/\s+/g, '').endsWith('ID')
 }
 
 function rowsFor(child) {
@@ -346,9 +425,25 @@ function toRuntimeCellField(field = {}) {
 }
 
 function buildRuntimeCellContext(child, rowIndex) {
+  const row = rowsFor(child)[rowIndex] || {}
   return {
+    ...(props.context || {}),
     schema: child.fields || [],
     allSchema: child.fields || [],
+    parentFormData: props.parentFormData || {},
+    form: props.parentFormData || {},
+    record: props.context?.record || props.parentFormData || {},
+    row,
+    currentRow: row,
+    query: route.query || {},
+    params: route.params || {},
+    route: {
+      query: route.query || {},
+      params: route.params || {},
+      path: route.path,
+      fullPath: route.fullPath,
+      name: route.name,
+    },
     patchFormData: patch => updateRow(child, rowIndex, patch),
   }
 }
@@ -380,24 +475,6 @@ function createEmptyRow(child) {
     row[field.field] = field.defaultValue ?? null
   })
   return row
-}
-
-function normalizeRecordSelectorConfig(child = {}) {
-  const config = {
-    ...(child.recordSelector || {}),
-    ...(child.selector || {}),
-  }
-  return {
-    ...config,
-    suiteCode: config.suiteCode || child.suiteCode || '',
-    objectCode: config.objectCode || child.targetObjectCode || child.objectCode || '',
-    title: config.title || config.selectorTitle || '',
-    buttonText: config.buttonText || '',
-    displayFields: Array.isArray(config.displayFields) ? config.displayFields : [],
-    keywordFields: Array.isArray(config.keywordFields) ? config.keywordFields : [],
-    fieldMappings: config.fieldMappings || config.mappings || [],
-    searchParams: config.searchParams || {},
-  }
 }
 
 function normalizeInputValue(value) {
@@ -495,13 +572,24 @@ function validate() {
 }
 
 function resolveColumnWidth(field) {
-  if (field.width)
-    return `${field.width}px`
-  if (field.type === 'textarea')
-    return '260px'
-  if (field.type === 'date' || field.type === 'datetime')
-    return '190px'
-  return '180px'
+  const configuredWidth = Number(field.width || field.props?.width || 0)
+  const minWidth = Math.max(Number(field.minWidth || field.props?.minWidth || 0), resolveDefaultColumnMinWidth(field))
+  return `${Math.max(configuredWidth, minWidth)}px`
+}
+
+function resolveDefaultColumnMinWidth(field = {}) {
+  const type = String(field.type || field.componentType || '').toLowerCase()
+  const label = String(field.label || '')
+  const fieldName = String(field.field || '')
+  if (type === 'textarea')
+    return 260
+  if (['date', 'datetime', 'daterange', 'datetimerange'].includes(type))
+    return type.includes('time') ? 190 : 150
+  if (['number', 'input-number', 'inputnumber'].includes(type))
+    return /金额|单价|价格|报价|库存|数量|分/.test(label) || /amount|price|quantity|stock/i.test(fieldName) ? 150 : 130
+  if (/单位/.test(label) || fieldName === 'unit')
+    return 90
+  return 120
 }
 
 defineExpose({

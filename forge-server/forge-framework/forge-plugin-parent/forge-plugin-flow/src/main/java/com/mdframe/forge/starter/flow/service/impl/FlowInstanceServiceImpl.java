@@ -13,6 +13,7 @@ import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
 import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.FlowInstanceService;
+import com.mdframe.forge.starter.flow.service.FlowModelService;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.extern.slf4j.Slf4j;
@@ -79,6 +80,9 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
     @Autowired
     private FlowErrorLogService flowErrorLogService;
 
+    @Autowired(required = false)
+    private FlowModelService flowModelService;
+
     private final Map<String, ReentrantLock> localFlowStartLocks = new ConcurrentHashMap<>();
 
     @Override
@@ -124,6 +128,10 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
                 .processDefinitionKey(modelKey)
                 .latestVersion()
                 .singleResult();
+
+        if (processDefinition == null) {
+            processDefinition = deployModelOnDemand(modelKey, tenantId);
+        }
 
         if (processDefinition == null) {
             log.error("[流程启动失败] 流程定义不存在: modelKey={}, 请检查流程是否已部署", modelKey);
@@ -308,6 +316,33 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
         }
         String status = normalizeStatus(business.getStatus());
         return "running".equals(status) || "draft".equals(status) || "suspended".equals(status);
+    }
+
+    private ProcessDefinition deployModelOnDemand(String modelKey, Long tenantId) {
+        if (flowModelService == null || isBlank(modelKey)) {
+            return null;
+        }
+        try {
+            FlowModel model = flowModelService.getOne(new LambdaQueryWrapper<FlowModel>()
+                    .eq(FlowModel::getTenantId, tenantId)
+                    .eq(FlowModel::getModelKey, modelKey)
+                    .eq(FlowModel::getDelFlag, 0)
+                    .last("LIMIT 1"));
+            if (model == null || isBlank(model.getBpmnXml())) {
+                return null;
+            }
+            log.warn("[流程启动] 流程定义不存在，尝试从模型自动部署: tenantId={}, modelKey={}, modelId={}",
+                    tenantId, modelKey, model.getId());
+            flowModelService.deployModel(model.getId(), "流程启动时自动部署缺失定义");
+            return processEngine.getRepositoryService()
+                    .createProcessDefinitionQuery()
+                    .processDefinitionKey(modelKey)
+                    .latestVersion()
+                    .singleResult();
+        } catch (Exception e) {
+            log.error("[流程启动] 自动部署流程模型失败: tenantId={}, modelKey={}", tenantId, modelKey, e);
+            return null;
+        }
     }
 
     private boolean isRuntimeProcessActive(String processInstanceId) {

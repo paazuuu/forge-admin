@@ -105,7 +105,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'success'])
 
-const visible = ref(false)
+const visible = ref(props.show)
 const loading = ref(false)
 const datasourceLoading = ref(false)
 const submitLoading = ref(false)
@@ -166,7 +166,7 @@ watch(() => props.show, (val) => {
     selectedDatasourceId.value = null
     searchKeyword.value = ''
   }
-})
+}, { immediate: true })
 
 watch(visible, (val) => {
   emit('update:show', val)
