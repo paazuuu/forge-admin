@@ -213,11 +213,84 @@
  * ═══════════════════════════════════════ */
 
 /* 表格 */
+.n-data-table {
+  --forge-table-sticky-header-top: 0px;
+  --forge-table-sticky-header-z-index: 4;
+  --forge-table-sticky-header-fixed-z-index: 5;
+}
+
+.n-data-table .n-data-table-base-table-header {
+  position: sticky;
+  top: var(--forge-table-sticky-header-top);
+  z-index: var(--forge-table-sticky-header-z-index);
+  background: var(--bg-secondary);
+}
+
+.n-data-table .n-data-table-thead {
+  background: var(--bg-secondary);
+}
+
 .n-data-table .n-data-table-th {
+  position: sticky;
+  top: var(--forge-table-sticky-header-top);
+  z-index: var(--forge-table-sticky-header-z-index);
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
   font-size: 13px;
   background: var(--bg-secondary) !important;
+}
+
+.n-data-table .n-data-table-th--fixed-left,
+.n-data-table .n-data-table-th--fixed-right {
+  position: sticky;
+  z-index: var(--forge-table-sticky-header-fixed-z-index);
+  background: var(--bg-secondary) !important;
+}
+
+.n-data-table .n-data-table-th--fixed-left {
+  left: 0;
+}
+
+.n-data-table .n-data-table-th--fixed-right {
+  right: 0;
+}
+
+.n-data-table .n-data-table-th.forge-table-action-column,
+.n-data-table .n-data-table-td.forge-table-action-column {
+  position: sticky;
+  right: 0;
+}
+
+.n-data-table .n-data-table-th.forge-table-action-column {
+  top: var(--forge-table-sticky-header-top);
+  z-index: var(--forge-table-sticky-header-fixed-z-index);
+  background: var(--bg-secondary) !important;
+}
+
+.n-data-table .n-data-table-td.forge-table-action-column {
+  z-index: 3;
+  background: var(--n-merged-td-color, var(--bg-primary)) !important;
+}
+
+.forge-table-scroll-enhanced .n-data-table-wrapper,
+.forge-table-scroll-enhanced .n-data-table-base-table-body,
+.forge-table-scroll-enhanced .n-scrollbar-container,
+.forge-table-scroll-enhanced .n-data-table-th,
+.forge-table-scroll-enhanced .n-data-table-td {
+  cursor: grab;
+}
+
+.forge-table-scroll-enhanced.is-table-dragging,
+.forge-table-scroll-enhanced .is-table-dragging {
+  cursor: grabbing !important;
+}
+
+.forge-table-scroll-enhanced.is-table-dragging * {
+  cursor: grabbing !important;
+}
+
+.forge-table-scroll-enhanced.forge-table-no-y-overflow .n-scrollbar-rail--vertical {
+  display: none;
 }
 
 .n-data-table .n-data-table-td {

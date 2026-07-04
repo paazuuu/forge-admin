@@ -85,7 +85,7 @@
       <AiSearch
         ref="searchRef"
         v-model="searchParams"
-        :schema="searchSchema"
+        :schema="normalizedSearchSchema"
         :grid-cols="searchGridCols"
         :label-width="searchLabelWidth"
         :enable-collapse="searchEnableCollapse"
@@ -1998,12 +1998,17 @@ const exportTaskColumns = computed(() => [
 ])
 
 function getColumnKey(col) {
-  return col?.prop || col?.key || col?.dataIndex || ''
+  return String(col?.prop || col?.key || col?.dataIndex || '').trim()
 }
 
 function isActionColumnConfig(col) {
   const key = getColumnKey(col)
-  return ['action', 'actions', 'operation', 'operations'].includes(key)
+  const title = String(col?.label || col?.title || '').trim()
+  return ['action', 'actions', 'operation', 'operations'].includes(key) || title === '操作'
+}
+
+function shouldDefaultActionFixedRight(col) {
+  return col.fixed === undefined || col.fixed === null || col.fixed === ''
 }
 
 const activeSourceColumns = computed(() => {
@@ -2059,14 +2064,16 @@ const tableColumns = computed(() => {
 
   // 判断是否是操作列（兼容 action / actions / operation 等写法）
   const isActionCol = (col) => {
-    const key = col.prop || col.key || col.dataIndex || ''
-    return ['action', 'actions', 'operation', 'operations'].includes(key)
+    return isActionColumnConfig(col)
   }
 
   activeSourceColumns.value.forEach((col) => {
     if (isActionCol(col) && col.actions) {
       const actionCol = { ...col }
       const actions = normalizeRowActions(col.actions)
+      if (shouldDefaultActionFixedRight(actionCol)) {
+        actionCol.fixed = 'right'
+      }
       delete actionCol.actions
       delete actionCol._slot
       delete actionCol.slot
@@ -2075,7 +2082,10 @@ const tableColumns = computed(() => {
       return
     }
     if (isActionCol(col) && col.render) {
-      cols.push(col)
+      cols.push({
+        ...col,
+        fixed: shouldDefaultActionFixedRight(col) ? 'right' : col.fixed,
+      })
       return
     }
     if (isActionCol(col) && !col.actions && !col.render) {
@@ -2340,6 +2350,19 @@ const detailPanelRowKeyValue = computed(() => {
   return resolveRowKeyValue(currentRow.value) || `detail_${modalStatus.value || 'current'}`
 })
 const hasSearchSchema = computed(() => !props.formOnly && props.showSearch && props.searchSchema.length > 0)
+const normalizedSearchSchema = computed(() => {
+  return (props.searchSchema || []).map((field) => {
+    const propsData = { ...(field.props || {}) }
+    delete propsData.showCount
+    delete propsData.showWordLimit
+    return {
+      ...field,
+      props: propsData,
+      showCount: false,
+      showWordLimit: false,
+    }
+  })
+})
 
 const modalFormSchema = computed(() => {
   if (!isDetailMode.value)
@@ -2801,7 +2824,12 @@ const computedMaxHeight = computed(() => {
     return props.maxHeight
   }
 
-  // 默认使用 calc 计算高度，减去搜索区域和工具栏的高度
+  // 少量数据不启用 Naive 的内置纵向滚动容器，避免单行也出现竖向滚动条。
+  // 表头固定由全局 sticky 样式兜底，多数据场景再限制表体高度。
+  if (dataSource.value.length <= 8) {
+    return undefined
+  }
+
   return 'calc(100vh - 280px)'
 })
 

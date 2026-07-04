@@ -160,6 +160,10 @@ const props = defineProps({
     type: [Number, String],
     default: null,
   },
+  fields: {
+    type: Array,
+    default: () => [],
+  },
   runtimeInfo: {
     type: Object,
     default: null,
@@ -212,6 +216,55 @@ const checkGroups = computed(() => [
 const activeCheckGroup = computed(() => checkGroups.value.find(group => group.level === activeCheckLevel.value) || checkGroups.value[0])
 const datasourceItems = computed(() => (checkResult.value.items || []).filter(item =>
   item?.category === 'DATASOURCE' || String(item?.itemCode || '').startsWith('DATASOURCE_')))
+const referenceFieldChecks = computed(() => {
+  const items = []
+  const fields = (props.fields || []).filter(field => !field.systemField)
+  fields.forEach((field) => {
+    const componentType = field.componentType || ''
+    const fieldType = field.fieldType || ''
+    const isObjectReference = componentType === 'objectReference' || fieldType === 'REFERENCE'
+    const isRecordSelector = componentType === 'recordSelector' || fieldType === 'RECORD_SELECTOR'
+    const recordSelector = field.basicProps?.recordSelector || field.recordSelector || {}
+    if (isObjectReference) {
+      if (!field.referenceObjectCode) {
+        items.push({
+          level: 'BLOCK',
+          category: 'FIELD',
+          itemCode: 'REFERENCE_OBJECT_MISSING',
+          fieldCode: field.fieldCode,
+          title: `字段「${field.fieldName || field.fieldCode}」未配置引用对象`,
+          message: '引用对象（objectReference）字段必须选择目标业务对象。',
+          fixActionLabel: '去配置',
+        })
+      }
+      if (field.referenceObjectCode && !field.referenceDisplayField) {
+        items.push({
+          level: 'BLOCK',
+          category: 'FIELD',
+          itemCode: 'REFERENCE_DISPLAY_FIELD_MISSING',
+          fieldCode: field.fieldCode,
+          title: `字段「${field.fieldName || field.fieldCode}」未配置显示字段`,
+          message: '引用对象字段必须选择用于显示的字段。',
+          fixActionLabel: '去配置',
+        })
+      }
+    }
+    if (isRecordSelector) {
+      if (!recordSelector.objectCode) {
+        items.push({
+          level: 'BLOCK',
+          category: 'FIELD',
+          itemCode: 'RECORD_SELECTOR_OBJECT_MISSING',
+          fieldCode: field.fieldCode,
+          title: `字段「${field.fieldName || field.fieldCode}」未配置记录选择器对象`,
+          message: '记录选择器字段必须选择目标业务对象。',
+          fixActionLabel: '去配置',
+        })
+      }
+    }
+  })
+  return items
+})
 const datasourceSummary = computed(() => {
   const items = datasourceItems.value
   if (!items.length) {
@@ -267,9 +320,22 @@ async function loadCheck() {
     const res = await businessObjectPublishCheck(props.objectId)
     if (!alive || requestSeq !== checkRequestSeq)
       return
+    const backendResult = res.data || {}
+    const localReferenceChecks = referenceFieldChecks.value
+    const blockItems = [...(backendResult.blockItems || []), ...localReferenceChecks.filter(item => item.level === 'BLOCK')]
+    const warnItems = [...(backendResult.warnItems || []), ...localReferenceChecks.filter(item => item.level === 'WARN')]
+    const passItems = [...(backendResult.passItems || []), ...localReferenceChecks.filter(item => item.level === 'PASS')]
     checkResult.value = {
       ...createEmptyCheck(),
-      ...(res.data || {}),
+      ...backendResult,
+      blockItems,
+      warnItems,
+      passItems,
+      blockCount: blockItems.length,
+      warnCount: warnItems.length,
+      passCount: passItems.length,
+      overallStatus: blockItems.length ? 'BLOCK' : warnItems.length ? 'WARN' : 'PASS',
+      publishable: backendResult.publishable !== false && blockItems.length === 0,
     }
     activeCheckLevel.value = resolveFocusLevel(checkResult.value)
     emit('checkUpdated', checkResult.value)

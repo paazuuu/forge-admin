@@ -1,1028 +1,1289 @@
 <template>
-  <div class="business-action-designer">
-    <div class="action-designer-head">
+  <section class="automation-designer">
+    <header class="designer-head">
       <div>
-        <h3>自定义操作</h3>
-        <p>维护工具栏、行操作和详情操作，普通模式只填写业务动作。</p>
+        <h2>自动化动作</h2>
+        <p>配置审批结果、按钮或触发器之后自动执行的业务处理。发起审批和审批办理不在这里配置。</p>
       </div>
-      <n-space size="small">
-        <n-button size="small" secondary @click="loadActions">
-          刷新
-        </n-button>
-        <n-button size="small" secondary @click="addFlowAction">
-          添加发起主流程
-        </n-button>
-        <n-button size="small" secondary @click="addAction('ROW')">
-          新增操作
-        </n-button>
-        <n-button size="small" type="primary" :loading="saving" @click="saveActions">
-          保存操作
-        </n-button>
-      </n-space>
+      <NButton size="small" type="primary" secondary @click="addAutomationAction">
+        新增自动化
+      </NButton>
+    </header>
+
+    <div class="boundary-strip">
+      <div class="boundary-item">
+        <strong>发起审批</strong>
+        <span>在“单据流程”和列表按钮里配置</span>
+      </div>
+      <div class="boundary-item">
+        <strong>同意 / 驳回</strong>
+        <span>在流程设计器节点中配置</span>
+      </div>
+      <div class="boundary-item active">
+        <strong>审批后业务处理</strong>
+        <span>在本页配置字段映射和执行动作</span>
+      </div>
     </div>
 
-    <div class="action-designer-body">
-      <main class="action-list-pane">
-        <n-spin :show="loading">
-          <div v-if="localActions.length" class="action-card-list">
-            <section v-for="(action, index) in localActions" :key="action.clientKey" class="action-card">
-              <header class="action-card-head">
-                <div>
-                  <strong>{{ action.actionName || '未命名操作' }}</strong>
-                  <p>{{ actionPositionLabel(action.actionPosition) }} · {{ actionTypeLabel(action.actionType) }}</p>
-                </div>
-                <n-space size="small">
-                  <n-tag size="small" :type="action.status === 0 ? 'default' : 'success'" :bordered="false">
-                    {{ action.status === 0 ? '停用' : '启用' }}
-                  </n-tag>
-                  <n-popconfirm @positive-click="removeAction(index)">
-                    <template #trigger>
-                      <n-button quaternary circle size="small">
-                        <template #icon>
-                          <n-icon><TrashOutline /></n-icon>
-                        </template>
-                      </n-button>
-                    </template>
-                    确认删除该操作？
-                  </n-popconfirm>
-                </n-space>
-              </header>
+    <n-alert v-if="approvalEntryActions.length" type="info" :bordered="false" class="approval-entry-note">
+      已识别到 {{ approvalEntryActions.length }} 个发起审批入口。这类入口由“单据流程”和列表按钮维护，本页不展示底层流程启动参数。
+    </n-alert>
 
-              <n-form label-placement="top" :show-feedback="false" size="small" class="action-form">
-                <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
-                  <n-form-item-gi label="操作名称">
-                    <n-input v-model:value="action.actionName" placeholder="例如：发起主流程" @update:value="value => updateActionName(action, value)" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="操作位置">
-                    <n-select v-model:value="action.actionPosition" :options="positionOptions" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="操作类型">
-                    <n-select v-model:value="action.actionType" :options="actionTypeOptions" @update:value="value => updateActionType(action, value)" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="权限标识">
-                    <n-input v-model:value="action.permission" placeholder="例如：ai:businessObject:publish" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="二次确认">
-                    <n-switch v-model:value="action.confirmRequired" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="启用状态">
-                    <n-switch :value="action.status !== 0" @update:value="value => updateStatus(action, value)" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="成功提示">
-                    <n-input v-model:value="action.successMessage" placeholder="操作成功" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="失败提示">
-                    <n-input v-model:value="action.failureMessage" placeholder="操作失败" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="排序">
-                    <n-input-number v-model:value="action.sortOrder" :min="0" style="width: 100%" @update:value="markDirty" />
-                  </n-form-item-gi>
+    <n-empty v-if="!automationActions.length" description="当前还没有业务自动化动作" class="empty-state" />
 
-                  <template v-if="action.actionType === 'OPEN_PAGE'">
-                    <n-form-item-gi :span="formOptions.length ? 2 : 3" label="目标页面">
-                      <n-input v-model:value="action.actionConfig.targetPath" placeholder="例如：/ai/crud-page/customer?pageKey=detail&id=:id" @update:value="markDirty" />
-                    </n-form-item-gi>
-                    <n-form-item-gi v-if="formOptions.length" label="目标表单">
-                      <n-select
-                        v-model:value="action.actionConfig.targetFormKey"
-                        :options="formOptions"
-                        clearable
-                        filterable
-                        placeholder="默认表单"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                  </template>
-                  <template v-else-if="action.actionType === 'START_FLOW'">
-                    <n-form-item-gi :span="3" label="主流程">
-                      <div class="main-flow-action-hint">
-                        <strong>使用“业务流程配置”中维护的主流程</strong>
-                        <span>这里只维护按钮名称、位置、权限和确认文案。</span>
-                      </div>
-                    </n-form-item-gi>
-                  </template>
-                  <template v-else-if="action.actionType === 'COMMAND'">
-                    <n-form-item-gi label="成功后">
-                      <n-select
-                        v-model:value="action.actionConfig.successBehavior"
-                        :options="successBehaviorOptions"
-                        clearable
-                        placeholder="刷新列表"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi :span="3" label="动作表单 Schema">
-                      <n-input
-                        v-model:value="action.actionConfig.formSchemaText"
-                        type="textarea"
-                        :autosize="{ minRows: 3, maxRows: 8 }"
-                        placeholder="[]"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi :span="3" label="动作步骤">
-                      <div class="command-step-panel">
-                        <div class="command-step-toolbar">
-                          <n-space size="small">
-                            <n-button size="small" secondary @click="insertQuantityStep(action)">
-                              <template #icon>
-                                <n-icon><AddOutline /></n-icon>
-                              </template>
-                              数量台账步骤
-                            </n-button>
-                            <n-button size="small" secondary @click="insertForeachQuantityStep(action)">
-                              <template #icon>
-                                <n-icon><AddOutline /></n-icon>
-                              </template>
-                              循环明细步骤
-                            </n-button>
-                            <n-button size="small" secondary @click="formatCommandSteps(action)">
-                              格式化
-                            </n-button>
-                          </n-space>
-                        </div>
-                        <n-input
-                          v-model:value="action.actionConfig.stepsText"
-                          type="textarea"
-                          :autosize="{ minRows: 4, maxRows: 10 }"
-                          placeholder="[]"
-                          @update:value="markDirty"
-                        />
-                      </div>
-                    </n-form-item-gi>
-                  </template>
-                  <n-form-item-gi v-else-if="action.actionType === 'OPEN_EXTERNAL'" :span="3" label="外部链接">
-                    <n-input v-model:value="action.actionConfig.url" placeholder="https://example.com" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <template v-else-if="action.actionType === 'CALL_API'">
-                    <n-form-item-gi :span="3" label="API 调用">
-                      <div class="api-action-panel">
-                        <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
-                          <n-form-item-gi label="已登记 API">
-                            <n-select
-                              v-model:value="action.actionConfig.apiConfigId"
-                              :options="apiConfigOptions"
-                              :loading="apiConfigLoading"
-                              clearable
-                              filterable
-                              placeholder="可手工填写"
-                              @update:value="value => applyApiConfig(action, value)"
-                            />
-                          </n-form-item-gi>
-                          <n-form-item-gi label="请求方式">
-                            <n-select v-model:value="action.actionConfig.method" :options="apiMethodOptions" @update:value="markDirty" />
-                          </n-form-item-gi>
-                          <n-form-item-gi label="成功后">
-                            <n-select
-                              v-model:value="action.actionConfig.successBehavior"
-                              :options="successBehaviorOptions"
-                              clearable
-                              placeholder="仅提示"
-                              @update:value="markDirty"
-                            />
-                          </n-form-item-gi>
-                          <n-form-item-gi :span="2" label="接口地址">
-                            <n-input v-model:value="action.actionConfig.url" placeholder="/business/customer/audit/:id" @update:value="markDirty" />
-                          </n-form-item-gi>
-                          <n-form-item-gi label="能力标识">
-                            <n-input v-model:value="action.actionConfig.capabilityCode" placeholder="可选，例如：customer_audit" @update:value="markDirty" />
-                          </n-form-item-gi>
-                        </n-grid>
-
-                        <div class="api-param-head">
-                          <span>参数映射</span>
-                          <n-button size="small" secondary @click="addApiParam(action)">
-                            <template #icon>
-                              <n-icon><AddOutline /></n-icon>
-                            </template>
-                            添加参数
-                          </n-button>
-                        </div>
-                        <div v-if="action.actionConfig.params?.length" class="api-param-list">
-                          <div v-for="(param, paramIndex) in action.actionConfig.params" :key="param.clientKey" class="api-param-row">
-                            <n-input v-model:value="param.name" placeholder="参数名" @update:value="markDirty" />
-                            <n-select v-model:value="param.target" :options="apiParamTargetOptions" @update:value="markDirty" />
-                            <n-select v-model:value="param.sourceType" :options="apiParamSourceOptions" @update:value="markDirty" />
-                            <n-select
-                              v-if="param.sourceType === 'rowField'"
-                              v-model:value="param.sourceField"
-                              :options="fieldOptions"
-                              clearable
-                              filterable
-                              placeholder="选择字段"
-                              @update:value="markDirty"
-                            />
-                            <n-select
-                              v-else-if="param.sourceType === 'system'"
-                              v-model:value="param.sourceField"
-                              :options="systemParamOptions"
-                              clearable
-                              placeholder="系统变量"
-                              @update:value="markDirty"
-                            />
-                            <n-input
-                              v-else-if="param.sourceType === 'routeQuery'"
-                              v-model:value="param.sourceField"
-                              placeholder="路由参数名"
-                              @update:value="markDirty"
-                            />
-                            <n-input
-                              v-else
-                              v-model:value="param.value"
-                              placeholder="固定值，支持 :id / ${field}"
-                              @update:value="markDirty"
-                            />
-                            <n-button quaternary circle size="small" @click="removeApiParam(action, paramIndex)">
-                              <template #icon>
-                                <n-icon><TrashOutline /></n-icon>
-                              </template>
-                            </n-button>
-                          </div>
-                        </div>
-                        <n-empty v-else size="small" description="暂无参数映射" />
-                      </div>
-                    </n-form-item-gi>
-                  </template>
-                  <n-form-item-gi v-else-if="action.actionType === 'TRIGGER'" :span="3" label="触发器标识">
-                    <n-input v-model:value="action.actionConfig.triggerCode" placeholder="例如：customer_notify" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi v-else :span="3" label="能力标识">
-                    <n-input v-model:value="action.actionConfig.capabilityCode" placeholder="填写已封装的业务能力标识" @update:value="markDirty" />
-                  </n-form-item-gi>
-                </n-grid>
-              </n-form>
-            </section>
-          </div>
-          <n-empty v-else-if="!loading" description="暂无自定义操作" />
-        </n-spin>
-      </main>
-
-      <aside class="action-summary-pane">
-        <section>
-          <h4>操作分布</h4>
-          <div class="action-stat-grid">
-            <div v-for="item in actionStats" :key="item.position">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.count }}</strong>
-            </div>
-          </div>
-        </section>
-        <section>
-          <h4>发布关注</h4>
-          <p>发起主流程按钮会复用当前对象的主流程配置；流程模型、标题和流程可识别的业务字段在业务流程配置里维护。</p>
-        </section>
+    <div v-else class="automation-workbench">
+      <aside class="automation-list">
+        <div class="pane-title">
+          <strong>业务自动化</strong>
+          <span>{{ automationActions.length }}</span>
+        </div>
+        <button
+          v-for="item in automationActions"
+          :key="item.originalIndex"
+          type="button"
+          class="automation-list-item"
+          :class="{ active: item.originalIndex === selectedActionIndex }"
+          @click="selectedActionIndex = item.originalIndex"
+        >
+          <strong>{{ item.action.actionName || '未命名自动化' }}</strong>
+          <span>{{ actionSceneLabel(item.action) }}</span>
+        </button>
       </aside>
+
+      <main v-if="selectedAction" class="automation-main">
+        <section class="panel-section action-summary">
+          <div class="section-title">
+            <h3>自动化信息</h3>
+            <n-switch
+              :value="selectedAction.status !== 0"
+              @update:value="patchSelectedAction({ status: $event ? 1 : 0 })"
+            />
+          </div>
+          <NGrid :cols="3" :x-gap="12" :y-gap="8" responsive="screen">
+            <NFormItemGi label="自动化名称">
+              <NInput
+                :value="selectedAction.actionName || ''"
+                placeholder="例如：审批通过后更新库存"
+                @update:value="patchSelectedAction({ actionName: $event })"
+              />
+            </NFormItemGi>
+            <NFormItemGi label="执行场景">
+              <NSelect
+                :value="resolveActionScene(selectedAction)"
+                :options="sceneOptions"
+                @update:value="updateActionScene($event)"
+              />
+            </NFormItemGi>
+            <NFormItemGi label="成功后">
+              <NSelect
+                :value="selectedAction.actionConfig?.successBehavior || 'refreshList'"
+                :options="successBehaviorOptions"
+                @update:value="patchActionConfig({ successBehavior: $event })"
+              />
+            </NFormItemGi>
+          </NGrid>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title">
+            <h3>业务处理流程</h3>
+            <NButton size="tiny" secondary @click="addDetailQuantityFlow">
+              添加明细数量处理
+            </NButton>
+          </div>
+
+          <n-empty v-if="!rootSteps.length" description="还没有业务处理步骤" size="small" />
+
+          <div v-else class="flow-stack">
+            <article v-for="rootStep in rootSteps" :key="rootStep.key" class="flow-card">
+              <template v-if="isInternalStepType(rootStep.raw, INTERNAL_STEP.FOREACH)">
+                <div class="flow-card-head">
+                  <span class="step-index">{{ rootStep.index + 1 }}</span>
+                  <div>
+                    <strong>逐行处理明细</strong>
+                    <em>对选中的子表明细逐行执行业务动作</em>
+                  </div>
+                  <NButton size="tiny" quaternary type="error" @click="removeStep(rootStep)">
+                    删除
+                  </NButton>
+                </div>
+                <NGrid :cols="1" :x-gap="12" :y-gap="8" responsive="screen">
+                  <NFormItemGi label="处理明细">
+                    <NSelect
+                      filterable
+                      :options="collectionOptionsForStep(rootStep)"
+                      :value="rootStep.config.collectionPath || ''"
+                      placeholder="选择关系与级联中配置的明细"
+                      @update:value="updateStepCollection(rootStep, $event)"
+                    />
+                  </NFormItemGi>
+                </NGrid>
+                <n-alert
+                  v-if="!collectionPathOptions.length"
+                  type="warning"
+                  :bordered="false"
+                  class="relation-warning"
+                >
+                  还没有可用于自动化的明细关系。请先到“关系与级联”配置主表和明细表的关系，自动化动作会直接复用那里的关系和字段。
+                </n-alert>
+
+                <div class="nested-actions">
+                  <div class="nested-title">
+                    <strong>每行执行</strong>
+                    <NButton size="tiny" secondary @click="addQuantityStep(rootStep)">
+                      添加数量处理
+                    </NButton>
+                  </div>
+                  <BusinessQuantityStepCard
+                    v-for="child in childBusinessSteps(rootStep)"
+                    :key="child.key"
+                    :step="child"
+                    :field-options="fieldPathOptions(child)"
+                    @patch-step="patchStep(child, $event)"
+                    @patch-config="patchStepConfig(child, $event)"
+                    @patch-param="updateStepParam(child, $event.key, $event.value)"
+                    @patch-fallback="updateFallbackFields(child, $event.key, $event.value)"
+                    @remove="removeStep(child)"
+                  />
+                </div>
+              </template>
+
+              <BusinessQuantityStepCard
+                v-else-if="isQuantityStep(rootStep.raw)"
+                :step="rootStep"
+                :field-options="fieldPathOptions(rootStep)"
+                @patch-step="patchStep(rootStep, $event)"
+                @patch-config="patchStepConfig(rootStep, $event)"
+                @patch-param="updateStepParam(rootStep, $event.key, $event.value)"
+                @patch-fallback="updateFallbackFields(rootStep, $event.key, $event.value)"
+                @remove="removeStep(rootStep)"
+              />
+
+              <div v-else class="unsupported-step">
+                <div>
+                  <strong>{{ rootStep.raw.stepName || '高级步骤' }}</strong>
+                  <span>该步骤暂未提供可视化表单，可在高级 JSON 中维护。</span>
+                </div>
+                <NButton size="tiny" quaternary type="error" @click="removeStep(rootStep)">
+                  删除
+                </NButton>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <n-collapse class="advanced-json">
+          <n-collapse-item title="高级 JSON（开发者兜底）" name="json">
+            <NInput
+              v-model:value="actionConfigText"
+              type="textarea"
+              :autosize="{ minRows: 8, maxRows: 18 }"
+              placeholder="动作配置 JSON"
+              @blur="applyActionConfigText"
+            />
+            <n-alert v-if="jsonError" type="error" :bordered="false" class="json-error">
+              {{ jsonError }}
+            </n-alert>
+          </n-collapse-item>
+        </n-collapse>
+      </main>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { AddOutline, TrashOutline } from '@vicons/ionicons5'
-import { useMessage } from 'naive-ui'
-import { computed, onMounted, ref, watch } from 'vue'
-import {
-  businessObjectActions,
-  enabledApiConfigs,
-  saveBusinessObjectActions,
-} from '@/api/business-app'
+import { NButton, NFormItemGi, NGrid, NInput, NSelect } from 'naive-ui'
+import { computed, defineComponent, h, ref, watch } from 'vue'
+import { businessObjectDesigner, businessObjectList } from '@/api/business-app'
 
 const props = defineProps({
-  objectId: {
-    type: [Number, String],
-    default: null,
+  actions: {
+    type: Array,
+    default: () => [],
   },
   fields: {
     type: Array,
     default: () => [],
   },
-  formOptions: {
+  modelSchema: {
+    type: Object,
+    default: () => ({}),
+  },
+  relations: {
     type: Array,
     default: () => [],
   },
+  suiteCode: {
+    type: String,
+    default: '',
+  },
+  documentConfig: {
+    type: Object,
+    default: () => ({}),
+  },
 })
+const emit = defineEmits(['update:actions', 'dirtyChange'])
+const INTERNAL_STEP = {
+  FOREACH: 'FOREACH',
+  DOMAIN_ACTION: 'DOMAIN_ACTION',
+  START_FLOW: 'START_FLOW',
+}
+const INTERNAL_ACTION = {
+  QUANTITY: 'QUANTITY',
+}
 
-const emit = defineEmits(['updated', 'dirtyChange'])
+const selectedActionIndex = ref(0)
+const actionConfigText = ref('')
+const jsonError = ref('')
+const businessObjects = ref([])
+const targetFieldsMap = ref({})
+const targetFieldLoadingMap = ref({})
 
-const message = useMessage()
-const loading = ref(false)
-const saving = ref(false)
-const localActions = ref([])
-const apiConfigs = ref([])
-const apiConfigLoading = ref(false)
-const apiConfigLoaded = ref(false)
-
-const positionOptions = [
-  { label: '工具栏', value: 'TOOLBAR' },
-  { label: '行操作', value: 'ROW' },
-  { label: '详情页', value: 'DETAIL' },
+const sceneOptions = [
+  { label: '审批通过后', value: 'FLOW_APPROVED' },
+  { label: '审批驳回后', value: 'FLOW_REJECTED' },
+  { label: '手动点击按钮', value: 'MANUAL' },
+  { label: '触发器调用', value: 'TRIGGER' },
 ]
-
-const actionTypeOptions = [
-  { label: '打开页面', value: 'OPEN_PAGE' },
-  { label: '调用 API', value: 'CALL_API' },
-  { label: '发起主流程', value: 'START_FLOW' },
-  { label: '通用动作', value: 'COMMAND' },
-  { label: '执行触发器', value: 'TRIGGER' },
-  { label: '打开外部链接', value: 'OPEN_EXTERNAL' },
-]
-
-const apiMethodOptions = [
-  { label: 'GET', value: 'GET' },
-  { label: 'POST', value: 'POST' },
-  { label: 'POST 加密', value: 'POST_ENCRYPT' },
-  { label: 'PUT', value: 'PUT' },
-  { label: 'DELETE', value: 'DELETE' },
-  { label: 'PATCH', value: 'PATCH' },
-]
-
-const apiParamTargetOptions = [
-  { label: 'Path', value: 'path' },
-  { label: 'Query', value: 'query' },
-  { label: 'Body', value: 'body' },
-  { label: 'Header', value: 'header' },
-]
-
-const apiParamSourceOptions = [
-  { label: '当前行字段', value: 'rowField' },
-  { label: '路由参数', value: 'routeQuery' },
-  { label: '固定值', value: 'static' },
-  { label: '系统变量', value: 'system' },
-]
-
-const systemParamOptions = [
-  { label: '当前时间', value: 'now' },
-  { label: '当前日期', value: 'today' },
-  { label: '租户ID', value: 'tenantId' },
-  { label: '勾选行ID', value: 'selectedIds' },
-]
-
 const successBehaviorOptions = [
   { label: '刷新列表', value: 'refreshList' },
-  { label: '返回上一页', value: 'goBack' },
+  { label: '无操作', value: 'none' },
 ]
+const quantityOperationOptions = [
+  { label: '增加数量', value: 'INBOUND' },
+  { label: '扣减数量', value: 'OUTBOUND' },
+  { label: '锁定数量', value: 'LOCK' },
+  { label: '释放锁定', value: 'RELEASE' },
+  { label: '转移数量', value: 'TRANSFER' },
+]
+const paramLabels = {
+  accountCode: '归属字段',
+  itemCode: '对象字段',
+  dimensionKey: '维度',
+  quantity: '数量字段',
+  sourceDetailId: '明细记录',
+  remark: '备注',
+  targetAccountCode: '目标归属字段',
+  targetItemCode: '目标对象字段',
+  targetDimensionKey: '目标维度',
+}
 
-const actionStats = computed(() => positionOptions.map(item => ({
-  position: item.value,
-  label: item.label,
-  count: localActions.value.filter(action => action.actionPosition === item.value && action.status !== 0).length,
-})))
+const actionList = computed(() => Array.isArray(props.actions) ? props.actions : [])
+const approvalEntryActions = computed(() => actionList.value.filter(action => containsInternalStartFlow(action)))
+const automationActions = computed(() => actionList.value
+  .map((action, originalIndex) => ({ action, originalIndex }))
+  .filter(item => !containsInternalStartFlow(item.action)))
+const selectedAction = computed(() => actionList.value[selectedActionIndex.value] || automationActions.value[0]?.action || null)
+const rootSteps = computed(() => flattenRootSteps(selectedAction.value?.actionConfig || {}))
+const actionRelations = computed(() => buildActionRelations(props.modelSchema, props.relations))
+const collectionPathOptions = computed(() => buildCollectionPathOptions(actionRelations.value))
 
-const apiConfigOptions = computed(() => apiConfigs.value.map(item => ({
-  label: `${item.apiName || item.apiCode || item.urlPath} · ${item.reqMethod || 'GET'} ${item.urlPath || ''}`,
-  value: String(item.id || item.apiCode || item.urlPath),
-})))
-
-const fieldOptions = computed(() => (Array.isArray(props.fields) ? props.fields : [])
-  .map((field) => {
-    const value = field.field || field.fieldCode || field.fieldName
-    if (!value)
-      return null
-    return {
-      label: `${field.label || field.fieldName || value}（${value}）`,
-      value,
-    }
-  })
-  .filter(Boolean))
-
-onMounted(() => {
-  loadEnabledApiConfigs()
-})
-
-watch(() => props.objectId, () => {
-  loadActions()
+watch(() => props.suiteCode, () => {
+  loadBusinessObjects()
 }, { immediate: true })
 
-async function loadActions() {
-  if (!props.objectId) {
-    localActions.value = []
+watch([() => props.relations, () => props.modelSchema, businessObjects], () => {
+  preloadRelationFields()
+}, { immediate: true, deep: true })
+
+watch(automationActions, (items) => {
+  if (!items.length) {
+    selectedActionIndex.value = 0
     return
   }
-  loading.value = true
-  try {
-    const res = await businessObjectActions(props.objectId)
-    localActions.value = (res.data || []).map(normalizeAction)
-    emit('updated', localActions.value)
-  }
-  finally {
-    loading.value = false
-  }
-}
+  if (!items.some(item => item.originalIndex === selectedActionIndex.value))
+    selectedActionIndex.value = items[0].originalIndex
+}, { immediate: true })
 
-async function loadEnabledApiConfigs() {
-  if (apiConfigLoaded.value || apiConfigLoading.value)
-    return
-  apiConfigLoading.value = true
-  try {
-    const res = await enabledApiConfigs()
-    apiConfigs.value = Array.isArray(res.data) ? res.data : []
-    apiConfigLoaded.value = true
-  }
-  catch (error) {
-    apiConfigs.value = []
-    apiConfigLoaded.value = true
-    console.warn('[BusinessActionDesigner] API配置不可用，已切换为手工输入模式', error?.message || error)
-  }
-  finally {
-    apiConfigLoading.value = false
-  }
-}
+watch(selectedAction, (action) => {
+  actionConfigText.value = stringifyJson(action?.actionConfig || {})
+  jsonError.value = ''
+}, { immediate: true })
 
-function addAction(position = 'ROW') {
-  localActions.value.push(normalizeAction({
-    actionCode: `custom_${Date.now()}`,
-    actionName: '自定义操作',
-    actionPosition: position,
-    actionType: 'OPEN_PAGE',
-    confirmRequired: false,
+const BusinessQuantityStepCard = defineComponent({
+  name: 'BusinessQuantityStepCard',
+  props: {
+    step: {
+      type: Object,
+      required: true,
+    },
+    fieldOptions: {
+      type: Array,
+      default: () => [],
+    },
+  },
+  emits: ['patchStep', 'patchConfig', 'patchParam', 'patchFallback', 'remove'],
+  setup(cardProps, { emit: cardEmit }) {
+    const paramValue = key => cardProps.step.config?.params?.[key] ?? ''
+    const fieldSelect = (key, placeholder = '选择字段') => h(NSelect, {
+      'filterable': true,
+      'options': mergeSelectedFieldOptions(cardProps.fieldOptions, [unwrapExpression(paramValue(key))]),
+      'value': unwrapExpression(paramValue(key)),
+      placeholder,
+      'onUpdate:value': value => cardEmit('patchParam', { key, value: wrapExpression(value) }),
+    })
+    const staticInput = (key, placeholder = '固定值') => h(NInput, {
+      'value': stringValue(paramValue(key)),
+      placeholder,
+      'onUpdate:value': value => cardEmit('patchParam', { key, value }),
+    })
+    const fallbackSelect = key => h(NSelect, {
+      'multiple': true,
+      'filterable': true,
+      'clearable': true,
+      'options': mergeSelectedFieldOptions(cardProps.fieldOptions, normalizeStringList(cardProps.step.config?.[`${key}FallbackFields`])),
+      'value': normalizeStringList(cardProps.step.config?.[`${key}FallbackFields`]),
+      'placeholder': '主字段为空时按顺序尝试其他字段',
+      'onUpdate:value': value => cardEmit('patchFallback', { key, value }),
+    })
+    return () => h('div', { class: 'quantity-card' }, [
+      h('div', { class: 'quantity-card-head' }, [
+        h('div', null, [
+          h('strong', null, cardProps.step.raw.stepName || '数量处理'),
+          h('span', null, '更新数量台账或库存余额'),
+        ]),
+        h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => cardEmit('remove') }, { default: () => '删除' }),
+      ]),
+      h(NGrid, { cols: 3, xGap: 12, yGap: 8, responsive: 'screen' }, {
+        default: () => [
+          h(NFormItemGi, { label: '处理方式' }, {
+            default: () => h(NSelect, {
+              'options': quantityOperationOptions,
+              'value': cardProps.step.config.operationType || cardProps.step.config.operation || 'INBOUND',
+              'onUpdate:value': value => cardEmit('patchConfig', { operationType: value }),
+            }),
+          }),
+          h(NFormItemGi, { label: paramLabels.accountCode }, { default: () => fieldSelect('accountCode') }),
+          h(NFormItemGi, { label: paramLabels.quantity }, { default: () => fieldSelect('quantity') }),
+          h(NFormItemGi, { label: paramLabels.itemCode }, { default: () => fieldSelect('itemCode') }),
+          h(NFormItemGi, { label: '备用识别字段' }, { default: () => fallbackSelect('itemCode') }),
+          h(NFormItemGi, { label: paramLabels.sourceDetailId }, { default: () => fieldSelect('sourceDetailId') }),
+          h(NFormItemGi, { label: paramLabels.dimensionKey }, { default: () => staticInput('dimensionKey', '留空表示默认维度') }),
+          h(NFormItemGi, { label: paramLabels.remark, span: 2 }, { default: () => staticInput('remark', '备注') }),
+        ],
+      }),
+    ])
+  },
+})
+
+function addAutomationAction() {
+  const actions = cloneValue(actionList.value)
+  const index = actions.length + 1
+  actions.push({
+    actionCode: `automation_${Date.now()}`,
+    actionName: `自动化 ${index}`,
+    actionPosition: 'DETAIL',
+    actionType: 'COMMAND',
     status: 1,
-    sortOrder: localActions.value.length * 10 + 10,
-    actionConfig: {},
-  }))
-  emit('dirtyChange', true)
+    sortOrder: index * 10,
+    actionConfig: {
+      triggerScene: 'FLOW_APPROVED',
+      successBehavior: 'refreshList',
+      steps: [],
+    },
+  })
+  emitActions(actions)
+  selectedActionIndex.value = actions.length - 1
 }
 
-function addFlowAction() {
-  localActions.value.push(normalizeAction({
-    actionCode: `start_flow_${Date.now()}`,
-    actionName: '发起主流程',
-    actionPosition: 'ROW',
-    actionType: 'START_FLOW',
-    confirmRequired: true,
-    successMessage: '流程已发起',
-    failureMessage: '流程发起失败',
-    status: 1,
-    sortOrder: localActions.value.length * 10 + 10,
-    actionConfig: { useMainFlow: true },
-  }))
-  emit('dirtyChange', true)
-}
-
-function removeAction(index) {
-  localActions.value.splice(index, 1)
-  emit('dirtyChange', true)
-}
-
-function updateActionName(action, value) {
-  action.actionName = value
-  if (!action.actionCode || /^custom_\d+/.test(action.actionCode))
-    action.actionCode = normalizeActionCode(value) || action.actionCode
-  markDirty()
-}
-
-function updateStatus(action, value) {
-  action.status = value ? 1 : 0
-  markDirty()
-}
-
-async function saveActions() {
-  if (!props.objectId)
+function patchSelectedAction(patch = {}) {
+  const actions = cloneValue(actionList.value)
+  if (!actions[selectedActionIndex.value])
     return
-  const invalidApiAction = localActions.value.find(action => action.status !== 0 && isInvalidApiAction(action))
-  if (invalidApiAction) {
-    message.warning(`请为“${invalidApiAction.actionName || '自定义操作'}”配置接口地址或能力标识`)
+  actions[selectedActionIndex.value] = {
+    ...actions[selectedActionIndex.value],
+    ...patch,
+  }
+  emitActions(actions)
+}
+
+function patchActionConfig(patch = {}) {
+  const actions = cloneValue(actionList.value)
+  const action = actions[selectedActionIndex.value]
+  if (!action)
     return
+  action.actionConfig = {
+    ...(action.actionConfig || {}),
+    ...patch,
   }
-  const invalidCommandAction = localActions.value.find(action => action.status !== 0 && isInvalidCommandAction(action))
-  if (invalidCommandAction) {
-    message.warning(`请为“${invalidCommandAction.actionName || '通用动作'}”配置至少一个动作步骤`)
+  emitActions(actions)
+}
+
+function updateActionScene(scene) {
+  patchActionConfig({ triggerScene: scene })
+}
+
+function addDetailQuantityFlow() {
+  const actions = cloneValue(actionList.value)
+  const action = actions[selectedActionIndex.value]
+  if (!action)
     return
-  }
-  saving.value = true
-  try {
-    await saveBusinessObjectActions(props.objectId, localActions.value.map(toActionPayload))
-    message.success('自定义操作已保存')
-    emit('dirtyChange', false)
-    await loadActions()
-  }
-  finally {
-    saving.value = false
-  }
-}
-
-function normalizeAction(action = {}) {
-  return {
-    ...action,
-    clientKey: action.actionCode || `action_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    actionCode: action.actionCode || normalizeActionCode(action.actionName) || `custom_${Date.now()}`,
-    actionName: action.actionName || '自定义操作',
-    actionPosition: normalizePosition(action.actionPosition),
-    actionType: normalizeActionType(action.actionType),
-    confirmRequired: Boolean(action.confirmRequired),
-    successMessage: action.successMessage || '',
-    failureMessage: action.failureMessage || '',
-    status: action.status ?? 1,
-    sortOrder: action.sortOrder ?? 0,
-    actionConfig: normalizeActionConfig(action.actionType, action.actionConfig),
-  }
-}
-
-function toActionPayload(action = {}) {
-  return {
-    actionCode: normalizeActionCode(action.actionCode) || normalizeActionCode(action.actionName),
-    actionName: action.actionName,
-    actionPosition: normalizePosition(action.actionPosition),
-    actionType: normalizeActionType(action.actionType),
-    permission: action.permission,
-    confirmRequired: Boolean(action.confirmRequired),
-    successMessage: action.successMessage,
-    failureMessage: action.failureMessage,
-    status: action.status ?? 1,
-    sortOrder: action.sortOrder ?? 0,
-    actionConfig: normalizeActionConfigForPayload(action.actionType, action.actionConfig),
-  }
-}
-
-function normalizePosition(value) {
-  const normalized = String(value || 'ROW').replace('-', '_').toUpperCase()
-  return positionOptions.some(item => item.value === normalized) ? normalized : 'ROW'
-}
-
-function normalizeActionType(value) {
-  const normalized = String(value || 'OPEN_PAGE')
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace('-', '_')
-    .toUpperCase()
-  if (normalized === 'START_APPROVAL')
-    return 'START_FLOW'
-  return actionTypeOptions.some(item => item.value === normalized) ? normalized : 'OPEN_PAGE'
-}
-
-function normalizeActionConfig(actionType, config = {}) {
-  const source = typeof config === 'string' ? safeParseJson(config) : { ...(config || {}) }
-  const normalizedType = normalizeActionType(actionType)
-  if (normalizedType === 'CALL_API')
-    return normalizeApiActionConfig(source)
-  if (normalizedType === 'COMMAND')
-    return normalizeCommandActionConfig(source)
-  if (normalizedType !== 'START_FLOW')
-    return source
-  return {
-    useMainFlow: true,
-  }
-}
-
-function normalizeActionConfigForPayload(actionType, config = {}) {
-  const source = normalizeActionConfig(actionType, config)
-  const normalizedType = normalizeActionType(actionType)
-  if (normalizedType === 'CALL_API')
-    return normalizeApiActionConfigForPayload(source)
-  if (normalizedType === 'COMMAND')
-    return normalizeCommandActionConfigForPayload(source)
-  if (normalizedType !== 'START_FLOW')
-    return source
-  return {
-    useMainFlow: true,
-  }
-}
-
-function updateActionType(action, value) {
-  action.actionType = normalizeActionType(value)
-  action.actionConfig = normalizeActionConfig(action.actionType, action.actionConfig)
-  if (action.actionType === 'CALL_API')
-    loadEnabledApiConfigs()
-  markDirty()
-}
-
-function normalizeApiActionConfig(config = {}) {
-  const params = Array.isArray(config.params)
-    ? config.params
-    : Array.isArray(config.paramMappings)
-      ? config.paramMappings
-      : []
-  return {
-    ...config,
-    apiConfigId: config.apiConfigId === undefined || config.apiConfigId === null ? null : String(config.apiConfigId),
-    apiCode: String(config.apiCode || '').trim(),
-    apiName: String(config.apiName || '').trim(),
-    method: normalizeApiMethod(config.method || config.reqMethod || config.apiMethod || 'POST'),
-    url: String(config.url || config.apiUrl || config.urlPath || config.path || '').trim(),
-    capabilityCode: String(config.capabilityCode || '').trim(),
-    successBehavior: String(config.successBehavior || '').trim() || null,
-    params: params.map(normalizeApiParam).filter(Boolean),
-  }
-}
-
-function normalizeApiActionConfigForPayload(config = {}) {
-  const normalized = normalizeApiActionConfig(config)
-  return {
-    ...normalized,
-    params: normalized.params
-      .filter(param => param.name && hasApiParamSource(param))
-      .map(({ clientKey, ...param }) => param),
-  }
-}
-
-function normalizeApiMethod(value) {
-  const method = String(value || 'POST')
-    .replace('-', '_')
-    .toUpperCase()
-  return apiMethodOptions.some(item => item.value === method) ? method : 'POST'
-}
-
-function normalizeApiParam(param = {}) {
-  const sourceType = ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'rowField'
-  const target = ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : ''
-  return {
-    clientKey: param.clientKey || `param_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    name: String(param.name || '').trim(),
-    target,
-    sourceType,
-    sourceField: String(param.sourceField || '').trim(),
-    value: param.value === undefined || param.value === null ? '' : String(param.value),
-  }
-}
-
-function hasApiParamSource(param = {}) {
-  if (param.sourceType === 'static')
-    return param.value !== ''
-  return Boolean(param.sourceField)
-}
-
-function isInvalidApiAction(action = {}) {
-  if (normalizeActionType(action.actionType) !== 'CALL_API')
-    return false
-  const config = normalizeApiActionConfig(action.actionConfig)
-  return !config.url && !config.capabilityCode
-}
-
-function normalizeCommandActionConfig(config = {}) {
-  const formSchema = parseJsonArray(config.formSchemaText, config.formSchema)
-  const steps = parseJsonArray(config.stepsText, config.steps || config.stepList)
-  return {
-    ...config,
-    successBehavior: String(config.successBehavior || '').trim() || 'refreshList',
-    formSchema,
-    steps,
-    formSchemaText: typeof config.formSchemaText === 'string' ? config.formSchemaText : stringifyJson(formSchema),
-    stepsText: typeof config.stepsText === 'string' ? config.stepsText : stringifyJson(steps),
-  }
-}
-
-function normalizeCommandActionConfigForPayload(config = {}) {
-  const normalized = normalizeCommandActionConfig(config)
-  const {
-    formSchemaText,
-    stepsText,
-    stepList,
-    ...rest
-  } = normalized
-  return {
-    ...rest,
-    formSchema: parseJsonArray(formSchemaText, normalized.formSchema),
-    steps: parseJsonArray(stepsText, normalized.steps || stepList),
-  }
-}
-
-function isInvalidCommandAction(action = {}) {
-  if (normalizeActionType(action.actionType) !== 'COMMAND')
-    return false
-  const config = normalizeCommandActionConfigForPayload(action.actionConfig)
-  return !Array.isArray(config.steps) || config.steps.length === 0
-}
-
-function insertQuantityStep(action) {
-  action.actionConfig = normalizeCommandActionConfig(action.actionConfig)
-  const steps = parseJsonArray(action.actionConfig.stepsText, action.actionConfig.steps)
-  steps.push({
-    stepCode: `quantity_${Date.now()}`,
-    stepName: '数量台账',
-    stepType: 'DOMAIN_ACTION',
+  const config = ensureActionConfig(action)
+  if (!Array.isArray(config.steps))
+    config.steps = []
+  const collectionPath = collectionPathOptions.value[0]?.value || ''
+  config.steps.push({
+    stepCode: `detail_loop_${Date.now()}`,
+    stepName: '逐行处理明细',
+    stepType: INTERNAL_STEP.FOREACH,
     rollbackOnFailure: true,
     stepConfig: {
-      actionType: 'QUANTITY',
+      collectionPath,
+      itemAlias: 'item',
+      indexAlias: 'index',
+      steps: [createQuantityStep()],
+    },
+  })
+  emitActions(actions)
+}
+
+function addQuantityStep(parentStep) {
+  const actions = cloneValue(actionList.value)
+  const cloned = resolveStep(actions, parentStep)
+  if (!cloned)
+    return
+  const config = ensureStepConfig(cloned)
+  if (!Array.isArray(config.steps))
+    config.steps = []
+  config.steps.push(createQuantityStep())
+  emitActions(actions)
+}
+
+function patchStep(step, patch = {}) {
+  const actions = cloneValue(actionList.value)
+  const cloned = resolveStep(actions, step)
+  if (!cloned)
+    return
+  Object.assign(cloned, patch)
+  emitActions(actions)
+}
+
+function patchStepConfig(step, patch = {}) {
+  const actions = cloneValue(actionList.value)
+  const cloned = resolveStep(actions, step)
+  if (!cloned)
+    return
+  Object.assign(ensureStepConfig(cloned), patch)
+  emitActions(actions)
+}
+
+function updateStepCollection(step, collectionPath) {
+  const relation = relationByCollectionPath(collectionPath)
+  patchStepConfig(step, {
+    collectionPath,
+    itemAlias: step.config?.itemAlias || 'item',
+    indexAlias: step.config?.indexAlias || 'index',
+    relationKey: relation?.collectionKey || '',
+    relationName: relation?.relationName || relation?.modelName || '',
+    targetObjectCode: relation?.targetObjectCode || '',
+  })
+}
+
+function updateStepParam(step, key, value) {
+  const actions = cloneValue(actionList.value)
+  const cloned = resolveStep(actions, step)
+  if (!cloned)
+    return
+  const params = ensureParams(ensureStepConfig(cloned))
+  params[key] = value
+  emitActions(actions)
+}
+
+function updateFallbackFields(step, key, value) {
+  const actions = cloneValue(actionList.value)
+  const cloned = resolveStep(actions, step)
+  if (!cloned)
+    return
+  ensureStepConfig(cloned)[`${key}FallbackFields`] = normalizeStringList(value)
+  emitActions(actions)
+}
+
+function removeStep(step) {
+  const actions = cloneValue(actionList.value)
+  const parentSteps = getPathValue(actions[selectedActionIndex.value]?.actionConfig, step.parentPath)
+  if (!Array.isArray(parentSteps))
+    return
+  parentSteps.splice(step.index, 1)
+  emitActions(actions)
+}
+
+function applyActionConfigText() {
+  jsonError.value = ''
+  let parsed
+  try {
+    parsed = actionConfigText.value?.trim() ? JSON.parse(actionConfigText.value) : {}
+  }
+  catch (error) {
+    jsonError.value = error?.message || 'JSON 格式不正确'
+    return
+  }
+  patchSelectedAction({
+    actionConfig: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {},
+  })
+}
+
+function emitActions(actions) {
+  emit('update:actions', actions)
+  emit('dirtyChange', true)
+}
+
+function containsInternalStartFlow(action = {}) {
+  return flattenAllSteps(action.actionConfig || {}).some(step => isInternalStepType(step.raw, INTERNAL_STEP.START_FLOW))
+}
+
+function flattenRootSteps(actionConfig = {}) {
+  const steps = Array.isArray(actionConfig.steps) ? actionConfig.steps : []
+  return steps.map((step, index) => buildStepVM(step, ['steps', index], ['steps'], index, []))
+}
+
+function childBusinessSteps(step) {
+  const children = Array.isArray(step.config.steps) ? step.config.steps : []
+  const childParentPath = [...step.configPath, 'steps']
+  const aliases = [
+    ...step.aliases,
+    {
+      alias: step.config.itemAlias || 'item',
+      collectionPath: step.config.collectionPath || '',
+    },
+  ]
+  return children.map((child, index) => buildStepVM(child, [...childParentPath, index], childParentPath, index, aliases))
+}
+
+function flattenAllSteps(actionConfig = {}) {
+  const result = []
+  function visit(steps, path, parentPath, aliases) {
+    if (!Array.isArray(steps))
+      return
+    steps.forEach((step, index) => {
+      const vm = buildStepVM(step, [...path, index], parentPath.length ? parentPath : path, index, aliases)
+      result.push(vm)
+      visit(vm.config.steps, [...vm.configPath, 'steps'], [...vm.configPath, 'steps'], vm.aliases)
+    })
+  }
+  visit(actionConfig.steps, ['steps'], ['steps'], [])
+  return result
+}
+
+function buildStepVM(raw, path, parentPath, index, aliases) {
+  const config = raw?.stepConfig && typeof raw.stepConfig === 'object' ? raw.stepConfig : raw || {}
+  const configPath = raw?.stepConfig && typeof raw.stepConfig === 'object' ? [...path, 'stepConfig'] : path
+  return {
+    raw: raw || {},
+    index,
+    path,
+    parentPath,
+    config,
+    configPath,
+    key: path.join('.'),
+    aliases,
+  }
+}
+
+function createQuantityStep() {
+  return {
+    stepCode: `quantity_${Date.now()}`,
+    stepName: '数量处理',
+    stepType: INTERNAL_STEP.DOMAIN_ACTION,
+    rollbackOnFailure: true,
+    stepConfig: {
+      actionType: INTERNAL_ACTION.QUANTITY,
       operationType: 'INBOUND',
       params: {
         accountCode: '',
-        itemCode: '${itemCode}',
+        itemCode: '',
+        quantity: '',
+        sourceDetailId: '',
         dimensionKey: '',
-        quantity: '${quantity}',
+        remark: '',
       },
     },
-  })
-  action.actionConfig.steps = steps
-  action.actionConfig.stepsText = stringifyJson(steps)
-  markDirty()
-}
-
-function insertForeachQuantityStep(action) {
-  action.actionConfig = normalizeCommandActionConfig(action.actionConfig)
-  const steps = parseJsonArray(action.actionConfig.stepsText, action.actionConfig.steps)
-  steps.push({
-    stepCode: `foreach_quantity_${Date.now()}`,
-    stepName: '循环明细数量动作',
-    stepType: 'FOREACH',
-    rollbackOnFailure: true,
-    stepConfig: {
-      collectionPath: 'formData.items',
-      itemAlias: 'item',
-      indexAlias: 'index',
-      steps: [
-        {
-          stepCode: 'quantity_by_item',
-          stepName: '逐行数量台账',
-          stepType: 'DOMAIN_ACTION',
-          rollbackOnFailure: true,
-          stepConfig: {
-            actionType: 'QUANTITY',
-            operationType: 'INBOUND',
-            params: {
-              accountCode: '${record.accountCode}',
-              itemCode: '${item.itemCode}',
-              dimensionKey: '${item.dimensionKey}',
-              quantity: '${item.quantity}',
-              sourceDetailId: '${item.id}',
-            },
-          },
-        },
-      ],
-    },
-  })
-  action.actionConfig.steps = steps
-  action.actionConfig.stepsText = stringifyJson(steps)
-  markDirty()
-}
-
-function formatCommandSteps(action) {
-  action.actionConfig = normalizeCommandActionConfig(action.actionConfig)
-  const steps = parseJsonArray(action.actionConfig.stepsText, action.actionConfig.steps)
-  action.actionConfig.steps = steps
-  action.actionConfig.stepsText = stringifyJson(steps)
-  markDirty()
-}
-
-function addApiParam(action) {
-  action.actionConfig = normalizeApiActionConfig(action.actionConfig)
-  action.actionConfig.params.push(normalizeApiParam({
-    target: normalizeApiMethod(action.actionConfig.method) === 'GET' ? 'query' : 'body',
-    sourceType: 'rowField',
-  }))
-  markDirty()
-}
-
-function removeApiParam(action, index) {
-  action.actionConfig.params.splice(index, 1)
-  markDirty()
-}
-
-function applyApiConfig(action, value) {
-  const configId = value === undefined || value === null ? '' : String(value)
-  const selected = apiConfigs.value.find(item => String(item.id || item.apiCode || item.urlPath) === configId)
-  action.actionConfig.apiConfigId = configId || null
-  if (selected) {
-    action.actionConfig.apiCode = selected.apiCode || ''
-    action.actionConfig.apiName = selected.apiName || ''
-    action.actionConfig.method = selected.needEncrypt && String(selected.reqMethod || '').toUpperCase() === 'POST'
-      ? 'POST_ENCRYPT'
-      : normalizeApiMethod(selected.reqMethod || 'POST')
-    action.actionConfig.url = selected.urlPath || ''
   }
-  markDirty()
 }
 
-function safeParseJson(value) {
+function isQuantityStep(step) {
+  const config = step?.config || step?.stepConfig || {}
+  return String(config.actionType || '').toUpperCase() === INTERNAL_ACTION.QUANTITY
+}
+
+function isInternalStepType(step, type) {
+  return String(step?.stepType || '').toUpperCase() === type
+}
+
+function resolveActionScene(action = {}) {
+  if (action.actionConfig?.triggerScene)
+    return action.actionConfig.triggerScene
+  const code = action.actionCode || action.key
+  const callbackMap = collectCallbackActionMap(props.documentConfig)
+  return callbackMap.get(code) || 'MANUAL'
+}
+
+function actionSceneLabel(action = {}) {
+  const value = resolveActionScene(action)
+  return sceneOptions.find(item => item.value === value)?.label || '业务自动化'
+}
+
+function collectCallbackActionMap(documentConfig = {}) {
+  const result = new Map()
+  const callbackActions = documentConfig.callbackActions
+    || documentConfig.mainFlowSummary?.callbackActions
+    || documentConfig.mainFlow?.callbackActions
+    || documentConfig.options?.callbackActions
+    || {}
+  Object.entries(callbackActions).forEach(([key, value]) => {
+    if (!value)
+      return
+    const normalized = String(key).toUpperCase()
+    if (normalized.includes('APPROVED') || normalized === 'APPROVED')
+      result.set(value, 'FLOW_APPROVED')
+    if (normalized.includes('REJECTED') || normalized === 'REJECTED')
+      result.set(value, 'FLOW_REJECTED')
+  })
+  if (callbackActions.approvedActionCode)
+    result.set(callbackActions.approvedActionCode, 'FLOW_APPROVED')
+  if (callbackActions.rejectedActionCode)
+    result.set(callbackActions.rejectedActionCode, 'FLOW_REJECTED')
+  return result
+}
+
+async function loadBusinessObjects() {
   try {
-    return JSON.parse(value || '{}')
+    const res = await businessObjectList({
+      suiteCode: props.suiteCode || undefined,
+    })
+    businessObjects.value = Array.isArray(res.data) ? res.data : []
+    await preloadRelationFields()
   }
   catch {
-    return {}
+    businessObjects.value = []
   }
 }
 
-function parseJsonArray(text, fallback = []) {
-  if (typeof text === 'string' && text.trim()) {
-    try {
-      const parsed = JSON.parse(text)
-      return Array.isArray(parsed) ? parsed : []
+async function preloadRelationFields() {
+  const objectCodes = Array.from(new Set(actionRelations.value
+    .map(relation => relation.targetObjectCode)
+    .filter(Boolean)))
+  await Promise.all(objectCodes.map(objectCode => loadTargetFields(objectCode)))
+}
+
+async function loadTargetFields(objectCode) {
+  const code = String(objectCode || '').trim()
+  if (!code || targetFieldsMap.value[code] || targetFieldLoadingMap.value[code])
+    return
+  targetFieldLoadingMap.value = {
+    ...targetFieldLoadingMap.value,
+    [code]: true,
+  }
+  try {
+    let targetObject = businessObjects.value.find(item => item.objectCode === code)
+    if (!targetObject?.id) {
+      const res = await businessObjectList({ objectCode: code })
+      targetObject = (res.data || [])[0]
     }
-    catch {
-      return Array.isArray(fallback) ? fallback : []
+    if (!targetObject?.id) {
+      targetFieldsMap.value = {
+        ...targetFieldsMap.value,
+        [code]: [],
+      }
+      return
+    }
+    const res = await businessObjectDesigner(targetObject.id)
+    const fields = res.data?.fields || res.data?.modelSchema?.fields || []
+    targetFieldsMap.value = {
+      ...targetFieldsMap.value,
+      [code]: fields.map(toPageField),
     }
   }
-  return Array.isArray(fallback) ? fallback : []
+  catch {
+    targetFieldsMap.value = {
+      ...targetFieldsMap.value,
+      [code]: [],
+    }
+  }
+  finally {
+    targetFieldLoadingMap.value = {
+      ...targetFieldLoadingMap.value,
+      [code]: false,
+    }
+  }
+}
+
+function buildCollectionPathOptions(relations = []) {
+  return relations
+    .filter(relation => isDetailRelation(relation))
+    .map((child) => {
+      const key = child.collectionKey || child.key || child.modelCode || child.tableName || child.relationName
+      const value = `record.children.${key}`
+      return {
+        label: child.relationName || child.detailTabTitle || child.modelName || child.label || '明细关系',
+        value,
+      }
+    })
+}
+
+function collectionOptionsForStep(step = {}) {
+  const options = [...collectionPathOptions.value]
+  const current = String(step.config?.collectionPath || '').trim()
+  if (current && !options.some(item => item.value === current)) {
+    options.unshift({
+      label: resolveCollectionPathLabel(current),
+      value: current,
+    })
+  }
+  return options
+}
+
+function resolveCollectionPathLabel(collectionPath = '') {
+  const relation = relationByCollectionPath(collectionPath)
+  if (relation)
+    return relation.relationName || relation.detailTabTitle || relation.modelName || '明细关系'
+  return '未识别明细关系（请在关系与级联中维护）'
+}
+
+function relationByCollectionPath(collectionPath = '') {
+  const path = String(collectionPath || '')
+  return actionRelations.value.find((child) => {
+    const keys = collectionKeyCandidates(child)
+    return keys.some(key => path.endsWith(String(key)))
+  }) || null
+}
+
+function buildActionRelations(modelSchema = {}, relations = []) {
+  const schemaChildren = collectSchemaChildren(modelSchema)
+  const result = []
+  const usedSchema = new Set()
+  ;(Array.isArray(relations) ? relations : []).forEach((relation) => {
+    const matchedIndex = schemaChildren.findIndex(child => isSameRelation(child, relation))
+    const schemaChild = matchedIndex >= 0 ? schemaChildren[matchedIndex] : {}
+    if (matchedIndex >= 0)
+      usedSchema.add(matchedIndex)
+    result.push(normalizeActionRelation({
+      ...schemaChild,
+      ...relation,
+      fields: mergeRelationFields(schemaChild, relation),
+    }))
+  })
+  schemaChildren.forEach((child, index) => {
+    if (!usedSchema.has(index))
+      result.push(normalizeActionRelation(child))
+  })
+  return result
+}
+
+function normalizeActionRelation(relation = {}) {
+  const targetObjectCode = relation.targetObjectCode || relation.objectCode || relation.modelCode || ''
+  const collectionKey = relation.key
+    || relation.modelCode
+    || relation.tableName
+    || lowerSnake(targetObjectCode)
+    || relation.relationName
+  return {
+    ...relation,
+    targetObjectCode,
+    collectionKey,
+    relationType: relation.relationType || relation.type || 'DETAIL',
+    relationName: relation.relationName || relation.detailTabTitle || relation.modelName || relation.label || '',
+    fields: relationFields({
+      ...relation,
+      targetObjectCode,
+    }),
+  }
+}
+
+function mergeRelationFields(schemaChild = {}, relation = {}) {
+  return [
+    ...normalizeFields(schemaChild.fields),
+    ...normalizeFields(relation.fields),
+  ]
+}
+
+function relationFields(relation = {}) {
+  const fields = [
+    ...normalizeFields(relation.fields),
+    ...normalizeFields(targetFieldsMap.value[relation.targetObjectCode]),
+  ]
+  const seen = new Set()
+  return fields.filter((field) => {
+    const code = field.sourceField || field.field || field.fieldCode
+    if (!code || seen.has(code) || isInactiveField(field))
+      return false
+    seen.add(code)
+    return true
+  })
+}
+
+function normalizeFields(fields = []) {
+  return Array.isArray(fields) ? fields.map(toPageField) : []
+}
+
+function isSameRelation(left = {}, right = {}) {
+  const leftCodes = collectionKeyCandidates(left)
+  const rightCodes = collectionKeyCandidates(right)
+  return leftCodes.some(code => rightCodes.includes(code))
+}
+
+function collectionKeyCandidates(relation = {}) {
+  return [
+    relation.collectionKey,
+    relation.key,
+    relation.modelCode,
+    relation.tableName,
+    relation.targetObjectCode,
+    lowerSnake(relation.targetObjectCode),
+    relation.relationName,
+  ].filter(Boolean).map(String)
+}
+
+function isDetailRelation(relation = {}) {
+  const type = String(relation.relationType || relation.type || '').toUpperCase()
+  return !type || ['DETAIL', 'CHILD_LIST', 'ONE_TO_MANY'].includes(type)
+}
+
+function collectSchemaChildren(modelSchema = {}) {
+  if (Array.isArray(modelSchema.children))
+    return modelSchema.children
+  if (Array.isArray(modelSchema.childrenConfig))
+    return modelSchema.childrenConfig
+  if (Array.isArray(modelSchema.relations))
+    return modelSchema.relations
+  return []
+}
+
+function lowerSnake(value = '') {
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/\W+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .toLowerCase()
+}
+
+function toPageField(field = {}) {
+  return {
+    ...field,
+    field: field.field || field.fieldCode || field.sourceField,
+    label: field.label || field.fieldName || field.name || field.fieldCode || field.sourceField,
+    fieldStatus: field.fieldStatus,
+    basicProps: { ...(field.basicProps || {}) },
+    advancedProps: { ...(field.advancedProps || {}) },
+  }
+}
+
+function isInactiveField(field = {}) {
+  const status = String(field.fieldStatus || '').toUpperCase()
+  return status === 'DISABLED' || status === 'HIDDEN'
+}
+
+function businessFieldLabel(field = {}) {
+  const fieldName = field.field || field.fieldCode || field.sourceField || ''
+  const systemLabels = {
+    id: '记录ID',
+    createBy: '创建人',
+    createTime: '创建时间',
+    updateBy: '修改人',
+    updateTime: '修改时间',
+    createDept: '创建部门',
+    tenantId: '租户',
+  }
+  return systemLabels[fieldName] || field.label || field.fieldName || field.name || '未命名字段'
+}
+
+function fieldPathOptions(step = {}) {
+  const options = []
+  const seen = new Set()
+  const add = (value, label) => {
+    const text = String(value || '').trim()
+    if (!text || seen.has(text))
+      return
+    seen.add(text)
+    options.push({ label: label || '未命名字段', value: text })
+  }
+  collectMainFields(props.fields, props.modelSchema).forEach((sourceField) => {
+    const field = toPageField(sourceField)
+    const fieldCode = field.sourceField || field.field || field.fieldCode
+    if (!fieldCode)
+      return
+    add(`record.main.${fieldCode}`, fieldDisplayLabel(field, '单据字段'))
+  })
+  const aliases = step.aliases?.length ? step.aliases : [{ alias: 'item', collectionPath: '' }]
+  aliases.forEach((aliasInfo) => {
+    const relation = relationByCollectionPath(aliasInfo.collectionPath) || actionRelations.value[0]
+    const detailLabel = detailDisplayLabel(aliasInfo.collectionPath)
+    const fields = relation?.fields || []
+    fields.forEach((field) => {
+      const fieldCode = field.sourceField || field.field || field.fieldCode
+      if (!fieldCode)
+        return
+      add(`${aliasInfo.alias}.${fieldCode}`, fieldDisplayLabel(field, detailLabel))
+    })
+    add(`${aliasInfo.alias}.id`, `${detailLabel} · ID`)
+  })
+  return options
+}
+
+function fieldDisplayLabel(field = {}, scopeLabel = '') {
+  const label = businessFieldLabel(field)
+  return scopeLabel ? `${scopeLabel} · ${label}` : label
+}
+
+function collectMainFields(fields = [], modelSchema = {}) {
+  if (Array.isArray(fields) && fields.length)
+    return fields
+  return Array.isArray(modelSchema.fields) ? modelSchema.fields : []
+}
+
+function detailDisplayLabel(collectionPath = '') {
+  const relation = relationByCollectionPath(collectionPath) || actionRelations.value[0]
+  return relation?.relationName || relation?.detailTabTitle || relation?.modelName || relation?.label || '明细字段'
+}
+
+function mergeSelectedFieldOptions(options = [], values = []) {
+  const result = Array.isArray(options) ? [...options] : []
+  const seen = new Set(result.map(item => item.value))
+  normalizeStringList(values).forEach((value) => {
+    if (seen.has(value))
+      return
+    result.push({
+      label: resolvePathDisplayLabel(value, result),
+      value,
+    })
+    seen.add(value)
+  })
+  return result
+}
+
+function resolvePathDisplayLabel(value, options = []) {
+  const matched = options.find(item => item.value === value)
+  if (matched?.label)
+    return matched.label
+  const fieldCode = String(value || '').split('.').pop()
+  const field = findFieldByCode(fieldCode)
+  if (field)
+    return fieldDisplayLabel(field, String(value || '').startsWith('record.') ? '单据字段' : '明细字段')
+  return '未识别字段（请在关系与级联中维护）'
+}
+
+function findFieldByCode(fieldCode) {
+  if (!fieldCode)
+    return null
+  const allFields = [
+    ...collectMainFields(props.fields, props.modelSchema).map(toPageField),
+    ...actionRelations.value.flatMap(relation => relation.fields || []),
+  ].map(toPageField)
+  return allFields.find((field) => {
+    const codes = [field.sourceField, field.field, field.fieldCode, field.columnName].filter(Boolean)
+    return codes.some(code => String(code) === String(fieldCode))
+  }) || null
+}
+
+function ensureActionConfig(action) {
+  if (!action.actionConfig || typeof action.actionConfig !== 'object' || Array.isArray(action.actionConfig))
+    action.actionConfig = {}
+  return action.actionConfig
+}
+
+function ensureStepConfig(step) {
+  if (!step.stepConfig || typeof step.stepConfig !== 'object' || Array.isArray(step.stepConfig))
+    step.stepConfig = {}
+  return step.stepConfig
+}
+
+function ensureParams(config) {
+  if (!config.params || typeof config.params !== 'object' || Array.isArray(config.params))
+    config.params = {}
+  return config.params
+}
+
+function resolveStep(actions, step) {
+  const action = actions[selectedActionIndex.value]
+  if (!action?.actionConfig)
+    return null
+  return getPathValue(action.actionConfig, step.path)
+}
+
+function getPathValue(root, path = []) {
+  let cursor = root
+  for (const key of path) {
+    if (cursor == null)
+      return null
+    cursor = cursor[key]
+  }
+  return cursor
+}
+
+function wrapExpression(path) {
+  const text = String(path || '').trim()
+  return text ? `\${${text}}` : ''
+}
+
+function unwrapExpression(value) {
+  const text = String(value || '').trim()
+  const match = text.match(/^\$\{([^}]+)\}$/)
+  return match ? match[1] : text
+}
+
+function stringValue(value) {
+  if (value == null)
+    return ''
+  if (typeof value === 'object')
+    return JSON.stringify(value)
+  return String(value)
+}
+
+function normalizeStringList(value) {
+  const list = Array.isArray(value) ? value : value ? [value] : []
+  return Array.from(new Set(list.map(item => String(item || '').trim()).filter(Boolean)))
+}
+
+function cloneValue(value) {
+  return JSON.parse(JSON.stringify(value ?? []))
 }
 
 function stringifyJson(value) {
   try {
-    return JSON.stringify(Array.isArray(value) ? value : [], null, 2)
+    return JSON.stringify(value || {}, null, 2)
   }
   catch {
-    return '[]'
+    return '{}'
   }
 }
-
-function normalizeActionCode(value) {
-  return String(value || '')
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace(/\W+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toLowerCase()
-    .slice(0, 64)
-}
-
-function actionPositionLabel(value) {
-  return positionOptions.find(item => item.value === value)?.label || value || '-'
-}
-
-function actionTypeLabel(value) {
-  return actionTypeOptions.find(item => item.value === value)?.label || value || '-'
-}
-
-function markDirty() {
-  emit('dirtyChange', true)
-}
-
-defineExpose({
-  saveActions,
-  loadActions,
-})
 </script>
 
 <style scoped>
-.business-action-designer {
+.automation-designer {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: calc(100vh - 106px);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 100%;
+  padding: 14px;
+  background: #f7f8fa;
 }
 
-.action-designer-head {
+.designer-head,
+.boundary-strip,
+.panel-section,
+.automation-list,
+.advanced-json {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.designer-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 14px 16px;
+  gap: 16px;
+  padding: 12px 14px;
 }
 
-.action-designer-head h3 {
+.designer-head h2,
+.section-title h3 {
   margin: 0;
-  color: #111827;
+  color: #18181b;
   font-size: 15px;
+  font-weight: 700;
 }
 
-.action-designer-head p,
-.action-card-head p,
-.action-summary-pane p {
-  margin: 4px 0 0;
-  color: #64748b;
+.designer-head p {
+  margin: 3px 0 0;
+  color: #71717a;
   font-size: 12px;
 }
 
-.action-designer-body {
+.boundary-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+}
+
+.boundary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: #fafafa;
+}
+
+.boundary-item.active {
+  background: #eef3ff;
+}
+
+.boundary-item strong {
+  color: #27272a;
+  font-size: 13px;
+}
+
+.boundary-item span,
+.pane-title span,
+.automation-list-item span,
+.flow-card-head em,
+.quantity-card-head span,
+.unsupported-step span {
+  color: #71717a;
+  font-size: 12px;
+}
+
+.approval-entry-note {
+  font-size: 12px;
+}
+
+.relation-warning {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.empty-state {
+  align-self: center;
+}
+
+.automation-workbench {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 12px;
   min-height: 0;
 }
 
-.action-list-pane {
-  min-width: 0;
+.automation-list {
+  min-height: 0;
   overflow: auto;
-  background: #f8fafc;
-  padding: 14px;
+  padding: 8px;
 }
 
-.action-card-list {
-  display: grid;
-  gap: 12px;
-}
-
-.action-card,
-.action-summary-pane section {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  padding: 14px;
-}
-
-.action-card-head {
+.pane-title,
+.section-title,
+.flow-card-head,
+.nested-title,
+.quantity-card-head,
+.unsupported-step {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  gap: 10px;
+}
+
+.pane-title {
+  padding: 4px 4px 8px;
+  color: #52525b;
+  font-size: 12px;
+}
+
+.automation-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.automation-list-item:hover,
+.automation-list-item.active {
+  border-color: #bfd0ff;
+  background: #eef3ff;
+}
+
+.automation-list-item strong,
+.quantity-card-head strong,
+.unsupported-step strong {
+  color: #27272a;
+  font-size: 13px;
+}
+
+.automation-main {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.panel-section {
+  padding: 12px;
+}
+
+.action-summary {
+  padding-bottom: 4px;
+}
+
+.flow-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.flow-card,
+.quantity-card,
+.unsupported-step {
+  padding: 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.flow-card-head {
   margin-bottom: 12px;
 }
 
-.action-card-head strong,
-.action-summary-pane h4 {
-  margin: 0;
-  color: #111827;
-  font-size: 14px;
+.flow-card-head > div,
+.quantity-card-head > div,
+.unsupported-step > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.action-summary-pane {
+.step-index {
   display: grid;
-  align-content: start;
-  gap: 12px;
-  border-left: 1px solid #e5e7eb;
-  background: #fbfcfe;
-  padding: 12px;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: #2944cc;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.action-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.nested-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e4e4e7;
+}
+
+.nested-title {
+  margin-bottom: 10px;
+}
+
+.quantity-card + .quantity-card {
   margin-top: 10px;
 }
 
-.action-stat-grid div {
-  border-radius: 6px;
-  background: #f1f5f9;
-  padding: 10px;
-  text-align: center;
+.quantity-card {
+  background: #fff;
 }
 
-.action-stat-grid span {
-  display: block;
-  color: #64748b;
-  font-size: 12px;
+.quantity-card-head {
+  margin-bottom: 10px;
 }
 
-.action-stat-grid strong {
-  display: block;
-  margin-top: 4px;
-  color: #111827;
-  font-size: 18px;
+.advanced-json {
+  overflow: hidden;
 }
 
-.main-flow-action-hint {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  background: #eff6ff;
-  color: #1e40af;
-  padding: 10px 12px;
+.json-error {
+  margin-top: 8px;
 }
 
-.main-flow-action-hint strong {
-  font-size: 13px;
-}
-
-.main-flow-action-hint span {
-  color: #475569;
-  font-size: 12px;
-}
-
-.api-action-panel {
-  display: grid;
-  gap: 12px;
-  width: 100%;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fbfcfe;
-  padding: 12px;
-}
-
-.api-action-panel :deep(.n-form-item:last-child) {
-  margin-bottom: 0;
-}
-
-.api-param-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.api-param-list {
-  display: grid;
-  gap: 8px;
-}
-
-.command-step-panel {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-}
-
-.command-step-toolbar {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.api-param-row {
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) 104px 120px minmax(150px, 1.2fr) 32px;
-  gap: 8px;
-  align-items: center;
-}
-
-@media (max-width: 1100px) {
-  .action-designer-body {
-    grid-template-columns: 1fr;
-  }
-
-  .action-summary-pane {
-    border-left: 0;
-    border-top: 1px solid #e5e7eb;
-  }
-
-  .api-param-row {
+@media (max-width: 1180px) {
+  .boundary-strip,
+  .automation-workbench {
     grid-template-columns: 1fr;
   }
 }

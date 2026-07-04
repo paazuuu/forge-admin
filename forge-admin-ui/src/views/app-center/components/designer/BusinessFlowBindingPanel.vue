@@ -128,18 +128,6 @@
                     @update:value="markDirty"
                   />
                 </n-form-item-gi>
-                <n-form-item-gi label="负责人字段">
-                  <n-select
-                    v-model:value="form.businessBinding.ownerField"
-                    :options="fieldOptions"
-                    :disabled="businessBindingAdapterMode"
-                    clearable
-                    filterable
-                    tag
-                    placeholder="选择或输入负责人字段"
-                    @update:value="markDirty"
-                  />
-                </n-form-item-gi>
               </n-grid>
             </n-form>
             <n-alert
@@ -812,12 +800,11 @@ function normalizeBusinessBinding(value = {}) {
     tenantField: normalizeText(value?.tenantField) || defaults.tenantField,
     statusField: normalizeText(value?.statusField),
     titleField: normalizeText(value?.titleField),
-    ownerField: normalizeText(value?.ownerField),
+    ownerField: '',
   }
   if (next.mode === 'LOWCODE_OBJECT') {
     next.statusField = next.statusField || inferStatusField()
     next.titleField = next.titleField || inferTitleField()
-    next.ownerField = next.ownerField || inferOwnerField()
   }
   return next
 }
@@ -825,7 +812,6 @@ function normalizeBusinessBinding(value = {}) {
 function fillLowcodeBusinessBindingDefaults() {
   form.businessBinding.statusField = form.businessBinding.statusField || inferStatusField()
   form.businessBinding.titleField = form.businessBinding.titleField || inferTitleField()
-  form.businessBinding.ownerField = form.businessBinding.ownerField || inferOwnerField()
 }
 
 function normalizeBusinessBindingMode(value) {
@@ -861,19 +847,6 @@ function inferTitleField() {
     'contractName',
     'contract_name',
   ], /标题|名称|主题|合同名称|单据名称/)
-}
-
-function inferOwnerField() {
-  return inferFieldCode([
-    'ownerId',
-    'owner_id',
-    'principalId',
-    'principal_id',
-    'leaderId',
-    'leader_id',
-    'managerId',
-    'manager_id',
-  ], /负责人|责任人|经理|主管/)
 }
 
 function inferFieldCode(exactCodes = [], labelPattern = null) {

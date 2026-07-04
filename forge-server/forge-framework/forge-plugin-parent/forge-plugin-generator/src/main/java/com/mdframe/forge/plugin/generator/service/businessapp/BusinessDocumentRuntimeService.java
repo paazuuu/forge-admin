@@ -60,7 +60,7 @@ public class BusinessDocumentRuntimeService {
         }
         fillDetailFlowDisplayOptions(vo, configVO);
 
-        String documentStatus = text(firstPresent(recordData, config.getStatusField(), snakeToCamel(config.getStatusField())));
+        String documentStatus = text(resolveRecordField(recordData, config.getStatusField()));
         vo.setDocumentStatus(documentStatus);
         vo.setDocumentStatusLabel(resolveStatusLabel(configVO, documentStatus));
 
@@ -135,7 +135,7 @@ public class BusinessDocumentRuntimeService {
             return vo;
         }
 
-        String documentStatus = text(firstPresent(recordData, config.getStatusField(), snakeToCamel(config.getStatusField())));
+        String documentStatus = text(resolveRecordField(recordData, config.getStatusField()));
         vo.setDocumentStatus(documentStatus);
         vo.setDocumentStatusLabel(resolveStatusLabel(configVO, documentStatus));
 
@@ -163,24 +163,24 @@ public class BusinessDocumentRuntimeService {
                 || !runtime.getAvailableActions().contains("START_FLOW"))) {
             throw new BusinessException("缺少发起主流程权限");
         }
+        if ("CONFIG_FLOW".equals(runtime.getNextAction())) {
+            throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "请先配置主流程"));
+        }
+        if ("VIEW_FLOW".equals(runtime.getNextAction())) {
+            throw new BusinessException("当前单据已有流转中的流程");
+        }
+        if ("WAIT_STATUS".equals(runtime.getNextAction())) {
+            throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "当前单据状态不可发起主流程"));
+        }
         if (!checkPermission) {
-            if ("CONFIG_FLOW".equals(runtime.getNextAction())) {
-                throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "请先配置主流程"));
-            }
-            if ("VIEW_FLOW".equals(runtime.getNextAction())) {
-                throw new BusinessException("当前单据已有流转中的流程");
-            }
-            if ("WAIT_STATUS".equals(runtime.getNextAction())) {
-                throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "当前单据状态不可发起主流程"));
-            }
             return;
         }
         BusinessDocumentRuntimeVO.RuntimeActionVO startAction = findRuntimeAction(runtime, "START_FLOW");
-        if (startAction == null || !Boolean.TRUE.equals(startAction.getVisible())) {
-            throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "当前单据不可发起主流程"));
-        }
-        if (Boolean.TRUE.equals(startAction.getDisabled())) {
+        if (startAction != null && Boolean.TRUE.equals(startAction.getDisabled())) {
             throw new BusinessException(StringUtils.defaultIfBlank(startAction.getDisabledReason(), "当前单据不可发起主流程"));
+        }
+        if (!"START_FLOW".equals(runtime.getNextAction())) {
+            throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "当前单据不可发起主流程"));
         }
     }
 
@@ -424,6 +424,32 @@ public class BusinessDocumentRuntimeService {
         return null;
     }
 
+    @SuppressWarnings("unchecked")
+    private Object resolveRecordField(Map<String, Object> recordData, String fieldName) {
+        if (recordData == null || StringUtils.isBlank(fieldName)) {
+            return null;
+        }
+        String[] aliases = fieldAliases(fieldName);
+        Object value = firstPresent(recordData, aliases);
+        if (value != null) {
+            return value;
+        }
+        Object main = recordData.get("main");
+        if (main instanceof Map<?, ?> mainMap) {
+            return firstPresent((Map<String, Object>) mainMap, aliases);
+        }
+        return null;
+    }
+
+    private String[] fieldAliases(String fieldName) {
+        String trimmed = StringUtils.trimToEmpty(fieldName);
+        return new String[] {
+                trimmed,
+                snakeToCamel(trimmed),
+                camelToSnake(trimmed)
+        };
+    }
+
     private String buildBusinessKey(String objectCode, Long recordId) {
         return objectCode + ":" + (recordId == null ? "" : recordId);
     }
@@ -584,6 +610,21 @@ public class BusinessDocumentRuntimeService {
             }
             result.append(upperNext ? Character.toUpperCase(ch) : ch);
             upperNext = false;
+        }
+        return result.toString();
+    }
+
+    private String camelToSnake(String value) {
+        if (StringUtils.isBlank(value)) {
+            return value;
+        }
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (Character.isUpperCase(ch) && i > 0) {
+                result.append('_');
+            }
+            result.append(Character.toLowerCase(ch));
         }
         return result.toString();
     }

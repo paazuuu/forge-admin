@@ -46,7 +46,7 @@ public class BusinessRecordSelectorService {
         String objectCode = resolveObjectCode(query);
         query.setObjectCode(objectCode);
         if (StringUtils.isBlank(objectCode)) {
-            throw new BusinessException("选择器缺少业务对象编码");
+            throw new BusinessException("选择器缺少业务对象编码: " + describeObjectCodeFields(query));
         }
         AiBusinessObject object = resolveObject(query);
         validateObjectViewPermission(object);
@@ -99,6 +99,21 @@ public class BusinessRecordSelectorService {
                 StringUtils.trimToNull(query.getRefObjectCode()),
                 StringUtils.trimToNull(query.getSourceObjectCode()),
                 StringUtils.trimToNull(query.getTargetCode()));
+    }
+
+    private String describeObjectCodeFields(BusinessRecordSelectorQueryDTO query) {
+        if (query == null) {
+            return "query=null";
+        }
+        return "objectCode=" + StringUtils.defaultString(query.getObjectCode())
+                + ", businessObjectCode=" + StringUtils.defaultString(query.getBusinessObjectCode())
+                + ", targetObjectCode=" + StringUtils.defaultString(query.getTargetObjectCode())
+                + ", targetEntityCode=" + StringUtils.defaultString(query.getTargetEntityCode())
+                + ", candidateObjectCode=" + StringUtils.defaultString(query.getCandidateObjectCode())
+                + ", referenceObjectCode=" + StringUtils.defaultString(query.getReferenceObjectCode())
+                + ", refObjectCode=" + StringUtils.defaultString(query.getRefObjectCode())
+                + ", sourceObjectCode=" + StringUtils.defaultString(query.getSourceObjectCode())
+                + ", targetCode=" + StringUtils.defaultString(query.getTargetCode());
     }
 
     private AiBusinessObject resolveObject(BusinessRecordSelectorQueryDTO query) {

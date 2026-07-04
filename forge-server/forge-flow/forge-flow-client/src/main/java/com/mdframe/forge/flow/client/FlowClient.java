@@ -291,11 +291,16 @@ public class FlowClient {
      * @param variables 额外流程变量（可为 null）
      */
     public FlowResult<Void> approve(String taskId, String userId, String comment, Map<String, Object> variables) {
+        return approve(taskId, userId, comment, null, variables);
+    }
+
+    public FlowResult<Void> approve(String taskId, String userId, String comment, String signature, Map<String, Object> variables) {
         String url = flowServiceUrl + "/api/flow/task/approve";
         Map<String, Object> params = new HashMap<>();
         params.put("taskId", taskId);
         params.put("userId", userId);
         params.put("comment", comment);
+        if (signature != null) params.put("signature", signature);
         if (variables != null) params.put("variables", variables);
         return post(url, params, new TypeReference<FlowResult<Void>>() {});
     }
@@ -308,11 +313,16 @@ public class FlowClient {
      * @param comment 驳回意见
      */
     public FlowResult<Void> reject(String taskId, String userId, String comment) {
+        return reject(taskId, userId, comment, null);
+    }
+
+    public FlowResult<Void> reject(String taskId, String userId, String comment, String signature) {
         String url = flowServiceUrl + "/api/flow/task/reject";
         Map<String, Object> params = new HashMap<>();
         params.put("taskId", taskId);
         params.put("userId", userId);
         params.put("comment", comment);
+        if (signature != null) params.put("signature", signature);
         return post(url, params, new TypeReference<FlowResult<Void>>() {});
     }
 

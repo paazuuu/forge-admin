@@ -23,7 +23,7 @@
           </div>
 
           <div class="child-table-scroll">
-            <table class="child-edit-table">
+            <table class="child-edit-table" :style="resolveTableStyle(child)">
               <thead>
                 <tr>
                   <th
@@ -57,11 +57,11 @@
                     <n-input
                       v-else-if="field.type === 'textarea'"
                       type="textarea"
-                      :value="row[field.field]"
+                      v-bind="resolveInputProps(field)"
+                      :value="resolveInputValue(row[field.field])"
                       :placeholder="field.props?.placeholder || `请输入${field.label || field.field}`"
                       :disabled="props.readonly || field.disabled || field.readonly"
                       :autosize="{ minRows: 1, maxRows: 3 }"
-                      v-bind="field.props"
                       @update:value="updateCell(child, rowIndex, field, $event)"
                     />
                     <n-input-number
@@ -120,11 +120,11 @@
                     />
                     <n-input
                       v-else
-                      :value="row[field.field]"
+                      v-bind="resolveInputProps(field)"
+                      :value="resolveInputValue(row[field.field])"
                       :placeholder="field.props?.placeholder || `请输入${field.label || field.field}`"
                       :disabled="props.readonly || field.disabled || field.readonly"
                       clearable
-                      v-bind="field.props"
                       @update:value="updateCell(child, rowIndex, field, $event)"
                     />
                   </td>
@@ -173,8 +173,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AiRecordSelectorModal from '@/components/ai-form/AiRecordSelectorModal.vue'
 import AiFormItem from '@/components/ai-form/AiFormItem.vue'
+import AiRecordSelectorModal from '@/components/ai-form/AiRecordSelectorModal.vue'
 import { applyRecordFieldMappings, normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 
@@ -335,7 +335,7 @@ function handleSelectorConfirm({ rows = [], mappings = {} } = {}) {
   const key = resolveChildKey(child)
   const nextRows = rows.map(row => ({
     ...createEmptyRow(child),
-    ...applyRecordFieldMappings(row, mappings || activeSelectorConfig.value.fieldMappings),
+    ...normalizeMappedRow(child, applyRecordFieldMappings(row, mappings || activeSelectorConfig.value.fieldMappings)),
   }))
   localValue.value = {
     ...localValue.value,
@@ -364,7 +364,7 @@ function removeRow(child, rowIndex) {
 }
 
 function updateCell(child, rowIndex, field, value) {
-  updateRow(child, rowIndex, { [field.field]: value })
+  updateRow(child, rowIndex, { [field.field]: normalizeCellValueForType(field, value) })
 }
 
 function updateCellLabel(child, rowIndex, field, value) {
@@ -472,9 +472,57 @@ function createEmptyRow(child) {
     __rowKey: `row_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   }
   ;(child.fields || []).forEach((field) => {
-    row[field.field] = field.defaultValue ?? null
+    row[field.field] = normalizeDefaultCellValue(field)
   })
   return row
+}
+
+function normalizeDefaultCellValue(field = {}) {
+  if (field.defaultValue !== undefined && field.defaultValue !== null)
+    return normalizeCellValueForType(field, field.defaultValue)
+  if (field.props?.defaultValue !== undefined && field.props.defaultValue !== null)
+    return normalizeCellValueForType(field, field.props.defaultValue)
+  return null
+}
+
+function normalizeCellValueForType(field = {}, value) {
+  if (value === undefined || value === null)
+    return null
+  const type = String(field.type || field.componentType || '').toLowerCase()
+  if (['input', 'textarea', 'text'].includes(type))
+    return typeof value === 'string' ? value : String(value)
+  if (['number', 'input-number', 'inputnumber'].includes(type)) {
+    const numberValue = Number(value)
+    return Number.isNaN(numberValue) ? null : numberValue
+  }
+  return value
+}
+
+function normalizeMappedRow(child, patch = {}) {
+  const fieldMap = new Map((child.fields || []).map(field => [field.field, field]))
+  return Object.entries(patch || {}).reduce((result, [key, value]) => {
+    const field = fieldMap.get(key)
+    result[key] = field ? normalizeCellValueForType(field, value) : value
+    return result
+  }, {})
+}
+
+function resolveInputValue(value) {
+  if (value === undefined || value === null)
+    return null
+  return typeof value === 'string' ? value : String(value)
+}
+
+function resolveInputProps(field = {}) {
+  const {
+    value,
+    defaultValue,
+    modelValue,
+    'onUpdate:value': _onUpdateValue,
+    'onUpdate:modelValue': _onUpdateModelValue,
+    ...rest
+  } = field.props || {}
+  return rest
 }
 
 function normalizeInputValue(value) {
@@ -568,6 +616,15 @@ function validate() {
         }
       }
     }
+  }
+}
+
+function resolveTableStyle(child) {
+  const contentWidth = (child.fields || [])
+    .reduce((total, field) => total + Number.parseInt(resolveColumnWidth(field), 10), props.readonly ? 0 : 76)
+  const minWidth = Math.max(contentWidth, Number(child.minWidth || child.tableMinWidth || 720))
+  return {
+    minWidth: `${minWidth}px`,
   }
 }
 

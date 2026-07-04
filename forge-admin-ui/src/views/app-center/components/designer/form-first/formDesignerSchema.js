@@ -1167,9 +1167,9 @@ function resolveComponentKey(field = {}) {
     return 'imageUpload'
   if (['fileUpload', 'upload'].includes(componentType) || ['FILE', 'ATTACHMENT'].includes(businessType))
     return 'fileUpload'
-  if (componentType === 'recordSelector' || businessType === 'RECORD_SELECTOR')
+  if (componentType === 'recordSelector' || field.type === 'recordSelector' || businessType === 'RECORD_SELECTOR')
     return 'recordSelector'
-  if (businessType === 'REFERENCE')
+  if (componentType === 'objectReference' || field.type === 'objectReference' || businessType === 'REFERENCE')
     return 'objectReference'
   if (componentType === 'customSelect')
     return 'customSelect'
@@ -1190,10 +1190,39 @@ function buildComponentProps(field = {}, label = '') {
     props.dictType = field.dictType
   if (field.length)
     props.maxlength = field.length
-  if (field.referenceObjectCode)
-    props.referenceObjectCode = field.referenceObjectCode
-  if (field.referenceDisplayField)
-    props.referenceDisplayField = field.referenceDisplayField
+  const referenceObjectCode = field.referenceObjectCode || field.props?.referenceObjectCode || field.basicProps?.referenceObjectCode || ''
+  const referenceDisplayField = field.referenceDisplayField || field.props?.referenceDisplayField || field.props?.displayField || field.basicProps?.referenceDisplayField || field.basicProps?.displayField || ''
+  const referenceValueField = field.referenceValueField || field.props?.referenceValueField || field.props?.valueField || field.basicProps?.referenceValueField || field.basicProps?.valueField || ''
+  if (referenceObjectCode)
+    props.referenceObjectCode = referenceObjectCode
+  if (referenceDisplayField)
+    props.referenceDisplayField = referenceDisplayField
+  if (referenceValueField)
+    props.referenceValueField = referenceValueField
+  // recordSelector: merge from multiple sources to ensure objectCode is never lost
+  const resolvedRecordSelector = field.recordSelector
+    || field.props?.recordSelector
+    || field.basicProps?.recordSelector
+    || null
+  if (resolvedRecordSelector) {
+    props.recordSelector = resolvedRecordSelector
+  }
+  else if (field.recordSelectorObjectCode || field.props?.recordSelectorObjectCode || field.basicProps?.recordSelectorObjectCode) {
+    // Synthesize recordSelector from flat fields (legacy property-panel format)
+    const objectCode = field.recordSelectorObjectCode || field.props?.recordSelectorObjectCode || field.basicProps?.recordSelectorObjectCode || ''
+    if (objectCode) {
+      props.recordSelector = {
+        objectCode,
+        valueField: field.recordSelectorValueField || field.props?.recordSelectorValueField || field.basicProps?.recordSelectorValueField || 'id',
+        labelField: field.recordSelectorLabelField || field.props?.recordSelectorLabelField || field.basicProps?.recordSelectorLabelField || '',
+        targetLabelField: field.recordSelectorTargetLabelField || field.props?.recordSelectorTargetLabelField || field.basicProps?.recordSelectorTargetLabelField || '',
+        displayFields: field.recordSelectorDisplayFields || field.props?.recordSelectorDisplayFields || field.basicProps?.recordSelectorDisplayFields || [],
+        keywordFields: field.recordSelectorKeywordFields || field.props?.recordSelectorKeywordFields || field.basicProps?.recordSelectorKeywordFields || [],
+      }
+    }
+  }
+  if (field.targetLabelField || field.props?.targetLabelField)
+    props.targetLabelField = field.targetLabelField || field.props?.targetLabelField
   return props
 }
 

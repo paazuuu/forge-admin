@@ -5,6 +5,7 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowBindingDTO
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowCallbackDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowResubmitDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessFlowStartDTO;
+import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskActionDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormContextQueryDTO;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormSaveDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowService;
@@ -93,6 +94,13 @@ public class BusinessFlowController {
     @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "保存业务待办表单字段")
     public RespInfo<BusinessTaskFormContextVO> saveTaskFormContext(@RequestBody BusinessTaskFormSaveDTO dto) {
         return RespInfo.success(flowService.saveTaskFormContext(dto));
+    }
+
+    @PostMapping("/task-action")
+    @SaCheckPermission("ai:businessFlow:view")
+    @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "办理业务待办任务")
+    public RespInfo<BusinessFlowRuntimeVO> completeTask(@RequestBody BusinessTaskActionDTO dto) {
+        return RespInfo.success(flowService.completeBusinessTask(dto));
     }
 
     @PutMapping("/binding/{objectCode}")

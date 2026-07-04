@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.LinkedHashMap;
@@ -56,7 +57,7 @@ public class BusinessQuantityDomainActionExecutor implements BusinessDomainActio
             throw new BusinessException("数量台账领域动作缺少 operationType");
         }
         dto.setAccountCode(firstText(values, "accountCode", "account"));
-        dto.setItemCode(firstText(values, "itemCode", "item"));
+        dto.setItemCode(resolveItemCode(values, context));
         dto.setDimensionKey(firstText(values, "dimensionKey", "dimension"));
         dto.setQuantity(firstLong(values, "quantity", "qty", "amount"));
         dto.setTargetAccountCode(firstText(values, "targetAccountCode", "targetAccount"));
@@ -76,6 +77,39 @@ public class BusinessQuantityDomainActionExecutor implements BusinessDomainActio
         dto.setRemark(firstText(values, "remark"));
         dto.setExtraData(buildExtraData(values));
         return dto;
+    }
+
+    private String resolveItemCode(Map<String, Object> values, BusinessActionExecutionContext context) {
+        String configured = firstText(values, "itemCode", "item");
+        if (StringUtils.isNotBlank(configured)) {
+            return configured;
+        }
+        String scoped = firstConfiguredFallbackText(values, context);
+        if (StringUtils.isNotBlank(scoped)) {
+            return scoped;
+        }
+        String sourceDetailId = firstText(values, "sourceDetailId", "detailId");
+        throw new BusinessException("数量项编码不能为空"
+                + (StringUtils.isBlank(sourceDetailId) ? "" : ": sourceDetailId=" + sourceDetailId));
+    }
+
+    private String firstConfiguredFallbackText(Map<String, Object> values, BusinessActionExecutionContext context) {
+        for (Object item : BusinessActionStepConfigHelper.firstList(values,
+                "itemCodeFallbackFields", "itemFallbackFields", "itemCodeFallbackPaths")) {
+            String path = item == null ? null : StringUtils.trimToNull(String.valueOf(item));
+            if (path == null) {
+                continue;
+            }
+            Object value = BusinessActionStepConfigHelper.resolvePath(path, context);
+            if (value == null && !path.contains(".")) {
+                value = firstScopedFieldValue(context, path);
+            }
+            String text = value == null ? null : StringUtils.trimToNull(String.valueOf(value));
+            if (StringUtils.isNotBlank(text)) {
+                return text;
+            }
+        }
+        return null;
     }
 
     private String resolveIdempotencyKey(BusinessActionExecutionContext context,
@@ -163,19 +197,47 @@ public class BusinessQuantityDomainActionExecutor implements BusinessDomainActio
         return value == null ? null : StringUtils.trimToNull(String.valueOf(value));
     }
 
+    private Object firstScopedFieldValue(BusinessActionExecutionContext context, String field) {
+        if (context == null || context.getScopedVariables() == null || context.getScopedVariables().isEmpty()) {
+            return null;
+        }
+        for (Object scopedValue : context.getScopedVariables().values()) {
+            Map<String, Object> scopedMap = BusinessActionStepConfigHelper.asMap(scopedValue);
+            if (scopedMap.isEmpty()) {
+                continue;
+            }
+            Object value = BusinessActionStepConfigHelper.readPath(scopedMap, field);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private Long firstLong(Map<String, Object> values, String... keys) {
         Object value = BusinessActionStepConfigHelper.firstValue(values, keys);
         if (value == null) {
             return null;
         }
         if (value instanceof Number number) {
-            return number.longValue();
+            return parseWholeNumber(number);
         }
         try {
-            return Long.valueOf(String.valueOf(value).trim());
-        } catch (NumberFormatException e) {
-            throw new BusinessException("数量字段不是有效整数: " + value);
+            return new BigDecimal(String.valueOf(value).trim()).toBigIntegerExact().longValueExact();
+        } catch (ArithmeticException | NumberFormatException e) {
+            throw new BusinessException("数量字段必须是整数最小单位: " + value);
         }
+    }
+
+    private Long parseWholeNumber(Number number) {
+        if (number instanceof Float || number instanceof Double || number instanceof BigDecimal) {
+            try {
+                return new BigDecimal(String.valueOf(number)).toBigIntegerExact().longValueExact();
+            } catch (ArithmeticException e) {
+                throw new BusinessException("数量字段必须是整数最小单位: " + number);
+            }
+        }
+        return number.longValue();
     }
 
     private Map<String, Object> toMap(BusinessQuantityOperationResultVO result) {

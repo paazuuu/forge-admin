@@ -359,6 +359,7 @@ import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import AiFormGroupTitle from '@/components/ai-form/AiFormGroupTitle.vue'
 import AiFormItem from '@/components/ai-form/AiFormItem.vue'
 import AiFormSectionTitle from '@/components/ai-form/AiFormSectionTitle.vue'
+import { normalizeRecordSelectorConfig as normalizePreviewRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import { isPageWidgetComponentKey } from '@/components/lowcode-builder/shared/page-widget-schema'
 import PageWidgetRenderer from '@/components/lowcode-builder/shared/PageWidgetRenderer.vue'
 import {
@@ -560,7 +561,7 @@ const childrenGridStyle = computed(() => {
 const previewField = computed(() => {
   const componentKey = props.component.componentKey || 'input'
   const fieldCode = props.component.fieldBinding?.fieldCode || props.component.id || componentKey
-  const rawProps = resolveRuntimeOptionProps({ ...(props.component.props || {}) }, componentKey)
+  const rawProps = resolvePreviewFieldProps(props.component, componentKey, fieldCode)
   delete rawProps.disabled
   delete rawProps.readonly
   return {
@@ -1680,6 +1681,114 @@ function resolveRuntimeOptionProps(rawProps = {}, componentKey = '') {
   if (shouldUseDictOptions(nextProps, componentKey))
     delete nextProps.options
   return nextProps
+}
+
+function resolvePreviewFieldProps(component = {}, componentKey = '', fieldCode = '') {
+  const rawProps = resolveRuntimeOptionProps({ ...(component.props || {}) }, componentKey)
+  return mergeRelationPreviewProps(rawProps, component, findFieldAsset(fieldCode))
+}
+
+function findFieldAsset(fieldCode = '') {
+  const code = String(fieldCode || '').trim()
+  if (!code)
+    return null
+  return (Array.isArray(props.fields) ? props.fields : []).find((field) => {
+    const candidates = [
+      field?.fieldCode,
+      field?.field,
+      field?.columnName,
+      field?.prop,
+      field?.name,
+    ].map(value => String(value ?? '').trim()).filter(Boolean)
+    return candidates.includes(code)
+  }) || null
+}
+
+function mergeRelationPreviewProps(rawProps = {}, component = {}, fieldAsset = null) {
+  const next = { ...(rawProps || {}) }
+  const fieldProps = {
+    ...(fieldAsset?.basicProps && typeof fieldAsset.basicProps === 'object' ? fieldAsset.basicProps : {}),
+    ...(fieldAsset?.props && typeof fieldAsset.props === 'object' ? fieldAsset.props : {}),
+  }
+  const componentKey = component?.componentKey || component?.type || ''
+  const fieldType = String(fieldAsset?.fieldType || fieldAsset?.businessFieldType || '').trim()
+
+  const referenceObjectCode = firstText(
+    next.referenceObjectCode,
+    component.props?.referenceObjectCode,
+    component.referenceObjectCode,
+    fieldAsset?.props?.referenceObjectCode,
+    fieldAsset?.referenceObjectCode,
+    fieldProps.referenceObjectCode,
+  )
+  const referenceDisplayField = firstText(
+    next.referenceDisplayField,
+    next.displayField,
+    next.labelField,
+    component.props?.referenceDisplayField,
+    component.props?.displayField,
+    component.props?.labelField,
+    component.referenceDisplayField,
+    fieldAsset?.props?.referenceDisplayField,
+    fieldAsset?.props?.displayField,
+    fieldAsset?.props?.labelField,
+    fieldAsset?.referenceDisplayField,
+    fieldProps.referenceDisplayField,
+  )
+  const referenceValueField = firstText(
+    next.referenceValueField,
+    next.valueField,
+    component.props?.referenceValueField,
+    component.props?.valueField,
+    component.referenceValueField,
+    fieldAsset?.props?.referenceValueField,
+    fieldAsset?.props?.valueField,
+    fieldAsset?.referenceValueField,
+    fieldProps.referenceValueField,
+    'id',
+  )
+
+  if (componentKey === 'objectReference' || fieldType === 'REFERENCE') {
+    if (referenceObjectCode)
+      next.referenceObjectCode = referenceObjectCode
+    if (referenceDisplayField)
+      next.referenceDisplayField = referenceDisplayField
+    if (referenceValueField)
+      next.referenceValueField = referenceValueField
+  }
+
+  const recordSelector = normalizePreviewRecordSelectorConfig({
+    ...(fieldAsset || {}),
+    ...(component || {}),
+    ...(next || {}),
+    basicProps: {
+      ...(fieldAsset?.basicProps || {}),
+      ...(component?.basicProps || {}),
+    },
+    props: {
+      ...(fieldAsset?.props || {}),
+      ...(fieldAsset?.basicProps || {}),
+      ...(component?.props || {}),
+      ...(next || {}),
+    },
+    recordSelector: next.recordSelector
+      || component.props?.recordSelector
+      || component.recordSelector
+      || fieldAsset?.props?.recordSelector
+      || fieldAsset?.basicProps?.recordSelector
+      || fieldAsset?.recordSelector,
+  })
+  if ((componentKey === 'recordSelector' || fieldType === 'RECORD_SELECTOR') && recordSelector.objectCode) {
+    next.recordSelector = recordSelector
+    next.objectCode = recordSelector.objectCode
+    next.businessObjectCode = recordSelector.businessObjectCode || recordSelector.objectCode
+    next.targetObjectCode = recordSelector.targetObjectCode || recordSelector.objectCode
+  }
+  return next
+}
+
+function firstText(...values) {
+  return values.map(value => String(value ?? '').trim()).find(Boolean) || ''
 }
 
 function resolvePreviewOptions(rawProps = {}, componentKey = '') {

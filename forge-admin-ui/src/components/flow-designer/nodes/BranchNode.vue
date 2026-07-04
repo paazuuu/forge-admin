@@ -116,7 +116,9 @@ function handleContextMenu(event) {
     0 0 0 1px rgba(255, 122, 26, 0.28),
     0 8px 18px rgba(255, 122, 26, 0.24);
   transform: rotate(45deg);
-  transition: box-shadow 160ms ease, transform 160ms ease;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .branch-node-shell.is-info .branch-node-diamond {
@@ -168,7 +170,9 @@ function handleContextMenu(event) {
   color: #ef4444;
   opacity: 0;
   transform: rotate(-45deg);
-  transition: background 160ms ease, color 160ms ease;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
 }
 
 .branch-node-shell:hover .branch-node-delete,

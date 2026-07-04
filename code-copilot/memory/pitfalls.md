@@ -224,6 +224,37 @@ Vite dev server 的 `node_modules/.vite` 预构建缓存与浏览器中已加载
 
 ---
 
+## 7. 业务记录选择器空 DTO 导致“选择器缺少业务对象编码”
+
+**发现日期**: 2026-07-04
+
+**问题描述**:
+低代码表单设计器、动态渲染页面或关联关系配置进入后，请求 `/ai/business/selector/query?pageSize=100&pageNum=1` 时后端日志里的 `BusinessRecordSelectorQueryDTO` 全字段为空，最终抛出“选择器缺少业务对象编码”。
+
+**根本原因**:
+该接口规范是 `POST /ai/business/selector/query?pageNum=1&pageSize=100`，分页参数走 query，但业务对象编码必须在 JSON body 中传 `objectCode`，或传后端兼容的 `businessObjectCode`、`targetObjectCode`、`referenceObjectCode` 等 alias。前端如果把选择器配置当成普通远程选项接口，只拼 URL 和分页 query，没有把 `optionSource.params`、`recordSelector`、`referenceObjectCode` 等配置注入 body，就会得到空 DTO。
+
+**正确做法**:
+前端统一走 `queryBusinessRecordSelector(data, params)`，请求前先用 `resolveBusinessRecordSelectorObjectCode()` 从 `props/basicProps/optionSource/referenceConfig/recordSelector` 等位置解析对象编码，并写入 body：
+
+```js
+queryBusinessRecordSelector({
+  objectCode,
+  businessObjectCode: objectCode,
+  targetObjectCode: objectCode,
+  keyword,
+  displayFields,
+  keywordFields,
+}, { pageNum: 1, pageSize: 100 })
+```
+
+**排查要点**:
+- 源码里不应再出现 `post@/ai/business/selector/query?pageSize=100&pageNum=1` 这类硬编码调用。
+- 浏览器 Network 里该请求可以带 `pageNum/pageSize` query，但 Request Payload 必须包含 `objectCode`。
+- 如果修改后仍看到空请求，优先重启 Vite dev server 或清理 `node_modules/.vite` 缓存，避免旧优化缓存继续服务。
+
+---
+
 ## 7. 代码应用已有业务对象时设计器误走低代码空模型
 
 **发现日期**: 2026-06-30
@@ -2594,3 +2625,64 @@ collectTaskFormAssets(objectCode) -> mergeCodeAppAssets(providerAssets, codeAppM
 - `ForgePropertyPanel.vue`
 - `form-first/formDesignerSchema.js`
 - 后续所有扩展到 `validation` 对象里的设计态配置
+
+## 97. 前端默认加密时后端漏 @ApiDecrypt 会表现为 DTO 字段全空
+
+**发现日期**: 2026-07-04
+
+**问题描述**:
+低代码动态 CRUD 新增表单加载对象引用字段选项时，前端 `field/source/selectorConfig` 已经都有 `objectCode=warehouse_management`，但后端 `/ai/business/selector/query` 仍报“选择器缺少业务对象编码”。日志容易误判为前端字段没传上。
+
+**根本原因**:
+前端 `cryptoConfig.includePaths` 为空时默认加密所有未排除接口，请求体会变成 `{ data: 加密串, algorithm: 'SM4' }`。如果后端 `@RequestBody` 接口没有 `@ApiDecrypt`，Spring 会直接把加密包装体绑定到业务 DTO，业务字段如 `objectCode/businessObjectCode/referenceObjectCode` 全部为空。
+
+**解决方案**:
+- `/ai/business/**` 这类需要接收 JSON 请求体的控制器必须按项目规范补齐 `@ApiDecrypt`，通常同时补 `@ApiEncrypt`。
+- 排查“前端日志确认已传字段，但后端 DTO 为空”时，先检查控制器类或方法是否有 `@ApiDecrypt`，不要继续堆前端字段兜底。
+- 同一组运行态 POST/PUT 接口要一起检查，避免修完一个接口后其它同链路接口继续出现同类问题。
+
+**影响范围**:
+- `BusinessRecordSelectorController`、`BusinessQuantityQueryController`、`BusinessActionExecutionController`、`BusinessTriggerController` 等低代码业务运行接口。
+- 所有默认走前端加密拦截器且后端使用 `@RequestBody` 接收 DTO 的接口。
+
+## 98. 审批运行态表单不能重建简化字段配置
+
+**发现日期**: 2026-07-04
+
+**问题描述**:
+待办审批页使用低代码业务对象表单时，渲染样式和表单设计器不一致，对象引用字段显示 ID 而不是中文名称。
+
+**根本原因**:
+后端待办上下文如果从表单 schema 中抽取字段时只保留 `field/label/componentType/dictType`，再重新组装审批字段，会丢掉设计器原始的 `props`、`span`、`componentKey`、`referenceObjectCode`、`referenceDisplayField`、`recordSelector`、校验和样式配置。前端拿到这种简化字段后会把对象引用、记录选择器等业务组件降级成普通输入框，recordData 也可能缺少引用显示字段。
+
+**解决方案**:
+- `BusinessFlowService` 构建审批字段时必须从原始组件配置复制，再叠加节点字段权限的 `readonly/disabled/required`。
+- 后端组件类型归一化要覆盖 `AiFormItem` 支持的运行态类型，不能把未知业务组件直接降级为 `input`。
+- `filterVisibleRecordData` 除字段自身值外，还要带上对象引用/记录选择器的显示字段，例如 `referenceDisplayField`、`labelField`、`warehouseId -> warehouseName`。
+- 前端只读选择类字段的显示候选要读取 `referenceDisplayField/displayField/labelField/targetLabelField`，不能只依赖 `xxxId -> xxxName` 约定。
+
+**影响范围**:
+- 低代码业务对象待办/已办审批表单。
+- 对象引用、记录选择器、字典、级联、人员/组织等选择类字段。
+- 表单设计器布局、字段跨度、组件 props 在审批运行态的回显。
+
+## 99. 低代码审批详情不能只渲染主表 AiForm
+
+**发现日期**: 2026-07-04
+
+**问题描述**:
+采购单等主子表低代码单据进入待办/已办审批详情时，主表字段能显示，但采购明细等子表数据为空。驳回后重新发起同一单据时，Flowable 报“业务流程已存在且不可重复发起：业务对象:记录ID”。
+
+**根本原因**:
+CRUD 详情页的渲染逻辑是“主表 `AiForm` + 子表 `ChildTableEditor`”，数据来自 `DynamicCrudService.selectById()` 返回的 `{ main, children }`。审批页如果只把字段过滤后交给 `AiForm`，并且过滤时丢掉 `recordData.children`，子表永远不会显示。
+
+流程重新发起的错误则来自 Flowable 业务关联表按 `businessKey` 关联实例。低代码单据的业务 key 应该稳定表示“对象 + 记录”，但 Flowable 每次流程实例启动需要一个不会撞旧流程记录的实例 key。
+
+**解决方案**:
+- `BusinessTaskFormContextVO` 需要返回 `childrenConfig`，审批上下文过滤主表字段时必须保留 `recordData.children`。
+- 待办/已办页面渲染低代码业务表单时，复用 CRUD 详情同类的 `ChildTableEditor` 只读渲染子表。
+- 启动流程时保留低代码单据原始 `businessKey/documentBusinessKey/recordBusinessKey`，同时给 Flowable 启动传唯一的 `flowBusinessKey`，回写状态时再按流程实例关联和原始单据 key 更新业务单据。
+
+**影响范围**:
+- 低代码主子表单据的待办、已办审批详情。
+- 驳回后重新发起、修改后重提等同一业务单据多次进入流程的场景。

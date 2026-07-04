@@ -3577,9 +3577,13 @@
                       <div v-for="(option, idx) in (selectedBlock.props?.options || [])" :key="idx" class="metric-row">
                         <n-input :value="option.label" size="small" placeholder="显示名" @update:value="updateOptionItem('options', idx, { label: $event })" />
                         <n-input :value="option.value" size="small" placeholder="值" @update:value="updateOptionItem('options', idx, { value: $event })" />
-                        <n-button size="tiny" quaternary @click="removeOptionItem('options', idx)">删</n-button>
+                        <n-button size="tiny" quaternary @click="removeOptionItem('options', idx)">
+                          删
+                        </n-button>
                       </div>
-                      <n-button size="small" dashed block @click="addOptionItem('options')">+ 添加选项</n-button>
+                      <n-button size="small" dashed block @click="addOptionItem('options')">
+                        + 添加选项
+                      </n-button>
                     </div>
                   </n-form-item>
                 </template>
@@ -3592,7 +3596,9 @@
                     </div>
                   </n-form-item>
                   <n-form-item label="表单字段">
-                    <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）</n-button>
+                    <n-button size="small" type="primary" secondary @click="openFieldDrawer('table')">
+                      配置字段（{{ selectedBlock.fieldRefs?.length || 0 }}/{{ fields.length }}）
+                    </n-button>
                   </n-form-item>
                 </template>
                 <template v-if="selectedBlock.blockType === 'paragraph'">
@@ -3706,9 +3712,13 @@
                       <div v-for="(item, idx) in (selectedBlock.props?.items || [])" :key="idx" class="metric-row">
                         <n-input :value="item.label" size="small" placeholder="标签" @update:value="updateOptionItem('items', idx, { label: $event })" />
                         <n-input :value="item.value" size="small" placeholder="内容" @update:value="updateOptionItem('items', idx, { value: $event })" />
-                        <n-button size="tiny" quaternary @click="removeOptionItem('items', idx)">删</n-button>
+                        <n-button size="tiny" quaternary @click="removeOptionItem('items', idx)">
+                          删
+                        </n-button>
                       </div>
-                      <n-button size="small" dashed block @click="addOptionItem('items')">+ 添加描述项</n-button>
+                      <n-button size="small" dashed block @click="addOptionItem('items')">
+                        + 添加描述项
+                      </n-button>
                     </div>
                   </n-form-item>
                 </template>
@@ -9197,6 +9207,25 @@ function addCustomAction(position = 'row') {
     customActionModalOpen.value = true
 }
 
+function openCustomActionManager(actionOrIdentity = '') {
+  if (!customActionList.value.length) {
+    addCustomAction('toolbar')
+    activeActionIndex.value = 0
+    customActionModalOpen.value = true
+    return
+  }
+  const index = actionOrIdentity ? findCustomActionIndexByIdentity(actionOrIdentity) : -1
+  activeActionIndex.value = index >= 0 ? index : 0
+  if (isApiCustomAction(customActionList.value[activeActionIndex.value]))
+    loadEnabledApiConfigs()
+  customActionModalOpen.value = true
+}
+
+function createAndEditCustomAction(position = 'toolbar') {
+  addCustomAction(position)
+  customActionModalOpen.value = true
+}
+
 function updateCustomAction(idx, patch) {
   const list = [...customActionList.value]
   list[idx] = { ...list[idx], ...patch }
@@ -9228,6 +9257,11 @@ function openCustomActionEditor(actionOrIdentity = '') {
     loadEnabledApiConfigs()
   customActionModalOpen.value = index >= 0
 }
+
+defineExpose({
+  openCustomActionManager,
+  createAndEditCustomAction,
+})
 
 function handleCustomActionGroupReorder(position = 'toolbar', rows = []) {
   const targetPosition = ['toolbar', 'row', 'detail'].includes(position) ? position : 'toolbar'
@@ -9304,9 +9338,7 @@ function removeCustomAction(idx) {
     return
   list.splice(idx, 1)
   persistCustomActionList(list)
-  activeActionIndex.value = list.length ? Math.min(idx, list.length - 1) : -1
-  if (!list.length)
-    customActionModalOpen.value = false
+  activeActionIndex.value = list.length ? Math.min(idx, list.length - 1) : 0
 }
 
 function removeCustomActionByIdentity(actionOrIdentity = '') {
@@ -9317,9 +9349,7 @@ function removeCustomActionByIdentity(actionOrIdentity = '') {
   if (list.length === customActionList.value.length)
     return
   persistCustomActionList(list)
-  activeActionIndex.value = list.length ? Math.min(activeActionIndex.value, list.length - 1) : -1
-  if (!list.length)
-    customActionModalOpen.value = false
+  activeActionIndex.value = list.length ? Math.min(activeActionIndex.value, list.length - 1) : 0
 }
 
 function persistCustomActionList(list = []) {

@@ -3,6 +3,7 @@ import copyDirective from './modules/copy'
 import hasPermi from './modules/hasPermi'
 import loadingDirective, { loadingService } from './modules/loading'
 import previewDirective from './modules/preview'
+import tableScrollEnhance, { setupGlobalTableScrollEnhance } from './modules/tableScrollEnhance'
 import watermarkDirective from './modules/watermark'
 
 const permission = {
@@ -28,6 +29,9 @@ export function setupDirectives(app) {
   app.directive('preview', previewDirective)
   // 注册水印指令
   app.directive('watermark', watermarkDirective)
+  // 注册表格横向拖拽增强指令
+  app.directive('table-scroll-enhance', tableScrollEnhance)
+  setupGlobalTableScrollEnhance()
 
   // 将loading服务添加到全局属性
   app.config.globalProperties.$loading = loadingService

@@ -149,7 +149,8 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
         vars.put("startDeptName", deptName);
 
         // 内置变量：业务主键
-        vars.put("businessKey", businessKey);
+        vars.putIfAbsent("businessKey", businessKey);
+        vars.putIfAbsent("flowBusinessKey", businessKey);
         vars.put("businessType", businessType);
 
         // 内置变量：流程标题

@@ -136,6 +136,18 @@
       @dirty-change="handleDirtyChange"
     />
 
+    <BusinessActionDesigner
+      v-else-if="activePanel === 'actions'"
+      :actions="draft.designerOptions?.actions || []"
+      :fields="draft.fields"
+      :model-schema="draft.modelSchema"
+      :relations="draft.relations"
+      :suite-code="draft.suiteCode"
+      :document-config="draft.documentConfig"
+      @update:actions="handleActionsUpdated"
+      @dirty-change="handleDirtyChange"
+    />
+
     <BusinessRelationDesigner
       v-else-if="activePanel === 'relations'"
       ref="relationDesignerRef"
@@ -145,7 +157,10 @@
       :object-code="draft.objectCode"
       :object-name="draft.objectName"
       :fields="draft.fields"
+      :designer-options="draft.designerOptions"
+      :designer-actions="draft.designerOptions?.actions || []"
       @updated="handleRelationsUpdated"
+      @update:designer-actions="handleActionsUpdated"
       @fields-updated="handleFieldsUpdated"
       @dirty-change="handleDirtyChange"
     />
@@ -182,6 +197,7 @@
       v-else-if="activePanel === 'publish'"
       ref="publishChecklistRef"
       :object-id="objectId"
+      :fields="draft.fields"
       :runtime-info="runtimeInfo"
       :publishing="publishing"
       @check-updated="handlePublishCheckUpdated"
@@ -256,6 +272,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved'])
 
 const BusinessAdvancedConfig = defineDesignerAsyncComponent(() => import('./components/designer/BusinessAdvancedConfig.vue'))
+const BusinessActionDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessActionDesigner.vue'))
 const BusinessDetailDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessDetailDesigner.vue'))
 const BusinessFieldManager = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFieldManager.vue'))
 const BusinessFlowAppConfigPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessFlowAppConfigPanel.vue'))
@@ -326,9 +343,9 @@ const publishDisabled = computed(() => {
     return true
   return publishCheckState.value?.publishable === false
 })
-const designerNavPanels = computed(() => (isCodeAppDesigner.value ? ['form', 'list', 'flow-app'] : []))
+const designerNavPanels = computed(() => (isCodeAppDesigner.value ? ['form', 'list', 'actions', 'flow-app'] : []))
 const closureSteps = computed(() => {
-  if (isCodeAppDesigner.value || activePanel.value === 'flow-app')
+  if (isCodeAppDesigner.value)
     return []
   const documentConfig = draft.documentConfig || {}
   const mainFlow = documentConfig.mainFlowSummary || {}
@@ -371,8 +388,6 @@ function resolveInitialPanel() {
 function normalizePanel(panel) {
   if (['flow', 'document', 'automation', 'flow-app'].includes(panel))
     return 'flow-app'
-  if (panel === 'actions')
-    return 'list'
   return panel === 'detail' ? 'form' : panel
 }
 
@@ -524,10 +539,10 @@ function isCodeAppRoute() {
 }
 
 function shouldOpenCodeAppDesigner() {
-  return ['form', 'list', 'flow-app'].includes(activePanel.value)
+  return ['form', 'list', 'actions', 'flow-app'].includes(activePanel.value)
     && !props.embedded
     && !!objectCode.value
-    && (isCodeAppRoute() || ['form', 'list', 'detail', 'flow-app'].includes(String(route.query.panel || '')))
+    && (isCodeAppRoute() || ['form', 'list', 'detail', 'actions', 'flow-app'].includes(String(route.query.panel || '')))
 }
 
 function isCodeAppBusinessObject(object = {}) {
@@ -596,7 +611,7 @@ async function applyCodeAppDesignerDraft(sourceObject = null) {
   designer.value = virtualDesigner
   runtimeInfo.value = null
   publishCheckState.value = null
-  if (!['form', 'list', 'flow-app'].includes(activePanel.value))
+  if (!['form', 'list', 'actions', 'flow-app'].includes(activePanel.value))
     activePanel.value = 'form'
   Object.assign(draft, createDraftFromDesigner(virtualDesigner))
 }
@@ -1011,7 +1026,7 @@ function handleRelationsUpdated(relations) {
 async function handleFlowAppSaved() {
   await loadDesigner()
   if (isCodeAppDesigner.value) {
-    if (!['form', 'list', 'flow-app'].includes(activePanel.value))
+    if (!['form', 'list', 'actions', 'flow-app'].includes(activePanel.value))
       activePanel.value = 'flow-app'
     return
   }
@@ -1062,7 +1077,7 @@ function handleActionsUpdated(actions) {
     ...(draft.designerOptions || {}),
     actions: cloneSchema(actions || []),
   }
-  if (ready.value && activePanel.value === 'list') {
+  if (ready.value && ['list', 'relations', 'actions'].includes(activePanel.value)) {
     dirty.value = true
     designerDraftDirty.value = true
   }
@@ -1125,7 +1140,7 @@ function handleDirtyChange(value) {
     designerDraftDirty.value = true
   if (value && activePanel.value === 'form' && formDetailTab.value === 'detail')
     designerDraftDirty.value = true
-  if (value && activePanel.value === 'list')
+  if (value && ['list', 'relations', 'actions'].includes(activePanel.value))
     designerDraftDirty.value = true
 }
 

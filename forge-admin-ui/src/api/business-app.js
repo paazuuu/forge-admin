@@ -1,3 +1,4 @@
+import { normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import { useAuthStore } from '@/store/modules/auth'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
@@ -362,7 +363,21 @@ export function businessActionLogs(params) {
 // ==================== 通用记录选择器 ====================
 
 export function queryBusinessRecordSelector(data, params = {}) {
-  return request.post('/ai/business/selector/query', data || {}, { params })
+  const payload = data && typeof data === 'object' ? { ...data } : {}
+  const normalized = normalizeRecordSelectorConfig(payload)
+  const objectCode = normalized.objectCode
+  if (!objectCode) {
+    console.error('[BusinessRecordSelector] 阻止缺少业务对象编码的查询', {
+      payload,
+      params,
+      stack: new Error('BusinessRecordSelector missing objectCode').stack,
+    })
+    return Promise.resolve({ data: { records: [], columns: [], total: 0, current: 1, size: 0 } })
+  }
+  payload.objectCode = objectCode
+  payload.businessObjectCode = payload.businessObjectCode || normalized.businessObjectCode || objectCode
+  payload.targetObjectCode = payload.targetObjectCode || normalized.targetObjectCode || objectCode
+  return request.post('/ai/business/selector/query', payload, { params })
 }
 
 // ==================== 通用数量台账查询 ====================
@@ -459,6 +474,10 @@ export function businessTaskFormReadonlyContext(params = {}) {
 
 export function saveBusinessTaskFormContext(data) {
   return request.put('/ai/business/flow/task-form-context', data)
+}
+
+export function completeBusinessTaskAction(data) {
+  return request.post('/ai/business/flow/task-action', data)
 }
 
 export function startBusinessDocumentFlow(data) {

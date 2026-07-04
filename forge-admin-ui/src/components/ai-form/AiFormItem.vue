@@ -238,7 +238,7 @@
         <!-- 日期选择 -->
         <n-date-picker
           v-else-if="field.type === 'date'"
-          :value="value"
+          :value="normalizePickerValue(value)"
           type="date"
           :placeholder="getPlaceholder(field)"
           :disabled="disabledHandler(field)"
@@ -255,7 +255,7 @@
         <!-- 日期时间选择 -->
         <n-date-picker
           v-else-if="field.type === 'datetime'"
-          :value="value"
+          :value="normalizePickerValue(value)"
           type="datetime"
           :placeholder="getPlaceholder(field)"
           :disabled="disabledHandler(field)"
@@ -310,7 +310,7 @@
         <!-- 月份选择 -->
         <n-date-picker
           v-else-if="field.type === 'month'"
-          :value="value"
+          :value="normalizePickerValue(value)"
           type="month"
           :placeholder="getPlaceholder(field)"
           :disabled="disabledHandler(field)"
@@ -327,7 +327,7 @@
         <!-- 年份选择 -->
         <n-date-picker
           v-else-if="field.type === 'year'"
-          :value="value"
+          :value="normalizePickerValue(value)"
           type="year"
           :placeholder="getPlaceholder(field)"
           :disabled="disabledHandler(field)"
@@ -344,7 +344,7 @@
         <!-- 时间选择 -->
         <n-time-picker
           v-else-if="field.type === 'time'"
-          :value="value"
+          :value="normalizePickerValue(value)"
           :placeholder="getPlaceholder(field)"
           :disabled="disabledHandler(field)"
           :clearable="field.clearable !== false"
@@ -617,9 +617,11 @@
           :loading="remoteLoading"
           :clearable="field.clearable !== false"
           :filterable="field.filterable !== false"
+          :remote="objectReferenceRemoteEnabled"
           :multiple="field.multiple"
           v-bind="field.props"
-          @update:value="handleUpdate"
+          @search="handleObjectReferenceSearch"
+          @update:value="handleObjectReferenceUpdate"
           v-on="getComponentEvents(field)"
         />
 
@@ -726,6 +728,7 @@ import { CopyOutline } from '@vicons/ionicons5'
 import { useClipboard } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { queryBusinessRecordSelector } from '@/api/business-app'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictSelect from '@/components/DictSelect.vue'
 import FileUpload from '@/components/file-upload/index.vue'
@@ -737,10 +740,10 @@ import { resolveRuntimeControl } from '@/components/lowcode-builder/shared/runti
 import RegionTreeSelect from '@/components/RegionTreeSelect.vue'
 import { getDictData } from '@/composables/useDict'
 import { request } from '@/utils'
-import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
 import AiCustomSelect from './AiCustomSelect.vue'
 import AiFormGroupTitle from './AiFormGroupTitle.vue'
 import AiFormSectionTitle from './AiFormSectionTitle.vue'
+import AiRecordSelectorModal from './AiRecordSelectorModal.vue'
 import { applyRecordFieldMappings, extractSelectorRawRecord, normalizeRecordSelectorConfig } from './record-selector-utils'
 
 const props = defineProps({
@@ -926,7 +929,11 @@ const dictCascadeConfig = computed(() => {
     sourceOptions: sourceDictOptions.value,
   }
 })
-const remoteOptionSource = computed(() => resolveDynamicOptionSource(props.field))
+const remoteOptionSource = computed(() => {
+  if (shouldSuppressDesignerRemoteOptions(props.field))
+    return null
+  return resolveDynamicOptionSource(props.field)
+})
 const runtimePageWidgetKey = computed(() => {
   const field = props.field || {}
   const componentKey = String(field.componentKey || '').trim()
@@ -1119,9 +1126,20 @@ async function loadSourceDictOptions(dictType) {
 function resolveOptionSource(field = {}) {
   if (isUserSelectField(field))
     return null
+  if (shouldSuppressDesignerRemoteOptions(field))
+    return null
   const configuredSource = field.optionSource || field.props?.optionSource
-  if (hasEffectiveOptionSource(configuredSource))
-    return normalizeOptionSource(configuredSource)
+  if (hasEffectiveOptionSource(configuredSource)) {
+    const source = normalizeOptionSource(configuredSource)
+    if (shouldSuppressDesignerRemoteOptions(field, source))
+      return null
+    return source
+  }
+  if (isObjectReferenceField(field)) {
+    const generated = buildObjectReferenceOptionSource(field)
+    if (generated)
+      return generated
+  }
   if (isOrgTreeSelectField(field)) {
     return {
       type: 'tree',
@@ -1134,6 +1152,24 @@ function resolveOptionSource(field = {}) {
     }
   }
   return null
+}
+
+function shouldSuppressDesignerRemoteOptions(field = {}, source = null) {
+  if (!isDesignerPreviewContext())
+    return false
+  if (isObjectReferenceField(field) || isRecordSelectorField(field))
+    return true
+  if (source?.type === 'businessRecordSelector')
+    return true
+  return String(source?.api || field?.optionSource?.api || field?.props?.optionSource?.api || '').includes('selector/query')
+}
+
+function isDesignerPreviewContext() {
+  const context = props.context || {}
+  const mode = String(context.mode || context.source || context.scene || '').trim()
+  return context.designerPreview === true
+    || context.designMode === true
+    || ['designer', 'designer-preview', 'form-designer', 'design', 'canvas'].includes(mode)
 }
 
 function hasEffectiveOptionSource(source) {
@@ -1162,12 +1198,28 @@ function normalizeOptionSource(source) {
 }
 
 function safeParseObject(value = '') {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
   try {
-    const parsed = JSON.parse(value || '{}')
+    const parsed = JSON.parse(text)
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
   }
   catch {
-    return {}
+    return text.split(/[&\n]/).reduce((result, item) => {
+      const content = item.trim()
+      if (!content)
+        return result
+      const separator = content.includes('=') ? '=' : content.includes(':') ? ':' : ''
+      if (!separator)
+        return result
+      const index = content.indexOf(separator)
+      const key = content.slice(0, index).trim()
+      const itemValue = content.slice(index + 1).trim()
+      if (key && itemValue)
+        result[key] = itemValue
+      return result
+    }, {})
   }
 }
 
@@ -1179,6 +1231,7 @@ function resolveDynamicOptionSource(field = {}) {
     ...source,
     params: resolveDynamicParams(source.params || {}),
   }
+  ensureSelectorQueryObjectCode(next, field)
   const cascade = cascadeConfig.value
   if (cascade?.enabled && cascade.mode === 'remoteParam' && cascade.sourceField && cascade.paramName) {
     const sourceValue = props.formData?.[cascade.sourceField]
@@ -1191,6 +1244,27 @@ function resolveDynamicOptionSource(field = {}) {
     }
   }
   return next
+}
+
+function ensureSelectorQueryObjectCode(source = {}, field = {}) {
+  if (!String(source.api || '').includes('selector/query'))
+    return source
+  const objectCode = isObjectReferenceField(field)
+    ? resolveObjectReferenceConfig(field).objectCode
+    : normalizeRecordSelectorConfig({
+      ...field,
+      ...source,
+      params: source.params,
+    }).objectCode
+  if (!objectCode)
+    return source
+  source.params = {
+    ...(source.params || {}),
+    objectCode,
+    businessObjectCode: source.params?.businessObjectCode || objectCode,
+    targetObjectCode: source.params?.targetObjectCode || objectCode,
+  }
+  return source
 }
 
 function resolveDynamicParams(params = {}) {
@@ -1207,15 +1281,77 @@ function resolveDynamicParams(params = {}) {
 }
 
 async function loadRemoteOptions(source, keyword = '') {
-  if (!source?.api)
+  if (!source)
     return
   if (source.waitForParent) {
     remoteOptions.value = []
     return
   }
+  if (source.type === 'businessRecordSelector') {
+    const objectCode = normalizeRecordSelectorConfig(source).objectCode
+    if (!objectCode) {
+      remoteOptions.value = []
+      return
+    }
+  }
   const requestSeq = ++remoteRequestSeq
   remoteLoading.value = true
   try {
+    if (source.type === 'businessRecordSelector') {
+      const objectCode = normalizeRecordSelectorConfig(source).objectCode
+      const selectorPayload = {
+        ...(source.params || {}),
+        objectCode,
+        businessObjectCode: source.businessObjectCode || source.params?.businessObjectCode || objectCode,
+        targetObjectCode: source.targetObjectCode || source.params?.targetObjectCode || objectCode,
+        keyword: keyword || undefined,
+        keywordFields: source.keywordFields || source.params?.keywordFields || [],
+        displayFields: source.displayFields || source.params?.displayFields || [],
+        searchParams: source.searchParams || source.params?.searchParams || {},
+      }
+      const res = await queryBusinessRecordSelector(selectorPayload, {
+        pageNum: source.pageNum || 1,
+        pageSize: source.pageSize || 100,
+      })
+      if (requestSeq !== remoteRequestSeq)
+        return
+      remoteOptions.value = normalizeRemoteOptions(res?.data || {}, source)
+      return
+    }
+
+    if (!source.api)
+      return
+    if (isSelectorQueryApi(source.api)) {
+      const selectorConfig = normalizeRecordSelectorConfig({
+        ...props.field,
+        ...source,
+        ...(source.params || {}),
+        params: source.params,
+      })
+      const objectCode = selectorConfig.objectCode
+      if (!objectCode) {
+        remoteOptions.value = []
+        return
+      }
+      const selectorPayload = {
+        ...(source.params || {}),
+        objectCode,
+        businessObjectCode: selectorConfig.businessObjectCode || objectCode,
+        targetObjectCode: selectorConfig.targetObjectCode || objectCode,
+        keyword: keyword || undefined,
+        keywordFields: source.keywordFields || source.params?.keywordFields || [],
+        displayFields: source.displayFields || source.params?.displayFields || [],
+        searchParams: source.searchParams || source.params?.searchParams || {},
+      }
+      const res = await queryBusinessRecordSelector(selectorPayload, {
+        pageNum: source.pageNum || 1,
+        pageSize: source.pageSize || 100,
+      })
+      if (requestSeq !== remoteRequestSeq)
+        return
+      remoteOptions.value = normalizeRemoteOptions(res?.data || {}, source)
+      return
+    }
     const { method, url } = parseOptionApi(source.api)
     const params = {
       ...(source.params || {}),
@@ -1233,13 +1369,28 @@ async function loadRemoteOptions(source, keyword = '') {
     remoteOptions.value = normalizeRemoteOptions(res, source)
   }
   catch (error) {
-    console.warn(`[AiFormItem] 加载 ${props.field?.field || ''} 选项失败:`, error)
+    console.warn(`[AiFormItem] 加载 ${props.field?.field || ''} 选项失败:`, {
+      error,
+      field: props.field,
+      source,
+      selectorConfig: normalizeRecordSelectorConfig({
+        ...props.field,
+        ...source,
+        ...(source?.params || {}),
+        params: source?.params,
+      }),
+      context: props.context,
+    })
     remoteOptions.value = []
   }
   finally {
     if (requestSeq === remoteRequestSeq)
       remoteLoading.value = false
   }
+}
+
+function isSelectorQueryApi(api = '') {
+  return String(api || '').includes('selector/query')
 }
 
 function parseOptionApi(api) {
@@ -1500,6 +1651,122 @@ function isUserSelectField(field = {}) {
   return normalizeRuntimeFieldType(field.type || field.componentType) === 'userSelect'
 }
 
+function isObjectReferenceField(field = {}) {
+  return normalizeRuntimeFieldType(field.type || field.componentType || field.componentKey) === 'objectReference'
+}
+
+function isRecordSelectorField(field = {}) {
+  return normalizeRuntimeFieldType(field.type || field.componentType || field.componentKey) === 'recordSelector'
+}
+
+function resolveObjectReferenceConfig(field = {}) {
+  const props = field.props || {}
+  const objectCode = firstNonBlank(
+    field.referenceObjectCode,
+    props.referenceObjectCode,
+    field.basicProps?.referenceObjectCode,
+    field.referenceConfig?.referenceObjectCode,
+    props.referenceConfig?.referenceObjectCode,
+    field.basicProps?.referenceConfig?.referenceObjectCode,
+    normalizeRecordSelectorConfig(field).objectCode,
+  )
+  return {
+    objectCode,
+    valueField: firstNonBlank(
+      props.referenceValueField,
+      props.valueField,
+      props.targetValueField,
+      field.referenceValueField,
+      field.valueField,
+      field.targetValueField,
+      'id',
+    ),
+    labelField: firstNonBlank(
+      props.referenceDisplayField,
+      props.displayField,
+      props.labelField,
+      props.targetLabelField,
+      field.referenceDisplayField,
+      field.displayField,
+      field.labelField,
+      field.targetLabelField,
+    ),
+  }
+}
+
+function firstNonBlank(...values) {
+  return values.map(value => String(value ?? '').trim()).find(Boolean) || ''
+}
+
+function buildObjectReferenceOptionSource(field = {}) {
+  const config = resolveObjectReferenceConfig(field)
+  if (!config.objectCode || !config.labelField)
+    return null
+  return {
+    type: 'businessRecordSelector',
+    objectCode: config.objectCode,
+    valueField: config.valueField,
+    labelField: config.labelField,
+    recordsField: 'records',
+    pageNum: 1,
+    pageSize: 100,
+    displayFields: [`${config.labelField}:${config.labelField}`],
+    keywordFields: [config.labelField],
+  }
+}
+
+// objectReference remote search support
+const objectReferenceRemoteEnabled = computed(() => {
+  return !isDesignerPreviewContext()
+    && isObjectReferenceField(props.field)
+    && Boolean(resolveObjectReferenceConfig(props.field).objectCode)
+})
+const objectReferenceSearchKeyword = ref('')
+let objectReferenceSearchTimer = null
+
+function handleObjectReferenceSearch(keyword) {
+  objectReferenceSearchKeyword.value = keyword || ''
+  if (objectReferenceSearchTimer)
+    clearTimeout(objectReferenceSearchTimer)
+  objectReferenceSearchTimer = setTimeout(() => {
+    reloadObjectReferenceOptions(keyword)
+  }, 300)
+}
+
+function handleObjectReferenceUpdate(value) {
+  handleUpdate(value)
+  // Sync label value from selected option
+  syncSelectionLabelFromOptions(props.field, value)
+}
+
+async function reloadObjectReferenceOptions(keyword = '') {
+  if (isDesignerPreviewContext())
+    return
+  const config = resolveObjectReferenceConfig(props.field)
+  if (!config.objectCode || !config.labelField)
+    return
+  remoteLoading.value = true
+  try {
+    const res = await queryBusinessRecordSelector({
+      objectCode: config.objectCode,
+      keyword: keyword || undefined,
+      keywordFields: [config.labelField],
+      displayFields: [`${config.labelField}:${config.labelField}`],
+    }, { pageNum: 1, pageSize: 50 })
+    const records = res.data?.records || []
+    remoteOptions.value = records.map(record => ({
+      label: record[config.labelField] || record.name || String(record[config.valueField] || record.id || ''),
+      value: record[config.valueField] || record.id,
+    }))
+  }
+  catch {
+    // Keep existing options on error
+  }
+  finally {
+    remoteLoading.value = false
+  }
+}
+
 function resolveSelectionLabelValue(field = {}) {
   for (const candidate of resolveSelectionLabelFields(field)) {
     const value = props.formData?.[candidate]
@@ -1512,6 +1779,14 @@ function resolveSelectionLabelValue(field = {}) {
 function resolveSelectionLabelFields(field = {}) {
   const fieldName = String(field.field || '')
   const candidates = [
+    field.props?.referenceDisplayField,
+    field.referenceDisplayField,
+    field.props?.displayField,
+    field.displayField,
+    field.props?.labelField,
+    field.labelField,
+    field.props?.targetLabelField,
+    field.targetLabelField,
     field.props?.labelValueField,
     field.labelValueField,
     field.props?.targetField,
@@ -1774,14 +2049,41 @@ function handleRuntimePageWidgetUpdate(nextProps = {}) {
 }
 
 function resolveRangeValue(value, index) {
-  return Array.isArray(value) ? value[index] ?? null : null
+  return Array.isArray(value) ? normalizePickerValue(value[index]) : null
+}
+
+function normalizePickerValue(value) {
+  if (value === null || value === undefined || value === '')
+    return null
+  if (value instanceof Date)
+    return Number.isNaN(value.getTime()) ? null : value
+  if (typeof value === 'number')
+    return Number.isFinite(value) ? value : null
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (!text)
+      return null
+    if (isSupportedPickerText(text))
+      return text
+    return null
+  }
+  return value
+}
+
+function isSupportedPickerText(text = '') {
+  return /^\d{4}$/.test(text)
+    || /^\d{4}-\d{2}$/.test(text)
+    || /^\d{4}-\d{2}-\d{2}$/.test(text)
+    || /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$/.test(text)
+    || /^\d{2}:\d{2}(?::\d{2})?$/.test(text)
 }
 
 function normalizeRangePickerValue(value) {
   if (!Array.isArray(value))
     return null
-  const hasValue = value.some(item => item !== null && item !== undefined && item !== '')
-  return hasValue ? value : null
+  const normalized = value.map(item => normalizePickerValue(item))
+  const hasValue = normalized.some(item => item !== null && item !== undefined && item !== '')
+  return hasValue ? normalized : null
 }
 
 function resolvePickerDefaultValue(field, range = false) {

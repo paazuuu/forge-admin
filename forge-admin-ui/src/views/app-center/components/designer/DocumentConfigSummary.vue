@@ -8,16 +8,12 @@
           <strong>{{ form.statusField || '-' }}</strong>
         </div>
         <div>
-          <span>编号字段</span>
-          <strong>{{ form.options?.documentNoField || '-' }}</strong>
-        </div>
-        <div>
-          <span>编号规则</span>
-          <strong>{{ ruleText }}</strong>
-        </div>
-        <div>
           <span>状态映射</span>
           <strong>{{ statusCount }} 项</strong>
+        </div>
+        <div>
+          <span>发起人</span>
+          <strong>创建人</strong>
         </div>
       </div>
     </section>
@@ -47,10 +43,6 @@
           <span />
           状态字段
         </li>
-        <li :class="{ ok: ruleConfigured && (!noRulePreview || noRulePreview.valid !== false) }">
-          <span />
-          编号规则
-        </li>
         <li :class="{ ok: statusCount > 0 }">
           <span />
           状态映射
@@ -72,29 +64,12 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
-  noRulePreview: {
-    type: Object,
-    default: null,
-  },
 })
 
 defineEmits(['configureFlow'])
 
 const mainFlow = computed(() => props.form.mainFlowSummary || {})
 const statusCount = computed(() => (props.form.statusMappingRows || []).filter(row => row.standardStatus && row.statusValue).length)
-const ruleConfigured = computed(() => !!(
-  props.form.options?.documentNoRuleName
-  || props.form.options?.codeRuleCode
-  || props.form.noRuleTemplate
-  || props.form.documentNoRule
-))
-const ruleText = computed(() => {
-  return props.form.options?.documentNoRuleName
-    || props.form.options?.codeRuleCode
-    || props.form.noRuleTemplate
-    || props.form.documentNoRule
-    || '-'
-})
 </script>
 
 <style scoped>

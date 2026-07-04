@@ -148,91 +148,126 @@
                 </n-grid>
               </section>
 
-              <section v-if="isRecordSelectorField" class="record-selector-config">
+              <section v-if="isRelationField" class="relation-config-unified">
                 <div class="record-selector-config-head">
-                  <strong>记录选择器</strong>
-                  <n-tag size="small" :bordered="false">
-                    通用对象
+                  <strong>关联配置</strong>
+                  <n-tag size="small" :bordered="false" :type="relationSelectionMode === 'dropdown' ? 'info' : 'success'">
+                    {{ relationSelectionMode === 'dropdown' ? '下拉选择' : '弹窗选择器' }}
                   </n-tag>
                 </div>
-                <n-grid :cols="2" :x-gap="12">
-                  <n-form-item-gi label="套件编码">
-                    <n-input
-                      v-model:value="form.recordSelectorSuiteCode"
-                      :disabled="field.systemField"
+
+                <n-form-item label="选择方式">
+                  <n-radio-group :value="relationSelectionMode" @update:value="switchRelationSelectionMode">
+                    <n-radio-button value="dropdown">
+                      下拉选择
+                    </n-radio-button>
+                    <n-radio-button value="popup">
+                      弹窗选择器
+                    </n-radio-button>
+                  </n-radio-group>
+                </n-form-item>
+
+                <n-form-item label="目标对象">
+                  <n-select
+                    :value="unifiedRelationObjectCode"
+                    :options="businessObjectOptions"
+                    :loading="businessObjectLoading"
+                    :disabled="field.systemField"
+                    filterable
+                    clearable
+                    placeholder="选择关联的业务对象"
+                    @update:value="handleUnifiedObjectCodeChange"
+                  />
+                </n-form-item>
+
+                <n-grid v-if="unifiedRelationObjectCode" :cols="2" :x-gap="12">
+                  <n-form-item-gi label="显示字段">
+                    <n-select
+                      :value="unifiedDisplayField"
+                      :options="unifiedTargetFieldOptions"
+                      :disabled="field.systemField || !unifiedRelationObjectCode"
+                      filterable
                       clearable
-                      placeholder="可为空"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="对象编码">
-                    <n-input
-                      v-model:value="form.recordSelectorObjectCode"
-                      :disabled="field.systemField"
-                      clearable
-                      placeholder="必填"
+                      placeholder="自动推断"
+                      @update:value="handleUnifiedDisplayFieldChange"
                     />
                   </n-form-item-gi>
                   <n-form-item-gi label="值字段">
-                    <n-input
-                      v-model:value="form.recordSelectorValueField"
-                      :disabled="field.systemField"
+                    <n-select
+                      :value="unifiedValueField"
+                      :options="unifiedTargetFieldOptions"
+                      :disabled="field.systemField || !unifiedRelationObjectCode"
+                      filterable
                       clearable
-                      placeholder="id"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="回显来源字段">
-                    <n-input
-                      v-model:value="form.recordSelectorLabelField"
-                      :disabled="field.systemField"
-                      clearable
-                      placeholder="name"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="回显目标字段">
-                    <n-input
-                      v-model:value="form.recordSelectorTargetLabelField"
-                      :disabled="field.systemField"
-                      clearable
-                      placeholder="可为空"
+                      placeholder="默认 id"
+                      @update:value="handleUnifiedValueFieldChange"
                     />
                   </n-form-item-gi>
                 </n-grid>
-                <n-form-item label="显示字段">
-                  <n-input
-                    v-model:value="form.recordSelectorDisplayFieldsText"
-                    :disabled="field.systemField"
-                    type="textarea"
-                    :autosize="{ minRows: 2, maxRows: 5 }"
-                    placeholder="field:显示名，每行一个"
-                  />
-                </n-form-item>
-                <n-form-item label="搜索字段">
-                  <n-input
-                    v-model:value="form.recordSelectorKeywordFieldsText"
-                    :disabled="field.systemField"
-                    type="textarea"
-                    :autosize="{ minRows: 1, maxRows: 3 }"
-                    placeholder="字段编码，逗号或换行分隔"
-                  />
-                </n-form-item>
-                <n-form-item label="字段映射">
-                  <n-input
-                    v-model:value="form.recordSelectorMappingsText"
-                    :disabled="field.systemField"
-                    type="textarea"
-                    :autosize="{ minRows: 2, maxRows: 6 }"
-                    placeholder="source=target，每行一个"
-                  />
-                </n-form-item>
-                <n-form-item label="过滤参数">
-                  <n-input
-                    v-model:value="form.recordSelectorSearchParamsText"
-                    :disabled="field.systemField"
-                    type="textarea"
-                    :autosize="{ minRows: 2, maxRows: 6 }"
-                    placeholder="warehouseId=${formData.warehouseId}，每行一个"
-                  />
-                </n-form-item>
+
+                <!-- 弹窗选择器高级配置 -->
+                <n-collapse v-if="relationSelectionMode === 'popup' && unifiedRelationObjectCode" :default-expanded-names="[]" class="relation-advanced-collapse">
+                  <n-collapse-item title="高级配置" name="advanced">
+                    <n-grid :cols="2" :x-gap="12">
+                      <n-form-item-gi label="套件编码">
+                        <n-input
+                          v-model:value="form.recordSelectorSuiteCode"
+                          :disabled="field.systemField"
+                          clearable
+                          placeholder="可为空"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="回显目标字段">
+                        <n-input
+                          v-model:value="form.recordSelectorTargetLabelField"
+                          :disabled="field.systemField"
+                          clearable
+                          placeholder="可为空"
+                        />
+                      </n-form-item-gi>
+                    </n-grid>
+                    <n-form-item label="弹窗展示字段">
+                      <n-select
+                        v-model:value="form.recordSelectorDisplayFields"
+                        :options="unifiedTargetFieldOptions"
+                        :disabled="field.systemField || !unifiedRelationObjectCode"
+                        multiple
+                        filterable
+                        clearable
+                        placeholder="选择弹窗列表中展示的字段"
+                      />
+                    </n-form-item>
+                    <n-form-item label="搜索字段">
+                      <n-select
+                        v-model:value="form.recordSelectorKeywordFields"
+                        :options="unifiedTargetFieldOptions"
+                        :disabled="field.systemField || !unifiedRelationObjectCode"
+                        multiple
+                        filterable
+                        clearable
+                        placeholder="选择用于关键字搜索的字段"
+                      />
+                    </n-form-item>
+                    <n-form-item label="字段映射">
+                      <n-input
+                        v-model:value="form.recordSelectorMappingsText"
+                        :disabled="field.systemField"
+                        type="textarea"
+                        :autosize="{ minRows: 2, maxRows: 6 }"
+                        placeholder="source=target，每行一个"
+                      />
+                    </n-form-item>
+                    <n-form-item label="过滤参数">
+                      <n-input
+                        v-model:value="form.recordSelectorSearchParamsText"
+                        :disabled="field.systemField"
+                        type="textarea"
+                        :autosize="{ minRows: 2, maxRows: 6 }"
+                        placeholder="warehouseId=${formData.warehouseId}，每行一个"
+                      />
+                    </n-form-item>
+                  </n-collapse-item>
+                </n-collapse>
               </section>
 
               <n-form-item label="备注">
@@ -246,8 +281,8 @@
               <section v-if="needsDict" class="cascade-config">
                 <div class="cascade-config-head">
                   <div>
-                    <strong>级联过滤</strong>
-                    <span>根据上级字段值过滤当前字典选项。</span>
+                    <strong>选项过滤</strong>
+                    <span>根据上级字段值过滤当前选项。</span>
                   </div>
                   <n-switch
                     :value="form.basicProps.cascade.enabled"
@@ -511,6 +546,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { businessObjectDesigner, businessObjectList } from '@/api/business-app'
 import { previewFormula, validateFormula } from '@/api/formula'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import FieldTypeSelect from '@/components/lowcode-builder/shared/FieldTypeSelect.vue'
@@ -691,6 +727,50 @@ const hasFormulaToolFields = computed(() => formulaToolFields.value.some(item =>
 const changed = computed(() => JSON.stringify(payload.value) !== baseline)
 const needsDict = computed(() => ['DICT', 'RADIO', 'CHECKBOX'].includes(form.fieldType) || ['select', 'radio', 'checkbox', 'dictSelect'].includes(form.componentType))
 const isRecordSelectorField = computed(() => form.fieldType === 'RECORD_SELECTOR' || form.componentType === 'recordSelector')
+const isObjectReferenceField = computed(() => form.fieldType === 'REFERENCE' || form.componentType === 'objectReference')
+const businessObjectOptions = ref([])
+const businessObjectLoading = ref(false)
+const referenceTargetFieldsMap = ref({})
+
+// ─── Unified Relation Field Computeds ────────────────────────────────────────
+const isRelationField = computed(() => isRecordSelectorField.value || isObjectReferenceField.value)
+
+const relationSelectionMode = computed(() => {
+  if (isRecordSelectorField.value)
+    return 'popup'
+  return 'dropdown'
+})
+
+const unifiedRelationObjectCode = computed(() => {
+  if (isRecordSelectorField.value)
+    return form.recordSelectorObjectCode || ''
+  if (isObjectReferenceField.value)
+    return form.referenceObjectCode || ''
+  return ''
+})
+
+const unifiedDisplayField = computed(() => {
+  if (isRecordSelectorField.value)
+    return form.recordSelectorLabelField || ''
+  if (isObjectReferenceField.value)
+    return form.referenceDisplayField || ''
+  return ''
+})
+
+const unifiedValueField = computed(() => {
+  if (isRecordSelectorField.value)
+    return form.recordSelectorValueField || ''
+  if (isObjectReferenceField.value)
+    return form.referenceValueField || ''
+  return ''
+})
+
+const unifiedTargetFieldOptions = computed(() => {
+  const objectCode = unifiedRelationObjectCode.value
+  if (!objectCode)
+    return []
+  return referenceTargetFieldsMap.value[objectCode]?.options || []
+})
 const normalizedDataType = computed(() => String(form.dataType || '').toLowerCase())
 const supportsLength = computed(() => ['varchar', 'char', 'decimal'].includes(normalizedDataType.value))
 const supportsPrecision = computed(() => normalizedDataType.value === 'decimal')
@@ -889,6 +969,7 @@ function createFieldForm(field) {
     fieldStatus: currentField.fieldStatus || 'ENABLED',
     referenceObjectCode: currentField.referenceObjectCode || '',
     referenceDisplayField: currentField.referenceDisplayField || '',
+    referenceValueField: currentField.referenceValueField || '',
     placeholder: currentField.basicProps?.placeholder || currentField.placeholder || '',
     remark: currentField.remark || '',
     sortOrder: currentField.sortOrder ?? 0,
@@ -937,8 +1018,8 @@ function createFieldForm(field) {
     recordSelectorValueField: recordSelector.valueField,
     recordSelectorLabelField: recordSelector.labelField,
     recordSelectorTargetLabelField: recordSelector.targetLabelField,
-    recordSelectorDisplayFieldsText: listToLines(recordSelector.displayFields),
-    recordSelectorKeywordFieldsText: listToLines(recordSelector.keywordFields),
+    recordSelectorDisplayFields: normalizeTextList(recordSelector.displayFields),
+    recordSelectorKeywordFields: normalizeTextList(recordSelector.keywordFields),
     recordSelectorMappingsText: mappingsToLines(recordSelector.fieldMappings),
     recordSelectorSearchParamsText: searchParamsToLines(recordSelector.searchParams),
   }
@@ -1027,6 +1108,7 @@ function normalizePayload(source) {
     fieldStatus: source.fieldStatus,
     referenceObjectCode: source.referenceObjectCode,
     referenceDisplayField: source.referenceDisplayField,
+    referenceValueField: source.referenceValueField,
     placeholder: source.placeholder,
     remark: source.remark,
     sortOrder: source.sortOrder,
@@ -1725,8 +1807,8 @@ function buildRecordSelectorConfig(source) {
     valueField: source.recordSelectorValueField,
     labelField: source.recordSelectorLabelField,
     targetLabelField: source.recordSelectorTargetLabelField,
-    displayFields: parseTextList(source.recordSelectorDisplayFieldsText),
-    keywordFields: parseTextList(source.recordSelectorKeywordFieldsText),
+    displayFields: source.recordSelectorDisplayFields,
+    keywordFields: source.recordSelectorKeywordFields,
     fieldMappings: parseMappingLines(source.recordSelectorMappingsText),
     searchParams: parseSearchParamLines(source.recordSelectorSearchParamsText),
   })
@@ -1794,13 +1876,15 @@ function normalizeSearchParams(value) {
     return {}
   if (typeof value === 'string')
     return parseSearchParamLines(value)
-  if (value && typeof value === 'object' && !Array.isArray(value))
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
     return Object.entries(value).reduce((result, [key, item]) => {
       const paramKey = String(key || '').trim()
-      if (paramKey && item !== undefined && item !== null && item !== '')
+      if (paramKey && item !== undefined && item !== null && item !== '') {
         result[paramKey] = item
+      }
       return result
     }, {})
+  }
   return {}
 }
 
@@ -1846,10 +1930,6 @@ function parseSearchParamLines(value) {
     }, {})
 }
 
-function listToLines(value) {
-  return normalizeTextList(value).join('\n')
-}
-
 function mappingsToLines(value) {
   return normalizeMappingList(value)
     .map(item => `${item.sourceField}=${item.targetField}`)
@@ -1888,6 +1968,208 @@ function applyFieldTypeDefaults(fieldType) {
   if (!['DICT', 'RADIO', 'CHECKBOX'].includes(fieldType))
     form.dictType = ''
 }
+
+async function loadBusinessObjectOptions() {
+  if (businessObjectOptions.value.length || businessObjectLoading.value)
+    return
+  businessObjectLoading.value = true
+  try {
+    const res = await businessObjectList({})
+    const list = Array.isArray(res.data) ? res.data : []
+    const seen = new Set()
+    businessObjectOptions.value = list
+      .filter((item) => {
+        if (!item.objectCode || seen.has(item.objectCode))
+          return false
+        seen.add(item.objectCode)
+        return true
+      })
+      .map(item => ({
+        label: `${item.objectName || item.objectCode}（${item.objectCode}）`,
+        value: item.objectCode,
+        object: item,
+      }))
+  }
+  catch {
+    businessObjectOptions.value = []
+  }
+  finally {
+    businessObjectLoading.value = false
+  }
+}
+
+async function loadReferenceTargetFields(objectCode) {
+  if (!objectCode || referenceTargetFieldsMap.value[objectCode])
+    return
+  const target = businessObjectOptions.value.find(item => item.value === objectCode)?.object
+  if (!target?.id) {
+    referenceTargetFieldsMap.value = { ...referenceTargetFieldsMap.value, [objectCode]: { options: [] } }
+    return
+  }
+  try {
+    const res = await businessObjectDesigner(target.id)
+    const fields = res.data?.fields || res.data?.modelSchema?.fields || []
+    const options = fields
+      .filter(field => !['tenantId', 'tenant_id', 'createBy', 'create_by', 'createTime', 'create_time', 'updateBy', 'update_by', 'updateTime', 'update_time', 'delFlag', 'del_flag'].includes(field.fieldCode || field.field))
+      .map(field => ({
+        label: `${field.fieldName || field.label || field.fieldCode || field.field}（${field.fieldCode || field.field}）`,
+        value: field.fieldCode || field.field,
+        field,
+      }))
+    referenceTargetFieldsMap.value = { ...referenceTargetFieldsMap.value, [objectCode]: { options } }
+  }
+  catch {
+    referenceTargetFieldsMap.value = { ...referenceTargetFieldsMap.value, [objectCode]: { options: [] } }
+  }
+}
+
+watch(
+  () => isObjectReferenceField.value,
+  async (isReference) => {
+    if (!isReference)
+      return
+    await loadBusinessObjectOptions()
+    if (form.referenceObjectCode)
+      await loadReferenceTargetFields(form.referenceObjectCode)
+  },
+)
+
+watch(
+  () => form.referenceObjectCode,
+  async (value, oldValue) => {
+    if (!value || value === oldValue)
+      return
+    if (!businessObjectOptions.value.length)
+      await loadBusinessObjectOptions()
+    form.referenceDisplayField = ''
+    form.referenceValueField = ''
+    await loadReferenceTargetFields(value)
+  },
+)
+
+// ─── Unified Relation Field Functions ────────────────────────────────────────
+function switchRelationSelectionMode(mode) {
+  const currentObjectCode = unifiedRelationObjectCode.value
+  const currentDisplayField = unifiedDisplayField.value
+  const currentValueField = unifiedValueField.value
+
+  if (mode === 'popup') {
+    // Switch to recordSelector
+    form.fieldType = 'RECORD_SELECTOR'
+    form.componentType = 'recordSelector'
+    form.recordSelectorObjectCode = currentObjectCode
+    form.recordSelectorLabelField = currentDisplayField
+    form.recordSelectorValueField = currentValueField || 'id'
+    // Clear objectReference fields
+    form.referenceObjectCode = ''
+    form.referenceDisplayField = ''
+    form.referenceValueField = ''
+  }
+  else {
+    // Switch to objectReference (dropdown)
+    form.fieldType = 'REFERENCE'
+    form.componentType = 'objectReference'
+    form.referenceObjectCode = currentObjectCode
+    form.referenceDisplayField = currentDisplayField
+    form.referenceValueField = currentValueField || 'id'
+    // Clear recordSelector fields
+    form.recordSelectorObjectCode = ''
+    form.recordSelectorLabelField = ''
+    form.recordSelectorValueField = ''
+  }
+}
+
+async function handleUnifiedObjectCodeChange(value) {
+  if (isRecordSelectorField.value) {
+    form.recordSelectorObjectCode = value || ''
+    form.recordSelectorLabelField = ''
+    form.recordSelectorValueField = ''
+  }
+  else {
+    form.referenceObjectCode = value || ''
+    form.referenceDisplayField = ''
+    form.referenceValueField = ''
+  }
+  if (value) {
+    if (!businessObjectOptions.value.length)
+      await loadBusinessObjectOptions()
+    await loadReferenceTargetFields(value)
+    // Auto-infer display/value fields
+    autoInferRelationFields(value)
+  }
+}
+
+function autoInferRelationFields(objectCode) {
+  const fieldOptions = referenceTargetFieldsMap.value[objectCode]?.options || []
+  if (!fieldOptions.length)
+    return
+  // Auto-infer display field: prefer name/title
+  const displayCandidate = fieldOptions.find(f => ['name', 'title', 'label'].includes(f.value))
+    || fieldOptions.find(f => /name|title/i.test(f.value))
+  // Auto-infer value field: prefer id
+  const valueCandidate = fieldOptions.find(f => f.value === 'id')
+
+  const inferredDisplay = displayCandidate?.value || ''
+  const inferredValue = valueCandidate?.value || 'id'
+
+  if (isRecordSelectorField.value) {
+    if (!form.recordSelectorLabelField)
+      form.recordSelectorLabelField = inferredDisplay
+    if (!form.recordSelectorValueField)
+      form.recordSelectorValueField = inferredValue
+    // Also infer keyword fields
+    if (!form.recordSelectorKeywordFields?.length && inferredDisplay) {
+      const keywordCandidates = fieldOptions
+        .filter(f => /name|code|title/i.test(f.value))
+        .map(f => f.value)
+        .slice(0, 3)
+      form.recordSelectorKeywordFields = keywordCandidates.length ? keywordCandidates : [inferredDisplay]
+    }
+  }
+  else {
+    if (!form.referenceDisplayField)
+      form.referenceDisplayField = inferredDisplay
+    if (!form.referenceValueField)
+      form.referenceValueField = inferredValue
+  }
+}
+
+function handleUnifiedDisplayFieldChange(value) {
+  if (isRecordSelectorField.value)
+    form.recordSelectorLabelField = value || ''
+  else
+    form.referenceDisplayField = value || ''
+}
+
+function handleUnifiedValueFieldChange(value) {
+  if (isRecordSelectorField.value)
+    form.recordSelectorValueField = value || ''
+  else
+    form.referenceValueField = value || ''
+}
+
+watch(
+  () => isRelationField.value,
+  async (isRelation) => {
+    if (!isRelation)
+      return
+    await loadBusinessObjectOptions()
+    const objectCode = unifiedRelationObjectCode.value
+    if (objectCode)
+      await loadReferenceTargetFields(objectCode)
+  },
+)
+
+watch(
+  () => isRecordSelectorField.value,
+  async (isSelector) => {
+    if (!isSelector)
+      return
+    await loadBusinessObjectOptions()
+    if (form.recordSelectorObjectCode)
+      await loadReferenceTargetFields(form.recordSelectorObjectCode)
+  },
+)
 
 defineExpose({
   resetForm,
@@ -2125,6 +2407,20 @@ defineExpose({
 .record-selector-config-head strong {
   color: #111827;
   font-size: 13px;
+}
+
+.relation-config-unified {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.relation-advanced-collapse {
+  margin-top: 4px;
 }
 
 .property-footer {

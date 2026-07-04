@@ -45,6 +45,7 @@ import { crudConfigRender } from '@/api/ai'
 import { businessDocumentRuntimeBatch } from '@/api/business-app'
 import catalog from '@/catalog'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
+import { normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import { applyCrudHookRules, CRUD_HOOK_RULE_TARGETS, normalizeCrudHookRules } from '@/components/lowcode-builder/page/crud-hook-rules'
 import ListPageGridDesigner from '@/components/lowcode-builder/page/ListPageGridDesigner.vue'
 import FieldValueRenderer from '@/components/lowcode-builder/shared/FieldValueRenderer.vue'
@@ -221,12 +222,14 @@ function transformColumns(columns, transConfig, options = {}) {
   const transMap = {}
   if (transConfig && typeof transConfig === 'object') {
     for (const [field, conf] of Object.entries(transConfig)) {
-      transMap[field] = conf.targetField || (`${field}Name`)
+      if (!isSystemRuntimeField(field))
+        transMap[field] = conf.targetField || (`${field}Name`)
     }
   }
 
   let treeColumnApplied = false
   const isActionColumnKey = key => ['actions', 'action', 'operations', 'operation'].includes(String(key || ''))
+  const canRenderTranslatedText = key => key && !isSystemRuntimeField(key)
   const result = (columns || []).map((col) => {
     // 统一提取字段名，优先级：prop > key > dataIndex
     const key = col.prop || col.key || col.dataIndex
@@ -264,14 +267,14 @@ function transformColumns(columns, transConfig, options = {}) {
       renderConfig.renderType = 'dictTag'
       renderConfig.dictType = col.render.dictType
     }
-    else if (col.render && typeof col.render === 'object' && col.render.type === 'relationName') {
+    else if (canRenderTranslatedText(key) && col.render && typeof col.render === 'object' && col.render.type === 'relationName') {
       renderConfig.textField = col.render.targetField || `${key}Name`
     }
-    else if (col.render && typeof col.render === 'object' && ['orgName', 'userName', 'regionName', 'fileUpload'].includes(col.render.type)) {
+    else if (canRenderTranslatedText(key) && col.render && typeof col.render === 'object' && ['orgName', 'userName', 'regionName', 'fileUpload'].includes(col.render.type)) {
       renderConfig.textField = col.render.targetField || `${key}Name`
     }
     // 如果该字段有翻译配置，优先显示翻译后的值，没有则显示原字段值
-    else if (transMap[key]) {
+    else if (canRenderTranslatedText(key) && transMap[key]) {
       renderConfig.textField = transMap[key]
     }
     if (Object.keys(renderConfig).length)
@@ -299,6 +302,26 @@ function transformColumns(columns, transConfig, options = {}) {
   }
 
   return result
+}
+
+function isSystemRuntimeField(field) {
+  return [
+    'id',
+    'tenantId',
+    'tenant_id',
+    'createBy',
+    'create_by',
+    'createTime',
+    'create_time',
+    'createDept',
+    'create_dept',
+    'updateBy',
+    'update_by',
+    'updateTime',
+    'update_time',
+    'delFlag',
+    'del_flag',
+  ].includes(String(field || ''))
 }
 
 function applyRuntimeColumnPresentation(targetCol, sourceCol = {}, key = '') {
@@ -507,11 +530,51 @@ function transformFields(fields, fieldMetaMap = new Map()) {
       }
     }
 
-    // 数字类型字段自动转换类型
+    // recordSelector: surface field asset selector config to props for runtime resolution.
+    if (isRuntimeRecordSelectorField(newField, fieldMeta)) {
+      const selectorConfig = normalizeRecordSelectorConfig(buildRuntimeRelationSource(newField, fieldMeta))
+      const selectorObjectCode = selectorConfig.objectCode
+      if (selectorObjectCode) {
+        newField.props = {
+          ...(newField.props || {}),
+          recordSelector: {
+            ...selectorConfig,
+            objectCode: selectorObjectCode,
+            businessObjectCode: selectorConfig.businessObjectCode || newField.businessObjectCode || fieldMeta?.businessObjectCode || selectorObjectCode,
+            targetObjectCode: selectorConfig.targetObjectCode || newField.targetObjectCode || fieldMeta?.targetObjectCode || selectorObjectCode,
+          },
+        }
+      }
+    }
+
+    // objectReference: surface reference config to props for runtime optionSource generation
+    if (isRuntimeObjectReferenceField(newField, fieldMeta)) {
+      const relationSource = buildRuntimeRelationSource(newField, fieldMeta)
+      const refObjectCode = firstRuntimeText(
+        relationSource.referenceObjectCode,
+        relationSource.basicProps?.referenceObjectCode,
+        relationSource.props?.referenceObjectCode,
+        relationSource.referenceConfig?.referenceObjectCode,
+        relationSource.basicProps?.referenceConfig?.referenceObjectCode,
+        relationSource.props?.referenceConfig?.referenceObjectCode,
+        normalizeRecordSelectorConfig(relationSource).objectCode,
+      )
+      if (refObjectCode) {
+        newField.props = {
+          ...(newField.props || {}),
+          referenceObjectCode: refObjectCode,
+          businessObjectCode: newField.props?.businessObjectCode || refObjectCode,
+          targetObjectCode: newField.props?.targetObjectCode || refObjectCode,
+          referenceDisplayField: firstRuntimeText(relationSource.referenceDisplayField, relationSource.basicProps?.referenceDisplayField, relationSource.props?.referenceDisplayField, relationSource.props?.displayField),
+          referenceValueField: firstRuntimeText(relationSource.referenceValueField, relationSource.basicProps?.referenceValueField, relationSource.props?.referenceValueField, relationSource.props?.valueField, 'id'),
+        }
+      }
+    }
+
+    // Number field type coercion
     if (['number', 'inputNumber'].includes(field.type)) {
       newField.onMounted = (vm) => {
         if (vm.field && vm.value) {
-          // 如果值是字符串，尝试转换成数字
           if (typeof vm.value === 'string') {
             const num = Number.parseFloat(vm.value)
             if (!Number.isNaN(num)) {
@@ -532,6 +595,43 @@ function transformFields(fields, fieldMetaMap = new Map()) {
 
     return newField
   })
+}
+
+function buildRuntimeRelationSource(field = {}, meta = {}) {
+  return {
+    ...(meta || {}),
+    ...(field || {}),
+    basicProps: {
+      ...(meta?.basicProps || {}),
+      ...(field?.basicProps || {}),
+    },
+    props: {
+      ...(meta?.props || {}),
+      ...(meta?.basicProps || {}),
+      ...(field?.props || {}),
+    },
+    recordSelector: field?.props?.recordSelector
+      || field?.recordSelector
+      || field?.basicProps?.recordSelector
+      || meta?.props?.recordSelector
+      || meta?.recordSelector
+      || meta?.basicProps?.recordSelector,
+  }
+}
+
+function isRuntimeRecordSelectorField(field = {}, meta = {}) {
+  return ['recordSelector', 'RECORD_SELECTOR'].includes(field.type)
+    || field.componentType === 'recordSelector'
+    || meta?.fieldType === 'RECORD_SELECTOR'
+    || meta?.componentType === 'recordSelector'
+    || Boolean(normalizeRecordSelectorConfig(buildRuntimeRelationSource(field, meta)).objectCode)
+}
+
+function isRuntimeObjectReferenceField(field = {}, meta = {}) {
+  return ['objectReference', 'REFERENCE'].includes(field.type)
+    || field.componentType === 'objectReference'
+    || meta?.fieldType === 'REFERENCE'
+    || meta?.componentType === 'objectReference'
 }
 
 function applyRuntimeFieldValidation(field = {}, meta = {}) {
@@ -845,6 +945,42 @@ function resolveDateTimeProps(type) {
   }
 }
 
+function normalizeRuntimeWidth(value) {
+  if (value === null || value === undefined)
+    return ''
+  const width = String(value).trim()
+  if (!width || width === 'auto' || width === '100%')
+    return ''
+  if (/^\d+$/.test(width))
+    return `${width}px`
+  return width
+}
+
+function resolvePageSchemaEditFormStyle(pageSchema = {}) {
+  const zones = Array.isArray(pageSchema.zones) ? pageSchema.zones : []
+  const editZone = zones.find((zone) => {
+    const key = String(zone?.zoneKey || zone?.key || zone?.type || '').toLowerCase()
+    const component = String(zone?.componentKey || zone?.component || '').toLowerCase()
+    return ['edit', 'edit-form', 'form'].includes(key) || component === 'edit-form'
+  })
+  return editZone?.props?.editFormStyle || {}
+}
+
+function resolveRuntimeModalWidth(options = {}, cfg = {}, formProfile = {}) {
+  const explicitWidth = normalizeRuntimeWidth(options.modalWidth || cfg.modalWidth)
+  if (explicitWidth)
+    return explicitWidth
+  const formStyle = options.editFormStyle
+    || cfg.editFormStyle
+    || formProfile.editFormStyle
+    || resolvePageSchemaEditFormStyle(cfg.pageSchema)
+    || {}
+  const formStyleWidth = normalizeRuntimeWidth(formStyle.maxWidth || formStyle.width)
+  if (formStyleWidth)
+    return formStyleWidth
+  return '800px'
+}
+
 const crudProps = computed(() => {
   if (!renderConfig.value)
     return {}
@@ -885,8 +1021,9 @@ const crudProps = computed(() => {
     ? { ...(cfg.apiConfig || {}), list: cfg.apiConfig?.tree || cfg.apiConfig?.list }
     : cfg.apiConfig || {}
   const masterDetailConfig = options.masterDetailConfig || {}
+  const runtimeFieldMetaMap = buildRuntimeFieldMetaMap(cfg.modelSchema)
   return {
-    searchSchema: transformFields(cfg.searchSchema),
+    searchSchema: transformFields(cfg.searchSchema, runtimeFieldMetaMap),
     columns: transformColumns(cfg.columnsSchema, cfg.transConfig, {
       treeTable,
       includeDetailAction: true,
@@ -894,7 +1031,7 @@ const crudProps = computed(() => {
       columnSettings: runtimeColumnSettings.value,
       fitTableToContainer: shouldRenderRuntimeGrid.value,
     }),
-    editSchema: transformEditFields(activeRuntimeFormProfile.value.editSchema, activeRuntimeFormProfile.value.editFormLayout || options.editFormLayout, buildRuntimeFieldMetaMap(cfg.modelSchema)),
+    editSchema: transformEditFields(activeRuntimeFormProfile.value.editSchema, activeRuntimeFormProfile.value.editFormLayout || options.editFormLayout, runtimeFieldMetaMap),
     childrenConfig: transformChildrenConfig(masterDetailConfig.children || []),
     detailPanels: options.detailPanels || cfg.detailPanels || [],
     apiConfig,
@@ -903,7 +1040,7 @@ const crudProps = computed(() => {
     formOpenMode,
     tabWorkspace: options.tabWorkspace || cfg.tabWorkspace || {},
     modalType: resolveRuntimeModalType(formOpenMode, options, cfg),
-    modalWidth: options.modalWidth || cfg.modalWidth || '800px',
+    modalWidth: resolveRuntimeModalWidth(options, cfg, activeRuntimeFormProfile.value),
     editGridCols: options.editGridCols || cfg.editGridCols || 1,
     editLabelWidth: options.editLabelWidth || cfg.editLabelWidth || 'auto',
     editLabelPlacement: options.editLabelPlacement || cfg.editLabelPlacement || 'left',
@@ -1331,6 +1468,10 @@ function normalizeRuntimeBatchMap(data) {
   if (!data || typeof data !== 'object')
     return new Map()
   return new Map(Object.entries(data))
+}
+
+function firstRuntimeText(...values) {
+  return values.map(value => String(value ?? '').trim()).find(Boolean) || ''
 }
 
 function resolveBusinessObjectCode(cfg = {}) {

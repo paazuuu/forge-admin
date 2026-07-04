@@ -7,6 +7,8 @@ import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessActionExecuteD
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessActionLogQueryDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessActionExecutionService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessActionExecuteResultVO;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/ai/business/action")
 @RequiredArgsConstructor
+@ApiDecrypt
+@ApiEncrypt
 public class BusinessActionExecutionController {
 
     private final BusinessActionExecutionService actionExecutionService;

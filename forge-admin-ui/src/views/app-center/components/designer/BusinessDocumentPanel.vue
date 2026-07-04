@@ -3,7 +3,7 @@
     <div class="document-head">
       <div>
         <h3>单据设置</h3>
-        <p>维护单据字段、编号生成和状态生命周期，主流程统一在流程与自动化中配置。</p>
+        <p>维护单据启用方式和状态生命周期，主流程统一在流程绑定中配置。</p>
       </div>
       <n-space align="center" size="small">
         <n-tag :type="form.documentEnabled ? 'success' : 'default'" :bordered="false">
@@ -26,18 +26,13 @@
             <strong>单据模式</strong>
             <em>{{ form.documentEnabled ? '运行态已启用' : '普通数据管理' }}</em>
           </div>
-          <div :class="{ active: !!form.options.documentNoField && (!!selectedDocumentRuleCode || !!form.noRuleTemplate) }">
-            <span>02</span>
-            <strong>编号生成</strong>
-            <em>{{ form.options.documentNoField || '待选择字段' }}</em>
-          </div>
           <div :class="{ active: !!form.statusField && statusValueOptions.length }">
-            <span>03</span>
+            <span>02</span>
             <strong>状态字典</strong>
             <em>{{ statusValueOptions.length ? `${statusValueOptions.length} 个可选值` : '待绑定选项' }}</em>
           </div>
           <div :class="{ active: !!form.mainFlowSummary?.configured }">
-            <span>04</span>
+            <span>03</span>
             <strong>主流程</strong>
             <em>{{ form.mainFlowSummary?.flowModelName || form.mainFlowSummary?.flowModelKey || '未配置' }}</em>
           </div>
@@ -76,97 +71,17 @@
                     />
                   </n-form-item-gi>
                   <n-form-item-gi label="发起人字段">
-                    <n-select
-                      v-model:value="form.starterField"
-                      :disabled="!form.documentEnabled"
-                      :options="fieldOptions"
-                      clearable
-                      filterable
-                      placeholder="选择记录发起人字段"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="负责人字段">
-                    <n-select
-                      v-model:value="form.ownerField"
-                      :disabled="!form.documentEnabled"
-                      :options="fieldOptions"
-                      clearable
-                      filterable
-                      placeholder="选择负责人字段"
-                      @update:value="markDirty"
-                    />
+                    <div class="readonly-field-value">
+                      <strong>创建人</strong>
+                      <span>createBy</span>
+                    </div>
                   </n-form-item-gi>
                 </n-grid>
               </n-form>
 
               <div class="field-hints">
                 <span>状态字段必须绑定字典或选项，状态映射只能从这些值中选择。</span>
-                <span>发起人和负责人用于流程发起、待办归属和消息接收。</span>
-              </div>
-            </section>
-
-            <section class="document-section">
-              <div class="section-head">
-                <div>
-                  <h4>编号生成</h4>
-                  <p>选择编号写入字段并维护生成规则；真实新增时由后端生成，不由用户手填。</p>
-                </div>
-              </div>
-              <n-form label-placement="top" size="small" :show-feedback="false">
-                <n-form-item label="编号字段">
-                  <n-select
-                    :value="form.options.documentNoField"
-                    :disabled="!form.documentEnabled"
-                    :options="documentNoFieldOptions"
-                    clearable
-                    filterable
-                    placeholder="选择申请单号/单据编号字段"
-                    @update:value="handleDocumentNoFieldChange"
-                  />
-                </n-form-item>
-              </n-form>
-              <div class="document-code-rule-box">
-                <div class="code-rule-row">
-                  <span>自动编号规则</span>
-                  <n-select
-                    :value="selectedDocumentRuleCode"
-                    :disabled="!form.documentEnabled || !form.options.documentNoField"
-                    :options="codeRuleOptions"
-                    :loading="codeRuleLoading"
-                    clearable
-                    filterable
-                    placeholder="选择后会写回字段自动编号配置"
-                    @update:value="updateDocumentFieldRule"
-                  />
-                </div>
-                <div v-if="selectedDocumentRule" class="code-rule-summary">
-                  <strong>{{ selectedDocumentRule.ruleName }}</strong>
-                  <code>{{ selectedDocumentRule.template }}</code>
-                </div>
-                <n-alert v-else-if="form.options.documentNoField" type="warning" :bordered="false">
-                  当前编号字段还没有自动编号规则，请选择一个编码规则；规则会保存到表单设计字段上。
-                </n-alert>
-                <n-alert v-else type="default" :bordered="false">
-                  先选择编号写入字段，再绑定自动编号规则。
-                </n-alert>
-                <div v-if="form.noRuleTemplate && !selectedDocumentRuleCode" class="legacy-rule-note">
-                  检测到旧单据模板：{{ form.noRuleTemplate }}。选择自动编号规则后将以字段配置为准。
-                </div>
-                <div class="code-rule-preview">
-                  <n-button
-                    size="small"
-                    secondary
-                    :disabled="!selectedDocumentRuleCode"
-                    :loading="previewingCodeRule"
-                    @click="previewDocumentCodeRule"
-                  >
-                    预览
-                  </n-button>
-                  <strong :class="{ invalid: noRulePreview?.valid === false }">
-                    {{ noRulePreview?.previewCode || noRulePreview?.previewNo || '选择规则后可预览' }}
-                  </strong>
-                </div>
+                <span>发起人固定取创建人，避免不同对象重复选择。</span>
               </div>
             </section>
           </div>
@@ -221,7 +136,6 @@
       <aside class="document-side">
         <DocumentConfigSummary
           :form="form"
-          :no-rule-preview="noRulePreview"
           @configure-flow="$emit('configureFlow')"
         />
       </aside>
@@ -231,8 +145,8 @@
 
 <script setup>
 import { useMessage } from 'naive-ui'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { businessDocumentConfig, codeRuleList, previewCodeRule, saveBusinessDocumentConfig } from '@/api/business-app'
+import { computed, reactive, ref, watch } from 'vue'
+import { businessDocumentConfig, saveBusinessDocumentConfig } from '@/api/business-app'
 import { getDictData } from '@/composables/useDict'
 import DocumentConfigSummary from './DocumentConfigSummary.vue'
 import DocumentStatusMappingTable from './DocumentStatusMappingTable.vue'
@@ -269,24 +183,14 @@ const emit = defineEmits(['dirtyChange', 'saved', 'loaded', 'configureFlow', 'up
 const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
-const noRulePreview = ref(null)
-const previewingCodeRule = ref(false)
-const codeRuleLoading = ref(false)
-const codeRules = ref([])
 const statusOptionsLoading = ref(false)
 const statusValueOptions = ref([])
 const form = reactive(createDefaultConfig())
 let statusOptionLoadSeq = 0
 
 const defaultDocumentName = computed(() => `${props.objectName || '业务单元'}单据`)
-const effectiveSuiteCode = computed(() => props.suiteCode || form.suiteCode || '')
-const effectiveObjectCode = computed(() => props.objectCode || form.objectCode || '')
 const activeFields = computed(() => props.fields.filter(field => fieldCode(field) && !isInactiveField(field)))
 const fieldMap = computed(() => new Map(activeFields.value.map(field => [fieldCode(field), field])))
-const fieldOptions = computed(() => activeFields.value.map(field => ({
-  label: `${field.fieldName || field.label || fieldCode(field)}（${fieldCode(field)}）`,
-  value: fieldCode(field),
-})))
 const statusFieldOptions = computed(() => activeFields.value.map((field) => {
   const hasOptions = hasFieldSelectableValues(field)
   const label = `${field.fieldName || field.label || fieldCode(field)}（${fieldCode(field)}）`
@@ -297,27 +201,6 @@ const statusFieldOptions = computed(() => activeFields.value.map((field) => {
   }
 }))
 const selectedStatusField = computed(() => fieldMap.value.get(form.statusField) || null)
-const selectedDocumentNoField = computed(() => fieldMap.value.get(form.options.documentNoField) || null)
-const selectedDocumentGeneration = computed(() => resolveFieldGeneration(selectedDocumentNoField.value))
-const selectedDocumentRuleCode = computed(() => selectedDocumentGeneration.value?.ruleCode || form.options.codeRuleCode || '')
-const selectedDocumentRule = computed(() => codeRules.value.find(rule => rule.ruleCode === selectedDocumentRuleCode.value) || null)
-const codeRuleOptions = computed(() => codeRules.value.map(rule => ({
-  label: `${rule.ruleName || rule.ruleCode}（${rule.ruleCode}）`,
-  value: rule.ruleCode,
-})))
-const documentNoFieldOptions = computed(() => {
-  const inferred = inferDocumentNoField()
-  return activeFields.value
-    .filter(isDocumentNoCandidate)
-    .map(field => ({
-      label: `${field.fieldName || field.label || fieldCode(field)}（${fieldCode(field)}）${fieldCode(field) === inferred ? ' - 推荐' : ''}`,
-      value: fieldCode(field),
-    }))
-})
-
-onMounted(() => {
-  loadCodeRules()
-})
 
 watch(() => props.objectId, () => {
   loadConfig()
@@ -340,15 +223,6 @@ watch(selectedStatusField, async (field) => {
     if (seq === statusOptionLoadSeq)
       statusOptionsLoading.value = false
   }
-}, { immediate: true })
-
-watch(activeFields, () => {
-  ensureDocumentNoField()
-}, { deep: true, immediate: true })
-
-watch(selectedDocumentRuleCode, () => {
-  if (selectedDocumentRuleCode.value)
-    previewDocumentCodeRule()
 }, { immediate: true })
 
 async function loadConfig() {
@@ -395,42 +269,28 @@ function validateBeforeSave() {
     message.warning('状态字段未配置字典或选项，不能保存状态映射')
     return false
   }
-  ensureDocumentNoField()
-  if (form.documentEnabled && form.noRuleTemplate && !form.options.documentNoField) {
-    message.warning('配置编号规则后必须选择编号字段')
-    return false
-  }
-  if (form.documentEnabled && form.options.documentNoField && !selectedDocumentRuleCode.value && !form.noRuleTemplate) {
-    message.warning('编号字段必须绑定自动编号规则')
-    return false
-  }
-  if (noRulePreview.value?.valid === false) {
-    message.warning('编号规则存在错误，请先修正预览提示')
-    return false
-  }
   return true
 }
 
 function buildPayload() {
   const statusMappingRows = normalizeStatusRows(form.statusMappingRows)
-  const legacyNoRuleTemplate = selectedDocumentRuleCode.value ? '' : (form.noRuleTemplate || '')
   return {
     documentEnabled: !!form.documentEnabled,
     documentName: form.documentName || defaultDocumentName.value,
-    documentNoRule: legacyNoRuleTemplate,
-    noRuleTemplate: legacyNoRuleTemplate,
+    documentNoRule: '',
+    noRuleTemplate: '',
     statusField: form.statusField || '',
-    starterField: form.starterField || '',
-    ownerField: form.ownerField || '',
+    starterField: 'createBy',
+    ownerField: '',
     defaultFlowKey: form.defaultFlowKey || form.mainFlowSummary?.flowModelKey || '',
     statusMapping: statusMappingFromRows(statusMappingRows),
     statusMappingRows,
     statusActionPolicy: form.statusActionPolicy || {},
     options: {
       ...(form.options || {}),
-      documentNoField: form.options?.documentNoField || '',
-      codeRuleCode: selectedDocumentRuleCode.value || '',
-      documentNoRuleName: selectedDocumentRule.value?.ruleName || '',
+      documentNoField: '',
+      codeRuleCode: '',
+      documentNoRuleName: '',
     },
   }
 }
@@ -440,22 +300,23 @@ function assignConfig(value = {}) {
     ...defaultDocumentOptions(),
     ...(value.options || {}),
   }
-  options.documentNoField = options.documentNoField || value.documentNoField || ''
-  options.codeRuleCode = options.codeRuleCode || ''
+  options.documentNoField = ''
+  options.codeRuleCode = ''
+  options.documentNoRuleName = ''
   options.detailFlowTimelineVisible = readBoolean(options.detailFlowTimelineVisible, true)
   options.detailFlowDiagramVisible = readBoolean(options.detailFlowDiagramVisible, true)
   Object.assign(form, {
     ...createDefaultConfig(),
     ...value,
     documentEnabled: readBoolean(value.documentEnabled, false),
-    noRuleTemplate: value.noRuleTemplate || value.documentNoRule || '',
+    noRuleTemplate: '',
+    starterField: 'createBy',
+    ownerField: '',
     statusMappingRows: normalizeStatusRows(value.statusMappingRows || rowsFromLegacyMapping(value.statusMapping || {})),
     statusActionPolicy: { ...(value.statusActionPolicy || {}) },
     mainFlowSummary: { ...(value.mainFlowSummary || {}) },
     options,
   })
-  ensureDocumentNoField()
-  noRulePreview.value = value.noRulePreview || null
 }
 
 function updateStatusRows(rows) {
@@ -464,14 +325,6 @@ function updateStatusRows(rows) {
 }
 
 function handleDocumentEnabledChange() {
-  ensureDocumentNoField()
-  markDirty()
-}
-
-function handleDocumentNoFieldChange(value = '') {
-  form.options.documentNoField = value || ''
-  form.options.codeRuleCode = resolveFieldGeneration(fieldMap.value.get(value))?.ruleCode || ''
-  noRulePreview.value = null
   markDirty()
 }
 
@@ -529,7 +382,7 @@ function createDefaultConfig() {
     documentNoRule: '',
     noRuleTemplate: '',
     statusField: '',
-    starterField: '',
+    starterField: 'createBy',
     ownerField: '',
     defaultFlowKey: '',
     statusMappingRows: defaultStatusRows(),
@@ -541,128 +394,9 @@ function createDefaultConfig() {
 
 function defaultDocumentOptions() {
   return {
-    documentNoField: '',
     detailFlowTimelineVisible: true,
     detailFlowDiagramVisible: true,
   }
-}
-
-function ensureDocumentNoField() {
-  if (!form.documentEnabled || form.options.documentNoField)
-    return
-  form.options.documentNoField = inferDocumentNoField()
-  form.options.codeRuleCode = resolveFieldGeneration(fieldMap.value.get(form.options.documentNoField))?.ruleCode || ''
-}
-
-async function loadCodeRules() {
-  if (codeRules.value.length || codeRuleLoading.value)
-    return
-  codeRuleLoading.value = true
-  try {
-    const res = await codeRuleList({ scene: 'COMMON' })
-    codeRules.value = Array.isArray(res.data) ? res.data : []
-  }
-  finally {
-    codeRuleLoading.value = false
-  }
-}
-
-function updateDocumentFieldRule(ruleCode = '') {
-  form.options.codeRuleCode = ruleCode || ''
-  const fieldCodeValue = form.options.documentNoField
-  if (!fieldCodeValue) {
-    markDirty()
-    return
-  }
-  const generation = ruleCode
-    ? {
-        enabled: true,
-        type: 'CODE_RULE',
-        mode: 'CODE_RULE',
-        ruleCode,
-        trigger: 'ON_CREATE',
-        fillPolicy: 'EMPTY_ONLY',
-        readonly: true,
-      }
-    : { ...(selectedDocumentGeneration.value || {}), enabled: false }
-  emit('updateFieldGeneration', {
-    fieldCode: fieldCodeValue,
-    generation,
-  })
-  if (ruleCode)
-    previewDocumentCodeRule(ruleCode)
-  else
-    noRulePreview.value = null
-  markDirty()
-}
-
-async function previewDocumentCodeRule(ruleCode = selectedDocumentRuleCode.value) {
-  if (!ruleCode)
-    return
-  await loadCodeRules()
-  previewingCodeRule.value = true
-  try {
-    const fieldCodeValue = form.options.documentNoField || 'code'
-    const res = await previewCodeRule({
-      ruleCode,
-      sequence: 1,
-      context: {
-        suiteCode: effectiveSuiteCode.value || 'SUITE',
-        objectCode: effectiveObjectCode.value || 'OBJECT',
-        fieldCode: fieldCodeValue,
-        sampleData: buildSampleData(),
-      },
-    })
-    noRulePreview.value = res.data || null
-  }
-  finally {
-    previewingCodeRule.value = false
-  }
-}
-
-function buildSampleData() {
-  return fieldOptions.value.slice(0, 8).reduce((result, field) => {
-    result[field.value] = field.label?.split('（')?.[0] || field.value
-    return result
-  }, {})
-}
-
-function resolveFieldGeneration(field = {}) {
-  const generation = field?.basicProps?.generation || field?.props?.generation || field?.generation || field?.advancedProps?.generation
-  return generation && generation.enabled === true ? generation : null
-}
-
-function inferDocumentNoField() {
-  const candidates = activeFields.value
-    .filter(field => !isInactiveField(field))
-    .map(field => ({
-      field,
-      code: fieldCode(field),
-      label: String(field.fieldName || field.label || ''),
-    }))
-    .filter(item => item.code)
-  const exact = candidates.find(item => ['documentNo', 'document_no', 'applicationNo', 'application_no', 'billNo', 'bill_no'].includes(item.code))
-  if (exact)
-    return exact.code
-  const byLabel = candidates.find(item => /申请单号|单据编号|单号|编号/.test(item.label))
-  if (byLabel)
-    return byLabel.code
-  const byCode = candidates.find(item => /(?:^|_)(?:no|code)$|No$|Code$/.test(item.code))
-  return byCode?.code || ''
-}
-
-function isDocumentNoCandidate(field = {}) {
-  const code = fieldCode(field)
-  const label = String(field.fieldName || field.label || '')
-  if (!code)
-    return false
-  if (/申请单号|单据编号|单号|编号|编码/.test(label))
-    return true
-  if (/(?:^|_)(?:no|code)$|No$|Code$/.test(code))
-    return true
-  const type = String(field.dataType || field.fieldType || '').toLowerCase()
-  const componentType = String(field.componentType || field.type || '').toLowerCase()
-  return ['varchar', 'char', 'text', 'string'].includes(type) || ['input', 'textarea'].includes(componentType)
 }
 
 function hasFieldSelectableValues(field = {}) {
@@ -796,7 +530,7 @@ defineExpose({
 
 .document-rail {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -856,7 +590,7 @@ defineExpose({
 
 .document-config-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -878,6 +612,27 @@ defineExpose({
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.readonly-field-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 0 12px;
+}
+
+.readonly-field-value strong {
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.readonly-field-value span {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .field-hints {

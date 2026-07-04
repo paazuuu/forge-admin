@@ -1,3 +1,4 @@
+import { normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import { getDictData } from '@/composables/useDict'
 import { request } from '@/utils'
 
@@ -693,14 +694,20 @@ async function loadRegionPreviewTree(rootCode, dataRight, virtualDisabled) {
 async function loadObjectReferencePreviewOptions(rule = {}) {
   const props = rule.props || {}
   const optionSource = props.optionSource || {}
-  const referenceObjectCode = props.referenceObjectCode || ''
+  const referenceObjectCode = normalizeRecordSelectorConfig({
+    ...rule,
+    ...props,
+    ...optionSource,
+  }).objectCode || props.referenceObjectCode || ''
   const api = optionSource.api || (referenceObjectCode ? `get@/business/${String(referenceObjectCode).toLowerCase().replace(/_/g, '-')}/page` : '')
   if (!api)
     return []
-  const cacheKey = `object:${api}:${optionSource.recordsField || ''}:${optionSource.labelField || props.referenceDisplayField || ''}`
+  if (String(api).includes('selector/query'))
+    return []
+  const cacheKey = `object:${api}:${referenceObjectCode || ''}:${optionSource.recordsField || ''}:${optionSource.labelField || props.referenceDisplayField || ''}`
   return cachedPreviewOptions(cacheKey, async () => {
     const { method, url } = parseApiConfig(api)
-    const params = {
+    const requestParams = {
       pageNum: 1,
       pageSize: 20,
       ...(optionSource.params || {}),
@@ -708,8 +715,8 @@ async function loadObjectReferencePreviewOptions(rule = {}) {
     const res = await request({
       method,
       url,
-      params: method === 'get' ? params : undefined,
-      data: method === 'get' ? undefined : params,
+      params: method === 'get' ? requestParams : undefined,
+      data: method === 'get' ? undefined : requestParams,
     })
     const rows = extractRows(res?.data, optionSource)
     const valueField = optionSource.valueField || 'id'

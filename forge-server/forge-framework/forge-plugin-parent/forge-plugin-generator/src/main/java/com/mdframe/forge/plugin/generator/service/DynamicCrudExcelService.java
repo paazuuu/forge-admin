@@ -596,9 +596,50 @@ public class DynamicCrudExcelService {
                     value = displayValue;
                 }
             }
-            values.add(value);
+            values.add(normalizeExportCellValue(column, value));
         }
         return values;
+    }
+
+    private Object normalizeExportCellValue(ExcelColumnMeta column, Object value) {
+        if (value == null) {
+            return null;
+        }
+        String dataType = StringUtils.defaultIfBlank(column.getDataType(), "").toLowerCase(Locale.ROOT);
+        String componentType = StringUtils.defaultIfBlank(column.getType(), "").toLowerCase(Locale.ROOT);
+        if ("date".equals(dataType) || "date".equals(componentType)) {
+            return formatDateValue(value);
+        }
+        if ("datetime".equals(dataType) || "datetime".equals(componentType)) {
+            return formatDateTimeValue(value);
+        }
+        if ("time".equals(dataType) || "time".equals(componentType)) {
+            return formatTimeValue(value);
+        }
+        if (value instanceof Date date) {
+            return DATETIME_FORMATTER.format(LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(date.getTime()), ZoneId.systemDefault()));
+        }
+        if (value instanceof LocalDate localDate) {
+            return DATE_FORMATTER.format(localDate);
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return DATETIME_FORMATTER.format(localDateTime);
+        }
+        if (value instanceof LocalTime localTime) {
+            return TIME_FORMATTER.format(localTime);
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal.stripTrailingZeros().toPlainString();
+        }
+        if (value instanceof Map<?, ?> || value instanceof Iterable<?> || value.getClass().isArray()) {
+            try {
+                return objectMapper.writeValueAsString(value);
+            } catch (Exception e) {
+                return String.valueOf(value);
+            }
+        }
+        return value;
     }
 
     private void writeWorkbook(HttpServletResponse response,

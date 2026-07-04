@@ -24,12 +24,12 @@ const STUBS = {
     emits: ['update:checked'],
     template: '<input type="checkbox" :checked="checked" :disabled="disabled" @change="$emit(\'update:checked\', $event.target.checked)" />',
   },
-  BasicConfig: true,
-  ApproverAssigneeForm: true,
-  MultiInstanceConfig: true,
-  PermissionConfig: true,
-  OverdueReminderConfig: true,
-  ListenerConfig: true,
+  'BasicConfig': true,
+  'ApproverAssigneeForm': true,
+  'MultiInstanceConfig': true,
+  'PermissionConfig': true,
+  'OverdueReminderConfig': true,
+  'ListenerConfig': true,
 }
 
 function mountApproverConfig() {

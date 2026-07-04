@@ -263,8 +263,18 @@
                 :field-permissions="businessFormFieldPermissions"
                 :show-actions="false"
                 :show-feedback="true"
-                :grid-cols="2"
-                label-placement="top"
+                :grid-cols="businessFormGridCols"
+                :label-placement="businessFormLabelPlacement"
+                :label-width="businessFormLabelWidth"
+                :context="businessFormRenderContext"
+                :form-assets="businessFormContext.formAssets || []"
+              />
+              <ChildTableEditor
+                v-if="businessFormChildrenConfig.length"
+                v-model:value="businessChildFormData"
+                :children-config="businessFormChildrenConfig"
+                readonly
+                :parent-form-data="businessFormData"
                 :context="businessFormRenderContext"
               />
               <div v-if="businessFormWarnings.length" class="business-form-warnings">
@@ -461,7 +471,7 @@
 import { NButton, NSpace, NTreeSelect } from 'naive-ui'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { businessTaskFormContext, saveBusinessTaskFormContext } from '@/api/business-app'
+import { businessTaskFormContext, completeBusinessTaskAction, saveBusinessTaskFormContext } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import { AiForm } from '@/components/ai-form'
 import { formCreateToAiSchema } from '@/components/ai-form/adapters/formCreate'
@@ -472,6 +482,7 @@ import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignaturePad from '@/components/flow/SignaturePad.vue'
+import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
@@ -522,6 +533,7 @@ const dynamicFormSchema = computed(() => formCreateToAiSchema(taskFormInfo.value
 const useDynamicForm = computed(() => taskFormInfo.value?.formType === 'dynamic' && dynamicFormSchema.value.length > 0)
 const businessFormContext = ref(null)
 const businessFormData = ref({})
+const businessChildFormData = ref({})
 const businessFormRef = ref(null)
 const businessFormLoading = ref(false)
 const businessFormSaving = ref(false)
@@ -531,8 +543,17 @@ const useBusinessManagedForm = computed(() => useBusinessObjectForm.value || use
 const useExternalForm = computed(() => !useBusinessManagedForm.value && taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
 const businessFormTitle = computed(() => getBusinessFormDisplayTitle(businessFormContext.value, '业务表单'))
 const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
+const businessFormChildrenConfig = computed(() => {
+  const children = Array.isArray(businessFormContext.value?.childrenConfig) ? businessFormContext.value.childrenConfig : []
+  return children.filter(child => child?.showInDetail !== false && Array.isArray(child.fields) && child.fields.length)
+})
 const businessFormHasWritableFields = computed(() => hasWritableBusinessFormFields(businessFormContext.value))
 const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
+const businessFormGridCols = computed(() => Math.max(1, Number(businessFormContext.value?.gridCols || 1)))
+const businessFormLabelPlacement = computed(() => ['left', 'top'].includes(businessFormContext.value?.labelPlacement)
+  ? businessFormContext.value.labelPlacement
+  : 'left')
+const businessFormLabelWidth = computed(() => businessFormContext.value?.labelWidth || '100')
 const useBusinessCodeComponentForm = computed(() => useBusinessCodeForm.value && Boolean(businessCodeFormUrl.value))
 const useComponentTaskForm = computed(() => useExternalForm.value || useBusinessCodeComponentForm.value)
 const componentTaskFormUrl = computed(() => useBusinessCodeComponentForm.value ? businessCodeFormUrl.value : taskFormInfo.value?.formUrl)
@@ -556,6 +577,7 @@ const businessFormRenderContext = computed(() => ({
   task: currentTask.value,
   taskFormInfo: taskFormInfo.value,
   businessFormContext: businessFormContext.value,
+  formAssets: businessFormContext.value?.formAssets || [],
 }))
 const taskPolicySource = computed(() => taskFormInfo.value || businessFormContext.value || {})
 const canApprove = computed(() => taskPolicySource.value?.allowApprove !== false)
@@ -631,8 +653,68 @@ function toNumberOptions(options = []) {
 function resetBusinessTaskForm() {
   businessFormContext.value = null
   businessFormData.value = {}
+  businessChildFormData.value = {}
   businessFormLoading.value = false
   businessFormSaving.value = false
+}
+
+function normalizeBusinessRecordData(recordData) {
+  if (recordData && typeof recordData === 'object' && !Array.isArray(recordData)) {
+    const main = recordData.main
+    if (main && typeof main === 'object' && !Array.isArray(main))
+      return { ...main }
+    const { children, ...mainRecord } = recordData
+    return { ...mainRecord }
+  }
+  return {}
+}
+
+function normalizeBusinessChildrenData(recordData) {
+  const source = recordData?.children && typeof recordData.children === 'object' && !Array.isArray(recordData.children)
+    ? recordData.children
+    : {}
+  const result = {}
+  businessFormChildrenConfig.value.forEach((child) => {
+    const key = resolveBusinessChildKey(child)
+    result[key] = Array.isArray(source[key]) ? source[key] : []
+  })
+  return result
+}
+
+function resolveBusinessChildKey(child = {}) {
+  return child.key || child.modelCode || child.tableName || 'children'
+}
+
+function logBusinessApprovalChildren(source, recordData) {
+  console.warn('[FlowApprovalChildren]', {
+    source,
+    configKey: businessFormContext.value?.configKey,
+    recordId: businessFormContext.value?.recordId,
+    childrenConfig: businessFormChildrenConfig.value.map(child => ({
+      key: resolveBusinessChildKey(child),
+      modelCode: child.modelCode,
+      tableName: child.tableName,
+      relationType: child.relationType,
+      sourceField: child.sourceField,
+      targetField: child.targetField,
+      fieldCount: Array.isArray(child.fields) ? child.fields.length : 0,
+    })),
+    recordChildren: summarizeBusinessChildren(recordData?.children),
+    renderChildren: summarizeBusinessChildren(businessChildFormData.value),
+  })
+}
+
+function summarizeBusinessChildren(children) {
+  if (!children || typeof children !== 'object' || Array.isArray(children))
+    return {}
+  return Object.fromEntries(Object.entries(children).map(([key, rows]) => [
+    key,
+    {
+      rows: Array.isArray(rows) ? rows.length : 0,
+      rowIds: Array.isArray(rows) ? rows.slice(0, 5).map(row => row?.id) : [],
+      firstFields: Array.isArray(rows) && rows[0] ? Object.keys(rows[0]).slice(0, 12) : [],
+    },
+  ]))
 }
 
 function buildBusinessTaskFormQuery(row = {}, formInfo = {}) {
@@ -671,6 +753,7 @@ function hasWritableBusinessFormFields(context) {
 async function loadBusinessTaskFormContext(row, formInfo) {
   businessFormContext.value = null
   businessFormData.value = {}
+  businessChildFormData.value = {}
 
   const query = buildBusinessTaskFormQuery(row, formInfo)
   if (!hasBusinessTaskFormQuery(query))
@@ -684,7 +767,9 @@ async function loadBusinessTaskFormContext(row, formInfo) {
       return null
     }
     businessFormContext.value = res.data || null
-    businessFormData.value = { ...(res.data?.recordData || {}) }
+    businessFormData.value = normalizeBusinessRecordData(res.data?.recordData)
+    businessChildFormData.value = normalizeBusinessChildrenData(res.data?.recordData)
+    logBusinessApprovalChildren('todo', res.data?.recordData)
     return businessFormContext.value
   }
   catch (error) {
@@ -747,7 +832,8 @@ async function saveBusinessTaskFormFields(options = {}) {
       throw new Error(res.message || '业务字段保存失败')
 
     businessFormContext.value = res.data || businessFormContext.value
-    businessFormData.value = { ...(businessFormContext.value?.recordData || businessFormData.value) }
+    businessFormData.value = normalizeBusinessRecordData(businessFormContext.value?.recordData || businessFormData.value)
+    businessChildFormData.value = normalizeBusinessChildrenData(businessFormContext.value?.recordData)
     if (!silent)
       window.$message.success('修改已暂存')
     return businessFormContext.value
@@ -770,6 +856,40 @@ async function persistBusinessTaskFormBeforeAction(action) {
   if (!useBusinessManagedForm.value || !businessFormHasWritableFields.value)
     return
   await saveBusinessTaskFormFields({ validate: true, silent: true })
+}
+
+function buildBusinessTaskActionPayload(action, comment, signature, variables = {}) {
+  const context = businessFormContext.value || {}
+  return compactParams({
+    action,
+    taskId: context.taskId || taskFormInfo.value?.taskId || currentTask.value?.taskId || currentTask.value?.id,
+    businessKey: context.businessKey || taskFormInfo.value?.businessKey || currentTask.value?.businessKey,
+    processInstanceId: context.processInstanceId || taskFormInfo.value?.processInstanceId || currentTask.value?.processInstanceId,
+    processDefKey: context.processDefKey || taskFormInfo.value?.processDefKey || currentTask.value?.processDefKey || currentTask.value?.processDefinitionKey,
+    taskDefKey: context.taskDefKey || taskFormInfo.value?.taskDefKey || currentTask.value?.taskDefKey || currentTask.value?.taskDefinitionKey,
+    objectCode: context.objectCode || taskFormInfo.value?.objectCode || currentTask.value?.objectCode,
+    recordId: context.recordId || taskFormInfo.value?.recordId || currentTask.value?.recordId,
+    formKey: context.formKey || taskFormInfo.value?.formKey,
+    userId: userStore.userId,
+    comment,
+    signature,
+    variables,
+    data: { ...businessFormData.value },
+  })
+}
+
+async function submitTaskAction(action, comment, signature, variables = {}) {
+  if (isConfiguredBusinessTaskForm(businessFormContext.value)) {
+    return completeBusinessTaskAction(buildBusinessTaskActionPayload(action, comment, signature, variables))
+  }
+  const api = resolveActionApi(action)
+  return api({
+    taskId: currentTask.value.taskId || currentTask.value.id,
+    userId: userStore.userId,
+    comment,
+    signature,
+    variables,
+  })
 }
 
 function openBusinessCodeForm() {
@@ -856,14 +976,7 @@ async function handleExternalFormSubmit({ action, comment, signature, variables 
   approveForm.action = action
   approveLoading.value = true
   try {
-    const api = resolveActionApi(action)
-    const res = await api({
-      taskId: currentTask.value.taskId || currentTask.value.id,
-      userId: userStore.userId,
-      comment,
-      signature: approvalSignature,
-      variables,
-    })
+    const res = await submitTaskAction(action, comment, approvalSignature, variables)
     if (res.code === 200) {
       window.$message.success(getActionSuccessText(action))
       showDrawer.value = false
@@ -957,16 +1070,9 @@ async function submitApprove(action) {
   try {
     const signature = await resolveSignature(approveSignatureRef.value, approveForm.signature)
     approveForm.signature = signature
-    const api = resolveActionApi(action)
     const variables = await collectDynamicFormVariables(action)
     await persistBusinessTaskFormBeforeAction(action)
-    const res = await api({
-      taskId: currentTask.value.taskId,
-      userId: userStore.userId,
-      comment: approveForm.comment,
-      signature,
-      variables,
-    })
+    const res = await submitTaskAction(action, approveForm.comment, signature, variables)
     if (res.code === 200) {
       window.$message.success(getActionSuccessText(action))
       showDrawer.value = false
@@ -1057,13 +1163,27 @@ async function executeQuickAction(action, row, comment) {
   const businessContext = await loadQuickBusinessTaskFormContext(row, formInfo)
   assertQuickActionAllowed(action, formInfo, businessContext)
 
-  const api = action === 'approve' ? flowApi.approveTask : flowApi.rejectTask
-  const res = await api({
-    taskId,
-    userId: userStore.userId,
-    comment,
-    variables: formInfo.variables || undefined,
-  })
+  const res = isConfiguredBusinessTaskForm(businessContext)
+    ? await completeBusinessTaskAction(compactParams({
+        action,
+        taskId,
+        businessKey: businessContext.businessKey || row.businessKey,
+        processInstanceId: businessContext.processInstanceId || row.processInstanceId,
+        processDefKey: businessContext.processDefKey || formInfo.processDefKey || row.processDefKey || row.processDefinitionKey,
+        taskDefKey: businessContext.taskDefKey || formInfo.taskDefKey || row.taskDefKey || row.taskDefinitionKey,
+        objectCode: businessContext.objectCode || row.objectCode,
+        recordId: businessContext.recordId || row.recordId,
+        formKey: businessContext.formKey || formInfo.formKey,
+        userId: userStore.userId,
+        comment,
+        variables: formInfo.variables || undefined,
+      }))
+    : await (action === 'approve' ? flowApi.approveTask : flowApi.rejectTask)({
+        taskId,
+        userId: userStore.userId,
+        comment,
+        variables: formInfo.variables || undefined,
+      })
   if (res.code !== 200)
     throw new Error(res.message || '操作失败')
 }

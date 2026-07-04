@@ -238,13 +238,13 @@ const visibleSteps = computed(() => {
   return [
     {
       key: 'document',
-      label: '单据规则',
+      label: '单据状态',
       status: configState.value?.summary?.statusField ? '已配置' : '未配置',
       done: !!configState.value?.summary?.statusField,
     },
     {
       key: 'flow',
-      label: '流程配置',
+      label: '流程绑定',
       status: flowBinding.value?.flowModelKey ? '已选择流程' : '未选择',
       done: !!flowBinding.value?.flowModelKey,
     },
@@ -324,26 +324,14 @@ const activeStages = computed(() => {
       key: 'base',
       index: 1,
       title: '基础配置',
-      description: documentConfig.value?.documentEnabled ? '设置单据与字段信息' : '启用单据生命周期',
+      description: documentConfig.value?.documentEnabled ? '单据生命周期已启用' : '启用单据生命周期',
       done: !!documentConfig.value?.documentEnabled,
       active: isActiveStage('base'),
       section: 'document',
     },
     {
-      key: 'number-rule',
-      index: 2,
-      title: '编号生成',
-      description: documentConfig.value?.options?.documentNoField ? '定义单据编号规则' : '选择编号字段和规则',
-      done: !!documentConfig.value?.options?.documentNoField
-        && !!(documentConfig.value?.options?.codeRuleCode
-          || documentConfig.value?.options?.documentNoRuleName
-          || documentConfig.value?.noRuleTemplate),
-      active: isActiveStage('number-rule'),
-      section: 'document',
-    },
-    {
       key: 'status-dict',
-      index: 3,
+      index: 2,
       title: '状态字典',
       description: statusValues ? `${statusValues} 个状态映射` : '配置状态与流转选项',
       done: !!summary.statusField || statusValues > 0,
@@ -352,7 +340,7 @@ const activeStages = computed(() => {
     },
     {
       key: 'flow-model',
-      index: 4,
+      index: 3,
       title: '主流程',
       description: mainFlow.flowModelName || mainFlow.flowModelKey || '配置业务流程与节点',
       done: !!mainFlow.configured || !!flowBinding.value?.flowModelKey,
@@ -664,7 +652,7 @@ defineExpose({
 
 .flow-stage-track {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 48px;
   margin-bottom: 24px;
 }
@@ -909,9 +897,6 @@ defineExpose({
 }
 
 .stage-base .flow-config-panel[data-section='document'] :deep(.document-config-grid .document-section:nth-child(1)),
-.stage-number-rule
-  .flow-config-panel[data-section='document']
-  :deep(.document-config-grid .document-section:nth-child(2)),
 .stage-status-dict
   .flow-config-panel[data-section='document']
   :deep(.n-spin-content > .document-section:nth-of-type(1)),

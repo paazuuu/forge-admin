@@ -1,10 +1,10 @@
-import { request } from '@/utils'
-import { postEncrypt } from '@/utils/encrypt-request'
 import {
   queryBusinessQuantityBalance,
   queryBusinessQuantityLedger,
   queryBusinessQuantityLock,
 } from '@/api/business-app'
+import { request } from '@/utils'
+import { postEncrypt } from '@/utils/encrypt-request'
 
 const DEFAULT_DATA_FIELD = 'records'
 const DEFAULT_TOTAL_FIELD = 'total'
@@ -176,11 +176,11 @@ function normalizeFormConfig(config = {}) {
 
 function defaultPanelTitle(type, index) {
   const titleMap = {
-    table: '明细',
-    descriptions: '概览',
-    form: '详情',
-    tabs: '更多',
-    custom: '扩展',
+    'table': '明细',
+    'descriptions': '概览',
+    'form': '详情',
+    'tabs': '更多',
+    'custom': '扩展',
     'quantity-balance': '数量余额',
     'quantity-ledger': '数量流水',
     'quantity-lock': '数量锁定',

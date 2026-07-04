@@ -215,15 +215,15 @@
                 placeholder="接收人"
                 @update:value="value => updateTierRuleField(index, 'receiverRule', value || '')"
               />
-              <n-button quaternary circle size="small" @click="removeTierRule(index)">
+              <NButton quaternary circle size="small" @click="removeTierRule(index)">
                 <template #icon>
                   <n-icon><TrashOutline /></n-icon>
                 </template>
-              </n-button>
+              </NButton>
             </div>
-            <n-button dashed size="small" @click="addTierRule">
+            <NButton dashed size="small" @click="addTierRule">
               添加分层规则
-            </n-button>
+            </NButton>
           </div>
         </n-form-item>
         <n-form-item label="开发者模式">
@@ -308,13 +308,13 @@
 </template>
 
 <script setup>
-import { NButton, NPopconfirm, NSpace, NSwitch, NTag, useMessage } from 'naive-ui'
 import { TrashOutline } from '@vicons/ionicons5'
+import { NButton, NPopconfirm, NSpace, NSwitch, NTag, useMessage } from 'naive-ui'
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  businessObjectFields,
   businessObjectActions,
+  businessObjectFields,
   businessObjectList,
   businessTriggerLogs,
   businessTriggerPage,

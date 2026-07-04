@@ -158,8 +158,18 @@
                 :field-permissions="readonlyBusinessFormFieldPermissions"
                 :show-actions="false"
                 :show-feedback="false"
-                :grid-cols="2"
-                label-placement="top"
+                :grid-cols="businessFormGridCols"
+                :label-placement="businessFormLabelPlacement"
+                :label-width="businessFormLabelWidth"
+                :context="businessFormRenderContext"
+                :form-assets="businessFormContext.formAssets || []"
+              />
+              <ChildTableEditor
+                v-if="businessFormChildrenConfig.length"
+                v-model:value="businessChildFormData"
+                :children-config="businessFormChildrenConfig"
+                readonly
+                :parent-form-data="businessFormData"
                 :context="businessFormRenderContext"
               />
               <div v-if="businessFormWarnings.length" class="business-form-warnings">
@@ -222,6 +232,7 @@ import DingFlowViewer from '@/components/flow-designer/viewer/DingFlowViewer.vue
 import FlowTaskCardList from '@/components/flow/FlowTaskCardList.vue'
 import FlowTaskDetailShell from '@/components/flow/FlowTaskDetailShell.vue'
 import SignatureImage from '@/components/flow/SignatureImage.vue'
+import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
 import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
@@ -262,6 +273,7 @@ const dynamicFormData = ref({})
 const dynamicFormSchema = computed(() => formCreateToAiSchema(taskFormInfo.value?.formJson || []))
 const businessFormContext = ref(null)
 const businessFormData = ref({})
+const businessChildFormData = ref({})
 const businessFormLoading = ref(false)
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_done_status).filter(item => item.value !== 6))
@@ -281,11 +293,21 @@ const useBusinessManagedForm = computed(() => useBusinessObjectForm.value || use
 const useExternalForm = computed(() => !useBusinessManagedForm.value && taskFormInfo.value?.formType === 'external' && taskFormInfo.value?.formUrl)
 const businessFormTitle = computed(() => getBusinessFormDisplayTitle(businessFormContext.value, '业务表单'))
 const businessFormWarnings = computed(() => Array.isArray(businessFormContext.value?.warnings) ? businessFormContext.value.warnings : [])
+const businessFormChildrenConfig = computed(() => {
+  const children = Array.isArray(businessFormContext.value?.childrenConfig) ? businessFormContext.value.childrenConfig : []
+  return children.filter(child => child?.showInDetail !== false && Array.isArray(child.fields) && child.fields.length)
+})
 const businessCodeFormUrl = computed(() => businessFormContext.value?.formUrl || businessFormContext.value?.formRef?.formUrl || '')
+const businessFormGridCols = computed(() => Math.max(1, Number(businessFormContext.value?.gridCols || 1)))
+const businessFormLabelPlacement = computed(() => ['left', 'top'].includes(businessFormContext.value?.labelPlacement)
+  ? businessFormContext.value.labelPlacement
+  : 'left')
+const businessFormLabelWidth = computed(() => businessFormContext.value?.labelWidth || '100')
 const businessFormRenderContext = computed(() => ({
   task: currentTask.value,
   taskFormInfo: taskFormInfo.value,
   businessFormContext: businessFormContext.value,
+  formAssets: businessFormContext.value?.formAssets || [],
 }))
 const readonlyBusinessFormFieldPermissions = computed(() => {
   return pickFirstNonEmptyFieldPermissions([
@@ -384,8 +406,68 @@ function resetReadonlyForm() {
   dynamicFormData.value = {}
   businessFormContext.value = null
   businessFormData.value = {}
+  businessChildFormData.value = {}
   formInfoLoading.value = false
   businessFormLoading.value = false
+}
+
+function normalizeBusinessRecordData(recordData) {
+  if (recordData && typeof recordData === 'object' && !Array.isArray(recordData)) {
+    const main = recordData.main
+    if (main && typeof main === 'object' && !Array.isArray(main))
+      return { ...main }
+    const { children, ...mainRecord } = recordData
+    return { ...mainRecord }
+  }
+  return {}
+}
+
+function normalizeBusinessChildrenData(recordData) {
+  const source = recordData?.children && typeof recordData.children === 'object' && !Array.isArray(recordData.children)
+    ? recordData.children
+    : {}
+  const result = {}
+  businessFormChildrenConfig.value.forEach((child) => {
+    const key = resolveBusinessChildKey(child)
+    result[key] = Array.isArray(source[key]) ? source[key] : []
+  })
+  return result
+}
+
+function resolveBusinessChildKey(child = {}) {
+  return child.key || child.modelCode || child.tableName || 'children'
+}
+
+function logBusinessApprovalChildren(source, recordData) {
+  console.warn('[FlowApprovalChildren]', {
+    source,
+    configKey: businessFormContext.value?.configKey,
+    recordId: businessFormContext.value?.recordId,
+    childrenConfig: businessFormChildrenConfig.value.map(child => ({
+      key: resolveBusinessChildKey(child),
+      modelCode: child.modelCode,
+      tableName: child.tableName,
+      relationType: child.relationType,
+      sourceField: child.sourceField,
+      targetField: child.targetField,
+      fieldCount: Array.isArray(child.fields) ? child.fields.length : 0,
+    })),
+    recordChildren: summarizeBusinessChildren(recordData?.children),
+    renderChildren: summarizeBusinessChildren(businessChildFormData.value),
+  })
+}
+
+function summarizeBusinessChildren(children) {
+  if (!children || typeof children !== 'object' || Array.isArray(children))
+    return {}
+  return Object.fromEntries(Object.entries(children).map(([key, rows]) => [
+    key,
+    {
+      rows: Array.isArray(rows) ? rows.length : 0,
+      rowIds: Array.isArray(rows) ? rows.slice(0, 5).map(row => row?.id) : [],
+      firstFields: Array.isArray(rows) && rows[0] ? Object.keys(rows[0]).slice(0, 12) : [],
+    },
+  ]))
 }
 
 function buildProcessFormInfoQuery(row = {}) {
@@ -417,6 +499,7 @@ function hasBusinessReadonlyQuery(query = {}) {
 async function loadReadonlyBusinessTaskFormContext(row, formInfo) {
   businessFormContext.value = null
   businessFormData.value = {}
+  businessChildFormData.value = {}
   const query = buildBusinessReadonlyQuery(row, formInfo)
   if (!hasBusinessReadonlyQuery(query))
     return null
@@ -429,7 +512,9 @@ async function loadReadonlyBusinessTaskFormContext(row, formInfo) {
       return null
     }
     businessFormContext.value = res.data || null
-    businessFormData.value = { ...(res.data?.recordData || {}) }
+    businessFormData.value = normalizeBusinessRecordData(res.data?.recordData)
+    businessChildFormData.value = normalizeBusinessChildrenData(res.data?.recordData)
+    logBusinessApprovalChildren('done', res.data?.recordData)
     return businessFormContext.value
   }
   catch (error) {

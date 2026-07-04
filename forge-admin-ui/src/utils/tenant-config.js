@@ -3,7 +3,7 @@ import { useTenantStore } from '@/store'
 import { resolveRenderableFileUrl } from '@/utils/file'
 import { normalizePageTitle, setDocumentTitle } from '@/utils/page-title'
 
-const MANAGED_FILE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/
+const MANAGED_FILE_ID_PATTERN = /^[\w-]{8,128}$/
 
 function getRequestPrefix() {
   return import.meta.env.VITE_REQUEST_PREFIX || ''

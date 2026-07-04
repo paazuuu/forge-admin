@@ -876,20 +876,204 @@ public class DynamicCrudService {
 
         Map<String, Object> children = new LinkedHashMap<>();
         for (RuntimeChildRelation relation : joinContext.childRelations()) {
-            Object relationValue = resolveMainRelationValue(relation, record, id, record);
+            RuntimeChildRelation queryRelation = resolveMasterDetailQueryRelation(config, relation);
+            Object relationValue = resolveMainRelationValue(queryRelation, record, id, record);
             if (relationValue == null) {
-                children.put(relation.modelCode(), List.of());
+                log.info("[动态CRUD详情子表] configKey={}, mainId={}, childModel={}, table={}, childFkColumn={}, mainColumn={}, relationValue=null, rows=0",
+                        config.getConfigKey(), id, queryRelation.modelCode(), queryRelation.tableName(),
+                        queryRelation.childFkColumn(), queryRelation.mainColumn());
+                children.put(queryRelation.modelCode(), List.of());
                 continue;
             }
-            List<Map<String, Object>> rows = repository.selectListByColumn(
-                    relation.tableName(), relation.childFkColumn(), relationValue);
-            children.put(relation.modelCode(), DynamicQueryGenerator.convertListToCamelCase(rows));
+            List<Map<String, Object>> rows = selectMasterDetailChildRows(config, queryRelation, id, relationValue);
+            log.info("[动态CRUD详情子表] configKey={}, mainId={}, childModel={}, table={}, childFkColumn={}, mainColumn={}, relationValue={}, rows={}, rowIds={}",
+                    config.getConfigKey(), id, queryRelation.modelCode(), queryRelation.tableName(),
+                    queryRelation.childFkColumn(), queryRelation.mainColumn(), relationValue, rows.size(),
+                    summarizeRowIds(rows));
+            children.put(queryRelation.modelCode(), DynamicQueryGenerator.convertListToCamelCase(rows));
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("main", main);
         result.put("children", children);
         return result;
+    }
+
+    private RuntimeChildRelation resolveMasterDetailQueryRelation(AiCrudConfig config, RuntimeChildRelation relation) {
+        JsonNode childNode = findMasterDetailChildNode(config, relation);
+        if (childNode == null || !childNode.isObject()) {
+            return relation;
+        }
+        Map<String, String> mainColumnMapping = repository.getColumnMapping(config.getTableName());
+        Map<String, String> childColumnMapping = repository.getColumnMapping(relation.tableName());
+        String childField = firstText(childNode, "sourceField", "childField", "foreignKey", "foreignKeyField");
+        String mainField = firstText(childNode, "targetField", "parentField", "mainField", "parentKey");
+        String childColumn = resolveChildColumn(childField, childColumnMapping);
+        String mainColumn = resolvePrimaryColumn(mainField, mainColumnMapping);
+        if (StringUtils.isBlank(childColumn) || StringUtils.isBlank(mainColumn)) {
+            return relation;
+        }
+        return new RuntimeChildRelation(
+                relation.modelCode(),
+                relation.tableName(),
+                relation.tableAlias(),
+                childColumn,
+                mainColumn,
+                relation.saveMode(),
+                relation.fields(),
+                relation.fieldRules()
+        );
+    }
+
+    private JsonNode findMasterDetailChildNode(AiCrudConfig config, RuntimeChildRelation relation) {
+        if (config == null || StringUtils.isBlank(config.getOptions()) || relation == null) {
+            return null;
+        }
+        try {
+            JsonNode children = objectMapper.readTree(config.getOptions()).path("masterDetailConfig").path("children");
+            if (!children.isArray()) {
+                return null;
+            }
+            for (JsonNode child : children) {
+                if (matchesMasterDetailChildNode(child, relation)) {
+                    return child;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("[DynamicCrudService] 解析主子表子表配置失败, configKey={}, modelCode={}, error={}",
+                    config.getConfigKey(), relation.modelCode(), e.getMessage());
+        }
+        return null;
+    }
+
+    private boolean matchesMasterDetailChildNode(JsonNode child, RuntimeChildRelation relation) {
+        if (child == null || relation == null) {
+            return false;
+        }
+        return StringUtils.equalsAny(relation.modelCode(),
+                firstText(child, "modelCode"),
+                firstText(child, "key"),
+                firstText(child, "field"))
+                || StringUtils.equals(relation.tableName(), firstText(child, "tableName"));
+    }
+
+    private List<Map<String, Object>> selectMasterDetailChildRows(AiCrudConfig config,
+                                                                  RuntimeChildRelation relation,
+                                                                  Object mainId,
+                                                                  Object relationValue) {
+        List<Map<String, Object>> rows = repository.selectListByColumn(
+                relation.tableName(), relation.childFkColumn(), relationValue);
+        if (mainId == null) {
+            return rows;
+        }
+        List<String> fallbackColumns = resolveMasterDetailChildFkCandidates(config, relation);
+        for (String column : fallbackColumns) {
+            if (StringUtils.equals(column, relation.childFkColumn())) {
+                continue;
+            }
+            List<Map<String, Object>> fallbackRows = repository.selectListByColumn(relation.tableName(), column, mainId);
+            if (shouldUseFallbackChildRows(relation.childFkColumn(), rows, fallbackRows)) {
+                log.warn("[DynamicCrudService] 主子表子表查询命中疑似错误外键，已切换候选外键: configKey={}, childModel={}, table={}, oldColumn={}, oldSize={}, newColumn={}, newSize={}",
+                        config.getConfigKey(), relation.modelCode(), relation.tableName(), relation.childFkColumn(), rows.size(),
+                        column, fallbackRows.size());
+                log.info("[动态CRUD详情子表] fallback configKey={}, mainId={}, childModel={}, table={}, oldColumn={}, oldRows={}, newColumn={}, newRows={}, newRowIds={}",
+                        config.getConfigKey(), mainId, relation.modelCode(), relation.tableName(), relation.childFkColumn(),
+                        rows.size(), column, fallbackRows.size(), summarizeRowIds(fallbackRows));
+                return fallbackRows;
+            }
+        }
+        return rows;
+    }
+
+    private boolean shouldUseFallbackChildRows(String currentColumn,
+                                               List<Map<String, Object>> currentRows,
+                                               List<Map<String, Object>> fallbackRows) {
+        if (fallbackRows == null || fallbackRows.isEmpty()) {
+            return false;
+        }
+        int currentSize = currentRows == null ? 0 : currentRows.size();
+        if (currentSize == 0) {
+            return true;
+        }
+        if (isSuspiciousMasterDetailChildFkColumn(currentColumn)) {
+            return true;
+        }
+        return currentSize > fallbackRows.size();
+    }
+
+    private boolean isSuspiciousMasterDetailChildFkColumn(String column) {
+        if (StringUtils.isBlank(column)) {
+            return true;
+        }
+        String normalized = column.trim().toLowerCase(Locale.ROOT);
+        return Set.of("id", "tenant_id", "create_by", "create_dept", "update_by", "del_flag").contains(normalized)
+                || normalized.endsWith("_name")
+                || normalized.endsWith("_code");
+    }
+
+    private List<String> resolveMasterDetailChildFkCandidates(AiCrudConfig config, RuntimeChildRelation relation) {
+        Set<String> candidates = new LinkedHashSet<>();
+        Set<String> childColumns = repository.getTableColumns(relation.tableName());
+        addMasterDetailChildFkCandidate(candidates, childColumns, relation.childFkColumn());
+
+        JsonNode childNode = findMasterDetailChildNode(config, relation);
+        if (childNode != null) {
+            Map<String, String> childColumnMapping = repository.getColumnMapping(relation.tableName());
+            addMasterDetailChildFkCandidate(candidates, childColumns,
+                    resolveChildColumn(firstText(childNode, "sourceField", "childField", "foreignKey", "foreignKeyField"), childColumnMapping));
+        }
+
+        addMasterDetailChildFkNameCandidates(candidates, childColumns, config.getConfigKey());
+        addMasterDetailChildFkNameCandidates(candidates, childColumns, config.getTableName());
+        return new ArrayList<>(candidates);
+    }
+
+    private void addMasterDetailChildFkNameCandidates(Set<String> candidates, Set<String> childColumns, String baseName) {
+        String normalized = normalizeIdentifierBase(baseName);
+        if (StringUtils.isBlank(normalized)) {
+            return;
+        }
+        addMasterDetailChildFkCandidate(candidates, childColumns, normalized + "_id");
+        String withoutPrefix = removeShortBusinessPrefix(normalized);
+        if (!StringUtils.equals(withoutPrefix, normalized)) {
+            addMasterDetailChildFkCandidate(candidates, childColumns, withoutPrefix + "_id");
+        }
+    }
+
+    private String normalizeIdentifierBase(String value) {
+        if (StringUtils.isBlank(value)) {
+            return "";
+        }
+        String normalized = DynamicQueryGenerator.camelToSnake(value).replaceAll("[^a-zA-Z0-9_]", "_").toLowerCase(Locale.ROOT);
+        return normalized.replaceAll("_+", "_").replaceAll("^_+|_+$", "");
+    }
+
+    private String removeShortBusinessPrefix(String value) {
+        if (StringUtils.isBlank(value) || !value.contains("_")) {
+            return value;
+        }
+        String prefix = StringUtils.substringBefore(value, "_");
+        return prefix.length() <= 4 ? StringUtils.substringAfter(value, "_") : value;
+    }
+
+    private void addMasterDetailChildFkCandidate(Set<String> candidates, Set<String> childColumns, String column) {
+        if (StringUtils.isBlank(column)) {
+            return;
+        }
+        String normalized = column.trim();
+        if (childColumns.contains(normalized)) {
+            candidates.add(normalized);
+        }
+    }
+
+    private List<Object> summarizeRowIds(List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        return rows.stream()
+                .limit(5)
+                .map(row -> firstPresent(row, "id", "ID"))
+                .toList();
     }
 
     private void insertMasterDetailData(AiCrudConfig config,
@@ -1124,6 +1308,9 @@ public class DynamicCrudService {
             return;
         }
         for (RuntimeChildFieldRule rule : relation.fieldRules().values()) {
+            if (isSystemChildValidationRule(relation, rule)) {
+                continue;
+            }
             Object value = firstPresent(row, rule.sourceField(), rule.fieldName(), rule.columnName());
             boolean provided = containsAnyKey(row, rule.sourceField(), rule.fieldName(), rule.columnName());
             if (rule.required() && (create || provided) && isBlankChildValue(value)) {
@@ -1133,6 +1320,16 @@ public class DynamicCrudService {
                 validateChildNumberRange(rule, value);
             }
         }
+    }
+
+    private boolean isSystemChildValidationRule(RuntimeChildRelation relation, RuntimeChildFieldRule rule) {
+        if (rule == null) {
+            return true;
+        }
+        return isImmutableWriteField(rule.fieldName())
+                || isImmutableWriteField(rule.sourceField())
+                || isImmutableWriteField(rule.columnName())
+                || StringUtils.equals(rule.columnName(), relation.childFkColumn());
     }
 
     private void validateChildNumberRange(RuntimeChildFieldRule rule, Object value) {
@@ -2700,7 +2897,7 @@ public class DynamicCrudService {
             return;
         }
         LowcodeRelationSchema primaryRelation = findRelationFromPrimary(primaryRelations, ref.getModelCode());
-        if (primaryRelation == null) {
+        if (primaryRelation == null || !isReferenceRelation(primaryRelation)) {
             return;
         }
         String sourceField = normalizeModelFieldName(modelSchema, primaryRelation.getSourceField());
@@ -2734,6 +2931,10 @@ public class DynamicCrudService {
         fieldColumnMapping.put(aliasField, relation.tableAlias() + "." + displayColumn);
         selectFields.add(new DynamicCrudRepository.JoinField(aliasField, relation.tableAlias(), displayColumn));
         relationDisplayAliases.put(sourceField, aliasField);
+    }
+
+    private boolean isReferenceRelation(LowcodeRelationSchema relation) {
+        return relation != null && "REFERENCE".equalsIgnoreCase(StringUtils.defaultString(relation.getRelationType()));
     }
 
     private LowcodeRelationSchema inferRelation(String primaryModelCode, LowcodePageModelRef ref) {

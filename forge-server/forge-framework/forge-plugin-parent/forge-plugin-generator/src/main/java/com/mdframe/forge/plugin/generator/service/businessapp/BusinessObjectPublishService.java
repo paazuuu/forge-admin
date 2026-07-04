@@ -294,6 +294,9 @@ public class BusinessObjectPublishService {
             String actionType = StringUtils.defaultIfBlank(text(action.get("actionType")), "OPEN_PAGE").toUpperCase();
             String position = normalizeActionPosition(action.get("actionPosition"));
             Map<String, Object> config = mapValue(action.get("actionConfig"));
+            if (isBusinessAutomationAction(actionType, config)) {
+                continue;
+            }
             if (isBuiltinCrudAction(position, actionCode, actionName, actionType, config)) {
                 continue;
             }
@@ -331,6 +334,17 @@ public class BusinessObjectPublishService {
             result.add(item);
         }
         return result;
+    }
+
+    private boolean isBusinessAutomationAction(String actionType, Map<String, Object> config) {
+        if ("COMMAND".equals(actionType)) {
+            return hasActionSteps(config);
+        }
+        return false;
+    }
+
+    private boolean hasActionSteps(Map<String, Object> config) {
+        return config != null && (config.get("steps") instanceof List<?> || config.get("stepList") instanceof List<?>);
     }
 
     private boolean isBuiltinCrudAction(String position, String actionCode, String actionName,
@@ -678,15 +692,53 @@ public class BusinessObjectPublishService {
     private void checkCustomActionCompleteness(Map<String, Object> action, String source,
                                                Set<String> modelFields, List<BusinessPublishCheckItemVO> items, int sortOrder) {
         String actionType = StringUtils.defaultIfBlank(text(action.get("actionType")), "route");
-        if ("refresh".equalsIgnoreCase(actionType)) {
+        if (isActionTypeWithoutRoute(actionType)) {
             return;
         }
-        if (StringUtils.isBlank(text(action.get("routePath")))) {
+        if (isApiActionType(actionType)) {
+            Map<String, Object> config = mapValue(action.get("actionConfig"));
+            String apiUrl = StringUtils.firstNonBlank(
+                    text(config.get("url")),
+                    text(config.get("apiUrl")),
+                    text(config.get("urlPath")),
+                    text(config.get("path"))
+            );
+            if (StringUtils.isBlank(apiUrl)) {
+                add(items, "PAGE_CUSTOM_ACTION_API_EMPTY", "PAGE", BusinessPublishCheckLevel.BLOCK,
+                        "自定义操作缺少接口地址", source + " 是接口调用，但未配置接口地址",
+                        text(action.get("key")), source, "CONFIG_CUSTOM_ACTION", "配置自定义操作", "list", sortOrder);
+            }
+            checkActionParams(action.get("params"), source + "/参数", modelFields, items, sortOrder + 1);
+            return;
+        }
+        if (isRouteActionType(actionType) && StringUtils.isBlank(text(action.get("routePath")))) {
+            String actionKind = isExternalRouteActionType(actionType) ? "外部链接" : "站内跳转";
             add(items, "PAGE_CUSTOM_ACTION_TARGET_EMPTY", "PAGE", BusinessPublishCheckLevel.BLOCK,
-                    "自定义操作缺少目标地址", source + " 是" + ("external".equalsIgnoreCase(actionType) ? "外部链接" : "站内跳转") + "，但未配置目标地址",
+                    "自定义操作缺少目标地址", source + " 是" + actionKind + "，但未配置目标地址",
                     text(action.get("key")), source, "CONFIG_CUSTOM_ACTION", "配置自定义操作", "list", sortOrder);
         }
         checkActionParams(action.get("params"), source + "/参数", modelFields, items, sortOrder + 1);
+    }
+
+    private boolean isActionTypeWithoutRoute(String actionType) {
+        return Set.of("REFRESH", "COMMAND", "START_FLOW", "TRIGGER")
+                .contains(StringUtils.upperCase(StringUtils.defaultString(actionType)));
+    }
+
+    private boolean isApiActionType(String actionType) {
+        return Set.of("CALL_API", "API", "REQUEST")
+                .contains(StringUtils.upperCase(StringUtils.defaultString(actionType)));
+    }
+
+    private boolean isRouteActionType(String actionType) {
+        String normalized = StringUtils.upperCase(StringUtils.defaultString(actionType));
+        return Set.of("ROUTE", "OPEN_PAGE", "EXTERNAL", "OPEN_EXTERNAL").contains(normalized)
+                || StringUtils.isBlank(normalized);
+    }
+
+    private boolean isExternalRouteActionType(String actionType) {
+        return Set.of("EXTERNAL", "OPEN_EXTERNAL")
+                .contains(StringUtils.upperCase(StringUtils.defaultString(actionType)));
     }
 
     private void checkActionParams(Object paramsValue, String source, Set<String> modelFields,

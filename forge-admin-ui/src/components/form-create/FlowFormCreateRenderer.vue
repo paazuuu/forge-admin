@@ -16,8 +16,8 @@
 
 <script setup>
 import { computed, getCurrentInstance, ref, watch } from 'vue'
-import { hydrateForgeBusinessPreviewRules } from '@/views/app-center/components/designer/form-first/forgeBusinessComponents'
 import { normalizeFieldPermissions } from '@/utils/field-permissions'
+import { hydrateForgeBusinessPreviewRules } from '@/views/app-center/components/designer/form-first/forgeBusinessComponents'
 import {
   buildDefaultFormOptions,
   cloneValue,

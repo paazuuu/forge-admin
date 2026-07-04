@@ -163,9 +163,9 @@ export function writeUserTaskConfig(config) {
       loopCardinalityXml = `<bpmn:loopCardinality xsi:type="bpmn:tFormalExpression">${escapeXmlText(loopCardinality)}</bpmn:loopCardinality>`
     }
     children.push(
-      `<bpmn:multiInstanceLoopCharacteristics ${loopAttrs.join(' ')}>`
-      + loopCardinalityXml
-      + `<bpmn:completionCondition xsi:type="bpmn:tFormalExpression">${escapeXmlText(expr)}</bpmn:completionCondition>`
+      `<bpmn:multiInstanceLoopCharacteristics ${loopAttrs.join(' ')}>${
+        loopCardinalityXml
+      }<bpmn:completionCondition xsi:type="bpmn:tFormalExpression">${escapeXmlText(expr)}</bpmn:completionCondition>`
       + `</bpmn:multiInstanceLoopCharacteristics>`,
     )
   }

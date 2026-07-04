@@ -171,9 +171,8 @@ public class LowcodeRuntimeConfigBuilder {
                 formOpenMode)));
         options.put("tabWorkspace", buildTabWorkspaceOptions(editProps, crudBlockProps));
         int editGridCols = resolveEditGridCols(pageSchema);
-        options.put("modalWidth", StringUtils.defaultIfBlank(text(editProps.get("modalWidth")),
-                StringUtils.defaultIfBlank(text(crudBlockProps.get("modalWidth")),
-                        resolveDefaultModalWidth(masterDetailRuntime, editGridCols))));
+        options.put("modalWidth", resolveRuntimeModalWidth(editProps, crudBlockProps,
+                resolveDefaultModalWidth(masterDetailRuntime, editGridCols)));
         options.put("searchGridCols", integerValue(crudBlockProps.get("searchGridCols")) == null
                 ? 4
                 : integerValue(crudBlockProps.get("searchGridCols")));
@@ -275,6 +274,51 @@ public class LowcodeRuntimeConfigBuilder {
             return "1180px";
         }
         return editGridCols > 1 ? "1040px" : "800px";
+    }
+
+    private String resolveRuntimeModalWidth(Map<String, Object> editProps,
+                                            Map<String, Object> crudBlockProps,
+                                            String defaultWidth) {
+        String editModalWidth = normalizeModalWidth(editProps.get("modalWidth"));
+        if (StringUtils.isNotBlank(editModalWidth)) {
+            return editModalWidth;
+        }
+        String crudModalWidth = normalizeModalWidth(crudBlockProps.get("modalWidth"));
+        if (StringUtils.isNotBlank(crudModalWidth) && !isDefaultCrudModalWidth(crudModalWidth)) {
+            return crudModalWidth;
+        }
+        String formStyleWidth = resolveFormStyleModalWidth(editProps.get("editFormStyle"));
+        if (StringUtils.isNotBlank(formStyleWidth)) {
+            return formStyleWidth;
+        }
+        return StringUtils.defaultIfBlank(crudModalWidth, defaultWidth);
+    }
+
+    private String resolveFormStyleModalWidth(Object style) {
+        if (!(style instanceof Map<?, ?> styleMap)) {
+            return null;
+        }
+        Object width = firstNonBlank(styleMap.get("maxWidth"), styleMap.get("width"));
+        return normalizeModalWidth(width);
+    }
+
+    private String normalizeModalWidth(Object value) {
+        String width = StringUtils.trimToNull(text(value));
+        if (StringUtils.isBlank(width)) {
+            return null;
+        }
+        String normalized = width.toLowerCase(Locale.ROOT);
+        if ("auto".equals(normalized) || "100%".equals(normalized)) {
+            return null;
+        }
+        if (width.matches("\\d+")) {
+            return width + "px";
+        }
+        return width;
+    }
+
+    private boolean isDefaultCrudModalWidth(String width) {
+        return "900px".equals(StringUtils.trimToEmpty(width));
     }
 
     private String resolveModalType(Object value) {
@@ -1164,7 +1208,7 @@ public class LowcodeRuntimeConfigBuilder {
                 continue;
             }
             LowcodeRelationSchema relation = findRelationFromPrimary(primaryRelations, ref.getModelCode());
-            if (relation == null) {
+            if (relation == null || !isReferenceRelation(relation)) {
                 continue;
             }
             String sourceField = normalizePrimaryFieldName(modelSchema, relation.getSourceField());
@@ -1255,6 +1299,10 @@ public class LowcodeRuntimeConfigBuilder {
         return StringUtils.isBlank(sourceField) ? null : sourceField + "Name";
     }
 
+    private boolean isReferenceRelation(LowcodeRelationSchema relation) {
+        return relation != null && "REFERENCE".equalsIgnoreCase(StringUtils.defaultString(relation.getRelationType()));
+    }
+
     private RelationLookupMeta resolveRelationLookup(LowcodeModelSchema modelSchema,
                                                      LowcodePageSchema pageSchema,
                                                      String fieldName) {
@@ -1274,7 +1322,7 @@ public class LowcodeRuntimeConfigBuilder {
                 continue;
             }
             LowcodeRelationSchema relation = findRelationFromPrimary(primaryRelations, ref.getModelCode());
-            if (relation == null || !"REFERENCE".equalsIgnoreCase(StringUtils.defaultString(relation.getRelationType()))) {
+            if (relation == null || !isReferenceRelation(relation)) {
                 continue;
             }
             String sourceField = normalizePrimaryFieldName(modelSchema, relation.getSourceField());
@@ -1584,6 +1632,7 @@ public class LowcodeRuntimeConfigBuilder {
         copyBasicProp(field.getBasicProps(), props, "businessId");
         copyBasicProp(field.getBasicProps(), props, "referenceObjectCode");
         copyBasicProp(field.getBasicProps(), props, "referenceDisplayField");
+        copyBasicProp(field.getBasicProps(), props, "referenceValueField");
         copyBasicProp(field.getBasicProps(), props, "targetObjectCode");
         copyBasicProp(field.getBasicProps(), props, "recordSelector");
         copyBasicProp(field.getBasicProps(), props, "recordSelectorConfig");

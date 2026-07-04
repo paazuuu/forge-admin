@@ -17,12 +17,16 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.Types;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -63,6 +67,9 @@ public class DynamicCrudRepository {
 
     // 缓存：表名 -> 列名集合
     private final ConcurrentHashMap<String, Set<String>> tableColumnsCache = new ConcurrentHashMap<>();
+
+    // 缓存：表名 -> {column -> JDBC type} 映射
+    private final ConcurrentHashMap<String, Map<String, Integer>> columnTypesCache = new ConcurrentHashMap<>();
 
     // 缓存：表名 -> {camelCase -> snake_case} 映射
     private final ConcurrentHashMap<String, Map<String, String>> columnMappingCache = new ConcurrentHashMap<>();
@@ -884,10 +891,11 @@ public class DynamicCrudRepository {
             return List.of();
         }
 
+        Object queryValue = normalizeColumnQueryValue(tableName, columnName, value);
         StringBuilder whereClause = new StringBuilder(columnName + " = :value");
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
-        params.addValue("value", value);
+        params.addValue("value", queryValue);
         String orderColumn = getTableColumns(tableName).contains(primaryKeyColumn()) ? primaryKeyColumn() : columnName;
         String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
         return jdbc().queryForList(sql, params);
@@ -917,11 +925,15 @@ public class DynamicCrudRepository {
         if (nonNullValues.isEmpty()) {
             return List.of();
         }
+        List<Object> queryValues = nonNullValues.stream()
+                .map(value -> normalizeColumnQueryValue(tableName, columnName, value))
+                .distinct()
+                .toList();
 
         StringBuilder whereClause = new StringBuilder(columnName + " IN (:values)");
         appendBaseQueryConditions(whereClause, new MapSqlParameterSource(), tableName);
         MapSqlParameterSource params = buildBaseQueryParams();
-        params.addValue("values", nonNullValues);
+        params.addValue("values", queryValues);
         appendSqlCondition(whereClause, params, dataScopeCondition);
         String orderColumn = getTableColumns(tableName).contains(primaryKeyColumn()) ? primaryKeyColumn() : columnName;
         String sql = buildSelectSql("SELECT *", tableName, whereClause) + " ORDER BY " + orderColumn + " ASC";
@@ -1250,6 +1262,51 @@ public class DynamicCrudRepository {
         });
     }
 
+    private Object normalizeColumnQueryValue(String tableName, String columnName, Object value) {
+        if (value == null) {
+            return null;
+        }
+        Integer jdbcType = getColumnJdbcTypes(tableName).get(StringUtils.defaultString(columnName).toLowerCase(Locale.ROOT));
+        if (jdbcType != null && isCharacterJdbcType(jdbcType)) {
+            return String.valueOf(value);
+        }
+        return value;
+    }
+
+    private Map<String, Integer> getColumnJdbcTypes(String tableName) {
+        String cacheKey = metadataCacheKey(tableName);
+        return columnTypesCache.computeIfAbsent(cacheKey, key -> {
+            try {
+                LowcodeRuntimeDataSourceContext context = LowcodeRuntimeDataSourceContextHolder.get();
+                return jdbcTemplateProvider.jdbcTemplate(context).execute((ConnectionCallback<Map<String, Integer>>) connection -> {
+                    Map<String, Integer> types = new HashMap<>();
+                    DatabaseMetaData metadata = connection.getMetaData();
+                    try (ResultSet columns = metadata.getColumns(connection.getCatalog(), null, tableName, null)) {
+                        while (columns.next()) {
+                            String columnName = columns.getString("COLUMN_NAME");
+                            if (StringUtils.isNotBlank(columnName)) {
+                                types.put(columnName.toLowerCase(Locale.ROOT), columns.getInt("DATA_TYPE"));
+                            }
+                        }
+                    }
+                    return types;
+                });
+            } catch (Exception e) {
+                log.warn("[DynamicCrudRepository] 获取表字段类型失败, tableName={}", tableName, e);
+                return Collections.emptyMap();
+            }
+        });
+    }
+
+    private boolean isCharacterJdbcType(int jdbcType) {
+        return jdbcType == Types.CHAR
+                || jdbcType == Types.VARCHAR
+                || jdbcType == Types.LONGVARCHAR
+                || jdbcType == Types.NCHAR
+                || jdbcType == Types.NVARCHAR
+                || jdbcType == Types.LONGNVARCHAR;
+    }
+
     /**
      * DDL 执行后清理动态表结构缓存，避免追加字段后运行时继续使用旧列集合。
      */
@@ -1257,6 +1314,7 @@ public class DynamicCrudRepository {
         String suffix = ":" + tableName;
         delFlagCache.keySet().removeIf(key -> key.endsWith(suffix));
         tableColumnsCache.keySet().removeIf(key -> key.endsWith(suffix));
+        columnTypesCache.keySet().removeIf(key -> key.endsWith(suffix));
         columnMappingCache.keySet().removeIf(key -> key.endsWith(suffix));
     }
 
@@ -1264,6 +1322,7 @@ public class DynamicCrudRepository {
         String cacheKey = metadataCacheKey(context, tableName);
         delFlagCache.remove(cacheKey);
         tableColumnsCache.remove(cacheKey);
+        columnTypesCache.remove(cacheKey);
         columnMappingCache.remove(cacheKey);
     }
 

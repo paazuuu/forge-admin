@@ -4,6 +4,8 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessRecordSelectorQueryDTO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessRecordSelectorService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessRecordSelectorResultVO;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/ai/business/selector")
 @RequiredArgsConstructor
+@ApiDecrypt
+@ApiEncrypt
 public class BusinessRecordSelectorController {
 
     private final BusinessRecordSelectorService selectorService;
@@ -25,7 +29,7 @@ public class BusinessRecordSelectorController {
     @PostMapping("/query")
     @SaCheckPermission("ai:businessObject:list")
     public RespInfo<BusinessRecordSelectorResultVO> query(@RequestBody BusinessRecordSelectorQueryDTO dto,
-                                                           PageQuery pageQuery) {
+                                                          PageQuery pageQuery) {
         return RespInfo.success(selectorService.query(dto, pageQuery));
     }
 }

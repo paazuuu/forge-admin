@@ -43,7 +43,9 @@
     <n-data-table
       v-if="currentRenderMode === 'table'"
       ref="tableRef"
+      v-table-scroll-enhance="dragScroll"
       remote
+      :data-table-drag-scroll="dragScroll ? 'enabled' : 'disabled'"
       :columns="tableColumns"
       :data="dataSource"
       :loading="loading"
@@ -229,6 +231,11 @@ const props = defineProps({
   scrollX: {
     type: Number,
     default: undefined,
+  },
+  // 是否开启表格横向拖拽滚动
+  dragScroll: {
+    type: Boolean,
+    default: true,
   },
   // 是否隐藏多选
   hideSelection: {
@@ -420,18 +427,24 @@ const tableColumns = computed(() => {
       return
     }
 
+    const actionColumn = isActionColumn(col)
+    const resolvedFixed = shouldDefaultRightFixed(col) ? 'right' : col.fixed
     const columnAlign = col.align || DEFAULT_COLUMN_ALIGN
     const columnTitleAlign = col.titleAlign || col.headerAlign || columnAlign
 
     const column = {
-      key: col.prop || col.key,
-      title: col.label || col.title,
+      key: col.prop || col.key || col.dataIndex || (actionColumn ? 'action' : undefined),
+      title: col.label || col.title || (actionColumn ? '操作' : undefined),
       width: col.width,
       minWidth: col.minWidth,
       maxWidth: col.maxWidth,
       align: columnAlign,
       titleAlign: columnTitleAlign,
-      fixed: col.fixed,
+      fixed: resolvedFixed,
+      className: mergeColumnClassName(
+        col.className,
+        actionColumn && resolvedFixed === 'right' ? 'forge-table-action-column' : undefined,
+      ),
       type: col.type,
       resizable: col.resizable ?? props.resizable,
       ellipsis: col.ellipsis !== false ? { tooltip: true } : false,
@@ -510,8 +523,26 @@ const tableColumns = computed(() => {
 })
 
 function isActionColumn(column) {
-  const key = column?.key || column?.prop || column?.dataIndex || ''
-  return key === 'action' || key === 'actions'
+  const key = String(column?.key || column?.prop || column?.dataIndex || '').trim()
+  const title = String(column?.label || column?.title || '').trim()
+  return ['action', 'actions', 'operation', 'operations'].includes(key) || title === '操作'
+}
+
+function shouldDefaultRightFixed(column) {
+  return isActionColumn(column)
+    && (column.fixed === undefined || column.fixed === null || column.fixed === '')
+}
+
+function mergeColumnClassName(className, extraClassName) {
+  if (!extraClassName) {
+    return className
+  }
+  if (!className) {
+    return extraClassName
+  }
+  return Array.isArray(className)
+    ? [...className, extraClassName]
+    : [className, extraClassName]
 }
 
 function normalizeCssUnit(value) {

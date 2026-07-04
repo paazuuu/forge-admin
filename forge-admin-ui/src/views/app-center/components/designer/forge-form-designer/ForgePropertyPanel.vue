@@ -849,6 +849,41 @@
                       @update:value="updateDictType"
                     />
                   </n-form-item>
+                  <template v-if="isObjectReferenceField">
+                    <n-form-item label="引用对象">
+                      <n-select
+                        :value="referenceObjectCode"
+                        :options="businessObjectOptions"
+                        :loading="businessObjectLoading"
+                        filterable
+                        clearable
+                        placeholder="选择目标业务对象"
+                        @update:value="updateReferenceObjectCode"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="referenceObjectCode" label="显示字段">
+                      <n-select
+                        :value="referenceDisplayField"
+                        :options="referenceTargetFieldOptions"
+                        :loading="referenceTargetFieldLoading"
+                        filterable
+                        clearable
+                        placeholder="选择下拉选项中显示的字段"
+                        @update:value="updateReferenceDisplayField"
+                      />
+                    </n-form-item>
+                    <n-form-item v-if="referenceObjectCode" label="值字段">
+                      <n-select
+                        :value="referenceValueField"
+                        :options="referenceTargetFieldOptions"
+                        :loading="referenceTargetFieldLoading"
+                        filterable
+                        clearable
+                        placeholder="选择保存到当前字段的值字段，默认 id"
+                        @update:value="updateReferenceValueField"
+                      />
+                    </n-form-item>
+                  </template>
                   <n-form-item v-if="activePropGroups.length" label="组件属性">
                     <n-button class="more-config-button" secondary block @click="componentPropsVisible = true">
                       <template #icon>
@@ -4042,7 +4077,7 @@ import {
 } from '@vicons/ionicons5'
 import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import draggable from 'vuedraggable'
-import { codeRuleList, previewCodeRule } from '@/api/business-app'
+import { businessObjectDesigner, businessObjectList, codeRuleList, previewCodeRule } from '@/api/business-app'
 import DictTypeSelect from '@/components/lowcode-builder/shared/DictTypeSelect.vue'
 import { pageWidgetComponentKeys } from '@/components/lowcode-builder/shared/page-widget-schema'
 import RuntimeRulesEditor from '@/components/lowcode-builder/shared/RuntimeRulesEditor.vue'
@@ -4784,6 +4819,17 @@ const isDictLikeField = computed(() => {
   const key = selectedComponent.value?.componentKey || ''
   return ['select', 'dictSelect', 'radio', 'checkbox', 'cascader'].includes(key)
 })
+const isObjectReferenceField = computed(() => selectedComponent.value?.componentKey === 'objectReference')
+const referenceObjectCode = computed(() => selectedComponent.value?.props?.referenceObjectCode || '')
+const referenceDisplayField = computed(() => selectedComponent.value?.props?.referenceDisplayField || '')
+const referenceValueField = computed(() => selectedComponent.value?.props?.referenceValueField || '')
+const businessObjectOptions = ref([])
+const businessObjectLoading = ref(false)
+const referenceTargetFieldsMap = ref({})
+const referenceTargetFieldLoading = computed(() => {
+  return !!referenceTargetFieldsMap.value[referenceObjectCode.value]?.loading
+})
+const referenceTargetFieldOptions = computed(() => referenceTargetFieldsMap.value[referenceObjectCode.value]?.options || [])
 
 const generationFillPolicyOptions = [
   { label: '为空时生成', value: 'EMPTY_ONLY' },
@@ -5136,6 +5182,118 @@ async function loadCodeRuleOptions() {
     codeRuleLoading.value = false
   }
 }
+
+async function loadBusinessObjectOptions() {
+  if (businessObjectOptions.value.length || businessObjectLoading.value)
+    return
+  businessObjectLoading.value = true
+  try {
+    const res = await businessObjectList({})
+    const list = Array.isArray(res.data) ? res.data : []
+    const seen = new Set()
+    businessObjectOptions.value = list
+      .filter((item) => {
+        if (!item.objectCode || seen.has(item.objectCode))
+          return false
+        seen.add(item.objectCode)
+        return true
+      })
+      .map(item => ({
+        label: `${item.objectName || item.objectCode}（${item.objectCode}）`,
+        value: item.objectCode,
+        object: item,
+      }))
+  }
+  catch {
+    businessObjectOptions.value = []
+  }
+  finally {
+    businessObjectLoading.value = false
+  }
+}
+
+async function loadReferenceTargetFields(objectCode, force = false) {
+  if (!objectCode)
+    return
+  if (!force && referenceTargetFieldsMap.value[objectCode])
+    return
+  const target = businessObjectOptions.value.find(item => item.value === objectCode)?.object
+  if (!target?.id) {
+    referenceTargetFieldsMap.value = {
+      ...referenceTargetFieldsMap.value,
+      [objectCode]: { loading: false, options: [] },
+    }
+    return
+  }
+  referenceTargetFieldsMap.value = {
+    ...referenceTargetFieldsMap.value,
+    [objectCode]: { loading: true, options: referenceTargetFieldsMap.value[objectCode]?.options || [] },
+  }
+  try {
+    const res = await businessObjectDesigner(target.id)
+    const fields = res.data?.fields || res.data?.modelSchema?.fields || []
+    const options = fields
+      .filter(field => !['tenantId', 'tenant_id', 'createBy', 'create_by', 'createTime', 'create_time', 'updateBy', 'update_by', 'updateTime', 'update_time', 'delFlag', 'del_flag'].includes(field.fieldCode || field.field))
+      .map(field => ({
+        label: `${field.fieldName || field.label || field.fieldCode || field.field}（${field.fieldCode || field.field}）`,
+        value: field.fieldCode || field.field,
+        field,
+      }))
+    referenceTargetFieldsMap.value = {
+      ...referenceTargetFieldsMap.value,
+      [objectCode]: { loading: false, options },
+    }
+  }
+  catch {
+    referenceTargetFieldsMap.value = {
+      ...referenceTargetFieldsMap.value,
+      [objectCode]: { loading: false, options: [] },
+    }
+  }
+}
+
+async function updateReferenceObjectCode(value) {
+  updateComponent({
+    props: {
+      referenceObjectCode: value || '',
+      referenceDisplayField: '',
+      referenceValueField: '',
+    },
+  })
+  if (value) {
+    if (!businessObjectOptions.value.length)
+      await loadBusinessObjectOptions()
+    await loadReferenceTargetFields(value, true)
+  }
+}
+
+function updateReferenceDisplayField(value) {
+  updateComponent({ props: { referenceDisplayField: value || '' } })
+}
+
+function updateReferenceValueField(value) {
+  updateComponent({ props: { referenceValueField: value || '' } })
+}
+
+watch(
+  () => selectedComponent.value?.componentKey,
+  async (key) => {
+    if (key === 'objectReference') {
+      await loadBusinessObjectOptions()
+      if (referenceObjectCode.value)
+        await loadReferenceTargetFields(referenceObjectCode.value)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  businessObjectOptions,
+  () => {
+    if (isObjectReferenceField.value && referenceObjectCode.value && !referenceTargetFieldsMap.value[referenceObjectCode.value])
+      loadReferenceTargetFields(referenceObjectCode.value)
+  },
+)
 
 function normalizeGenerationConfig(patch = {}) {
   return {

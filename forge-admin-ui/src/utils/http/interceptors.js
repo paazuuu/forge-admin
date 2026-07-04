@@ -36,6 +36,68 @@ function hasBusinessCode(data) {
   return data && typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'code')
 }
 
+function normalizeRequestData(data) {
+  if (!data)
+    return {}
+  if (typeof data === 'object')
+    return data
+  if (typeof data !== 'string')
+    return {}
+  try {
+    const parsed = JSON.parse(data)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
+}
+
+function resolveSelectorObjectCode(config = {}) {
+  const data = normalizeRequestData(config.data)
+  const params = config.params && typeof config.params === 'object' ? config.params : {}
+  return [
+    data.objectCode,
+    data.businessObjectCode,
+    data.targetObjectCode,
+    data.targetEntityCode,
+    data.candidateObjectCode,
+    data.referenceObjectCode,
+    data.refObjectCode,
+    data.sourceObjectCode,
+    data.targetCode,
+    params.objectCode,
+    params.businessObjectCode,
+    params.targetObjectCode,
+    params.targetEntityCode,
+    params.candidateObjectCode,
+    params.referenceObjectCode,
+    params.refObjectCode,
+    params.sourceObjectCode,
+    params.targetCode,
+  ].map(value => String(value ?? '').trim()).find(Boolean) || ''
+}
+
+function assertBusinessSelectorRequest(config = {}) {
+  const url = String(config.url || '')
+  if (!url.includes('/ai/business/selector/query') && !url.includes('ai/business/selector/query'))
+    return
+  if (resolveSelectorObjectCode(config))
+    return
+  const error = {
+    code: 'BUSINESS_SELECTOR_OBJECT_CODE_MISSING',
+    message: '选择器缺少业务对象编码，已在前端阻止请求',
+    config: {
+      url: config.url,
+      method: config.method,
+      data: normalizeRequestData(config.data),
+      params: config.params || {},
+    },
+    stack: new Error('Business selector request missing objectCode').stack,
+  }
+  console.error('[BusinessRecordSelector] 阻止缺少业务对象编码的接口请求', error)
+  throw error
+}
+
 function buildErrorDetail(config, payload = {}, fallbackError) {
   return {
     code: payload.code,
@@ -279,6 +341,8 @@ async function reqResolve(config, axiosInstance) {
 
   // 显式加密接口必须先完成会话密钥协商，禁止在无密钥时降级成明文请求
   await ensureEncryptionSession(config, axiosInstance, authStore)
+
+  assertBusinessSelectorRequest(config)
 
   // 加密处理
   config = encryptRequest(config)

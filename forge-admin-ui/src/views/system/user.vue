@@ -2165,12 +2165,12 @@ async function handleSubmitTenant() {
     tenantSubmitLoading.value = true
     const res = await request.post(
       `/system/user/${currentUser.value.id}/tenants`,
-        {
-          tenantIds: checkedTenantKeys.value,
-          defaultTenantId: defaultTenantId.value,
-          memberType: normalizeSingleNumber(currentUser.value.userType, 2) === 1 ? 1 : 2,
-        },
-      )
+      {
+        tenantIds: checkedTenantKeys.value,
+        defaultTenantId: defaultTenantId.value,
+        memberType: normalizeSingleNumber(currentUser.value.userType, 2) === 1 ? 1 : 2,
+      },
+    )
     if (res.code === 200) {
       window.$message.success('租户绑定成功')
       tenantModalVisible.value = false

@@ -242,6 +242,7 @@ const navItems = [
   { key: 'form', label: '表单设计', icon: ReaderOutline },
   { key: 'fields', label: '高级字段资产', icon: TextOutline },
   { key: 'list', label: '列表设计', icon: ListOutline },
+  { key: 'actions', label: '业务处理', icon: GitBranchOutline },
   { key: 'relations', label: '关系与级联', icon: GitNetworkOutline },
   { key: 'flow-app', label: '业务流程配置', icon: GitBranchOutline },
   { key: 'permission', label: '数据权限', icon: KeyOutline },
@@ -253,6 +254,8 @@ const filteredNavItems = computed(() => {
   const whitelist = props.navPanels || []
   return navItems.filter((item) => {
     if (whitelist.length && !whitelist.includes(item.key))
+      return false
+    if (item.key === 'actions' && !whitelist.includes(item.key))
       return false
     if (item.key === 'fields')
       return props.activePanel === 'fields'

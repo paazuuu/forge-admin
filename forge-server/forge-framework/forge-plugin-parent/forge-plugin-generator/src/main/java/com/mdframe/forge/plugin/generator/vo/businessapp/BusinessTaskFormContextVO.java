@@ -49,9 +49,19 @@ public class BusinessTaskFormContextVO {
 
     private String editMode;
 
+    private Integer gridCols;
+
+    private String labelPlacement;
+
+    private String labelWidth;
+
     private Map<String, Object> formRef = new LinkedHashMap<>();
 
     private List<Map<String, Object>> fields = new ArrayList<>();
+
+    private List<Map<String, Object>> formAssets = new ArrayList<>();
+
+    private List<Map<String, Object>> childrenConfig = new ArrayList<>();
 
     private List<Map<String, Object>> fieldPermissions = new ArrayList<>();
 

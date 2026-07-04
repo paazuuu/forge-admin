@@ -210,9 +210,36 @@
       </div>
     </div>
 
+    <section class="list-custom-actions-entry">
+      <div class="custom-actions-entry-copy">
+        <strong>自定义操作</strong>
+        <span>配置列表顶部按钮和每行操作按钮，当前共 {{ listCustomActions.length }} 个。</span>
+      </div>
+      <div class="custom-actions-entry-preview">
+        <span v-for="action in customActionPreviewItems" :key="action.clientKey || action.key" class="custom-action-preview-chip">
+          {{ action.positionLabel }} · {{ action.label || '自定义操作' }}
+        </span>
+        <span v-if="!customActionPreviewItems.length" class="custom-action-preview-empty">
+          暂无自定义操作
+        </span>
+      </div>
+      <n-space class="custom-actions-entry-buttons" size="small">
+        <n-button size="small" secondary @click="createToolbarCustomAction">
+          新增顶部按钮
+        </n-button>
+        <n-button size="small" secondary @click="createRowCustomAction">
+          新增行操作
+        </n-button>
+        <n-button size="small" type="primary" @click="openCustomActionManager">
+          配置全部操作
+        </n-button>
+      </n-space>
+    </section>
+
     <div class="list-designer-body">
       <main class="list-workspace">
         <ListPageGridDesigner
+          ref="listGridDesignerRef"
           :model-value="currentPageGridLayout"
           :fields="designFields"
           :model-schema="effectiveModelSchema"
@@ -338,6 +365,7 @@ const message = useMessage()
 const saving = ref(false)
 const undoStack = ref([])
 const redoStack = ref([])
+const listGridDesignerRef = ref(null)
 const activePageKey = ref('list')
 const pageSettingsExpanded = ref(false)
 const HISTORY_LIMIT = 50
@@ -361,6 +389,12 @@ const canRedo = computed(() => redoStack.value.length > 0)
 const listPreviewVisible = ref(false)
 const templateSelectValue = ref(resolveTemplateSelectValue(localSchema.value.layoutType))
 const listCustomActions = ref([])
+const customActionPreviewItems = computed(() => {
+  return listCustomActions.value.slice(0, 6).map(action => ({
+    ...action,
+    positionLabel: action.position === 'toolbar' ? '顶部' : action.position === 'detail' ? '详情' : '行内',
+  }))
+})
 const pageTypeOptions = [
   { label: '列表页', value: 'list' },
   { label: '新增页', value: 'create' },
@@ -1157,6 +1191,18 @@ function handleListCustomActionsUpdate(actions = []) {
   setLocalSchema(syncSchemaCustomActions(localSchema.value, nextActions))
   emit('update:designerActions', cloneSchema(nextActions.map((action, index) => listActionToDesignerAction(action, index, { preserveDraftParams: true }))))
   emit('dirtyChange', true)
+}
+
+function openCustomActionManager() {
+  listGridDesignerRef.value?.openCustomActionManager?.()
+}
+
+function createToolbarCustomAction() {
+  listGridDesignerRef.value?.createAndEditCustomAction?.('toolbar')
+}
+
+function createRowCustomAction() {
+  listGridDesignerRef.value?.createAndEditCustomAction?.('row')
 }
 
 function buildDesignerActionsForSave() {
@@ -2191,6 +2237,61 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #e4e4e7;
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(10px);
+}
+
+.list-custom-actions-entry {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.4fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #dbe3ee;
+  background: #f8fbff;
+}
+
+.custom-actions-entry-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.custom-actions-entry-copy strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.custom-actions-entry-copy span,
+.custom-action-preview-empty {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.custom-actions-entry-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.custom-action-preview-chip {
+  max-width: 180px;
+  overflow: hidden;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 9px;
+}
+
+.custom-actions-entry-buttons {
+  flex-wrap: nowrap;
 }
 
 .page-switch-head {

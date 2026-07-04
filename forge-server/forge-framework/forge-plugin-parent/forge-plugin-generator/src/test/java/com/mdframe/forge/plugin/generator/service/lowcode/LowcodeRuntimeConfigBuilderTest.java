@@ -4,8 +4,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeFieldSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeModelSchema;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageModelRef;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodePageZone;
+import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRelationSchema;
 import com.mdframe.forge.plugin.generator.dto.lowcode.LowcodeRuntimeConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @DisplayName("LowcodeRuntimeConfigBuilder")
 class LowcodeRuntimeConfigBuilderTest {
@@ -140,6 +143,21 @@ class LowcodeRuntimeConfigBuilderTest {
         assertEquals("recordSelector", searchSchema.get(0).get("type"));
     }
 
+    @Test
+    @DisplayName("does not publish one-to-many child relation as relation name translation")
+    void doesNotPublishOneToManyChildRelationAsRelationNameTranslation() throws Exception {
+        LowcodeRuntimeConfig runtimeConfig = builder.buildRuntimeConfig(
+                "pw_purchase_order",
+                purchaseOrderModelSchema(),
+                purchaseOrderMasterDetailPageSchema()
+        );
+
+        Map<String, Object> transConfig = objectMapper.readValue(runtimeConfig.getTransConfig(), new TypeReference<>() {
+        });
+
+        assertFalse(transConfig.containsKey("id"));
+    }
+
     private LowcodeModelSchema modelSchema() {
         LowcodeFieldSchema itemName = new LowcodeFieldSchema();
         itemName.setField("itemName");
@@ -157,6 +175,75 @@ class LowcodeRuntimeConfigBuilderTest {
         schema.setTableName("biz_inventory");
         schema.setBusinessName("库存对象");
         schema.setFields(List.of(itemName));
+        return schema;
+    }
+
+    private LowcodeModelSchema purchaseOrderModelSchema() {
+        LowcodeFieldSchema id = new LowcodeFieldSchema();
+        id.setField("id");
+        id.setColumnName("id");
+        id.setLabel("ID");
+        id.setDataType("bigint");
+        id.setPrimaryKey(true);
+        id.setListVisible(true);
+        id.setFormVisible(false);
+
+        LowcodeFieldSchema projectName = new LowcodeFieldSchema();
+        projectName.setField("projectName");
+        projectName.setColumnName("project_name");
+        projectName.setLabel("项目名称");
+        projectName.setDataType("varchar");
+        projectName.setComponentType("input");
+        projectName.setListVisible(true);
+        projectName.setFormVisible(true);
+
+        LowcodeRelationSchema childRelation = new LowcodeRelationSchema();
+        childRelation.setRelationType("ONE_TO_MANY");
+        childRelation.setTargetObjectCode("pw_purchase_order_item");
+        childRelation.setSourceField("id");
+        childRelation.setTargetField("purchaseId");
+        childRelation.setDisplayField("materialName");
+
+        LowcodeModelSchema schema = new LowcodeModelSchema();
+        schema.setAppType("SINGLE");
+        schema.setTableMode("EXISTING");
+        schema.setTableName("pw_purchase_order");
+        schema.setBusinessName("采购单");
+        schema.setFields(List.of(id, projectName));
+        schema.setRelations(List.of(childRelation));
+        return schema;
+    }
+
+    private LowcodePageSchema purchaseOrderMasterDetailPageSchema() {
+        LowcodePageModelRef primaryRef = new LowcodePageModelRef();
+        primaryRef.setModelCode("pw_purchase_order");
+        primaryRef.setModelName("采购单");
+        primaryRef.setTableName("pw_purchase_order");
+        primaryRef.setPrimary(true);
+        LowcodeRelationSchema childRelation = new LowcodeRelationSchema();
+        childRelation.setRelationType("ONE_TO_MANY");
+        childRelation.setTargetObjectCode("pw_purchase_order_item");
+        childRelation.setSourceField("id");
+        childRelation.setTargetField("purchaseId");
+        childRelation.setDisplayField("materialName");
+        primaryRef.setRelations(List.of(childRelation));
+
+        LowcodePageModelRef childRef = new LowcodePageModelRef();
+        childRef.setModelCode("pw_purchase_order_item");
+        childRef.setModelName("采购明细");
+        childRef.setTableName("pw_purchase_order_item");
+        childRef.setPrimary(false);
+        childRef.setFields(List.of(
+                Map.of("field", "id", "sourceField", "id", "columnName", "id", "label", "ID"),
+                Map.of("field", "purchaseId", "sourceField", "purchaseId", "columnName", "purchase_id", "label", "采购单ID"),
+                Map.of("field", "materialName", "sourceField", "materialName", "columnName", "material_name", "label", "物料名称")
+        ));
+
+        LowcodePageSchema schema = new LowcodePageSchema();
+        schema.setLayoutType("master-detail-crud");
+        schema.setPrimaryModelCode("pw_purchase_order");
+        schema.setModelRefs(List.of(primaryRef, childRef));
+        schema.setZones(new ArrayList<>());
         return schema;
     }
 

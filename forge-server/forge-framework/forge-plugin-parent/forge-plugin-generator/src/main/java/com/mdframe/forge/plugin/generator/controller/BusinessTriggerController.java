@@ -9,6 +9,8 @@ import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowServic
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessPermissionService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessTriggerService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessTriggerScenarioTemplateVO;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/ai/business/trigger")
 @RequiredArgsConstructor
+@ApiDecrypt
+@ApiEncrypt
 public class BusinessTriggerController {
 
     private final BusinessTriggerService triggerService;

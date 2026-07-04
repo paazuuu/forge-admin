@@ -249,6 +249,7 @@
           :y-gap="previewLayout.yGap || previewLayout.rowGap || 0"
           :show-actions="false"
           :show-feedback="previewLayout.showFeedback !== false"
+          :context="previewRuntimeContext"
           :form-assets="formAssets"
         />
         <n-card
@@ -269,6 +270,7 @@
             :grid-cols="previewLayout.gridCols || previewLayout.gridColumns || 1"
             :show-actions="false"
             :form-assets="formAssets"
+            :context="previewRuntimeContext"
           />
         </n-card>
         <n-tabs
@@ -294,6 +296,7 @@
               :grid-cols="previewLayout.gridCols || previewLayout.gridColumns || 1"
               :show-actions="false"
               :form-assets="formAssets"
+              :context="previewRuntimeContext"
             />
           </n-tab-pane>
         </n-tabs>
@@ -318,6 +321,7 @@
               :grid-cols="previewLayout.gridCols || previewLayout.gridColumns || 1"
               :show-actions="false"
               :form-assets="formAssets"
+              :context="previewRuntimeContext"
             />
           </n-collapse-item>
         </n-collapse>
@@ -425,6 +429,7 @@ import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import AiForm from '@/components/ai-form/AiForm.vue'
 import AiFormGroupTitle from '@/components/ai-form/AiFormGroupTitle.vue'
 import AiFormSectionTitle from '@/components/ai-form/AiFormSectionTitle.vue'
+import { normalizeRecordSelectorConfig as normalizeRuntimeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import { repairFormDesignerFieldRefs } from '../form-first/fieldReferenceUtils'
 import { extractForgeSchemaFieldRefs } from '../form-first/forgeToFormCreate'
 import {
@@ -485,6 +490,11 @@ const previewModeOptions = [
   { label: '编辑', value: 'edit' },
   { label: '详情', value: 'detail' },
 ]
+const previewRuntimeContext = {
+  mode: 'designer-preview',
+  designerPreview: true,
+  source: 'form-designer',
+}
 const baseDesignerMoreOptions = [
   { label: '按字段生成', key: 'resetFromFields' },
   { label: '清理失效字段', key: 'repairRefs' },
@@ -912,7 +922,7 @@ function normalizeRuntimeComponent(component, mode = 'create') {
   const nodeType = resolveRuntimeNodeType(componentKey)
   const fieldCode = getRuntimeFieldCode(component)
   const rules = [...(component.validation?.rules || [])]
-  const runtimeProps = resolveRuntimeProps(component.props || {}, componentKey)
+  const runtimeProps = resolveRuntimeFieldProps(component, componentKey, fieldCode)
   const readonly = mode === 'detail' || Boolean(component.visibility?.readonly)
   const disabled = readonly || Boolean(runtimeProps.disabled)
 
@@ -971,6 +981,115 @@ function resolveRuntimeProps(props = {}, componentKey = '') {
   return nextProps
 }
 
+function resolveRuntimeFieldProps(component = {}, componentKey = '', fieldCode = '') {
+  const runtimeProps = resolveRuntimeProps(component.props || {}, componentKey)
+  const fieldAsset = findFieldAsset(fieldCode)
+  return mergeRelationRuntimeProps(runtimeProps, component, fieldAsset)
+}
+
+function findFieldAsset(fieldCode = '') {
+  const code = String(fieldCode || '').trim()
+  if (!code)
+    return null
+  return (Array.isArray(props.fields) ? props.fields : []).find((field) => {
+    const candidates = [
+      field?.fieldCode,
+      field?.field,
+      field?.columnName,
+      field?.prop,
+      field?.name,
+    ].map(value => String(value ?? '').trim()).filter(Boolean)
+    return candidates.includes(code)
+  }) || null
+}
+
+function mergeRelationRuntimeProps(runtimeProps = {}, component = {}, fieldAsset = null) {
+  const next = { ...(runtimeProps || {}) }
+  const fieldProps = {
+    ...(fieldAsset?.basicProps && typeof fieldAsset.basicProps === 'object' ? fieldAsset.basicProps : {}),
+    ...(fieldAsset?.props && typeof fieldAsset.props === 'object' ? fieldAsset.props : {}),
+  }
+  const componentKey = component?.componentKey || component?.type || ''
+  const fieldType = String(fieldAsset?.fieldType || fieldAsset?.businessFieldType || '').trim()
+
+  const referenceObjectCode = firstText(
+    next.referenceObjectCode,
+    component.props?.referenceObjectCode,
+    component.referenceObjectCode,
+    fieldAsset?.props?.referenceObjectCode,
+    fieldAsset?.referenceObjectCode,
+    fieldProps.referenceObjectCode,
+  )
+  const referenceDisplayField = firstText(
+    next.referenceDisplayField,
+    next.displayField,
+    next.labelField,
+    component.props?.referenceDisplayField,
+    component.props?.displayField,
+    component.props?.labelField,
+    component.referenceDisplayField,
+    fieldAsset?.props?.referenceDisplayField,
+    fieldAsset?.props?.displayField,
+    fieldAsset?.props?.labelField,
+    fieldAsset?.referenceDisplayField,
+    fieldProps.referenceDisplayField,
+  )
+  const referenceValueField = firstText(
+    next.referenceValueField,
+    next.valueField,
+    component.props?.referenceValueField,
+    component.props?.valueField,
+    component.referenceValueField,
+    fieldAsset?.props?.referenceValueField,
+    fieldAsset?.props?.valueField,
+    fieldAsset?.referenceValueField,
+    fieldProps.referenceValueField,
+    'id',
+  )
+
+  if (componentKey === 'objectReference' || fieldType === 'REFERENCE') {
+    if (referenceObjectCode)
+      next.referenceObjectCode = referenceObjectCode
+    if (referenceDisplayField)
+      next.referenceDisplayField = referenceDisplayField
+    if (referenceValueField)
+      next.referenceValueField = referenceValueField
+  }
+
+  const recordSelector = normalizeRuntimeRecordSelectorConfig({
+    ...(fieldAsset || {}),
+    ...(component || {}),
+    ...(next || {}),
+    basicProps: {
+      ...(fieldAsset?.basicProps || {}),
+      ...(component?.basicProps || {}),
+    },
+    props: {
+      ...(fieldAsset?.props || {}),
+      ...(fieldAsset?.basicProps || {}),
+      ...(component?.props || {}),
+      ...(next || {}),
+    },
+    recordSelector: next.recordSelector
+      || component.props?.recordSelector
+      || component.recordSelector
+      || fieldAsset?.props?.recordSelector
+      || fieldAsset?.basicProps?.recordSelector
+      || fieldAsset?.recordSelector,
+  })
+  if ((componentKey === 'recordSelector' || fieldType === 'RECORD_SELECTOR') && recordSelector.objectCode) {
+    next.recordSelector = recordSelector
+    next.objectCode = recordSelector.objectCode
+    next.businessObjectCode = recordSelector.businessObjectCode || recordSelector.objectCode
+    next.targetObjectCode = recordSelector.targetObjectCode || recordSelector.objectCode
+  }
+  return next
+}
+
+function firstText(...values) {
+  return values.map(value => String(value ?? '').trim()).find(Boolean) || ''
+}
+
 function resolveRuntimeNodeType(componentKey = '') {
   if (['row', 'fcRow'].includes(componentKey))
     return 'row'
@@ -1012,6 +1131,8 @@ function getDefaultRuntimeValue(component, mode = 'create') {
     return component.defaultValue
   }
   const componentKey = component?.componentKey || component?.type
+  if (['date', 'datetime', 'month', 'year', 'time', 'daterange', 'datetimerange', 'timerange'].includes(componentKey))
+    return null
   if (componentKey === 'checkbox' || componentKey === 'checkboxGroup')
     return []
   if (componentKey === 'switch')
@@ -1039,8 +1160,18 @@ function getMockRuntimeValue(component) {
     return '2026-06-17'
   if (componentKey === 'datetime')
     return '2026-06-17 09:30:00'
+  if (componentKey === 'month')
+    return '2026-06'
+  if (componentKey === 'year')
+    return '2026'
   if (componentKey === 'time')
     return '09:30:00'
+  if (componentKey === 'daterange')
+    return ['2026-06-17', '2026-06-18']
+  if (componentKey === 'datetimerange')
+    return ['2026-06-17 09:30:00', '2026-06-18 18:00:00']
+  if (componentKey === 'timerange')
+    return ['09:30:00', '18:00:00']
   if (componentKey === 'textarea')
     return `${label}的模拟详情内容`
   if (['upload', 'imageUpload'].includes(componentKey))

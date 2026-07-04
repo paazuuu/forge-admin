@@ -90,7 +90,7 @@ public class BusinessActionExecutionService {
             return fromLog(e.getLogEntry(), true);
         } catch (StepExecutionException e) {
             stepResults = e.getStepResults();
-            String message = e.getCause() == null ? e.getMessage() : e.getCause().getMessage();
+            String message = rootErrorMessage(e);
             saveFailureLog(context, logEntry, message, stepResults, startTime);
             throw new BusinessException(StringUtils.defaultIfBlank(message, "业务动作执行失败"));
         } catch (IdempotentConflictException e) {
@@ -488,6 +488,18 @@ public class BusinessActionExecutionService {
         result.setErrorMessage(e.getMessage());
         result.setDurationMs(System.currentTimeMillis() - startTime);
         return result;
+    }
+
+    private String rootErrorMessage(Throwable error) {
+        Throwable current = error;
+        String message = null;
+        while (current != null) {
+            if (StringUtils.isNotBlank(current.getMessage())) {
+                message = current.getMessage();
+            }
+            current = current.getCause();
+        }
+        return message;
     }
 
     private boolean hasTodo(List<BusinessActionStepResultVO> stepResults) {

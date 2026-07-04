@@ -85,7 +85,7 @@ public class FlowEventSubscriber {
     private void doDispatch(FlowEventContext ctx) {
         boolean matchedBean = false;
         for (FlowBindBean flowBindBean : findFlowBindBeans()) {
-            if (!flowBindBean.bind().modelKey().equals(ctx.getProcessDefKey())) {
+            if (!matchesModelKey(flowBindBean.bind().modelKey(), ctx.getProcessDefKey())) {
                 continue;
             }
             matchedBean = true;
@@ -95,6 +95,10 @@ public class FlowEventSubscriber {
             log.warn("[FlowCallback] 未找到匹配的 @FlowBind Bean: event={} processDefKey={} businessKey={}",
                     ctx.getEvent(), ctx.getProcessDefKey(), ctx.getBusinessKey());
         }
+    }
+
+    private boolean matchesModelKey(String bindModelKey, String processDefKey) {
+        return "*".equals(bindModelKey) || bindModelKey.equals(processDefKey);
     }
 
     private List<FlowBindBean> findFlowBindBeans() {

@@ -22,10 +22,10 @@ const props = defineProps({
 defineEmits(['click'])
 
 const approvalResultLabels = [
-  { label: '同意通过', value: 'approve', expression: '$' + "{approvalResult == 'approve'}" },
-  { label: '驳回修改', value: 'reject', expression: '$' + "{approvalResult == 'reject'}" },
-  { label: '退回上一步', value: 'return', expression: '$' + "{approvalResult == 'return'}" },
-  { label: '终止流程', value: 'terminate', expression: '$' + "{approvalResult == 'terminate'}" },
+  { label: '同意通过', value: 'approve', expression: '$' + '{approvalResult == \'approve\'}' },
+  { label: '驳回修改', value: 'reject', expression: '$' + '{approvalResult == \'reject\'}' },
+  { label: '退回上一步', value: 'return', expression: '$' + '{approvalResult == \'return\'}' },
+  { label: '终止流程', value: 'terminate', expression: '$' + '{approvalResult == \'terminate\'}' },
 ]
 
 const labelText = computed(() => {

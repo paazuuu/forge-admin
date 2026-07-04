@@ -330,79 +330,79 @@ const tableColumns = computed(() => {
   // 显式订阅 testing 集合，使行的"测试连接"按钮可动态切换 label/disabled
   const testingIds = testingConnectionIds.value
   return [
-  {
-    prop: 'connectionName',
-    label: '连接资产',
-    width: 300,
-    render: row => h('div', { class: 'connection-name-card' }, [
-      h('div', { class: 'connection-name-row' }, [
-        h('div', { class: 'connection-name' }, row.connectionName),
-        h(NTag, {
-          size: 'small',
-          bordered: false,
-          type: getDbTypeTagType(row.dbType),
-        }, { default: () => getDbTypeLabel(row.dbType) }),
+    {
+      prop: 'connectionName',
+      label: '连接资产',
+      width: 300,
+      render: row => h('div', { class: 'connection-name-card' }, [
+        h('div', { class: 'connection-name-row' }, [
+          h('div', { class: 'connection-name' }, row.connectionName),
+          h(NTag, {
+            size: 'small',
+            bordered: false,
+            type: getDbTypeTagType(row.dbType),
+          }, { default: () => getDbTypeLabel(row.dbType) }),
+        ]),
+        h('div', { class: 'connection-code' }, row.connectionCode),
+        h('div', { class: 'connection-desc' }, row.description || '暂无描述'),
       ]),
-      h('div', { class: 'connection-code' }, row.connectionCode),
-      h('div', { class: 'connection-desc' }, row.description || '暂无描述'),
-    ]),
-  },
-  {
-    prop: 'driverClassName',
-    label: '驱动与模式',
-    width: 250,
-    render: row => h('div', { class: 'connection-meta-card' }, [
-      h('div', { class: 'connection-meta-primary' }, getDriverShortName(row.driverClassName) || '未设置驱动'),
-      h('div', { class: 'connection-meta-secondary' }, row.driverClassName || '待自动填充'),
-      h('div', { class: 'connection-meta-tertiary' }, row.schemaName || '未指定 schema'),
-    ]),
-  },
-  {
-    prop: 'jdbcUrl',
-    label: '访问入口',
-    width: 320,
-    render: row => h('div', { class: 'connection-endpoint-card' }, [
-      h('div', { class: 'connection-endpoint-primary' }, getJdbcEndpoint(row.jdbcUrl) || '待配置地址'),
-      h('div', { class: 'connection-endpoint-secondary' }, getJdbcDatabaseName(row.jdbcUrl) || row.jdbcUrl || '-'),
-      h('div', { class: 'connection-endpoint-tertiary' }, `账号：${row.username || '-'}`),
-    ]),
-  },
-  {
-    prop: 'status',
-    label: '状态',
-    width: 110,
-    render: row => h(DictTag, {
-      dictType: 'sys_enable_disable',
-      dictValue: String(row.status),
-      size: 'small',
-    }),
-  },
-  {
-    prop: 'updateTime',
-    label: '更新时间',
-    width: 180,
-  },
-  {
-    prop: 'action',
-    label: '操作',
-    width: 260,
-    fixed: 'right',
-    maxActionButtons: 4,
-    actions: [
-      { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },
-      {
-        label: '测试连接',
-        key: 'test',
-        type: 'info',
-        onClick: handleTest,
-        // 行级 loading：disabled 函数禁用重复点击，配合 $message 反馈
-        disabled: row => testingIds.has(row?.id),
-        disabledReason: '正在测试，请稍候…',
-      },
-      { label: '查看表', key: 'tables', type: 'info', onClick: handleViewTables },
-      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
-    ],
-  },
+    },
+    {
+      prop: 'driverClassName',
+      label: '驱动与模式',
+      width: 250,
+      render: row => h('div', { class: 'connection-meta-card' }, [
+        h('div', { class: 'connection-meta-primary' }, getDriverShortName(row.driverClassName) || '未设置驱动'),
+        h('div', { class: 'connection-meta-secondary' }, row.driverClassName || '待自动填充'),
+        h('div', { class: 'connection-meta-tertiary' }, row.schemaName || '未指定 schema'),
+      ]),
+    },
+    {
+      prop: 'jdbcUrl',
+      label: '访问入口',
+      width: 320,
+      render: row => h('div', { class: 'connection-endpoint-card' }, [
+        h('div', { class: 'connection-endpoint-primary' }, getJdbcEndpoint(row.jdbcUrl) || '待配置地址'),
+        h('div', { class: 'connection-endpoint-secondary' }, getJdbcDatabaseName(row.jdbcUrl) || row.jdbcUrl || '-'),
+        h('div', { class: 'connection-endpoint-tertiary' }, `账号：${row.username || '-'}`),
+      ]),
+    },
+    {
+      prop: 'status',
+      label: '状态',
+      width: 110,
+      render: row => h(DictTag, {
+        dictType: 'sys_enable_disable',
+        dictValue: String(row.status),
+        size: 'small',
+      }),
+    },
+    {
+      prop: 'updateTime',
+      label: '更新时间',
+      width: 180,
+    },
+    {
+      prop: 'action',
+      label: '操作',
+      width: 260,
+      fixed: 'right',
+      maxActionButtons: 4,
+      actions: [
+        { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },
+        {
+          label: '测试连接',
+          key: 'test',
+          type: 'info',
+          onClick: handleTest,
+          // 行级 loading：disabled 函数禁用重复点击，配合 $message 反馈
+          disabled: row => testingIds.has(row?.id),
+          disabledReason: '正在测试，请稍候…',
+        },
+        { label: '查看表', key: 'tables', type: 'info', onClick: handleViewTables },
+        { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
+      ],
+    },
   ]
 })
 

@@ -7,6 +7,8 @@ import com.mdframe.forge.plugin.generator.service.businessapp.BusinessQuantityQu
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityBalanceVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLedgerVO;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLockVO;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/ai/business/quantity/query")
 @RequiredArgsConstructor
+@ApiDecrypt
+@ApiEncrypt
 public class BusinessQuantityQueryController {
 
     private final BusinessQuantityQueryService quantityQueryService;
