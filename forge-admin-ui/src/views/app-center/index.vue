@@ -21,84 +21,82 @@
           </n-button>
         </div>
 
-        <n-spin :show="loadingSuites && !bootstrapping">
-          <div class="suite-pill-list">
-            <template v-if="bootstrapping">
-              <n-skeleton v-for="idx in 6" :key="idx" height="32px" :sharp="false" />
-            </template>
-            <template v-else>
-              <div
-                class="suite-pill all-suite"
-                :class="{ active: !suiteCode }"
-                role="button"
-                tabindex="0"
-                @click="selectSuite(null)"
-                @keydown.enter.prevent="selectSuite(null)"
-                @keydown.space.prevent="selectSuite(null)"
-              >
-                <span class="suite-pill-icon all">
-                  <n-icon><GridOutline /></n-icon>
-                </span>
-                <span class="suite-pill-copy">
-                  <strong>全部业务域</strong>
-                  <small>{{ suiteObjectTotal }} 对象 · {{ suiteAppTotal }} 入口</small>
-                </span>
-              </div>
+        <div class="suite-pill-list">
+          <template v-if="showSuiteSkeleton">
+            <n-skeleton v-for="idx in 6" :key="idx" height="32px" :sharp="false" />
+          </template>
+          <template v-else>
+            <div
+              class="suite-pill all-suite"
+              :class="{ active: !suiteCode }"
+              role="button"
+              tabindex="0"
+              @click="selectSuite(null)"
+              @keydown.enter.prevent="selectSuite(null)"
+              @keydown.space.prevent="selectSuite(null)"
+            >
+              <span class="suite-pill-icon all">
+                <n-icon><GridOutline /></n-icon>
+              </span>
+              <span class="suite-pill-copy">
+                <strong>全部业务域</strong>
+                <small>{{ suiteObjectTotal }} 对象 · {{ suiteAppTotal }} 入口</small>
+              </span>
+            </div>
 
-              <div
-                v-for="suiteRow in suiteTreeRows"
-                :key="suiteRow.suite.id || suiteRow.suite.suiteCode"
-                class="suite-pill"
-                :class="{
-                  'active': suiteCode === suiteRow.suite.suiteCode,
-                  'child': suiteRow.level > 0,
-                  'has-children': suiteRow.hasChildren,
-                }"
-                :style="{ '--suite-indent': `${suiteRow.level * 16}px` }"
-                role="button"
-                tabindex="0"
-                @click="selectSuite(suiteRow.suite)"
-                @keydown.enter.prevent="selectSuite(suiteRow.suite)"
-                @keydown.space.prevent="selectSuite(suiteRow.suite)"
+            <div
+              v-for="suiteRow in suiteTreeRows"
+              :key="suiteRow.suite.id || suiteRow.suite.suiteCode"
+              class="suite-pill"
+              :class="{
+                'active': suiteCode === suiteRow.suite.suiteCode,
+                'child': suiteRow.level > 0,
+                'has-children': suiteRow.hasChildren,
+              }"
+              :style="{ '--suite-indent': `${suiteRow.level * 16}px` }"
+              role="button"
+              tabindex="0"
+              @click="selectSuite(suiteRow.suite)"
+              @keydown.enter.prevent="selectSuite(suiteRow.suite)"
+              @keydown.space.prevent="selectSuite(suiteRow.suite)"
+            >
+              <button
+                v-if="suiteRow.hasChildren"
+                class="suite-tree-toggle"
+                type="button"
+                :aria-label="isSuiteExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
+                @click.stop="toggleSuiteExpanded(suiteRow.suite)"
               >
-                <button
-                  v-if="suiteRow.hasChildren"
-                  class="suite-tree-toggle"
-                  type="button"
-                  :aria-label="isSuiteExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
-                  @click.stop="toggleSuiteExpanded(suiteRow.suite)"
+                <n-icon>
+                  <ChevronDownOutline v-if="isSuiteExpanded(suiteRow.suite)" />
+                  <ChevronForwardOutline v-else />
+                </n-icon>
+              </button>
+              <span v-else class="suite-tree-spacer" />
+              <span class="suite-pill-icon" :class="{ 'has-icon': suiteRow.suite.icon }">
+                <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="18" />
+                <template v-else>{{ suiteInitial(suiteRow.suite) }}</template>
+              </span>
+              <span class="suite-pill-copy">
+                <strong>{{ suiteRow.suite.suiteName || suiteRow.suite.suiteCode }}</strong>
+                <small>{{ suitePillMetaText(suiteRow.suite) }}</small>
+              </span>
+              <span class="suite-pill-actions" @click.stop>
+                <n-dropdown
+                  trigger="click"
+                  :options="getSuiteActionOptions(suiteRow.suite)"
+                  @select="key => handleSuiteAction(key, suiteRow.suite)"
                 >
-                  <n-icon>
-                    <ChevronDownOutline v-if="isSuiteExpanded(suiteRow.suite)" />
-                    <ChevronForwardOutline v-else />
-                  </n-icon>
-                </button>
-                <span v-else class="suite-tree-spacer" />
-                <span class="suite-pill-icon" :class="{ 'has-icon': suiteRow.suite.icon }">
-                  <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="18" />
-                  <template v-else>{{ suiteInitial(suiteRow.suite) }}</template>
-                </span>
-                <span class="suite-pill-copy">
-                  <strong>{{ suiteRow.suite.suiteName || suiteRow.suite.suiteCode }}</strong>
-                  <small>{{ suitePillMetaText(suiteRow.suite) }}</small>
-                </span>
-                <span class="suite-pill-actions" @click.stop>
-                  <n-dropdown
-                    trigger="click"
-                    :options="getSuiteActionOptions(suiteRow.suite)"
-                    @select="key => handleSuiteAction(key, suiteRow.suite)"
-                  >
-                    <n-button quaternary circle size="small" class="suite-item-more" aria-label="业务域操作">
-                      <template #icon>
-                        <n-icon><EllipsisVertical /></n-icon>
-                      </template>
-                    </n-button>
-                  </n-dropdown>
-                </span>
-              </div>
-            </template>
-          </div>
-        </n-spin>
+                  <n-button quaternary circle size="small" class="suite-item-more" aria-label="业务域操作">
+                    <template #icon>
+                      <n-icon><EllipsisVertical /></n-icon>
+                    </template>
+                  </n-button>
+                </n-dropdown>
+              </span>
+            </div>
+          </template>
+        </div>
       </aside>
 
       <main class="workspace">
@@ -134,32 +132,30 @@
             </div>
           </div>
 
-          <n-spin :show="workspaceLoading && !bootstrapping">
-            <div v-if="bootstrapping" class="object-table-skeleton">
-              <div v-for="idx in 4" :key="idx" class="object-group-skeleton">
-                <n-skeleton height="40px" :sharp="false" />
-                <n-skeleton text :repeat="3" />
-              </div>
+          <div v-if="showWorkspaceSkeleton" class="object-table-skeleton">
+            <div v-for="idx in 4" :key="idx" class="object-group-skeleton">
+              <n-skeleton height="40px" :sharp="false" />
+              <n-skeleton text :repeat="3" />
             </div>
-            <BusinessObjectTable
-              v-else-if="pagedObjectGroups.length"
-              :groups="pagedObjectGroups"
-              :show-suite="!suiteCode"
-              @open-object="openObject"
-              @edit-object="openObjectEditor"
-              @design-object="openObjectDesigner"
-              @stats-object="openObjectStats"
-              @toggle-object="toggleObject"
-              @delete-object="deleteObject"
-              @open-app="openApp"
-              @code-app="openCodePanel"
-              @config-app="openEditor"
-              @toggle-app="toggleApp"
-              @delete-app="deleteApp"
-              @create-app="createAppForObject"
-            />
-            <n-empty v-else-if="!workspaceLoading" description="当前筛选下暂无业务对象或访问入口" />
-          </n-spin>
+          </div>
+          <BusinessObjectTable
+            v-else-if="pagedObjectGroups.length"
+            :groups="pagedObjectGroups"
+            :show-suite="!suiteCode"
+            @open-object="openObject"
+            @edit-object="openObjectEditor"
+            @design-object="openObjectDesigner"
+            @stats-object="openObjectStats"
+            @toggle-object="toggleObject"
+            @delete-object="deleteObject"
+            @open-app="openApp"
+            @code-app="openCodePanel"
+            @config-app="openEditor"
+            @toggle-app="toggleApp"
+            @delete-app="deleteApp"
+            @create-app="createAppForObject"
+          />
+          <n-empty v-else description="当前筛选下暂无业务对象或访问入口" />
 
           <div v-if="objectGroupTotal > groupPagination.pageSize" class="card-pagination">
             <n-pagination
@@ -321,6 +317,8 @@ const selectedSuiteCodes = computed(() => {
 const suiteObjectTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.objectCount || 0), 0))
 const suiteAppTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.appCount || 0), 0))
 const workspaceLoading = computed(() => loadingObjects.value || loadingApps.value || loadingRelations.value)
+const showSuiteSkeleton = computed(() => bootstrapping.value || loadingSuites.value)
+const showWorkspaceSkeleton = computed(() => bootstrapping.value || workspaceLoading.value)
 const appGroups = computed(() => {
   const groups = new Map()
   apps.value.forEach((app) => {
