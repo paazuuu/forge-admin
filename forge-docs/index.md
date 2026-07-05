@@ -10,14 +10,14 @@ hero:
     alt: Forge Admin Logo
   actions:
     - theme: brand
+      text: 快速入门
+      link: /guide/quick-start
+    - theme: alt
       text: 开发指南
       link: /guide/sdd-workflow
     - theme: alt
-      text: 前端文档
-      link: /frontend/components/overview
-    - theme: alt
-      text: 后端文档
-      link: /backend/modules/overview
+      text: 低代码应用管理
+      link: /guide/lowcode-app-management
     - theme: alt
       text: 🔗 在线演示
       link: http://www.dlforgelab.com:8084/forge/login
