@@ -21,7 +21,7 @@
           <section class="flow-card">
             <div class="flow-card-head">
               <div>
-                <h4>默认流程</h4>
+                <h4><span class="flow-step-index">1</span>选择流程模型</h4>
                 <p>手动按钮和触发器可以复用同一套流程绑定。</p>
               </div>
               <n-tag :type="form.flowModelKey ? 'success' : 'warning'" :bordered="false">
@@ -61,115 +61,213 @@
             </n-form>
           </section>
 
-          <section v-if="!codeApp" class="flow-card">
+          <section class="flow-card flow-field-binding-card">
             <div class="flow-card-head">
               <div>
-                <h4>业务记录绑定</h4>
-                <p>维护流程实例和业务记录的关联字段，状态回写按这里的字段执行。</p>
+                <h4>业务字段绑定</h4>
+                <p>业务字段会作为流程变量参与标题模板、条件分支和节点表达式，默认按字段编码同名传递。</p>
               </div>
-              <n-tag :type="businessBindingTagType" :bordered="false">
-                {{ businessBindingModeLabel }}
+              <n-tag :type="effectiveVariableMappingCount ? 'success' : 'warning'" :bordered="false">
+                {{ effectiveVariableMappingCount ? `${effectiveVariableMappingCount} 个绑定` : '未绑定' }}
               </n-tag>
             </div>
-            <n-form label-placement="top" size="small" :show-feedback="false">
-              <n-grid :cols="3" :x-gap="14" :y-gap="4" responsive="screen">
-                <n-form-item-gi label="接入方式">
-                  <n-select
-                    v-model:value="form.businessBinding.mode"
-                    :options="businessBindingModeOptions"
-                    @update:value="handleBusinessBindingModeChange"
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi label="业务表">
-                  <n-input
-                    v-model:value="form.businessBinding.tableName"
-                    :disabled="businessBindingReadonly"
-                    placeholder="发布后自动填充"
-                    @update:value="markDirty"
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi label="主键字段">
-                  <n-input
-                    v-model:value="form.businessBinding.primaryKeyField"
-                    :disabled="businessBindingReadonly"
-                    placeholder="id"
-                    @update:value="markDirty"
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi label="租户字段">
-                  <n-input
-                    v-model:value="form.businessBinding.tenantField"
-                    :disabled="businessBindingReadonly"
-                    placeholder="tenant_id"
-                    @update:value="markDirty"
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi label="流程状态字段">
-                  <n-select
-                    v-model:value="form.businessBinding.statusField"
-                    :options="fieldOptions"
-                    :disabled="businessBindingAdapterMode"
-                    clearable
-                    filterable
-                    tag
-                    placeholder="选择或输入状态字段"
-                    @update:value="markDirty"
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi label="标题字段">
-                  <n-select
-                    v-model:value="form.businessBinding.titleField"
-                    :options="fieldOptions"
-                    :disabled="businessBindingAdapterMode"
-                    clearable
-                    filterable
-                    tag
-                    placeholder="选择或输入标题字段"
-                    @update:value="markDirty"
-                  />
-                </n-form-item-gi>
-              </n-grid>
-            </n-form>
-            <n-alert
-              v-if="businessBindingMessage"
-              :type="businessBindingAdapterMode ? 'info' : 'warning'"
-              :bordered="false"
-              class="business-binding-alert"
-            >
-              {{ businessBindingMessage }}
+            <div class="field-binding-toolbar">
+              <span>选择流程模型后可按流程变量调整绑定；未配置时系统会自动按字段编码补齐。</span>
+              <n-space size="small">
+                <n-button size="tiny" secondary @click="resetVariableMappings">
+                  自动补齐
+                </n-button>
+                <n-button size="tiny" secondary @click="addVariableMapping">
+                  添加绑定
+                </n-button>
+              </n-space>
+            </div>
+            <div v-if="form.variableMapping.length" class="variable-mapping-list">
+              <div
+                v-for="(mapping, index) in form.variableMapping"
+                :key="mapping.clientKey"
+                class="variable-mapping-row"
+              >
+                <n-select
+                  v-model:value="mapping.formField"
+                  :options="fieldOptions"
+                  clearable
+                  filterable
+                  placeholder="业务字段"
+                  @update:value="value => updateVariableMappingField(mapping, value)"
+                />
+                <span>传给</span>
+                <n-select
+                  v-model:value="mapping.flowVariable"
+                  :options="flowVariableSelectOptions"
+                  clearable
+                  filterable
+                  tag
+                  placeholder="流程变量"
+                  @update:value="markDirty"
+                />
+                <n-button quaternary circle size="small" @click="removeVariableMapping(index)">
+                  ×
+                </n-button>
+              </div>
+            </div>
+            <n-empty v-else size="small" description="暂无字段绑定，点击自动补齐生成默认绑定" />
+          </section>
+
+          <n-collapse class="advanced-flow-collapse" arrow-placement="right">
+            <n-collapse-item name="business-binding">
+              <template #header>
+                <span class="advanced-flow-title">
+                  高级配置：业务记录绑定
+                  <n-tag size="small" :type="businessBindingTagType" :bordered="false">
+                    {{ businessBindingModeLabel }}
+                  </n-tag>
+                </span>
+              </template>
+
+              <template v-if="!codeApp">
+                <n-form label-placement="top" size="small" :show-feedback="false">
+                  <n-grid :cols="3" :x-gap="14" :y-gap="4" responsive="screen">
+                    <n-form-item-gi label="接入方式">
+                      <n-select
+                        v-model:value="form.businessBinding.mode"
+                        :options="businessBindingModeOptions"
+                        @update:value="handleBusinessBindingModeChange"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi label="业务表">
+                      <n-input
+                        v-model:value="form.businessBinding.tableName"
+                        :disabled="businessBindingReadonly"
+                        placeholder="发布后自动填充"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi label="主键字段">
+                      <n-input
+                        v-model:value="form.businessBinding.primaryKeyField"
+                        :disabled="businessBindingReadonly"
+                        placeholder="id"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi label="租户字段">
+                      <n-input
+                        v-model:value="form.businessBinding.tenantField"
+                        :disabled="businessBindingReadonly"
+                        placeholder="tenant_id"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi label="流程状态字段">
+                      <n-select
+                        v-model:value="form.businessBinding.statusField"
+                        :options="fieldOptions"
+                        :disabled="businessBindingAdapterMode"
+                        clearable
+                        filterable
+                        tag
+                        placeholder="选择或输入状态字段"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                    <n-form-item-gi label="标题字段">
+                      <n-select
+                        v-model:value="form.businessBinding.titleField"
+                        :options="fieldOptions"
+                        :disabled="businessBindingAdapterMode"
+                        clearable
+                        filterable
+                        tag
+                        placeholder="选择或输入标题字段"
+                        @update:value="markDirty"
+                      />
+                    </n-form-item-gi>
+                  </n-grid>
+                </n-form>
+                <n-alert
+                  v-if="businessBindingMessage"
+                  :type="businessBindingAdapterMode ? 'info' : 'warning'"
+                  :bordered="false"
+                  class="business-binding-alert"
+                >
+                  {{ businessBindingMessage }}
+                </n-alert>
+              </template>
+
+              <div v-else class="adapter-facts">
+                <div>
+                  <span>业务编码</span>
+                  <strong>{{ objectCode }}</strong>
+                </div>
+                <div>
+                  <span>主键字段</span>
+                  <strong>{{ form.businessBinding.primaryKeyField || 'id' }}</strong>
+                </div>
+                <div>
+                  <span>状态回写</span>
+                  <strong>业务代码处理</strong>
+                </div>
+              </div>
+            </n-collapse-item>
+          </n-collapse>
+
+          <section class="flow-card flow-step-card">
+            <div class="flow-card-head">
+              <div>
+                <h4><span class="flow-step-index">2</span>流程节点一览</h4>
+                <p>节点字段权限在真实流程设计器中维护，这里只提供状态预览和快捷入口。</p>
+              </div>
+              <n-tag :type="userTasks.length ? 'info' : 'default'" :bordered="false">
+                {{ userTasks.length ? `${userTasks.length} 个审批节点` : '未读取节点' }}
+              </n-tag>
+            </div>
+
+            <n-spin :show="variablesLoading || formAssetsLoading">
+              <div v-if="userTasks.length" class="flow-node-list">
+                <button
+                  v-for="task in userTasks"
+                  :key="task.taskDefKey"
+                  type="button"
+                  class="flow-node-row"
+                  :disabled="!selectedFlowModelId"
+                  @click="openFlowDesigner"
+                >
+                  <span>
+                    <strong>{{ task.taskName || task.taskDefKey }}</strong>
+                    <small>{{ task.taskDefKey }}</small>
+                  </span>
+                  <span>{{ taskAssigneeSummary(task) }}</span>
+                  <n-tag size="small" :type="taskPermissionType(task)" :bordered="false">
+                    {{ taskPermissionSummary(task) }}
+                  </n-tag>
+                </button>
+              </div>
+              <n-empty v-else size="small" description="选择流程模型后自动读取审批节点" />
+
+              <div class="flow-node-footer">
+                <span>{{ formAssets.length }} 个表单资产 · {{ fieldOptions.length }} 个业务字段</span>
+                <n-button
+                  type="primary"
+                  secondary
+                  size="small"
+                  :disabled="!selectedFlowModelId"
+                  @click.stop="openFlowDesigner"
+                >
+                  打开流程设计器
+                </n-button>
+              </div>
+            </n-spin>
+
+            <n-alert v-if="formAssetWarnings.length" type="warning" :bordered="false" class="node-form-warning">
+              {{ formAssetWarnings.join('；') }}
             </n-alert>
           </section>
 
-          <section v-else class="flow-card adapter-card">
+          <section class="flow-card flow-step-card">
             <div class="flow-card-head">
               <div>
-                <h4>业务记录绑定</h4>
-                <p>代码业务由业务模块读取、保存和回写状态，平台只保存流程实例与业务键的关联。</p>
-              </div>
-              <n-tag type="info" :bordered="false">
-                代码适配器
-              </n-tag>
-            </div>
-            <div class="adapter-facts">
-              <div>
-                <span>业务编码</span>
-                <strong>{{ objectCode }}</strong>
-              </div>
-              <div>
-                <span>主键字段</span>
-                <strong>{{ form.businessBinding.primaryKeyField || 'id' }}</strong>
-              </div>
-              <div>
-                <span>状态回写</span>
-                <strong>业务代码处理</strong>
-              </div>
-            </div>
-          </section>
-
-          <section class="flow-card">
-            <div class="flow-card-head">
-              <div>
-                <h4>流程结果动作</h4>
+                <h4><span class="flow-step-index">3</span>审批结果动作</h4>
                 <p>流程结束后按结果执行对象动作，动作步骤、事务和日志复用通用动作引擎。</p>
               </div>
               <n-tag :type="callbackActionCount ? 'success' : 'default'" :bordered="false">
@@ -196,105 +294,8 @@
               </n-grid>
             </n-form>
           </section>
-
-          <section class="flow-card flow-designer-entry-card">
-            <div class="flow-card-head">
-              <div>
-                <h4>流程节点配置</h4>
-                <p>审批办理、节点表单资产和字段权限在流程设计器节点抽屉中配置，运行时读取流程节点配置。</p>
-              </div>
-              <n-tag :type="userTasks.length ? 'info' : 'default'" :bordered="false">
-                {{ userTasks.length ? `${userTasks.length} 个节点` : '未读取节点' }}
-              </n-tag>
-            </div>
-
-            <n-spin :show="variablesLoading || formAssetsLoading">
-              <div class="flow-designer-entry">
-                <div
-                  class="flow-designer-entry-main"
-                  :class="{ disabled: !selectedFlowModelId }"
-                  role="button"
-                  tabindex="0"
-                  @click="openFlowDesigner"
-                  @keydown.enter.prevent="openFlowDesigner"
-                  @keydown.space.prevent="openFlowDesigner"
-                >
-                  <div class="flow-designer-entry-icon">
-                    <i class="i-material-symbols:account-tree-outline" />
-                  </div>
-                  <div>
-                    <strong>在流程设计器中配置节点</strong>
-                    <span>打开流程画布，选中审批节点，在节点抽屉的“表单权限”页签配置字段可见、可编辑和必填。</span>
-                  </div>
-                </div>
-                <n-button
-                  type="primary"
-                  secondary
-                  :disabled="!selectedFlowModelId"
-                  @click.stop="openFlowDesigner"
-                >
-                  打开流程设计器
-                </n-button>
-              </div>
-
-              <div class="flow-designer-facts">
-                <div>
-                  <span>当前流程</span>
-                  <strong>{{ form.flowModelName || form.flowModelKey || '-' }}</strong>
-                </div>
-                <div>
-                  <span>人工节点</span>
-                  <strong>{{ userTasks.length }} 个</strong>
-                </div>
-                <div>
-                  <span>业务字段目录</span>
-                  <strong>{{ formAssets.length }} 个资产 · {{ fieldOptions.length }} 字段</strong>
-                </div>
-              </div>
-            </n-spin>
-
-            <n-alert v-if="formAssetWarnings.length" type="warning" :bordered="false" class="node-form-warning">
-              {{ formAssetWarnings.join('；') }}
-            </n-alert>
-          </section>
         </n-spin>
       </main>
-
-      <aside class="flow-side">
-        <section>
-          <h4>运行摘要</h4>
-          <div class="flow-facts">
-            <div>
-              <span>流程模型</span>
-              <strong>{{ form.flowModelName || form.flowModelKey || '-' }}</strong>
-            </div>
-            <div>
-              <span>发起方式</span>
-              <strong>{{ startModeLabel }}</strong>
-            </div>
-            <div>
-              <span>业务字段</span>
-              <strong>{{ fieldOptions.length }} 项</strong>
-            </div>
-            <div>
-              <span>业务绑定</span>
-              <strong>{{ businessBindingSummary }}</strong>
-            </div>
-            <div>
-              <span>状态字段</span>
-              <strong>{{ form.businessBinding.statusField || '-' }}</strong>
-            </div>
-            <div>
-              <span>流程节点</span>
-              <strong>{{ userTasks.length }} 个</strong>
-            </div>
-            <div>
-              <span>回调动作</span>
-              <strong>{{ callbackActionCount }} 个</strong>
-            </div>
-          </div>
-        </section>
-      </aside>
     </div>
 
     <n-modal
@@ -414,9 +415,26 @@ const fieldOptions = computed(() => {
   flowFieldCandidates.value.forEach(append)
   return options
 })
+const flowVariableSelectOptions = computed(() => {
+  const options = []
+  const used = new Set()
+  const append = (label, value) => {
+    const code = normalizeText(value)
+    if (!code || used.has(code))
+      return
+    used.add(code)
+    options.push({
+      label: label || code,
+      value: code,
+    })
+  }
+  variableOptions.value.forEach(option => append(option.label, option.value))
+  fieldOptions.value.forEach(option => append(`${option.value}（同名业务字段）`, option.value))
+  form.variableMapping.forEach(mapping => append(mapping.flowVariable, mapping.flowVariable))
+  return options
+})
 const selectedFlowModel = computed(() => flowModelOptions.value.find(item => item.value === form.flowModelKey) || null)
 const selectedFlowModelId = computed(() => selectedFlowModel.value?.id || '')
-const startModeLabel = computed(() => startModeOptions.find(item => item.value === form.startMode)?.label || '-')
 const normalizedBusinessBindingMode = computed(() => normalizeBusinessBindingMode(form.businessBinding.mode))
 const businessBindingAdapterMode = computed(() => normalizedBusinessBindingMode.value === 'ADAPTER')
 const businessBindingReadonly = computed(() => normalizedBusinessBindingMode.value === 'LOWCODE_OBJECT' || businessBindingAdapterMode.value)
@@ -428,10 +446,6 @@ const businessBindingTagType = computed(() => {
     return 'success'
   return 'warning'
 })
-const businessBindingSummary = computed(() => {
-  const tableName = form.businessBinding.tableName || '-'
-  return `${businessBindingModeLabel.value} · ${tableName}`
-})
 const callbackResultOptions = [
   { label: '审批通过后', value: 'APPROVED' },
   { label: '审批驳回后', value: 'REJECTED' },
@@ -439,6 +453,7 @@ const callbackResultOptions = [
 ]
 const callbackActionOptions = computed(() => actionOptions.value)
 const callbackActionCount = computed(() => Object.values(form.options?.callbackActions || {}).filter(Boolean).length)
+const effectiveVariableMappingCount = computed(() => form.variableMapping.filter(item => item.formField && item.flowVariable).length)
 const businessBindingMessage = computed(() => {
   if (businessBindingAdapterMode.value)
     return '代码适配器接管状态回写和节点表单权限，平台不会直接更新业务表字段。'
@@ -571,7 +586,7 @@ function buildPayload() {
     flowModelName: form.flowModelName || selectedFlowName(),
     titleTemplate: form.titleTemplate || '',
     startMode: form.startMode || 'MANUAL',
-    variableMapping: buildAutomaticVariableMapping(),
+    variableMapping: buildVariableMappingPayload(),
     businessBinding: normalizeBusinessBinding(form.businessBinding),
     nodeForms: [],
     conditionFlows: form.conditionFlows || [],
@@ -610,12 +625,18 @@ async function applyBindingConfig(value = {}, assetCatalog = null) {
 }
 
 function normalizeMappings(list = []) {
-  return list.map(item => ({
-    clientKey: `mapping_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    formField: item.formField || item.field || null,
-    flowVariable: item.flowVariable || item.variable || '',
-    label: item.label || fieldLabel(item.formField || item.field),
-  }))
+  return list.map(createVariableMappingRow).filter(item => item.formField || item.flowVariable)
+}
+
+function createVariableMappingRow(item = {}) {
+  const formField = normalizeText(item.formField || item.field)
+  const flowVariable = normalizeText(item.flowVariable || item.variable) || formField
+  return {
+    clientKey: item.clientKey || `mapping_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    formField,
+    flowVariable,
+    label: item.label || fieldLabel(formField),
+  }
 }
 
 function createDefaultBinding() {
@@ -702,15 +723,46 @@ async function loadVariableCandidates() {
     })).filter(item => item.value)
     flowFieldCandidates.value = normalizeFlowFieldCandidates(data.fieldCandidates || [])
     userTasks.value = normalizeUserTasks(data.userTasks || [])
+    ensureVariableMappings()
   }
   catch (e) {
     flowFieldCandidates.value = []
     userTasks.value = []
+    ensureVariableMappings()
     message.warning(e.message || '流程变量候选项加载失败')
   }
   finally {
     variablesLoading.value = false
   }
+}
+
+function ensureVariableMappings() {
+  if (form.variableMapping.length || !fieldOptions.value.length)
+    return
+  form.variableMapping = normalizeMappings(buildAutomaticVariableMapping())
+}
+
+function addVariableMapping() {
+  form.variableMapping.push(createVariableMappingRow())
+  markDirty()
+}
+
+function removeVariableMapping(index) {
+  form.variableMapping.splice(index, 1)
+  markDirty()
+}
+
+function resetVariableMappings() {
+  form.variableMapping = normalizeMappings(buildAutomaticVariableMapping())
+  markDirty()
+}
+
+function updateVariableMappingField(mapping, value) {
+  mapping.formField = normalizeText(value)
+  if (!mapping.flowVariable)
+    mapping.flowVariable = mapping.formField
+  mapping.label = fieldLabel(mapping.formField)
+  markDirty()
 }
 
 function selectedFlowName() {
@@ -722,8 +774,50 @@ function normalizeUserTasks(list = []) {
     .map(item => ({
       taskDefKey: normalizeText(item.taskDefKey || item.id),
       taskName: normalizeText(item.taskName || item.name),
+      assignee: normalizeText(item.assignee || item.assigneeName),
+      candidateUsers: normalizeList(item.candidateUsers || item.userCandidates || item.users),
+      candidateGroups: normalizeList(item.candidateGroups || item.roleCandidates || item.groups),
     }))
     .filter(item => item.taskDefKey)
+}
+
+function taskAssigneeSummary(task = {}) {
+  if (task.assignee)
+    return `审批人：${task.assignee}`
+  if (task.candidateGroups?.length)
+    return `角色：${task.candidateGroups.join('、')}`
+  if (task.candidateUsers?.length)
+    return `用户：${task.candidateUsers.join('、')}`
+  return '审批人：流程设计器配置'
+}
+
+function taskPermissionSummary(task = {}) {
+  const config = nodeFormForTask(task)
+  if (!config)
+    return '待配置'
+  const total = fieldOptions.value.length
+  const configured = new Set([
+    ...config.visibleFields,
+    ...config.writableFields,
+    ...config.requiredFields,
+  ]).size
+  return configured ? `已配置 ${configured}/${total || configured} 字段` : '已配置'
+}
+
+function taskPermissionType(task = {}) {
+  return nodeFormForTask(task) ? 'success' : 'warning'
+}
+
+function nodeFormForTask(task = {}) {
+  const taskDefKey = normalizeText(task.taskDefKey)
+  return form.nodeForms.find(item => item.taskDefKey === taskDefKey) || null
+}
+
+function normalizeList(value = []) {
+  if (Array.isArray(value))
+    return value.map(item => normalizeText(item)).filter(Boolean)
+  const text = normalizeText(value)
+  return text ? [text] : []
 }
 
 function normalizeFlowFieldCandidates(list = []) {
@@ -887,6 +981,18 @@ function buildAutomaticVariableMapping() {
     .filter(Boolean)
 }
 
+function buildVariableMappingPayload() {
+  const mappings = normalizeMappings(form.variableMapping)
+  const rows = mappings.length ? mappings : normalizeMappings(buildAutomaticVariableMapping())
+  return rows
+    .map(row => ({
+      formField: row.formField,
+      flowVariable: row.flowVariable || row.formField,
+      label: row.label || fieldLabel(row.formField),
+    }))
+    .filter(row => row.formField && row.flowVariable)
+}
+
 function fieldCode(field = {}) {
   return field.fieldCode || field.field || field.code || ''
 }
@@ -954,8 +1060,7 @@ defineExpose({
 }
 
 .flow-head h3,
-.flow-card h4,
-.flow-side h4 {
+.flow-card h4 {
   margin: 0;
   color: #111827;
   font-size: 15px;
@@ -971,7 +1076,7 @@ defineExpose({
 
 .flow-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -983,14 +1088,15 @@ defineExpose({
 }
 
 .flow-card,
-.flow-side section {
+.advanced-flow-collapse {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
   padding: 14px;
 }
 
-.flow-card + .flow-card {
+.flow-card + .flow-card,
+.flow-card + .advanced-flow-collapse {
   margin-top: 12px;
 }
 
@@ -1002,21 +1108,59 @@ defineExpose({
   margin-bottom: 12px;
 }
 
-.mapping-list {
-  display: grid;
-  gap: 8px;
-}
-
-.variable-warning {
-  margin-top: 10px;
+.flow-step-index {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e0ecff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: -2px;
 }
 
 .business-binding-alert {
   margin-top: 10px;
 }
 
-.adapter-card {
-  background: #f8fbff;
+.field-binding-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.field-binding-toolbar > span {
+  min-width: 0;
+}
+
+.variable-mapping-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.variable-mapping-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 44px minmax(180px, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.variable-mapping-row > span {
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .adapter-facts {
@@ -1055,102 +1199,98 @@ defineExpose({
   margin-top: 10px;
 }
 
-.flow-designer-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  background: #f8fbff;
-  padding: 12px;
+.flow-node-list {
+  display: grid;
+  gap: 6px;
 }
 
-.flow-designer-entry-main {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  border-radius: 8px;
-  padding: 4px;
+.flow-node-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #fff;
+  padding: 9px 10px;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.flow-node-row:not(:disabled) {
   cursor: pointer;
+}
+
+.flow-node-row:not(:disabled):hover,
+.flow-node-row:not(:disabled):focus-visible {
+  border-color: #bfdbfe;
+  background: #f8fbff;
   outline: none;
 }
 
-.flow-designer-entry-main:hover,
-.flow-designer-entry-main:focus-visible {
-  background: #eff6ff;
-}
-
-.flow-designer-entry-main.disabled {
+.flow-node-row:disabled {
   cursor: not-allowed;
   opacity: 0.72;
 }
 
-.flow-designer-entry-main.disabled:hover,
-.flow-designer-entry-main.disabled:focus-visible {
-  background: transparent;
-}
-
-.flow-designer-entry-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: 8px;
-  background: #e0ecff;
-  color: #2563eb;
-  font-size: 18px;
-}
-
-.flow-designer-entry-main strong {
-  display: block;
-  color: #111827;
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.flow-designer-entry-main span {
-  display: block;
-  margin-top: 2px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.flow-designer-facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.flow-designer-facts div {
-  min-width: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  padding: 10px;
-}
-
-.flow-designer-facts span {
-  display: block;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.flow-designer-facts strong {
+.flow-node-row strong,
+.flow-node-row small {
   display: block;
   overflow: hidden;
-  margin-top: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-node-row strong {
   color: #111827;
   font-size: 13px;
   line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.flow-node-row small,
+.flow-node-row > span:nth-child(2) {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.flow-node-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.advanced-flow-collapse {
+  padding: 8px 14px 12px;
+}
+
+.advanced-flow-collapse :deep(.n-collapse-item__header) {
+  min-height: 44px;
+  padding: 10px 0;
+  align-items: center;
+}
+
+.advanced-flow-collapse :deep(.n-collapse-item__header-main) {
+  min-height: 28px;
+  align-items: center;
+  overflow: visible;
+}
+
+.advanced-flow-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-height: 28px;
+  color: #111827;
+  font-weight: 700;
+  line-height: 22px;
 }
 
 .flow-designer-modal-shell {
@@ -1173,74 +1313,31 @@ defineExpose({
   min-width: 0;
 }
 
-.mapping-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) 24px minmax(180px, 1fr) 32px;
-  gap: 8px;
-  align-items: center;
-}
-
-.mapping-row span,
-.flow-facts span {
-  color: #64748b;
-  font-size: 12px;
-  text-align: center;
-}
-
-.flow-side {
-  border-left: 1px solid #e5e7eb;
-  background: #fbfcfe;
-  padding: 12px;
-}
-
-.flow-facts {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.flow-facts div {
-  min-width: 0;
-  border-radius: 6px;
-  background: #f1f5f9;
-  padding: 10px;
-}
-
-.flow-facts strong {
-  display: block;
-  overflow: hidden;
-  margin-top: 4px;
-  color: #111827;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @media (max-width: 1100px) {
-  .flow-body {
-    grid-template-columns: 1fr;
-  }
-
-  .flow-side {
-    border-left: 0;
-    border-top: 1px solid #e5e7eb;
-  }
-
-  .mapping-row {
-    grid-template-columns: 1fr;
-  }
-
   .adapter-facts {
     grid-template-columns: 1fr;
   }
 
-  .flow-designer-entry {
+  .flow-node-row {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-node-footer {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .flow-designer-facts {
+  .field-binding-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .variable-mapping-row {
     grid-template-columns: 1fr;
+  }
+
+  .variable-mapping-row > span {
+    text-align: left;
   }
 }
 </style>

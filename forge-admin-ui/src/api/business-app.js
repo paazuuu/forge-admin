@@ -4,57 +4,62 @@ import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 
 const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
+const ENCRYPTED_REQUEST = { encrypt: true }
+
+function encryptedParams(params) {
+  return { params, encrypt: true }
+}
 
 export function businessSuitePage(params) {
-  return request.get('/ai/business/suite/page', { params })
+  return request.get('/ai/business/suite/page', encryptedParams(params))
 }
 
 export function businessSuiteList(params) {
-  return request.get('/ai/business/suite/list', { params })
+  return request.get('/ai/business/suite/list', encryptedParams(params))
 }
 
 export function businessSuiteSummary(params) {
-  return request.get('/ai/business/suite/summary', { params })
+  return request.get('/ai/business/suite/summary', encryptedParams(params))
 }
 
 export function businessSuiteDetail(id) {
-  return request.get(`/ai/business/suite/${id}`)
+  return request.get(`/ai/business/suite/${id}`, ENCRYPTED_REQUEST)
 }
 
 export function createBusinessSuite(data) {
-  return request.post('/ai/business/suite', data)
+  return request.post('/ai/business/suite', data, ENCRYPTED_REQUEST)
 }
 
 export function updateBusinessSuite(data) {
-  return request.put('/ai/business/suite', data)
+  return request.put('/ai/business/suite', data, ENCRYPTED_REQUEST)
 }
 
 export function updateBusinessSuiteStatus(id, status) {
-  return request.put(`/ai/business/suite/${id}/status`, null, { params: { status } })
+  return request.put(`/ai/business/suite/${id}/status`, null, encryptedParams({ status }))
 }
 
 export function deleteBusinessSuite(id) {
-  return request.delete(`/ai/business/suite/${id}`)
+  return request.delete(`/ai/business/suite/${id}`, ENCRYPTED_REQUEST)
 }
 
 export function syncLowcodeDomains() {
-  return request.post('/ai/business/suite/sync-lowcode-domains')
+  return request.post('/ai/business/suite/sync-lowcode-domains', null, ENCRYPTED_REQUEST)
 }
 
 export function businessObjectPage(params) {
-  return request.get('/ai/business/object/page', { params })
+  return request.get('/ai/business/object/page', encryptedParams(params))
 }
 
 export function businessObjectList(params) {
-  return request.get('/ai/business/object/list', { params })
+  return request.get('/ai/business/object/list', encryptedParams(params))
 }
 
 export function businessObjectDetail(id) {
-  return request.get(`/ai/business/object/${id}`)
+  return request.get(`/ai/business/object/${id}`, ENCRYPTED_REQUEST)
 }
 
 export function createBusinessObject(data) {
-  return request.post('/ai/business/object', data)
+  return request.post('/ai/business/object', data, ENCRYPTED_REQUEST)
 }
 
 export function genDatasourceEnabled(usageScope) {
@@ -68,63 +73,63 @@ export function genDatasourceTables(datasourceId) {
 }
 
 export function updateBusinessObject(data) {
-  return request.put('/ai/business/object', data)
+  return request.put('/ai/business/object', data, ENCRYPTED_REQUEST)
 }
 
 export function updateBusinessObjectStatus(id, status) {
-  return request.put(`/ai/business/object/${id}/status`, null, { params: { status } })
+  return request.put(`/ai/business/object/${id}/status`, null, encryptedParams({ status }))
 }
 
 export function deleteBusinessObject(id) {
-  return request.delete(`/ai/business/object/${id}`)
+  return request.delete(`/ai/business/object/${id}`, ENCRYPTED_REQUEST)
 }
 
 export function businessObjectRuntimeInfo(id) {
-  return request.get(`/ai/business/object/${id}/runtime-info`)
+  return request.get(`/ai/business/object/${id}/runtime-info`, ENCRYPTED_REQUEST)
 }
 
 export function businessObjectRelations(objectId) {
-  return request.get(`/ai/business/object/${objectId}/relations`)
+  return request.get(`/ai/business/object/${objectId}/relations`, ENCRYPTED_REQUEST)
 }
 
 export function saveBusinessObjectRelations(objectId, data) {
-  return request.post(`/ai/business/object/${objectId}/relations`, data)
+  return request.post(`/ai/business/object/${objectId}/relations`, data, ENCRYPTED_REQUEST)
 }
 
 export function syncLowcodeModels() {
-  return request.post('/ai/business/object/sync-lowcode-models')
+  return request.post('/ai/business/object/sync-lowcode-models', null, ENCRYPTED_REQUEST)
 }
 
 export function businessAppPage(params) {
-  return request.get('/ai/business/app/page', { params })
+  return request.get('/ai/business/app/page', encryptedParams(params))
 }
 
 export function businessAppList(params) {
-  return request.get('/ai/business/app/list', { params })
+  return request.get('/ai/business/app/list', encryptedParams(params))
 }
 
 export function businessAppDetail(id) {
-  return request.get(`/ai/business/app/${id}`)
+  return request.get(`/ai/business/app/${id}`, ENCRYPTED_REQUEST)
 }
 
 export function createBusinessApp(data) {
-  return request.post('/ai/business/app', data)
+  return request.post('/ai/business/app', data, ENCRYPTED_REQUEST)
 }
 
 export function updateBusinessApp(data) {
-  return request.put('/ai/business/app', data)
+  return request.put('/ai/business/app', data, ENCRYPTED_REQUEST)
 }
 
 export function updateBusinessAppStatus(id, status) {
-  return request.put(`/ai/business/app/${id}/status`, null, { params: { status } })
+  return request.put(`/ai/business/app/${id}/status`, null, encryptedParams({ status }))
 }
 
 export function deleteBusinessApp(id) {
-  return request.delete(`/ai/business/app/${id}`)
+  return request.delete(`/ai/business/app/${id}`, ENCRYPTED_REQUEST)
 }
 
 export function businessAppOpenInfo(id) {
-  return request.get(`/ai/business/app/${id}/open-info`)
+  return request.get(`/ai/business/app/${id}/open-info`, ENCRYPTED_REQUEST)
 }
 
 export function syncPublishedCrudConfigs() {
@@ -132,19 +137,19 @@ export function syncPublishedCrudConfigs() {
 }
 
 export function syncPublishedApps() {
-  return request.post('/ai/business/app/sync-published-apps')
+  return request.post('/ai/business/app/sync-published-apps', null, ENCRYPTED_REQUEST)
 }
 
 export function businessAppCodePreview(id, params) {
-  return request.get(`/ai/business/app/${id}/code/preview`, { params })
+  return request.get(`/ai/business/app/${id}/code/preview`, encryptedParams(params))
 }
 
 export function businessAppCodeOptions(id) {
-  return request.get(`/ai/business/app/${id}/code/options`)
+  return request.get(`/ai/business/app/${id}/code/options`, ENCRYPTED_REQUEST)
 }
 
 export function businessSaveAppCodeOptions(id, data) {
-  return request.put(`/ai/business/app/${id}/code/options`, data)
+  return request.put(`/ai/business/app/${id}/code/options`, data, ENCRYPTED_REQUEST)
 }
 
 export async function businessDownloadAppCode(id, params = {}) {

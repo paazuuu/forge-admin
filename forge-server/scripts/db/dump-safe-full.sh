@@ -25,14 +25,16 @@ usage() {
   cat <<'USAGE'
 Usage: dump-safe-full.sh [options]
 
-Exports one SQL file containing full DDL and safe INSERT data.
-DDL is always exported for all tables. Data is skipped for log/runtime tables
-and sensitive configuration tables by default.
+Exports one SQL file containing DDL and safe INSERT data.
+DDL and data are skipped for runtime/history tables that are rebuilt or not
+needed during normal restore, including act_* Flowable tables and *_version
+tables. Data is skipped for log/runtime tables and sensitive configuration
+tables by default.
 
 Options:
   --host HOST                    MySQL host, default 127.0.0.1
   --port PORT                    MySQL port, default 3306
-  --database DATABASE            Database name, default forge_admin
+  --database DATABASE            Database name, default forge_admin_new
   --user USER                    MySQL user, default root
   --password PASSWORD            MySQL password. Prefer MYSQL_PWD env in CI.
   --ssl-mode MODE                MySQL SSL mode, e.g. REQUIRED for secure connection
@@ -75,10 +77,6 @@ validate_identifier() {
 
 escape_sql_literal() {
   printf "%s" "$1" | sed "s/'/''/g"
-}
-
-escape_backtick() {
-  printf "%s" "$1" | sed 's/`/``/g'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -228,10 +226,7 @@ if [[ "$GZIP_OUTPUT" == "true" && "$OUTPUT" != *.gz ]]; then
   OUTPUT="${OUTPUT}.gz"
 fi
 
-full_ignore_tables=(
-  forge_schema_history
-)
-
+full_ignore_regex="^act_|(^|_)version$"
 log_regex="(^|_)log($|_)|(^|_)logs($|_)|_log$|^log_|_history$|^qrtz_(fired_triggers|scheduler_state|locks)$|^worker_node$|^sys_auth_online_user$|^ai_crud_export_task$|^ai_chat_(record|session)$|^ai_dashboard_generate_record$"
 sensitive_tables=(
   ai_business_message_channel
@@ -254,7 +249,7 @@ sensitive_tables=(
 
 where_parts=()
 if [[ "$INCLUDE_LOG_DATA" != "true" ]]; then
-  where_parts+=("(LOWER(table_name) NOT REGEXP '^act_' AND LOWER(table_name) REGEXP '$(escape_sql_literal "$log_regex")')")
+  where_parts+=("LOWER(table_name) REGEXP '$(escape_sql_literal "$log_regex")'")
 fi
 
 if [[ "$INCLUDE_SENSITIVE_DATA" != "true" ]]; then
@@ -322,18 +317,18 @@ fi
 echo "Checking MySQL connection for database $DATABASE ..."
 run_mysql "$DATABASE" --execute="SELECT 1" >/dev/null
 
-if ! IFS=$'\t' read -r db_charset db_collation < <(
-  run_mysql --execute="
-SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME
-FROM information_schema.SCHEMATA
-WHERE SCHEMA_NAME = '$(escape_sql_literal "$DATABASE")';"
-); then
-  die "Unable to read schema charset and collation for database $DATABASE."
-fi
+full_ignore_query="
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_type = 'BASE TABLE'
+  AND LOWER(table_name) REGEXP '$(escape_sql_literal "$full_ignore_regex")'
+ORDER BY table_name;"
 
-[[ -n "${db_charset:-}" && -n "${db_collation:-}" ]] || die "Database not found: $DATABASE"
-validate_identifier "$db_charset" "database character set"
-validate_identifier "$db_collation" "database collation"
+full_ignore_tables=()
+while IFS= read -r table; do
+  [[ -n "$table" ]] && full_ignore_tables+=("$table")
+done < <(run_mysql "$DATABASE" --execute="$full_ignore_query")
 
 full_ignore_opts=()
 if [[ ${#full_ignore_tables[@]} -gt 0 ]]; then
@@ -392,7 +387,6 @@ fi
 
 mkdir -p "$(dirname "$OUTPUT")"
 tmp_output="${OUTPUT%.gz}.tmp"
-db_name_escaped="$(escape_backtick "$DATABASE")"
 
 cleanup() {
   rm -f "$tmp_output"
@@ -424,9 +418,7 @@ trap cleanup EXIT
     done
   fi
   echo
-  echo "CREATE DATABASE IF NOT EXISTS \`$db_name_escaped\` DEFAULT CHARACTER SET $db_charset COLLATE $db_collation;"
-  echo "USE \`$db_name_escaped\`;"
-  echo
+  echo "-- Restore with: mysql <options> $DATABASE < this_file.sql"
   echo "SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;"
   echo "SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;"
   echo

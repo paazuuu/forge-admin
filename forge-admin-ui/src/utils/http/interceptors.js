@@ -155,6 +155,15 @@ export function setupInterceptors(axiosInstance) {
         // 清除过期密钥
         resetKeyExchange()
 
+        try {
+          const retryResult = await retryReadonlyCryptoRequest(response?.config, axiosInstance)
+          if (retryResult)
+            return retryResult
+        }
+        catch (retryError) {
+          return Promise.reject(retryError)
+        }
+
         // 提示用户
         const message = '安全会话已过期，请重新操作'
         window.$message?.error(message)
@@ -284,6 +293,35 @@ function createEncryptSessionError(config) {
   error.code = 'ENCRYPT_KEY_MISSING'
   error.config = config
   return error
+}
+
+function isReadonlyCryptoRequest(config = {}) {
+  const method = String(config.method || 'get').toLowerCase()
+  return ['get', 'head', 'options'].includes(method)
+}
+
+function shouldRetryReadonlyCryptoRequest(config = {}) {
+  return config
+    && !config.__cryptoRetry
+    && config.encrypt !== false
+    && isReadonlyCryptoRequest(config)
+    && shouldEncrypt(config.url || '')
+}
+
+async function retryReadonlyCryptoRequest(config, axiosInstance) {
+  if (!shouldRetryReadonlyCryptoRequest(config))
+    return null
+
+  const authStore = useAuthStore()
+  const exchanged = await initKeyExchange(axiosInstance, authStore.accessToken)
+  if (!exchanged || !getSessionKey())
+    return null
+
+  return axiosInstance({
+    ...config,
+    headers: { ...(config.headers || {}) },
+    __cryptoRetry: true,
+  })
 }
 
 async function ensureEncryptionSession(config, axiosInstance, authStore) {

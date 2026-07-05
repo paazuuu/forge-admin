@@ -23,6 +23,13 @@
       @update:value="value => emit('update:suiteCode', value)"
     />
     <DictSelect
+      :value="objectType"
+      class="filter-select"
+      dict-type="ai_business_object_type"
+      placeholder="对象类型"
+      @update:value="value => emit('update:objectType', value)"
+    />
+    <DictSelect
       :value="appType"
       class="filter-select"
       dict-type="ai_business_app_type"
@@ -56,6 +63,10 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  objectType: {
+    type: String,
+    default: null,
+  },
   suites: {
     type: Array,
     default: () => [],
@@ -70,6 +81,7 @@ const emit = defineEmits([
   'update:keyword',
   'update:suiteCode',
   'update:appType',
+  'update:objectType',
   'search',
   'refresh',
 ])

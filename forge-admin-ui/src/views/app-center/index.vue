@@ -1,23 +1,5 @@
 <template>
   <div class="app-center-page">
-    <header class="page-head">
-      <div class="page-title-block">
-        <h1>应用总览</h1>
-        <p>按业务域查看业务单元、访问入口和底座能力。</p>
-      </div>
-      <n-space class="head-actions" :wrap="true">
-        <BusinessTopNav active="appCenter" />
-        <n-dropdown trigger="click" :options="createOptions" @select="handleCreateSelect">
-          <n-button type="primary">
-            <template #icon>
-              <n-icon><AddOutline /></n-icon>
-            </template>
-            新建
-          </n-button>
-        </n-dropdown>
-      </n-space>
-    </header>
-
     <section class="app-center-layout">
       <aside class="suite-nav">
         <div class="suite-nav-head">
@@ -25,66 +7,28 @@
             <strong>业务域</strong>
             <span>{{ suites.length }} 个业务域</span>
           </div>
-          <div class="suite-nav-actions">
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button quaternary circle size="small" :disabled="!hasExpandableSuites" @click="expandAllSuites">
-                  <template #icon>
-                    <n-icon><ChevronDownOutline /></n-icon>
-                  </template>
-                </n-button>
-              </template>
-              展开全部
-            </n-tooltip>
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button quaternary circle size="small" :disabled="!hasExpandableSuites" @click="collapseAllSuites">
-                  <template #icon>
-                    <n-icon><ChevronForwardOutline /></n-icon>
-                  </template>
-                </n-button>
-              </template>
-              收起全部
-            </n-tooltip>
-            <n-tooltip trigger="hover">
-              <template #trigger>
-                <n-button quaternary circle size="small" @click="loadAll">
-                  <template #icon>
-                    <n-icon><RefreshOutline /></n-icon>
-                  </template>
-                </n-button>
-              </template>
-              刷新
-            </n-tooltip>
-          </div>
+          <n-button
+            class="suite-create-btn"
+            secondary
+            type="primary"
+            size="small"
+            @click="openSuiteEditor(null)"
+          >
+            <template #icon>
+              <n-icon><AddOutline /></n-icon>
+            </template>
+            新建业务域
+          </n-button>
         </div>
 
-        <n-input
-          v-model:value="suiteKeyword"
-          clearable
-          size="small"
-          class="suite-search"
-          placeholder="搜索业务域"
-        >
-          <template #prefix>
-            <n-icon><SearchOutline /></n-icon>
-          </template>
-        </n-input>
-
         <n-spin :show="loadingSuites && !bootstrapping">
-          <div class="suite-nav-list">
+          <div class="suite-pill-list">
             <template v-if="bootstrapping">
-              <div v-for="idx in 5" :key="idx" class="suite-skeleton-row">
-                <n-skeleton circle :width="38" :height="38" />
-                <div>
-                  <n-skeleton text :width="idx === 1 ? '62%' : '78%'" />
-                  <n-skeleton text :width="idx === 1 ? '82%' : '58%'" />
-                </div>
-              </div>
+              <n-skeleton v-for="idx in 6" :key="idx" height="32px" :sharp="false" />
             </template>
             <template v-else>
               <div
-                class="suite-nav-item"
+                class="suite-pill all-suite"
                 :class="{ active: !suiteCode }"
                 role="button"
                 tabindex="0"
@@ -92,26 +36,25 @@
                 @keydown.enter.prevent="selectSuite(null)"
                 @keydown.space.prevent="selectSuite(null)"
               >
-                <span class="suite-tree-control" />
-                <span class="suite-mark all">
+                <span class="suite-pill-icon all">
                   <n-icon><GridOutline /></n-icon>
                 </span>
-                <span class="suite-nav-copy">
+                <span class="suite-pill-copy">
                   <strong>全部业务域</strong>
-                  <small>{{ suiteObjectTotal }} 个业务单元 · {{ suiteAppTotal }} 个入口</small>
+                  <small>{{ suiteObjectTotal }} 对象 · {{ suiteAppTotal }} 入口</small>
                 </span>
               </div>
 
               <div
-                v-for="suiteRow in filteredSuiteRows"
-                :key="suiteRow.suite.id"
-                class="suite-nav-item"
+                v-for="suiteRow in suiteTreeRows"
+                :key="suiteRow.suite.id || suiteRow.suite.suiteCode"
+                class="suite-pill"
                 :class="{
                   'active': suiteCode === suiteRow.suite.suiteCode,
                   'child': suiteRow.level > 0,
                   'has-children': suiteRow.hasChildren,
                 }"
-                :style="{ '--suite-indent': `${suiteRow.level * 18}px` }"
+                :style="{ '--suite-indent': `${suiteRow.level * 16}px` }"
                 role="button"
                 tabindex="0"
                 @click="selectSuite(suiteRow.suite)"
@@ -122,26 +65,24 @@
                   v-if="suiteRow.hasChildren"
                   class="suite-tree-toggle"
                   type="button"
-                  :aria-label="isSuiteTreeExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
+                  :aria-label="isSuiteExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
                   @click.stop="toggleSuiteExpanded(suiteRow.suite)"
-                  @keydown.enter.stop.prevent="toggleSuiteExpanded(suiteRow.suite)"
-                  @keydown.space.stop.prevent="toggleSuiteExpanded(suiteRow.suite)"
                 >
                   <n-icon>
-                    <ChevronDownOutline v-if="isSuiteTreeExpanded(suiteRow.suite)" />
+                    <ChevronDownOutline v-if="isSuiteExpanded(suiteRow.suite)" />
                     <ChevronForwardOutline v-else />
                   </n-icon>
                 </button>
-                <span v-else class="suite-tree-control" />
-                <span class="suite-mark" :class="{ 'has-icon': suiteRow.suite.icon }">
-                  <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="22" />
+                <span v-else class="suite-tree-spacer" />
+                <span class="suite-pill-icon" :class="{ 'has-icon': suiteRow.suite.icon }">
+                  <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="18" />
                   <template v-else>{{ suiteInitial(suiteRow.suite) }}</template>
                 </span>
-                <span class="suite-nav-copy">
+                <span class="suite-pill-copy">
                   <strong>{{ suiteRow.suite.suiteName || suiteRow.suite.suiteCode }}</strong>
-                  <small>{{ suiteMetaText(suiteRow) }}</small>
+                  <small>{{ suitePillMetaText(suiteRow.suite) }}</small>
                 </span>
-                <div class="suite-item-actions" @click.stop>
+                <span class="suite-pill-actions" @click.stop>
                   <n-dropdown
                     trigger="click"
                     :options="getSuiteActionOptions(suiteRow.suite)"
@@ -153,53 +94,20 @@
                       </template>
                     </n-button>
                   </n-dropdown>
-                </div>
+                </span>
               </div>
-
-              <n-empty
-                v-if="suiteKeyword && !filteredSuiteRows.length && !loadingSuites"
-                size="small"
-                description="没有匹配的业务域"
-              />
             </template>
           </div>
         </n-spin>
       </aside>
 
       <main class="workspace">
-        <section class="workspace-head">
-          <div class="selected-suite-title">
-            <span class="suite-mark large" :class="{ 'has-icon': activeSuite?.icon }">
-              <IconRenderer v-if="activeSuite?.icon" :icon="activeSuite.icon" :size="24" />
-              <template v-else>{{ activeSuiteInitial }}</template>
-            </span>
-            <div>
-              <h2>{{ activeSuiteName }}</h2>
-              <p>{{ activeSuiteDescription }}</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="metric-grid">
-          <template v-if="bootstrapping">
-            <div v-for="idx in 4" :key="idx" class="metric-item metric-skeleton">
-              <n-skeleton text :width="idx % 2 ? '46%' : '58%'" />
-              <n-skeleton text :width="idx % 2 ? '34%' : '42%'" />
-            </div>
-          </template>
-          <template v-else>
-            <div v-for="metric in metrics" :key="metric.label" class="metric-item">
-              <span>{{ metric.label }}</span>
-              <strong>{{ metric.value }}</strong>
-            </div>
-          </template>
-        </section>
-
         <section class="workspace-toolbar">
           <AppFilterBar
             v-model:keyword="keyword"
             v-model:suite-code="suiteCode"
             v-model:app-type="appType"
+            v-model:object-type="objectType"
             :suites="suites"
             :show-suite="false"
             @search="loadWorkspace"
@@ -210,68 +118,64 @@
         <section class="workspace-content">
           <div class="content-head">
             <div>
-              <h3>业务单元与访问入口</h3>
-              <p>先按业务单元归集，再处理对应入口；独立入口会单独归类。</p>
+              <h3>业务对象分组</h3>
+              <p>按主对象归集明细、引用对象和访问入口。</p>
             </div>
-            <span>{{ businessUnitTotal }} 个业务单元</span>
+            <div class="content-head-actions">
+              <span>{{ objectGroupTotal }} 个分组</span>
+              <n-dropdown trigger="click" :options="createOptions" @select="handleCreateSelect">
+                <n-button type="primary" size="small">
+                  <template #icon>
+                    <n-icon><AddOutline /></n-icon>
+                  </template>
+                  新建
+                </n-button>
+              </n-dropdown>
+            </div>
           </div>
 
           <n-spin :show="workspaceLoading && !bootstrapping">
-            <div v-if="bootstrapping" class="unit-grid">
-              <div v-for="idx in 6" :key="idx" class="unit-skeleton-card">
-                <div class="unit-skeleton-head">
-                  <n-skeleton circle :width="34" :height="34" />
-                  <div>
-                    <n-skeleton text :width="idx % 2 ? '72%' : '58%'" />
-                    <n-skeleton text :width="idx % 2 ? '48%' : '64%'" />
-                  </div>
-                </div>
-                <n-skeleton text :repeat="2" />
-                <div class="unit-skeleton-actions">
-                  <n-skeleton text width="28%" />
-                  <n-skeleton text width="24%" />
-                  <n-skeleton text width="20%" />
-                </div>
+            <div v-if="bootstrapping" class="object-table-skeleton">
+              <div v-for="idx in 4" :key="idx" class="object-group-skeleton">
+                <n-skeleton height="40px" :sharp="false" />
+                <n-skeleton text :repeat="3" />
               </div>
             </div>
-            <div v-else-if="pagedBusinessUnits.length" class="unit-grid">
-              <BusinessUnitCard
-                v-for="unit in pagedBusinessUnits"
-                :key="unit.key"
-                :unit="unit"
-                :show-suite="!suiteCode"
-                @open-object="openObject"
-                @edit-object="openObjectEditor"
-                @design-object="openObjectDesigner"
-                @stats-object="openObjectStats"
-                @toggle-object="toggleObject"
-                @delete-object="deleteObject"
-                @open-app="openApp"
-                @code-app="openCodePanel"
-                @config-app="openEditor"
-                @toggle-app="toggleApp"
-                @delete-app="deleteApp"
-                @create-app="createAppForObject"
-              />
-            </div>
-            <n-empty v-else-if="!workspaceLoading" description="当前筛选下暂无业务单元或访问入口" />
+            <BusinessObjectTable
+              v-else-if="pagedObjectGroups.length"
+              :groups="pagedObjectGroups"
+              :show-suite="!suiteCode"
+              @open-object="openObject"
+              @edit-object="openObjectEditor"
+              @design-object="openObjectDesigner"
+              @stats-object="openObjectStats"
+              @toggle-object="toggleObject"
+              @delete-object="deleteObject"
+              @open-app="openApp"
+              @code-app="openCodePanel"
+              @config-app="openEditor"
+              @toggle-app="toggleApp"
+              @delete-app="deleteApp"
+              @create-app="createAppForObject"
+            />
+            <n-empty v-else-if="!workspaceLoading" description="当前筛选下暂无业务对象或访问入口" />
           </n-spin>
 
-          <div v-if="businessUnitTotal > unitPagination.pageSize" class="card-pagination">
+          <div v-if="objectGroupTotal > groupPagination.pageSize" class="card-pagination">
             <n-pagination
-              v-model:page="unitPagination.page"
-              v-model:page-size="unitPagination.pageSize"
-              :item-count="businessUnitTotal"
-              :page-sizes="unitPageSizeOptions"
+              v-model:page="groupPagination.page"
+              v-model:page-size="groupPagination.pageSize"
+              :item-count="objectGroupTotal"
+              :page-sizes="groupPageSizeOptions"
               show-size-picker
-              @update:page-size="handleUnitPageSizeChange"
+              @update:page-size="handleGroupPageSizeChange"
             />
           </div>
         </section>
       </main>
     </section>
 
-    <AppEditorDrawer
+    <AppEntryWizard
       v-model:show="editorVisible"
       :app="editingApp"
       :suites="suites"
@@ -299,17 +203,6 @@
       :suites="suites"
       @saved="handleSuiteSaved"
     />
-    <BusinessObjectDesignerPage
-      v-if="designerVisible"
-      :key="designerMountKey"
-      embedded
-      :embedded-object-code="designingObject?.objectCode || ''"
-      :embedded-object-id="designingObject?.id || null"
-      :embedded-suite-code="designingObject?.suiteCode || suiteCode || ''"
-      :initial-panel="designerPanel"
-      @saved="loadAll"
-      @close="closeObjectDesigner"
-    />
   </div>
 </template>
 
@@ -320,8 +213,6 @@ import {
   ChevronForwardOutline,
   EllipsisVertical,
   GridOutline,
-  RefreshOutline,
-  SearchOutline,
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
@@ -332,6 +223,7 @@ import {
   businessAppOpenInfo,
   businessObjectDetail,
   businessObjectList,
+  businessObjectRelations,
   businessSuiteSummary,
   deleteBusinessApp,
   deleteBusinessObject,
@@ -340,33 +232,33 @@ import {
   updateBusinessObjectStatus,
   updateBusinessSuiteStatus,
 } from '@/api/business-app'
-import BusinessTopNav from '@/components/business-top-nav/BusinessTopNav.vue'
 import IconRenderer from '@/components/IconRenderer.vue'
 import AppFilterBar from './components/AppFilterBar.vue'
-import BusinessUnitCard from './components/BusinessUnitCard.vue'
+import BusinessObjectTable from './components/BusinessObjectTable.vue'
 
 const AppCodePanel = defineAsyncComponent(() => import('./components/AppCodePanel.vue'))
-const AppEditorDrawer = defineAsyncComponent(() => import('./components/AppEditorDrawer.vue'))
+const AppEntryWizard = defineAsyncComponent(() => import('./components/AppEntryWizard.vue'))
 const BusinessObjectEditorDrawer = defineAsyncComponent(() => import('./components/BusinessObjectEditorDrawer.vue'))
 const BusinessObjectWizardDrawer = defineAsyncComponent(() => import('./components/BusinessObjectWizardDrawer.vue'))
 const SuiteEditorDrawer = defineAsyncComponent(() => import('./components/SuiteEditorDrawer.vue'))
-const BusinessObjectDesignerPage = defineAsyncComponent(() => import('./object-designer.[objectCode].vue'))
 
 const router = useRouter()
 const route = useRoute()
 const message = useMessage()
 
 const keyword = ref('')
-const suiteKeyword = ref('')
 const suiteCode = ref(null)
 const appType = ref(null)
+const objectType = ref(null)
 const suites = ref([])
 const collapsedSuiteIds = ref(new Set())
 const objects = ref([])
 const apps = ref([])
+const relationCache = ref(new Map())
 const loadingSuites = ref(false)
 const loadingObjects = ref(false)
 const loadingApps = ref(false)
+const loadingRelations = ref(false)
 const bootstrapping = ref(true)
 const editorVisible = ref(false)
 const editingApp = ref(null)
@@ -377,11 +269,8 @@ const objectEditorVisible = ref(false)
 const editingObject = ref(null)
 const suiteEditorVisible = ref(false)
 const editingSuite = ref(null)
-const designerVisible = ref(false)
-const designingObject = ref(null)
-const designerPanel = ref('form')
-const unitPageSizeOptions = [8, 16, 32, 48]
-const unitPagination = ref({
+const groupPageSizeOptions = [8, 16, 32, 48]
+const groupPagination = ref({
   page: 1,
   pageSize: 8,
 })
@@ -410,10 +299,10 @@ const suiteById = computed(() => {
   })
   return map
 })
+const sortedSuites = computed(() => [...suites.value].sort(compareSuites))
 const suiteChildrenMap = computed(() => {
   const map = new Map()
-  const sortedSuites = [...suites.value].sort(compareSuites)
-  sortedSuites.forEach((suite) => {
+  sortedSuites.value.forEach((suite) => {
     const parentKey = normalizeSuiteParentKey(suite)
     if (!map.has(parentKey))
       map.set(parentKey, [])
@@ -422,33 +311,6 @@ const suiteChildrenMap = computed(() => {
   return map
 })
 const suiteTreeRows = computed(() => flattenSuiteRows('__root__', 0, new Set()))
-const expandableSuiteIds = computed(() => suites.value
-  .filter((suite) => {
-    if (suite?.id == null)
-      return false
-    return (suiteChildrenMap.value.get(String(suite.id)) || []).length > 0
-  })
-  .map(suite => String(suite.id)))
-const hasExpandableSuites = computed(() => expandableSuiteIds.value.length > 0)
-const filteredSuiteRows = computed(() => {
-  const word = suiteKeyword.value.trim().toLowerCase()
-  if (!word)
-    return suiteTreeRows.value
-  const includedIds = new Set()
-  suites.value.forEach((suite) => {
-    if (!suiteMatchesKeyword(suite, word))
-      return
-    let cursor = suite
-    const visited = new Set()
-    while (cursor?.id != null && !visited.has(String(cursor.id))) {
-      const cursorId = String(cursor.id)
-      includedIds.add(cursorId)
-      visited.add(cursorId)
-      cursor = suiteById.value.get(String(cursor.parentId))
-    }
-  })
-  return suiteTreeRows.value.filter(row => includedIds.has(String(row.suite.id)))
-})
 const selectedSuiteCodes = computed(() => {
   if (!activeSuite.value)
     return suiteCode.value ? [suiteCode.value] : []
@@ -458,27 +320,7 @@ const selectedSuiteCodes = computed(() => {
 })
 const suiteObjectTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.objectCount || 0), 0))
 const suiteAppTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.appCount || 0), 0))
-const objectTotal = computed(() => objects.value.length)
-const appTotal = computed(() => apps.value.length)
-const enabledAppCount = computed(() => apps.value.filter(item => item.status === 1).length)
-const openableAppCount = computed(() => apps.value.filter(isAppOpenable).length)
-const workspaceLoading = computed(() => loadingObjects.value || loadingApps.value)
-const activeSuiteName = computed(() => activeSuite.value?.suiteName || activeSuite.value?.suiteCode || '全部业务域')
-const activeSuiteDescription = computed(() => {
-  if (activeSuite.value?.description)
-    return activeSuite.value.description
-  if (activeSuite.value)
-    return '查看当前业务域下的业务单元、入口和运行能力。'
-  return '跨业务域聚合业务单元和访问入口，适合快速定位可用应用。'
-})
-const activeSuiteInitial = computed(() => activeSuite.value ? suiteInitial(activeSuite.value) : '全')
-const designerMountKey = computed(() => `${designingObject.value?.objectCode || 'object'}_${designerPanel.value}`)
-const metrics = computed(() => [
-  { label: '业务单元', value: objectTotal.value },
-  { label: '访问入口', value: appTotal.value },
-  { label: '可直接打开', value: openableAppCount.value },
-  { label: '已启用入口', value: enabledAppCount.value },
-])
+const workspaceLoading = computed(() => loadingObjects.value || loadingApps.value || loadingRelations.value)
 const appGroups = computed(() => {
   const groups = new Map()
   apps.value.forEach((app) => {
@@ -491,32 +333,58 @@ const appGroups = computed(() => {
   })
   return groups
 })
-const businessUnits = computed(() => {
-  const units = new Map()
+const objectByKey = computed(() => {
+  const map = new Map()
   objects.value.forEach((object) => {
     const key = unitKey(object.suiteCode, object.objectCode)
-    if (!key)
-      return
-    units.set(key, {
-      key,
-      object,
-      apps: appGroups.value.get(key) || [],
-      synthetic: false,
-      standalone: false,
-    })
+    if (key)
+      map.set(key, object)
   })
+  return map
+})
+const objectGroups = computed(() => {
+  const groups = []
+  const groupedChildKeys = new Set()
+  const objectList = [...objects.value].sort(compareObjects)
+
+  objectList.forEach((object) => {
+    if (!isGroupLeaderObject(object))
+      return
+    const group = createObjectGroup(object, { standalone: false, synthetic: false })
+    const sourceRelations = relationCache.value.get(String(object.id)) || []
+    sourceRelations
+      .filter(relation => relationBelongsToSource(relation, object))
+      .forEach((relation) => {
+        const child = childFromRelation(relation, object)
+        if (!child)
+          return
+        group.children.push(child)
+        if (!child.synthetic && child.object?.objectCode) {
+          groupedChildKeys.add(unitKey(child.object.suiteCode, child.object.objectCode))
+        }
+      })
+    finalizeGroupStats(group)
+    groups.push(group)
+  })
+
+  objectList.forEach((object) => {
+    const key = unitKey(object.suiteCode, object.objectCode)
+    if (!key || groupedChildKeys.has(key) || groups.some(group => group.key === key))
+      return
+    const group = createObjectGroup(object, { standalone: false, synthetic: false })
+    finalizeGroupStats(group)
+    groups.push(group)
+  })
+
+  const objectKeys = new Set(objectList.map(object => unitKey(object.suiteCode, object.objectCode)).filter(Boolean))
   apps.value.forEach((app) => {
     const key = unitKey(app.suiteCode, app.objectCode)
     if (!key)
       return
-    if (!units.has(key)) {
-      units.set(key, {
-        key,
-        object: syntheticObjectFromApp(app),
-        apps: appGroups.value.get(key) || [],
-        synthetic: true,
-        standalone: false,
-      })
+    if (!objectKeys.has(key) && !groups.some(group => group.key === key)) {
+      const group = createObjectGroup(syntheticObjectFromApp(app), { standalone: false, synthetic: true })
+      finalizeGroupStats(group)
+      groups.push(group)
     }
   })
 
@@ -528,7 +396,7 @@ const businessUnits = computed(() => {
     if (!standaloneGroups.has(key)) {
       standaloneGroups.set(key, {
         key,
-        object: {
+        groupObject: {
           suiteCode: app.suiteCode,
           suiteName: app.suiteName,
           objectName: app.suiteName ? `${app.suiteName}独立入口` : '独立访问入口',
@@ -537,30 +405,36 @@ const businessUnits = computed(() => {
         apps: [],
         synthetic: true,
         standalone: true,
+        children: [],
       })
     }
     standaloneGroups.get(key).apps.push(app)
   })
 
-  return [...units.values(), ...standaloneGroups.values()]
-    .filter(unit => !appType.value || unit.apps.length > 0)
-    .sort(compareUnits)
+  standaloneGroups.forEach((group) => {
+    finalizeGroupStats(group)
+    groups.push(group)
+  })
+
+  return groups
+    .filter(group => !appType.value || group.entryCount > 0)
+    .sort(compareGroups)
 })
-const businessUnitTotal = computed(() => businessUnits.value.length)
-const pagedBusinessUnits = computed(() => {
-  const start = (unitPagination.value.page - 1) * unitPagination.value.pageSize
-  return businessUnits.value.slice(start, start + unitPagination.value.pageSize)
+const objectGroupTotal = computed(() => objectGroups.value.length)
+const pagedObjectGroups = computed(() => {
+  const start = (groupPagination.value.page - 1) * groupPagination.value.pageSize
+  return objectGroups.value.slice(start, start + groupPagination.value.pageSize)
 })
 
-watch([keyword, suiteCode, appType], () => {
-  unitPagination.value.page = 1
+watch([keyword, suiteCode, appType, objectType], () => {
+  groupPagination.value.page = 1
   loadWorkspace()
 })
 
-watch(businessUnitTotal, (total) => {
-  const maxPage = Math.max(1, Math.ceil(total / unitPagination.value.pageSize))
-  if (unitPagination.value.page > maxPage)
-    unitPagination.value.page = maxPage
+watch(objectGroupTotal, (total) => {
+  const maxPage = Math.max(1, Math.ceil(total / groupPagination.value.pageSize))
+  if (groupPagination.value.page > maxPage)
+    groupPagination.value.page = maxPage
 })
 
 watch(() => route.query.codeAppId, () => {
@@ -578,12 +452,14 @@ onMounted(async () => {
 })
 
 async function loadAll() {
+  relationCache.value = new Map()
   await loadSuites()
   await loadWorkspace()
 }
 
 async function loadWorkspace() {
   await Promise.all([loadObjects(), loadApps()])
+  await loadGroupRelations()
 }
 
 async function loadSuites() {
@@ -591,7 +467,6 @@ async function loadSuites() {
   try {
     const res = await businessSuiteSummary()
     suites.value = res.data || []
-    collapseAllSuites()
   }
   finally {
     loadingSuites.value = false
@@ -603,6 +478,7 @@ async function loadObjects() {
   try {
     const res = await businessObjectList({
       keyword: keyword.value,
+      objectType: objectType.value,
       ...workspaceSuiteParams(),
     })
     objects.value = res.data || []
@@ -624,6 +500,39 @@ async function loadApps() {
   }
   finally {
     loadingApps.value = false
+  }
+}
+
+async function loadGroupRelations() {
+  const candidates = objects.value.filter((object) => {
+    if (!object?.id || !isGroupLeaderObject(object))
+      return false
+    return Number(object.relationCount || 0) > 0
+  })
+  const missingCandidates = candidates.filter(object => !relationCache.value.has(String(object.id)))
+  if (!missingCandidates.length)
+    return
+
+  loadingRelations.value = true
+  try {
+    const nextCache = new Map(relationCache.value)
+    const results = await Promise.all(missingCandidates.map(async (object) => {
+      try {
+        const res = await businessObjectRelations(object.id)
+        return [String(object.id), res.data || []]
+      }
+      catch (error) {
+        console.error('加载业务对象关系失败:', error)
+        return [String(object.id), []]
+      }
+    }))
+    results.forEach(([objectId, relations]) => {
+      nextCache.set(objectId, relations)
+    })
+    relationCache.value = nextCache
+  }
+  finally {
+    loadingRelations.value = false
   }
 }
 
@@ -661,16 +570,13 @@ function flattenSuiteRows(parentKey, level, visited) {
     const nextVisited = new Set(visited)
     nextVisited.add(suiteKey)
     const hasChildren = (suiteChildrenMap.value.get(suiteKey) || []).length > 0
-    const childCount = countSuiteDescendants(suiteKey, nextVisited)
-    const forceExpanded = Boolean(suiteKeyword.value.trim())
-    const childRows = forceExpanded || isSuiteExpanded(suite)
+    const childRows = hasChildren && isSuiteExpanded(suite)
       ? flattenSuiteRows(suiteKey, level + 1, nextVisited)
       : []
     return [{
       suite,
       level,
       hasChildren,
-      childCount,
     }, ...childRows]
   })
 }
@@ -694,20 +600,6 @@ function isSuiteExpanded(suite) {
   return !collapsedSuiteIds.value.has(String(suite.id))
 }
 
-function isSuiteTreeExpanded(suite) {
-  if (suiteKeyword.value.trim())
-    return true
-  return isSuiteExpanded(suite)
-}
-
-function expandAllSuites() {
-  collapsedSuiteIds.value = new Set()
-}
-
-function collapseAllSuites() {
-  collapsedSuiteIds.value = new Set(expandableSuiteIds.value)
-}
-
 function toggleSuiteExpanded(suite) {
   if (!suite?.id)
     return
@@ -718,11 +610,6 @@ function toggleSuiteExpanded(suite) {
   else
     next.add(suiteId)
   collapsedSuiteIds.value = next
-}
-
-function suiteMatchesKeyword(suite, word) {
-  const name = `${suite?.suiteName || ''} ${suite?.suiteCode || ''} ${suite?.description || ''}`.toLowerCase()
-  return name.includes(word)
 }
 
 function collectSuiteCodes(suite, codes, visited) {
@@ -736,10 +623,10 @@ function collectSuiteCodes(suite, codes, visited) {
   ;(suiteChildrenMap.value.get(suiteKey) || []).forEach(child => collectSuiteCodes(child, codes, visited))
 }
 
-function suiteMetaText(suiteRow) {
-  const suite = suiteRow?.suite || {}
-  const childText = suiteRow?.childCount ? ` · ${suiteRow.childCount} 个子域` : ''
-  return `${suite.objectCount || 0} 个业务单元 · ${suite.appCount || 0} 个入口${childText}`
+function suitePillMetaText(suite) {
+  const childCount = suite?.id == null ? 0 : countSuiteDescendants(String(suite.id), new Set([String(suite.id)]))
+  const childText = childCount ? ` · ${childCount} 子域` : ''
+  return `${suite.objectCount || 0} 对象 · ${suite.appCount || 0} 入口${childText}`
 }
 
 function suiteInitial(suite) {
@@ -770,28 +657,99 @@ function syntheticObjectFromApp(app) {
   }
 }
 
-function compareUnits(a, b) {
+function isGroupLeaderObject(object) {
+  return ['MASTER', 'TRANSACTION'].includes(String(object?.objectType || '').toUpperCase())
+}
+
+function createObjectGroup(object, options = {}) {
+  const key = unitKey(object?.suiteCode, object?.objectCode) || `standalone:${object?.suiteCode || 'all'}`
+  return {
+    key,
+    groupObject: object,
+    children: [],
+    apps: appGroups.value.get(key) || [],
+    entryCount: 0,
+    synthetic: Boolean(options.synthetic),
+    standalone: Boolean(options.standalone),
+  }
+}
+
+function finalizeGroupStats(group) {
+  group.entryCount = (group.apps || []).length + (group.children || []).reduce((sum, child) => {
+    return sum + (child.apps || []).length
+  }, 0)
+  return group
+}
+
+function relationBelongsToSource(relation, object) {
+  const relationSuiteCode = relation?.suiteCode || object?.suiteCode
+  return relationSuiteCode === object?.suiteCode
+    && relation?.sourceObjectCode === object?.objectCode
+    && relation?.targetObjectCode
+}
+
+function childFromRelation(relation, sourceObject) {
+  const targetKey = unitKey(relation.suiteCode || sourceObject.suiteCode, relation.targetObjectCode)
+  if (!targetKey || targetKey === unitKey(sourceObject.suiteCode, sourceObject.objectCode))
+    return null
+  const targetObject = objectByKey.value.get(targetKey)
+  if (targetObject) {
+    if (!objectMatchesType(targetObject))
+      return null
+    return {
+      object: targetObject,
+      relation,
+      apps: appGroups.value.get(targetKey) || [],
+      synthetic: false,
+    }
+  }
+  const syntheticObject = syntheticObjectFromRelation(relation, sourceObject)
+  if (!objectMatchesType(syntheticObject))
+    return null
+  return {
+    object: syntheticObject,
+    relation,
+    apps: appGroups.value.get(targetKey) || [],
+    synthetic: true,
+  }
+}
+
+function syntheticObjectFromRelation(relation, sourceObject) {
+  return {
+    suiteCode: relation.suiteCode || sourceObject.suiteCode,
+    suiteName: sourceObject.suiteName,
+    objectCode: relation.targetObjectCode,
+    objectName: relation.targetObjectName || relation.targetObjectCode,
+    objectType: relation.relationType === 'REFERENCE' ? 'LOOKUP' : 'DETAIL',
+    description: relation.description || relation.relationName || '关系目标对象尚未进入当前筛选结果。',
+    status: relation.status,
+  }
+}
+
+function compareGroups(a, b) {
   if (a.standalone !== b.standalone)
     return a.standalone ? 1 : -1
+  return compareObjects(a.groupObject, b.groupObject)
+}
+
+function objectMatchesType(object) {
+  if (!objectType.value)
+    return true
+  return String(object?.objectType || '').toUpperCase() === String(objectType.value).toUpperCase()
+}
+
+function compareObjects(a, b) {
   if (!suiteCode.value) {
-    const suiteCompare = String(a.object?.suiteName || a.object?.suiteCode || '')
-      .localeCompare(String(b.object?.suiteName || b.object?.suiteCode || ''), 'zh-CN')
+    const suiteCompare = String(a?.suiteName || a?.suiteCode || '')
+      .localeCompare(String(b?.suiteName || b?.suiteCode || ''), 'zh-CN')
     if (suiteCompare !== 0)
       return suiteCompare
   }
-  const sortCompare = Number(a.object?.sortOrder || 0) - Number(b.object?.sortOrder || 0)
+  const sortCompare = Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0)
   if (sortCompare !== 0)
     return sortCompare
-  return String(a.object?.objectName || a.object?.objectCode || '')
-    .localeCompare(String(b.object?.objectName || b.object?.objectCode || ''), 'zh-CN')
-}
-
-function isAppOpenable(app) {
-  if (app.status !== 1)
-    return false
-  if (app.entryMode === 'RUNTIME')
-    return Boolean(app.configKey || app.entryUrl)
-  return Boolean(app.entryUrl)
+  return String(a?.objectName || a?.objectCode || '')
+    .localeCompare(String(b?.objectName || b?.objectCode || ''), 'zh-CN')
 }
 
 function selectSuite(suite) {
@@ -869,9 +827,9 @@ function openSuite(suite) {
   router.push(`/app-center/suite/${suite.suiteCode}`)
 }
 
-function handleUnitPageSizeChange(pageSize) {
-  unitPagination.value.pageSize = pageSize
-  unitPagination.value.page = 1
+function handleGroupPageSizeChange(pageSize) {
+  groupPagination.value.pageSize = pageSize
+  groupPagination.value.page = 1
 }
 
 function openObject(object) {
@@ -886,18 +844,16 @@ function openObject(object) {
 function openObjectDesigner(object, panel = 'form') {
   if (!object?.id || !object?.objectCode)
     return
-  designingObject.value = {
-    ...object,
-    suiteCode: object.suiteCode || suiteCode.value,
-  }
-  designerPanel.value = panel || 'form'
-  designerVisible.value = true
-}
-
-async function closeObjectDesigner() {
-  designerVisible.value = false
-  designingObject.value = null
-  await loadAll()
+  openRouteInNewTab({
+    name: 'BusinessObjectDesigner',
+    params: { objectCode: object.objectCode },
+    query: {
+      suiteCode: object.suiteCode || suiteCode.value || undefined,
+      objectId: object.id,
+      panel: panel || 'form',
+      returnTo: route.fullPath,
+    },
+  })
 }
 
 async function openEditor(app, object = null) {
@@ -1012,7 +968,18 @@ async function openApp(app) {
     message.info('接口类型入口用于登记能力，不跳转独立页面')
     return
   }
-  router.push(info.targetUrl)
+  openRouteInNewTab(info.targetUrl)
+}
+
+function openRouteInNewTab(location) {
+  if (!location)
+    return
+  if (typeof location === 'string' && /^https?:\/\//i.test(location)) {
+    window.open(location, '_blank', 'noopener,noreferrer')
+    return
+  }
+  const target = router.resolve(location)
+  window.open(target.href, '_blank', 'noopener,noreferrer')
 }
 
 function isCodeDownloadApp(app) {
@@ -1142,93 +1109,62 @@ function deleteApp(app) {
   padding: 12px;
 }
 
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  padding: 12px 14px;
-}
-
-.head-actions {
-  justify-content: flex-end;
-  max-width: 620px;
-}
-
-.page-title-block h1,
-.workspace-head h2,
 .content-head h3 {
   margin: 0;
-  color: #111827;
+  color: var(--n-text-color, #111827);
   font-weight: 700;
   letter-spacing: 0;
-}
-
-.page-title-block h1 {
-  font-size: 20px;
-  line-height: 26px;
-}
-
-.workspace-head h2 {
-  font-size: 18px;
 }
 
 .content-head h3 {
   font-size: 16px;
 }
 
-.page-title-block p,
-.workspace-head p,
 .content-head p {
   margin: 3px 0 0;
-  color: #6b7280;
+  color: var(--n-text-color-2, #6b7280);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .app-center-layout {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
 
 .suite-nav,
-.workspace-head,
-.metric-grid,
 .workspace-toolbar,
 .workspace-content {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--n-border-color, #e5e7eb);
   border-radius: 8px;
-  background: #fff;
+  background: var(--n-color, #fff);
 }
 
 .suite-nav {
   position: sticky;
   top: 12px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  max-height: calc(100vh - 116px);
-  overflow: auto;
+  width: 232px;
+  height: calc(100vh - 40px);
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
   padding: 10px;
 }
 
 .suite-nav-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: center;
+  gap: 8px;
+  align-items: flex-start;
+  flex: 0 0 auto;
 }
 
-.suite-nav-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  align-items: center;
+.suite-nav-head > div {
+  min-width: 0;
 }
 
 .suite-nav-head strong,
@@ -1237,94 +1173,183 @@ function deleteApp(app) {
 }
 
 .suite-nav-head strong {
-  color: #111827;
-  font-size: 15px;
+  color: var(--n-text-color, #111827);
+  font-size: 14px;
 }
 
 .suite-nav-head span {
   margin-top: 2px;
-  color: #6b7280;
+  color: var(--n-text-color-2, #6b7280);
   font-size: 12px;
 }
 
-.suite-search {
-  width: 100%;
+.suite-create-btn {
+  flex: 0 0 auto;
 }
 
-.suite-nav-list {
+.suite-nav :deep(.n-spin-container),
+.suite-nav :deep(.n-spin-content) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.suite-pill-list {
   display: grid;
+  flex: 1 1 auto;
+  align-content: start;
   gap: 4px;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
-.suite-nav-item {
+.suite-pill {
   position: relative;
   display: grid;
-  grid-template-columns: 22px 32px minmax(0, 1fr) 28px;
+  grid-template-columns: 18px 24px minmax(0, 1fr) 26px;
   gap: 7px;
   align-items: center;
-  width: 100%;
-  min-height: 48px;
+  min-height: 36px;
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: 7px;
-  background: #f9fafb;
-  padding: 6px 7px 6px calc(7px + var(--suite-indent, 0px));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--n-text-color, #111827);
+  padding: 4px 5px 4px calc(5px + var(--suite-indent, 0px));
   text-align: left;
   transition:
     background 160ms ease,
     border-color 160ms ease,
-    box-shadow 160ms ease;
+    color 160ms ease;
 }
 
-.suite-nav-item.child {
-  background: #fbfdff;
+.suite-pill.all-suite {
+  grid-template-columns: 24px minmax(0, 1fr);
+  padding-left: 5px;
 }
 
-.suite-nav-item.has-children {
-  background: #f8fafc;
-}
-
-.suite-nav-item.child::before {
+.suite-pill.child::before {
   position: absolute;
-  z-index: 0;
-  top: -5px;
-  bottom: -5px;
-  left: calc(17px + var(--suite-indent, 0px));
+  top: -4px;
+  bottom: -4px;
+  left: calc(14px + var(--suite-indent, 0px));
   width: 1px;
   background: #dbe4f0;
   content: '';
   pointer-events: none;
 }
 
-.suite-nav-item.child::after {
+.suite-pill.child::after {
   position: absolute;
-  z-index: 0;
-  top: 23px;
-  left: calc(17px + var(--suite-indent, 0px));
-  width: 12px;
+  top: 18px;
+  left: calc(14px + var(--suite-indent, 0px));
+  width: 10px;
   height: 1px;
   background: #dbe4f0;
   content: '';
   pointer-events: none;
 }
 
-.suite-nav-item:hover {
-  border-color: #cbd5e1;
-  background: #fff;
+.suite-pill:hover {
+  background: rgb(0 0 0 / 4%);
 }
 
-.suite-nav-item.active {
-  border-color: #2f6feb;
-  background: #f4f8ff;
-  box-shadow: inset 3px 0 0 #2f6feb;
+.suite-pill.active {
+  border-color: #18a058;
+  background: #18a058;
+  color: #fff;
 }
 
-.suite-item-actions {
+.suite-tree-toggle,
+.suite-tree-spacer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 18px;
+  height: 24px;
+  place-items: center;
+}
+
+.suite-tree-toggle {
+  cursor: pointer;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.suite-tree-toggle:hover {
+  background: rgb(0 0 0 / 7%);
+}
+
+.suite-pill.active .suite-tree-toggle:hover {
+  background: rgb(255 255 255 / 18%);
+}
+
+.suite-pill-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 5px;
+  background: #eef6ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.suite-pill-icon.all {
+  background: #ecfdf5;
+  color: #15803d;
+  font-size: 15px;
+}
+
+.suite-pill.active .suite-pill-icon {
+  background: rgb(255 255 255 / 18%);
+  color: #fff;
+}
+
+.suite-pill-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.suite-pill-copy strong,
+.suite-pill-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suite-pill-copy strong {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.suite-pill-copy small {
+  margin-top: 1px;
+  color: var(--n-text-color-3, #8a94a6);
+  font-size: 10px;
+}
+
+.suite-pill.active .suite-pill-copy small {
+  color: rgb(255 255 255 / 78%);
+}
+
+.suite-pill-actions {
   position: relative;
   z-index: 1;
   display: flex;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   align-items: center;
   justify-content: center;
   opacity: 0;
@@ -1332,100 +1357,14 @@ function deleteApp(app) {
   transition: opacity 160ms ease;
 }
 
-.suite-nav-item:hover .suite-item-actions,
-.suite-nav-item.active .suite-item-actions {
+.suite-pill:hover .suite-pill-actions,
+.suite-pill.active .suite-pill-actions {
   opacity: 1;
   pointer-events: auto;
 }
 
 .suite-item-more {
-  color: #64748b;
-}
-
-.suite-tree-control,
-.suite-tree-toggle {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-}
-
-.suite-tree-toggle {
-  cursor: pointer;
-  border: 1px solid #d7e0ec;
-  border-radius: 5px;
-  background: #fff;
-  color: #64748b;
-  padding: 0;
-  transition:
-    border-color 160ms ease,
-    color 160ms ease,
-    background 160ms ease;
-}
-
-.suite-tree-toggle:hover {
-  border-color: #2f6feb;
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.suite-mark {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 7px;
-  background: #eef2ff;
-  color: #3730a3;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.suite-mark.has-icon {
-  background: #f8fafc;
-  color: #2563eb;
-}
-
-.suite-mark.all {
-  background: #ecfdf5;
-  color: #15803d;
-  font-size: 18px;
-}
-
-.suite-mark.large {
-  width: 42px;
-  height: 42px;
-  font-size: 14px;
-}
-
-.suite-nav-copy {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-}
-
-.suite-nav-copy strong,
-.suite-nav-copy small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.suite-nav-copy strong {
-  color: #111827;
-  font-size: 13px;
-  line-height: 1.25;
-}
-
-.suite-nav-copy small {
-  margin-top: 2px;
-  color: #6b7280;
-  font-size: 11px;
+  color: inherit;
 }
 
 .workspace {
@@ -1434,75 +1373,8 @@ function deleteApp(app) {
   gap: 10px;
 }
 
-.workspace-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
-}
-
-.selected-suite-title {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-}
-
-.selected-suite-title h2,
-.selected-suite-title p {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.selected-suite-title h2 {
-  white-space: nowrap;
-}
-
-.selected-suite-title p {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 0;
-  overflow: hidden;
-}
-
-.metric-item {
-  min-width: 0;
-  min-height: 58px;
-  border-right: 1px solid #eef2f7;
-  padding: 10px 14px;
-}
-
-.metric-item:last-child {
-  border-right: 0;
-}
-
-.metric-item span,
-.metric-item strong {
-  display: block;
-}
-
-.metric-item span {
-  color: #6b7280;
-  font-size: 12px;
-}
-
-.metric-item strong {
-  margin-top: 4px;
-  color: #111827;
-  font-size: 20px;
-  line-height: 1.1;
-}
-
 .workspace-toolbar {
-  background: #fbfcfe;
+  background: var(--n-color, #fff);
   padding: 10px;
 }
 
@@ -1520,7 +1392,14 @@ function deleteApp(app) {
   align-items: flex-start;
 }
 
-.content-head span {
+.content-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.content-head-actions span {
   flex: 0 0 auto;
   border-radius: 4px;
   background: #eef6ff;
@@ -1535,62 +1414,18 @@ function deleteApp(app) {
   width: 100%;
 }
 
-.unit-grid {
+.object-table-skeleton {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 10px;
-  align-items: stretch;
 }
 
-.suite-skeleton-row {
+.object-group-skeleton {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
   gap: 9px;
-  align-items: center;
-  min-height: 56px;
-  border: 1px solid #eef2f7;
+  border: 1px solid var(--n-border-color, #eef2f7);
   border-radius: 8px;
-  background: #f9fafb;
-  padding: 8px;
-}
-
-.suite-skeleton-row > div:last-child,
-.unit-skeleton-head > div {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.metric-skeleton {
-  display: grid;
-  align-content: center;
-  gap: 6px;
-}
-
-.unit-skeleton-card {
-  display: grid;
-  gap: 10px;
-  min-height: 172px;
-  border: 1px solid #eef2f7;
-  border-radius: 8px;
-  background: #fff;
-  padding: 12px;
-}
-
-.unit-skeleton-head {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.unit-skeleton-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-top: auto;
-  padding-top: 6px;
-  border-top: 1px solid #f1f5f9;
+  background: var(--n-color, #fff);
+  padding: 10px;
 }
 
 .card-pagination {
@@ -1598,81 +1433,40 @@ function deleteApp(app) {
   justify-content: flex-end;
 }
 
-@media (max-width: 1180px) {
-  .app-center-layout {
-    grid-template-columns: 260px minmax(0, 1fr);
-  }
-
-  .unit-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 980px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .app-center-layout {
+    grid-template-columns: 208px minmax(0, 1fr);
   }
 
-  .metric-item:nth-child(2) {
-    border-right: 0;
-  }
-
-  .metric-item:nth-child(-n + 2) {
-    border-bottom: 1px solid #eef2f7;
+  .suite-nav {
+    width: 208px;
   }
 }
 
 @media (max-width: 860px) {
-  .page-head,
-  .workspace-head {
-    display: grid;
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  .head-actions {
-    justify-content: flex-start;
-    max-width: none;
-  }
-
   .app-center-layout {
     grid-template-columns: 1fr;
   }
 
   .suite-nav {
     position: static;
-    max-height: none;
-  }
-
-  .suite-nav-list {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    width: auto;
+    height: 260px;
+    max-height: 260px;
   }
 }
 
 @media (max-width: 560px) {
   .app-center-page {
-    padding: 12px;
+    padding: 10px;
   }
 
   .content-head {
     display: grid;
   }
 
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .metric-item,
-  .metric-item:nth-child(2) {
-    border-right: 0;
-  }
-
-  .metric-item:not(:last-child) {
-    border-bottom: 1px solid #eef2f7;
-  }
-
-  .unit-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .content-head-actions {
+    justify-content: space-between;
   }
 }
 </style>

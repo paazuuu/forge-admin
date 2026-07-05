@@ -12,9 +12,6 @@
         <n-button size="small" secondary @click="addRelation">
           新增关系
         </n-button>
-        <n-button size="small" secondary @click="addLinkageRule">
-          新增联动
-        </n-button>
         <n-button size="small" type="primary" :loading="saving" @click="saveRelations">
           保存配置
         </n-button>
@@ -36,7 +33,7 @@
               :key="relation.clientKey"
               type="button"
               class="relation-choice"
-              :class="{ active: activeRelation?.clientKey === relation.clientKey }"
+              :class="{ active: activePanel === 'relation' && activeRelation?.clientKey === relation.clientKey }"
               @click="selectRelation(relation.clientKey)"
             >
               <strong>{{ relation.relationName || relationLabel(relation) }}</strong>
@@ -46,450 +43,50 @@
           <n-empty v-else size="small" description="暂无关系" />
         </div>
 
+        <div class="rail-divider" />
+
         <div class="rail-block">
           <div class="rail-title">
-            <span>配置步骤</span>
+            <span>字段联动</span>
+            <n-button size="tiny" secondary @click="addLinkageRule">
+              新增
+            </n-button>
           </div>
-          <ol class="relation-step-list">
-            <li v-for="step in relationSteps" :key="step.key">
-              <button type="button" @click="scrollToRelationSection(step.key)">
-                <span class="step-index">{{ step.index }}</span>
-                <span>{{ step.label }}</span>
-              </button>
-            </li>
-          </ol>
+          <div v-if="localLinkage.rules.length" class="relation-choice-list">
+            <button
+              v-for="rule in localLinkage.rules"
+              :key="rule.ruleId"
+              type="button"
+              class="relation-choice linkage-choice"
+              :class="{ active: activePanel === 'linkage' && activeLinkageRuleId === rule.ruleId }"
+              @click="selectLinkageRule(rule.ruleId)"
+            >
+              <strong>{{ linkageRuleLabel(rule) }}</strong>
+              <span>{{ linkageRuleSentence(rule) }}</span>
+            </button>
+          </div>
+          <n-empty v-else size="small" description="暂无联动" />
         </div>
       </aside>
 
       <main class="relation-main-pane">
         <n-spin :show="loading">
-          <template v-if="activeRelation">
-            <section id="relation-section-basic" class="relation-config-card">
-              <header class="section-title-row">
-                <div>
-                  <strong>基础信息</strong>
-                  <span>{{ relationSentence(activeRelation) }}</span>
-                </div>
-                <n-space size="small">
-                  <n-tag size="small" :type="activeRelation.status === 0 ? 'default' : 'success'" :bordered="false">
-                    {{ activeRelation.status === 0 ? '停用' : '启用' }}
-                  </n-tag>
-                  <n-popconfirm @positive-click="removeActiveRelation">
-                    <template #trigger>
-                      <n-button quaternary circle size="small">
-                        <template #icon>
-                          <n-icon><TrashOutline /></n-icon>
-                        </template>
-                      </n-button>
-                    </template>
-                    确认移除该关系？
-                  </n-popconfirm>
-                </n-space>
-              </header>
-              <n-form label-placement="top" :show-feedback="false" size="small">
-                <n-grid :cols="2" :x-gap="16" :y-gap="6" responsive="screen">
-                  <n-form-item-gi label="关系名称">
-                    <n-input v-model:value="activeRelation.relationName" placeholder="例如：采购单-采购明细" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="关系类型">
-                    <n-select
-                      v-model:value="activeRelation.relationType"
-                      :options="relationTypeOptions"
-                      @update:value="value => updateRelationType(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="目标对象">
-                    <n-select
-                      v-model:value="activeRelation.targetObjectCode"
-                      :options="targetObjectOptions"
-                      filterable
-                      placeholder="选择目标对象"
-                      @update:value="value => updateTargetObject(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="启用状态">
-                    <n-switch
-                      :value="activeRelation.status !== 0"
-                      @update:value="value => updateStatus(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                </n-grid>
-              </n-form>
-            </section>
-
-            <section id="relation-section-match" class="relation-config-card">
-              <header class="section-title-row">
-                <div>
-                  <strong>匹配与回显</strong>
-                  <span>{{ activeRelation.sourceFieldCode || '未选择' }} → {{ activeRelation.targetFieldCode || inferredTargetField(activeRelation) }}</span>
-                </div>
-              </header>
-              <n-form label-placement="top" :show-feedback="false" size="small">
-                <n-grid :cols="3" :x-gap="16" :y-gap="6" responsive="screen">
-                  <n-form-item-gi :label="sourceFieldLabel(activeRelation)">
-                    <n-select
-                      v-model:value="activeRelation.sourceFieldCode"
-                      :options="sourceFieldOptions"
-                      clearable
-                      filterable
-                      :placeholder="sourceFieldPlaceholder(activeRelation)"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi :label="targetFieldLabel(activeRelation)">
-                    <n-select
-                      v-model:value="activeRelation.targetFieldCode"
-                      :options="targetFieldOptions(activeRelation)"
-                      :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
-                      clearable
-                      filterable
-                      :placeholder="targetFieldPlaceholder(activeRelation)"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi :label="displayFieldLabel(activeRelation)">
-                    <n-select
-                      v-model:value="activeRelation.displayField"
-                      :options="targetDisplayFieldOptions(activeRelation)"
-                      :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
-                      clearable
-                      filterable
-                      placeholder="选择运行态回显字段"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                </n-grid>
-              </n-form>
-            </section>
-
-            <section id="relation-section-inline" class="relation-config-card">
-              <header class="section-title-row">
-                <div>
-                  <strong>新增/编辑内嵌</strong>
-                  <span>控制这条关系是否出现在新增、编辑和详情区域。</span>
-                </div>
-              </header>
-              <n-form label-placement="top" :show-feedback="false" size="small">
-                <n-grid :cols="4" :x-gap="16" :y-gap="6" responsive="screen">
-                  <n-form-item-gi label="新增表单维护">
-                    <n-switch
-                      :value="activeRelation.inlineCreateEnabled === true"
-                      :disabled="!canInlineEdit(activeRelation)"
-                      @update:value="value => updateInlineCreate(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="编辑表单维护">
-                    <n-switch
-                      :value="activeRelation.inlineEditEnabled === true"
-                      :disabled="!canInlineEdit(activeRelation)"
-                      @update:value="value => updateInlineEdit(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="详情页展示">
-                    <n-switch
-                      :value="activeRelation.showInDetail !== false"
-                      @update:value="value => updateShowInDetail(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="子表保存模式">
-                    <n-select
-                      v-model:value="activeRelation.saveMode"
-                      :options="childSaveModeOptions"
-                      :disabled="!canInlineEdit(activeRelation)"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="详情页签">
-                    <n-input v-model:value="activeRelation.detailTabTitle" placeholder="例如：采购明细" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="排序">
-                    <n-input-number v-model:value="activeRelation.sortOrder" :min="0" style="width: 100%" @update:value="markDirty" />
-                  </n-form-item-gi>
-                </n-grid>
-              </n-form>
-            </section>
-
-            <section id="relation-section-selector" class="relation-config-card">
-              <header class="section-title-row">
-                <div>
-                  <strong>子表选择器</strong>
-                  <span>{{ activeRelation.selectorEnabled ? '已启用选择器按钮' : '未启用选择器按钮' }}</span>
-                </div>
-                <n-space size="small">
-                  <n-button v-if="activeRelation.selectorEnabled" size="tiny" secondary @click="applySelectorDefaults(activeRelation)">
-                    智能补齐
-                  </n-button>
-                  <n-switch
-                    :value="activeRelation.selectorEnabled === true"
-                    :disabled="!canInlineEdit(activeRelation)"
-                    @update:value="value => updateRelationSelectorEnabled(activeRelation, value)"
-                  />
-                </n-space>
-              </header>
-              <n-form v-if="activeRelation.selectorEnabled" label-placement="top" :show-feedback="false" size="small">
-                <n-grid :cols="3" :x-gap="16" :y-gap="6" responsive="screen">
-                  <n-form-item-gi label="候选对象">
-                    <n-select
-                      v-model:value="activeRelation.selectorObjectCode"
-                      :options="targetObjectOptions"
-                      clearable
-                      filterable
-                      placeholder="选择弹窗里查询的对象"
-                      @update:value="value => updateSelectorObject(activeRelation, value)"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="按钮文案">
-                    <n-input v-model:value="activeRelation.selectorButtonText" placeholder="选择记录" @update:value="markDirty" />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="选择器标题">
-                    <n-input v-model:value="activeRelation.selectorTitle" placeholder="可为空" @update:value="markDirty" />
-                  </n-form-item-gi>
-                </n-grid>
-              </n-form>
-              <n-empty v-else size="small" description="开启后可配置候选对象、弹窗字段和回填映射" />
-            </section>
-
-            <section id="relation-section-mapping" class="relation-config-card">
-              <header class="section-title-row">
-                <div>
-                  <strong>字段映射</strong>
-                  <span>选择器弹窗展示、搜索和选中后的写入规则。</span>
-                </div>
-                <n-button v-if="activeRelation.selectorEnabled" size="tiny" secondary @click="addSelectorMapping(activeRelation)">
-                  <template #icon>
-                    <n-icon><AddOutline /></n-icon>
-                  </template>
-                  添加映射
-                </n-button>
-              </header>
-              <template v-if="activeRelation.selectorEnabled">
-                <n-form label-placement="top" :show-feedback="false" size="small">
-                  <n-grid :cols="2" :x-gap="16" :y-gap="6" responsive="screen">
-                    <n-form-item-gi label="弹窗展示字段">
-                      <n-select
-                        v-model:value="activeRelation.selectorDisplayFields"
-                        :options="selectorCandidateFieldOptions(activeRelation)"
-                        :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
-                        multiple
-                        clearable
-                        filterable
-                        placeholder="选择用户在弹窗里看到的字段"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi label="关键词搜索字段">
-                      <n-select
-                        v-model:value="activeRelation.selectorKeywordFields"
-                        :options="selectorCandidateFieldOptions(activeRelation)"
-                        :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
-                        multiple
-                        clearable
-                        filterable
-                        placeholder="选择编号、名称等可搜索字段"
-                        @update:value="markDirty"
-                      />
-                    </n-form-item-gi>
-                  </n-grid>
-                </n-form>
-                <div v-if="activeRelation.selectorMappings.length" class="selector-mapping-list">
-                  <div class="selector-row-head">
-                    <span>候选对象字段</span>
-                    <span />
-                    <span>子表字段</span>
-                    <span />
-                  </div>
-                  <div v-for="(mapping, mappingIndex) in activeRelation.selectorMappings" :key="mapping.clientKey" class="selector-mapping-row">
-                    <n-select
-                      v-model:value="mapping.sourceField"
-                      :options="selectorCandidateFieldOptions(activeRelation, mapping.sourceField)"
-                      :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
-                      clearable
-                      filterable
-                      placeholder="候选字段"
-                      @update:value="markDirty"
-                    />
-                    <span class="selector-mapping-arrow">写入</span>
-                    <n-select
-                      v-model:value="mapping.targetField"
-                      :options="selectorTargetFieldOptions(activeRelation, mapping.targetField)"
-                      :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
-                      clearable
-                      filterable
-                      placeholder="子表字段"
-                      @update:value="markDirty"
-                    />
-                    <n-button quaternary circle size="small" @click="removeSelectorMapping(activeRelation, mappingIndex)">
-                      <template #icon>
-                        <n-icon><TrashOutline /></n-icon>
-                      </template>
-                    </n-button>
-                  </div>
-                </div>
-                <n-empty v-else size="small" description="还没有字段映射，点击添加映射" />
-
-                <div class="selector-filter-block">
-                  <div class="selector-filter-title">
-                    <strong>筛选候选记录</strong>
-                    <n-button size="tiny" secondary @click="addSelectorSearchParam(activeRelation)">
-                      <template #icon>
-                        <n-icon><AddOutline /></n-icon>
-                      </template>
-                      添加筛选
-                    </n-button>
-                  </div>
-                  <div v-if="activeRelation.selectorSearchParams.length" class="selector-filter-list">
-                    <div v-for="(param, paramIndex) in activeRelation.selectorSearchParams" :key="param.clientKey" class="selector-filter-row">
-                      <n-select
-                        v-model:value="param.paramKey"
-                        :options="selectorCandidateFieldOptions(activeRelation, param.paramKey)"
-                        :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
-                        clearable
-                        filterable
-                        placeholder="候选对象筛选字段"
-                        @update:value="markDirty"
-                      />
-                      <n-select
-                        v-model:value="param.sourceType"
-                        :options="selectorFilterSourceOptions"
-                        @update:value="value => updateSelectorSearchParamSource(param, value)"
-                      />
-                      <n-select
-                        v-if="param.sourceType !== 'static'"
-                        v-model:value="param.sourceField"
-                        :options="selectorContextFieldOptions(param)"
-                        clearable
-                        filterable
-                        placeholder="选择来源字段"
-                        @update:value="markDirty"
-                      />
-                      <n-input
-                        v-else
-                        v-model:value="param.staticValue"
-                        clearable
-                        placeholder="固定值"
-                        @update:value="markDirty"
-                      />
-                      <n-button quaternary circle size="small" @click="removeSelectorSearchParam(activeRelation, paramIndex)">
-                        <template #icon>
-                          <n-icon><TrashOutline /></n-icon>
-                        </template>
-                      </n-button>
-                    </div>
-                  </div>
-                  <n-empty v-else size="small" description="未设置筛选条件，弹窗展示全部候选记录" />
-                </div>
-              </template>
-              <n-empty v-else size="small" description="开启子表选择器后可维护字段映射" />
-            </section>
-
-            <section v-if="canInlineEdit(activeRelation)" id="relation-section-approval" class="relation-config-card">
-              <header class="section-title-row">
-                <div>
-                  <strong>审批后处理</strong>
-                  <span>{{ activeRelation.approvalQuantityEnabled ? '审批通过后按当前关系逐行同步数量' : '未启用审批后数量同步' }}</span>
-                </div>
-                <n-switch
-                  :value="activeRelation.approvalQuantityEnabled === true"
-                  @update:value="value => updateRelationApprovalQuantityEnabled(activeRelation, value)"
-                />
-              </header>
-              <n-form v-if="activeRelation.approvalQuantityEnabled" label-placement="top" :show-feedback="false" size="small">
-                <n-grid :cols="2" :x-gap="16" :y-gap="6" responsive="screen">
-                  <n-form-item-gi label="处理方式">
-                    <n-select
-                      v-model:value="activeRelation.approvalQuantityOperation"
-                      :options="approvalQuantityOperationOptions"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="归属字段（主表）">
-                    <n-select
-                      v-model:value="activeRelation.approvalQuantityAccountField"
-                      :options="sourceFieldOptions"
-                      clearable
-                      filterable
-                      placeholder="选择主表字段"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="对象字段（明细）">
-                    <n-select
-                      v-model:value="activeRelation.approvalQuantityItemField"
-                      :options="targetFieldOptions(activeRelation)"
-                      :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
-                      clearable
-                      filterable
-                      placeholder="选择明细字段"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="备用对象字段（明细）">
-                    <n-select
-                      v-model:value="activeRelation.approvalQuantityItemFallbackFields"
-                      :options="targetFieldOptions(activeRelation)"
-                      :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
-                      multiple
-                      clearable
-                      filterable
-                      placeholder="主对象字段为空时按顺序尝试"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="数量字段（明细）">
-                    <n-select
-                      v-model:value="activeRelation.approvalQuantityField"
-                      :options="targetFieldOptions(activeRelation)"
-                      :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
-                      clearable
-                      filterable
-                      placeholder="选择明细里的数量字段"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                  <n-form-item-gi label="备注">
-                    <n-input
-                      v-model:value="activeRelation.approvalQuantityRemark"
-                      placeholder="例如：审批通过后自动同步"
-                      @update:value="markDirty"
-                    />
-                  </n-form-item-gi>
-                </n-grid>
-              </n-form>
-            </section>
-          </template>
-          <n-empty v-else-if="!loading" class="relation-empty-state" description="暂无关系配置">
-            <template #extra>
-              <n-button size="small" type="primary" @click="addRelation">
-                新增关系
-              </n-button>
-            </template>
-          </n-empty>
-
-          <section id="relation-section-linkage" class="relation-config-card">
-            <header class="section-title-row">
-              <div>
-                <strong>字段联动</strong>
-                <span>维护表单字段之间的过滤和清空规则。</span>
-              </div>
-              <n-button size="tiny" secondary @click="addLinkageRule">
-                <template #icon>
-                  <n-icon><AddOutline /></n-icon>
-                </template>
-                新增联动
-              </n-button>
-            </header>
-            <div v-if="localLinkage.rules.length" class="relation-card-list">
-              <section v-for="(rule, index) in localLinkage.rules" :key="rule.ruleId" class="relation-card linkage-card">
-                <header class="relation-card-head">
+          <template v-if="activePanel === 'relation'">
+            <template v-if="activeRelation">
+              <section id="relation-section-basic" class="relation-config-card">
+                <header class="section-title-row">
                   <div>
-                    <strong>{{ linkageRuleLabel(rule) }}</strong>
-                    <p>{{ linkageRuleSentence(rule) }}</p>
+                    <strong>基础信息</strong>
+                    <span>{{ relationSentence(activeRelation) }}</span>
                   </div>
                   <n-space size="small">
-                    <n-tag size="small" :type="rule.enabled === false ? 'default' : 'success'" :bordered="false">
-                      {{ rule.enabled === false ? '停用' : '启用' }}
+                    <n-tag size="small" :type="relationMatchTagType(activeRelation)" :bordered="false">
+                      {{ relationMatchSummary(activeRelation) }}
                     </n-tag>
-                    <n-popconfirm @positive-click="removeLinkageRule(index)">
+                    <n-tag size="small" :type="activeRelation.status === 0 ? 'default' : 'success'" :bordered="false">
+                      {{ activeRelation.status === 0 ? '停用' : '启用' }}
+                    </n-tag>
+                    <n-popconfirm @positive-click="removeActiveRelation">
                       <template #trigger>
                         <n-button quaternary circle size="small">
                           <template #icon>
@@ -497,100 +94,540 @@
                           </template>
                         </n-button>
                       </template>
-                      确认移除该级联规则？
+                      确认移除该关系？
                     </n-popconfirm>
                   </n-space>
                 </header>
-
-                <n-form label-placement="top" :show-feedback="false" size="small" class="relation-form">
-                  <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
-                    <n-form-item-gi label="规则类型">
+                <n-form label-placement="top" :show-feedback="false" size="small">
+                  <n-grid :cols="2" :x-gap="16" :y-gap="6" responsive="screen">
+                    <n-form-item-gi label="关系名称">
+                      <n-input v-model:value="activeRelation.relationName" placeholder="例如：采购单-采购明细" @update:value="markDirty" />
+                    </n-form-item-gi>
+                    <n-form-item-gi label="关系类型">
                       <n-select
-                        v-model:value="rule.type"
-                        :options="linkageTypeOptions"
-                        @update:value="value => updateLinkageType(rule, value)"
+                        v-model:value="activeRelation.relationType"
+                        :options="relationTypeOptions"
+                        @update:value="value => updateRelationType(activeRelation, value)"
                       />
                     </n-form-item-gi>
-                    <n-form-item-gi label="上级字段">
+                    <n-form-item-gi label="目标对象">
                       <n-select
-                        v-model:value="rule.sourceField"
-                        :options="sourceFieldOptions"
-                        clearable
+                        v-model:value="activeRelation.targetObjectCode"
+                        :options="targetObjectOptions"
                         filterable
-                        placeholder="选择控制字段"
-                        @update:value="value => updateLinkageSource(rule, value)"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi label="目标字段">
-                      <n-select
-                        v-model:value="rule.targetField"
-                        :options="linkageTargetFieldOptions(rule)"
-                        clearable
-                        filterable
-                        placeholder="选择被过滤字段"
-                        @update:value="value => updateLinkageTarget(rule, value)"
-                      />
-                    </n-form-item-gi>
-
-                    <template v-if="rule.dataSourceType === 'dict'">
-                      <n-form-item-gi label="上级字典类型">
-                        <n-input v-model:value="rule.dictConfig.sourceDictType" placeholder="选择或填写字典类型" @update:value="markLinkageDirty" />
-                      </n-form-item-gi>
-                      <n-form-item-gi label="目标字典类型">
-                        <n-input v-model:value="rule.dictConfig.targetDictType" placeholder="选择或填写字典类型" @update:value="markLinkageDirty" />
-                      </n-form-item-gi>
-                      <n-form-item-gi v-if="rule.type === 'linkedDict'" label="关联字典类型">
-                        <n-input v-model:value="rule.dictConfig.linkedDictType" placeholder="选择或填写关联字典类型" @update:value="markLinkageDirty" />
-                      </n-form-item-gi>
-                    </template>
-
-                    <template v-else>
-                      <n-form-item-gi label="请求参数名">
-                        <n-input v-model:value="rule.remoteConfig.paramName" placeholder="例如：上级字段参数名" @update:value="markLinkageDirty" />
-                      </n-form-item-gi>
-                      <n-form-item-gi label="远程接口">
-                        <n-input v-model:value="rule.remoteConfig.url" placeholder="选择项接口地址" @update:value="markLinkageDirty" />
-                      </n-form-item-gi>
-                      <n-form-item-gi label="请求方式">
-                        <n-select v-model:value="rule.remoteConfig.method" :options="methodOptions" @update:value="markLinkageDirty" />
-                      </n-form-item-gi>
-                      <n-form-item-gi v-if="rule.type === 'objectReference'" label="目标对象">
-                        <n-select
-                          v-model:value="rule.objectConfig.targetObjectCode"
-                          :options="targetObjectOptions"
-                          clearable
-                          filterable
-                          placeholder="选择目标对象"
-                          @update:value="markLinkageDirty"
-                        />
-                      </n-form-item-gi>
-                    </template>
-
-                    <n-form-item-gi label="上级为空">
-                      <n-select
-                        v-model:value="rule.emptyStrategy"
-                        :options="emptyStrategyOptions"
-                        @update:value="markLinkageDirty"
-                      />
-                    </n-form-item-gi>
-                    <n-form-item-gi label="上级变化清空">
-                      <n-switch
-                        :value="rule.clearOnSourceChange !== false"
-                        @update:value="value => updateRuleClearOnChange(rule, value)"
+                        placeholder="选择目标对象"
+                        @update:value="value => updateTargetObject(activeRelation, value)"
                       />
                     </n-form-item-gi>
                     <n-form-item-gi label="启用状态">
                       <n-switch
-                        :value="rule.enabled !== false"
-                        @update:value="value => updateRuleEnabled(rule, value)"
+                        :value="activeRelation.status !== 0"
+                        @update:value="value => updateStatus(activeRelation, value)"
                       />
                     </n-form-item-gi>
                   </n-grid>
                 </n-form>
+
+                <div class="relation-match-box">
+                  <div class="relation-match-box-head">
+                    <strong>匹配字段</strong>
+                    <n-tag size="small" :type="relationMatchTagType(activeRelation)" :bordered="false">
+                      {{ relationMatchSummary(activeRelation) }}
+                    </n-tag>
+                  </div>
+                  <n-form label-placement="top" :show-feedback="false" size="small">
+                    <n-grid :cols="3" :x-gap="16" :y-gap="6" responsive="screen">
+                      <n-form-item-gi :label="sourceFieldLabel(activeRelation)">
+                        <n-select
+                          v-model:value="activeRelation.sourceFieldCode"
+                          :options="sourceFieldOptions"
+                          clearable
+                          filterable
+                          :placeholder="sourceFieldPlaceholder(activeRelation)"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi :label="targetFieldLabel(activeRelation)">
+                        <n-select
+                          v-model:value="activeRelation.targetFieldCode"
+                          :options="targetFieldOptions(activeRelation)"
+                          :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
+                          clearable
+                          filterable
+                          :placeholder="targetFieldPlaceholder(activeRelation)"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi :label="displayFieldLabel(activeRelation)">
+                        <n-select
+                          v-model:value="activeRelation.displayField"
+                          :options="targetDisplayFieldOptions(activeRelation)"
+                          :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
+                          clearable
+                          filterable
+                          placeholder="选择运行态回显字段"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                    </n-grid>
+                  </n-form>
+                </div>
               </section>
-            </div>
-            <n-empty v-else description="暂无级联规则" />
-          </section>
+
+              <n-collapse class="relation-advanced-collapse" arrow-placement="right">
+                <n-collapse-item name="inline">
+                  <template #header>
+                    <span class="advanced-relation-title">
+                      显示与内嵌
+                      <n-tag size="small" :type="inlineConfigTagType(activeRelation)" :bordered="false">
+                        {{ inlineConfigSummary(activeRelation) }}
+                      </n-tag>
+                    </span>
+                  </template>
+                  <p class="advanced-relation-hint">
+                    控制这条关系是否出现在新增、编辑和详情区域。
+                  </p>
+                  <n-form label-placement="top" :show-feedback="false" size="small">
+                    <n-grid :cols="4" :x-gap="16" :y-gap="6" responsive="screen">
+                      <n-form-item-gi label="新增表单维护">
+                        <n-switch
+                          :value="activeRelation.inlineCreateEnabled === true"
+                          :disabled="!canInlineEdit(activeRelation)"
+                          @update:value="value => updateInlineCreate(activeRelation, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="编辑表单维护">
+                        <n-switch
+                          :value="activeRelation.inlineEditEnabled === true"
+                          :disabled="!canInlineEdit(activeRelation)"
+                          @update:value="value => updateInlineEdit(activeRelation, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="详情页展示">
+                        <n-switch
+                          :value="activeRelation.showInDetail !== false"
+                          @update:value="value => updateShowInDetail(activeRelation, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="子表保存模式">
+                        <n-select
+                          v-model:value="activeRelation.saveMode"
+                          :options="childSaveModeOptions"
+                          :disabled="!canInlineEdit(activeRelation)"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="详情页签">
+                        <n-input v-model:value="activeRelation.detailTabTitle" placeholder="例如：采购明细" @update:value="markDirty" />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="排序">
+                        <n-input-number v-model:value="activeRelation.sortOrder" :min="0" style="width: 100%" @update:value="markDirty" />
+                      </n-form-item-gi>
+                    </n-grid>
+                  </n-form>
+                </n-collapse-item>
+
+                <n-collapse-item name="selector">
+                  <template #header>
+                    <span class="advanced-relation-title">
+                      子表选择器
+                      <n-tag size="small" :type="selectorConfigTagType(activeRelation)" :bordered="false">
+                        {{ selectorConfigSummary(activeRelation) }}
+                      </n-tag>
+                    </span>
+                  </template>
+                  <div class="selector-toggle-row">
+                    <span>{{ activeRelation.selectorEnabled ? '已启用选择器按钮' : '开启后可从候选对象批量选择记录' }}</span>
+                    <n-space size="small">
+                      <n-button v-if="activeRelation.selectorEnabled" size="tiny" secondary @click="applySelectorDefaults(activeRelation)">
+                        智能补齐
+                      </n-button>
+                      <n-switch
+                        :value="activeRelation.selectorEnabled === true"
+                        :disabled="!canInlineEdit(activeRelation)"
+                        @update:value="value => updateRelationSelectorEnabled(activeRelation, value)"
+                      />
+                    </n-space>
+                  </div>
+                  <n-form v-if="activeRelation.selectorEnabled" label-placement="top" :show-feedback="false" size="small">
+                    <n-grid :cols="3" :x-gap="16" :y-gap="6" responsive="screen">
+                      <n-form-item-gi label="候选对象">
+                        <n-select
+                          v-model:value="activeRelation.selectorObjectCode"
+                          :options="targetObjectOptions"
+                          clearable
+                          filterable
+                          placeholder="选择弹窗里查询的对象"
+                          @update:value="value => updateSelectorObject(activeRelation, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="按钮文案">
+                        <n-input v-model:value="activeRelation.selectorButtonText" placeholder="选择记录" @update:value="markDirty" />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="选择器标题">
+                        <n-input v-model:value="activeRelation.selectorTitle" placeholder="可为空" @update:value="markDirty" />
+                      </n-form-item-gi>
+                    </n-grid>
+                  </n-form>
+                  <n-empty v-else size="small" description="开启后可配置候选对象、弹窗字段和回填映射" />
+                </n-collapse-item>
+
+                <n-collapse-item name="mapping">
+                  <template #header>
+                    <span class="advanced-relation-title">
+                      字段映射
+                      <n-tag size="small" :type="mappingConfigTagType(activeRelation)" :bordered="false">
+                        {{ mappingConfigSummary(activeRelation) }}
+                      </n-tag>
+                    </span>
+                  </template>
+                  <div class="selector-toggle-row">
+                    <span>选择器弹窗展示、搜索和选中后的写入规则。</span>
+                    <n-button v-if="activeRelation.selectorEnabled" size="tiny" secondary @click="addSelectorMapping(activeRelation)">
+                      <template #icon>
+                        <n-icon><AddOutline /></n-icon>
+                      </template>
+                      添加映射
+                    </n-button>
+                  </div>
+                  <template v-if="activeRelation.selectorEnabled">
+                    <n-form label-placement="top" :show-feedback="false" size="small">
+                      <n-grid :cols="2" :x-gap="16" :y-gap="6" responsive="screen">
+                        <n-form-item-gi label="弹窗展示字段">
+                          <n-select
+                            v-model:value="activeRelation.selectorDisplayFields"
+                            :options="selectorCandidateFieldOptions(activeRelation)"
+                            :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
+                            multiple
+                            clearable
+                            filterable
+                            placeholder="选择用户在弹窗里看到的字段"
+                            @update:value="markDirty"
+                          />
+                        </n-form-item-gi>
+                        <n-form-item-gi label="关键词搜索字段">
+                          <n-select
+                            v-model:value="activeRelation.selectorKeywordFields"
+                            :options="selectorCandidateFieldOptions(activeRelation)"
+                            :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
+                            multiple
+                            clearable
+                            filterable
+                            placeholder="选择编号、名称等可搜索字段"
+                            @update:value="markDirty"
+                          />
+                        </n-form-item-gi>
+                      </n-grid>
+                    </n-form>
+                    <div v-if="activeRelation.selectorMappings.length" class="selector-mapping-list">
+                      <div class="selector-row-head">
+                        <span>候选对象字段</span>
+                        <span />
+                        <span>子表字段</span>
+                        <span />
+                      </div>
+                      <div v-for="(mapping, mappingIndex) in activeRelation.selectorMappings" :key="mapping.clientKey" class="selector-mapping-row">
+                        <n-select
+                          v-model:value="mapping.sourceField"
+                          :options="selectorCandidateFieldOptions(activeRelation, mapping.sourceField)"
+                          :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
+                          clearable
+                          filterable
+                          placeholder="候选字段"
+                          @update:value="markDirty"
+                        />
+                        <span class="selector-mapping-arrow">写入</span>
+                        <n-select
+                          v-model:value="mapping.targetField"
+                          :options="selectorTargetFieldOptions(activeRelation, mapping.targetField)"
+                          :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
+                          clearable
+                          filterable
+                          placeholder="子表字段"
+                          @update:value="markDirty"
+                        />
+                        <n-button quaternary circle size="small" @click="removeSelectorMapping(activeRelation, mappingIndex)">
+                          <template #icon>
+                            <n-icon><TrashOutline /></n-icon>
+                          </template>
+                        </n-button>
+                      </div>
+                    </div>
+                    <n-empty v-else size="small" description="还没有字段映射，点击添加映射" />
+
+                    <div class="selector-filter-block">
+                      <div class="selector-filter-title">
+                        <strong>筛选候选记录</strong>
+                        <n-button size="tiny" secondary @click="addSelectorSearchParam(activeRelation)">
+                          <template #icon>
+                            <n-icon><AddOutline /></n-icon>
+                          </template>
+                          添加筛选
+                        </n-button>
+                      </div>
+                      <div v-if="activeRelation.selectorSearchParams.length" class="selector-filter-list">
+                        <div v-for="(param, paramIndex) in activeRelation.selectorSearchParams" :key="param.clientKey" class="selector-filter-row">
+                          <n-select
+                            v-model:value="param.paramKey"
+                            :options="selectorCandidateFieldOptions(activeRelation, param.paramKey)"
+                            :loading="targetFieldLoadingMap[selectorCandidateObjectCode(activeRelation)]"
+                            clearable
+                            filterable
+                            placeholder="候选对象筛选字段"
+                            @update:value="markDirty"
+                          />
+                          <n-select
+                            v-model:value="param.sourceType"
+                            :options="selectorFilterSourceOptions"
+                            @update:value="value => updateSelectorSearchParamSource(param, value)"
+                          />
+                          <n-select
+                            v-if="param.sourceType !== 'static'"
+                            v-model:value="param.sourceField"
+                            :options="selectorContextFieldOptions(param)"
+                            clearable
+                            filterable
+                            placeholder="选择来源字段"
+                            @update:value="markDirty"
+                          />
+                          <n-input
+                            v-else
+                            v-model:value="param.staticValue"
+                            clearable
+                            placeholder="固定值"
+                            @update:value="markDirty"
+                          />
+                          <n-button quaternary circle size="small" @click="removeSelectorSearchParam(activeRelation, paramIndex)">
+                            <template #icon>
+                              <n-icon><TrashOutline /></n-icon>
+                            </template>
+                          </n-button>
+                        </div>
+                      </div>
+                      <n-empty v-else size="small" description="未设置筛选条件，弹窗展示全部候选记录" />
+                    </div>
+                  </template>
+                  <n-empty v-else size="small" description="开启子表选择器后可维护字段映射" />
+                </n-collapse-item>
+
+                <n-collapse-item v-if="canInlineEdit(activeRelation)" name="approval">
+                  <template #header>
+                    <span class="advanced-relation-title">
+                      审批后处理
+                      <n-tag size="small" :type="approvalConfigTagType(activeRelation)" :bordered="false">
+                        {{ approvalConfigSummary(activeRelation) }}
+                      </n-tag>
+                    </span>
+                  </template>
+                  <div class="selector-toggle-row">
+                    <span>{{ activeRelation.approvalQuantityEnabled ? '审批通过后按当前关系逐行同步数量' : '未启用审批后数量同步' }}</span>
+                    <n-switch
+                      :value="activeRelation.approvalQuantityEnabled === true"
+                      @update:value="value => updateRelationApprovalQuantityEnabled(activeRelation, value)"
+                    />
+                  </div>
+                  <n-form v-if="activeRelation.approvalQuantityEnabled" label-placement="top" :show-feedback="false" size="small">
+                    <n-grid :cols="2" :x-gap="16" :y-gap="6" responsive="screen">
+                      <n-form-item-gi label="处理方式">
+                        <n-select
+                          v-model:value="activeRelation.approvalQuantityOperation"
+                          :options="approvalQuantityOperationOptions"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="归属字段（主表）">
+                        <n-select
+                          v-model:value="activeRelation.approvalQuantityAccountField"
+                          :options="sourceFieldOptions"
+                          clearable
+                          filterable
+                          placeholder="选择主表字段"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="对象字段（明细）">
+                        <n-select
+                          v-model:value="activeRelation.approvalQuantityItemField"
+                          :options="targetFieldOptions(activeRelation)"
+                          :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
+                          clearable
+                          filterable
+                          placeholder="选择明细字段"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="备用对象字段（明细）">
+                        <n-select
+                          v-model:value="activeRelation.approvalQuantityItemFallbackFields"
+                          :options="targetFieldOptions(activeRelation)"
+                          :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
+                          multiple
+                          clearable
+                          filterable
+                          placeholder="主对象字段为空时按顺序尝试"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="数量字段（明细）">
+                        <n-select
+                          v-model:value="activeRelation.approvalQuantityField"
+                          :options="targetFieldOptions(activeRelation)"
+                          :loading="targetFieldLoadingMap[activeRelation.targetObjectCode]"
+                          clearable
+                          filterable
+                          placeholder="选择明细里的数量字段"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="备注">
+                        <n-input
+                          v-model:value="activeRelation.approvalQuantityRemark"
+                          placeholder="例如：审批通过后自动同步"
+                          @update:value="markDirty"
+                        />
+                      </n-form-item-gi>
+                    </n-grid>
+                  </n-form>
+                </n-collapse-item>
+              </n-collapse>
+            </template>
+            <n-empty v-else-if="!loading" class="relation-empty-state" description="暂无关系配置">
+              <template #extra>
+                <n-button size="small" type="primary" @click="addRelation">
+                  新增关系
+                </n-button>
+              </template>
+            </n-empty>
+          </template>
+
+          <template v-else>
+            <section id="relation-section-linkage" class="relation-config-card">
+              <header class="section-title-row">
+                <div>
+                  <strong>字段联动</strong>
+                  <span>维护表单字段之间的过滤和清空规则。</span>
+                </div>
+                <n-button size="tiny" secondary @click="addLinkageRule">
+                  <template #icon>
+                    <n-icon><AddOutline /></n-icon>
+                  </template>
+                  新增联动
+                </n-button>
+              </header>
+              <div v-if="localLinkage.rules.length" class="relation-card-list">
+                <section v-for="(rule, index) in localLinkage.rules" :key="rule.ruleId" class="relation-card linkage-card">
+                  <header class="relation-card-head">
+                    <div>
+                      <strong>{{ linkageRuleLabel(rule) }}</strong>
+                      <p>{{ linkageRuleSentence(rule) }}</p>
+                    </div>
+                    <n-space size="small">
+                      <n-tag size="small" :type="rule.enabled === false ? 'default' : 'success'" :bordered="false">
+                        {{ rule.enabled === false ? '停用' : '启用' }}
+                      </n-tag>
+                      <n-popconfirm @positive-click="removeLinkageRule(index)">
+                        <template #trigger>
+                          <n-button quaternary circle size="small">
+                            <template #icon>
+                              <n-icon><TrashOutline /></n-icon>
+                            </template>
+                          </n-button>
+                        </template>
+                        确认移除该级联规则？
+                      </n-popconfirm>
+                    </n-space>
+                  </header>
+
+                  <n-form label-placement="top" :show-feedback="false" size="small" class="relation-form">
+                    <n-grid :cols="3" :x-gap="12" :y-gap="4" responsive="screen">
+                      <n-form-item-gi label="规则类型">
+                        <n-select
+                          v-model:value="rule.type"
+                          :options="linkageTypeOptions"
+                          @update:value="value => updateLinkageType(rule, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="上级字段">
+                        <n-select
+                          v-model:value="rule.sourceField"
+                          :options="sourceFieldOptions"
+                          clearable
+                          filterable
+                          placeholder="选择控制字段"
+                          @update:value="value => updateLinkageSource(rule, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="目标字段">
+                        <n-select
+                          v-model:value="rule.targetField"
+                          :options="linkageTargetFieldOptions(rule)"
+                          clearable
+                          filterable
+                          placeholder="选择被过滤字段"
+                          @update:value="value => updateLinkageTarget(rule, value)"
+                        />
+                      </n-form-item-gi>
+
+                      <template v-if="rule.dataSourceType === 'dict'">
+                        <n-form-item-gi label="上级字典类型">
+                          <n-input v-model:value="rule.dictConfig.sourceDictType" placeholder="选择或填写字典类型" @update:value="markLinkageDirty" />
+                        </n-form-item-gi>
+                        <n-form-item-gi label="目标字典类型">
+                          <n-input v-model:value="rule.dictConfig.targetDictType" placeholder="选择或填写字典类型" @update:value="markLinkageDirty" />
+                        </n-form-item-gi>
+                        <n-form-item-gi v-if="rule.type === 'linkedDict'" label="关联字典类型">
+                          <n-input v-model:value="rule.dictConfig.linkedDictType" placeholder="选择或填写关联字典类型" @update:value="markLinkageDirty" />
+                        </n-form-item-gi>
+                      </template>
+
+                      <template v-else>
+                        <n-form-item-gi label="请求参数名">
+                          <n-input v-model:value="rule.remoteConfig.paramName" placeholder="例如：上级字段参数名" @update:value="markLinkageDirty" />
+                        </n-form-item-gi>
+                        <n-form-item-gi label="远程接口">
+                          <n-input v-model:value="rule.remoteConfig.url" placeholder="选择项接口地址" @update:value="markLinkageDirty" />
+                        </n-form-item-gi>
+                        <n-form-item-gi label="请求方式">
+                          <n-select v-model:value="rule.remoteConfig.method" :options="methodOptions" @update:value="markLinkageDirty" />
+                        </n-form-item-gi>
+                        <n-form-item-gi v-if="rule.type === 'objectReference'" label="目标对象">
+                          <n-select
+                            v-model:value="rule.objectConfig.targetObjectCode"
+                            :options="targetObjectOptions"
+                            clearable
+                            filterable
+                            placeholder="选择目标对象"
+                            @update:value="markLinkageDirty"
+                          />
+                        </n-form-item-gi>
+                      </template>
+
+                      <n-form-item-gi label="上级为空">
+                        <n-select
+                          v-model:value="rule.emptyStrategy"
+                          :options="emptyStrategyOptions"
+                          @update:value="markLinkageDirty"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="上级变化清空">
+                        <n-switch
+                          :value="rule.clearOnSourceChange !== false"
+                          @update:value="value => updateRuleClearOnChange(rule, value)"
+                        />
+                      </n-form-item-gi>
+                      <n-form-item-gi label="启用状态">
+                        <n-switch
+                          :value="rule.enabled !== false"
+                          @update:value="value => updateRuleEnabled(rule, value)"
+                        />
+                      </n-form-item-gi>
+                    </n-grid>
+                  </n-form>
+                </section>
+              </div>
+              <n-empty v-else description="暂无级联规则" />
+            </section>
+          </template>
         </n-spin>
       </main>
     </div>
@@ -727,7 +764,9 @@ const emit = defineEmits(['updated', 'dirtyChange', 'fieldsUpdated', 'update:lin
 const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
+const activePanel = ref('relation')
 const activeRelationKey = ref('')
+const activeLinkageRuleId = ref('')
 const businessObjects = ref([])
 const localRelations = ref([])
 const localLinkage = ref(normalizeLinkageSchema())
@@ -747,16 +786,6 @@ const relationWizardForm = ref({
   relationName: '',
   detailTabTitle: '',
 })
-
-const relationSteps = [
-  { index: 1, key: 'basic', label: '基础信息' },
-  { index: 2, key: 'match', label: '匹配与回显' },
-  { index: 3, key: 'inline', label: '新增/编辑内嵌' },
-  { index: 4, key: 'selector', label: '子表选择器' },
-  { index: 5, key: 'mapping', label: '字段映射' },
-  { index: 6, key: 'approval', label: '审批后处理' },
-  { index: 7, key: 'linkage', label: '字段联动' },
-]
 
 const relationTypeOptions = [
   { label: '包含多个明细', value: 'DETAIL' },
@@ -1008,7 +1037,13 @@ function addRelation() {
 }
 
 function selectRelation(clientKey) {
+  activePanel.value = 'relation'
   activeRelationKey.value = clientKey || ''
+}
+
+function selectLinkageRule(ruleId) {
+  activePanel.value = 'linkage'
+  activeLinkageRuleId.value = ruleId || localLinkage.value.rules?.[0]?.ruleId || ''
 }
 
 function removeActiveRelation() {
@@ -1021,9 +1056,12 @@ function removeActiveRelation() {
 }
 
 function scrollToRelationSection(key) {
-  const element = document.getElementById(`relation-section-${key}`)
-  if (element)
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  activePanel.value = key === 'linkage' ? 'linkage' : 'relation'
+  nextTick(() => {
+    const element = document.getElementById(`relation-section-${key}`)
+    if (element)
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 function addLinkageRule() {
@@ -1046,6 +1084,8 @@ function addLinkageRule() {
       rule,
     ],
   })
+  activePanel.value = 'linkage'
+  activeLinkageRuleId.value = rule.ruleId
   syncLinkageModel(true)
   nextTick(() => scrollToRelationSection('linkage'))
 }
@@ -1064,6 +1104,8 @@ function removeLinkageRule(index) {
     ...localLinkage.value,
     rules,
   })
+  if (!rules.some(rule => rule.ruleId === activeLinkageRuleId.value))
+    activeLinkageRuleId.value = rules[0]?.ruleId || ''
   syncLinkageModel(true)
 }
 
@@ -1115,20 +1157,6 @@ function updateInlineEdit(relation, value) {
 function updateInlineCreate(relation, value) {
   relation.inlineCreateEnabled = canInlineEdit(relation) && !!value
   markDirty()
-}
-
-function inferredTargetField(relation) {
-  if (relation.targetFieldCode)
-    return relation.targetFieldCode
-  // Auto-infer: for oneToMany, the target typically has a sourceObjectCode + 'Id' field
-  const targetFields = targetFieldsMap.value[relation.targetObjectCode] || []
-  const sourceCode = props.objectCode || ''
-  if (sourceCode) {
-    const candidate = targetFields.find(f => f.value === `${sourceCode}Id` || f.value === `${sourceCode}_id`)
-    if (candidate)
-      return candidate.value
-  }
-  return 'id'
 }
 
 function updateRelationSelectorEnabled(relation, value) {
@@ -1935,6 +1963,62 @@ function linkageRuleSentence(rule = {}) {
   return `${source} → ${target}，${verbs[rule.type] || '联动'}`
 }
 
+function relationMatchSummary(relation = {}) {
+  if (!relation.targetObjectCode)
+    return '先选择目标对象'
+  if (relation.sourceFieldCode && relation.targetFieldCode)
+    return `已自动推断：${relation.sourceFieldCode} → ${relation.targetFieldCode}`
+  return '请补齐匹配字段'
+}
+
+function relationMatchTagType(relation = {}) {
+  return relation.sourceFieldCode && relation.targetFieldCode ? 'success' : 'warning'
+}
+
+function inlineConfigSummary(relation = {}) {
+  const enabledCount = [
+    relation.inlineCreateEnabled === true,
+    relation.inlineEditEnabled === true,
+    relation.showInDetail !== false,
+  ].filter(Boolean).length
+  return enabledCount ? `${enabledCount} 项已开启` : '未配置'
+}
+
+function inlineConfigTagType(relation = {}) {
+  return inlineConfigSummary(relation) === '未配置' ? 'default' : 'success'
+}
+
+function selectorConfigSummary(relation = {}) {
+  return relation.selectorEnabled ? '已启用' : '未启用'
+}
+
+function selectorConfigTagType(relation = {}) {
+  return relation.selectorEnabled ? 'success' : 'default'
+}
+
+function mappingConfigSummary(relation = {}) {
+  if (!relation.selectorEnabled)
+    return '无映射'
+  const count = selectorMappingCount(relation)
+  return count ? `${count} 条映射` : '无映射'
+}
+
+function mappingConfigTagType(relation = {}) {
+  return selectorMappingCount(relation) ? 'success' : 'default'
+}
+
+function selectorMappingCount(relation = {}) {
+  return (relation.selectorMappings || []).filter(item => item.sourceField && item.targetField).length
+}
+
+function approvalConfigSummary(relation = {}) {
+  return relation.approvalQuantityEnabled ? '已启用' : '未启用'
+}
+
+function approvalConfigTagType(relation = {}) {
+  return relation.approvalQuantityEnabled ? 'success' : 'default'
+}
+
 function fieldLabel(fieldCode) {
   if (!fieldCode)
     return ''
@@ -2412,7 +2496,7 @@ defineExpose({
 
 .relation-workbench {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -2431,6 +2515,11 @@ defineExpose({
 .rail-block {
   display: grid;
   gap: 10px;
+}
+
+.rail-divider {
+  height: 1px;
+  background: #e5e9f2;
 }
 
 .rail-title {
@@ -2485,63 +2574,6 @@ defineExpose({
   overflow-wrap: anywhere;
 }
 
-.relation-step-list {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.relation-step-list li {
-  position: relative;
-  min-height: 46px;
-}
-
-.relation-step-list li:not(:last-child)::after {
-  position: absolute;
-  top: 30px;
-  left: 13px;
-  width: 1px;
-  height: 24px;
-  background: #d9e0ec;
-  content: '';
-}
-
-.relation-step-list button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: #344054;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  padding: 4px 0;
-}
-
-.step-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 27px;
-  width: 27px;
-  height: 27px;
-  border: 1px solid #d9e0ec;
-  border-radius: 999px;
-  background: #fff;
-  color: #667085;
-  font-size: 12px;
-}
-
-.relation-step-list button:hover .step-index {
-  border-color: #2b6bed;
-  background: #2b6bed;
-  color: #fff;
-}
-
 .relation-main-pane {
   min-width: 0;
   min-height: 0;
@@ -2564,6 +2596,61 @@ defineExpose({
   box-shadow: 0 10px 26px rgb(16 24 40 / 4%);
   padding: 16px 18px 18px;
   scroll-margin-top: 16px;
+}
+
+.relation-match-box {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border-top: 1px solid #edf1f7;
+  padding-top: 14px;
+}
+
+.relation-match-box-head,
+.selector-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.relation-match-box-head strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.relation-advanced-collapse {
+  border: 1px solid #e3e8f2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgb(16 24 40 / 4%);
+  padding: 4px 16px 10px;
+}
+
+.relation-advanced-collapse :deep(.n-collapse-item:not(:last-child)) {
+  border-bottom: 1px solid #edf1f7;
+}
+
+.advanced-relation-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.advanced-relation-hint,
+.selector-toggle-row span {
+  margin: 0 0 12px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.selector-toggle-row {
+  margin-bottom: 12px;
 }
 
 .section-title-row,
@@ -2688,19 +2775,6 @@ defineExpose({
     border-right: 0;
     border-bottom: 1px solid #e5e9f2;
   }
-
-  .relation-step-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .relation-step-list li {
-    min-height: auto;
-  }
-
-  .relation-step-list li::after {
-    display: none;
-  }
 }
 
 @media (max-width: 760px) {
@@ -2713,8 +2787,10 @@ defineExpose({
     padding: 14px;
   }
 
-  .relation-step-list {
-    grid-template-columns: 1fr 1fr;
+  .relation-match-box-head,
+  .selector-toggle-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .selector-row-head {
