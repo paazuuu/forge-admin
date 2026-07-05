@@ -614,6 +614,7 @@ function buildFormDesignerEditZone(zone, schema, fields = primaryDesignFields.va
   const formLayout = buildRuntimeFormLayout(normalizedSchema, fieldSet, gridColumns)
   const fieldRefs = Object.keys(compiledSettings)
   const modelFieldSet = buildPrimaryModelFieldSet(fields)
+  const formOpenMode = normalizeFormOpenMode(layout.formOpenMode || layout.modalType)
   return {
     ...zone,
     fieldRefs: mergeUniqueRefs(fieldRefs, resolveSelectedRelationFieldRefs(zone)),
@@ -627,6 +628,11 @@ function buildFormDesignerEditZone(zone, schema, fields = primaryDesignFields.va
       labelWidth: defaultLabelWidth,
       labelAlign: layout.labelAlign || 'right',
       size: normalizeRuntimeFormSize(layout.size),
+      formOpenMode,
+      modalType: ['modal', 'drawer'].includes(formOpenMode) ? formOpenMode : 'modal',
+      modalWidth: layout.modalWidth || zone.props?.modalWidth || '800px',
+      detailModalWidth: layout.detailModalWidth || layout.modalWidth || zone.props?.detailModalWidth || zone.props?.modalWidth || '800px',
+      drawerPlacement: layout.drawerPlacement || zone.props?.drawerPlacement || 'right',
       showFeedback: layout.showFeedback !== false,
       hideRequiredAsterisk: Boolean(layout.hideRequiredAsterisk),
       inlineFeedback: Boolean(layout.inlineFeedback),

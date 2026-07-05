@@ -183,6 +183,14 @@
       @update-field-generation="handleFieldGenerationUpdate"
     />
 
+    <BusinessTriggerConfigPanel
+      v-else-if="activePanel === 'triggers'"
+      embedded
+      lock-object
+      :object-code="draft.objectCode || objectCode"
+      :object-name="draft.objectName"
+    />
+
     <BusinessPermissionFlowPanel
       v-else-if="activePanel === 'permission'"
       ref="permissionFlowRef"
@@ -281,6 +289,7 @@ const BusinessListDesigner = defineDesignerAsyncComponent(() => import('./compon
 const BusinessPermissionFlowPanel = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPermissionFlowPanel.vue'))
 const BusinessPublishChecklist = defineDesignerAsyncComponent(() => import('./components/designer/BusinessPublishChecklist.vue'))
 const BusinessRelationDesigner = defineDesignerAsyncComponent(() => import('./components/designer/BusinessRelationDesigner.vue'))
+const BusinessTriggerConfigPanel = defineDesignerAsyncComponent(() => import('./trigger.vue'))
 const FormulaFunctionMarket = defineDesignerAsyncComponent(() => import('./components/designer/formula/FormulaFunctionMarket.vue'))
 
 function defineDesignerAsyncComponent(loader) {
@@ -355,7 +364,7 @@ const closureSteps = computed(() => {
   return [
     step('flow-app', '单据流程', 'flow-app', Boolean(documentConfig.documentEnabled && documentConfig.statusField && mainFlow.configured)),
     step('start', '发起方式', 'flow-app', Boolean(startMode), !startMode && Boolean(mainFlow.configured)),
-    step('trigger', '自动化触发器', 'trigger', triggerRequired && !hasTriggerGap, triggerRequired && hasTriggerGap),
+    step('trigger', '自动化触发器', 'triggers', triggerRequired && !hasTriggerGap, triggerRequired && hasTriggerGap),
     step('publish', '发布检查', 'publish', publishCheckState.value?.publishable === true, publishCheckState.value?.publishable === false),
     step('runtime', '试运行', 'runtime', Boolean(runtimeInfo.value?.canOpen), Boolean(runtimeInfo.value && !runtimeInfo.value.canOpen)),
   ]
@@ -386,6 +395,8 @@ function resolveInitialPanel() {
 }
 
 function normalizePanel(panel) {
+  if (['trigger', 'automation-trigger', 'triggers'].includes(panel))
+    return 'triggers'
   if (['flow', 'document', 'automation', 'flow-app'].includes(panel))
     return 'flow-app'
   return panel === 'detail' ? 'form' : panel
@@ -951,13 +962,7 @@ function openTriggerConfig() {
     emit('close')
     return
   }
-  router.push({
-    path: '/app-center/trigger',
-    query: {
-      objectCode: code,
-      returnTo: route.fullPath,
-    },
-  })
+  activePanel.value = 'triggers'
 }
 
 async function handleFieldsUpdated(fields, options = {}) {
@@ -1035,7 +1040,7 @@ async function handleFlowAppSaved() {
     activePanel.value = 'flow-app'
   const startMode = String(mainFlow.startMode || '').toUpperCase()
   if (startMode === 'TRIGGER' || startMode === 'BOTH') {
-    openTriggerConfig()
+    activePanel.value = 'triggers'
     return
   }
   activePanel.value = 'publish'

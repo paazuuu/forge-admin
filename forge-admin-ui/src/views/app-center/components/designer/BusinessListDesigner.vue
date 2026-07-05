@@ -1076,13 +1076,14 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
   const tableProps = tableZone.props || {}
   const searchProps = searchZone.props || {}
   const editProps = editZone.props || {}
+  const formLayout = schema.layout || {}
   const apiValues = resolveDesignerDefaultApiValues(schema)
   const fieldMap = buildDesignerFieldMap(fields)
   const editFields = buildDesignerEditSchema(editZone, fieldMap)
   const hookHandlers = buildDesignerCrudHookHandlers(tableProps)
   const runtimeActions = normalizeListCustomActions(customActions)
-  const resolvedFormOpenMode = resolveDesignerFormOpenMode(tableProps, editProps)
-  const resolvedModalType = resolveDesignerModalType(resolvedFormOpenMode, tableProps, editProps)
+  const resolvedFormOpenMode = resolveDesignerFormOpenMode(formLayout, tableProps, editProps)
+  const resolvedModalType = resolveDesignerModalType(resolvedFormOpenMode, formLayout, tableProps, editProps)
   return {
     lazy: true,
     loadDetailOnEdit: false,
@@ -1108,20 +1109,20 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
     searchEnableCollapse: tableProps.searchEnableCollapse !== false,
     searchMaxVisibleFields: tableProps.searchMaxVisibleFields || 3,
     searchYGap: tableProps.searchYGap ?? 16,
-    editGridCols: editProps.editGridCols || tableProps.editGridCols || 1,
-    editLabelWidth: editProps.editLabelWidth || editProps.labelWidth || tableProps.editLabelWidth || 'auto',
-    editLabelPlacement: editProps.editLabelPlacement || editProps.labelPlacement || tableProps.editLabelPlacement || 'left',
-    editLabelAlign: editProps.editLabelAlign || editProps.labelAlign || tableProps.editLabelAlign || 'right',
-    editSize: editProps.editSize || editProps.size || tableProps.editSize || 'medium',
+    editGridCols: formLayout.gridColumns || formLayout.gridCols || editProps.editGridCols || tableProps.editGridCols || 1,
+    editLabelWidth: formLayout.labelWidth || editProps.editLabelWidth || editProps.labelWidth || tableProps.editLabelWidth || 'auto',
+    editLabelPlacement: formLayout.labelPlacement || editProps.editLabelPlacement || editProps.labelPlacement || tableProps.editLabelPlacement || 'left',
+    editLabelAlign: formLayout.labelAlign || editProps.editLabelAlign || editProps.labelAlign || tableProps.editLabelAlign || 'right',
+    editSize: formLayout.size || editProps.editSize || editProps.size || tableProps.editSize || 'medium',
     editShowFeedback: editProps.editShowFeedback ?? editProps.showFeedback ?? tableProps.editShowFeedback ?? true,
-    editXGap: editProps.editXGap ?? editProps.columnGap ?? tableProps.editXGap ?? 16,
-    editYGap: editProps.editYGap ?? editProps.rowGap ?? tableProps.editYGap ?? 8,
-    modalWidth: tableProps.modalWidth || editProps.modalWidth || '800px',
-    detailModalWidth: tableProps.detailModalWidth || 'min(1080px, 92vw)',
+    editXGap: formLayout.columnGap ?? editProps.editXGap ?? editProps.columnGap ?? tableProps.editXGap ?? 16,
+    editYGap: formLayout.rowGap ?? editProps.editYGap ?? editProps.rowGap ?? tableProps.editYGap ?? 8,
+    modalWidth: formLayout.modalWidth || editProps.modalWidth || tableProps.modalWidth || '800px',
+    detailModalWidth: formLayout.detailModalWidth || formLayout.modalWidth || editProps.detailModalWidth || editProps.modalWidth || tableProps.detailModalWidth || tableProps.modalWidth || '800px',
     formOpenMode: resolvedFormOpenMode,
-    tabWorkspace: tableProps.tabWorkspace || editProps.tabWorkspace || {},
+    tabWorkspace: formLayout.tabWorkspace || editProps.tabWorkspace || tableProps.tabWorkspace || {},
     modalType: resolvedModalType,
-    drawerPlacement: tableProps.drawerPlacement || 'right',
+    drawerPlacement: formLayout.drawerPlacement || editProps.drawerPlacement || tableProps.drawerPlacement || 'right',
     hideModalFooter: tableProps.hideModalFooter === true,
     hideDefaultDetailContent: tableProps.hideDefaultDetailContent === true,
     hideToolbar: tableProps.hideToolbar === true,
@@ -1158,8 +1159,8 @@ function buildDesignerRuntimeCrudProps(schema = {}, fields = [], customActions =
   }
 }
 
-function resolveDesignerFormOpenMode(tableProps = {}, editProps = {}) {
-  const value = editProps.formOpenMode || tableProps.formOpenMode || editProps.modalType || tableProps.modalType || 'modal'
+function resolveDesignerFormOpenMode(formLayout = {}, tableProps = {}, editProps = {}) {
+  const value = formLayout.formOpenMode || formLayout.modalType || editProps.formOpenMode || tableProps.formOpenMode || editProps.modalType || tableProps.modalType || 'modal'
   const mode = String(value || '').trim()
   if (mode === 'tabWorkspace' || mode.toLowerCase() === 'tabworkspace')
     return 'tabWorkspace'
@@ -1167,10 +1168,10 @@ function resolveDesignerFormOpenMode(tableProps = {}, editProps = {}) {
   return ['modal', 'drawer', 'flat'].includes(normalized) ? normalized : 'modal'
 }
 
-function resolveDesignerModalType(formOpenMode = 'modal', tableProps = {}, editProps = {}) {
+function resolveDesignerModalType(formOpenMode = 'modal', formLayout = {}, tableProps = {}, editProps = {}) {
   if (['modal', 'drawer'].includes(formOpenMode))
     return formOpenMode
-  const value = editProps.modalType || tableProps.modalType || 'modal'
+  const value = formLayout.modalType || editProps.modalType || tableProps.modalType || 'modal'
   const normalized = String(value || '').trim().toLowerCase()
   return ['modal', 'drawer'].includes(normalized) ? normalized : 'modal'
 }
@@ -1711,7 +1712,7 @@ function buildDesignerColumns(zone = {}, fieldMap = new Map()) {
       field: fieldCode,
       title: setting.label || field.label || field.fieldName || fieldCode,
       minWidth: Number(setting.width || field.width || 110),
-      align: setting.align || 'left',
+      align: setting.align || undefined,
       ellipsis: { tooltip: true },
     }
   })

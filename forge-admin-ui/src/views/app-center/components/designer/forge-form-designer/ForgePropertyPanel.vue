@@ -43,6 +43,14 @@
                   <n-form-item label="显示名称">
                     <n-input :value="selectedComponent.label" placeholder="请输入" @update:value="updateLabel" />
                   </n-form-item>
+                  <n-form-item v-if="canSwitchComponentType" label="组件类型">
+                    <n-select
+                      :value="selectedComponent.componentKey"
+                      :options="switchableComponentOptions"
+                      filterable
+                      @update:value="handleSwitchComponentType"
+                    />
+                  </n-form-item>
                   <n-form-item v-if="selectedComponent.fieldBinding?.fieldCode" label="绑定字段">
                     <n-input
                       :value="selectedComponent.fieldBinding.fieldCode"
@@ -645,31 +653,33 @@
                       @update:value="updateDefaultValue"
                     />
                   </n-form-item>
+                  <n-form-item v-if="supportsFieldMaxLength" label="最大长度">
+                    <div class="option-editor-row two-columns">
+                      <n-input-number
+                        :value="selectedFieldMaxLength"
+                        :min="1"
+                        :max="2048"
+                        :show-button="false"
+                        clearable
+                        placeholder="最大长度"
+                        @update:value="updateFieldMaxLength"
+                      />
+                      <n-switch
+                        :value="selectedComponent.props?.showCount === true"
+                        size="small"
+                        @update:value="updateComponent({ props: { showCount: $event } })"
+                      >
+                        <template #checked>
+                          计数
+                        </template>
+                        <template #unchecked>
+                          计数
+                        </template>
+                      </n-switch>
+                    </div>
+                  </n-form-item>
                   <n-form-item label="字段约束">
                     <div class="field-constraint-config">
-                      <div v-if="supportsFieldMaxLength" class="option-editor-row two-columns">
-                        <n-input-number
-                          :value="selectedFieldMaxLength"
-                          :min="1"
-                          :max="2048"
-                          :show-button="false"
-                          clearable
-                          placeholder="最大长度"
-                          @update:value="updateFieldMaxLength"
-                        />
-                        <n-switch
-                          :value="selectedComponent.props?.showCount === true"
-                          size="small"
-                          @update:value="updateComponent({ props: { showCount: $event } })"
-                        >
-                          <template #checked>
-                            计数
-                          </template>
-                          <template #unchecked>
-                            计数
-                          </template>
-                        </n-switch>
-                      </div>
                       <n-select
                         :value="selectedComponent.validation?.preset || ''"
                         :options="commonValidationOptions"
@@ -2863,52 +2873,13 @@
             <section class="panel-item">
               <div class="panel-item-title">
                 编辑弹窗
+                <small class="panel-item-hint">配置已移至「表单属性 → 表单项配置」</small>
               </div>
-              <n-form-item label="编辑标签宽度">
-                <n-input
-                  :value="crudOptions.editLabelWidth || 'auto'"
-                  placeholder="auto / 100"
-                  @update:value="updateCrudOption('editLabelWidth', $event || 'auto')"
-                />
-              </n-form-item>
-              <n-form-item label="列间距">
-                <n-input-number
-                  :value="crudOptions.editXGap || 16"
-                  :min="0"
-                  :max="40"
-                  @update:value="updateCrudOption('editXGap', $event || 16)"
-                />
-              </n-form-item>
-              <n-form-item label="行间距">
-                <n-input-number
-                  :value="crudOptions.editYGap || 8"
-                  :min="0"
-                  :max="40"
-                  @update:value="updateCrudOption('editYGap', $event || 8)"
-                />
-              </n-form-item>
-              <n-form-item label="编辑打开方式">
-                <n-select
-                  :value="crudOptions.formOpenMode || crudOptions.modalType || 'modal'"
-                  :options="formOpenModeOptions"
-                  size="small"
-                  @update:value="updateCrudFormOpenMode"
-                />
-              </n-form-item>
-              <n-form-item label="弹窗宽度">
-                <n-input
-                  :value="crudOptions.modalWidth || '900px'"
-                  placeholder="900px"
-                  @update:value="updateCrudOption('modalWidth', $event || '900px')"
-                />
-              </n-form-item>
-              <n-form-item label="详情弹窗宽度">
-                <n-input
-                  :value="crudOptions.detailModalWidth || 'min(1080px, 92vw)'"
-                  placeholder="min(1080px, 92vw)"
-                  @update:value="updateCrudOption('detailModalWidth', $event || 'min(1080px, 92vw)')"
-                />
-              </n-form-item>
+              <div class="crud-readonly-summary">
+                <span>打开方式：{{ schema.layout?.formOpenMode || schema.layout?.modalType || 'modal' }}</span>
+                <span>弹窗宽度：{{ schema.layout?.modalWidth || '800px' }}</span>
+                <span>表单列数：{{ normalizedFormGridColumns }}</span>
+              </div>
               <n-form-item label="每页条数">
                 <n-input-number
                   :value="crudOptions.pageSize || 10"
@@ -3289,6 +3260,24 @@
                     :options="formOpenModeOptions"
                     size="small"
                     @update:value="updateFormOpenModeLayout"
+                  />
+                </div>
+                <div class="compact-config-row">
+                  <label>弹窗宽度</label>
+                  <n-input
+                    :value="schema.layout?.modalWidth || '800px'"
+                    placeholder="800px / 60vw"
+                    size="small"
+                    @update:value="updateFormModalWidth"
+                  />
+                </div>
+                <div class="compact-config-row">
+                  <label>抽屉方向</label>
+                  <n-select
+                    :value="schema.layout?.drawerPlacement || 'right'"
+                    :options="drawerPlacementOptions"
+                    size="small"
+                    @update:value="updateFormLayout({ drawerPlacement: $event || 'right' })"
                   />
                 </div>
                 <div class="form-columns-control">
@@ -4231,6 +4220,44 @@ const selectedFieldAsset = computed(() => {
   })
   return normalizeSelectedFieldAsset(matched || createFieldAssetFromSelectedComponent())
 })
+const switchableComponentGroups = [
+  ['input', 'textarea', 'number', 'inputNumber', 'money'],
+  ['select', 'radio', 'checkbox', 'dictSelect'],
+  ['date', 'datetime'],
+  ['fileUpload', 'imageUpload'],
+  ['objectReference', 'recordSelector'],
+]
+const componentTypeLabelMap = {
+  input: '单行输入',
+  textarea: '多行文本',
+  number: '数字输入',
+  inputNumber: '数字输入',
+  money: '金额',
+  select: '下拉选择',
+  radio: '单选框',
+  checkbox: '多选框',
+  dictSelect: '字典选择',
+  date: '日期',
+  datetime: '日期时间',
+  fileUpload: '文件上传',
+  imageUpload: '图片上传',
+  objectReference: '引用对象',
+  recordSelector: '记录选择器',
+}
+const canSwitchComponentType = computed(() => {
+  if (!isField.value || !selectedComponent.value)
+    return false
+  const key = selectedComponent.value.componentKey
+  return switchableComponentGroups.some(group => group.includes(key))
+})
+const switchableComponentOptions = computed(() => {
+  const key = selectedComponent.value?.componentKey
+  const group = switchableComponentGroups.find(item => item.includes(key)) || []
+  return group.map(value => ({
+    label: componentTypeLabelMap[value] || value,
+    value,
+  }))
+})
 const supportsFieldMaxLength = computed(() => ['input', 'textarea'].includes(selectedComponent.value?.componentKey))
 const selectedFieldMaxLength = computed(() => {
   const fromProps = normalizePositiveInteger(selectedComponent.value?.props?.maxlength)
@@ -4559,6 +4586,10 @@ const formOpenModeOptions = [
   { label: '抽屉', value: 'drawer' },
   { label: '平铺', value: 'flat' },
   { label: '多页签', value: 'tabWorkspace' },
+]
+const drawerPlacementOptions = [
+  { label: '右侧', value: 'right' },
+  { label: '左侧', value: 'left' },
 ]
 const expandTriggerOptions = [
   { label: '图标', value: 'icon' },
@@ -4908,6 +4939,67 @@ function updateComponent(patch) {
   if (!props.selectedId)
     return
   emit('update:schema', updateDesignerComponent(props.schema, props.selectedId, patch))
+}
+
+function pickSwitchableCommonProps(sourceProps = {}, newKey = '') {
+  const commonKeys = ['defaultValue', 'placeholder', 'disabled', 'clearable', 'required', 'dictType']
+  const nextProps = {}
+  commonKeys.forEach((key) => {
+    if (sourceProps[key] !== undefined)
+      nextProps[key] = sourceProps[key]
+  })
+  if (['input', 'textarea'].includes(newKey)) {
+    if (sourceProps.maxlength !== undefined)
+      nextProps.maxlength = sourceProps.maxlength
+    if (sourceProps.showCount !== undefined)
+      nextProps.showCount = sourceProps.showCount
+  }
+  else {
+    nextProps.maxlength = undefined
+    nextProps.showCount = undefined
+  }
+  return nextProps
+}
+
+function handleSwitchComponentType(newKey) {
+  const component = selectedComponent.value
+  if (!component || !newKey || newKey === component.componentKey)
+    return
+  const group = switchableComponentGroups.find(item => item.includes(component.componentKey))
+  if (!group?.includes(newKey))
+    return
+  const defaults = componentFieldDefaults[newKey] || componentFieldDefaults.input
+  const nextProps = pickSwitchableCommonProps(component.props || {}, newKey)
+  const nextFieldBinding = {
+    ...(component.fieldBinding || {}),
+    fieldType: defaults.fieldType,
+    dataType: defaults.dataType,
+    componentType: defaults.componentType || newKey,
+  }
+  updateComponent({
+    componentKey: newKey,
+    props: nextProps,
+    fieldBinding: nextFieldBinding,
+  })
+  const asset = selectedFieldAsset.value
+  if (!asset || !selectedFieldCode.value)
+    return
+  emit('fieldAssetUpdated', {
+    ...asset,
+    fieldCode: selectedFieldCode.value,
+    fieldType: defaults.fieldType,
+    dataType: defaults.dataType,
+    length: defaults.length,
+    precision: defaults.precision,
+    componentType: defaults.componentType || newKey,
+    queryType: defaults.queryType,
+    fieldBinding: nextFieldBinding,
+    basicProps: {
+      ...(asset.basicProps || {}),
+      ...nextProps,
+      fieldBinding: nextFieldBinding,
+    },
+  })
 }
 
 function updateComponentHidden(value) {
@@ -6693,19 +6785,16 @@ function normalizeFormOpenModePatch(value) {
   }
 }
 
-function updateCrudFormOpenMode(value) {
-  updateComponent({
-    props: {
-      crudOptions: {
-        ...crudOptions.value,
-        ...normalizeFormOpenModePatch(value),
-      },
-    },
-  })
-}
-
 function updateFormOpenModeLayout(value) {
   updateFormLayout(normalizeFormOpenModePatch(value))
+}
+
+function updateFormModalWidth(value) {
+  const width = value || '800px'
+  updateFormLayout({
+    modalWidth: width,
+    detailModalWidth: width,
+  })
 }
 
 function updateCrudFieldRole(componentId, role, value) {
@@ -9631,6 +9720,25 @@ button.form-asset-card,
 
 .option-props-input {
   grid-column: 1 / -1;
+}
+
+.crud-readonly-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 12px;
+  background: var(--n-color-hover, #f7f8fa);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  margin-bottom: 12px;
+}
+
+.panel-item-hint {
+  font-weight: normal;
+  font-size: 11px;
+  color: var(--n-text-color-3);
+  margin-left: 8px;
 }
 
 .crud-field-config-title {

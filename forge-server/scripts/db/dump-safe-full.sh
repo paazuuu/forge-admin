@@ -236,10 +236,7 @@ sensitive_tables=(
   config_properties
   gen_datasource
   sys_api_config
-  sys_client
   sys_email_config
-  sys_external_api
-  sys_external_system
   sys_file_metadata
   sys_file_storage_config
   sys_sms_config

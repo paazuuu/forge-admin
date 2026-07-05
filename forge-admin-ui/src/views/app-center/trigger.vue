@@ -1,8 +1,8 @@
 <template>
-  <div class="center-shell">
+  <div class="center-shell" :class="{ 'trigger-embedded': embedded }">
     <header class="trigger-page-header">
       <div class="center-head-row">
-        <NButton text @click="router.push('/app-center/engines')">
+        <NButton v-if="!embedded" text @click="router.push('/app-center/engines')">
           返回引擎中心
         </NButton>
         <NSpace :wrap="true">
@@ -14,10 +14,10 @@
           </NButton>
         </NSpace>
       </div>
-      <div class="trigger-title-row">
+      <div v-if="!embedded" class="trigger-title-row">
         <div>
-          <h1>触发器配置</h1>
-          <p>基于业务事件的自动化规则：当记录创建、修改或状态变更时自动发起主流程、推送消息或更新字段。</p>
+          <h1>{{ pageTitle }}</h1>
+          <p>{{ pageDescription }}</p>
         </div>
         <div class="trigger-range">
           {{ pageRangeText }}
@@ -25,7 +25,7 @@
       </div>
     </header>
 
-    <section class="trigger-stats">
+    <section v-if="!embedded" class="trigger-stats">
       <div class="trigger-stat">
         <span>总触发器</span>
         <strong>{{ total }}</strong>
@@ -46,12 +46,13 @@
 
     <section class="trigger-panel">
       <div class="trigger-toolbar">
-        <div>
+        <div v-if="!embedded">
           <h2>规则列表</h2>
           <p>筛选、启停和查看每条触发器的执行情况。</p>
         </div>
         <NSpace :wrap="true" align="center">
           <n-select
+            v-if="!objectLocked"
             v-model:value="filterObjectCode"
             clearable
             filterable
@@ -111,6 +112,7 @@
           <n-select
             v-model:value="formData.objectCode"
             :options="objectOptions"
+            :disabled="objectLocked"
             clearable
             filterable
             placeholder="选择业务单元"
@@ -327,6 +329,25 @@ import {
 import TriggerActionConfigPanel from './components/TriggerActionConfigPanel.vue'
 import TriggerConditionBuilder from './components/TriggerConditionBuilder.vue'
 
+const props = defineProps({
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
+  objectCode: {
+    type: String,
+    default: '',
+  },
+  objectName: {
+    type: String,
+    default: '',
+  },
+  lockObject: {
+    type: Boolean,
+    default: false,
+  },
+})
+
 const router = useRouter()
 const route = useRoute()
 const message = useMessage()
@@ -355,14 +376,23 @@ const actionOptions = ref([])
 const objectFieldsCache = ref({})
 const objectActionsCache = ref({})
 
+const embedded = computed(() => props.embedded)
+const fixedObjectCode = computed(() => String(props.objectCode || '').trim())
+const objectLocked = computed(() => props.embedded && props.lockObject && Boolean(fixedObjectCode.value))
+const pageTitle = computed(() => props.embedded ? '自动化触发器' : '触发器配置')
+const pageDescription = computed(() => props.embedded
+  ? '配置当前业务单元的自动化规则，支持记录事件、定时提醒、流程发起和消息推送。'
+  : '基于业务事件的自动化规则：当记录创建、修改或状态变更时自动发起主流程、推送消息或更新字段。')
 const enabledCount = computed(() => triggers.value.filter(t => t.status === 1).length)
 const scheduledCount = computed(() => triggers.value.filter(isScheduleRow).length)
 const currentObjectLabel = computed(() => {
+  if (props.objectName && fixedObjectCode.value)
+    return `${props.objectName}（${fixedObjectCode.value}）`
   if (!filterObjectCode.value)
     return '全部'
   return objectOptions.value.find(item => item.value === filterObjectCode.value)?.label || filterObjectCode.value
 })
-const hasActiveFilter = computed(() => Boolean(filterObjectCode.value || filterScenarioType.value))
+const hasActiveFilter = computed(() => Boolean((!objectLocked.value && filterObjectCode.value) || filterScenarioType.value))
 const pageRangeText = computed(() => {
   if (!total.value)
     return '暂无数据'
@@ -523,6 +553,12 @@ async function loadObjects() {
 }
 
 function applyRouteObjectContext() {
+  if (fixedObjectCode.value) {
+    filterObjectCode.value = fixedObjectCode.value
+    return
+  }
+  if (props.embedded)
+    return
   const queryObjectCode = normalizeQueryValue(route.query.objectCode)
   if (!queryObjectCode)
     return
@@ -567,7 +603,7 @@ function handleFilterChange() {
 }
 
 function resetFilters() {
-  filterObjectCode.value = null
+  filterObjectCode.value = objectLocked.value ? fixedObjectCode.value : null
   filterScenarioType.value = null
   handleFilterChange()
 }
@@ -780,6 +816,10 @@ async function loadActionOptions(objectCode) {
 }
 
 function handleObjectCodeChange(value) {
+  if (objectLocked.value) {
+    formData.value.objectCode = fixedObjectCode.value
+    return
+  }
   formData.value.objectCode = value || null
   fieldOptions.value = []
   actionOptions.value = []
@@ -990,12 +1030,21 @@ watch(() => formData.value.objectCode, (val) => {
 })
 
 watch(() => route.query.objectCode, () => {
+  if (props.embedded)
+    return
+  applyRouteObjectContext()
+  handleFilterChange()
+})
+
+watch(fixedObjectCode, () => {
+  if (!props.embedded)
+    return
   applyRouteObjectContext()
   handleFilterChange()
 })
 
 function resolveDefaultObjectCode() {
-  return normalizeQueryValue(route.query.objectCode) || filterObjectCode.value || null
+  return fixedObjectCode.value || normalizeQueryValue(route.query.objectCode) || filterObjectCode.value || null
 }
 
 function normalizeQueryValue(value) {
@@ -1010,6 +1059,31 @@ function normalizeQueryValue(value) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.trigger-embedded {
+  min-height: 100%;
+  padding: 0;
+}
+
+.trigger-embedded .trigger-page-header {
+  border-bottom: 1px solid #e5e9f2;
+  background: #fff;
+  padding: 10px 16px;
+}
+
+.trigger-embedded .center-head-row {
+  align-items: center;
+}
+
+.trigger-embedded .trigger-panel {
+  border: 0;
+  border-radius: 0;
+}
+
+.trigger-embedded .trigger-toolbar {
+  justify-content: flex-end;
+  padding: 10px 16px;
 }
 
 .trigger-title-row {

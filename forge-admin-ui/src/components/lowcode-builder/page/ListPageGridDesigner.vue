@@ -1725,89 +1725,24 @@
                   <n-collapse-item v-if="selectedBlock.blockType === 'AiCrudPage' && propertySectionVisible(['表单与弹窗', '新增', '编辑', '表单', '弹窗', '抽屉', '详情', '页脚', '打开方式', '标签位置', '标签对齐', '标签宽度', '表单列数'])" name="edit" title="表单与弹窗">
                     <div class="property-search-anchor" data-property-search="表单与弹窗 新增 编辑 表单 弹窗 抽屉 详情 页脚 打开方式 标签位置 标签对齐 标签宽度 表单列数" />
                     <div class="form-modal-help">
-                      新增、编辑弹窗使用当前表单设计的字段与 AIForm 表单渲染；这里只调整弹窗方式、宽度和表单布局。
+                      弹窗方式和表单布局已统一在「表单设计」的「表单属性 → 表单项配置」中管理。
                     </div>
-                    <n-form-item label="编辑表单布局">
-                      <div class="style-grid four">
-                        <n-input-number
-                          :value="selectedBlock.props?.editGridCols || 1"
-                          :min="1"
-                          :max="4"
-                          :show-button="false"
-                          placeholder="列数"
-                          @update:value="patchBlockProps(selectedBlock.id, { editGridCols: $event || 1 })"
-                        />
-                        <n-input-number
-                          :value="toNumberOrNull(selectedBlock.props?.editLabelWidth)"
-                          :min="0"
-                          :max="260"
-                          :show-button="false"
-                          placeholder="标签宽"
-                          @update:value="patchBlockProps(selectedBlock.id, { editLabelWidth: $event ?? 'auto' })"
-                        />
-                        <n-select
-                          :value="selectedBlock.props?.editLabelPlacement || 'left'"
-                          :options="labelPlacementOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { editLabelPlacement: $event || 'left' })"
-                        />
-                        <n-select
-                          :value="selectedBlock.props?.editLabelAlign || 'right'"
-                          :options="labelAlignOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { editLabelAlign: $event || 'right' })"
-                        />
+                    <div class="form-modal-readonly-summary">
+                      <div class="readonly-summary-row">
+                        <span>打开方式</span>
+                        <strong>{{ selectedAiCrudFormModalProps.formOpenMode || selectedAiCrudFormModalProps.modalType || 'modal' }}</strong>
                       </div>
-                    </n-form-item>
-                    <n-form-item label="表单尺寸 / 间距">
-                      <div class="style-grid three">
-                        <n-select
-                          :value="selectedBlock.props?.editSize || 'medium'"
-                          :options="componentSizeOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { editSize: $event || 'medium' })"
-                        />
-                        <n-input-number
-                          :value="selectedBlock.props?.editXGap ?? 16"
-                          :min="0"
-                          :max="48"
-                          :show-button="false"
-                          placeholder="列距"
-                          @update:value="patchBlockProps(selectedBlock.id, { editXGap: $event ?? 16 })"
-                        />
-                        <n-input-number
-                          :value="selectedBlock.props?.editYGap ?? 8"
-                          :min="0"
-                          :max="48"
-                          :show-button="false"
-                          placeholder="行距"
-                          @update:value="patchBlockProps(selectedBlock.id, { editYGap: $event ?? 8 })"
-                        />
+                      <div class="readonly-summary-row">
+                        <span>弹窗宽度</span>
+                        <strong>{{ selectedAiCrudFormModalProps.modalWidth || '800px' }}</strong>
                       </div>
-                    </n-form-item>
-                    <n-form-item label="弹出方式">
-                      <div class="style-grid three">
-                        <n-select
-                          :value="selectedBlock.props?.formOpenMode || selectedBlock.props?.modalType || 'modal'"
-                          :options="formOpenModeOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, normalizeFormOpenModePatch($event))"
-                        />
-                        <n-select
-                          :value="selectedBlock.props?.drawerPlacement || 'right'"
-                          :options="drawerPlacementOptions"
-                          @update:value="patchBlockProps(selectedBlock.id, { drawerPlacement: $event || 'right' })"
-                        />
-                        <n-input
-                          :value="selectedBlock.props?.modalWidth || '800px'"
-                          placeholder="弹窗宽度"
-                          @update:value="patchBlockProps(selectedBlock.id, { modalWidth: $event || '800px' })"
-                        />
+                      <div class="readonly-summary-row">
+                        <span>编辑列数</span>
+                        <strong>{{ selectedAiCrudFormModalProps.editGridCols || 1 }}</strong>
                       </div>
-                    </n-form-item>
+                    </div>
                     <n-form-item label="详情与页脚">
                       <div class="metrics-editor">
-                        <n-input
-                          :value="selectedBlock.props?.detailModalWidth || 'min(1080px, 92vw)'"
-                          placeholder="详情宽度"
-                          @update:value="patchBlockProps(selectedBlock.id, { detailModalWidth: $event || 'min(1080px, 92vw)' })"
-                        />
                         <n-checkbox-group
                           :value="resolveAiCrudEditFlags(selectedBlock)"
                           @update:value="updateAiCrudEditFlags"
@@ -5099,18 +5034,6 @@ const requestMethodOptions = [
   { label: 'GET', value: 'get' },
   { label: 'POST', value: 'post' },
 ]
-const formOpenModeOptions = [
-  { label: '弹窗', value: 'modal' },
-  { label: '抽屉', value: 'drawer' },
-  { label: '平铺', value: 'flat' },
-  { label: '多页签', value: 'tabWorkspace' },
-]
-const drawerPlacementOptions = [
-  { label: '右侧', value: 'right' },
-  { label: '左侧', value: 'left' },
-  { label: '顶部', value: 'top' },
-  { label: '底部', value: 'bottom' },
-]
 const tagTypeOptions = [
   { label: '默认', value: 'default' },
   { label: '主要', value: 'primary' },
@@ -5466,6 +5389,14 @@ const collapsedTreeFrames = computed(() => {
 })
 
 const selectedBlock = computed(() => findBlockInTree(blocks.value, selectedBlockId.value) || null)
+const selectedAiCrudFormModalProps = computed(() => {
+  if (selectedBlock.value?.blockType !== 'AiCrudPage')
+    return {}
+  return {
+    ...(selectedBlock.value.props || {}),
+    ...(resolvedRuntimeCrudProps.value || {}),
+  }
+})
 const selectedBlockEvents = computed(() => selectedBlock.value?.props?.events || [])
 const selectedBlockStyle = computed(() => ({
   ...createDefaultBlockStyle(),
@@ -7763,14 +7694,6 @@ function handleBlockPropsUpdate(payload = {}) {
   if (!payload.blockId || !payload.propsData)
     return
   patchBlockProps(payload.blockId, payload.propsData)
-}
-
-function normalizeFormOpenModePatch(value) {
-  const formOpenMode = value === 'tabWorkspace' ? 'tabWorkspace' : (['modal', 'drawer', 'flat'].includes(value) ? value : 'modal')
-  return {
-    formOpenMode,
-    modalType: ['modal', 'drawer'].includes(formOpenMode) ? formOpenMode : 'modal',
-  }
 }
 
 function handleCrudPreviewStateChange(payload = {}) {
@@ -11134,6 +11057,33 @@ function buildCrudFieldListPatch(blockProps = {}, fieldKey = '', settingKey = ''
   color: #475569;
   font-size: 12px;
   line-height: 18px;
+}
+
+.form-modal-readonly-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--n-color-hover, #f7f8fa);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.readonly-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.readonly-summary-row span {
+  color: var(--n-text-color-3);
+}
+
+.readonly-summary-row strong {
+  color: var(--n-text-color-1);
+  font-weight: 500;
+  text-align: right;
 }
 
 .event-row {

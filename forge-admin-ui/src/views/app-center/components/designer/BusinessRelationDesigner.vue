@@ -46,6 +46,20 @@
         <div class="rail-divider" />
 
         <div class="rail-block">
+          <button
+            type="button"
+            class="relation-choice er-choice"
+            :class="{ active: activePanel === 'er' }"
+            @click="selectErDiagram"
+          >
+            <strong>关系 ER 图</strong>
+            <span>{{ erDiagramSummary }}</span>
+          </button>
+        </div>
+
+        <div class="rail-divider" />
+
+        <div class="rail-block">
           <div class="rail-title">
             <span>字段联动</span>
             <n-button size="tiny" secondary @click="addLinkageRule">
@@ -500,6 +514,19 @@
             </n-empty>
           </template>
 
+          <template v-else-if="activePanel === 'er'">
+            <section id="relation-section-er" class="relation-er-panel">
+              <LowcodeErDiagram
+                title="关系 ER 图"
+                :subtitle="erDiagramSubtitle"
+                :models="erDiagramModels"
+                :primary-model-code="props.objectCode"
+                :download-file-name="`${props.objectCode || 'business-object'}-er.svg`"
+                empty-text="暂无可绘制的业务对象关系"
+              />
+            </section>
+          </template>
+
           <template v-else>
             <section id="relation-section-linkage" class="relation-config-card">
               <header class="section-title-row">
@@ -717,6 +744,7 @@ import {
   saveBusinessObjectDesigner,
 } from '@/api/business-app'
 import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
+import LowcodeErDiagram from '@/components/lowcode-builder/model/LowcodeErDiagram.vue'
 import {
   applyLinkageSchemaToFields,
   createLinkageSchemaFromFields,
@@ -852,6 +880,16 @@ const activeRelation = computed(() => {
     return null
   return localRelations.value.find(relation => relation.clientKey === activeRelationKey.value) || localRelations.value[0]
 })
+const erDiagramSummary = computed(() => {
+  const relationCount = localRelations.value.filter(relation => relation.targetObjectCode).length
+  return relationCount ? `${relationCount} 条关系` : '查看当前对象结构'
+})
+const erDiagramSubtitle = computed(() => {
+  const modelCount = erDiagramModels.value.length
+  const relationCount = localRelations.value.filter(relation => relation.targetObjectCode).length
+  return `${props.objectName || props.objectCode || '当前对象'}：${modelCount} 个对象，${relationCount} 条关系`
+})
+const erDiagramModels = computed(() => buildErDiagramModels())
 
 watch(() => props.objectId, () => {
   loadRelations()
@@ -1044,6 +1082,10 @@ function selectRelation(clientKey) {
 function selectLinkageRule(ruleId) {
   activePanel.value = 'linkage'
   activeLinkageRuleId.value = ruleId || localLinkage.value.rules?.[0]?.ruleId || ''
+}
+
+function selectErDiagram() {
+  activePanel.value = 'er'
 }
 
 function removeActiveRelation() {
@@ -2165,6 +2207,90 @@ async function loadTargetFields(objectCode) {
   }
 }
 
+function buildErDiagramModels() {
+  const currentCode = props.objectCode || 'current_object'
+  const models = [
+    {
+      modelCode: currentCode,
+      modelName: props.objectName || currentCode,
+      tableName: currentCode,
+      modelSchema: {
+        object: {
+          code: currentCode,
+          name: props.objectName || currentCode,
+        },
+        tableName: currentCode,
+        fields: normalizeErFields(props.fields || []),
+        relations: localRelations.value
+          .filter(relation => relation.targetObjectCode)
+          .map(toErRelation),
+      },
+    },
+  ]
+  const targetCodes = Array.from(new Set(localRelations.value
+    .map(relation => relation.targetObjectCode)
+    .filter(Boolean)))
+  targetCodes.forEach((targetCode) => {
+    const targetObject = businessObjects.value.find(item => item.objectCode === targetCode) || {}
+    models.push({
+      modelCode: targetCode,
+      modelName: targetObject.objectName || targetCode,
+      tableName: targetObject.tableName || targetCode,
+      modelSchema: {
+        object: {
+          code: targetCode,
+          name: targetObject.objectName || targetCode,
+        },
+        tableName: targetObject.tableName || targetCode,
+        fields: normalizeErFields(targetFieldsMap.value[targetCode] || []),
+        relations: [],
+      },
+    })
+  })
+  return models
+}
+
+function normalizeErFields(fields = []) {
+  const rows = (fields || [])
+    .map(toPageField)
+    .filter(field => field.field && !isInactiveField(field))
+    .map(field => ({
+      field: field.field,
+      columnName: field.columnName || field.field,
+      label: field.label || field.fieldName || field.field,
+      dataType: field.dataType || field.fieldType || field.businessFieldType || '',
+      primaryKey: Boolean(field.primaryKey) || field.field === 'id' || field.columnName === 'id',
+      systemField: Boolean(field.systemField),
+    }))
+  if (!rows.some(field => field.field === 'id' || field.columnName === 'id')) {
+    rows.unshift({
+      field: 'id',
+      columnName: 'id',
+      label: 'ID',
+      dataType: 'bigint',
+      primaryKey: true,
+      systemField: true,
+    })
+  }
+  return rows
+}
+
+function toErRelation(relation = {}) {
+  return {
+    relationType: normalizeErRelationType(relation.relationType),
+    targetObjectCode: relation.targetObjectCode,
+    sourceField: relation.sourceFieldCode || 'id',
+    targetField: relation.targetFieldCode || 'id',
+  }
+}
+
+function normalizeErRelationType(value) {
+  const type = normalizeDesignerRelationType(value)
+  if (type === 'DETAIL')
+    return 'ONE_TO_MANY'
+  return type
+}
+
 function firstTargetField(objectCode, relationType = 'DETAIL', currentValue = '') {
   const fields = targetFieldsMap.value[objectCode] || []
   if (relationType === 'REFERENCE') {
@@ -2558,6 +2684,15 @@ defineExpose({
   border-color: #2b6bed;
   background: #f3f7ff;
   box-shadow: 0 6px 16px rgb(43 107 237 / 8%);
+}
+
+.er-choice {
+  border-style: dashed;
+}
+
+.relation-er-panel {
+  min-height: 100%;
+  padding: 16px;
 }
 
 .relation-choice strong {

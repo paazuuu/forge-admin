@@ -875,6 +875,9 @@ function normalizeLayout(layout = {}) {
     columnGap: Number(source.columnGap ?? source.xGap ?? 16),
     xGap: Number(source.xGap ?? source.columnGap ?? 16),
     yGap: Number(source.yGap ?? source.rowGap ?? 16),
+    modalWidth: source.modalWidth || '800px',
+    detailModalWidth: source.detailModalWidth || source.modalWidth || '800px',
+    drawerPlacement: ['left', 'right'].includes(source.drawerPlacement) ? source.drawerPlacement : 'right',
   }
   if (source.formStyle !== undefined)
     normalized.formStyle = cloneValue(source.formStyle)
@@ -994,6 +997,9 @@ export function normalizeFieldBinding(binding = {}, fallbackFieldCode = '') {
     createIfMissing: source.createIfMissing !== false && Boolean(fieldCode),
     source: source.source || 'designer',
     locked: Boolean(source.locked),
+    ...(source.fieldType ? { fieldType: source.fieldType } : {}),
+    ...(source.dataType ? { dataType: source.dataType } : {}),
+    ...(source.componentType ? { componentType: source.componentType } : {}),
   }
 }
 
