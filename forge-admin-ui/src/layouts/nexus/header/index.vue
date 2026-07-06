@@ -17,6 +17,7 @@
       <MessageNotification />
       <div class="header-divider" />
       <TenantSwitcher />
+      <OrgSwitcher />
       <UserAvatar />
     </div>
   </div>
@@ -27,6 +28,7 @@ import ToggleTheme from '@/components/common/ToggleTheme.vue'
 import Fullscreen from '@/layouts/components/Fullscreen.vue'
 import MenuSearch from '@/layouts/components/MenuSearch.vue'
 import MessageNotification from '@/layouts/components/MessageNotification.vue'
+import OrgSwitcher from '@/layouts/components/OrgSwitcher.vue'
 import TenantSwitcher from '@/layouts/components/TenantSwitcher.vue'
 import UserAvatar from '@/layouts/components/UserAvatar.vue'
 import BreadCrumb from '../BreadCrumb.vue'

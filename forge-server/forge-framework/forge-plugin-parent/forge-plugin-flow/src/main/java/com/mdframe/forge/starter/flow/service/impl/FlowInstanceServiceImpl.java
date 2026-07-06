@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.SysRole;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
+import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.flow.entity.FlowBusiness;
 import com.mdframe.forge.starter.flow.entity.FlowErrorLog;
@@ -195,7 +196,12 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
         // 自动注入用户角色信息
         if (userId != null && !userId.isEmpty() && sysUserService != null) {
             try {
-                List<Long> roleIds = sysUserService.selectUserRoleIds(Long.parseLong(userId));
+                LoginUser loginUser = SessionHelper.getLoginUser();
+                Long activeOrgId = loginUser == null ? null : loginUser.getActiveOrgId();
+                Long roleTenantId = loginUser == null ? tenantId : loginUser.getTenantId();
+                List<Long> roleIds = activeOrgId == null
+                        ? List.of()
+                        : sysUserService.selectUserOrgRoleIds(Long.parseLong(userId), activeOrgId, roleTenantId);
                 if (roleIds != null && !roleIds.isEmpty()) {
                     // 注入角色ID列表（逗号分隔）
                     String roleIdsStr = roleIds.stream()
@@ -203,6 +209,10 @@ public class FlowInstanceServiceImpl implements FlowInstanceService {
                             .collect(Collectors.joining(","));
                     vars.put("startUserRoleIds", roleIdsStr);
                     log.info("自动注入用户角色ID变量：startUserRoleIds={}", roleIdsStr);
+                }
+                if (activeOrgId != null) {
+                    vars.put("startUserActiveOrgId", String.valueOf(activeOrgId));
+                    log.info("自动注入当前组织变量：startUserActiveOrgId={}", activeOrgId);
                 }
             } catch (Exception e) {
                 log.warn("获取用户角色失败，startUserRoleIds 变量未注入：userId={}", userId, e);

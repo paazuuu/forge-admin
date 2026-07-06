@@ -41,6 +41,11 @@ public class SysRoleQuery extends PageQuery {
     private Integer roleType;
 
     /**
+     * 适用组织ID。传入后仅查询该组织可分配的角色。
+     */
+    private Long orgId;
+
+    /**
      * 当前用户可见的角色ID列表，非超级管理员只能查询自己已拥有的角色。
      */
     private List<Long> accessibleRoleIds;

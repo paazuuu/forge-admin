@@ -11,6 +11,7 @@ import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.entity.SysUserOrg;
+import com.mdframe.forge.plugin.system.entity.SysUserOrgRole;
 import com.mdframe.forge.plugin.system.entity.SysUserPost;
 import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
@@ -19,6 +20,7 @@ import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserPostMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.plugin.system.service.ISysTenantService;
 import com.mdframe.forge.plugin.system.service.IUserLoadService;
@@ -49,6 +51,7 @@ public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant
     private final SysUserMapper userMapper;
     private final SysUserTenantMapper userTenantMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final SysUserOrgRoleMapper userOrgRoleMapper;
     private final SysUserOrgMapper userOrgMapper;
     private final SysUserPostMapper userPostMapper;
     private final IUserLoadService userLoadService;
@@ -165,6 +168,9 @@ public class SysTenantServiceImpl extends ServiceImpl<SysTenantMapper, SysTenant
             userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
                     .eq(SysUserRole::getUserId, userId)
                     .eq(SysUserRole::getTenantId, tenantId));
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                    .eq(SysUserOrgRole::getUserId, userId)
+                    .eq(SysUserOrgRole::getTenantId, tenantId));
             userOrgMapper.delete(new LambdaQueryWrapper<SysUserOrg>()
                     .eq(SysUserOrg::getUserId, userId)
                     .eq(SysUserOrg::getTenantId, tenantId));

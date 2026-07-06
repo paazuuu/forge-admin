@@ -41,9 +41,12 @@ public class InjectionMetaObjectHandler implements MetaObjectHandler {
                         // 填充创建人、更新人和创建部门信息
                         baseEntity.setCreateBy(userId);
                         baseEntity.setUpdateBy(userId);
-                        if (CollUtil.isNotEmpty(loginUser.getOrgIds())) {
+                        Long createDept = ObjectUtil.isNotNull(loginUser.getActiveOrgId())
+                                ? loginUser.getActiveOrgId()
+                                : (CollUtil.isNotEmpty(loginUser.getOrgIds()) ? loginUser.getOrgIds().get(0) : null);
+                        if (ObjectUtil.isNotNull(createDept)) {
                             baseEntity.setCreateDept(ObjectUtil.isNotNull(baseEntity.getCreateDept())
-                                    ? baseEntity.getCreateDept() : loginUser.getOrgIds().get(0));
+                                    ? baseEntity.getCreateDept() : createDept);
                         }
                     }
                 }

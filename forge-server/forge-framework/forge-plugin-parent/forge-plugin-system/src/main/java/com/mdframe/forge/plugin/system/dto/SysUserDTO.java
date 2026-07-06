@@ -107,4 +107,14 @@ public class SysUserDTO implements Serializable {
      * 角色ID列表（新增/编辑时同步绑定）
      */
     private List<Long> roleIds;
+
+    /**
+     * 所属组织ID列表。为空时普通管理员新增用户默认加入当前组织。
+     */
+    private List<Long> orgIds;
+
+    /**
+     * 主组织ID。
+     */
+    private Long mainOrgId;
 }

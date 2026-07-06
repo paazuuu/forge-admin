@@ -50,10 +50,20 @@
     </select>
 
     <select id="selectUserIdsByRoleIds" resultType="java.lang.Long">
-        SELECT DISTINCT user_id
-        FROM sys_user_role
-        WHERE tenant_id = #{tenantId}
-          AND role_id IN
+        SELECT DISTINCT uor.user_id
+        FROM sys_user_org_role uor
+        INNER JOIN sys_user u ON u.id = uor.user_id AND u.user_status = 1
+        INNER JOIN sys_role r
+            ON r.id = uor.role_id
+           AND r.tenant_id = uor.tenant_id
+           AND r.role_status = 1
+        INNER JOIN sys_role_org ro
+            ON ro.tenant_id = uor.tenant_id
+           AND ro.role_id = uor.role_id
+           AND ro.org_id = uor.org_id
+        WHERE uor.tenant_id = #{tenantId}
+          AND uor.org_id = #{orgId}
+          AND uor.role_id IN
         <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
             #{roleId}
         </foreach>

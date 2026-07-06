@@ -187,6 +187,21 @@
       :mask-closable="false"
     >
       <div class="auth-modal-content">
+        <n-alert type="info" :bordered="false" class="batch-action-alert">
+          角色授权按组织生效，切换授权组织后会分别加载该组织可用角色和用户已拥有角色。
+        </n-alert>
+        <n-form label-placement="left" label-width="90" class="batch-action-form">
+          <n-form-item label="授权组织">
+            <n-select
+              v-model:value="authOrgId"
+              :options="authOrgOptions"
+              placeholder="请选择授权组织"
+              filterable
+              :disabled="authOrgOptions.length === 0"
+            />
+          </n-form-item>
+        </n-form>
+
         <!-- 操作按钮 -->
         <div class="auth-toolbar">
           <n-input
@@ -279,6 +294,18 @@
               :options="tenantSelectOptions"
               placeholder="请选择授权租户"
               filterable
+            />
+          </n-form-item>
+          <n-form-item label="授权组织">
+            <n-tree-select
+              v-model:value="batchAuthOrgId"
+              :options="batchAuthOrgTreeOptions"
+              placeholder="请选择授权组织"
+              filterable
+              clearable
+              key-field="value"
+              label-field="label"
+              children-field="children"
             />
           </n-form-item>
         </n-form>
@@ -374,10 +401,21 @@
             </n-button>
           </n-space>
           <div class="org-main-hint">
-            <span>已选组织</span>
-            <strong>{{ mainOrgName || '请选择一个组织' }}</strong>
+            <span>已选 {{ checkedOrgKeys.length }} 个组织</span>
+            <strong>主组织：{{ mainOrgName || '请选择主组织' }}</strong>
           </div>
         </div>
+        <n-form label-placement="left" label-width="90" class="org-main-form">
+          <n-form-item label="主组织">
+            <n-select
+              v-model:value="mainOrgId"
+              :options="selectedOrgOptions"
+              placeholder="请选择主组织"
+              filterable
+              :disabled="checkedOrgKeys.length === 0"
+            />
+          </n-form-item>
+        </n-form>
 
         <!-- 组织树形区域 -->
         <div class="org-tree-container">
@@ -385,7 +423,10 @@
             <PremiumTree
               v-if="orgTreeData.length > 0"
               :data="orgTreeData"
+              checkable
+              :cascade="false"
               :selected-keys="mainOrgId ? [mainOrgId] : []"
+              :checked-keys="checkedOrgKeys"
               :expanded-keys="orgTreeExpandedKeys"
               key-field="id"
               label-field="orgName"
@@ -395,7 +436,7 @@
               :get-node-tone="getLeftOrgNodeTone"
               show-meta
               @update:expanded-keys="handleOrgExpandedKeysChange"
-              @update:selected-keys="handleOrgSelectedKeysChange"
+              @update:checked-keys="handleOrgCheckedKeysChange"
             />
             <n-empty v-else description="暂无组织数据" />
           </n-spin>
@@ -612,11 +653,15 @@ const authSubmitLoading = ref(false)
 const batchAuthModalVisible = ref(false)
 const batchAuthSubmitLoading = ref(false)
 const batchAuthTenantId = ref(null)
+const batchAuthOrgId = ref(null)
+const batchAuthOrgTreeData = ref([])
 const currentUser = ref({})
 const roleTableData = ref([])
 const roleSearchKeyword = ref('')
 const editingUserTenantId = ref(null)
 const checkedRoleKeys = ref([])
+const authOrgId = ref(null)
+const currentUserOrgBindings = ref([])
 const rolePagination = ref({
   page: 1,
   pageSize: 10,
@@ -641,6 +686,7 @@ const orgLoading = ref(false)
 const orgSubmitLoading = ref(false)
 const orgTreeData = ref([])
 const mainOrgId = ref(null)
+const checkedOrgKeys = ref([])
 const orgTreeExpandAll = ref(true)
 const orgTreeExpandedKeys = ref([])
 
@@ -679,6 +725,13 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
+const authOrgOptions = computed(() => currentUserOrgBindings.value
+  .map(item => ({
+    label: formatUserOrgBindingLabel(item),
+    value: normalizeSingleNumber(item.orgId),
+  }))
+  .filter(item => item.value !== null))
+const batchAuthOrgTreeOptions = computed(() => convertOrgToTreeSelect(batchAuthOrgTreeData.value))
 const tenantMemberTypeOptions = computed(() => userTypeOptions.value.filter(item => Number(item.value) !== 0))
 const rolePaginationConfig = computed(() => ({
   page: rolePagination.value.page,
@@ -728,6 +781,18 @@ const selectedTenantOptions = computed(() => tenantOptions.value
     label: item.tenantName,
     value: item.id,
   })))
+const selectedOrgOptions = computed(() => flattenOrgNodes(orgTreeData.value)
+  .filter(item => checkedOrgKeys.value.includes(normalizeSingleNumber(item.id)))
+  .map(item => ({
+    label: item.orgName,
+    value: normalizeSingleNumber(item.id),
+  })))
+
+watch(checkedOrgKeys, (keys) => {
+  if (mainOrgId.value && !keys.includes(mainOrgId.value)) {
+    mainOrgId.value = keys[0] || null
+  }
+})
 
 watch(checkedTenantKeys, (keys) => {
   if (defaultTenantId.value && !keys.includes(defaultTenantId.value)) {
@@ -735,12 +800,34 @@ watch(checkedTenantKeys, (keys) => {
   }
 })
 
-watch(batchAuthTenantId, (tenantId, previousTenantId) => {
-  if (!batchAuthModalVisible.value || isSameKey(tenantId, previousTenantId))
+watch(authOrgId, (orgId, previousOrgId) => {
+  if (!authModalVisible.value || isSameKey(orgId, previousOrgId))
     return
   checkedRoleKeys.value = []
   rolePagination.value.page = 1
-  loadRoleList(tenantId)
+  loadRoleList(resolveOperationTenantId(), orgId)
+  loadUserRoles(currentUser.value.id, orgId)
+})
+
+watch(batchAuthTenantId, async (tenantId, previousTenantId) => {
+  if (!batchAuthModalVisible.value || isSameKey(tenantId, previousTenantId))
+    return
+  checkedRoleKeys.value = []
+  batchAuthOrgId.value = null
+  rolePagination.value.page = 1
+  await loadBatchAuthOrgTree(tenantId)
+  batchAuthOrgId.value = resolvePreferredOrgIdFromTree(batchAuthOrgTreeData.value)
+  if (batchAuthOrgId.value)
+    loadRoleList(tenantId, batchAuthOrgId.value)
+})
+
+watch(batchAuthOrgId, (orgId, previousOrgId) => {
+  if (!batchAuthModalVisible.value || isSameKey(orgId, previousOrgId))
+    return
+  checkedRoleKeys.value = []
+  rolePagination.value.page = 1
+  if (orgId)
+    loadRoleList(batchAuthTenantId.value, orgId)
 })
 
 // 岗位选项（仅已勾选的岗位可选为主岗）
@@ -998,26 +1085,6 @@ const editSchema = computed(() => [
     },
   },
   {
-    field: 'roleIds',
-    label: '角色',
-    type: 'select',
-    span: 2,
-    vIf: formData => !isCurrentLoginUser(formData.id),
-    optionSource: {
-      api: 'get@/system/role/page',
-      // eslint-disable-next-line no-template-curly-in-string
-      params: { pageNum: 1, pageSize: 1000, tenantId: '${tenantId}' },
-      valueField: 'id',
-      labelField: 'roleName',
-    },
-    props: {
-      placeholder: '请选择角色',
-      multiple: true,
-      clearable: true,
-      filterable: true,
-    },
-  },
-  {
     type: 'divider',
     label: '联系信息',
     props: {
@@ -1160,6 +1227,39 @@ function normalizeNumberList(value) {
   return Array.from(new Set(list
     .map(item => normalizeSingleNumber(item))
     .filter(item => item !== null)))
+}
+
+function flattenOrgNodes(list = []) {
+  return (list || []).flatMap((item) => {
+    const current = [item]
+    const children = flattenOrgNodes(item.children || [])
+    return [...current, ...children]
+  })
+}
+
+function convertOrgToTreeSelect(list = []) {
+  return (list || []).map(item => ({
+    label: item.orgName || item.label || String(item.id),
+    value: normalizeSingleNumber(item.id),
+    key: normalizeSingleNumber(item.id),
+    children: item.children?.length ? convertOrgToTreeSelect(item.children) : undefined,
+  }))
+}
+
+function resolvePreferredOrgIdFromTree(list = []) {
+  const flat = flattenOrgNodes(list)
+  const activeOrgId = normalizeSingleNumber(userStore.activeOrgId || userStore.userInfo?.activeOrgId)
+  if (activeOrgId !== null && flat.some(item => isSameKey(item.id, activeOrgId)))
+    return activeOrgId
+  return normalizeSingleNumber(flat[0]?.id)
+}
+
+function formatUserOrgBindingLabel(item = {}) {
+  const roleNames = Array.isArray(item.roleNames) ? item.roleNames.filter(Boolean) : []
+  const suffix = roleNames.length > 0
+    ? ` · ${roleNames.slice(0, 2).join('、')}${roleNames.length > 2 ? '等' : ''}`
+    : ''
+  return `${item.orgName || item.orgId}${Number(item.isMain) === 1 ? ' · 主组织' : ''}${suffix}`
 }
 
 function resolveTenantIds(data = {}, fallbackTenantId = null) {
@@ -1343,6 +1443,8 @@ function getLeftOrgNodeTone(node = {}) {
 function getUserOrgNodeMeta(node = {}) {
   if (isSameKey(node.id, mainOrgId.value))
     return { value: '主组织' }
+  if (checkedOrgKeys.value.includes(normalizeSingleNumber(node.id)))
+    return { value: '已选' }
   return null
 }
 
@@ -1613,12 +1715,9 @@ async function beforeRenderUserDetail(data) {
   }
   try {
     const params = buildTenantParams(tenantId)
-    const [roleRes, postRes] = await Promise.all([
-      request.get(`/system/user/${data.id}/roles`, { params }),
+    const [postRes] = await Promise.all([
       request.get(`/system/user/${data.id}/posts`, { params }),
     ])
-    if (roleRes.code === 200)
-      next.roleIds = normalizeNumberList(roleRes.data || [])
     if (postRes.code === 200)
       next.postIds = normalizeNumberList(postRes.data || [])
   }
@@ -1707,6 +1806,7 @@ async function handleUntieDisable(row) {
 // 表单提交前处理
 function beforeSubmit(formData) {
   Object.assign(formData, normalizeUserFormData(formData, userStore.userInfo?.tenantId))
+  delete formData.roleIds
   if (!userStore.isAdmin) {
     formData.tenantId = userStore.userInfo?.tenantId
     formData.tenantIds = [userStore.userInfo?.tenantId].filter(Boolean)
@@ -1767,10 +1867,18 @@ async function handleOpenBatchAuth() {
   }
 
   batchAuthModalVisible.value = true
+  batchAuthOrgId.value = null
+  batchAuthOrgTreeData.value = []
   roleSearchKeyword.value = ''
   checkedRoleKeys.value = []
   rolePagination.value.page = 1
-  await loadRoleList(batchAuthTenantId.value)
+  await loadBatchAuthOrgTree(batchAuthTenantId.value)
+  batchAuthOrgId.value = selectedOrgNode.value?.id || resolvePreferredOrgIdFromTree(batchAuthOrgTreeData.value)
+  if (!batchAuthOrgId.value) {
+    window.$message.warning('请选择授权组织')
+    return
+  }
+  await loadRoleList(batchAuthTenantId.value, batchAuthOrgId.value)
 }
 
 async function handleAuth(row) {
@@ -1779,13 +1887,59 @@ async function handleAuth(row) {
   batchAuthModalVisible.value = false
   roleSearchKeyword.value = ''
   rolePagination.value.page = 1
+  checkedRoleKeys.value = []
+  authOrgId.value = null
 
-  await loadRoleList()
-  await loadUserRoles(row.id)
+  await loadUserOrgBindings(row.id, resolveOperationTenantId(row))
+  authOrgId.value = resolveDefaultAuthOrgId()
+  if (!authOrgId.value) {
+    window.$message.warning('请先给用户绑定组织')
+    return
+  }
+  await loadRoleList(resolveOperationTenantId(row), authOrgId.value)
+  await loadUserRoles(row.id, authOrgId.value)
+}
+
+async function loadUserOrgBindings(userId, tenantId = resolveOperationTenantId()) {
+  try {
+    const res = await request.get(`/system/user/${userId}/org-bindings`, {
+      params: buildTenantParams(tenantId),
+    })
+    if (res.code === 200) {
+      currentUserOrgBindings.value = res.data || []
+      return
+    }
+  }
+  catch (error) {
+    console.error('加载用户组织绑定详情失败:', error)
+  }
+  currentUserOrgBindings.value = []
+}
+
+function resolveDefaultAuthOrgId() {
+  const activeOrgId = normalizeSingleNumber(userStore.activeOrgId || userStore.userInfo?.activeOrgId)
+  if (activeOrgId !== null && currentUserOrgBindings.value.some(item => isSameKey(item.orgId, activeOrgId)))
+    return activeOrgId
+
+  const mainOrg = currentUserOrgBindings.value.find(item => Number(item.isMain) === 1)
+  if (mainOrg)
+    return normalizeSingleNumber(mainOrg.orgId)
+
+  return normalizeSingleNumber(currentUserOrgBindings.value[0]?.orgId)
+}
+
+async function loadBatchAuthOrgTree(tenantId) {
+  try {
+    batchAuthOrgTreeData.value = await loadCompleteOrgTree(tenantId)
+  }
+  catch (error) {
+    console.error('加载批量授权组织失败:', error)
+    batchAuthOrgTreeData.value = []
+  }
 }
 
 // 加载角色列表
-async function loadRoleList(tenantId = resolveOperationTenantId()) {
+async function loadRoleList(tenantId = resolveOperationTenantId(), orgId = authOrgId.value) {
   try {
     authLoading.value = true
     const res = await request.get('/system/role/page', {
@@ -1793,6 +1947,7 @@ async function loadRoleList(tenantId = resolveOperationTenantId()) {
         pageNum: rolePagination.value.page,
         pageSize: rolePagination.value.pageSize,
         roleName: roleSearchKeyword.value || undefined,
+        orgId: normalizeSingleNumber(orgId) || undefined,
         ...buildTenantParams(tenantId),
       },
     })
@@ -1811,11 +1966,19 @@ async function loadRoleList(tenantId = resolveOperationTenantId()) {
 }
 
 // 加载用户已有的角色
-async function loadUserRoles(userId) {
+async function loadUserRoles(userId, orgId = authOrgId.value) {
+  const normalizedOrgId = normalizeSingleNumber(orgId)
+  if (!normalizedOrgId) {
+    checkedRoleKeys.value = []
+    return
+  }
   try {
     authLoading.value = true
-    const res = await request.get(`/system/user/${userId}/roles`, {
-      params: buildTenantParams(resolveOperationTenantId()),
+    const res = await request.get(`/system/user/${userId}/org-roles`, {
+      params: {
+        ...buildTenantParams(resolveOperationTenantId()),
+        orgId: normalizedOrgId,
+      },
     })
     if (res.code === 200) {
       checkedRoleKeys.value = normalizeNumberList(res.data || [])
@@ -1837,18 +2000,27 @@ function handleCheckedKeysChange(keys) {
 
 function handleRoleSearch() {
   rolePagination.value.page = 1
-  loadRoleList(batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId())
+  loadRoleList(
+    batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId(),
+    batchAuthModalVisible.value ? batchAuthOrgId.value : authOrgId.value,
+  )
 }
 
 function handleRolePageChange(page) {
   rolePagination.value.page = page
-  loadRoleList(batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId())
+  loadRoleList(
+    batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId(),
+    batchAuthModalVisible.value ? batchAuthOrgId.value : authOrgId.value,
+  )
 }
 
 function handleRolePageSizeChange(pageSize) {
   rolePagination.value.pageSize = pageSize
   rolePagination.value.page = 1
-  loadRoleList(batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId())
+  loadRoleList(
+    batchAuthModalVisible.value ? batchAuthTenantId.value : resolveOperationTenantId(),
+    batchAuthModalVisible.value ? batchAuthOrgId.value : authOrgId.value,
+  )
 }
 
 // 全选
@@ -1864,12 +2036,20 @@ function handleUncheckAll() {
 
 // 提交授权
 async function handleSubmitAuth() {
+  const orgId = normalizeSingleNumber(authOrgId.value)
+  if (!orgId) {
+    window.$message.warning('请选择授权组织')
+    return
+  }
   try {
     authSubmitLoading.value = true
     const res = await request.post(
-      `/system/user/${currentUser.value.id}/roles`,
-      checkedRoleKeys.value,
-      { params: buildTenantParams(resolveOperationTenantId()) },
+      `/system/user/${currentUser.value.id}/org-roles`,
+      {
+        orgId,
+        roleIds: normalizeNumberList(checkedRoleKeys.value),
+        tenantId: resolveOperationTenantId(),
+      },
     )
     if (res.code === 200) {
       window.$message.success('授权成功')
@@ -1894,6 +2074,11 @@ async function handleSubmitBatchAuth() {
     window.$message.warning('请选择授权租户')
     return
   }
+  const orgId = normalizeSingleNumber(batchAuthOrgId.value)
+  if (orgId === null) {
+    window.$message.warning('请选择授权组织')
+    return
+  }
   const roleIds = normalizeNumberList(checkedRoleKeys.value)
   if (roleIds.length === 0) {
     window.$message.warning('请至少选择一个角色')
@@ -1902,18 +2087,28 @@ async function handleSubmitBatchAuth() {
 
   try {
     batchAuthSubmitLoading.value = true
-    const res = await request.post('/system/user/batch/roles', {
-      userIds,
-      roleIds,
-      tenantId,
-    })
-    if (res.code === 200) {
-      window.$message.success('批量授权成功')
-      batchAuthModalVisible.value = false
-      checkedRoleKeys.value = []
-      clearBatchSelection()
-      crudRef.value?.refresh()
+    for (const userId of userIds) {
+      const currentRes = await request.get(`/system/user/${userId}/org-roles`, {
+        params: { tenantId, orgId },
+      })
+      const mergedRoleIds = Array.from(new Set([
+        ...normalizeNumberList(currentRes.code === 200 ? currentRes.data : []),
+        ...roleIds,
+      ]))
+      const res = await request.post(`/system/user/${userId}/org-roles`, {
+        tenantId,
+        orgId,
+        roleIds: mergedRoleIds,
+      })
+      if (res.code !== 200) {
+        throw new Error(`用户 ${userId} 授权失败`)
+      }
     }
+    window.$message.success('批量授权成功')
+    batchAuthModalVisible.value = false
+    checkedRoleKeys.value = []
+    clearBatchSelection()
+    crudRef.value?.refresh()
   }
   catch (error) {
     console.error('批量授权失败:', error)
@@ -1929,6 +2124,7 @@ async function handleOrg(row) {
   currentUser.value = row
   orgModalVisible.value = true
   mainOrgId.value = null
+  checkedOrgKeys.value = []
 
   await loadOrgTree(resolveOperationTenantId(row))
   await loadUserOrgs(row.id)
@@ -1955,11 +2151,14 @@ async function loadOrgTree(tenantId = resolveOperationTenantId()) {
 async function loadUserOrgs(userId) {
   try {
     orgLoading.value = true
-    const res = await request.get(`/system/user/${userId}/orgs`, {
+    const res = await request.get(`/system/user/${userId}/org-bindings`, {
       params: buildTenantParams(resolveOperationTenantId()),
     })
     if (res.code === 200) {
-      mainOrgId.value = normalizeNumberList(res.data || [])[0] || null
+      const bindings = res.data || []
+      checkedOrgKeys.value = normalizeNumberList(bindings.map(item => item.orgId))
+      const mainBinding = bindings.find(item => Number(item.isMain) === 1)
+      mainOrgId.value = normalizeSingleNumber(mainBinding?.orgId) || checkedOrgKeys.value[0] || null
     }
   }
   catch (error) {
@@ -1977,14 +2176,24 @@ function handleOrgExpandedKeysChange(keys) {
 }
 
 // 组织选中的变化
-function handleOrgSelectedKeysChange(keys) {
-  mainOrgId.value = normalizeNumberList(keys || [])[0] ?? null
+function handleOrgCheckedKeysChange(keys) {
+  checkedOrgKeys.value = normalizeNumberList(keys || [])
+  if (mainOrgId.value && !checkedOrgKeys.value.includes(mainOrgId.value)) {
+    mainOrgId.value = checkedOrgKeys.value[0] || null
+  }
+  else if (!mainOrgId.value && checkedOrgKeys.value.length > 0) {
+    mainOrgId.value = checkedOrgKeys.value[0]
+  }
 }
 
 // 提交组织绑定
 async function handleSubmitOrg() {
-  if (!mainOrgId.value) {
-    window.$message.warning('请选择一个组织')
+  if (checkedOrgKeys.value.length === 0) {
+    window.$message.warning('请至少选择一个组织')
+    return
+  }
+  if (!mainOrgId.value || !checkedOrgKeys.value.includes(mainOrgId.value)) {
+    window.$message.warning('请选择主组织')
     return
   }
 
@@ -1993,7 +2202,7 @@ async function handleSubmitOrg() {
     const res = await request.post(
       `/system/user/${currentUser.value.id}/orgs`,
       {
-        orgIds: [mainOrgId.value],
+        orgIds: checkedOrgKeys.value,
         mainOrgId: mainOrgId.value,
       },
       { params: buildTenantParams(resolveOperationTenantId()) },

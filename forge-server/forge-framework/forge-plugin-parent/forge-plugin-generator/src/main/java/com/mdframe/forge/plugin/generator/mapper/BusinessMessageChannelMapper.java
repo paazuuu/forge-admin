@@ -17,6 +17,7 @@ public interface BusinessMessageChannelMapper extends BaseMapper<AiBusinessMessa
                                                  @Param("channelCode") String channelCode);
 
     List<Long> selectUserIdsByRoleIds(@Param("tenantId") Long tenantId,
+                                      @Param("orgId") Long orgId,
                                       @Param("roleIds") List<Long> roleIds);
 
     List<Long> selectUserIdsByOrgIds(@Param("tenantId") Long tenantId,

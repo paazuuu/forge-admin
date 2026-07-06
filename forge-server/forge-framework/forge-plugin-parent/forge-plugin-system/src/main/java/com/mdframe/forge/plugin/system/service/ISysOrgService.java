@@ -6,6 +6,7 @@ import com.mdframe.forge.plugin.system.dto.SysOrgDTO;
 import com.mdframe.forge.plugin.system.dto.SysOrgQuery;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
+import com.mdframe.forge.starter.core.session.LoginUser;
 
 import java.util.List;
 
@@ -75,5 +76,20 @@ public interface ISysOrgService extends IService<SysOrg> {
     List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId);
 
     List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId, Long tenantId);
+
+    /**
+     * 查询当前用户在当前租户下可切换组织。
+     *
+     * @return 当前用户组织选项
+     */
+    List<SysOrgTreeVO> selectCurrentUserOrgOptions();
+
+    /**
+     * 切换当前组织并重算权限。
+     *
+     * @param orgId 组织ID
+     * @return 重建后的登录用户
+     */
+    LoginUser switchCurrentOrg(Long orgId);
     
 }

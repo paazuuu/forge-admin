@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.*;
 import com.mdframe.forge.plugin.system.mapper.*;
 import com.mdframe.forge.plugin.system.service.*;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.flow.service.FlowOrgIntegrationService;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,7 +32,7 @@ public class FlowOrgIntegrationServiceImpl implements FlowOrgIntegrationService 
     private final ISysUserOrgService sysUserOrgService;
     
     // 直接使用Mapper操作关联表
-    private final SysUserRoleMapper sysUserRoleMapper;
+    private final SysUserOrgRoleMapper sysUserOrgRoleMapper;
     private final SysUserPostMapper sysUserPostMapper;
 
     @Override
@@ -224,20 +226,10 @@ public class FlowOrgIntegrationServiceImpl implements FlowOrgIntegrationService 
         try {
             Long rid = Long.parseLong(roleId);
             
-            // 查询用户角色关联表
-            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SysUserRole::getRoleId, rid);
-            List<SysUserRole> userRoles = sysUserRoleMapper.selectList(wrapper);
-            
-            if (userRoles.isEmpty()) {
+            List<Long> userIds = selectUserIdsByCurrentOrgRole(rid);
+            if (userIds.isEmpty()) {
                 return Collections.emptyList();
             }
-            
-            // 获取用户ID列表
-            List<Long> userIds = userRoles.stream()
-                    .map(SysUserRole::getUserId)
-                    .distinct()
-                    .collect(Collectors.toList());
             
             // 过滤有效用户
             List<SysUser> users = sysUserService.lambdaQuery()
@@ -496,19 +488,11 @@ public class FlowOrgIntegrationServiceImpl implements FlowOrgIntegrationService 
         try {
             Long uid = Long.parseLong(userId);
             
-            // 获取用户角色ID列表
-            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SysUserRole::getUserId, uid);
-            List<SysUserRole> userRoles = sysUserRoleMapper.selectList(wrapper);
-            
-            if (userRoles.isEmpty()) {
+            List<Long> roleIds = selectCurrentOrgRoleIdsByUser(uid);
+            if (roleIds.isEmpty()) {
                 return false;
             }
-            
-            List<Long> roleIds = userRoles.stream()
-                    .map(SysUserRole::getRoleId)
-                    .collect(Collectors.toList());
-            
+
             // 检查是否有匹配的角色
             long count = sysRoleService.lambdaQuery()
                     .in(SysRole::getId, roleIds)
@@ -533,19 +517,11 @@ public class FlowOrgIntegrationServiceImpl implements FlowOrgIntegrationService 
         try {
             Long uid = Long.parseLong(userId);
             
-            // 获取用户角色ID列表
-            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SysUserRole::getUserId, uid);
-            List<SysUserRole> userRoles = sysUserRoleMapper.selectList(wrapper);
-            
-            if (userRoles.isEmpty()) {
+            List<Long> roleIds = selectCurrentOrgRoleIdsByUser(uid);
+            if (roleIds.isEmpty()) {
                 return Collections.emptyList();
             }
-            
-            List<Long> roleIds = userRoles.stream()
-                    .map(SysUserRole::getRoleId)
-                    .collect(Collectors.toList());
-            
+
             // 获取角色编码列表
             List<SysRole> roles = sysRoleService.lambdaQuery()
                     .in(SysRole::getId, roleIds)
@@ -735,6 +711,36 @@ public class FlowOrgIntegrationServiceImpl implements FlowOrgIntegrationService 
                     return map;
                 })
                 .collect(Collectors.toList());
+    }
+
+    private List<Long> selectUserIdsByCurrentOrgRole(Long roleId) {
+        Long tenantId = resolveTenantId();
+        Long orgId = resolveActiveOrgId();
+        if (tenantId == null || orgId == null || roleId == null) {
+            return Collections.emptyList();
+        }
+        return sysUserOrgRoleMapper.selectUserIdsByRoleIds(tenantId, orgId, List.of(roleId));
+    }
+
+    private List<Long> selectCurrentOrgRoleIdsByUser(Long userId) {
+        Long tenantId = resolveTenantId();
+        Long orgId = resolveActiveOrgId();
+        if (tenantId == null || orgId == null || userId == null) {
+            return Collections.emptyList();
+        }
+        return sysUserOrgRoleMapper.selectActiveRoleIdsByUserOrg(tenantId, userId, orgId);
+    }
+
+    private Long resolveTenantId() {
+        Long tenantId = TenantContextHolder.getTenantId();
+        if (tenantId == null) {
+            tenantId = SessionHelper.getTenantId();
+        }
+        return tenantId;
+    }
+
+    private Long resolveActiveOrgId() {
+        return SessionHelper.getActiveOrgId();
     }
 
     /**

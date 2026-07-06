@@ -16,6 +16,7 @@
       <MessageNotification />
       <div class="header-divider" />
       <TenantSwitcher />
+      <OrgSwitcher />
       <UserAvatar />
     </div>
   </div>
@@ -69,5 +70,5 @@
 
 <script setup>
 import { ToggleTheme } from '@/components'
-import { AppTab, BeginnerGuide, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, TenantSwitcher, UserAvatar } from '@/layouts/components'
+import { AppTab, BeginnerGuide, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, OrgSwitcher, TenantSwitcher, UserAvatar } from '@/layouts/components'
 </script>

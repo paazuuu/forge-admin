@@ -41,7 +41,7 @@ public class DataDatasetAccessServiceImpl extends ServiceImpl<DataDatasetAclMapp
         }
         query.setUserId(loginUser.getUserId());
         query.setRoleIds(loginUser.getRoleIds());
-        query.setOrgIds(loginUser.getOrgIds());
+        query.setOrgIds(loginUser.getActiveOrgId() == null ? List.of() : List.of(loginUser.getActiveOrgId()));
         query.setSkipAccessFilter(loginUser.isAdmin() || loginUser.isTenantAdmin());
         return query;
     }
@@ -92,7 +92,7 @@ public class DataDatasetAccessServiceImpl extends ServiceImpl<DataDatasetAclMapp
         }
 
         Long userId = SessionHelper.getUserId();
-        Long deptId = SessionHelper.getMainOrgId();
+        Long deptId = SessionHelper.getActiveOrgId();
         Set<String> uniqueKeys = new HashSet<>();
         List<DataDatasetAcl> entities = new ArrayList<>();
         for (DataDatasetAclDTO item : aclItems) {

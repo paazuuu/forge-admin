@@ -109,7 +109,9 @@ public class SendMessageActionStepExecutor implements BusinessActionStepExecutor
             request.setSendScope("USERS");
         } else if (normalizedRule.startsWith("ROLES:")) {
             List<Long> roleIds = parseLongList(receiverRule.substring(receiverRule.indexOf(':') + 1));
-            request.setUserIds(messageChannelService.toUserIdSet(messageChannelService.selectUserIdsByRoleIds(roleIds)));
+            Long orgId = resolveBusinessOrgId(context);
+            request.setUserIds(messageChannelService.toUserIdSet(
+                    messageChannelService.selectUserIdsByRoleIds(roleIds, context.getTenantId(), orgId)));
             request.setSendScope("USERS");
         } else if (normalizedRule.startsWith("DEPTS:")) {
             request.setOrgIds(new LinkedHashSet<>(parseLongList(receiverRule.substring(receiverRule.indexOf(':') + 1))));
@@ -119,6 +121,23 @@ public class SendMessageActionStepExecutor implements BusinessActionStepExecutor
         } else {
             setSingleReceiver(request, resolveUserId());
         }
+    }
+
+    private Long resolveBusinessOrgId(BusinessActionExecutionContext context) {
+        Long orgId = firstLong(context.getRecordData(),
+                "activeOrgId", "orgId", "org_id", "deptId", "dept_id", "createDept", "create_dept",
+                "main.activeOrgId", "main.orgId", "main.org_id", "main.deptId", "main.dept_id",
+                "main.createDept", "main.create_dept");
+        if (orgId != null) {
+            return orgId;
+        }
+        orgId = firstLong(context.getFormData(),
+                "activeOrgId", "orgId", "org_id", "deptId", "dept_id", "createDept", "create_dept");
+        if (orgId != null) {
+            return orgId;
+        }
+        return firstLong(context.getExtraContext(),
+                "activeOrgId", "orgId", "org_id", "deptId", "dept_id", "createDept", "create_dept");
     }
 
     private void setSingleReceiver(MessageSendRequestDTO request, Long userId) {

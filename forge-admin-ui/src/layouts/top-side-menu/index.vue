@@ -26,6 +26,7 @@
           <!--          <ThemeSetting class="mr-16" /> -->
           <MessageNotification class="mobile-hidden-action mr-16" />
           <TenantSwitcher class="mr-12" />
+          <OrgSwitcher class="mr-12" />
           <UserAvatar />
         </div>
       </div>
@@ -68,6 +69,7 @@ import {
   MenuCollapse,
   MenuSearch,
   MessageNotification,
+  OrgSwitcher,
   TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'

@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.system.dto;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 角色新增/修改DTO
@@ -56,4 +57,9 @@ public class SysRoleDTO implements Serializable {
      * 备注
      */
     private String remark;
+
+    /**
+     * 适用组织ID列表。
+     */
+    private List<Long> orgIds;
 }

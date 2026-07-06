@@ -24,6 +24,11 @@ public class RoleUserQuery extends PageQuery {
     private Long tenantId;
 
     /**
+     * 组织ID，可选。为空时汇总当前租户下全部组织授权。
+     */
+    private Long orgId;
+
+    /**
      * 用户名（模糊查询）
      */
     private String username;

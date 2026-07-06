@@ -18,6 +18,16 @@ public interface IUserLoadService {
     LoginUser loadUserByUsername(String username, Long tenantId);
 
     /**
+     * 根据用户名和首选当前组织加载用户信息。
+     *
+     * @param username 用户名
+     * @param tenantId 租户ID
+     * @param preferredActiveOrgId 首选当前组织ID
+     * @return 登录用户信息
+     */
+    LoginUser loadUserByUsername(String username, Long tenantId, Long preferredActiveOrgId);
+
+    /**
      * 根据手机号加载用户信息
      *
      * @param phone    手机号
@@ -25,6 +35,11 @@ public interface IUserLoadService {
      * @return 登录用户信息
      */
     LoginUser loadUserByPhone(String phone, Long tenantId);
+
+    /**
+     * 根据手机号和首选当前组织加载用户信息。
+     */
+    LoginUser loadUserByPhone(String phone, Long tenantId, Long preferredActiveOrgId);
 
     /**
      * 根据邮箱加载用户信息
@@ -36,6 +51,11 @@ public interface IUserLoadService {
     LoginUser loadUserByEmail(String email, Long tenantId);
 
     /**
+     * 根据邮箱和首选当前组织加载用户信息。
+     */
+    LoginUser loadUserByEmail(String email, Long tenantId, Long preferredActiveOrgId);
+
+    /**
      * 根据用户ID和当前租户加载用户信息
      *
      * @param userId 用户ID
@@ -43,6 +63,11 @@ public interface IUserLoadService {
      * @return 登录用户信息
      */
     LoginUser loadUserByUserId(Long userId, Long tenantId);
+
+    /**
+     * 根据用户ID、租户和首选当前组织加载用户信息。
+     */
+    LoginUser loadUserByUserId(Long userId, Long tenantId, Long preferredActiveOrgId);
 
     /**
      * 获取用户密码

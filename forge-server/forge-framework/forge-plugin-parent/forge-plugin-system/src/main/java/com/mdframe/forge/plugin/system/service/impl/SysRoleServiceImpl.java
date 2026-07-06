@@ -12,15 +12,21 @@ import com.mdframe.forge.plugin.system.dto.SysRoleDTO;
 import com.mdframe.forge.plugin.system.dto.SysRoleQuery;
 import com.mdframe.forge.plugin.system.entity.SysResource;
 import com.mdframe.forge.plugin.system.entity.SysRole;
+import com.mdframe.forge.plugin.system.entity.SysRoleOrg;
 import com.mdframe.forge.plugin.system.entity.SysRoleResource;
+import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.entity.SysUserOrgRole;
 import com.mdframe.forge.plugin.system.entity.SysUserRole;
 import com.mdframe.forge.plugin.system.entity.SysUserTenant;
+import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleMapper;
+import com.mdframe.forge.plugin.system.mapper.SysRoleOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleResourceMapper;
 import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.plugin.system.service.ISysResourceService;
@@ -44,10 +50,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> implements ISysRoleService {
 
+    private static final String[] ROLE_MANAGEMENT_PERMISSIONS = {
+            "system:role:list", "system:role:query", "system:role:add", "system:role:edit", "system:role:remove"
+    };
+
     private final SysRoleMapper roleMapper;
+    private final SysRoleOrgMapper roleOrgMapper;
     private final SysRoleResourceMapper roleResourceMapper;
     private final SysTenantMapper tenantMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final SysUserOrgRoleMapper userOrgRoleMapper;
+    private final SysOrgMapper orgMapper;
     private final SysUserMapper userMapper;
     private final SysUserTenantMapper userTenantMapper;
     @Lazy
@@ -76,7 +89,11 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         BeanUtil.copyProperties(dto, role);
         role.setTenantId(resolveWriteTenantId(dto.getTenantId()));
         validateDataScopeAllowedForCurrentUser(role.getDataScope());
-        return TenantContextHolder.executeIgnore(() -> roleMapper.insert(role) > 0);
+        boolean inserted = TenantContextHolder.executeIgnore(() -> roleMapper.insert(role) > 0);
+        if (inserted && dto.getOrgIds() != null) {
+            bindRoleOrgs(role.getId(), dto.getOrgIds());
+        }
+        return inserted;
     }
 
     @Override
@@ -95,7 +112,11 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         Integer nextDataScope = dto.getDataScope() != null ? dto.getDataScope() : existing.getDataScope();
         validateDataScopeAllowedForCurrentUser(nextDataScope);
         validateDataScopeAllowedForBoundUsers(existing, nextDataScope);
-        return TenantContextHolder.executeIgnore(() -> roleMapper.updateById(role) > 0);
+        boolean updated = TenantContextHolder.executeIgnore(() -> roleMapper.updateById(role) > 0);
+        if (updated && dto.getOrgIds() != null) {
+            bindRoleOrgs(existing.getId(), dto.getOrgIds());
+        }
+        return updated;
     }
 
     @Override
@@ -108,6 +129,12 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             roleResourceMapper.delete(new LambdaQueryWrapper<SysRoleResource>()
                     .eq(SysRoleResource::getRoleId, id)
                     .eq(SysRoleResource::getTenantId, role.getTenantId()));
+            roleOrgMapper.delete(new LambdaQueryWrapper<SysRoleOrg>()
+                    .eq(SysRoleOrg::getRoleId, id)
+                    .eq(SysRoleOrg::getTenantId, role.getTenantId()));
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                    .eq(SysUserOrgRole::getRoleId, id)
+                    .eq(SysUserOrgRole::getTenantId, role.getTenantId()));
             return roleMapper.deleteById(id) > 0;
         });
     }
@@ -332,6 +359,58 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     @Override
+    public List<Long> selectRoleOrgIds(Long roleId) {
+        if (roleId == null) {
+            return new ArrayList<>();
+        }
+        SysRole role = loadRoleForAccess(roleId);
+        return TenantContextHolder.executeIgnore(() -> roleOrgMapper.selectList(new LambdaQueryWrapper<SysRoleOrg>()
+                        .eq(SysRoleOrg::getTenantId, role.getTenantId())
+                        .eq(SysRoleOrg::getRoleId, roleId)
+                        .select(SysRoleOrg::getOrgId)))
+                .stream()
+                .map(SysRoleOrg::getOrgId)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean bindRoleOrgs(Long roleId, List<Long> orgIds) {
+        SysRole role = loadRoleForAccess(roleId);
+        assertCanMaintainRole(role);
+        List<Long> normalizedOrgIds = normalizeOrgIds(orgIds);
+        validateOrgTenant(normalizedOrgIds, role.getTenantId());
+
+        List<Long> existingOrgIds = selectRoleOrgIds(roleId);
+        List<Long> removedOrgIds = existingOrgIds.stream()
+                .filter(orgId -> !normalizedOrgIds.contains(orgId))
+                .collect(Collectors.toList());
+        if (!removedOrgIds.isEmpty()) {
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                    .eq(SysUserOrgRole::getTenantId, role.getTenantId())
+                    .eq(SysUserOrgRole::getRoleId, roleId)
+                    .in(SysUserOrgRole::getOrgId, removedOrgIds));
+            roleOrgMapper.delete(new LambdaQueryWrapper<SysRoleOrg>()
+                    .eq(SysRoleOrg::getTenantId, role.getTenantId())
+                    .eq(SysRoleOrg::getRoleId, roleId)
+                    .in(SysRoleOrg::getOrgId, removedOrgIds));
+        }
+
+        Set<Long> existingOrgIdSet = new HashSet<>(existingOrgIds);
+        for (Long orgId : normalizedOrgIds) {
+            if (existingOrgIdSet.contains(orgId)) {
+                continue;
+            }
+            SysRoleOrg roleOrg = new SysRoleOrg();
+            roleOrg.setTenantId(role.getTenantId());
+            roleOrg.setRoleId(roleId);
+            roleOrg.setOrgId(orgId);
+            roleOrgMapper.insert(roleOrg);
+        }
+        return true;
+    }
+
+    @Override
     public List<Long> selectCurrentUserRoleIds() {
         LoginUser loginUser = SessionHelper.getLoginUser();
         if (loginUser == null) {
@@ -364,58 +443,22 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         
         SysRole role = loadRoleForAccess(roleId);
         assertCanMaintainRole(role);
-        LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUserRole::getRoleId, roleId)
-                .eq(SysUserRole::getTenantId, role.getTenantId())
-                .eq(SysUserRole::getUserId, userId);
-        return TenantContextHolder.executeIgnore(() -> userRoleMapper.delete(wrapper) > 0);
+        return TenantContextHolder.executeIgnore(() -> {
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                    .eq(SysUserOrgRole::getRoleId, roleId)
+                    .eq(SysUserOrgRole::getTenantId, role.getTenantId())
+                    .eq(SysUserOrgRole::getUserId, userId));
+            return userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
+                    .eq(SysUserRole::getRoleId, roleId)
+                    .eq(SysUserRole::getTenantId, role.getTenantId())
+                    .eq(SysUserRole::getUserId, userId)) > 0;
+        });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean addUsersToRole(Long roleId, List<Long> userIds) {
-        if (roleId == null || CollUtil.isEmpty(userIds)) {
-            return false;
-        }
-
-        SysRole role = loadRoleForAccess(roleId);
-        assertCanMaintainRole(role);
-        Long tenantId = role.getTenantId();
-        validateRoleAssignableToUsers(role, userIds);
-
-        // 查询已经绑定该角色的用户ID，避免重复插入
-        List<Long> existingUserIds = TenantContextHolder.executeIgnore(() -> {
-            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(SysUserRole::getRoleId, roleId)
-                    .eq(SysUserRole::getTenantId, tenantId)
-                    .in(SysUserRole::getUserId, userIds);
-            return userRoleMapper.selectList(wrapper).stream()
-                    .map(SysUserRole::getUserId)
-                    .toList();
-        });
-
-        Set<Long> existingSet = new HashSet<>(existingUserIds);
-        List<SysUserRole> toInsert = userIds.stream()
-                .filter(uid -> !existingSet.contains(uid))
-                .map(uid -> {
-                    SysUserRole ur = new SysUserRole();
-                    ur.setRoleId(roleId);
-                    ur.setUserId(uid);
-                    ur.setTenantId(tenantId);
-                    return ur;
-                })
-                .toList();
-
-        if (CollUtil.isEmpty(toInsert)) {
-            return true;
-        }
-
-        return TenantContextHolder.executeIgnore(() -> {
-            for (SysUserRole ur : toInsert) {
-                userRoleMapper.insert(ur);
-            }
-            return true;
-        });
+        throw new RuntimeException("旧角色加人接口已废弃，请选择授权组织后使用组织角色授权");
     }
 
     private void normalizeRoleQueryTenant(SysRoleQuery query) {
@@ -429,7 +472,13 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
     }
 
     private void assertRoleManagementAllowed() {
-        requireLoginUser();
+        LoginUser loginUser = requireLoginUser();
+        if (loginUser.isAdmin() || loginUser.isTenantAdmin()) {
+            return;
+        }
+        if (!hasAnyPermission(loginUser, ROLE_MANAGEMENT_PERMISSIONS)) {
+            throw new RuntimeException("无权访问角色管理功能");
+        }
     }
 
     private LoginUser requireLoginUser() {
@@ -438,6 +487,37 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             throw new RuntimeException("用户未登录");
         }
         return loginUser;
+    }
+
+    private boolean hasAnyPermission(LoginUser loginUser, String... permissions) {
+        Set<String> userPermissions = loginUser == null ? null : loginUser.getPermissions();
+        if (userPermissions == null || userPermissions.isEmpty() || permissions == null) {
+            return false;
+        }
+        if (userPermissions.contains("*") || userPermissions.contains("*:*:*")) {
+            return true;
+        }
+        for (String permission : permissions) {
+            if (hasPermission(userPermissions, permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasPermission(Set<String> userPermissions, String permission) {
+        if (permission == null || userPermissions.contains(permission)) {
+            return permission != null;
+        }
+        int splitIndex = permission.lastIndexOf(':');
+        while (splitIndex > 0) {
+            String wildcardPermission = permission.substring(0, splitIndex) + ":*";
+            if (userPermissions.contains(wildcardPermission)) {
+                return true;
+            }
+            splitIndex = permission.lastIndexOf(':', splitIndex - 1);
+        }
+        return false;
     }
 
     private Long resolveWriteTenantId(Long requestedTenantId) {
@@ -498,12 +578,7 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
         if (role.getIsSystem() != null && role.getIsSystem() == 1) {
             throw new RuntimeException("系统内置角色只能由超级管理员维护");
         }
-        Long count = TenantContextHolder.executeIgnore(() ->
-                userRoleMapper.selectCount(new LambdaQueryWrapper<SysUserRole>()
-                        .eq(SysUserRole::getRoleId, role.getId())
-                        .eq(SysUserRole::getTenantId, role.getTenantId())
-                        .eq(SysUserRole::getUserId, loginUser.getUserId())));
-        if (count != null && count > 0) {
+        if (loginUser.getRoleIds() != null && loginUser.getRoleIds().contains(role.getId())) {
             throw new RuntimeException("不能维护自己当前绑定的角色");
         }
     }
@@ -517,11 +592,12 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
 
     private void validateDataScopeAllowedForBoundUsers(SysRole role, Integer dataScope) {
         List<Long> userIds = TenantContextHolder.executeIgnore(() ->
-                userRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>()
-                                .eq(SysUserRole::getRoleId, role.getId())
-                                .eq(SysUserRole::getTenantId, role.getTenantId()))
+                userOrgRoleMapper.selectList(new LambdaQueryWrapper<SysUserOrgRole>()
+                                .eq(SysUserOrgRole::getRoleId, role.getId())
+                                .eq(SysUserOrgRole::getTenantId, role.getTenantId()))
                         .stream()
-                        .map(SysUserRole::getUserId)
+                        .map(SysUserOrgRole::getUserId)
+                        .distinct()
                         .collect(Collectors.toList()));
         validateDataScopeAllowedForUsers(dataScope, userIds, role.getTenantId());
     }
@@ -593,5 +669,28 @@ public class SysRoleServiceImpl extends ServiceImpl<SysRoleMapper, SysRole> impl
             return SystemConstants.UserType.NORMAL_USER;
         }
         return userType;
+    }
+
+    private List<Long> normalizeOrgIds(List<Long> orgIds) {
+        if (orgIds == null) {
+            return new ArrayList<>();
+        }
+        return orgIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private void validateOrgTenant(List<Long> orgIds, Long tenantId) {
+        if (CollUtil.isEmpty(orgIds)) {
+            return;
+        }
+        Long count = TenantContextHolder.executeIgnore(() ->
+                orgMapper.selectCount(new LambdaQueryWrapper<SysOrg>()
+                        .in(SysOrg::getId, orgIds)
+                        .eq(SysOrg::getTenantId, tenantId)));
+        if (count == null || count != orgIds.size()) {
+            throw new RuntimeException("组织不属于当前角色租户");
+        }
     }
 }

@@ -301,6 +301,16 @@
               style="width: 120px"
               :options="userStatusOptions"
             />
+            <n-select
+              v-model:value="roleUserOrgId"
+              placeholder="授权组织"
+              clearable
+              filterable
+              size="small"
+              style="width: 180px"
+              :options="roleUserOrgOptions"
+              @update:value="handleRoleUserOrgChange"
+            />
             <n-button size="small" type="primary" @click="handleUserSearch">
               <template #icon>
                 <i class="i-material-symbols:search" />
@@ -374,15 +384,74 @@
       :confirm-loading="addUserLoading"
       :assigned-user-ids="assignedUserIds"
       :tenant-id="currentRole.tenantId"
+      :initial-org-id="roleUserOrgId"
+      :locked-org-id="roleUserOrgId"
+      :direct-org-only="true"
       @update:show="val => addUserModalVisible = val"
       @confirm="handleConfirmAddUsers"
     />
+
+    <!-- 角色适用组织弹窗 -->
+    <n-modal
+      v-model:show="roleOrgModalVisible"
+      :title="`适用组织 - ${currentRole.roleName || ''}`"
+      preset="card"
+      style="width: 720px"
+      :mask-closable="false"
+    >
+      <div class="role-org-modal-content">
+        <div class="auth-toolbar">
+          <n-space size="small" align="center">
+            <n-button size="small" :disabled="roleOrgLoading" @click="toggleRoleOrgExpandAll">
+              <template #icon>
+                <i :class="roleOrgTreeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
+              </template>
+              {{ roleOrgTreeExpandAll ? '折叠全部' : '展开全部' }}
+            </n-button>
+            <NTag type="info" size="small">
+              已选 {{ checkedRoleOrgKeys.length }} 个组织
+            </NTag>
+          </n-space>
+        </div>
+        <div class="auth-tree-container">
+          <n-spin :show="roleOrgLoading">
+            <PremiumTree
+              v-if="roleOrgTreeData.length > 0"
+              :data="roleOrgTreeData"
+              checkable
+              :cascade="false"
+              :expanded-keys="roleOrgExpandedKeys"
+              :checked-keys="checkedRoleOrgKeys"
+              key-field="id"
+              label-field="orgName"
+              children-field="children"
+              :get-node-icon="getOrgNodeIcon"
+              :get-node-tone="getOrgNodeTone"
+              @update:expanded-keys="handleRoleOrgExpandedKeysChange"
+              @update:checked-keys="handleRoleOrgCheckedKeysChange"
+            />
+            <n-empty v-else description="暂无组织数据" />
+          </n-spin>
+        </div>
+      </div>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="roleOrgModalVisible = false">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="roleOrgSubmitLoading" @click="handleSubmitRoleOrgs">
+            确定
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
 import { NTag } from 'naive-ui'
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import PremiumTree from '@/components/common/PremiumTree.vue'
 import DictTag from '@/components/DictTag.vue'
@@ -425,6 +494,9 @@ const currentRole = ref({})
 const addUserModalVisible = ref(false)
 const addUserLoading = ref(false)
 const assignedUserIds = ref([]) // 当前角色已授权的用户ID列表
+const roleUserOrgId = ref(null)
+const roleApplicableOrgIds = ref([])
+const roleOrgTreeData = ref([])
 const userSearchParams = ref({
   username: '',
   realName: '',
@@ -436,6 +508,14 @@ const userPagination = ref({
   pageSize: 10,
   itemCount: 0,
 })
+
+// 角色适用组织
+const roleOrgModalVisible = ref(false)
+const roleOrgLoading = ref(false)
+const roleOrgSubmitLoading = ref(false)
+const checkedRoleOrgKeys = ref([])
+const roleOrgExpandedKeys = ref([])
+const roleOrgTreeExpandAll = ref(true)
 
 const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, ROLE_DATA_SCOPE_DICT, ROLE_TYPE_DICT, NORMAL_DISABLE_DICT, YES_NO_DICT)
 
@@ -454,6 +534,18 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
+const roleUserOrgOptions = computed(() => {
+  const scopedOrgIds = new Set(normalizeNumberList(roleApplicableOrgIds.value))
+  if (roleOrgTreeData.value.length > 0 && scopedOrgIds.size === 0)
+    return []
+  return flattenOrgNodes(roleOrgTreeData.value)
+    .filter(item => scopedOrgIds.has(normalizeSingleNumber(item.id)))
+    .map(item => ({
+      label: item.orgName,
+      value: normalizeSingleNumber(item.id),
+    }))
+    .filter(item => item.value !== null)
+})
 
 // 计算分页配置
 const userPaginationConfig = computed(() => ({
@@ -494,6 +586,12 @@ const authClientTabs = computed(() => {
 const currentAuthClientName = computed(() => {
   const client = authClientTabs.value.find(item => item.clientCode === currentAuthClientCode.value)
   return client?.clientName || currentAuthClientCode.value || '-'
+})
+
+watch(roleUserOrgOptions, (options) => {
+  if (roleUserOrgId.value && options.some(item => item.value === roleUserOrgId.value))
+    return
+  roleUserOrgId.value = options[0]?.value || null
 })
 
 function countResources(data) {
@@ -675,10 +773,11 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 220,
+    width: 260,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
+      { label: '适用组织', key: 'orgScope', type: 'info', onClick: handleRoleOrgScope },
       { label: '查看用户', key: 'viewUsers', onClick: handleViewUsers },
       { label: '添加用户', key: 'addUsers', type: 'success', onClick: handleAddUserFromList },
       { label: '授权', key: 'auth', onClick: handleAuth },
@@ -849,6 +948,84 @@ function toNumberOptions(options = []) {
   }))
 }
 
+function normalizeSingleNumber(value, fallback = null) {
+  if (Array.isArray(value)) {
+    const first = value.find(item => item !== null && item !== undefined && item !== '')
+    return normalizeSingleNumber(first, fallback)
+  }
+  if (value === null || value === undefined || value === '')
+    return fallback
+  const numberValue = Number(value)
+  return Number.isNaN(numberValue) ? fallback : numberValue
+}
+
+function normalizeNumberList(value) {
+  const list = Array.isArray(value) ? value : (value === null || value === undefined || value === '' ? [] : [value])
+  return Array.from(new Set(list
+    .map(item => normalizeSingleNumber(item))
+    .filter(item => item !== null)))
+}
+
+function flattenOrgNodes(list = []) {
+  return (list || []).flatMap((item) => {
+    const current = [item]
+    const children = flattenOrgNodes(item.children || [])
+    return [...current, ...children]
+  })
+}
+
+function getOrgNodeIcon(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'i-material-symbols:account-tree-rounded'
+  if (node.children?.length)
+    return 'i-material-symbols:corporate-fare-rounded'
+  return 'i-material-symbols:groups-rounded'
+}
+
+function getOrgNodeTone(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'folder'
+  return node.children?.length ? 'folder' : 'menu'
+}
+
+function buildRoleTenantParams(tenantId = currentRole.value?.tenantId) {
+  const resolvedTenantId = userStore.isAdmin ? tenantId : userStore.userInfo?.tenantId
+  return resolvedTenantId ? { tenantId: resolvedTenantId } : {}
+}
+
+async function loadRoleOrgTree(tenantId = currentRole.value?.tenantId) {
+  const res = await request.get('/system/org/tree', {
+    params: buildRoleTenantParams(tenantId),
+  })
+  if (res.code === 200) {
+    roleOrgTreeData.value = res.data || []
+    if (roleOrgTreeExpandAll.value)
+      roleOrgExpandedKeys.value = getAllKeys(roleOrgTreeData.value)
+  }
+}
+
+async function loadRoleApplicableOrgIds(roleId = currentRole.value?.id) {
+  if (!roleId) {
+    roleApplicableOrgIds.value = []
+    return []
+  }
+  const res = await request.get(`/system/role/${roleId}/orgs`)
+  if (res.code === 200) {
+    roleApplicableOrgIds.value = normalizeNumberList(res.data || [])
+    return roleApplicableOrgIds.value
+  }
+  roleApplicableOrgIds.value = []
+  return []
+}
+
+function resolveDefaultRoleUserOrgId() {
+  const activeOrgId = normalizeSingleNumber(userStore.activeOrgId || userStore.userInfo?.activeOrgId)
+  const availableOrgIds = new Set(roleUserOrgOptions.value.map(item => item.value))
+  if (activeOrgId !== null && availableOrgIds.has(activeOrgId))
+    return activeOrgId
+  return roleUserOrgOptions.value[0]?.value || null
+}
+
 // 表单提交前处理
 function beforeSubmit(formData) {
   if (!userStore.isAdmin) {
@@ -903,6 +1080,69 @@ function handleDelete(row) {
   })
 }
 
+async function handleRoleOrgScope(row) {
+  currentRole.value = row
+  roleOrgModalVisible.value = true
+  checkedRoleOrgKeys.value = []
+  roleOrgExpandedKeys.value = []
+  try {
+    roleOrgLoading.value = true
+    await Promise.all([
+      loadRoleOrgTree(row.tenantId),
+      loadRoleApplicableOrgIds(row.id),
+    ])
+    checkedRoleOrgKeys.value = normalizeNumberList(roleApplicableOrgIds.value)
+  }
+  catch (error) {
+    console.error('加载角色适用组织失败:', error)
+    window.$message.error('加载角色适用组织失败')
+  }
+  finally {
+    roleOrgLoading.value = false
+  }
+}
+
+function toggleRoleOrgExpandAll() {
+  roleOrgTreeExpandAll.value = !roleOrgTreeExpandAll.value
+  roleOrgExpandedKeys.value = roleOrgTreeExpandAll.value ? getAllKeys(roleOrgTreeData.value) : []
+}
+
+function handleRoleOrgExpandedKeysChange(keys) {
+  roleOrgExpandedKeys.value = keys
+}
+
+function handleRoleOrgCheckedKeysChange(keys) {
+  checkedRoleOrgKeys.value = normalizeNumberList(keys)
+}
+
+async function handleSubmitRoleOrgs() {
+  if (checkedRoleOrgKeys.value.length === 0) {
+    window.$message.warning('请至少选择一个适用组织')
+    return
+  }
+  try {
+    roleOrgSubmitLoading.value = true
+    const res = await request.post(`/system/role/${currentRole.value.id}/orgs`, checkedRoleOrgKeys.value)
+    if (res.code === 200) {
+      window.$message.success('适用组织保存成功')
+      roleOrgModalVisible.value = false
+      roleApplicableOrgIds.value = normalizeNumberList(checkedRoleOrgKeys.value)
+      if (roleUserOrgId.value && !roleApplicableOrgIds.value.includes(roleUserOrgId.value)) {
+        roleUserOrgId.value = resolveDefaultRoleUserOrgId()
+        if (usersModalVisible.value)
+          loadRoleUsers()
+      }
+    }
+  }
+  catch (error) {
+    console.error('保存适用组织失败:', error)
+    window.$message.error('保存适用组织失败')
+  }
+  finally {
+    roleOrgSubmitLoading.value = false
+  }
+}
+
 // 查看角色用户
 async function handleViewUsers(row) {
   currentRole.value = row
@@ -915,6 +1155,12 @@ async function handleViewUsers(row) {
     userStatus: null,
   }
   userPagination.value.page = 1
+  roleUserOrgId.value = null
+  await Promise.all([
+    loadRoleOrgTree(row.tenantId),
+    loadRoleApplicableOrgIds(row.id),
+  ])
+  roleUserOrgId.value = resolveDefaultRoleUserOrgId()
   await loadRoleUsers()
 }
 
@@ -926,6 +1172,7 @@ async function loadRoleUsers() {
       ...userSearchParams.value,
       pageNum: userPagination.value.page,
       pageSize: userPagination.value.pageSize,
+      orgId: roleUserOrgId.value || undefined,
     }
     // 过滤空值
     Object.keys(params).forEach((key) => {
@@ -951,6 +1198,11 @@ async function loadRoleUsers() {
 
 // 用户搜索
 function handleUserSearch() {
+  userPagination.value.page = 1
+  loadRoleUsers()
+}
+
+function handleRoleUserOrgChange() {
   userPagination.value.page = 1
   loadRoleUsers()
 }
@@ -982,18 +1234,30 @@ function handleUserPageSizeChange(pageSize) {
 
 // 移除角色用户
 async function handleRemoveUserRole(user) {
+  const orgId = normalizeSingleNumber(roleUserOrgId.value)
+  if (orgId === null) {
+    window.$message.warning('请选择授权组织')
+    return
+  }
   window.$dialog.warning({
     title: '确认移除',
-    content: `确定要从角色“${currentRole.value.roleName}”中移除用户“${user.username}”吗？`,
+    content: `确定要从当前组织的角色“${currentRole.value.roleName}”中移除用户“${user.username}”吗？`,
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
-        const res = await request.post('/system/role/removeUserRole', null, {
+        const currentRes = await request.get(`/system/user/${user.id}/org-roles`, {
           params: {
-            roleId: currentRole.value.id,
-            userId: user.id,
+            tenantId: currentRole.value.tenantId,
+            orgId,
           },
+        })
+        const nextRoleIds = normalizeNumberList(currentRes.code === 200 ? currentRes.data : [])
+          .filter(roleId => Number(roleId) !== Number(currentRole.value.id))
+        const res = await request.post(`/system/user/${user.id}/org-roles`, {
+          tenantId: currentRole.value.tenantId,
+          orgId,
+          roleIds: nextRoleIds,
         })
         if (res.code === 200) {
           window.$message.success('移除成功')
@@ -1010,9 +1274,14 @@ async function handleRemoveUserRole(user) {
 
 // 加载角色已授权用户ID列表
 async function loadAssignedUserIds() {
+  const orgId = normalizeSingleNumber(roleUserOrgId.value)
+  if (orgId === null) {
+    assignedUserIds.value = []
+    return
+  }
   try {
     const res = await request.get(`/system/role/${currentRole.value.id}/users`, {
-      params: { pageNum: 1, pageSize: 9999 },
+      params: { pageNum: 1, pageSize: 9999, orgId },
     })
     if (res.code === 200 && res.data) {
       assignedUserIds.value = (res.data.records || []).map(u => u.id)
@@ -1025,6 +1294,10 @@ async function loadAssignedUserIds() {
 
 // 打开添加用户弹窗
 async function handleAddUser() {
+  if (!roleUserOrgId.value) {
+    window.$message.warning('请选择授权组织')
+    return
+  }
   await loadAssignedUserIds()
   addUserModalVisible.value = true
 }
@@ -1032,6 +1305,16 @@ async function handleAddUser() {
 // 从角色列表直接添加用户
 async function handleAddUserFromList(row) {
   currentRole.value = row
+  roleUserOrgId.value = null
+  await Promise.all([
+    loadRoleOrgTree(row.tenantId),
+    loadRoleApplicableOrgIds(row.id),
+  ])
+  roleUserOrgId.value = resolveDefaultRoleUserOrgId()
+  if (!roleUserOrgId.value) {
+    window.$message.warning('请先配置角色适用组织')
+    return
+  }
   await loadAssignedUserIds()
   addUserModalVisible.value = true
 }
@@ -1040,14 +1323,36 @@ async function handleAddUserFromList(row) {
 async function handleConfirmAddUsers(userIds) {
   if (!userIds || userIds.length === 0)
     return
+  const orgId = normalizeSingleNumber(roleUserOrgId.value)
+  if (orgId === null) {
+    window.$message.warning('请选择授权组织')
+    return
+  }
   try {
     addUserLoading.value = true
-    const res = await request.post(`/system/role/${currentRole.value.id}/addUsers`, userIds)
-    if (res.code === 200) {
-      window.$message.success(`成功添加 ${userIds.length} 个用户`)
-      addUserModalVisible.value = false
-      await loadRoleUsers()
+    for (const userId of userIds) {
+      const currentRes = await request.get(`/system/user/${userId}/org-roles`, {
+        params: {
+          tenantId: currentRole.value.tenantId,
+          orgId,
+        },
+      })
+      const roleIds = Array.from(new Set([
+        ...normalizeNumberList(currentRes.code === 200 ? currentRes.data : []),
+        normalizeSingleNumber(currentRole.value.id),
+      ]))
+      const res = await request.post(`/system/user/${userId}/org-roles`, {
+        tenantId: currentRole.value.tenantId,
+        orgId,
+        roleIds,
+      })
+      if (res.code !== 200) {
+        throw new Error(`用户 ${userId} 添加失败`)
+      }
     }
+    window.$message.success(`成功添加 ${userIds.length} 个用户`)
+    addUserModalVisible.value = false
+    await loadRoleUsers()
   }
   catch (error) {
     console.error('添加用户失败:', error)

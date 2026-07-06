@@ -69,6 +69,15 @@
         <if test="query.roleType != null">
             AND r.role_type = #{query.roleType}
         </if>
+        <if test="query.orgId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM sys_role_org ro
+                WHERE ro.tenant_id = r.tenant_id
+                  AND ro.role_id = r.id
+                  AND ro.org_id = #{query.orgId}
+            )
+        </if>
         <if test="query.accessibleRoleIds != null">
             <choose>
                 <when test="query.accessibleRoleIds.size() > 0">
@@ -102,7 +111,7 @@
     </select>
 
     <select id="selectRoleUsers" resultMap="RoleUserResultMap">
-        SELECT u.id,
+        SELECT DISTINCT u.id,
                u.tenant_id,
                t.tenant_name,
                u.username,
@@ -125,7 +134,7 @@
                u.create_time,
                u.update_by,
                u.update_time
-        FROM sys_user_role ur
+        FROM sys_user_org_role ur
         INNER JOIN sys_user u ON u.id = ur.user_id
         INNER JOIN sys_user_tenant sut
             ON sut.user_id = u.id
@@ -134,6 +143,9 @@
         LEFT JOIN sys_tenant t ON t.id = ur.tenant_id
         WHERE ur.role_id = #{query.roleId}
           AND ur.tenant_id = #{query.tenantId}
+        <if test="query.orgId != null">
+          AND ur.org_id = #{query.orgId}
+        </if>
         <if test="query.username != null and query.username != ''">
           AND u.username LIKE CONCAT('%', #{query.username}, '%')
         </if>
@@ -151,7 +163,7 @@
 
     <select id="countUsersByRole" resultType="java.lang.Long">
         SELECT COUNT(1)
-        FROM sys_user_role
+        FROM sys_user_org_role
         WHERE role_id = #{roleId}
           AND tenant_id = #{tenantId}
     </select>

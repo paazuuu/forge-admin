@@ -11,6 +11,8 @@ import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.entity.SysTenant;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
+import com.mdframe.forge.plugin.system.service.IUserLoadService;
 import com.mdframe.forge.plugin.system.service.ISysOrgService;
 import com.mdframe.forge.plugin.system.vo.SysOrgTreeVO;
 import com.mdframe.forge.starter.core.session.LoginUser;
@@ -32,8 +34,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> implements ISysOrgService {
 
+    private static final String[] ORG_READ_PERMISSIONS = {
+            "system:org:list", "system:org:query",
+            "system:user:list", "system:user:query",
+            "system:role:list", "system:role:query"
+    };
+
     private final SysOrgMapper orgMapper;
     private final SysTenantMapper tenantMapper;
+    private final SysUserOrgMapper userOrgMapper;
+    private final IUserLoadService userLoadService;
 
     @Override
     @DictTranslate
@@ -76,6 +86,101 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
     public List<SysOrgTreeVO> selectOrgChildrenByParentId(Long parentId, Long tenantId) {
         Long operationTenantId = resolveQueryTenantId(tenantId);
         return TenantContextHolder.executeIgnore(() -> orgMapper.selectOrgChildrenByParentId(parentId, operationTenantId));
+    }
+
+    @Override
+    @DictTranslate
+    public List<SysOrgTreeVO> selectCurrentUserOrgOptions() {
+        LoginUser loginUser = requireLoginUser();
+        if (loginUser.getTenantId() == null) {
+            return List.of();
+        }
+        List<Long> orgIds = selectCurrentUserBoundOrgIds(loginUser);
+        if (orgIds.isEmpty() && loginUser.isAdmin()) {
+            SysOrgQuery query = new SysOrgQuery();
+            query.setTenantId(loginUser.getTenantId());
+            return selectOrgTree(query).stream()
+                    .map(this::toOrgTreeVO)
+                    .toList();
+        }
+        if (orgIds.isEmpty()) {
+            return List.of();
+        }
+        List<SysOrg> orgs = TenantContextHolder.executeIgnore(() ->
+                orgMapper.selectEnabledOrgsByIds(loginUser.getTenantId(), orgIds));
+        return orgs.stream()
+                .map(this::toOrgTreeVO)
+                .toList();
+    }
+
+    @Override
+    public LoginUser switchCurrentOrg(Long orgId) {
+        if (orgId == null) {
+            throw new RuntimeException("组织ID不能为空");
+        }
+        LoginUser currentUser = requireLoginUser();
+        SysOrg org = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(orgId));
+        if (org == null || !Objects.equals(org.getTenantId(), currentUser.getTenantId())) {
+            throw new RuntimeException("组织不存在或不属于当前租户");
+        }
+        List<Long> boundOrgIds = selectCurrentUserBoundOrgIds(currentUser);
+        if (boundOrgIds.isEmpty() && !currentUser.isAdmin()) {
+            throw new RuntimeException("当前用户未加入任何组织");
+        }
+        if (!boundOrgIds.isEmpty() && !boundOrgIds.contains(orgId)) {
+            throw new RuntimeException("当前用户未加入该组织");
+        }
+
+        LoginUser switchedUser = userLoadService.loadUserByUserId(
+                currentUser.getUserId(), currentUser.getTenantId(), orgId);
+        switchedUser.setLoginTime(currentUser.getLoginTime());
+        switchedUser.setLoginIp(currentUser.getLoginIp());
+        switchedUser.setUserClient(currentUser.getUserClient());
+        SessionHelper.setLoginUser(switchedUser);
+        return switchedUser;
+    }
+
+    private List<Long> selectCurrentUserBoundOrgIds(LoginUser loginUser) {
+        if (loginUser == null || loginUser.getUserId() == null || loginUser.getTenantId() == null) {
+            return List.of();
+        }
+        List<Long> orgIds = TenantContextHolder.executeIgnore(() ->
+                userOrgMapper.selectOrgIdsByUserTenant(loginUser.getTenantId(), loginUser.getUserId()));
+        if (orgIds == null || orgIds.isEmpty()) {
+            return List.of();
+        }
+        return orgIds.stream()
+                .distinct()
+                .toList();
+    }
+
+    private SysOrgTreeVO toOrgTreeVO(SysOrg org) {
+        SysOrgTreeVO vo = new SysOrgTreeVO();
+        vo.setId(org.getId());
+        vo.setTenantId(org.getTenantId());
+        vo.setOrgName(org.getOrgName());
+        vo.setParentId(org.getParentId());
+        vo.setAncestors(org.getAncestors());
+        vo.setSort(org.getSort());
+        vo.setOrgType(org.getOrgType());
+        vo.setOrgStatus(org.getOrgStatus());
+        vo.setLeaderId(org.getLeaderId());
+        vo.setLeaderName(org.getLeaderName());
+        vo.setPhone(org.getPhone());
+        vo.setAddress(org.getAddress());
+        vo.setRegionCode(org.getRegionCode());
+        vo.setRemark(org.getRemark());
+        List<SysOrg> children = org.getChildren();
+        if (children != null && !children.isEmpty()) {
+            vo.setChildren(children.stream()
+                    .map(this::toOrgTreeVO)
+                    .toList());
+            vo.setHasChildren(true);
+        } else {
+            vo.setChildren(null);
+            vo.setHasChildren(false);
+        }
+        return vo;
     }
 
     /**
@@ -156,6 +261,7 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
 
     @Override
     public boolean insertOrg(SysOrgDTO dto) {
+        assertOrgWriteAllowed("system:org:add");
         SysOrg org = new SysOrg();
         BeanUtil.copyProperties(dto, org);
         Long tenantId = resolveWriteTenantId(dto.getTenantId(), null);
@@ -178,6 +284,7 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
 
     @Override
     public boolean updateOrg(SysOrgDTO dto) {
+        assertOrgWriteAllowed("system:org:edit");
         SysOrg existing = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(dto.getId()));
         if (existing == null) {
             return false;
@@ -198,6 +305,7 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
 
     @Override
     public boolean deleteOrgById(Long id) {
+        assertOrgWriteAllowed("system:org:remove");
         validateOrgDeletable(id);
         return TenantContextHolder.executeIgnore(() -> orgMapper.deleteById(id) > 0);
     }
@@ -236,6 +344,7 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
 
     private Long resolveQueryTenantId(Long requestedTenantId) {
         LoginUser loginUser = requireLoginUser();
+        assertOrgReadAllowed(loginUser);
         if (!loginUser.isAdmin()) {
             return loginUser.getTenantId();
         }
@@ -273,6 +382,56 @@ public class SysOrgServiceImpl extends ServiceImpl<SysOrgMapper, SysOrg> impleme
             throw new RuntimeException("用户未登录");
         }
         return loginUser;
+    }
+
+    private void assertOrgReadAllowed(LoginUser loginUser) {
+        if (loginUser.isAdmin() || loginUser.isTenantAdmin()) {
+            return;
+        }
+        if (!hasAnyPermission(loginUser, ORG_READ_PERMISSIONS)) {
+            throw new RuntimeException("无权访问组织管理功能");
+        }
+    }
+
+    private void assertOrgWriteAllowed(String permission) {
+        LoginUser loginUser = requireLoginUser();
+        if (loginUser.isAdmin() || loginUser.isTenantAdmin()) {
+            return;
+        }
+        if (!hasAnyPermission(loginUser, permission)) {
+            throw new RuntimeException("无权维护组织信息");
+        }
+    }
+
+    private boolean hasAnyPermission(LoginUser loginUser, String... permissions) {
+        Set<String> userPermissions = loginUser == null ? null : loginUser.getPermissions();
+        if (userPermissions == null || userPermissions.isEmpty() || permissions == null) {
+            return false;
+        }
+        if (userPermissions.contains("*") || userPermissions.contains("*:*:*")) {
+            return true;
+        }
+        for (String permission : permissions) {
+            if (hasPermission(userPermissions, permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasPermission(Set<String> userPermissions, String permission) {
+        if (permission == null || userPermissions.contains(permission)) {
+            return permission != null;
+        }
+        int splitIndex = permission.lastIndexOf(':');
+        while (splitIndex > 0) {
+            String wildcardPermission = permission.substring(0, splitIndex) + ":*";
+            if (userPermissions.contains(wildcardPermission)) {
+                return true;
+            }
+            splitIndex = permission.lastIndexOf(':', splitIndex - 1);
+        }
+        return false;
     }
 
     private void validateTenantEnabled(Long tenantId) {

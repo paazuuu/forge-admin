@@ -24,6 +24,8 @@
 
       <TenantSwitcher />
 
+      <OrgSwitcher />
+
       <UserAvatar />
     </div>
   </div>
@@ -31,7 +33,7 @@
 
 <script setup>
 import { ToggleTheme } from '@/components'
-import { BeginnerGuide, BreadCrumb, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, TenantSwitcher, UserAvatar } from '@/layouts/components'
+import { BeginnerGuide, BreadCrumb, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, OrgSwitcher, TenantSwitcher, UserAvatar } from '@/layouts/components'
 
 function handleLinkClick(link) {
   window.open(link)

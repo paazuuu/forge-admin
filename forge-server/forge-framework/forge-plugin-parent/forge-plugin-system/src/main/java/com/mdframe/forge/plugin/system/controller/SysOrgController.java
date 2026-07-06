@@ -10,6 +10,7 @@ import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.session.LoginUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -57,6 +58,22 @@ public class SysOrgController {
                                                  @RequestParam(required = false) Long tenantId) {
         List<SysOrgTreeVO> list = orgService.selectOrgChildrenByParentId(parentId, tenantId);
         return RespInfo.success(list);
+    }
+
+    /**
+     * 查询当前用户可切换组织。
+     */
+    @GetMapping("/current/options")
+    public RespInfo<List<SysOrgTreeVO>> currentOptions() {
+        return RespInfo.success(orgService.selectCurrentUserOrgOptions());
+    }
+
+    /**
+     * 切换当前组织。
+     */
+    @PostMapping("/switch")
+    public RespInfo<LoginUser> switchOrg(@RequestParam Long orgId) {
+        return RespInfo.success(orgService.switchCurrentOrg(orgId));
     }
 
     /**

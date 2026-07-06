@@ -83,10 +83,23 @@ public class BusinessMessageChannelService {
     }
 
     public List<Long> selectUserIdsByRoleIds(List<Long> roleIds) {
+        return selectUserIdsByRoleIds(roleIds, null, null);
+    }
+
+    public List<Long> selectUserIdsByRoleIds(List<Long> roleIds, Long orgId) {
+        return selectUserIdsByRoleIds(roleIds, null, orgId);
+    }
+
+    public List<Long> selectUserIdsByRoleIds(List<Long> roleIds, Long tenantId, Long orgId) {
         if (roleIds == null || roleIds.isEmpty()) {
             return List.of();
         }
-        return channelMapper.selectUserIdsByRoleIds(resolveTenantId(), roleIds);
+        Long resolvedOrgId = orgId != null ? orgId : resolveActiveOrgId();
+        if (resolvedOrgId == null) {
+            return List.of();
+        }
+        Long resolvedTenantId = tenantId != null ? tenantId : resolveTenantId();
+        return channelMapper.selectUserIdsByRoleIds(resolvedTenantId, resolvedOrgId, roleIds);
     }
 
     public List<Long> selectUserIdsByOrgIds(List<Long> orgIds) {
@@ -162,5 +175,13 @@ public class BusinessMessageChannelService {
             tenantId = null;
         }
         return tenantId == null ? 1L : tenantId;
+    }
+
+    private Long resolveActiveOrgId() {
+        try {
+            return SessionHelper.getActiveOrgId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

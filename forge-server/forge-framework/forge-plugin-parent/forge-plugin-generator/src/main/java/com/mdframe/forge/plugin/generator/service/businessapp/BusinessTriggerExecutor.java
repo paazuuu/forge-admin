@@ -579,7 +579,9 @@ public class BusinessTriggerExecutor {
             req.setSendScope("USERS");
         } else if (normalizedRule.startsWith("ROLES:")) {
             List<Long> roleIds = parseLongList(receiverRule.substring(receiverRule.indexOf(':') + 1));
-            req.setUserIds(messageChannelService.toUserIdSet(messageChannelService.selectUserIdsByRoleIds(roleIds)));
+            Long orgId = resolveBusinessOrgId(event);
+            req.setUserIds(messageChannelService.toUserIdSet(
+                    messageChannelService.selectUserIdsByRoleIds(roleIds, event.getTenantId(), orgId)));
             req.setSendScope("USERS");
         } else if (normalizedRule.startsWith("DEPTS:")) {
             List<Long> orgIds = parseLongList(receiverRule.substring(receiverRule.indexOf(':') + 1));
@@ -596,6 +598,20 @@ public class BusinessTriggerExecutor {
         }
     }
 
+    private Long resolveBusinessOrgId(BusinessEvent event) {
+        Long orgId = firstLongFromRecord(event.getRecordData(),
+                "activeOrgId", "orgId", "org_id", "deptId", "dept_id", "createDept", "create_dept",
+                "main.activeOrgId", "main.orgId", "main.org_id", "main.deptId", "main.dept_id",
+                "main.createDept", "main.create_dept");
+        if (orgId != null) {
+            return orgId;
+        }
+        return firstLongFromRecord(event.getPreviousData(),
+                "activeOrgId", "orgId", "org_id", "deptId", "dept_id", "createDept", "create_dept",
+                "main.activeOrgId", "main.orgId", "main.org_id", "main.deptId", "main.dept_id",
+                "main.createDept", "main.create_dept");
+    }
+
     private void setSingleReceiver(MessageSendRequestDTO req, Long userId) {
         if (userId != null) {
             req.setUserIds(Set.of(userId));
@@ -608,7 +624,9 @@ public class BusinessTriggerExecutor {
             return null;
         }
         for (String field : fields) {
-            Object value = readRecordValue(recordData, field);
+            Object value = field != null && field.contains(".")
+                    ? BusinessActionStepConfigHelper.readPath(recordData, field)
+                    : readRecordValue(recordData, field);
             if (value == null) {
                 continue;
             }

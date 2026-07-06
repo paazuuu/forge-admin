@@ -92,6 +92,22 @@ public class SessionHelper {
     }
 
     /**
+     * 获取当前用户的当前组织ID
+     */
+    public static Long getActiveOrgId() {
+        LoginUser loginUser = getLoginUser();
+        return loginUser != null ? loginUser.getActiveOrgId() : null;
+    }
+
+    /**
+     * 获取当前用户的当前组织名称
+     */
+    public static String getActiveOrgName() {
+        LoginUser loginUser = getLoginUser();
+        return loginUser != null ? loginUser.getActiveOrgName() : null;
+    }
+
+    /**
      * 判断当前用户是否为超级管理员
      */
     public static boolean isAdmin() {

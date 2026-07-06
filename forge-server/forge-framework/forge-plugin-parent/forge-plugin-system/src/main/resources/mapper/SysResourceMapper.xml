@@ -59,10 +59,10 @@
         SELECT DISTINCT sr.*
         FROM sys_resource sr
         INNER JOIN sys_role_resource srr ON sr.id = srr.resource_id
-        INNER JOIN sys_user_role sur ON srr.role_id = sur.role_id
-        WHERE sur.user_id = #{userId} 
-          AND sr.visible = 1 
-          AND sr.menu_status = 1 
+        INNER JOIN sys_user_org_role sur ON srr.role_id = sur.role_id
+        WHERE sur.user_id = #{userId}
+          AND sr.visible = 1
+          AND sr.menu_status = 1
           AND sr.resource_type IN (1, 2)
         <if test="clientCode != null and clientCode != ''">
             AND sr.client_code = #{clientCode}
@@ -75,9 +75,9 @@
         SELECT DISTINCT sr.perms
         FROM sys_resource sr
         INNER JOIN sys_role_resource srr ON sr.id = srr.resource_id
-        INNER JOIN sys_user_role sur ON srr.role_id = sur.role_id
-        WHERE sur.user_id = #{userId} 
-          AND sr.visible = 1 
+        INNER JOIN sys_user_org_role sur ON srr.role_id = sur.role_id
+        WHERE sur.user_id = #{userId}
+          AND sr.visible = 1
           AND sr.resource_type = 4
         <if test="clientCode != null and clientCode != ''">
             AND sr.client_code = #{clientCode}

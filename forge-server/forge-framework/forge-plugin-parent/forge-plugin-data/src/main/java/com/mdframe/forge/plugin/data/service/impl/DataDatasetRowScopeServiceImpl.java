@@ -73,7 +73,8 @@ public class DataDatasetRowScopeServiceImpl extends ServiceImpl<DataDatasetRowSc
         }
         return switch (scopeType) {
             case TENANT_ALL, TENANT_ALL_LEGACY -> buildTenantCondition(rowScope, dialect, loginUser);
-            case ORG -> buildOrgCondition(rowScope, dialect, loginUser.getOrgIds());
+            case ORG -> buildOrgCondition(rowScope, dialect,
+                    loginUser.getActiveOrgId() == null ? List.of() : List.of(loginUser.getActiveOrgId()));
             case ORG_AND_CHILD -> buildOrgAndChildCondition(rowScope, dialect, loginUser);
             case SELF -> buildSelfCondition(rowScope, dialect, loginUser);
             case REGION -> buildRegionCondition(rowScope, dialect, loginUser);
@@ -94,7 +95,7 @@ public class DataDatasetRowScopeServiceImpl extends ServiceImpl<DataDatasetRowSc
         entity.setRegionStrategy(DataDatasetRowScopeStrategyEnum.getByCode(dto.getRegionStrategy()).getCode());
         entity.setRemark(dto.getRemark());
         entity.setCreateBy(SessionHelper.getUserId());
-        entity.setCreateDept(SessionHelper.getMainOrgId());
+        entity.setCreateDept(SessionHelper.getActiveOrgId());
         entity.setUpdateBy(SessionHelper.getUserId());
         return entity;
     }
@@ -134,7 +135,7 @@ public class DataDatasetRowScopeServiceImpl extends ServiceImpl<DataDatasetRowSc
     private DataDatasetRowScopeCondition buildOrgAndChildCondition(DataDatasetRowScope rowScope, DbDialect dialect,
             LoginUser loginUser) {
         requireColumn(rowScope.getOrgColumn(), "组织字段");
-        List<Long> orgIds = loginUser.getOrgIds();
+        List<Long> orgIds = loginUser.getActiveOrgId() == null ? List.of() : List.of(loginUser.getActiveOrgId());
         if (orgIds == null || orgIds.isEmpty()) {
             return denyAllCondition();
         }

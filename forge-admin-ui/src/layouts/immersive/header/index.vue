@@ -34,6 +34,7 @@
       <MessageNotification />
       <div class="header-divider" />
       <TenantSwitcher />
+      <OrgSwitcher />
       <UserAvatar />
     </div>
 
@@ -52,6 +53,7 @@ import {
   Fullscreen,
   MenuSearch,
   MessageNotification,
+  OrgSwitcher,
   TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'

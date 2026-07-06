@@ -95,21 +95,34 @@
         <if test="query.createDept != null">
             AND u.create_dept = #{query.createDept}
         </if>
-        <!-- 组织ID过滤：查询该组织及其子组织下的用户 -->
+        <!-- 组织ID过滤：默认查询该组织及其子组织；directOrgOnly=true 时只查直接成员 -->
         <if test="query.orgId != null">
-            AND u.id IN (
-                SELECT user_id FROM sys_user_org WHERE
-                <if test="query.tenantId != null">
-                    tenant_id = #{query.tenantId} AND
-                </if>
-                org_id IN (
-                    SELECT id FROM sys_org WHERE
-                    <if test="query.tenantId != null">
-                        tenant_id = #{query.tenantId} AND
-                    </if>
-                    (id = #{query.orgId} OR FIND_IN_SET(#{query.orgId}, ancestors) > 0)
-                )
-            )
+            <choose>
+                <when test="query.directOrgOnly != null and query.directOrgOnly">
+                    AND u.id IN (
+                        SELECT user_id FROM sys_user_org WHERE
+                        <if test="query.tenantId != null">
+                            tenant_id = #{query.tenantId} AND
+                        </if>
+                        org_id = #{query.orgId}
+                    )
+                </when>
+                <otherwise>
+                    AND u.id IN (
+                        SELECT user_id FROM sys_user_org WHERE
+                        <if test="query.tenantId != null">
+                            tenant_id = #{query.tenantId} AND
+                        </if>
+                        org_id IN (
+                            SELECT id FROM sys_org WHERE
+                            <if test="query.tenantId != null">
+                                tenant_id = #{query.tenantId} AND
+                            </if>
+                            (id = #{query.orgId} OR FIND_IN_SET(#{query.orgId}, ancestors) > 0)
+                        )
+                    )
+                </otherwise>
+            </choose>
         </if>
         <!-- 行政区划过滤（支持虚拟组织ALL后缀） -->
         <if test="query.regionCode != null and query.regionCode != '' and query.regionCode.contains('ALL')">
