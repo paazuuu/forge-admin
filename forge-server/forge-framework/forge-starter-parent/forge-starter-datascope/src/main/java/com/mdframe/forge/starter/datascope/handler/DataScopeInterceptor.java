@@ -339,6 +339,13 @@ public class DataScopeInterceptor implements InnerInterceptor {
         } else {
             result = result.replace("#{orgIds}", "NULL");
         }
+
+        // 替换 #{activeOrgId}
+        if (context.getActiveOrgId() != null) {
+            result = result.replace("#{activeOrgId}", context.getActiveOrgId().toString());
+        } else {
+            result = result.replace("#{activeOrgId}", "NULL");
+        }
         
         // 替换 #{customOrgIds}
         if (context.getCustomOrgIds() != null && !context.getCustomOrgIds().isEmpty()) {

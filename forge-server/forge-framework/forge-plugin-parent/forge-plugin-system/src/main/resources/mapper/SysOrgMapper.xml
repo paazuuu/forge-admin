@@ -176,4 +176,16 @@
         WHERE org_id = #{orgId}
     </select>
 
+    <select id="selectEnabledOrgsByIds" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List" />
+        FROM sys_org
+        WHERE tenant_id = #{tenantId}
+          AND org_status = 1
+          AND id IN
+          <foreach collection="orgIds" item="orgId" open="(" separator="," close=")">
+              #{orgId}
+          </foreach>
+        ORDER BY sort ASC, id ASC
+    </select>
+
 </mapper>

@@ -59,6 +59,11 @@ public class SysUserQuery extends PageQuery {
     private Long orgId;
 
     /**
+     * 是否只查询直接加入指定组织的用户
+     */
+    private Boolean directOrgOnly;
+
+    /**
      * 行政区划编码（支持虚拟组织ALL后缀，如150000ALL）
      */
     private String regionCode;

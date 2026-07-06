@@ -51,6 +51,18 @@ public interface IAuthService {
     LoginUser loadUserByUsername(String username, Long tenantId);
 
     /**
+     * 根据用户名加载用户信息，并保留首选当前组织。
+     *
+     * @param username 用户名
+     * @param tenantId 租户ID（可选）
+     * @param preferredActiveOrgId 首选当前组织ID
+     * @return 登录用户信息
+     */
+    default LoginUser loadUserByUsername(String username, Long tenantId, Long preferredActiveOrgId) {
+        return loadUserByUsername(username, tenantId);
+    }
+
+    /**
      * 根据手机号加载用户信息
      *
      * @param phone    手机号
@@ -81,6 +93,13 @@ public interface IAuthService {
      */
     default LoginUser loadUserByUserId(Long userId, Long tenantId) {
         throw new UnsupportedOperationException("不支持按用户ID加载用户");
+    }
+
+    /**
+     * 根据用户ID、租户和首选当前组织加载用户信息。
+     */
+    default LoginUser loadUserByUserId(Long userId, Long tenantId, Long preferredActiveOrgId) {
+        return loadUserByUserId(userId, tenantId);
     }
 
     /**

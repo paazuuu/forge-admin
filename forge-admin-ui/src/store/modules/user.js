@@ -60,6 +60,18 @@ export const useUserStore = defineStore('user', {
     isTenantAdmin() {
       return this.userInfo?.tenantAdmin || this.userInfo?.isTenantAdmin || false
     },
+    tenantId() {
+      return this.userInfo?.tenantId
+    },
+    tenantName() {
+      return this.userInfo?.tenantName
+    },
+    activeOrgId() {
+      return this.userInfo?.activeOrgId
+    },
+    activeOrgName() {
+      return this.userInfo?.activeOrgName
+    },
     // 兼容旧的 staffInfo 相关 getters
     staffId() {
       return this.staffInfo?.staffId

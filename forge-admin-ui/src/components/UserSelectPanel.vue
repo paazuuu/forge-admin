@@ -145,6 +145,18 @@ const props = defineProps({
     type: [Number, String],
     default: null,
   },
+  initialOrgId: {
+    type: [Number, String],
+    default: null,
+  },
+  lockedOrgId: {
+    type: [Number, String],
+    default: null,
+  },
+  directOrgOnly: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['update:show', 'confirm'])
@@ -191,7 +203,7 @@ watch(() => props.show, async (val) => {
   visible.value = val
   if (val) {
     checkedUserIds.value = []
-    selectedOrgKeys.value = []
+    selectedOrgKeys.value = resolveInitialOrgKeys()
     orgExpandedKeys.value = []
     searchKeyword.value = ''
     pagination.page = 1
@@ -236,6 +248,9 @@ async function loadUserList() {
     }
     if (selectedOrgKeys.value.length > 0) {
       params.orgId = selectedOrgKeys.value[0]
+      if (props.directOrgOnly) {
+        params.directOrgOnly = true
+      }
     }
     const res = await request.get('/system/user/page', { params })
     if (res.code === 200 && res.data) {
@@ -259,9 +274,18 @@ function buildTenantParams() {
 }
 
 function handleOrgSelect(keys) {
+  if (props.lockedOrgId) {
+    selectedOrgKeys.value = [Number(props.lockedOrgId)]
+    return
+  }
   selectedOrgKeys.value = keys
   pagination.page = 1
   loadUserList()
+}
+
+function resolveInitialOrgKeys() {
+  const orgId = props.lockedOrgId || props.initialOrgId
+  return orgId ? [Number(orgId)] : []
 }
 
 function handleOrgExpandedKeysChange(keys) {

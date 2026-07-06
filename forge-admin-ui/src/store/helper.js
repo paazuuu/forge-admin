@@ -22,6 +22,8 @@ export async function getUserInfo() {
       tenantId: loginUser.tenantId,
       tenantName: loginUser.tenantName,
       tenantIds: loginUser.tenantIds || [],
+      activeOrgId: loginUser.activeOrgId,
+      activeOrgName: loginUser.activeOrgName,
       roleIds: loginUser.roleIds || [],
       roleKeys: loginUser.roleKeys || [],
       permissions: loginUser.permissions || [],

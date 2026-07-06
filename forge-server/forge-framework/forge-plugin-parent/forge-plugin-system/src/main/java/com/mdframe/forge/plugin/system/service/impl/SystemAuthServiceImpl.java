@@ -303,6 +303,11 @@ public class SystemAuthServiceImpl implements IAuthService {
     }
 
     @Override
+    public LoginUser loadUserByUsername(String username, Long tenantId, Long preferredActiveOrgId) {
+        return userLoadService.loadUserByUsername(username, tenantId, preferredActiveOrgId);
+    }
+
+    @Override
     public LoginUser loadUserByPhone(String phone, Long tenantId) {
         return userLoadService.loadUserByPhone(phone, tenantId);
     }
@@ -315,6 +320,11 @@ public class SystemAuthServiceImpl implements IAuthService {
     @Override
     public LoginUser loadUserByUserId(Long userId, Long tenantId) {
         return userLoadService.loadUserByUserId(userId, tenantId);
+    }
+
+    @Override
+    public LoginUser loadUserByUserId(Long userId, Long tenantId, Long preferredActiveOrgId) {
+        return userLoadService.loadUserByUserId(userId, tenantId, preferredActiveOrgId);
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.dto.UserTenantBindDTO;
 import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.vo.UserOrgBindingVO;
 import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
 
 import java.util.List;
@@ -150,6 +151,36 @@ public interface ISysUserService extends IService<SysUser> {
      * @return 组织ID列表
      */
     List<Long> selectUserOrgIds(Long userId, Long tenantId);
+
+    /**
+     * 查询用户组织绑定详情。
+     *
+     * @param userId 用户ID
+     * @param tenantId 操作租户ID
+     * @return 组织绑定详情
+     */
+    List<UserOrgBindingVO> selectUserOrgBindings(Long userId, Long tenantId);
+
+    /**
+     * 查询用户在指定组织下的角色。
+     *
+     * @param userId 用户ID
+     * @param orgId 组织ID
+     * @param tenantId 操作租户ID
+     * @return 角色ID列表
+     */
+    List<Long> selectUserOrgRoleIds(Long userId, Long orgId, Long tenantId);
+
+    /**
+     * 保存用户在指定组织下的角色。
+     *
+     * @param userId 用户ID
+     * @param orgId 组织ID
+     * @param roleIds 角色ID列表
+     * @param tenantId 操作租户ID
+     * @return 是否成功
+     */
+    boolean bindUserOrgRoles(Long userId, Long orgId, List<Long> roleIds, Long tenantId);
 
     /**
      * 查询用户绑定租户

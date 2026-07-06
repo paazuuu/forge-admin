@@ -114,6 +114,23 @@ public class SysRoleController {
     }
 
     /**
+     * 查询角色适用组织ID列表。
+     */
+    @GetMapping("/{roleId}/orgs")
+    public RespInfo<List<Long>> getRoleOrgIds(@PathVariable Long roleId) {
+        return RespInfo.success(roleService.selectRoleOrgIds(roleId));
+    }
+
+    /**
+     * 保存角色适用组织。
+     */
+    @PostMapping("/{roleId}/orgs")
+    public RespInfo<Void> bindRoleOrgs(@PathVariable Long roleId, @RequestBody List<Long> orgIds) {
+        boolean result = roleService.bindRoleOrgs(roleId, orgIds);
+        return result ? RespInfo.success() : RespInfo.error("绑定组织失败");
+    }
+
+    /**
      * 查询角色下的用户列表（分页）
      */
     @GetMapping("/{roleId}/users")

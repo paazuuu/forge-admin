@@ -111,6 +111,23 @@ public interface ISysRoleService extends IService<SysRole> {
     List<Long> selectRoleResourceIds(Long roleId, String clientCode);
 
     /**
+     * 查询角色适用组织ID列表。
+     *
+     * @param roleId 角色ID
+     * @return 组织ID列表
+     */
+    List<Long> selectRoleOrgIds(Long roleId);
+
+    /**
+     * 保存角色适用组织。
+     *
+     * @param roleId 角色ID
+     * @param orgIds 组织ID列表
+     * @return 是否成功
+     */
+    boolean bindRoleOrgs(Long roleId, List<Long> orgIds);
+
+    /**
      * 查询当前用户的角色ID列表
      *
      * @return 角色ID列表

@@ -109,6 +109,16 @@ public class LoginUser implements Serializable {
     private Long mainOrgId;
 
     /**
+     * 当前组织ID
+     */
+    private Long activeOrgId;
+
+    /**
+     * 当前组织名称
+     */
+    private String activeOrgName;
+
+    /**
      * 登录时间
      */
     private Long loginTime;

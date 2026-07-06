@@ -24,6 +24,11 @@ public class DataScopeContext {
      * 用户所属组织ID列表
      */
     private List<Long> orgIds;
+
+    /**
+     * 当前组织ID
+     */
+    private Long activeOrgId;
     
     /**
      * 用户角色ID列表

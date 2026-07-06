@@ -6,11 +6,13 @@ import com.mdframe.forge.plugin.system.dto.BatchUserTenantBindDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
 import com.mdframe.forge.plugin.system.dto.UserOrgBindDTO;
+import com.mdframe.forge.plugin.system.dto.UserOrgRoleBindDTO;
 import com.mdframe.forge.plugin.system.dto.UserPostBindDTO;
 import com.mdframe.forge.plugin.system.dto.UserTenantBindDTO;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
 import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
+import com.mdframe.forge.plugin.system.vo.UserOrgBindingVO;
 import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
@@ -189,6 +191,15 @@ public class SysUserController {
     }
 
     /**
+     * 查询用户组织绑定详情。
+     */
+    @GetMapping("/{userId}/org-bindings")
+    public RespInfo<List<UserOrgBindingVO>> getUserOrgBindings(@PathVariable Long userId,
+                                                               @RequestParam(required = false) Long tenantId) {
+        return RespInfo.success(userService.selectUserOrgBindings(userId, tenantId));
+    }
+
+    /**
      * 查询用户的租户绑定列表
      */
     @GetMapping("/{userId}/tenants")
@@ -223,6 +234,26 @@ public class SysUserController {
                                    @RequestParam(required = false) Long tenantId) {
         boolean result = userService.bindUserOrgs(userId, dto.getOrgIds(), dto.getMainOrgId(), tenantId);
         return result ? RespInfo.success() : RespInfo.error("绑定组织失败");
+    }
+
+    /**
+     * 查询用户在指定组织下的角色ID列表。
+     */
+    @GetMapping("/{userId}/org-roles")
+    public RespInfo<List<Long>> getUserOrgRoleIds(@PathVariable Long userId,
+                                                  @RequestParam Long orgId,
+                                                  @RequestParam(required = false) Long tenantId) {
+        return RespInfo.success(userService.selectUserOrgRoleIds(userId, orgId, tenantId));
+    }
+
+    /**
+     * 保存用户在指定组织下的角色。
+     */
+    @PostMapping("/{userId}/org-roles")
+    public RespInfo<Void> bindUserOrgRoles(@PathVariable Long userId,
+                                           @RequestBody UserOrgRoleBindDTO dto) {
+        boolean result = userService.bindUserOrgRoles(userId, dto.getOrgId(), dto.getRoleIds(), dto.getTenantId());
+        return result ? RespInfo.success() : RespInfo.error("绑定组织角色失败");
     }
 
     /**

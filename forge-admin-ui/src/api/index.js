@@ -27,4 +27,10 @@ export default {
 
   // 切换租户
   switchTenant: tenantId => request.post('/system/tenant/switch', null, { params: { tenantId } }),
+
+  // 当前用户可切换组织
+  getCurrentOrgOptions: () => request.get('/system/org/current/options'),
+
+  // 切换当前组织
+  switchOrg: orgId => request.post('/system/org/switch', null, { params: { orgId } }),
 }

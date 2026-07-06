@@ -45,4 +45,9 @@ public interface SysOrgMapper extends BaseMapper<SysOrg> {
     List<SysOrgTreeVO> selectOrgLazyTree(@Param("query") SysOrgQuery query);
     
     List<SysOrgTreeVO> selectOrgChildrenByParentId(@Param("parentId") Long parentId, @Param("tenantId") Long tenantId);
+
+    /**
+     * 按组织ID集合查询当前租户内启用组织。
+     */
+    List<SysOrg> selectEnabledOrgsByIds(@Param("tenantId") Long tenantId, @Param("orgIds") List<Long> orgIds);
 }

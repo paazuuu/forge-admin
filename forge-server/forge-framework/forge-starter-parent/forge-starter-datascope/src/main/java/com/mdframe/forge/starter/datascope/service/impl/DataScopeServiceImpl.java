@@ -91,6 +91,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
             context.setUserId(loginUser.getUserId());
             context.setTenantId(loginUser.getTenantId());
             context.setMinDataScope(DataScopeType.ALL.getCode());
+            fillActiveOrgInfo(context, loginUser);
             fillRegionInfo(context, loginUser);
             return context;
         }
@@ -100,6 +101,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
             context.setUserId(loginUser.getUserId());
             context.setTenantId(loginUser.getTenantId());
             context.setMinDataScope(DataScopeType.TENANT_ALL.getCode());
+            fillActiveOrgInfo(context, loginUser);
             fillRegionInfo(context, loginUser);
             return context;
         }
@@ -110,6 +112,7 @@ public class DataScopeServiceImpl implements IDataScopeService {
             context.setUserId(loginUser.getUserId());
             context.setTenantId(loginUser.getTenantId());
             context.setMinDataScope(DataScopeType.SELF.getCode());
+            fillActiveOrgInfo(context, loginUser);
             fillRegionInfo(context, loginUser);
             return context;
         }
@@ -130,12 +133,18 @@ public class DataScopeServiceImpl implements IDataScopeService {
         context.setUserId(loginUser.getUserId());
         context.setTenantId(loginUser.getTenantId());
         context.setRoleIds(roleIds);
-        context.setOrgIds(loginUser.getOrgIds());
+        fillActiveOrgInfo(context, loginUser);
         context.setMinDataScope(minDataScope);
         context.setCustomOrgIds(customOrgIds);
         fillRegionInfo(context, loginUser);
 
         return context;
+    }
+
+    private void fillActiveOrgInfo(DataScopeContext context, LoginUser loginUser) {
+        Long activeOrgId = loginUser.getActiveOrgId();
+        context.setActiveOrgId(activeOrgId);
+        context.setOrgIds(activeOrgId == null ? Collections.emptyList() : List.of(activeOrgId));
     }
 
     private void fillRegionInfo(DataScopeContext context, LoginUser loginUser) {

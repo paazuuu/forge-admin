@@ -33,6 +33,7 @@ public class UserLoadServiceImpl implements IUserLoadService {
 
     private final SysUserMapper userMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final SysUserOrgRoleMapper userOrgRoleMapper;
     private final SysRoleMapper roleMapper;
     private final SysUserOrgMapper userOrgMapper;
     private final SysUserTenantMapper userTenantMapper;
@@ -47,6 +48,11 @@ public class UserLoadServiceImpl implements IUserLoadService {
     
     @Override
     public LoginUser loadUserByUsername(String username, Long tenantId) {
+        return loadUserByUsername(username, tenantId, null);
+    }
+
+    @Override
+    public LoginUser loadUserByUsername(String username, Long tenantId, Long preferredActiveOrgId) {
         SysUser user = TenantContextHolder.executeIgnore(() ->
                 userMapper.selectByUsernameForLogin(username, tenantId));
         
@@ -54,11 +60,16 @@ public class UserLoadServiceImpl implements IUserLoadService {
             throw new RuntimeException("用户不存在");
         }
 
-        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId), preferredActiveOrgId);
     }
 
     @Override
     public LoginUser loadUserByPhone(String phone, Long tenantId) {
+        return loadUserByPhone(phone, tenantId, null);
+    }
+
+    @Override
+    public LoginUser loadUserByPhone(String phone, Long tenantId, Long preferredActiveOrgId) {
         SysUser user = TenantContextHolder.executeIgnore(() ->
                 userMapper.selectByPhoneForLogin(phone, tenantId));
         
@@ -66,11 +77,16 @@ public class UserLoadServiceImpl implements IUserLoadService {
             throw new RuntimeException("用户不存在");
         }
 
-        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId), preferredActiveOrgId);
     }
 
     @Override
     public LoginUser loadUserByEmail(String email, Long tenantId) {
+        return loadUserByEmail(email, tenantId, null);
+    }
+
+    @Override
+    public LoginUser loadUserByEmail(String email, Long tenantId, Long preferredActiveOrgId) {
         SysUser user = TenantContextHolder.executeIgnore(() ->
                 userMapper.selectByEmailForLogin(email, tenantId));
         
@@ -78,16 +94,21 @@ public class UserLoadServiceImpl implements IUserLoadService {
             throw new RuntimeException("用户不存在");
         }
 
-        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId), preferredActiveOrgId);
     }
 
     @Override
     public LoginUser loadUserByUserId(Long userId, Long tenantId) {
+        return loadUserByUserId(userId, tenantId, null);
+    }
+
+    @Override
+    public LoginUser loadUserByUserId(Long userId, Long tenantId, Long preferredActiveOrgId) {
         SysUser user = TenantContextHolder.executeIgnore(() -> userMapper.selectById(userId));
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
-        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId));
+        return buildLoginUser(user, resolveEffectiveTenantId(user, tenantId), preferredActiveOrgId);
     }
 
     @Override
@@ -118,7 +139,7 @@ public class UserLoadServiceImpl implements IUserLoadService {
     /**
      * 构建LoginUser（包含角色、权限、组织）
      */
-    private LoginUser buildLoginUser(SysUser user, Long effectiveTenantId) {
+    private LoginUser buildLoginUser(SysUser user, Long effectiveTenantId, Long preferredActiveOrgId) {
         SysUserTenant tenantMember = validateTenantMembership(user, effectiveTenantId);
         SysTenant tenant = tenantMapper.selectById(effectiveTenantId);
 
@@ -139,11 +160,11 @@ public class UserLoadServiceImpl implements IUserLoadService {
         loginUser.setTenantIds(loadAvailableTenantIds(user));
 
         TenantContextHolder.executeWithTenant(effectiveTenantId, () -> {
-            // 2. 加载用户角色
-            loadUserRoles(loginUser);
+            // 2. 加载用户组织并确定当前组织
+            loadUserOrgs(loginUser, preferredActiveOrgId);
 
-            // 3. 加载用户组织
-            loadUserOrgs(loginUser);
+            // 3. 加载当前组织下的用户角色
+            loadUserRoles(loginUser);
 
             // 4. 加载用户权限（按钮权限）
             loadUserPermissions(loginUser);
@@ -162,56 +183,64 @@ public class UserLoadServiceImpl implements IUserLoadService {
      * 加载用户角色
      */
     private void loadUserRoles(LoginUser loginUser) {
-        LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUserRole::getUserId, loginUser.getUserId())
-                .eq(SysUserRole::getTenantId, loginUser.getTenantId());
-        List<SysUserRole> userRoles = userRoleMapper.selectList(wrapper);
-
-        if (CollUtil.isNotEmpty(userRoles)) {
-            List<Long> roleIds = userRoles.stream()
-                    .map(SysUserRole::getRoleId)
-                    .collect(Collectors.toList());
-            loginUser.setRoleIds(roleIds);
-
-            if (CollUtil.isNotEmpty(roleIds)) {
-                LambdaQueryWrapper<SysRole> roleWrapper = new LambdaQueryWrapper<>();
-                roleWrapper.in(SysRole::getId, roleIds)
-                        .eq(SysRole::getTenantId, loginUser.getTenantId())
-                        .eq(SysRole::getRoleStatus, 1);
-                List<SysRole> roles = roleMapper.selectList(roleWrapper);
-
-                if (CollUtil.isNotEmpty(roles)) {
-                    List<Long> activeRoleIds = roles.stream()
-                            .map(SysRole::getId)
-                            .collect(Collectors.toList());
-                    Set<String> roleKeys = roles.stream()
-                            .map(SysRole::getRoleKey)
-                            .filter(StrUtil::isNotBlank)
-                            .collect(Collectors.toSet());
-                    loginUser.setRoleIds(activeRoleIds);
-                    loginUser.setRoleKeys(roleKeys);
-                    
-                    log.debug("加载用户角色: userId={}, roleIds={}, roleKeys={}",
-                            loginUser.getUserId(), activeRoleIds, roleKeys);
-                } else {
-                    loginUser.setRoleIds(new ArrayList<>());
-                    log.warn("用户没有启用的角色: userId={}", loginUser.getUserId());
-                }
-            }
-        } else {
+        if (loginUser.getActiveOrgId() == null) {
             loginUser.setRoleIds(new ArrayList<>());
-            log.warn("用户没有分配角色: userId={}", loginUser.getUserId());
+            loginUser.setRoleKeys(new HashSet<>());
+            log.warn("用户没有当前组织，无法加载组织内角色: userId={}, tenantId={}",
+                    loginUser.getUserId(), loginUser.getTenantId());
+            return;
         }
+
+        List<Long> roleIds = userOrgRoleMapper.selectActiveRoleIdsByUserOrg(
+                loginUser.getTenantId(), loginUser.getUserId(), loginUser.getActiveOrgId());
+        if (CollUtil.isEmpty(roleIds)) {
+            loginUser.setRoleIds(new ArrayList<>());
+            loginUser.setRoleKeys(new HashSet<>());
+            log.warn("用户当前组织没有分配角色: userId={}, tenantId={}, activeOrgId={}",
+                    loginUser.getUserId(), loginUser.getTenantId(), loginUser.getActiveOrgId());
+            return;
+        }
+
+        List<SysRole> roles = roleMapper.selectList(new LambdaQueryWrapper<SysRole>()
+                .in(SysRole::getId, roleIds)
+                .eq(SysRole::getTenantId, loginUser.getTenantId())
+                .eq(SysRole::getRoleStatus, 1));
+
+        if (CollUtil.isEmpty(roles)) {
+            loginUser.setRoleIds(new ArrayList<>());
+            loginUser.setRoleKeys(new HashSet<>());
+            log.warn("用户当前组织没有启用角色: userId={}, tenantId={}, activeOrgId={}",
+                    loginUser.getUserId(), loginUser.getTenantId(), loginUser.getActiveOrgId());
+            return;
+        }
+
+        List<Long> activeRoleIds = roles.stream()
+                .map(SysRole::getId)
+                .collect(Collectors.toList());
+        Set<String> roleKeys = roles.stream()
+                .map(SysRole::getRoleKey)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toSet());
+        loginUser.setRoleIds(activeRoleIds);
+        loginUser.setRoleKeys(roleKeys);
+
+        log.debug("加载用户当前组织角色: userId={}, tenantId={}, activeOrgId={}, roleIds={}, roleKeys={}",
+                loginUser.getUserId(), loginUser.getTenantId(), loginUser.getActiveOrgId(), activeRoleIds, roleKeys);
     }
 
     /**
      * 加载用户组织
      */
-    private void loadUserOrgs(LoginUser loginUser) {
+    private void loadUserOrgs(LoginUser loginUser, Long preferredActiveOrgId) {
         LambdaQueryWrapper<SysUserOrg> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserOrg::getUserId, loginUser.getUserId())
                 .eq(SysUserOrg::getTenantId, loginUser.getTenantId());
         List<SysUserOrg> userOrgs = userOrgMapper.selectList(wrapper);
+
+        if (loginUser.isAdmin() && CollUtil.isEmpty(userOrgs)) {
+            loadAdminTenantOrgs(loginUser, preferredActiveOrgId);
+            return;
+        }
 
         if (CollUtil.isNotEmpty(userOrgs)) {
             List<Long> orgIds = userOrgs.stream()
@@ -219,17 +248,63 @@ public class UserLoadServiceImpl implements IUserLoadService {
                     .collect(Collectors.toList());
             loginUser.setOrgIds(orgIds);
 
-            userOrgs.stream()
+            Long mainOrgId = userOrgs.stream()
                     .filter(uo -> uo.getIsMain() != null && uo.getIsMain() == 1)
                     .findFirst()
-                    .ifPresent(uo -> {
-                        loginUser.setMainOrgId(uo.getOrgId());
-                        SysOrg sysOrg = sysOrgMapper.selectById(uo.getOrgId());
-                        if (sysOrg != null) {
-                            loginUser.setDeptName(sysOrg.getOrgName());
-                        }
-                    });
+                    .map(SysUserOrg::getOrgId)
+                    .orElse(null);
+            loginUser.setMainOrgId(mainOrgId);
+
+            Long activeOrgId = resolveActiveOrgId(orgIds, mainOrgId, preferredActiveOrgId);
+            loginUser.setActiveOrgId(activeOrgId);
+            if (activeOrgId != null) {
+                SysOrg sysOrg = sysOrgMapper.selectById(activeOrgId);
+                if (sysOrg != null) {
+                    loginUser.setActiveOrgName(sysOrg.getOrgName());
+                    loginUser.setDeptName(sysOrg.getOrgName());
+                }
+            }
+        } else {
+            loginUser.setOrgIds(new ArrayList<>());
         }
+    }
+
+    private void loadAdminTenantOrgs(LoginUser loginUser, Long preferredActiveOrgId) {
+        List<SysOrg> orgs = sysOrgMapper.selectList(new LambdaQueryWrapper<SysOrg>()
+                .eq(SysOrg::getTenantId, loginUser.getTenantId())
+                .eq(SysOrg::getOrgStatus, 1)
+                .orderByAsc(SysOrg::getSort)
+                .orderByAsc(SysOrg::getId));
+        if (CollUtil.isEmpty(orgs)) {
+            loginUser.setOrgIds(new ArrayList<>());
+            return;
+        }
+
+        List<Long> orgIds = orgs.stream().map(SysOrg::getId).collect(Collectors.toList());
+        Long activeOrgId = resolveActiveOrgId(orgIds, null, preferredActiveOrgId);
+        loginUser.setOrgIds(orgIds);
+        loginUser.setMainOrgId(activeOrgId);
+        loginUser.setActiveOrgId(activeOrgId);
+        orgs.stream()
+                .filter(org -> org.getId().equals(activeOrgId))
+                .findFirst()
+                .ifPresent(org -> {
+                    loginUser.setActiveOrgName(org.getOrgName());
+                    loginUser.setDeptName(org.getOrgName());
+                });
+    }
+
+    private Long resolveActiveOrgId(List<Long> orgIds, Long mainOrgId, Long preferredActiveOrgId) {
+        if (CollUtil.isEmpty(orgIds)) {
+            return null;
+        }
+        if (preferredActiveOrgId != null && orgIds.contains(preferredActiveOrgId)) {
+            return preferredActiveOrgId;
+        }
+        if (mainOrgId != null && orgIds.contains(mainOrgId)) {
+            return mainOrgId;
+        }
+        return orgIds.get(0);
     }
 
     /**
@@ -461,9 +536,10 @@ public class UserLoadServiceImpl implements IUserLoadService {
     private void loadUserRegion(LoginUser loginUser) {
         String regionCode = null;
         
-        // 优先从主组织获取
-        if (loginUser.getMainOrgId() != null) {
-            SysOrg org = sysOrgMapper.selectById(loginUser.getMainOrgId());
+        // 优先从当前组织获取
+        Long regionOrgId = loginUser.getActiveOrgId() != null ? loginUser.getActiveOrgId() : loginUser.getMainOrgId();
+        if (regionOrgId != null) {
+            SysOrg org = sysOrgMapper.selectById(regionOrgId);
             if (org != null && StrUtil.isNotBlank(org.getRegionCode())) {
                 regionCode = org.getRegionCode();
             }

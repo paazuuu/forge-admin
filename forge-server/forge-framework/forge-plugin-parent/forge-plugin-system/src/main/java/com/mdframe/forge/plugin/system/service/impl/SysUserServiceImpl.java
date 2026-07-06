@@ -21,19 +21,25 @@ import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.entity.SysPost;
 import com.mdframe.forge.plugin.system.entity.SysRegion;
 import com.mdframe.forge.plugin.system.entity.SysRole;
+import com.mdframe.forge.plugin.system.entity.SysRoleOrg;
+import com.mdframe.forge.plugin.system.entity.SysUserOrgRole;
 import com.mdframe.forge.plugin.system.mapper.SysOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysPostMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRegionMapper;
+import com.mdframe.forge.plugin.system.mapper.SysRoleOrgMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserOrgMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserOrgRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserPostMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserRoleMapper;
 import com.mdframe.forge.plugin.system.mapper.SysUserTenantMapper;
 import com.mdframe.forge.plugin.system.mapper.SysTenantMapper;
 import com.mdframe.forge.plugin.system.mapper.SysRoleMapper;
 import com.mdframe.forge.plugin.system.service.ISysUserService;
+import com.mdframe.forge.plugin.system.service.IUserLoadService;
 import com.mdframe.forge.plugin.system.dto.UserTenantBindDTO;
 import com.mdframe.forge.plugin.system.vo.SysUserTenantVO;
+import com.mdframe.forge.plugin.system.vo.UserOrgBindingVO;
 import com.mdframe.forge.starter.auth.util.PasswordUtil;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
@@ -47,6 +53,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -58,16 +65,25 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements ISysUserService {
 
+    private static final String[] USER_MANAGEMENT_PERMISSIONS = {
+            "system:user:list", "system:user:query", "system:user:add", "system:user:edit", "system:user:remove",
+            "system:org:list", "system:org:query",
+            "system:role:list", "system:role:query"
+    };
+
     private final SysUserMapper userMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final SysUserOrgRoleMapper userOrgRoleMapper;
     private final SysUserOrgMapper userOrgMapper;
     private final SysUserPostMapper userPostMapper;
     private final SysUserTenantMapper userTenantMapper;
     private final SysTenantMapper tenantMapper;
     private final SysRoleMapper roleMapper;
+    private final SysRoleOrgMapper roleOrgMapper;
     private final SysOrgMapper orgMapper;
     private final SysPostMapper postMapper;
     private final SysRegionMapper regionMapper;
+    private final IUserLoadService userLoadService;
 
     @Override
     public IPage<SysUser> selectUserPage(SysUserQuery query) {
@@ -102,6 +118,13 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (inserted) {
             for (Long bindTenantId : tenantIds) {
                 upsertUserTenant(user.getId(), bindTenantId, user.getUserType(), Objects.equals(bindTenantId, tenantId));
+            }
+            List<Long> orgIds = dto.getOrgIds() == null ? List.of() : dto.getOrgIds();
+            if (!orgIds.isEmpty()) {
+                Long mainOrgId = dto.getMainOrgId() != null ? dto.getMainOrgId() : orgIds.get(0);
+                bindUserOrgs(user.getId(), orgIds, mainOrgId, tenantId);
+            } else if (!loginUser.isAdmin() && loginUser.getActiveOrgId() != null) {
+                bindUserOrgs(user.getId(), List.of(loginUser.getActiveOrgId()), loginUser.getActiveOrgId(), tenantId);
             }
             // 同步绑定角色
             if (dto.getRoleIds() != null) {
@@ -243,12 +266,21 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         }
         assertCanManageUser(userId);
         assertNotSelfManagement(userId);
+        Long tenantId = resolveTenantScopedOperationTenantId(userId);
         
         LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserRole::getUserId, userId)
-                .eq(SysUserRole::getTenantId, resolveTenantScopedOperationTenantId(userId))
+                .eq(SysUserRole::getTenantId, tenantId)
                 .in(SysUserRole::getRoleId, Arrays.asList(roleIds));
-        return userRoleMapper.delete(wrapper) > 0;
+        userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                .eq(SysUserOrgRole::getUserId, userId)
+                .eq(SysUserOrgRole::getTenantId, tenantId)
+                .in(SysUserOrgRole::getRoleId, Arrays.asList(roleIds)));
+        boolean deleted = userRoleMapper.delete(wrapper) > 0;
+        if (deleted) {
+            syncCurrentUserOrgSession(userId, tenantId);
+        }
+        return deleted;
     }
 
     @Override
@@ -312,12 +344,21 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         }
         assertCanManageUser(userId);
         assertNotSelfManagement(userId);
+        Long tenantId = resolveTenantScopedOperationTenantId(userId);
         
         LambdaQueryWrapper<SysUserOrg> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUserOrg::getUserId, userId)
-                .eq(SysUserOrg::getTenantId, resolveTenantScopedOperationTenantId(userId))
+                .eq(SysUserOrg::getTenantId, tenantId)
                 .eq(SysUserOrg::getOrgId, orgId);
-        return userOrgMapper.delete(wrapper) > 0;
+        userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                .eq(SysUserOrgRole::getUserId, userId)
+                .eq(SysUserOrgRole::getTenantId, tenantId)
+                .eq(SysUserOrgRole::getOrgId, orgId));
+        boolean deleted = userOrgMapper.delete(wrapper) > 0;
+        if (deleted) {
+            syncCurrentUserOrgSession(userId, tenantId);
+        }
+        return deleted;
     }
 
     @Override
@@ -366,6 +407,130 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     }
 
     @Override
+    public List<UserOrgBindingVO> selectUserOrgBindings(Long userId, Long tenantId) {
+        if (userId == null) {
+            return new ArrayList<>();
+        }
+        assertCanReadUser(userId);
+
+        Long operationTenantId = resolveTenantScopedOperationTenantId(userId, tenantId);
+        List<SysUserOrg> userOrgs = TenantContextHolder.executeIgnore(() ->
+                userOrgMapper.selectList(new LambdaQueryWrapper<SysUserOrg>()
+                        .eq(SysUserOrg::getUserId, userId)
+                        .eq(SysUserOrg::getTenantId, operationTenantId)));
+        if (userOrgs.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Long> orgIds = userOrgs.stream()
+                .map(SysUserOrg::getOrgId)
+                .collect(Collectors.toList());
+        List<SysOrg> orgs = TenantContextHolder.executeIgnore(() ->
+                orgMapper.selectList(new LambdaQueryWrapper<SysOrg>()
+                        .eq(SysOrg::getTenantId, operationTenantId)
+                        .in(SysOrg::getId, orgIds)));
+        Map<Long, SysOrg> orgMap = orgs.stream()
+                .collect(Collectors.toMap(SysOrg::getId, item -> item, (left, right) -> left));
+
+        return userOrgs.stream()
+                .map(userOrg -> {
+                    SysOrg org = orgMap.get(userOrg.getOrgId());
+                    List<String> roleNames = userOrgRoleMapper.selectRoleNamesByUserOrg(
+                            operationTenantId, userId, userOrg.getOrgId());
+                    UserOrgBindingVO vo = new UserOrgBindingVO();
+                    vo.setTenantId(operationTenantId);
+                    vo.setUserId(userId);
+                    vo.setOrgId(userOrg.getOrgId());
+                    vo.setOrgName(org == null ? null : org.getOrgName());
+                    vo.setParentId(org == null ? null : org.getParentId());
+                    vo.setAncestors(org == null ? null : org.getAncestors());
+                    vo.setIsMain(userOrg.getIsMain());
+                    vo.setRoleNames(roleNames);
+                    vo.setRoleCount(roleNames == null ? 0 : roleNames.size());
+                    return vo;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Long> selectUserOrgRoleIds(Long userId, Long orgId, Long tenantId) {
+        if (userId == null || orgId == null) {
+            return new ArrayList<>();
+        }
+        assertCanReadUser(userId);
+        Long operationTenantId = resolveTenantScopedOperationTenantId(userId, tenantId);
+        validateUserOrgMembership(userId, orgId, operationTenantId);
+        return userOrgRoleMapper.selectUserOrgRoleIds(operationTenantId, userId, orgId)
+                .stream()
+                .filter(this::isRoleVisibleForCurrentUser)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean bindUserOrgRoles(Long userId, Long orgId, List<Long> roleIds, Long tenantId) {
+        if (userId == null || orgId == null || roleIds == null) {
+            return false;
+        }
+        assertCanManageUser(userId);
+        assertNotSelfManagement(userId);
+
+        Long operationTenantId = resolveTenantScopedOperationTenantId(userId, tenantId);
+        validateUserOrgMembership(userId, orgId, operationTenantId);
+
+        List<Long> normalizedRoleIds = normalizeRoleIds(roleIds);
+        LoginUser loginUser = requireLoginUser();
+        Set<Long> manageableRoleIds = resolveManageableRoleIds(loginUser);
+        if (!loginUser.isAdmin()) {
+            if (!Objects.equals(orgId, loginUser.getActiveOrgId())) {
+                throw new RuntimeException("只能维护当前组织下的用户角色");
+            }
+            if (!manageableRoleIds.containsAll(normalizedRoleIds)) {
+                throw new RuntimeException("权限溢出：不能分配自己没有的角色");
+            }
+        }
+
+        validateRoleTenant(normalizedRoleIds.toArray(new Long[0]), operationTenantId);
+        validateRoleStatus(normalizedRoleIds, operationTenantId);
+        validateRolesApplicableToOrg(normalizedRoleIds, orgId, operationTenantId);
+        validateRoleDataScopeForTarget(normalizedRoleIds, userId, operationTenantId);
+
+        LambdaQueryWrapper<SysUserOrgRole> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(SysUserOrgRole::getTenantId, operationTenantId)
+                .eq(SysUserOrgRole::getUserId, userId)
+                .eq(SysUserOrgRole::getOrgId, orgId);
+        if (!loginUser.isAdmin()) {
+            if (manageableRoleIds.isEmpty()) {
+                return normalizedRoleIds.isEmpty();
+            }
+            deleteWrapper.in(SysUserOrgRole::getRoleId, manageableRoleIds);
+        }
+        if (!normalizedRoleIds.isEmpty()) {
+            deleteWrapper.notIn(SysUserOrgRole::getRoleId, normalizedRoleIds);
+        }
+        userOrgRoleMapper.delete(deleteWrapper);
+
+        if (!normalizedRoleIds.isEmpty()) {
+            Set<Long> existingRoleIds = new HashSet<>(userOrgRoleMapper.selectUserOrgRoleIds(
+                    operationTenantId, userId, orgId));
+            for (Long roleId : normalizedRoleIds) {
+                if (existingRoleIds.contains(roleId)) {
+                    continue;
+                }
+                SysUserOrgRole userOrgRole = new SysUserOrgRole();
+                userOrgRole.setTenantId(operationTenantId);
+                userOrgRole.setUserId(userId);
+                userOrgRole.setOrgId(orgId);
+                userOrgRole.setRoleId(roleId);
+                userOrgRoleMapper.insert(userOrgRole);
+            }
+        }
+
+        syncCurrentUserOrgSession(userId, operationTenantId);
+        return true;
+    }
+
+    @Override
     public List<SysUserTenantVO> selectUserTenants(Long userId) {
         assertCanManageUser(userId);
         return TenantContextHolder.executeIgnore(() -> userTenantMapper.selectUserTenants(userId, false));
@@ -405,6 +570,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
                         .eq(SysUserRole::getUserId, userId)
                         .in(SysUserRole::getTenantId, removedTenantIds));
+                userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                        .eq(SysUserOrgRole::getUserId, userId)
+                        .in(SysUserOrgRole::getTenantId, removedTenantIds));
                 userOrgMapper.delete(new LambdaQueryWrapper<SysUserOrg>()
                         .eq(SysUserOrg::getUserId, userId)
                         .in(SysUserOrg::getTenantId, removedTenantIds));
@@ -512,6 +680,10 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             deleteWrapper.eq(SysUserOrg::getUserId, userId)
                     .eq(SysUserOrg::getTenantId, tenantId)
                     .in(SysUserOrg::getOrgId, toDelete);
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                    .eq(SysUserOrgRole::getUserId, userId)
+                    .eq(SysUserOrgRole::getTenantId, tenantId)
+                    .in(SysUserOrgRole::getOrgId, toDelete));
             userOrgMapper.delete(deleteWrapper);
         }
         
@@ -860,6 +1032,43 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (loginUser == null) {
             throw new RuntimeException("用户未登录");
         }
+        if (loginUser.isAdmin() || loginUser.isTenantAdmin()) {
+            return;
+        }
+        if (!hasAnyPermission(loginUser, USER_MANAGEMENT_PERMISSIONS)) {
+            throw new RuntimeException("无权访问用户组织管理功能");
+        }
+    }
+
+    private boolean hasAnyPermission(LoginUser loginUser, String... permissions) {
+        Set<String> userPermissions = loginUser == null ? null : loginUser.getPermissions();
+        if (userPermissions == null || userPermissions.isEmpty() || permissions == null) {
+            return false;
+        }
+        if (userPermissions.contains("*") || userPermissions.contains("*:*:*")) {
+            return true;
+        }
+        for (String permission : permissions) {
+            if (hasPermission(userPermissions, permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasPermission(Set<String> userPermissions, String permission) {
+        if (permission == null || userPermissions.contains(permission)) {
+            return permission != null;
+        }
+        int splitIndex = permission.lastIndexOf(':');
+        while (splitIndex > 0) {
+            String wildcardPermission = permission.substring(0, splitIndex) + ":*";
+            if (userPermissions.contains(wildcardPermission)) {
+                return true;
+            }
+            splitIndex = permission.lastIndexOf(':', splitIndex - 1);
+        }
+        return false;
     }
 
     private void assertNotSelfManagement(Long userId) {
@@ -918,33 +1127,11 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             return;
         }
 
-        List<SysUserOrg> userOrgs = TenantContextHolder.executeIgnore(() ->
-                userOrgMapper.selectList(new LambdaQueryWrapper<SysUserOrg>()
-                        .eq(SysUserOrg::getUserId, userId)
-                        .eq(SysUserOrg::getTenantId, tenantId)));
-        List<Long> orgIds = userOrgs.stream()
-                .map(SysUserOrg::getOrgId)
-                .collect(Collectors.toList());
-        loginUser.setOrgIds(orgIds);
-
-        SysUserOrg mainOrg = userOrgs.stream()
-                .filter(item -> item.getIsMain() != null && item.getIsMain() == 1)
-                .findFirst()
-                .orElse(null);
-        if (mainOrg == null) {
-            loginUser.setMainOrgId(null);
-            loginUser.setDeptName(null);
-            SessionHelper.setLoginUser(loginUser);
-            return;
-        }
-
-        loginUser.setMainOrgId(mainOrg.getOrgId());
-        SysOrg org = TenantContextHolder.executeIgnore(() -> orgMapper.selectById(mainOrg.getOrgId()));
-        if (org != null) {
-            loginUser.setDeptName(org.getOrgName());
-            applyRegionToSession(loginUser, org.getRegionCode());
-        }
-        SessionHelper.setLoginUser(loginUser);
+        LoginUser fresh = userLoadService.loadUserByUserId(userId, tenantId, loginUser.getActiveOrgId());
+        fresh.setLoginTime(loginUser.getLoginTime());
+        fresh.setLoginIp(loginUser.getLoginIp());
+        fresh.setUserClient(loginUser.getUserClient());
+        SessionHelper.setLoginUser(fresh);
     }
 
     private void applyRegionToSession(LoginUser loginUser, String regionCode) {
@@ -1025,6 +1212,64 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         if (count == null || count != roleIds.length) {
             throw new RuntimeException("角色不属于当前操作租户");
         }
+    }
+
+    private List<Long> normalizeRoleIds(List<Long> roleIds) {
+        if (roleIds == null) {
+            return new ArrayList<>();
+        }
+        return roleIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private void validateUserOrgMembership(Long userId, Long orgId, Long tenantId) {
+        Long count = TenantContextHolder.executeIgnore(() ->
+                userOrgMapper.selectCount(new LambdaQueryWrapper<SysUserOrg>()
+                        .eq(SysUserOrg::getTenantId, tenantId)
+                        .eq(SysUserOrg::getUserId, userId)
+                        .eq(SysUserOrg::getOrgId, orgId)));
+        if (count == null || count == 0) {
+            throw new RuntimeException("用户未加入目标组织");
+        }
+    }
+
+    private void validateRoleStatus(List<Long> roleIds, Long tenantId) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        Long count = roleMapper.selectCount(new LambdaQueryWrapper<SysRole>()
+                .in(SysRole::getId, roleIds)
+                .eq(SysRole::getTenantId, tenantId)
+                .eq(SysRole::getRoleStatus, 1));
+        if (count == null || count != roleIds.size()) {
+            throw new RuntimeException("角色不存在或已禁用");
+        }
+    }
+
+    private void validateRolesApplicableToOrg(List<Long> roleIds, Long orgId, Long tenantId) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        Long count = roleOrgMapper.selectCount(new LambdaQueryWrapper<SysRoleOrg>()
+                .eq(SysRoleOrg::getTenantId, tenantId)
+                .eq(SysRoleOrg::getOrgId, orgId)
+                .in(SysRoleOrg::getRoleId, roleIds));
+        if (count == null || count != roleIds.size()) {
+            throw new RuntimeException("角色不适用于目标组织");
+        }
+    }
+
+    private boolean isRoleApplicableToOrg(Long roleId, Long orgId, Long tenantId) {
+        if (roleId == null || orgId == null || tenantId == null) {
+            return false;
+        }
+        Long count = roleOrgMapper.selectCount(new LambdaQueryWrapper<SysRoleOrg>()
+                .eq(SysRoleOrg::getTenantId, tenantId)
+                .eq(SysRoleOrg::getRoleId, roleId)
+                .eq(SysRoleOrg::getOrgId, orgId));
+        return count != null && count > 0;
     }
 
     private void validateOrgTenant(List<Long> orgIds, Long tenantId) {
@@ -1134,6 +1379,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         userRoleMapper.delete(deleteWrapper);
 
         if (normalizedRoleIds.isEmpty()) {
+            syncLegacyRolesToUserOrgs(userId, tenantId, normalizedRoleIds, loginUser, manageableRoleIds);
             return true;
         }
 
@@ -1157,7 +1403,57 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             userRoleMapper.insert(userRole);
         }
 
+        syncLegacyRolesToUserOrgs(userId, tenantId, normalizedRoleIds, loginUser, manageableRoleIds);
         return true;
+    }
+
+    private void syncLegacyRolesToUserOrgs(Long userId,
+                                           Long tenantId,
+                                           List<Long> roleIds,
+                                           LoginUser loginUser,
+                                           Set<Long> manageableRoleIds) {
+        List<SysUserOrg> userOrgs = userOrgMapper.selectList(new LambdaQueryWrapper<SysUserOrg>()
+                .eq(SysUserOrg::getUserId, userId)
+                .eq(SysUserOrg::getTenantId, tenantId));
+        if (userOrgs.isEmpty()) {
+            return;
+        }
+
+        for (SysUserOrg userOrg : userOrgs) {
+            List<Long> applicableRoleIds = roleIds.stream()
+                    .filter(roleId -> isRoleApplicableToOrg(roleId, userOrg.getOrgId(), tenantId))
+                    .collect(Collectors.toList());
+
+            LambdaQueryWrapper<SysUserOrgRole> deleteWrapper = new LambdaQueryWrapper<>();
+            deleteWrapper.eq(SysUserOrgRole::getUserId, userId)
+                    .eq(SysUserOrgRole::getTenantId, tenantId)
+                    .eq(SysUserOrgRole::getOrgId, userOrg.getOrgId());
+            if (!loginUser.isAdmin()) {
+                if (manageableRoleIds.isEmpty()) {
+                    continue;
+                }
+                deleteWrapper.in(SysUserOrgRole::getRoleId, manageableRoleIds);
+            }
+            if (!applicableRoleIds.isEmpty()) {
+                deleteWrapper.notIn(SysUserOrgRole::getRoleId, applicableRoleIds);
+            }
+            userOrgRoleMapper.delete(deleteWrapper);
+
+            Set<Long> existingRoleIds = new HashSet<>(userOrgRoleMapper.selectUserOrgRoleIds(
+                    tenantId, userId, userOrg.getOrgId()));
+            for (Long roleId : applicableRoleIds) {
+                if (existingRoleIds.contains(roleId)) {
+                    continue;
+                }
+                SysUserOrgRole userOrgRole = new SysUserOrgRole();
+                userOrgRole.setTenantId(tenantId);
+                userOrgRole.setUserId(userId);
+                userOrgRole.setOrgId(userOrg.getOrgId());
+                userOrgRole.setRoleId(roleId);
+                userOrgRoleMapper.insert(userOrgRole);
+            }
+        }
+        syncCurrentUserOrgSession(userId, tenantId);
     }
 
     private Set<Long> resolveManageableRoleIds(LoginUser loginUser) {
@@ -1230,6 +1526,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
                     .eq(SysUserRole::getUserId, userId)
                     .eq(SysUserRole::getTenantId, tenantId));
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>()
+                    .eq(SysUserOrgRole::getUserId, userId)
+                    .eq(SysUserOrgRole::getTenantId, tenantId));
             userOrgMapper.delete(new LambdaQueryWrapper<SysUserOrg>()
                     .eq(SysUserOrg::getUserId, userId)
                     .eq(SysUserOrg::getTenantId, tenantId));
@@ -1251,6 +1550,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private boolean deleteUserGlobally(Long userId) {
         return TenantContextHolder.executeIgnore(() -> {
             userRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+            userOrgRoleMapper.delete(new LambdaQueryWrapper<SysUserOrgRole>().eq(SysUserOrgRole::getUserId, userId));
             userOrgMapper.delete(new LambdaQueryWrapper<SysUserOrg>().eq(SysUserOrg::getUserId, userId));
             userPostMapper.delete(new LambdaQueryWrapper<SysUserPost>().eq(SysUserPost::getUserId, userId));
             userTenantMapper.delete(new LambdaQueryWrapper<SysUserTenant>().eq(SysUserTenant::getUserId, userId));

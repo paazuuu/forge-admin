@@ -16,8 +16,11 @@ public interface DataScopeRoleMapper {
     /**
      * 根据用户ID查询角色ID列表
      */
-    @Select("SELECT role_id FROM sys_user_role WHERE user_id = #{userId}")
-    List<Long> selectRoleIdsByUserId(@Param("userId") Long userId);
+    @Select("SELECT role_id FROM sys_user_org_role "
+            + "WHERE user_id = #{userId} AND tenant_id = #{tenantId} AND org_id = #{orgId}")
+    List<Long> selectRoleIdsByUserId(@Param("userId") Long userId,
+                                     @Param("tenantId") Long tenantId,
+                                     @Param("orgId") Long orgId);
     
     /**
      * 根据角色ID列表查询最小数据权限范围

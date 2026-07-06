@@ -86,7 +86,7 @@ public class AuthController {
 
         if (loginUser != null) {
             LoginUser fresh = authService.loadUserByUsername(
-                    loginUser.getUsername(), loginUser.getTenantId());
+                    loginUser.getUsername(), loginUser.getTenantId(), loginUser.getActiveOrgId());
             if (fresh != null) {
                 fresh.setLoginTime(System.currentTimeMillis());
                 fresh.setLoginIp(loginUser.getLoginIp());
