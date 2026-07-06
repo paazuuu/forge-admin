@@ -51,9 +51,9 @@
                       @update:value="handleSwitchComponentType"
                     />
                   </n-form-item>
-                  <n-form-item v-if="selectedComponent.fieldBinding?.fieldCode" label="绑定字段">
+                  <n-form-item v-if="isField" label="绑定字段">
                     <n-input
-                      :value="selectedComponent.fieldBinding.fieldCode"
+                      :value="selectedComponent.fieldBinding?.fieldCode || ''"
                       clearable
                       placeholder="请输入字段编码"
                       @update:value="updateFieldBindingCode"
@@ -5485,11 +5485,12 @@ async function previewSelectedGenerationRule(ruleCode = selectedGenerationRuleCo
 
 function updateFieldBindingCode(value = '') {
   const fieldCode = String(value || '').trim()
-  if (!selectedComponent.value?.fieldBinding)
+  if (!selectedComponent.value || !isField.value)
     return
   updateComponent({
     fieldBinding: {
       ...(selectedComponent.value.fieldBinding || {}),
+      mode: selectedComponent.value.fieldBinding?.mode || 'field',
       fieldCode,
       columnName: camelToSnake(fieldCode),
     },

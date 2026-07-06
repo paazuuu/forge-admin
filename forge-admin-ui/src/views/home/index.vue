@@ -752,7 +752,10 @@ onMounted(() => {
 
 <style scoped>
 .home-page {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* 统计卡片网格 */

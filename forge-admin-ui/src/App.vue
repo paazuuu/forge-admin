@@ -9,13 +9,10 @@
     <n-message-provider>
       <!-- 当菜单数据未加载完成时显示加载状态 -->
       <div v-if="showLoading" class="loading-wrapper">
-        <n-spin size="large">
-          <template #description>
-            <div class="loading-text">
-              正在加载...
-            </div>
-          </template>
-        </n-spin>
+        <div class="app-loader" aria-hidden="true" />
+        <div class="loading-text">
+          正在加载...
+        </div>
       </div>
       <router-view v-else v-slot="{ Component, route: curRoute }">
         <component :is="LayoutComponent" :key="curRoute.meta?.layout || appStore.layout">
@@ -143,26 +140,69 @@ watchEffect(() => {
   width: 100vw;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.4);
+  gap: 18px;
+  background:
+    radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--primary-color, #165dff) 8%, transparent),
+      transparent 34%
+    ),
+    color-mix(in srgb, var(--bg-primary, #fff) 84%, transparent);
+  backdrop-filter: blur(2px);
   z-index: 99;
 }
 
+.app-loader {
+  --size: 1px;
+  --loader-color: var(--primary-color, #165dff);
+
+  width: calc(48 * var(--size));
+  height: calc(48 * var(--size));
+  background: var(--loader-color);
+  border-radius: 10%;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--loader-color) 32%, transparent);
+  animation: app-loader-rotate 1s linear infinite;
+}
+
 .loading-text {
-  margin-top: 12px;
-  font-size: 16px;
-  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary, #4e5969);
+  letter-spacing: 0;
 }
 
-:deep(.n-spin-content) {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.dark .loading-wrapper {
+  background:
+    radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--primary-color, #4080ff) 18%, transparent),
+      transparent 36%
+    ),
+    color-mix(in srgb, var(--bg-primary, #0f172a) 88%, transparent);
 }
 
-:deep(.n-spin-description) {
-  margin-top: 12px;
+.dark .app-loader {
+  --loader-color: var(--primary-color, #4080ff);
+}
+
+@keyframes app-loader-rotate {
+  0% {
+    transform: rotate(0deg) scale(0.2);
+    border-radius: 10%;
+  }
+
+  50% {
+    transform: rotate(180deg) scale(1.5);
+    border-radius: 50%;
+  }
+
+  100% {
+    transform: rotate(360deg) scale(0.2);
+    border-radius: 10%;
+  }
 }
 
 /* 水印层样式 */

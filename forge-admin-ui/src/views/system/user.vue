@@ -822,20 +822,22 @@ const tableColumns = computed(() => [
   {
     prop: 'username',
     label: '用户名',
-    width: 150,
+    minWidth: 140,
   },
   {
     prop: 'realName',
     label: '真实姓名',
-    width: 120,
+    minWidth: 120,
   },
   {
-    prop: 'userType',
-    label: '用户类型',
-    width: 120,
-    render: (row) => {
-      return h(DictTag, { options: userTypeOptions.value, value: normalizeSingleNumber(row.userType), size: 'small', forceTag: true })
-    },
+    prop: 'phone',
+    label: '手机号',
+    minWidth: 130,
+  },
+  {
+    prop: 'email',
+    label: '邮箱',
+    minWidth: 180,
   },
   ...(userStore.isAdmin
     ? [{
@@ -846,27 +848,9 @@ const tableColumns = computed(() => [
       }]
     : []),
   {
-    prop: 'phone',
-    label: '手机号',
-    width: 130,
-  },
-  {
-    prop: 'email',
-    label: '邮箱',
-    width: 180,
-  },
-  {
-    prop: 'gender',
-    label: '性别',
-    width: 80,
-    render: (row) => {
-      return h(DictTag, { options: genderOptions.value, value: normalizeSingleNumber(row.gender), size: 'small', forceTag: true })
-    },
-  },
-  {
     prop: 'regionCode',
     label: '行政区划',
-    width: 150,
+    minWidth: 150,
     render: (row) => {
       if (!row.regionCode)
         return '-'
@@ -875,12 +859,22 @@ const tableColumns = computed(() => [
     },
   },
   {
+    prop: 'userType',
+    label: '用户类型',
+    width: 100,
+    render: row => renderDictTag(userTypeOptions.value, normalizeSingleNumber(row.userType)),
+  },
+  {
+    prop: 'gender',
+    label: '性别',
+    width: 80,
+    render: row => renderDictTag(genderOptions.value, normalizeSingleNumber(row.gender)),
+  },
+  {
     prop: 'userStatus',
     label: '状态',
     width: 80,
-    render: (row) => {
-      return h(DictTag, { options: userStatusOptions.value, value: normalizeSingleNumber(row.userStatus), size: 'small', forceTag: true })
-    },
+    render: row => renderDictTag(userStatusOptions.value, normalizeSingleNumber(row.userStatus), 'user-status-tag'),
   },
   {
     prop: 'remark',
@@ -1318,12 +1312,18 @@ function renderTenantNames(row = {}) {
   if (names.length === 0)
     return '-'
   return h('div', { class: 'tenant-name-list' }, names.map(name =>
-    h(NTag, { size: 'small', type: 'info', bordered: false, class: 'tenant-name-tag' }, { default: () => name }),
+    h(NTag, { size: 'small', bordered: true, class: 'tenant-name-tag' }, { default: () => name }),
   ))
 }
 
 function resolveOptionLabel(options = [], value) {
   return options.find(option => isSameKey(option?.value, value))?.label || ''
+}
+
+function renderDictTag(options = [], value, className = '') {
+  return h('span', { class: ['user-table-tag', className] }, [
+    h(DictTag, { options, value, size: 'small', forceTag: true }),
+  ])
 }
 
 function getLeftOrgNodeIcon(node = {}) {
@@ -2241,17 +2241,17 @@ async function handleSubmitBatchTenant() {
 .org-tree-panel {
   width: 248px;
   min-width: 248px;
-  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 18%, #ffffff 100%);
-  border-radius: 14px;
-  border: 1px solid #dbe4f0;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  background: var(--bg-primary, #fff);
+  border-radius: 8px;
+  border: 1px solid var(--border-light, #e5e7eb);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition:
     width 0.24s ease,
     min-width 0.24s ease,
-    box-shadow 0.24s ease;
+    border-color 0.24s ease;
 }
 
 .org-tree-panel.is-collapsed {
@@ -2273,18 +2273,13 @@ async function handleSubmitBatchTenant() {
 }
 
 .org-tree-header {
-  padding: 14px 12px 12px;
-  border-bottom: 1px solid #e8eef5;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-light, #e5e7eb);
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(59, 130, 246, 0.08) 0%,
-    rgba(59, 130, 246, 0.02) 55%,
-    rgba(255, 255, 255, 0.96) 100%
-  );
+  background: var(--bg-primary, #fff);
 }
 
 .header-title {
@@ -2295,18 +2290,17 @@ async function handleSubmitBatchTenant() {
 }
 
 .header-icon {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-  color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: var(--bg-secondary, #f6f8fb);
+  color: var(--text-secondary, #4b5563);
 }
 
 .header-icon i {
@@ -2322,14 +2316,14 @@ async function handleSubmitBatchTenant() {
 
 .header-copy span {
   font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
   line-height: 1.2;
 }
 
 .header-copy small {
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-tertiary, #9ca3af);
   line-height: 1.2;
 }
 
@@ -2340,19 +2334,19 @@ async function handleSubmitBatchTenant() {
 }
 
 .org-tree-header :deep(.n-button) {
-  color: #475569;
+  color: var(--text-tertiary, #9ca3af);
 }
 
 .org-tree-header :deep(.n-button:hover) {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
+  color: var(--text-secondary, #4b5563);
+  background: var(--bg-secondary, #f6f8fb);
 }
 
 .org-tree-content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 8px 12px;
+  padding: 8px;
 }
 
 .org-tree-content :deep(.n-spin-content) {
@@ -2368,7 +2362,7 @@ async function handleSubmitBatchTenant() {
   justify-content: center;
   gap: 12px;
   padding: 14px 6px;
-  color: #64748b;
+  color: var(--text-tertiary, #9ca3af);
   cursor: pointer;
   transition:
     background-color 0.2s ease,
@@ -2387,39 +2381,42 @@ async function handleSubmitBatchTenant() {
 }
 
 .org-tree-collapsed-hint:hover {
-  background: rgba(37, 99, 235, 0.06);
-  color: #2563eb;
+  background: var(--bg-secondary, #f6f8fb);
+  color: var(--text-secondary, #4b5563);
 }
 
 .org-tree-collapsed-hint.has-active-filter {
-  color: #2563eb;
+  color: var(--primary-color, #2563eb);
 }
 
 .org-tree-all-node {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   margin-bottom: 6px;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 500;
+  color: var(--text-secondary, #4b5563);
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
 }
 
 .org-tree-all-node:hover {
-  background-color: #f8fafc;
-  border-color: #dbe4f0;
+  background-color: var(--bg-secondary, #f6f8fb);
+  border-color: var(--border-light, #e5e7eb);
 }
 
 .org-tree-all-node.is-selected {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
-  border-color: rgba(37, 99, 235, 0.18);
-  color: #2563eb;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
+  background: color-mix(in srgb, var(--primary-color, #2563eb) 8%, var(--bg-primary, #fff)) !important;
+  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 18%, var(--border-light, #e5e7eb));
+  color: var(--primary-color, #2563eb);
+  box-shadow: inset 3px 0 0 var(--primary-color, #2563eb);
 }
 
 .org-tree-all-node i {
@@ -2452,10 +2449,10 @@ async function handleSubmitBatchTenant() {
 .user-list-panel {
   flex: 1;
   min-width: 0;
-  background: #fff;
-  border-radius: 14px;
-  border: 1px solid #dbe4f0;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+  background: var(--bg-primary, #fff);
+  border-radius: 8px;
+  border: 1px solid var(--border-light, #e5e7eb);
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -2475,18 +2472,29 @@ async function handleSubmitBatchTenant() {
 .tenant-name-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
 }
 
-.tenant-name-tag {
+.tenant-name-list :deep(.tenant-name-tag) {
   max-width: 128px;
 }
 
-.tenant-name-tag :deep(.n-tag__content) {
+.tenant-name-list :deep(.tenant-name-tag .n-tag__content) {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-table-tag {
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-table-tag :deep(.n-tag) {
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 /* 授权弹窗样式 */
@@ -2639,16 +2647,11 @@ async function handleSubmitBatchTenant() {
 .dark .org-tree-panel {
   background: #0f172a !important;
   border-color: #334155 !important;
-  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
+  box-shadow: none;
 }
 
 .dark .org-tree-header {
-  background: linear-gradient(
-    135deg,
-    rgba(37, 99, 235, 0.18) 0%,
-    rgba(30, 41, 59, 0.94) 58%,
-    rgba(15, 23, 42, 0.96) 100%
-  );
+  background: #0f172a;
   border-bottom-color: #334155;
 }
 
@@ -2661,7 +2664,8 @@ async function handleSubmitBatchTenant() {
 }
 
 .dark .header-icon {
-  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  background: #162033;
+  color: #cbd5e1;
 }
 
 .dark .org-tree-content {
@@ -2674,8 +2678,8 @@ async function handleSubmitBatchTenant() {
 
 .dark .org-tree-collapsed-hint:hover,
 .dark .org-tree-collapsed-hint.has-active-filter {
-  background: rgba(37, 99, 235, 0.14);
-  color: #60a5fa;
+  background: #162033;
+  color: #cbd5e1;
 }
 
 .dark .org-tree-all-node {
@@ -2688,8 +2692,10 @@ async function handleSubmitBatchTenant() {
 }
 
 .dark .org-tree-all-node.is-selected {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.12) 100%) !important;
+  background: rgba(37, 99, 235, 0.18) !important;
+  border-color: rgba(96, 165, 250, 0.28);
   color: #60a5fa;
+  box-shadow: inset 3px 0 0 #60a5fa;
 }
 
 .dark .org-tree-header :deep(.n-button) {
@@ -2697,8 +2703,8 @@ async function handleSubmitBatchTenant() {
 }
 
 .dark .org-tree-header :deep(.n-button:hover) {
-  color: #60a5fa;
-  background: rgba(96, 165, 250, 0.12);
+  color: #cbd5e1;
+  background: #162033;
 }
 
 .dark .org-tree-content::-webkit-scrollbar-track {
@@ -2716,7 +2722,7 @@ async function handleSubmitBatchTenant() {
 .dark .user-list-panel {
   background: #0f172a !important;
   border-color: #334155 !important;
-  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
+  box-shadow: none;
 }
 
 .dark .org-filter-tip .n-tag {

@@ -22,8 +22,8 @@ const appStore = useAppStore()
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary, #ffffff);
-  color: var(--text-primary);
+  background: var(--side-menu-bg-color, #ffffff);
+  color: var(--side-menu-text-color);
 }
 
 .sidebar-simple-menu {
@@ -38,7 +38,8 @@ const appStore = useAppStore()
   align-items: center;
   justify-content: space-around;
   padding: 16px 12px;
-  border-top: 1px solid var(--border-light, #f1f5f9);
+  border-top: 1px solid var(--side-menu-border-color, #f1f5f9);
+  background: var(--side-menu-bg-color, #ffffff);
   gap: 8px;
 }
 

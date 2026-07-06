@@ -32,9 +32,8 @@ const systemName = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
-  background: var(--bg-primary);
+  background: var(--side-menu-bg-color);
 }
 
 .logo-link {
@@ -67,7 +66,7 @@ const systemName = computed(() => {
 .system-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--side-menu-text-color);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;

@@ -385,6 +385,7 @@ defineExpose({
 <style scoped>
 .message-notification-wrapper {
   margin-right: 8px;
+  color: var(--top-menu-text-color, var(--layout-header-text-color));
 }
 
 .notification-trigger {
@@ -396,16 +397,8 @@ defineExpose({
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #1f2937;
+  color: currentColor;
   cursor: pointer;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
-}
-
-.notification-trigger:hover {
-  background: #f3f4f6;
-  color: #5f7f4f;
 }
 
 .notification-trigger i {

@@ -73,12 +73,15 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 /* 页面内容 */
 .bento-page {
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px;
   background: var(--bg-page);
+  min-height: 0;
 }
 
 .bento-page-flush {
+  overflow: hidden;
   padding: 0;
 }
 

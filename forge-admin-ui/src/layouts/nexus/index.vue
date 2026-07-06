@@ -405,13 +405,15 @@ onBeforeUnmount(() => {
 /* 页面内容 */
 .nexus-page {
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 10px;
   background: var(--bg-primary);
   min-height: 0;
 }
 
 .nexus-page-flush {
+  overflow: hidden;
   padding: 0;
 }
 

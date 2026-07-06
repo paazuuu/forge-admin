@@ -58,7 +58,7 @@
                 @update:value="handleUpdateConfig"
               />
             </n-form-item>
-            <n-form-item label="选中颜色">
+            <n-form-item label="选中文字色">
               <n-color-picker
                 v-model:value="localConfig.topMenu.textColorActive"
                 :modes="['hex']"
@@ -142,9 +142,23 @@
                 @update:value="handleUpdateConfig"
               />
             </n-form-item>
-            <n-form-item label="选中颜色">
+            <n-form-item label="选中文字色">
               <n-color-picker
                 v-model:value="localConfig.sideMenu.textColorActive"
+                :modes="['hex']"
+                @update:value="handleUpdateConfig"
+              />
+            </n-form-item>
+            <n-form-item label="父级提示文字">
+              <n-color-picker
+                v-model:value="localConfig.sideMenu.parentTextColorActive"
+                :modes="['hex']"
+                @update:value="handleUpdateConfig"
+              />
+            </n-form-item>
+            <n-form-item label="父级提示背景">
+              <n-color-picker
+                v-model:value="localConfig.sideMenu.parentBackgroundColorActive"
                 :modes="['hex']"
                 @update:value="handleUpdateConfig"
               />

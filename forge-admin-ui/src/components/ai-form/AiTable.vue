@@ -6,7 +6,7 @@
 -->
 
 <template>
-  <div class="ai-table-wrapper">
+  <div class="ai-table-wrapper" :class="`ai-table-density-${currentSize}`">
     <!-- 工具栏 -->
     <div v-if="showToolbar" class="ai-table-toolbar">
       <div class="ai-table-toolbar-left">
@@ -55,6 +55,7 @@
       :bordered="bordered"
       :single-line="singleLine"
       :size="currentSize"
+      flex-height
       :max-height="maxHeight"
       :scroll-x="scrollX"
       :checked-row-keys="innerCheckedRowKeys"
@@ -199,12 +200,12 @@ const props = defineProps({
   // 是否显示边框
   bordered: {
     type: Boolean,
-    default: true,
+    default: false,
   },
   // 是否单行
   singleLine: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   // 尺寸
   size: {
@@ -371,7 +372,7 @@ const tableRef = ref(null)
 const innerCheckedRowKeys = ref([...props.checkedRowKeys])
 
 // 工具栏相关状态
-const currentSize = ref(props.size)
+const currentSize = ref(normalizeTableSize(props.size))
 const currentRenderMode = ref(props.renderMode)
 const visibleColumns = ref([])
 
@@ -390,6 +391,13 @@ watch(
   () => props.renderMode,
   (mode) => {
     currentRenderMode.value = mode || 'table'
+  },
+)
+
+watch(
+  () => props.size,
+  (size) => {
+    currentSize.value = normalizeTableSize(size)
   },
 )
 
@@ -596,6 +604,12 @@ function renderCardCell(row, column, index) {
   return value ?? '-'
 }
 
+function normalizeTableSize(size) {
+  if (['small', 'medium', 'large'].includes(size))
+    return size
+  return 'medium'
+}
+
 /**
  * 处理刷新
  */
@@ -607,8 +621,9 @@ function handleRefresh() {
  * 处理密度变化
  */
 function handleDensityChange(size) {
-  currentSize.value = size
-  emit('density-change', size)
+  const nextSize = normalizeTableSize(size)
+  currentSize.value = nextSize
+  emit('density-change', nextSize)
 }
 
 /**
@@ -757,6 +772,11 @@ defineExpose({
 <style scoped>
 .ai-table-wrapper {
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ai-card-mode {
@@ -933,6 +953,7 @@ defineExpose({
 }
 
 .ai-table-toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -940,6 +961,43 @@ defineExpose({
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
   min-height: 50px;
+}
+
+:deep(.n-data-table) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.n-data-table-wrapper) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:deep(.n-data-table-base-table) {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.n-data-table-base-table-body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:deep(.n-data-table-base-table-body .n-scrollbar) {
+  height: 100%;
+}
+
+:deep(.n-data-table-base-table-body .n-scrollbar-container) {
+  min-height: 0;
 }
 
 .ai-table-toolbar-left,
@@ -956,13 +1014,22 @@ defineExpose({
 }
 
 /* 分页器样式 */
-:deep(.n-pagination) {
+:deep(.n-data-table__pagination) {
+  width: 100%;
+  margin: 0 !important;
   padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+:deep(.n-data-table__pagination .n-pagination) {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
-  border-top: 1px solid var(--border-light);
+  border-top: 0;
 }
 
 /* 表格层 hover 效果增强 */
@@ -979,11 +1046,40 @@ defineExpose({
   white-space: nowrap;
 }
 
+.ai-table-density-small :deep(.n-data-table-th) {
+  height: 34px;
+  padding: 6px 10px;
+}
+
+.ai-table-density-small :deep(.n-data-table-td) {
+  height: 38px;
+  padding: 6px 10px;
+}
+
+.ai-table-density-medium :deep(.n-data-table-th) {
+  height: 40px;
+  padding: 8px 12px;
+}
+
+.ai-table-density-medium :deep(.n-data-table-td) {
+  height: 44px;
+  padding: 8px 12px;
+}
+
+.ai-table-density-large :deep(.n-data-table-th) {
+  height: 48px;
+  padding: 12px 16px;
+}
+
+.ai-table-density-large :deep(.n-data-table-td) {
+  height: 54px;
+  padding: 12px 16px;
+}
+
 /* 小屏幕适配 */
 @media (max-width: 768px) {
-  :deep(.n-pagination) {
+  :deep(.n-data-table__pagination .n-pagination) {
     justify-content: center;
-    padding: 12px;
   }
 
   :deep(.n-pagination .n-pagination-item) {
@@ -1006,8 +1102,11 @@ defineExpose({
 }
 
 @media (max-width: 576px) {
-  :deep(.n-pagination) {
+  :deep(.n-data-table__pagination) {
     padding: 10px;
+  }
+
+  :deep(.n-data-table__pagination .n-pagination) {
     gap: 4px;
   }
 

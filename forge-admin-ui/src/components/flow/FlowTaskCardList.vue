@@ -36,7 +36,9 @@
           </template>
         </n-input>
         <n-button quaternary class="task-list-icon-btn" title="刷新" aria-label="刷新列表" @click="emit('refresh')">
-          <i class="i-material-symbols:refresh" />
+          <n-icon :size="18">
+            <RefreshOutline />
+          </n-icon>
         </n-button>
       </div>
     </div>
@@ -94,6 +96,7 @@
 </template>
 
 <script setup>
+import { RefreshOutline } from '@vicons/ionicons5'
 import { computed } from 'vue'
 
 const props = defineProps({
@@ -177,11 +180,18 @@ function clearSelection() {
   max-width: none;
   min-height: 0;
   flex-direction: column;
-  background: #fff;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-primary);
 }
 
 :deep(.n-spin-container),
 :deep(.n-spin-content) {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   width: 100%;
 }
 
@@ -190,7 +200,10 @@ function clearSelection() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 0 12px;
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
 }
 
 .task-list-titlebar {
@@ -201,31 +214,33 @@ function clearSelection() {
 }
 
 .task-list-title {
-  color: #111827;
-  font-size: 16px;
-  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .task-list-selected {
-  color: #0f766e;
+  color: var(--primary-color);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .task-list-clear {
-  color: #0f766e;
+  color: var(--primary-color);
   cursor: pointer;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
 }
 
 .task-list-tools {
   display: flex;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -234,60 +249,85 @@ function clearSelection() {
 }
 
 .task-list-icon-btn {
-  width: 44px;
-  min-width: 44px;
-  height: 42px;
-  border: 1px solid #d6e5e5;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
-  color: #3f7474;
-  font-size: 22px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 18px;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.task-list-icon-btn:hover {
+  border-color: color-mix(in srgb, var(--primary-color) 34%, var(--border-light));
+  background: color-mix(in srgb, var(--primary-color) 7%, var(--bg-primary));
+  color: var(--primary-color);
 }
 
 :deep(.task-list-icon-btn .n-button__content) {
-  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
   line-height: 1;
 }
 
+:deep(.task-list-icon-btn .n-icon) {
+  color: currentColor;
+}
+
 :deep(.task-list-icon-btn i) {
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1;
 }
 
 .task-card-stack {
   display: flex;
   width: 100%;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 0 4px;
+  gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 12px;
 }
 
 .task-card-row {
   box-sizing: border-box;
   display: grid;
   width: 100%;
-  min-height: 88px;
+  min-height: 82px;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 10px;
-  border: 1px solid #86cbca;
-  border-radius: 5px;
-  background: #fff;
-  padding: 12px 10px;
+  column-gap: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--bg-primary);
+  padding: 12px 14px;
   cursor: pointer;
   transition:
     border-color 160ms ease,
     background-color 160ms ease,
-    box-shadow 160ms ease;
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .task-card-row:hover,
 .task-card-row.selected {
-  border-color: #3faaa8;
-  box-shadow: 0 2px 10px rgba(15, 118, 110, 0.08);
+  border-color: color-mix(in srgb, var(--primary-color) 30%, var(--border-light));
+  background: color-mix(in srgb, var(--primary-color) 4%, var(--bg-primary));
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+  transform: translateY(-1px);
 }
 
 .task-card-row.unread {
-  background: #faffff;
+  background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-primary));
 }
 
 .task-card-check {
@@ -305,16 +345,16 @@ function clearSelection() {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .task-card-title {
   min-width: 0;
-  color: #177c7d;
+  color: var(--text-primary);
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 24px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
   overflow: hidden;
   text-align: left;
   text-overflow: ellipsis;
@@ -322,24 +362,24 @@ function clearSelection() {
 }
 
 .task-card-title:hover {
-  color: #0f5f63;
+  color: var(--primary-color);
 }
 
 .task-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-top: 12px;
-  color: #4b5563;
-  font-size: 14px;
-  line-height: 22px;
+  gap: 7px 18px;
+  margin-top: 9px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .task-card-summary {
   margin-top: 8px;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .task-card-actions {
@@ -357,31 +397,33 @@ function clearSelection() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  height: 32px;
-  padding: 0 3px 0 8px;
-  border: 0;
+  gap: 3px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #177c7d;
+  color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   transition:
+    border-color 160ms ease,
     background-color 160ms ease,
     color 160ms ease;
 }
 
 :global(.task-row-link-action:hover) {
-  background: #effafa;
-  color: #0f5f63;
+  border-color: color-mix(in srgb, var(--primary-color) 24%, var(--border-light));
+  background: color-mix(in srgb, var(--primary-color) 7%, transparent);
+  color: var(--primary-color);
 }
 
 :global(.task-row-link-action.primary) {
-  color: #177c7d;
+  color: var(--primary-color);
 }
 
 :global(.task-row-link-action.info) {
@@ -417,25 +459,29 @@ function clearSelection() {
 }
 
 .task-list-empty {
-  padding: 56px 0;
+  flex: 1;
+  padding: 72px 0;
 }
 
 .task-list-pagination {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
-  padding: 12px 0 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-secondary);
 }
 
 :global(.task-status-pill) {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 11px;
+  height: 22px;
+  padding: 0 9px;
   border-radius: 4px;
   background: #fff8e8;
   color: #c07b16;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -443,13 +489,13 @@ function clearSelection() {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 26px;
+  height: 24px;
   padding: 0 9px;
   border-radius: 4px;
-  background: #f5fbfb;
-  color: #2f7777;
-  font-size: 13px;
-  font-weight: 600;
+  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  color: var(--primary-color);
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -486,21 +532,19 @@ function clearSelection() {
 }
 
 :global(.task-meta-label) {
-  color: #6b7280;
-  font-weight: 600;
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 :global(.task-meta-value) {
-  color: #374151;
-  font-weight: 600;
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 @media (max-width: 900px) {
   .task-list-toolbar {
     align-items: stretch;
     flex-direction: column;
-    padding-right: 0;
-    padding-left: 0;
   }
 
   .task-list-tools {

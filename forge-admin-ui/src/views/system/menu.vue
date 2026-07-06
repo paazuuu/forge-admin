@@ -85,21 +85,31 @@
         </n-input>
 
         <div class="tree-scroll">
-          <n-spin :show="loading">
-            <n-tree
-              block-line
-              selectable
-              :data="navigationTreeData"
-              :expanded-keys="navigationExpandedKeys"
-              :selected-keys="navigationSelectedKeys"
-              :render-label="renderNavigationLabel"
-              key-field="key"
-              label-field="label"
-              children-field="children"
-              @update:selected-keys="handleNavigationSelect"
-              @update:expanded-keys="handleNavigationExpandedKeys"
-            />
-          </n-spin>
+          <div v-if="loading" class="menu-tree-skeleton">
+            <div
+              v-for="index in 10"
+              :key="index"
+              class="menu-tree-skeleton-row"
+              :style="{ paddingLeft: `${(index % 3) * 16}px` }"
+            >
+              <n-skeleton circle size="small" />
+              <n-skeleton text :width="`${72 - (index % 4) * 8}%`" />
+            </div>
+          </div>
+          <n-tree
+            v-else
+            block-line
+            selectable
+            :data="navigationTreeData"
+            :expanded-keys="navigationExpandedKeys"
+            :selected-keys="navigationSelectedKeys"
+            :render-label="renderNavigationLabel"
+            key-field="key"
+            label-field="label"
+            children-field="children"
+            @update:selected-keys="handleNavigationSelect"
+            @update:expanded-keys="handleNavigationExpandedKeys"
+          />
         </div>
       </aside>
 
@@ -176,7 +186,19 @@
         </div>
 
         <div class="resource-list-scroll" :style="{ maxHeight: `${tableMaxHeight}px` }">
-          <n-spin :show="loading">
+          <div v-if="loading" class="resource-list-skeleton">
+            <div v-for="index in 9" :key="index" class="resource-list-skeleton-row">
+              <n-skeleton circle size="small" />
+              <div class="resource-list-skeleton-main">
+                <n-skeleton text :width="`${42 + (index % 4) * 8}%`" />
+                <n-skeleton text :width="`${58 - (index % 3) * 7}%`" />
+              </div>
+              <n-skeleton text width="34%" />
+              <n-skeleton text width="36px" />
+              <n-skeleton text width="48px" />
+            </div>
+          </div>
+          <template v-else>
             <div v-if="displayRows.length === 0" class="resource-list-empty">
               <i class="i-material-symbols:database-off-outline" />
               <span>暂无资源</span>
@@ -302,7 +324,7 @@
                 </NDropdown>
               </div>
             </div>
-          </n-spin>
+          </template>
         </div>
       </main>
 
@@ -2201,6 +2223,20 @@ const editSchema = computed(() => [
   padding: 0 6px 8px;
 }
 
+.menu-tree-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 4px 0;
+}
+
+.menu-tree-skeleton-row {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .list-pane {
   min-width: 0;
 }
@@ -2413,10 +2449,27 @@ const editSchema = computed(() => [
   overflow: auto;
 }
 
-.resource-list-scroll :deep(.n-spin-content) {
-  min-height: 100%;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
+.resource-list-skeleton {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.resource-list-skeleton-row {
+  display: grid;
+  grid-template-columns: 26px minmax(240px, 1fr) minmax(160px, 0.8fr) 58px 66px;
+  gap: 10px;
+  align-items: center;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.resource-list-skeleton-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .resource-list-empty {

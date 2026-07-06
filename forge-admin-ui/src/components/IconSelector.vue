@@ -8,47 +8,60 @@
       <span v-else>选择图标</span>
     </n-button>
 
-    <n-drawer v-model:show="showDrawer" :width="600" placement="right">
+    <n-drawer v-model:show="showDrawer" width="min(720px, calc(100vw - 24px))" placement="right">
       <n-drawer-content closable>
         <template #header>
           <div class="drawer-header">
-            <span class="drawer-title">选择图标</span>
-            <n-button
-              v-if="modelValue"
-              style="margin-right: 30px"
-              type="error"
-              secondary
-              size="small"
-              @click="clearSelection"
-            >
-              <template #icon>
-                <i class="i-material-symbols:delete-outline" />
-              </template>
-              清除
-            </n-button>
+            <div>
+              <span class="drawer-title">选择图标</span>
+              <span class="drawer-subtitle">字体图标、内置图片和上传图片统一维护</span>
+            </div>
           </div>
         </template>
 
         <div class="icon-selector-popover">
           <div class="icon-selector-header">
-            <n-input
-              v-model:value="searchText"
-              placeholder="搜索图标"
-              clearable
-              style="margin-bottom: 12px"
-            />
+            <div class="icon-search-row">
+              <n-input
+                v-model:value="searchText"
+                placeholder="搜索图标名称 / 类名"
+                clearable
+                size="medium"
+              >
+                <template #prefix>
+                  <i class="i-material-symbols:search" />
+                </template>
+              </n-input>
+            </div>
+
+            <div v-if="modelValue" class="selected-icon-summary">
+              <span class="selected-icon-preview">
+                <IconRenderer :icon="modelValue" :size="30" />
+              </span>
+              <div class="selected-icon-copy">
+                <span>当前已选</span>
+                <strong>{{ formatDisplayName(modelValue) }}</strong>
+              </div>
+              <n-button type="error" secondary size="small" @click="clearSelection">
+                <template #icon>
+                  <i class="i-material-symbols:delete-outline" />
+                </template>
+                清除
+              </n-button>
+            </div>
+
             <n-tabs v-model:value="activeTab" type="segment" size="small">
               <n-tab v-if="currentImagePreview" name="currentImage">
                 当前图片
               </n-tab>
               <n-tab name="ionicons">
-                Ionicons
+                常用图标
               </n-tab>
               <n-tab name="local">
                 本地图标
               </n-tab>
               <n-tab name="localImages">
-                本地图片
+                图片图标
               </n-tab>
               <n-tab name="uploadImage">
                 上传图片
@@ -391,42 +404,82 @@ watch(activeTab, () => {
 
 .icon-selector-popover {
   width: 100%;
-  padding: 12px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--bg-primary, #fff);
+}
+
+.icon-selector-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-primary, #fff);
+  border-bottom: 1px solid var(--border-light, #e5e7eb);
+}
+
+.icon-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .icon-selector-content {
-  max-height: 500px;
+  flex: 1;
+  min-height: 0;
+  max-height: calc(100vh - 190px);
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 12px 14px 16px;
+  background: var(--bg-secondary, #f7f8fa);
 }
 
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 10px;
 }
+
 .icon-grid::before {
   display: none;
 }
+
 .icon-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 8px;
+  padding: 10px 8px;
+  border: 1px solid var(--border-light, #e5e7eb);
   border-radius: 6px;
+  background: var(--bg-primary, #fff);
   cursor: pointer;
-  transition: all 0.2s;
-  height: 100px;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+  height: 86px;
+  min-width: 0;
 }
 
 .icon-item:hover {
-  background-color: #f5f5f5;
+  background: color-mix(in srgb, var(--primary-color, #165dff) 5%, var(--bg-primary, #fff));
+  border-color: color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgb(15 23 42 / 7%);
 }
 
 .icon-item.selected {
-  background-color: #e6f4ff;
-  border: 1px solid #1890ff;
+  color: var(--primary-color, #165dff);
+  background: color-mix(in srgb, var(--primary-color, #165dff) 8%, var(--bg-primary, #fff));
+  border-color: color-mix(in srgb, var(--primary-color, #165dff) 46%, var(--border-light, #e5e7eb));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color, #165dff) 36%, transparent);
 }
 
 .current-image-panel {
@@ -438,9 +491,9 @@ watch(activeTab, () => {
   align-items: center;
   gap: 12px;
   padding: 14px;
-  border: 1px solid #1890ff;
+  border: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 36%, var(--border-light, #e5e7eb));
   border-radius: 6px;
-  background: #e6f4ff;
+  background: color-mix(in srgb, var(--primary-color, #165dff) 8%, var(--bg-primary, #fff));
 }
 
 .current-image-title {
@@ -450,19 +503,22 @@ watch(activeTab, () => {
 
 .current-image-name {
   margin-top: 4px;
-  color: #666;
+  color: var(--text-secondary, #4e5969);
   font-size: var(--font-size-sm);
   word-break: break-all;
 }
 
 .upload-image-panel {
-  padding: 4px 0;
+  padding: 12px;
+  border: 1px dashed var(--border-default, #c9cdd4);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
 }
 
 .icon {
-  width: 32px;
-  height: 32px;
-  margin-bottom: 8px;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -470,6 +526,7 @@ watch(activeTab, () => {
 
 .icon-name {
   font-size: var(--font-size-sm);
+  color: var(--text-secondary, #4e5969);
   text-align: center;
   word-break: break-word;
   line-height: 1.2;
@@ -492,14 +549,17 @@ watch(activeTab, () => {
 
 .icon-text {
   font-size: var(--font-size-sm);
-  color: #666;
+  color: var(--text-secondary, #4e5969);
 }
 
 .no-icons {
   grid-column: 1 / -1;
   text-align: center;
-  padding: 20px;
-  color: #999;
+  padding: 32px 20px;
+  color: var(--text-tertiary, #86909c);
+  background: var(--bg-primary, #fff);
+  border: 1px dashed var(--border-light, #e5e7eb);
+  border-radius: 6px;
 }
 
 .drawer-header {
@@ -510,7 +570,76 @@ watch(activeTab, () => {
 }
 
 .drawer-title {
+  display: block;
+  color: var(--text-primary, #1d2129);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.drawer-subtitle {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary, #86909c);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.selected-icon-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: 6px;
+  background: var(--bg-secondary, #f7f8fa);
+}
+
+.selected-icon-preview {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--primary-color, #165dff);
+  background: color-mix(in srgb, var(--primary-color, #165dff) 10%, var(--bg-primary, #fff));
+}
+
+.selected-icon-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.selected-icon-copy span {
+  color: var(--text-tertiary, #86909c);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.selected-icon-copy strong {
+  min-width: 0;
+  color: var(--text-primary, #1d2129);
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .icon-grid {
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  }
+
+  .icon-item {
+    height: 80px;
+  }
 }
 </style>

@@ -2,11 +2,9 @@
   <div class="menu-search-wrapper">
     <n-tooltip placement="bottom" trigger="hover">
       <template #trigger>
-        <div class="search-trigger" @click="handleOpen">
-          <i class="i-mdi-magnify text-20" />
-          <span class="search-text">搜索菜单</span>
-          <span class="search-shortcut">Ctrl K</span>
-        </div>
+        <button class="search-trigger" type="button" aria-label="搜索菜单" @click="handleOpen">
+          <i class="i-mdi-magnify" />
+        </button>
       </template>
       <span>搜索菜单 (Ctrl + K)</span>
     </n-tooltip>
@@ -54,7 +52,13 @@
               @mouseenter="selectedIndex = index"
             >
               <div class="item-icon">
-                <i :class="item.icon || 'i-mdi-file-outline'" />
+                <IconRenderer
+                  v-if="getMenuIcon(item)"
+                  :icon="getMenuIcon(item)"
+                  :font-size="18"
+                  custom-style="color: currentColor"
+                />
+                <i v-else class="i-mdi-file-outline" />
               </div>
               <div class="item-content">
                 <div class="item-title" v-html="highlightText(item.title)" />
@@ -94,7 +98,13 @@
               @click="handleSelect(item)"
             >
               <div class="item-icon">
-                <i :class="item.icon || 'i-mdi-file-outline'" />
+                <IconRenderer
+                  v-if="getMenuIcon(item)"
+                  :icon="getMenuIcon(item)"
+                  :font-size="18"
+                  custom-style="color: currentColor"
+                />
+                <i v-else class="i-mdi-file-outline" />
               </div>
               <div class="item-content">
                 <div class="item-title">
@@ -128,6 +138,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import IconRenderer from '@/components/IconRenderer.vue'
 import { useMenu } from '@/composables'
 import { usePermissionStore } from '@/store'
 
@@ -165,6 +176,7 @@ const flatMenus = computed(() => {
           ...item,
           title: menuName,
           path: menuPath,
+          icon: getMenuIcon(item),
           fullTitle: parentName ? `${parentName} / ${menuName}` : menuName,
         })
       }
@@ -199,6 +211,10 @@ function highlightText(text) {
   const keyword = searchKeyword.value.trim()
   const regex = new RegExp(`(${keyword})`, 'gi')
   return text.replace(regex, '<mark>$1</mark>')
+}
+
+function getMenuIcon(item) {
+  return item?.icon || item?.meta?.icon || item?.menuIcon || item?.resourceIcon || ''
 }
 
 // 打开弹窗
@@ -272,7 +288,19 @@ function loadRecentMenus() {
   try {
     const stored = localStorage.getItem('recentMenus')
     if (stored) {
-      recentMenus.value = JSON.parse(stored).slice(0, 6)
+      const recent = JSON.parse(stored)
+      recentMenus.value = (Array.isArray(recent) ? recent : [])
+        .slice(0, 6)
+        .map((item) => {
+          const matched = flatMenus.value.find(menu => menu.path === item.path)
+          return {
+            ...item,
+            icon: getMenuIcon(item) || getMenuIcon(matched),
+          }
+        })
+    }
+    else {
+      recentMenus.value = []
     }
   }
   catch (e) {
@@ -294,7 +322,7 @@ function saveRecentMenu(item) {
     recent.unshift({
       path: item.path,
       title: item.title,
-      icon: item.icon,
+      icon: getMenuIcon(item),
     })
 
     // 只保留最近10个
@@ -341,34 +369,23 @@ onUnmounted(() => {
 
 /* 搜索触发按钮 */
 .search-trigger {
-  display: flex;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  justify-content: center;
+  padding: 0;
+  border: 0;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.04);
+  background: transparent;
   cursor: pointer;
   transition: all 0.2s ease;
-  color: var(--text-color-secondary);
-  font-size: 14px;
+  color: var(--top-menu-text-color, var(--layout-header-text-color));
+  font-size: 22px;
 }
 
 .search-trigger:hover {
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--text-color);
-}
-
-.search-text {
-  font-size: 13px;
-}
-
-.search-shortcut {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.06);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-color-secondary);
+  color: var(--top-menu-text-color-hover, var(--top-menu-text-color, var(--layout-header-text-color)));
 }
 
 /* 弹窗样式 */

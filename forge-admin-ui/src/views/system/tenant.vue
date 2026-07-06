@@ -47,20 +47,71 @@
       <!-- 系统布局选择器 -->
       <template #form-systemLayout="{ value, updateValue }">
         <div class="layout-selector">
-          <n-radio-group :value="value || 'normal'" @update:value="updateValue">
-            <n-space>
-              <n-radio
-                v-for="layout in systemLayoutOptions"
+          <section
+            v-for="group in layoutOptionGroups"
+            :key="group.key"
+            class="layout-group"
+          >
+            <div class="layout-group-header">
+              <span class="layout-group-title">{{ group.title }}</span>
+              <span class="layout-group-desc">{{ group.description }}</span>
+            </div>
+            <div class="layout-group-grid">
+              <button
+                v-for="layout in group.options"
                 :key="layout.value"
-                :value="layout.value"
+                class="layout-option"
+                :class="{ active: (value || 'normal') === layout.value }"
+                type="button"
+                @click="updateValue(layout.value)"
               >
-                <div class="layout-card" :class="{ active: value === layout.value }">
+                <span class="layout-preview-card">
                   <img :src="layout.preview" :alt="layout.label" class="layout-img">
-                  <span class="layout-name">{{ layout.label }}</span>
-                </div>
-              </n-radio>
-            </n-space>
-          </n-radio-group>
+                </span>
+                <span class="layout-option-main">
+                  <span class="layout-option-title">
+                    {{ layout.label }}
+                    <span v-if="layout.recommended" class="layout-option-badge">推荐</span>
+                  </span>
+                  <span class="layout-option-desc">{{ layout.description }}</span>
+                </span>
+                <span
+                  v-if="(value || 'normal') === layout.value"
+                  class="layout-option-check"
+                  aria-hidden="true"
+                >
+                  <i class="i-material-symbols:check-small-rounded" />
+                </span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </template>
+
+      <template #form-themePreset="{ value, updateValue, formData }">
+        <div class="theme-preset-selector">
+          <button
+            v-for="preset in tenantThemePresets"
+            :key="preset.key"
+            class="theme-preset-option"
+            :class="{ active: value === preset.key }"
+            type="button"
+            @click="applyTenantThemePreset(preset, formData, updateValue)"
+          >
+            <span class="theme-preset-swatches">
+              <span :style="{ background: preset.colors.headerBackground }" />
+              <span :style="{ background: preset.colors.sideBackground }" />
+              <span :style="{ background: preset.colors.sideActiveBackground }" />
+              <span :style="{ background: preset.colors.primary }" />
+            </span>
+            <span class="theme-preset-main">
+              <span class="theme-preset-title">{{ preset.name }}</span>
+              <span class="theme-preset-desc">{{ preset.description }}</span>
+            </span>
+            <span v-if="value === preset.key" class="theme-preset-check" aria-hidden="true">
+              <i class="i-material-symbols:check-small-rounded" />
+            </span>
+          </button>
         </div>
       </template>
     </AiCrudPage>
@@ -226,6 +277,7 @@ const systemLayoutOptions = [
     label: '通用',
     value: 'normal',
     description: '侧边栏菜单布局',
+    recommended: true,
     preview: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA0IiBoZWlnaHQ9IjYwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIyMCIgaGVpZ2h0PSI2MCIgZmlsbD0iI0UwRTBFMCIvPjxyZWN0IHg9IjI0IiB3aWR0aD0iODAiIGhlaWdodD0iMTAiIGZpbGw9IiNGNUY1RjUiLz48cmVjdCB4PSIyNCIgeT0iMTQiIHdpZHRoPSI4MCIgaGVpZ2h0PSI0NiIgZmlsbD0iI0Y1RjVGNSIvPjwvc3ZnPg==',
   },
   {
@@ -238,6 +290,7 @@ const systemLayoutOptions = [
     label: '顶部加侧面菜单',
     value: 'top-side-menu',
     description: '顶部+左侧混合布局',
+    recommended: true,
     preview: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA0IiBoZWlnaHQ9IjYwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDQiIGhlaWdodD0iMTAiIGZpbGw9IiNFMEUwRTAiLz48cmVjdCB5PSIxMiIgd2lkdGg9IjIwIiBoZWlnaHQ9IjQ4IiBmaWxsPSIjRTBFMEUwIi8+PHJlY3QgeD0iMjIiIHk9IjEyIiB3aWR0aD0iODIiIGhlaWdodD0iNDgiIGZpbGw9IiNGNUY1RjUiLz48L3N2Zz4=',
   },
   {
@@ -265,6 +318,118 @@ const systemLayoutOptions = [
     preview: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTA0IiBoZWlnaHQ9IjYwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIxNiIgaGVpZ2h0PSI1NCIgZmlsbD0iI0YwRjBGMCIgc3Ryb2tlPSIjRDVENTVFIiByeD0iMiIvPjxyZWN0IHg9IjIyIiB5PSIzIiB3aWR0aD0iNzkiIGhlaWdodD0iOCIgZmlsbD0iI0YwRjBGMCIgc3Ryb2tlPSIjRDVENTVFIiByeD0iMiIvPjxyZWN0IHg9IjIyIiB5PSIxNCIgd2lkdGg9Ijc5IiBoZWlnaHQ9IjQzIiBmaWxsPSIjRjBGMEYwIiBzdHJva2U9IiNENUQ1RTUiIHJ4PSIyIi8+PC9zdmc+',
   },
 ]
+
+const tenantThemePresets = [
+  {
+    key: 'forge-blue',
+    name: 'Forge 蓝',
+    description: '稳重科技风，适合默认后台和平台型系统。',
+    colors: {
+      primary: '#4242F7',
+      headerBackground: '#4242F7',
+      headerText: '#FFFFFF',
+      topText: 'rgba(255, 255, 255, 0.78)',
+      topActiveText: '#FFFFFF',
+      sideBackground: '#FFFFFF',
+      sideText: '#334155',
+      sideHoverText: '#4242F7',
+      sideHoverBackground: '#F3F6FF',
+      sideActiveText: '#4242F7',
+      sideActiveBackground: '#EEF2FF',
+      parentText: '#3730A3',
+      parentBackground: '#F3F4FF',
+      sideIcon: '#64748B',
+      sideIconActive: '#4242F7',
+    },
+  },
+  {
+    key: 'enterprise-red',
+    name: '企业红',
+    description: '品牌感更强，适合政企、运营和门户后台。',
+    colors: {
+      primary: '#D12723',
+      headerBackground: '#B91C1C',
+      headerText: '#FFFFFF',
+      topText: 'rgba(255, 255, 255, 0.8)',
+      topActiveText: '#FFFFFF',
+      sideBackground: '#FFFFFF',
+      sideText: '#3F3333',
+      sideHoverText: '#B91C1C',
+      sideHoverBackground: '#FEF2F2',
+      sideActiveText: '#B91C1C',
+      sideActiveBackground: '#FEE2E2',
+      parentText: '#991B1B',
+      parentBackground: '#FFF1F2',
+      sideIcon: '#7F5D5D',
+      sideIconActive: '#D12723',
+    },
+  },
+  {
+    key: 'teal-business',
+    name: '松石绿',
+    description: '清爽耐看，适合业务系统、数据管理和协作场景。',
+    colors: {
+      primary: '#0F9F8F',
+      headerBackground: '#0F766E',
+      headerText: '#FFFFFF',
+      topText: 'rgba(255, 255, 255, 0.78)',
+      topActiveText: '#FFFFFF',
+      sideBackground: '#FFFFFF',
+      sideText: '#28413E',
+      sideHoverText: '#0F766E',
+      sideHoverBackground: '#ECFDF5',
+      sideActiveText: '#0F766E',
+      sideActiveBackground: '#CCFBF1',
+      parentText: '#0F766E',
+      parentBackground: '#F0FDFA',
+      sideIcon: '#5B7772',
+      sideIconActive: '#0F9F8F',
+    },
+  },
+  {
+    key: 'graphite',
+    name: '石墨灰',
+    description: '低饱和、干净克制，适合高频操作型后台。',
+    colors: {
+      primary: '#334155',
+      headerBackground: '#1F2937',
+      headerText: '#F8FAFC',
+      topText: 'rgba(248, 250, 252, 0.76)',
+      topActiveText: '#FFFFFF',
+      sideBackground: '#FFFFFF',
+      sideText: '#334155',
+      sideHoverText: '#1F2937',
+      sideHoverBackground: '#F1F5F9',
+      sideActiveText: '#1F2937',
+      sideActiveBackground: '#E2E8F0',
+      parentText: '#334155',
+      parentBackground: '#F8FAFC',
+      sideIcon: '#64748B',
+      sideIconActive: '#334155',
+    },
+  },
+]
+
+const layoutOptionGroups = computed(() => {
+  const commonValues = ['normal', 'simple', 'top-side-menu', 'top-menu', 'full']
+  const commonOptions = systemLayoutOptions.filter(item => commonValues.includes(item.value))
+  const advancedOptions = systemLayoutOptions.filter(item => !commonValues.includes(item.value))
+
+  return [
+    {
+      key: 'common',
+      title: '常用布局',
+      description: '推荐给大多数租户，结构稳定、学习成本低。',
+      options: commonOptions,
+    },
+    {
+      key: 'advanced',
+      title: '扩展布局',
+      description: '适合大屏展示、极简导航或偏定制化的租户。',
+      options: advancedOptions,
+    },
+  ].filter(group => group.options.length > 0)
+})
 
 // 搜索表单配置
 const searchSchema = computed(() => [
@@ -508,16 +673,16 @@ const editSchema = computed(() => [
     props: { placeholder: '页面底部显示的版权信息', rows: 2 },
   },
 
-  // ==================== 界面风格 ====================
+  // ==================== 外观方案 ====================
   {
     type: 'divider',
-    label: '界面风格',
-    props: { titlePlacement: 'left', description: '选择整体布局和主色，高级配置留空时会沿用默认主题。', badge: '推荐' },
+    label: '外观方案',
+    props: { titlePlacement: 'left', description: '先确定租户默认布局和品牌主色，后面的导航配色只在需要深度定制时调整。', badge: '推荐' },
     span: 2,
   },
   {
     field: 'systemLayout',
-    label: '系统布局',
+    label: '默认布局',
     type: 'slot',
     slotName: 'systemLayout',
     span: 2,
@@ -529,15 +694,21 @@ const editSchema = computed(() => [
     defaultValue: '#d12723',
     props: { showAlpha: false },
   },
-
-  // ==================== 高级主题配置（可选） ====================
   {
-    type: 'divider',
-    label: '高级主题配置',
-    props: { titlePlacement: 'left', dashed: true, description: '按 Header、侧边菜单、顶部菜单拆开配置，适合需要深度品牌化的租户。', badge: '可选' },
+    field: 'themePreset',
+    label: '配色推荐',
+    type: 'slot',
+    slotName: 'themePreset',
     span: 2,
   },
-  // Header 配置
+
+  // ==================== 顶栏外观 ====================
+  {
+    type: 'divider',
+    label: '顶栏外观',
+    props: { titlePlacement: 'left', dashed: true, description: '控制页面顶部 Header 和顶部菜单。顶部菜单选中态使用下划线，不配置选中背景。', badge: '可选' },
+    span: 2,
+  },
   {
     field: 'theme_header_backgroundColor',
     label: 'Header背景',
@@ -562,7 +733,46 @@ const editSchema = computed(() => [
     gridClass: 'tenant-config-field tenant-config-field--header tenant-config-field--size',
     props: { placeholder: '例如: 60px' },
   },
-  // 侧边菜单配置
+  {
+    field: 'theme_topMenu_textColor',
+    label: '顶部菜单文字',
+    type: 'color',
+    defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--top',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_topMenu_textColorActive',
+    label: '顶部选中文字',
+    type: 'color',
+    defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--top',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_topMenu_iconColor',
+    label: '顶部图标',
+    type: 'color',
+    defaultValue: '#ffffff',
+    gridClass: 'tenant-config-field tenant-config-field--top',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_topMenu_iconActiveColor',
+    label: '顶部选中图标',
+    type: 'color',
+    defaultValue: '#ffffff',
+    gridClass: 'tenant-config-field tenant-config-field--top',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+
+  // ==================== 侧边导航 ====================
+  {
+    type: 'divider',
+    label: '侧边导航',
+    props: { titlePlacement: 'left', dashed: true, description: '控制左侧菜单的默认、悬停和选中状态，适用于简约、通用、全屏、顶部+侧面布局。' },
+    span: 2,
+  },
   {
     field: 'theme_sideMenu_backgroundColor',
     label: '侧边栏背景',
@@ -581,9 +791,41 @@ const editSchema = computed(() => [
   },
   {
     field: 'theme_sideMenu_textColorActive',
-    label: '菜单选中色',
+    label: '选中文字色',
     type: 'color',
     defaultValue: '#316cfa',
+    gridClass: 'tenant-config-field tenant-config-field--side',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_sideMenu_parentTextColorActive',
+    label: '父级提示文字',
+    type: 'color',
+    defaultValue: '#1d4ed8',
+    gridClass: 'tenant-config-field tenant-config-field--side',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_sideMenu_parentBackgroundColorActive',
+    label: '父级提示背景',
+    type: 'color',
+    defaultValue: '#eef4ff',
+    gridClass: 'tenant-config-field tenant-config-field--side',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_sideMenu_textColorHover',
+    label: '菜单悬停色',
+    type: 'color',
+    defaultValue: '#316cfa',
+    gridClass: 'tenant-config-field tenant-config-field--side',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_sideMenu_backgroundColorHover',
+    label: '悬停背景色',
+    type: 'color',
+    defaultValue: '#f5f5f5',
     gridClass: 'tenant-config-field tenant-config-field--side',
     props: { showAlpha: false, modes: ['hex'] },
   },
@@ -626,54 +868,6 @@ const editSchema = computed(() => [
     defaultValue: '64px',
     gridClass: 'tenant-config-field tenant-config-field--side tenant-config-field--size',
     props: { placeholder: '例如: 64px' },
-  },
-
-  // ==================== 顶部菜单配置 ====================
-  {
-    type: 'divider',
-    label: '顶部菜单配置',
-    props: { titlePlacement: 'left', dashed: true, description: '仅影响顶部菜单布局，和左侧菜单配置分开维护。' },
-    span: 2,
-  },
-  {
-    field: 'theme_topMenu_textColor',
-    label: '菜单文字色',
-    type: 'color',
-    defaultValue: '#FFFFFF',
-    gridClass: 'tenant-config-field tenant-config-field--top',
-    props: { showAlpha: false, modes: ['hex'] },
-  },
-  {
-    field: 'theme_topMenu_textColorActive',
-    label: '选中文字色',
-    type: 'color',
-    defaultValue: '#FFFFFF',
-    gridClass: 'tenant-config-field tenant-config-field--top',
-    props: { showAlpha: false, modes: ['hex'] },
-  },
-  {
-    field: 'theme_topMenu_backgroundColorActive',
-    label: '选中背景色',
-    type: 'color',
-    defaultValue: '#ffffff',
-    gridClass: 'tenant-config-field tenant-config-field--top',
-    props: { showAlpha: false, modes: ['hex'] },
-  },
-  {
-    field: 'theme_topMenu_iconColor',
-    label: '图标颜色',
-    type: 'color',
-    defaultValue: '#ffffff',
-    gridClass: 'tenant-config-field tenant-config-field--top',
-    props: { showAlpha: false, modes: ['hex'] },
-  },
-  {
-    field: 'theme_topMenu_iconActiveColor',
-    label: '选中图标色',
-    type: 'color',
-    defaultValue: '#333333',
-    gridClass: 'tenant-config-field tenant-config-field--top',
-    props: { showAlpha: false, modes: ['hex'] },
   },
 ])
 
@@ -751,6 +945,34 @@ function findBusinessDatasource(datasourceId) {
   if (datasourceId === null || datasourceId === undefined)
     return null
   return businessDatasources.value.find(item => String(item.datasourceId) === String(datasourceId)) || null
+}
+
+function applyTenantThemePreset(preset, formData, updateValue) {
+  const colors = preset?.colors
+  if (!colors || !formData)
+    return
+
+  Object.assign(formData, {
+    systemTheme: colors.primary,
+    theme_header_backgroundColor: colors.headerBackground,
+    theme_header_textColor: colors.headerText,
+    theme_topMenu_textColor: colors.topText,
+    theme_topMenu_textColorActive: colors.topActiveText,
+    theme_topMenu_iconColor: colors.topText,
+    theme_topMenu_iconActiveColor: colors.topActiveText,
+    theme_sideMenu_backgroundColor: colors.sideBackground,
+    theme_sideMenu_textColor: colors.sideText,
+    theme_sideMenu_textColorHover: colors.sideHoverText,
+    theme_sideMenu_backgroundColorHover: colors.sideHoverBackground,
+    theme_sideMenu_textColorActive: colors.sideActiveText,
+    theme_sideMenu_backgroundColorActive: colors.sideActiveBackground,
+    theme_sideMenu_parentTextColorActive: colors.parentText,
+    theme_sideMenu_parentBackgroundColorActive: colors.parentBackground,
+    theme_sideMenu_iconColor: colors.sideIcon,
+    theme_sideMenu_iconColorActive: colors.sideIconActive,
+  })
+
+  updateValue?.(preset.key)
 }
 
 async function loadBusinessDatasources() {
@@ -1029,12 +1251,15 @@ function handleBeforeSubmit(formData) {
     || formData.theme_header_height
     || formData.theme_topMenu_textColor
     || formData.theme_topMenu_textColorActive
-    || formData.theme_topMenu_backgroundColorActive
     || formData.theme_topMenu_iconColor
     || formData.theme_topMenu_iconActiveColor
     || formData.theme_sideMenu_backgroundColor
     || formData.theme_sideMenu_textColor
     || formData.theme_sideMenu_textColorActive
+    || formData.theme_sideMenu_parentTextColorActive
+    || formData.theme_sideMenu_parentBackgroundColorActive
+    || formData.theme_sideMenu_textColorHover
+    || formData.theme_sideMenu_backgroundColorHover
     || formData.theme_sideMenu_backgroundColorActive
     || formData.theme_sideMenu_iconColor
     || formData.theme_sideMenu_iconColorActive
@@ -1053,17 +1278,22 @@ function handleBeforeSubmit(formData) {
       topMenu: {
         textColor: formData.theme_topMenu_textColor || '#FFFFFF',
         textColorActive: formData.theme_topMenu_textColorActive || '#FFFFFF',
-        backgroundColorActive: formData.theme_topMenu_backgroundColorActive || '#ffffff',
+        backgroundColorHover: 'transparent',
+        backgroundColorActive: 'transparent',
         iconColor: formData.theme_topMenu_iconColor || '#ffffff',
-        iconActiveColor: formData.theme_topMenu_iconActiveColor || '#333333',
+        iconActiveColor: formData.theme_topMenu_iconActiveColor || '#ffffff',
       },
       sideMenu: {
         backgroundColor: formData.theme_sideMenu_backgroundColor || '#ffffff',
         textColor: formData.theme_sideMenu_textColor || '#333333',
+        textColorHover: formData.theme_sideMenu_textColorHover || '#316cfa',
         textColorActive: formData.theme_sideMenu_textColorActive || '#316cfa',
+        parentTextColorActive: formData.theme_sideMenu_parentTextColorActive || '#1d4ed8',
+        backgroundColorHover: formData.theme_sideMenu_backgroundColorHover || '#f5f5f5',
         backgroundColorActive: formData.theme_sideMenu_backgroundColorActive || '#f6eded',
+        parentBackgroundColorActive: formData.theme_sideMenu_parentBackgroundColorActive || '#eef4ff',
         iconColor: formData.theme_sideMenu_iconColor || '#666666',
-        iconColorActive: formData.theme_sideMenu_iconColorActive || '#d12723FF',
+        iconColorActive: formData.theme_sideMenu_iconColorActive || '#4242F7',
         width: formData.theme_sideMenu_width || '220px',
         collapsedWidth: formData.theme_sideMenu_collapsedWidth || '64px',
       },
@@ -1077,14 +1307,18 @@ function handleBeforeSubmit(formData) {
   delete formData.theme_header_backgroundColor
   delete formData.theme_header_textColor
   delete formData.theme_header_height
+  delete formData.themePreset
   delete formData.theme_topMenu_textColor
   delete formData.theme_topMenu_textColorActive
-  delete formData.theme_topMenu_backgroundColorActive
   delete formData.theme_topMenu_iconColor
   delete formData.theme_topMenu_iconActiveColor
   delete formData.theme_sideMenu_backgroundColor
   delete formData.theme_sideMenu_textColor
   delete formData.theme_sideMenu_textColorActive
+  delete formData.theme_sideMenu_parentTextColorActive
+  delete formData.theme_sideMenu_parentBackgroundColorActive
+  delete formData.theme_sideMenu_textColorHover
+  delete formData.theme_sideMenu_backgroundColorHover
   delete formData.theme_sideMenu_backgroundColorActive
   delete formData.theme_sideMenu_iconColor
   delete formData.theme_sideMenu_iconColorActive
@@ -1108,12 +1342,15 @@ function handleBeforeRenderDetail(data) {
       data.theme_header_height = themeConfig.header?.height
       data.theme_topMenu_textColor = themeConfig.topMenu?.textColor
       data.theme_topMenu_textColorActive = themeConfig.topMenu?.textColorActive
-      data.theme_topMenu_backgroundColorActive = themeConfig.topMenu?.backgroundColorActive
       data.theme_topMenu_iconColor = themeConfig.topMenu?.iconColor
       data.theme_topMenu_iconActiveColor = themeConfig.topMenu?.iconActiveColor
       data.theme_sideMenu_backgroundColor = themeConfig.sideMenu?.backgroundColor
       data.theme_sideMenu_textColor = themeConfig.sideMenu?.textColor
+      data.theme_sideMenu_textColorHover = themeConfig.sideMenu?.textColorHover
       data.theme_sideMenu_textColorActive = themeConfig.sideMenu?.textColorActive
+      data.theme_sideMenu_parentTextColorActive = themeConfig.sideMenu?.parentTextColorActive
+      data.theme_sideMenu_parentBackgroundColorActive = themeConfig.sideMenu?.parentBackgroundColorActive
+      data.theme_sideMenu_backgroundColorHover = themeConfig.sideMenu?.backgroundColorHover
       data.theme_sideMenu_backgroundColorActive = themeConfig.sideMenu?.backgroundColorActive
       data.theme_sideMenu_iconColor = themeConfig.sideMenu?.iconColor
       data.theme_sideMenu_iconColorActive = themeConfig.sideMenu?.iconColorActive
@@ -1225,60 +1462,249 @@ onMounted(() => {
 
 .layout-selector {
   width: 100%;
-}
-
-.layout-selector :deep(.n-radio-group) {
-  width: 100%;
-}
-
-.layout-selector :deep(.n-space) {
-  width: 100%;
-  gap: 10px !important;
-}
-
-.layout-selector :deep(.n-radio) {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.layout-selector :deep(.n-radio__label) {
-  width: 100%;
-}
-
-.layout-card {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.layout-group {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.layout-group-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.layout-group-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.layout-group-desc {
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
+}
+
+.layout-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.layout-option {
+  position: relative;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  min-height: 54px;
-  padding: 7px 9px;
+  gap: 10px;
+  padding: 10px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+  color: #334155;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
   cursor: pointer;
-  transition: all 0.2s;
-  background: linear-gradient(180deg, #fff, #f8fafc);
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
-.layout-card:hover {
+.layout-option:hover {
   border-color: #93c5fd;
-  box-shadow: 0 6px 16px rgb(37 99 235 / 8%);
+  background: #fff;
+  box-shadow: 0 8px 18px rgb(37 99 235 / 8%);
+  transform: translateY(-1px);
 }
 
-.layout-card.active,
-:deep(.n-radio:has(input:checked)) .layout-card {
-  border-color: #60a5fa;
+.layout-option.active {
+  border-color: #2563eb;
   background: linear-gradient(180deg, #eff6ff, #ffffff);
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 12%);
+}
+
+.layout-preview-card {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
 }
 
 .layout-img {
-  width: 58px;
-  height: 36px;
+  width: 64px;
+  height: 40px;
   object-fit: contain;
-  flex-shrink: 0;
 }
 
-.layout-name {
+.layout-option-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.layout-option-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.layout-option-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.layout-option-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
   font-size: 12px;
-  color: #606266;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.layout-option-check {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #fff;
+  background: #2563eb;
+  font-size: 16px;
+}
+
+.theme-preset-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-preset-option {
+  position: relative;
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #f8fafc);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.theme-preset-option:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 8px 18px rgb(37 99 235 / 8%);
+  transform: translateY(-1px);
+}
+
+.theme-preset-option.active {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #eff6ff, #fff);
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 12%);
+}
+
+.theme-preset-swatches {
+  height: 46px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+}
+
+.theme-preset-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.theme-preset-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.theme-preset-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.theme-preset-check {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #fff;
+  background: #2563eb;
+  font-size: 16px;
+}
+
+@media (max-width: 760px) {
+  .layout-group-header {
+    display: block;
+  }
+
+  .layout-group-desc {
+    display: block;
+    margin-top: 3px;
+    text-align: left;
+  }
+
+  .layout-group-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-preset-selector {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

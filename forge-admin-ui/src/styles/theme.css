@@ -24,13 +24,13 @@
   --top-menu-text-color-active-hover: #ffffffff;
   --top-menu-text-color-active-horizontal: #333333;
   --top-menu-bg-color: transparent;
-  --top-menu-bg-color-hover: rgba(255, 255, 255, 0.1);
+  --top-menu-bg-color-hover: transparent;
   --top-menu-bg-color-active: rgba(255, 255, 255, 0.2);
   --top-menu-bg-color-active-hover: rgba(255, 255, 255, 0.15);
   --top-menu-font-size: var(--font-size-base);
   --top-menu-font-weight: 500;
-  --top-menu-icon-color: #333333;
-  --top-menu-icon-color-active: #333333;
+  --top-menu-icon-color: rgba(255, 255, 255, 0.75);
+  --top-menu-icon-color-active: #ffffff;
   --n-item-text-color-child-active-horizontal: #ffffff;
 
   /* 侧边菜单配置 */
@@ -38,8 +38,10 @@
   --side-menu-text-color: var(--text-secondary);
   --side-menu-text-color-hover: var(--primary-600);
   --side-menu-text-color-active: var(--primary-600);
+  --side-menu-parent-text-color-active: var(--primary-700);
   --side-menu-bg-color-hover: var(--bg-hover);
   --side-menu-bg-color-active: var(--primary-50);
+  --side-menu-parent-bg-color-active: var(--primary-50);
   --side-menu-border-color: var(--border-default);
   --side-menu-font-size: var(--font-size-base);
   --side-menu-font-weight: 400;
@@ -61,16 +63,16 @@
 /* normal layout 浅色 header 覆盖 - 直接将 layout-header 改为白色 */
 .header-glass .layout-header,
 .header-glass.layout-header {
-  background: var(--bg-primary) !important;
-  background-color: var(--bg-primary) !important;
-  color: var(--text-primary) !important;
-  border-color: transparent !important;
+  background: var(--layout-header-bg-color) !important;
+  background-color: var(--layout-header-bg-color) !important;
+  color: var(--layout-header-text-color) !important;
+  border-color: var(--layout-header-border-color) !important;
   height: 50px !important;
   box-shadow: none !important;
 }
 .side-header {
-  background-color: var(--layout-header-bg-color) !important;
-  color: var(--layout-header-text-color) !important;
+  background-color: var(--side-menu-bg-color) !important;
+  color: var(--side-menu-text-color) !important;
   height: var(--layout-header-height) !important;
 }
 .layout-header * {
@@ -98,19 +100,19 @@
 .top-menu-wrapper .n-menu-item-content--selected,
 .top-menu .n-menu-item-content--selected:hover {
   color: var(--top-menu-text-color-active) !important;
-  background-color: var(--top-menu-bg-color-active) !important;
+  background-color: transparent !important;
 }
 .top-menu-wrapper.n-menu.n-menu--horizontal
   .n-menu-item-content:not(.n-menu-item-content--disabled).n-menu-item-content--selected:hover
   .n-menu-item-content-header {
   color: var(--top-menu-text-color-active) !important;
-  /*background-color: var(--top-menu-bg-color-active) !important;*/
 }
 
 .top-menu-wrapper .n-menu-item-content--selected,
 .top-menu .n-menu-item-content--selected {
   color: var(--top-menu-text-color-active) !important;
-  background-color: var(--top-menu-bg-color-active) !important;
+  background-color: transparent !important;
+  font-weight: 600 !important;
 }
 
 .top-menu-wrapper .n-menu-item-content__icon,
@@ -157,9 +159,6 @@
 .side-menu-wrapper .n-menu .n-menu-item-content.n-menu-item-content--selected .n-menu-item-content-header {
   color: var(--side-menu-text-color-active) !important;
 }
-.n-menu .n-menu-item-content.n-menu-item-content--selected .n-menu-item-content-header {
-  color: var(--side-menu-text-color-active) !important;
-}
 .layout-header
   .n-menu.n-menu--horizontal
   .n-menu-item-content.n-menu-item-content--selected
@@ -189,10 +188,10 @@
   color: var(--top-menu-icon-color-active) !important;
 }
 .n-menu.n-menu--horizontal .n-menu-item-content.n-menu-item-content--child-active {
-  background: var(--top-menu-bg-color-active);
+  background: transparent !important;
 }
 .n-menu.n-menu--horizontal .n-menu-item-content.n-menu-item-content--child-active:hover {
-  background: var(--top-menu-bg-color-active) !important;
+  background: transparent !important;
 }
 .n-dialog .n-dialog__icon {
   color: var(--primary-500) !important;

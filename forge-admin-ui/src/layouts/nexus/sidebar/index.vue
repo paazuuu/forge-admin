@@ -5,7 +5,7 @@
       <div class="logo-icon">
         <TheLogo />
       </div>
-      <span class="logo-text">Forge Admin</span>
+      <span class="logo-text">{{systemName}}</span>
     </div>
 
     <!-- 菜单区域 -->
@@ -138,7 +138,15 @@ import IconRenderer from '@/components/IconRenderer.vue'
 import { useMenu, useUser } from '@/composables'
 import MenuCollapse from '@/layouts/components/MenuCollapse.vue'
 import { usePermissionStore } from '@/store'
+import { useTenantStore } from '@/store'
+import { getDefaultPageTitle } from '@/utils/page-title'
 
+const tenantStore = useTenantStore()
+
+// 优先使用租户配置的系统名称，否则使用默认值
+const systemName = computed(() => {
+  return tenantStore.systemName || getDefaultPageTitle()
+})
 const route = useRoute()
 const permissionStore = usePermissionStore()
 const { activeKey: currentActiveKey, handleMenuSelect: baseHandleMenuSelect } = useMenu()

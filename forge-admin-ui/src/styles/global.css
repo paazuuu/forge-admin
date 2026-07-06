@@ -60,6 +60,35 @@ body {
   }
 }
 
+/* Naive Popover 会 Teleport 到 body，下列样式放全局，避免侧栏折叠菜单弹层圆角被 scoped 样式漏掉。 */
+body .n-popover__content.forge-side-menu-popover-content,
+body .n-popover:has(.forge-side-menu-flyout) .n-popover__content {
+  padding: 0 !important;
+  border-radius: 8px !important;
+  background: var(--side-menu-bg-color) !important;
+  overflow: hidden !important;
+}
+
+body .n-popover:has(.forge-side-menu-flyout) {
+  border-radius: 8px !important;
+  background: var(--side-menu-bg-color) !important;
+  overflow: hidden !important;
+}
+
+/* DataTable 分页分隔线放在整行 wrapper 上，避免只跟随分页内容宽度。 */
+.n-data-table__pagination {
+  width: 100%;
+  margin: 0 !important;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.n-data-table__pagination > .n-pagination {
+  width: 100%;
+  padding: 0;
+  border-top: 0 !important;
+}
+
 /* 暗色模式滚动条 */
 .dark .cus-scroll,
 .dark .cus-scroll-x,

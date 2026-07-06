@@ -379,11 +379,14 @@ onMounted(() => {
 .flow-page {
   box-sizing: border-box;
   width: 100%;
-  padding: 10px 14px 14px;
   height: 100%;
+  min-height: 0;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
+  overflow: hidden;
+  background: var(--bg-secondary);
 }
 .page-header {
   background: #fff;
@@ -433,22 +436,23 @@ onMounted(() => {
   width: 116px;
 }
 .tabs-container {
-  background: #fff;
-  padding: 0;
-  margin-bottom: 12px;
-  border-bottom: 1px solid #e5eeee;
+  flex: 0 0 auto;
+  background: var(--bg-primary);
+  padding: 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
 }
 .tab-content {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #374151;
-  font-weight: 600;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 .tab-badge {
-  border: 1px solid #f3b6b6;
-  background: #fff7f7;
-  color: #c24141;
+  border: 1px solid #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 10px;
