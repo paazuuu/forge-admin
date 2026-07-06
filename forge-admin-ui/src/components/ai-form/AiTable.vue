@@ -965,13 +965,14 @@ defineExpose({
 
 :deep(.n-data-table) {
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
 :deep(.n-data-table-wrapper) {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -979,7 +980,7 @@ defineExpose({
 }
 
 :deep(.n-data-table-base-table) {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   height: auto;
   min-height: 0;
   display: flex;
@@ -988,7 +989,7 @@ defineExpose({
 
 :deep(.n-data-table-base-table-body) {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 144px;
   overflow: hidden;
 }
 

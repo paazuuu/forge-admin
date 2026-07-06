@@ -5,10 +5,10 @@
       api="/system/client"
       :api-config="{
         list: 'get@/system/client/page',
-        detail: 'get@/system/client/{id}',
+        detail: 'get@/system/client/:id',
         add: 'post@/system/client',
         update: 'put@/system/client',
-        delete: 'delete@/system/client/{id}',
+        delete: 'delete@/system/client/:id',
       }"
       :search-schema="searchSchema"
       :columns="tableColumns"
@@ -447,6 +447,16 @@ async function handleReloadCache(row) {
 
 <style scoped lang="scss">
 .client-management-page {
-  //padding: 16px;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.client-management-page :deep(.ai-crud-page) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 </style>
