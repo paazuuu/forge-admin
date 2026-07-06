@@ -103,12 +103,23 @@ export function writeUserTaskConfig(config) {
   }
 
   // form
+  if (cfg.formMode)
+    attrs.push(`flowable:formMode="${escapeXmlAttr(cfg.formMode)}"`)
   if (cfg.formKey)
     attrs.push(`flowable:formKey="${escapeXmlAttr(cfg.formKey)}"`)
+  if (cfg.formName)
+    attrs.push(`flowable:formName="${escapeXmlAttr(cfg.formName)}"`)
+  if (cfg.providerKey)
+    attrs.push(`flowable:providerKey="${escapeXmlAttr(cfg.providerKey)}"`)
   if (cfg.formJson)
     attrs.push(`flowable:formJson="${escapeXmlAttr(cfg.formJson)}"`)
   if (cfg.formUrl)
     attrs.push(`flowable:formUrl="${escapeXmlAttr(cfg.formUrl)}"`)
+  if (cfg.viewKey)
+    attrs.push(`flowable:viewKey="${escapeXmlAttr(cfg.viewKey)}"`)
+  const formRef = stringifyFormRef(cfg.formRef)
+  if (formRef)
+    attrs.push(`flowable:formRef="${escapeXmlAttr(formRef)}"`)
   if (Array.isArray(cfg.formFieldPermissions) && cfg.formFieldPermissions.length) {
     const permissions = cfg.formFieldPermissions
       .map(normalizeFormFieldPermission)
@@ -239,6 +250,17 @@ function normalizeNonNegativeInt(value, fallback) {
     return fallback
   const n = Number.parseInt(value, 10)
   return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
+function stringifyFormRef(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return ''
+  const cleaned = Object.entries(value).reduce((acc, [key, item]) => {
+    if (item !== undefined && item !== null && item !== '')
+      acc[key] = item
+    return acc
+  }, {})
+  return Object.keys(cleaned).length ? JSON.stringify(cleaned) : ''
 }
 
 function normalizePositiveInt(value, fallback) {

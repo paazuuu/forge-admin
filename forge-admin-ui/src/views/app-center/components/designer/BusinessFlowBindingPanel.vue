@@ -540,7 +540,7 @@ async function loadFormAssets() {
   formAssetsLoading.value = true
   formAssetWarnings.value = []
   try {
-    const res = await businessFlowFormAssets(props.objectCode)
+    const res = await businessFlowFormAssets(props.objectCode, { includeInternal: true })
     const data = res.data || {}
     formAssets.value = Array.isArray(data.formAssets) ? data.formAssets : []
     formAssetWarnings.value = data.warnings || []

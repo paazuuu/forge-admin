@@ -57,6 +57,11 @@ public class TaskFormInfo {
     private String formJson;
 
     /**
+     * 业务表单模式：BUSINESS_OBJECT_FORM/BUSINESS_CODE_FORM/EXTERNAL
+     */
+    private String formMode;
+
+    /**
      * 外部表单URL（formType=external时有值）
      */
     private String formUrl;
@@ -70,6 +75,26 @@ public class TaskFormInfo {
      * 表单Key
      */
     private String formKey;
+
+    /**
+     * 表单名称
+     */
+    private String formName;
+
+    /**
+     * 代码表单 Provider Key
+     */
+    private String providerKey;
+
+    /**
+     * 业务表单视图 Key
+     */
+    private String viewKey;
+
+    /**
+     * 结构化表单引用
+     */
+    private Map<String, Object> formRef;
 
     /**
      * 节点表单字段权限配置JSON

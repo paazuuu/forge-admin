@@ -42,6 +42,13 @@ const SAMPLE_FORM_PRIORITY = [
   '                   flowable:overdueReminderIntervalMinutes="60"',
   '                   flowable:overdueReminderMaxTimes="3"/>',
   '    <bpmn:userTask id="T_dynamic" flowable:formKey="leaveForm"/>',
+  '    <bpmn:userTask id="T_business"',
+  '                   flowable:formMode="BUSINESS_CODE_FORM"',
+  '                   flowable:formKey="sample_purchase_order_approval_form"',
+  '                   flowable:formName="采购单审批表单"',
+  '                   flowable:providerKey="samplePurchaseOrder"',
+  '                   flowable:viewKey="approve"',
+  '                   flowable:formRef=\'{"type":"BUSINESS_CODE_FORM","providerKey":"samplePurchaseOrder","formKey":"sample_purchase_order_approval_form"}\'/>',
   '    <bpmn:userTask id="T_no_form"/>',
   '  </bpmn:process>',
   '</bpmn:definitions>',
@@ -82,6 +89,21 @@ describe('parseUserTaskConfig - 表单 / 优先级 / dueDate', () => {
     const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_dynamic'))
     expect(cfg.formType).toBe('dynamic')
     expect(cfg.formKey).toBe('leaveForm')
+  })
+
+  it('解析业务表单资产引用', () => {
+    const cfg = parseUserTaskConfig(getTask(SAMPLE_FORM_PRIORITY, 'T_business'))
+    expect(cfg.formType).toBe('dynamic')
+    expect(cfg.formMode).toBe('BUSINESS_CODE_FORM')
+    expect(cfg.formKey).toBe('sample_purchase_order_approval_form')
+    expect(cfg.formName).toBe('采购单审批表单')
+    expect(cfg.providerKey).toBe('samplePurchaseOrder')
+    expect(cfg.viewKey).toBe('approve')
+    expect(cfg.formRef).toEqual({
+      type: 'BUSINESS_CODE_FORM',
+      providerKey: 'samplePurchaseOrder',
+      formKey: 'sample_purchase_order_approval_form',
+    })
   })
 
   it('无表单配置 → formType=none', () => {

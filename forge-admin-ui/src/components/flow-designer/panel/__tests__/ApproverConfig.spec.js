@@ -32,7 +32,7 @@ const STUBS = {
   'ListenerConfig': true,
 }
 
-function mountApproverConfig() {
+function mountApproverConfig(options = {}) {
   const Parent = defineComponent({
     components: { ApproverConfig },
     setup() {
@@ -59,7 +59,13 @@ function mountApproverConfig() {
           ],
         },
       })
-      const formAssetOptions = [
+      if (options.nodeConfig) {
+        node.value.config = {
+          ...node.value.config,
+          ...options.nodeConfig,
+        }
+      }
+      const formAssetOptions = options.formAssetOptions || [
         {
           formKey: 'main_form',
           formName: '主表单',
@@ -138,6 +144,42 @@ describe('approverConfig', () => {
         required: true,
       },
     ])
+
+    wrapper.unmount()
+  })
+
+  it('旧 BPMN 只有 formKey 时也能回显应用表单资产', async () => {
+    const wrapper = mountApproverConfig({
+      nodeConfig: {
+        formMode: '',
+        formKey: 'purchase_form',
+        formName: '',
+        providerKey: '',
+        formUrl: '',
+        formRef: {},
+        formFieldPermissions: [],
+      },
+      formAssetOptions: [
+        {
+          formKey: 'purchase_form',
+          formName: '采购单审批表单',
+          formMode: 'BUSINESS_CODE_FORM',
+          providerKey: 'samplePurchaseOrder',
+          formUrl: '/business/purchase-order-test',
+          fieldCatalog: [],
+        },
+      ],
+    })
+
+    const asset = wrapper.find('.asset-card')
+    expect(asset.classes()).toContain('selected')
+
+    await asset.trigger('click')
+
+    expect(wrapper.vm.node.config.formMode).toBe('BUSINESS_CODE_FORM')
+    expect(wrapper.vm.node.config.formName).toBe('采购单审批表单')
+    expect(wrapper.vm.node.config.providerKey).toBe('samplePurchaseOrder')
+    expect(wrapper.vm.node.config.formUrl).toBe('/business/purchase-order-test')
 
     wrapper.unmount()
   })

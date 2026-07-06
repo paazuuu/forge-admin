@@ -65,9 +65,14 @@ export function parseUserTaskConfig(taskElement) {
     priority: 50,
     dueDate: 0,
     formType: 'none',
+    formMode: '',
     formKey: '',
+    formName: '',
+    providerKey: '',
     formJson: '',
     formUrl: '',
+    viewKey: 'default',
+    formRef: {},
     multiInstanceType: 'none',
     completionCondition: 'all',
     passRate: 100,
@@ -209,15 +214,32 @@ function splitCsv(str) {
 }
 
 function applyForm(el, config) {
+  config.formMode = getFlowableAttr(el, 'formMode') || ''
   config.formKey = getFlowableAttr(el, 'formKey') || ''
+  config.formName = getFlowableAttr(el, 'formName') || ''
+  config.providerKey = getFlowableAttr(el, 'providerKey') || ''
   config.formJson = getFlowableAttr(el, 'formJson') || ''
   config.formUrl = getFlowableAttr(el, 'formUrl') || ''
+  config.viewKey = getFlowableAttr(el, 'viewKey') || 'default'
+  config.formRef = parseJsonObject(getFlowableAttr(el, 'formRef'))
   if (config.formUrl)
     config.formType = 'external'
   else if (config.formKey || config.formJson)
     config.formType = 'dynamic'
   else
     config.formType = 'none'
+}
+
+function parseJsonObject(value) {
+  if (!value)
+    return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  catch {
+    return {}
+  }
 }
 
 function applyPriorityAndDueDate(el, config) {

@@ -239,16 +239,57 @@
               </NTag>
             </div>
 
-            <template v-if="businessContextActive">
+            <template v-if="businessFormConfigActive">
               <label class="settings-field">
+                <span class="settings-field-label">表单类型</span>
+                <n-select
+                  v-model:value="modelInfo.formType"
+                  :options="businessManagedFormTypeOptions"
+                  size="small"
+                  @update:value="handleBusinessManagedFormTypeChange"
+                />
+              </label>
+              <label v-if="businessObjectPickerVisible" class="settings-field">
+                <span class="settings-field-label">业务应用</span>
+                <n-select
+                  v-model:value="manualBusinessObjectCode"
+                  :options="businessObjectOptions"
+                  :loading="businessObjectLoading"
+                  placeholder="选择应用管理中的业务对象"
+                  filterable
+                  clearable
+                  size="small"
+                  @focus="loadBusinessObjectOptions"
+                  @update:value="handleBusinessObjectChange"
+                />
+              </label>
+              <div class="settings-field">
                 <span class="settings-field-label">应用表单资产</span>
                 <BusinessFlowFormAssetSelect
+                  v-if="appManagedFormTypeActive && businessContextActive"
                   :node-form="businessGlobalFormNode"
                   :form-assets="nodeFormAssetOptions"
                   show-all-modes
                   @update="handleBusinessGlobalFormUpdate"
                 />
+                <n-empty
+                  v-else-if="appManagedFormTypeActive"
+                  size="small"
+                  description="请先选择业务应用，再选择应用管理中维护的表单"
+                />
+                <n-empty
+                  v-else
+                  size="small"
+                  description="当前流程不使用发起表单"
+                />
+              </div>
+              <label v-if="modelInfo.formType === 'external'" class="settings-field">
+                <span class="settings-field-label">外置表单</span>
+                <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
               </label>
+              <div v-if="appManagedFormTypeActive" class="settings-tip">
+                表单来源于应用管理的表单设计；流程侧只选择表单资产，节点字段权限在节点抽屉维护。
+              </div>
             </template>
             <template v-else>
               <label class="settings-field">
@@ -275,23 +316,9 @@
                 <span class="settings-field-label">外置表单</span>
                 <n-input v-model:value="modelInfo.formUrl" placeholder="/views/leave/apply" size="small" />
               </label>
-              <div v-if="modelInfo.formType === 'dynamic'" class="settings-form-actions">
-                <n-button size="small" type="primary" @click="handleOpenFormDesigner">
-                  <template #icon>
-                    <i class="i-material-symbols:edit-document" />
-                  </template>
-                  {{ modelInfo.formJson ? '编辑表单' : '设计表单' }}
-                </n-button>
-                <n-button size="small" :disabled="!formSchema.length" @click="showFormPreview = true">
-                  <template #icon>
-                    <i class="i-material-symbols:visibility-outline" />
-                  </template>
-                  预览
-                </n-button>
-              </div>
             </template>
             <div class="settings-tip">
-              {{ businessContextActive ? '节点未单独选择表单时继承这里的应用表单资产；字段权限在节点抽屉维护。' : '发起节点不再单独配置表单；这里的表单会作为流程全局发起表单使用。' }}
+              {{ businessFormConfigActive ? '节点未单独选择表单时继承这里的应用表单资产。' : '发起节点不再单独配置表单；这里的表单会作为流程全局发起表单使用。' }}
             </div>
           </div>
 
@@ -704,13 +731,12 @@
 
 <script setup>
 import { NTag, NTreeSelect } from 'naive-ui'
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { modelListByProvider, providerPage } from '@/api/ai'
-import { businessFlowFormAssets } from '@/api/business-app'
+import { businessFlowFormAssets, businessFlowModelBindings, businessObjectList } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import { streamFlowGenerate } from '@/api/flow-generator'
-import FlowModeler from '@/components/bpmn/FlowModeler.vue'
 import NodePropertiesPanel from '@/components/bpmn/NodePropertiesPanel.vue'
 import { DingFlowDesigner } from '@/components/flow-designer'
 import FlowPropertyPanelShell from '@/components/flow/FlowPropertyPanelShell.vue'
@@ -752,11 +778,26 @@ const route = useRoute()
 const router = useRouter()
 const message = window.$message
 
+const FlowModeler = defineAsyncComponent(() => import('@/components/bpmn/FlowModeler.vue'))
+
 const embedded = computed(() => props.embedded)
-const businessObjectCode = computed(() => routeQueryText(props.businessObjectCode || route.query.businessObjectCode || route.query.objectCode))
+const explicitBusinessObjectCode = computed(() => routeQueryText(props.businessObjectCode || route.query.businessObjectCode || route.query.objectCode))
+const explicitBusinessObjectName = computed(() => routeQueryText(props.businessObjectName || route.query.businessObjectName || route.query.objectName))
+const explicitBusinessEntryRoute = computed(() => routeQueryText(props.businessEntryRoute || route.query.businessEntryRoute))
+const resolvedBusinessBinding = ref(null)
+const manualBusinessObjectCode = ref('')
+const manualBusinessObjectName = ref('')
+const businessObjectOptions = ref([])
+const businessObjectLoading = ref(false)
+const businessObjectCode = computed(() => explicitBusinessObjectCode.value || routeQueryText(resolvedBusinessBinding.value?.objectCode) || manualBusinessObjectCode.value)
 const businessContextActive = computed(() => !!businessObjectCode.value)
-const businessContextName = computed(() => routeQueryText(props.businessObjectName || route.query.businessObjectName || route.query.objectName) || businessObjectCode.value)
-const businessEntryRoute = computed(() => routeQueryText(props.businessEntryRoute || route.query.businessEntryRoute))
+const businessContextName = computed(() => explicitBusinessObjectName.value || routeQueryText(resolvedBusinessBinding.value?.objectName) || manualBusinessObjectName.value || businessObjectCode.value)
+const businessEntryRoute = computed(() => explicitBusinessEntryRoute.value || routeQueryText(resolvedBusinessBinding.value?.entryRoute))
+const effectiveCodeApp = computed(() => {
+  return props.codeApp
+    || parseBooleanWithDefault(routeQueryText(route.query.codeApp), false)
+    || (!explicitBusinessObjectCode.value && parseBooleanWithDefault(resolvedBusinessBinding.value?.codeApp, false))
+})
 
 const saving = ref(false)
 const deploying = ref(false)
@@ -833,7 +874,15 @@ const designerTypeOptions = [
 ]
 
 const formTypeOptions = [
-  { label: '动态表单', value: 'dynamic' },
+  { label: '动态表单（应用表单）', value: 'dynamic' },
+  { label: '外置表单', value: 'external' },
+  { label: '业务应用表单', value: 'business' },
+  { label: '无表单', value: 'none' },
+]
+
+const businessManagedFormTypeOptions = [
+  { label: '业务应用表单', value: 'business' },
+  { label: '动态表单（应用表单）', value: 'dynamic' },
   { label: '外置表单', value: 'external' },
   { label: '无表单', value: 'none' },
 ]
@@ -920,6 +969,14 @@ const processConfig = computed(() => ({
   autoApprovalMode: normalizeAutoApprovalMode(modelInfo.autoApprovalMode),
 }))
 
+const appManagedFormTypeActive = computed(() => isAppManagedFormType(modelInfo.formType))
+const businessFormConfigActive = computed(() => businessContextActive.value || appManagedFormTypeActive.value)
+const businessObjectPickerVisible = computed(() => {
+  return appManagedFormTypeActive.value
+    && !explicitBusinessObjectCode.value
+    && !routeQueryText(resolvedBusinessBinding.value?.objectCode)
+})
+
 const nodeFormAssetOptions = computed(() => {
   if (businessContextActive.value) {
     return businessFormAssets.value.map(asset => ({
@@ -951,20 +1008,25 @@ const nodeFormAssetOptions = computed(() => {
 })
 
 const businessGlobalFormRef = computed(() => {
-  if (modelInfo.formType !== 'business')
+  if (!businessFormConfigActive.value || !appManagedFormTypeActive.value)
     return {}
   return parseBusinessGlobalFormRef(modelInfo.formJson)
 })
 
 const businessGlobalFormNode = computed(() => {
   const ref = businessGlobalFormRef.value
+  const asset = findBusinessFormAsset(
+    ref.formKey,
+    ref.providerKey,
+    ref.formMode || ref.type || ref.formRef?.formMode || ref.formRef?.type,
+  )
   return {
-    formMode: ref.formMode || ref.type || 'BUSINESS_OBJECT_FORM',
+    formMode: ref.formMode || ref.type || asset?.formMode || asset?.type || 'BUSINESS_OBJECT_FORM',
     formKey: ref.formKey || '',
-    formName: ref.formName || '',
-    providerKey: ref.providerKey || '',
-    formUrl: ref.formUrl || '',
-    viewKey: ref.viewKey || 'default',
+    formName: ref.formName || asset?.formName || '',
+    providerKey: ref.providerKey || asset?.providerKey || '',
+    formUrl: ref.formUrl || asset?.formUrl || '',
+    viewKey: ref.viewKey || asset?.viewKey || 'default',
     formRef: ref.formRef || ref,
   }
 })
@@ -973,11 +1035,20 @@ const selectedBusinessGlobalFormAsset = computed(() => {
   if (!businessContextActive.value)
     return null
   const current = businessGlobalFormNode.value
-  return findBusinessFormAsset(current.formKey, current.providerKey)
+  return findBusinessFormAsset(current.formKey, current.providerKey, current.formMode)
 })
 
 const formConfigStatus = computed(() => {
-  if (businessContextActive.value) {
+  if (businessFormConfigActive.value) {
+    if (modelInfo.formType === 'none')
+      return { label: '无表单', type: 'default' }
+    if (modelInfo.formType === 'external') {
+      return modelInfo.formUrl
+        ? { label: '已配置', type: 'success' }
+        : { label: '未配置', type: 'warning' }
+    }
+    if (!businessContextActive.value)
+      return { label: '未选应用', type: 'warning' }
     if (businessGlobalFormNode.value.formKey)
       return { label: '已配置', type: 'success' }
     return { label: '未配置', type: 'warning' }
@@ -1132,6 +1203,9 @@ function resetNewModelState() {
   formSchema.value = []
   formFieldCatalog.value = []
   businessFormAssets.value = []
+  resolvedBusinessBinding.value = null
+  manualBusinessObjectCode.value = ''
+  manualBusinessObjectName.value = ''
   dockedElement.value = null
   modelerInstance.value = null
   workspaceMode.value = 'design'
@@ -1195,7 +1269,7 @@ watch(() => props.modelId, async (value, oldValue) => {
 })
 
 watch(businessObjectCode, async (value, oldValue) => {
-  if (value === oldValue || !modelInfo.id)
+  if (value === oldValue || !modelInfo.id || syncingModel.value)
     return
   await refreshFormFieldCatalog()
 })
@@ -1303,6 +1377,10 @@ async function refreshFormFieldCatalog(formDetail = null) {
     return
   }
   businessFormAssets.value = []
+  if (appManagedFormTypeActive.value) {
+    formFieldCatalog.value = []
+    return
+  }
   if (modelInfo.formType !== 'dynamic') {
     formFieldCatalog.value = []
     return
@@ -1338,6 +1416,113 @@ async function refreshFormFieldCatalog(formDetail = null) {
   formFieldCatalog.value = resolveLocalFormFieldCatalog()
 }
 
+async function loadBusinessObjectOptions() {
+  if (businessObjectOptions.value.length || businessObjectLoading.value)
+    return
+  businessObjectLoading.value = true
+  try {
+    const res = await businessObjectList({})
+    const list = Array.isArray(res.data) ? res.data : []
+    const seen = new Set()
+    businessObjectOptions.value = list
+      .filter((item) => {
+        const objectCode = routeQueryText(item?.objectCode)
+        if (!objectCode || seen.has(objectCode))
+          return false
+        seen.add(objectCode)
+        return true
+      })
+      .map(item => ({
+        label: `${item.objectName || item.objectCode}（${item.objectCode}）`,
+        value: item.objectCode,
+        object: item,
+      }))
+  }
+  catch (error) {
+    console.warn('[FlowDesign] 加载业务应用列表失败:', error?.message || error)
+    businessObjectOptions.value = []
+  }
+  finally {
+    businessObjectLoading.value = false
+  }
+}
+
+async function handleBusinessObjectChange(value) {
+  manualBusinessObjectCode.value = routeQueryText(value)
+  const selected = businessObjectOptions.value.find(item => item.value === manualBusinessObjectCode.value)?.object
+  manualBusinessObjectName.value = routeQueryText(selected?.objectName) || manualBusinessObjectCode.value
+  modelInfo.formType = normalizeAppManagedFormType(modelInfo.formType)
+  modelInfo.formId = null
+  modelInfo.formUrl = ''
+  modelInfo.formJson = ''
+  formSchema.value = []
+  businessFormAssets.value = []
+  formFieldCatalog.value = []
+  if (manualBusinessObjectCode.value)
+    await refreshBusinessFormFieldCatalog()
+  hasChanges.value = true
+}
+
+async function handleBusinessManagedFormTypeChange(value) {
+  if (value === 'none') {
+    modelInfo.formType = 'none'
+    modelInfo.formId = null
+    modelInfo.formUrl = ''
+    modelInfo.formJson = ''
+    formSchema.value = []
+    formFieldCatalog.value = []
+    hasChanges.value = true
+    return
+  }
+  if (value === 'external') {
+    modelInfo.formType = 'external'
+    modelInfo.formId = null
+    modelInfo.formJson = ''
+    formSchema.value = []
+    formFieldCatalog.value = []
+    hasChanges.value = true
+    return
+  }
+  modelInfo.formType = value || 'business'
+  modelInfo.formId = null
+  modelInfo.formUrl = ''
+  formSchema.value = []
+  if (!businessContextActive.value) {
+    await loadBusinessObjectOptions()
+    modelInfo.formJson = ''
+    formFieldCatalog.value = []
+    hasChanges.value = true
+    return
+  }
+  await refreshBusinessFormFieldCatalog()
+  hasChanges.value = true
+}
+
+async function resolveBusinessBindingForModel() {
+  if (explicitBusinessObjectCode.value) {
+    resolvedBusinessBinding.value = null
+    return
+  }
+
+  const modelKey = routeQueryText(modelInfo.modelKey)
+  if (!modelKey) {
+    resolvedBusinessBinding.value = null
+    return
+  }
+
+  try {
+    const res = await businessFlowModelBindings(modelKey)
+    const bindings = res.code === 200 && Array.isArray(res.data)
+      ? res.data.filter(item => routeQueryText(item?.objectCode))
+      : []
+    resolvedBusinessBinding.value = bindings[0] || null
+  }
+  catch (error) {
+    console.warn('[FlowDesign] 反查业务对象绑定失败:', modelKey, error?.message || error)
+    resolvedBusinessBinding.value = null
+  }
+}
+
 async function refreshBusinessFormFieldCatalog() {
   if (!businessObjectCode.value) {
     businessFormAssets.value = []
@@ -1345,9 +1530,10 @@ async function refreshBusinessFormFieldCatalog() {
     return
   }
   try {
-    const res = await businessFlowFormAssets(businessObjectCode.value)
+    const res = await businessFlowFormAssets(businessObjectCode.value, { includeInternal: true })
     const assets = normalizeBusinessFormAssets(res.data?.formAssets || [])
     businessFormAssets.value = assets
+    ensureBusinessGlobalFormSelection(assets)
     formFieldCatalog.value = collectBusinessAssetFields(selectedBusinessGlobalFormAsset.value
       ? [selectedBusinessGlobalFormAsset.value]
       : assets)
@@ -1378,7 +1564,7 @@ function normalizeBusinessFormAssets(assets = []) {
 
 function handleBusinessGlobalFormUpdate(payload = {}) {
   const formKey = routeQueryText(payload.formKey)
-  modelInfo.formType = 'business'
+  modelInfo.formType = normalizeAppManagedFormType(modelInfo.formType)
   modelInfo.formId = null
   modelInfo.formUrl = ''
   formSchema.value = []
@@ -1390,34 +1576,89 @@ function handleBusinessGlobalFormUpdate(payload = {}) {
     return
   }
 
-  const asset = findBusinessFormAsset(formKey, payload.providerKey) || {}
-  const formMode = payload.formMode || asset.formMode || asset.type || 'BUSINESS_OBJECT_FORM'
+  const asset = findBusinessFormAsset(
+    formKey,
+    payload.providerKey,
+    payload.formMode || payload.formRef?.formMode || payload.formRef?.type,
+  ) || {}
+  modelInfo.formJson = buildBusinessGlobalFormJson({
+    ...asset,
+    ...payload,
+    formKey,
+  })
+  formFieldCatalog.value = collectBusinessAssetFields(asset.formKey ? [asset] : businessFormAssets.value)
+  hasChanges.value = true
+}
+
+function ensureBusinessGlobalFormSelection(assets = businessFormAssets.value) {
+  if (!businessContextActive.value)
+    return
+  if (!isAppManagedFormType(modelInfo.formType))
+    return
+  const availableAssets = Array.isArray(assets) ? assets.filter(asset => routeQueryText(asset?.formKey)) : []
+  if (!availableAssets.length)
+    return
+
+  const currentRef = parseBusinessGlobalFormRef(modelInfo.formJson)
+  const currentFormKey = routeQueryText(currentRef.formKey)
+  const currentProviderKey = routeQueryText(currentRef.providerKey)
+  const currentFormMode = normalizeBusinessFormMode(
+    currentRef.formMode || currentRef.type || currentRef.formRef?.formMode || currentRef.formRef?.type,
+  )
+  const currentAsset = currentFormKey
+    ? findBusinessFormAssetInList(availableAssets, currentFormKey, currentProviderKey, currentFormMode)
+    : null
+
+  if (isAppManagedFormType(modelInfo.formType) && currentAsset) {
+    const normalizedFormJson = buildBusinessGlobalFormJson({
+      ...currentAsset,
+      ...(currentRef.formRef || {}),
+      ...currentRef,
+      formKey: currentFormKey,
+    })
+    if (normalizedFormJson)
+      modelInfo.formJson = normalizedFormJson
+    return
+  }
+
+  const nextAsset = currentAsset || availableAssets[0]
+  modelInfo.formType = normalizeAppManagedFormType(modelInfo.formType)
+  modelInfo.formId = null
+  modelInfo.formUrl = ''
+  formSchema.value = []
+  modelInfo.formJson = buildBusinessGlobalFormJson(nextAsset)
+}
+
+function buildBusinessGlobalFormJson(source = {}) {
+  const formKey = routeQueryText(source.formKey || source.key || source.value)
+  if (!formKey)
+    return ''
+  const formMode = normalizeBusinessFormMode(source.formMode || source.type, 'BUSINESS_OBJECT_FORM')
+  const providerKey = routeQueryText(source.providerKey)
   const formRef = {
-    ...(payload.formRef || {}),
-    objectCode: businessObjectCode.value,
-    objectName: businessContextName.value,
+    ...(source.formRef || {}),
+    objectCode: source.objectCode || businessObjectCode.value,
+    objectName: source.objectName || businessContextName.value,
     type: formMode,
     formMode,
     formKey,
-    formName: payload.formName || asset.formName || formKey,
-    providerKey: payload.providerKey || asset.providerKey || '',
-    formUrl: payload.formUrl || asset.formUrl || '',
-    viewKey: payload.viewKey || asset.viewKey || 'default',
+    formName: source.formName || source.name || source.label || formKey,
+    providerKey,
+    formUrl: source.formUrl || '',
+    viewKey: source.viewKey || 'default',
   }
-  modelInfo.formJson = JSON.stringify({
+  return JSON.stringify({
     type: formMode,
     formMode,
-    objectCode: businessObjectCode.value,
-    objectName: businessContextName.value,
+    objectCode: formRef.objectCode,
+    objectName: formRef.objectName,
     formKey,
     formName: formRef.formName,
-    providerKey: formRef.providerKey,
+    providerKey,
     formUrl: formRef.formUrl,
     viewKey: formRef.viewKey,
     formRef,
   })
-  formFieldCatalog.value = collectBusinessAssetFields(asset.formKey ? [asset] : businessFormAssets.value)
-  hasChanges.value = true
 }
 
 function parseBusinessGlobalFormRef(value) {
@@ -1453,18 +1694,54 @@ function parseBusinessGlobalFormRef(value) {
   }
 }
 
-function findBusinessFormAsset(formKey, providerKey = '') {
+function findBusinessFormAsset(formKey, providerKey = '', formMode = '') {
+  return findBusinessFormAssetInList(businessFormAssets.value, formKey, providerKey, formMode)
+}
+
+function findBusinessFormAssetInList(assets = [], formKey, providerKey = '', formMode = '') {
   const key = routeQueryText(formKey)
   const provider = routeQueryText(providerKey)
+  const mode = normalizeBusinessFormMode(formMode)
   if (!key)
     return null
-  return businessFormAssets.value.find((asset) => {
-    if (asset.formKey !== key)
-      return false
-    if (!provider)
-      return true
-    return String(asset.providerKey || '') === provider
-  }) || null
+  const availableAssets = Array.isArray(assets) ? assets : []
+  const sameFormKey = availableAssets.filter(asset => routeQueryText(asset?.formKey) === key)
+  if (!sameFormKey.length)
+    return null
+  const exactAsset = sameFormKey.find(asset =>
+    (!mode || normalizeBusinessFormMode(asset.formMode || asset.type, 'BUSINESS_OBJECT_FORM') === mode)
+    && (!provider || routeQueryText(asset.providerKey) === provider),
+  )
+  if (exactAsset)
+    return exactAsset
+  if (provider) {
+    const providerAsset = sameFormKey.find(asset => routeQueryText(asset.providerKey) === provider)
+    if (providerAsset)
+      return providerAsset
+  }
+  if (mode) {
+    const modeAsset = sameFormKey.find(asset =>
+      normalizeBusinessFormMode(asset.formMode || asset.type, 'BUSINESS_OBJECT_FORM') === mode,
+    )
+    if (modeAsset)
+      return modeAsset
+  }
+  return sameFormKey[0] || null
+}
+
+function normalizeBusinessFormMode(value, fallback = '') {
+  const normalized = routeQueryText(value).toUpperCase()
+  if (normalized === 'BUSINESS_CODE_FORM' || normalized === 'BUSINESS_OBJECT_FORM' || normalized === 'EXTERNAL')
+    return normalized
+  return fallback
+}
+
+function isAppManagedFormType(value) {
+  return value === 'business' || value === 'dynamic'
+}
+
+function normalizeAppManagedFormType(value) {
+  return isAppManagedFormType(value) ? value : 'business'
 }
 
 function collectBusinessAssetFields(assets = []) {
@@ -1532,22 +1809,31 @@ function goBackToBusinessApp() {
     path: `/app-center/object/${businessObjectCode.value}/designer`,
     query: {
       panel: 'flow-app',
-      codeApp: props.codeApp ? '1' : undefined,
+      codeApp: effectiveCodeApp.value ? '1' : undefined,
     },
   })
 }
 
 function normalizeBusinessEntryRoute(value) {
-  const route = String(value || '').trim()
+  const route = decodeHtmlEntities(value)
   if (!route)
     return route
   const [path, query = ''] = route.split('?')
   const params = new URLSearchParams(query)
   if (!params.get('panel'))
     params.set('panel', 'flow-app')
-  if (props.codeApp && !params.get('codeApp'))
+  if (effectiveCodeApp.value && !params.get('codeApp'))
     params.set('codeApp', '1')
   return `${path}?${params.toString()}`
+}
+
+function decodeHtmlEntities(value) {
+  return routeQueryText(value)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, '\'')
 }
 
 function normalizeDesignerType(value) {
@@ -1662,6 +1948,7 @@ async function loadModel(id) {
       modelInfo.category = resolveFlowCategoryValue(res.data.category, categoryTreeOptions.value)
       bpmnXml.value = res.data.bpmnXml || ''
       applyProcessConfigFromXml(bpmnXml.value)
+      await resolveBusinessBindingForModel()
 
       if (res.data.formType === 'business') {
         formSchema.value = []
@@ -1744,10 +2031,6 @@ async function handleFormSelect(formId) {
     console.error('加载表单失败:', error)
     message.error('加载表单失败')
   }
-}
-
-function handleOpenFormDesigner() {
-  showFormDesigner.value = true
 }
 
 function handleSaveFormSchema(schema) {
@@ -2593,11 +2876,18 @@ async function handleSaveDraft() {
 }
 
 function normalizeBusinessGlobalFormBeforeSave() {
+  if (!businessFormConfigActive.value)
+    return
+  if (modelInfo.formType === 'none' || modelInfo.formType === 'external')
+    return
   if (!businessContextActive.value)
     return
-  if (modelInfo.formType === 'business')
+  if (isAppManagedFormType(modelInfo.formType) && routeQueryText(parseBusinessGlobalFormRef(modelInfo.formJson).formKey))
     return
-  modelInfo.formType = 'business'
+  ensureBusinessGlobalFormSelection()
+  if (isAppManagedFormType(modelInfo.formType) && routeQueryText(parseBusinessGlobalFormRef(modelInfo.formJson).formKey))
+    return
+  modelInfo.formType = normalizeAppManagedFormType(modelInfo.formType)
   modelInfo.formId = null
   modelInfo.formUrl = ''
   modelInfo.formJson = ''

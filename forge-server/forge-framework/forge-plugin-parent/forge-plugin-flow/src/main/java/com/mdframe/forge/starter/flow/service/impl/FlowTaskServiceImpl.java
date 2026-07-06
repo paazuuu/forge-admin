@@ -1816,15 +1816,17 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         formInfo.setFormFieldPermissions(nodeForm.formFieldPermissions);
 
         if (isBusinessNodeForm(flowModel, nodeForm.formKey, nodeForm.formMode)) {
-            applyBusinessNodeFormConfiguration(formInfo, flowModel, nodeForm.formKey, nodeForm.formUrl);
+            applyBusinessNodeFormConfiguration(formInfo, flowModel, nodeForm);
         } else if (!isBlank(nodeForm.formUrl)) {
             formInfo.setFormType("external");
             formInfo.setFormUrl(nodeForm.formUrl);
             formInfo.setFormTarget(!isBlank(nodeForm.formTarget) ? nodeForm.formTarget : "modal");
+            applyNodeFormReference(formInfo, nodeForm, Map.of());
         } else if (!isBlank(nodeForm.formKey) || !isBlank(nodeForm.formJson)) {
             formInfo.setFormType("dynamic");
             formInfo.setFormKey(nodeForm.formKey);
             formInfo.setFormJson(resolveFormJson(nodeForm.formKey, nodeForm.formJson));
+            applyNodeFormReference(formInfo, nodeForm, Map.of());
         } else if (flowModel != null) {
             applyModelFormConfiguration(formInfo, flowModel);
         } else if (!isBlank(formInfo.getFormJson()) || !isBlank(formInfo.getFormKey())) {
@@ -1856,21 +1858,44 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             Map<String, Object> formRef = readBusinessGlobalFormRef(flowModel.getFormJson());
             formInfo.setFormType(FORM_TYPE_BUSINESS);
             formInfo.setFormKey(firstNonBlank(textValue(formRef.get("formKey")), flowModel.getFormId()));
+            formInfo.setFormMode(firstNonBlank(
+                    textValue(formRef.get("formMode")),
+                    textValue(formRef.get("type"))));
+            formInfo.setFormName(textValue(formRef.get("formName")));
+            formInfo.setProviderKey(textValue(formRef.get("providerKey")));
             formInfo.setFormUrl(textValue(formRef.get("formUrl")));
+            formInfo.setViewKey(firstNonBlank(textValue(formRef.get("viewKey")), "default"));
+            formInfo.setFormRef(new LinkedHashMap<>(formRef));
             formInfo.setFormTarget("modal");
             formInfo.setFormJson(flowModel.getFormJson());
         }
     }
 
     private void applyBusinessNodeFormConfiguration(TaskFormInfo formInfo, FlowModel flowModel,
-                                                    String nodeFormKey, String nodeFormUrl) {
+                                                    NodeFormConfig nodeForm) {
         formInfo.setFormType(FORM_TYPE_BUSINESS);
         Map<String, Object> formRef = flowModel == null ? Map.of() : readBusinessGlobalFormRef(flowModel.getFormJson());
+        Map<String, Object> mergedFormRef = mergeFormRef(formRef, nodeForm.formRef);
         formInfo.setFormKey(firstNonBlank(
-                nodeFormKey,
-                textValue(formRef.get("formKey")),
+                nodeForm.formKey,
+                textValue(mergedFormRef.get("formKey")),
                 flowModel == null ? null : flowModel.getFormId()));
-        formInfo.setFormUrl(firstNonBlank(nodeFormUrl, textValue(formRef.get("formUrl"))));
+        formInfo.setFormMode(firstNonBlank(
+                nodeForm.formMode,
+                textValue(mergedFormRef.get("formMode")),
+                textValue(mergedFormRef.get("type"))));
+        formInfo.setFormName(firstNonBlank(nodeForm.formName, textValue(mergedFormRef.get("formName"))));
+        formInfo.setProviderKey(firstNonBlank(nodeForm.providerKey, textValue(mergedFormRef.get("providerKey"))));
+        formInfo.setFormUrl(firstNonBlank(nodeForm.formUrl, textValue(mergedFormRef.get("formUrl"))));
+        formInfo.setViewKey(firstNonBlank(nodeForm.viewKey, textValue(mergedFormRef.get("viewKey")), "default"));
+        putIfPresent(mergedFormRef, "formKey", formInfo.getFormKey());
+        putIfPresent(mergedFormRef, "formMode", formInfo.getFormMode());
+        putIfPresent(mergedFormRef, "type", formInfo.getFormMode());
+        putIfPresent(mergedFormRef, "formName", formInfo.getFormName());
+        putIfPresent(mergedFormRef, "providerKey", formInfo.getProviderKey());
+        putIfPresent(mergedFormRef, "formUrl", formInfo.getFormUrl());
+        putIfPresent(mergedFormRef, "viewKey", formInfo.getViewKey());
+        formInfo.setFormRef(mergedFormRef);
         formInfo.setFormTarget("modal");
         formInfo.setFormJson(flowModel == null ? null : flowModel.getFormJson());
     }
@@ -1883,9 +1908,7 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         if (flowModel == null || !FORM_TYPE_BUSINESS.equalsIgnoreCase(flowModel.getFormType())) {
             return false;
         }
-        Map<String, Object> formRef = readBusinessGlobalFormRef(flowModel.getFormJson());
-        String modelFormKey = firstNonBlank(textValue(formRef.get("formKey")), flowModel.getFormId());
-        return isBlank(formKey) || isBlank(modelFormKey) || Objects.equals(formKey, modelFormKey);
+        return true;
     }
 
     private String normalizeFormMode(String value) {
@@ -1911,6 +1934,46 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
             log.warn("解析流程全局业务表单引用失败: {}", e.getMessage());
             return Map.of();
         }
+    }
+
+    private void applyNodeFormReference(TaskFormInfo formInfo, NodeFormConfig nodeForm, Map<String, Object> fallbackRef) {
+        Map<String, Object> mergedFormRef = mergeFormRef(fallbackRef, nodeForm.formRef);
+        formInfo.setFormMode(firstNonBlank(nodeForm.formMode, textValue(mergedFormRef.get("formMode")), textValue(mergedFormRef.get("type"))));
+        formInfo.setFormName(firstNonBlank(nodeForm.formName, textValue(mergedFormRef.get("formName"))));
+        formInfo.setProviderKey(firstNonBlank(nodeForm.providerKey, textValue(mergedFormRef.get("providerKey"))));
+        formInfo.setViewKey(firstNonBlank(nodeForm.viewKey, textValue(mergedFormRef.get("viewKey")), "default"));
+        if (!mergedFormRef.isEmpty()) {
+            putIfPresent(mergedFormRef, "formKey", formInfo.getFormKey());
+            putIfPresent(mergedFormRef, "formMode", formInfo.getFormMode());
+            putIfPresent(mergedFormRef, "type", formInfo.getFormMode());
+            putIfPresent(mergedFormRef, "formName", formInfo.getFormName());
+            putIfPresent(mergedFormRef, "providerKey", formInfo.getProviderKey());
+            putIfPresent(mergedFormRef, "formUrl", formInfo.getFormUrl());
+            putIfPresent(mergedFormRef, "viewKey", formInfo.getViewKey());
+            formInfo.setFormRef(mergedFormRef);
+        }
+    }
+
+    private Map<String, Object> mergeFormRef(Map<String, Object> base, Map<String, Object> overrides) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (base != null) {
+            merged.putAll(base);
+        }
+        if (overrides != null) {
+            overrides.forEach((key, value) -> {
+                if (value != null && !isBlank(String.valueOf(value))) {
+                    merged.put(key, value);
+                }
+            });
+        }
+        return merged;
+    }
+
+    private void putIfPresent(Map<String, Object> target, String key, Object value) {
+        if (target == null || value == null || isBlank(String.valueOf(value))) {
+            return;
+        }
+        target.put(key, value);
     }
 
     private String textValue(Object value) {
@@ -1960,10 +2023,14 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         config.formUrl = flowNode.getAttributeValue(FLOWABLE_NS, "formUrl");
         config.formJson = flowNode.getAttributeValue(FLOWABLE_NS, "formJson");
         config.formTarget = flowNode.getAttributeValue(FLOWABLE_NS, "formTarget");
+        config.formName = flowNode.getAttributeValue(FLOWABLE_NS, "formName");
+        config.providerKey = flowNode.getAttributeValue(FLOWABLE_NS, "providerKey");
+        config.viewKey = flowNode.getAttributeValue(FLOWABLE_NS, "viewKey");
         config.formMode = firstNonBlank(
                 flowNode.getAttributeValue(FLOWABLE_NS, "formMode"),
                 flowNode.getAttributeValue(FLOWABLE_NS, "formType"),
                 flowNode.getAttributeValue(FLOWABLE_NS, "type"));
+        config.formRef = readBusinessGlobalFormRef(flowNode.getAttributeValue(FLOWABLE_NS, "formRef"));
         config.formFieldPermissions = flowNode.getAttributeValue(FLOWABLE_NS, "formFieldPermissions");
 
         Map<String, List<ExtensionElement>> extensions = flowNode.getExtensionElements();
@@ -1982,6 +2049,18 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         if (isBlank(config.formTarget) && formTargetElements != null && !formTargetElements.isEmpty()) {
             config.formTarget = formTargetElements.get(0).getElementText();
         }
+        List<ExtensionElement> formNameElements = extensions.get("formName");
+        if (isBlank(config.formName) && formNameElements != null && !formNameElements.isEmpty()) {
+            config.formName = formNameElements.get(0).getElementText();
+        }
+        List<ExtensionElement> providerKeyElements = extensions.get("providerKey");
+        if (isBlank(config.providerKey) && providerKeyElements != null && !providerKeyElements.isEmpty()) {
+            config.providerKey = providerKeyElements.get(0).getElementText();
+        }
+        List<ExtensionElement> viewKeyElements = extensions.get("viewKey");
+        if (isBlank(config.viewKey) && viewKeyElements != null && !viewKeyElements.isEmpty()) {
+            config.viewKey = viewKeyElements.get(0).getElementText();
+        }
         List<ExtensionElement> formModeElements = extensions.get("formMode");
         if (isBlank(config.formMode) && formModeElements != null && !formModeElements.isEmpty()) {
             config.formMode = formModeElements.get(0).getElementText();
@@ -1989,6 +2068,10 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         List<ExtensionElement> formTypeElements = extensions.get("formType");
         if (isBlank(config.formMode) && formTypeElements != null && !formTypeElements.isEmpty()) {
             config.formMode = formTypeElements.get(0).getElementText();
+        }
+        List<ExtensionElement> formRefElements = extensions.get("formRef");
+        if ((config.formRef == null || config.formRef.isEmpty()) && formRefElements != null && !formRefElements.isEmpty()) {
+            config.formRef = readBusinessGlobalFormRef(formRefElements.get(0).getElementText());
         }
         List<ExtensionElement> formFieldPermissionElements = extensions.get("formFieldPermissions");
         if (isBlank(config.formFieldPermissions) && formFieldPermissionElements != null
@@ -2170,6 +2253,10 @@ public class FlowTaskServiceImpl extends ServiceImpl<FlowTaskMapper, FlowTask> i
         private String formUrl;
         private String formTarget;
         private String formMode;
+        private String formName;
+        private String providerKey;
+        private String viewKey;
+        private Map<String, Object> formRef = Map.of();
         private String formFieldPermissions;
 
         private boolean hasForm() {
