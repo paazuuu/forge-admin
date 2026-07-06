@@ -30,19 +30,19 @@ export const defaultThemeConfig = {
 
   // 顶部菜单配置
   topMenu: {
-    textColor: '#FFFFFF',
+    textColor: 'rgba(255, 255, 255, 0.75)',
     textColorHover: '#FFFFFF',
     textColorActive: '#FFFFFF',
     textColorActiveHover: '#FFFFFF',
-    textColorActiveHorizontal: '#333333',
+    textColorActiveHorizontal: '#FFFFFF',
     backgroundColor: 'transparent',
-    backgroundColorHover: 'rgba(255, 255, 255, 0.1)',
-    backgroundColorActive: '#ffffff',
-    backgroundColorActiveHover: 'rgba(255, 255, 255, 0.15)',
+    backgroundColorHover: 'transparent',
+    backgroundColorActive: 'transparent',
+    backgroundColorActiveHover: 'transparent',
     fontSize: 'var(--font-size-base)',
     fontWeight: '500',
-    iconColor: '#ffffff',
-    iconActiveColor: '#333333',
+    iconColor: 'rgba(255, 255, 255, 0.75)',
+    iconActiveColor: '#FFFFFF',
   },
 
   // 暗色模式顶部菜单配置
@@ -53,7 +53,7 @@ export const defaultThemeConfig = {
     textColorActiveHover: '#6fa3ff',
     textColorActiveHorizontal: '#5388ff',
     backgroundColor: 'transparent',
-    backgroundColorHover: '#2d2d30',
+    backgroundColorHover: 'transparent',
     backgroundColorActive: '#1e3a5f',
     backgroundColorActiveHover: '#2a4a70',
     fontSize: 'var(--font-size-base)',
@@ -68,8 +68,10 @@ export const defaultThemeConfig = {
     textColor: '#333333',
     textColorHover: '#316cfa',
     textColorActive: '#316cfa',
+    parentTextColorActive: '#1d4ed8',
     backgroundColorHover: '#f5f5f5',
     backgroundColorActive: '#f6eded',
+    parentBackgroundColorActive: '#eef4ff',
     borderColor: '#e5e7eb',
     fontSize: 'var(--font-size-base)',
     fontWeight: '400',
@@ -85,8 +87,10 @@ export const defaultThemeConfig = {
     textColor: '#e5e7eb',
     textColorHover: '#5388ff',
     textColorActive: '#5388ff',
+    parentTextColorActive: '#93c5fd',
     backgroundColorHover: '#2d2d30',
     backgroundColorActive: '#1e3a5f',
+    parentBackgroundColorActive: '#1e293b',
     borderColor: '#2d2d30',
     fontSize: 'var(--font-size-base)',
     fontWeight: '400',
@@ -207,8 +211,10 @@ export function applyThemeConfig(config, isDark = false) {
     root.style.setProperty('--side-menu-text-color', sideMenuConfig.textColor)
     root.style.setProperty('--side-menu-text-color-hover', sideMenuConfig.textColorHover)
     root.style.setProperty('--side-menu-text-color-active', sideMenuConfig.textColorActive)
+    root.style.setProperty('--side-menu-parent-text-color-active', sideMenuConfig.parentTextColorActive || sideMenuConfig.textColorActive)
     root.style.setProperty('--side-menu-bg-color-hover', sideMenuConfig.backgroundColorHover)
     root.style.setProperty('--side-menu-bg-color-active', sideMenuConfig.backgroundColorActive)
+    root.style.setProperty('--side-menu-parent-bg-color-active', sideMenuConfig.parentBackgroundColorActive || 'transparent')
     root.style.setProperty('--side-menu-border-color', sideMenuConfig.borderColor)
     root.style.setProperty('--side-menu-font-size', sideMenuConfig.fontSize)
     root.style.setProperty('--side-menu-font-weight', sideMenuConfig.fontWeight)

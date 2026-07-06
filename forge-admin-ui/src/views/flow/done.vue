@@ -664,11 +664,14 @@ onMounted(() => {
 .flow-page {
   box-sizing: border-box;
   width: 100%;
-  padding: 10px 14px 14px;
   height: 100%;
+  min-height: 0;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
+  overflow: hidden;
+  background: var(--bg-secondary);
 }
 .page-header {
   background: #fff;

@@ -3,6 +3,7 @@
     trigger="click"
     :options="dropdownOptions"
     :disabled="dropdownOptions.length === 0"
+    :render-label="renderDropdownLabel"
     @select="handleSelect"
   >
     <div class="tenant-switcher" :class="{ 'is-single': switchableTenantCount <= 1 }">
@@ -45,6 +46,9 @@ const switchableTenantCount = computed(() => displayTenantOptions.value.length)
 const dropdownOptions = computed(() => displayTenantOptions.value.map(item => ({
   label: item.tenantName || `租户 ${item.tenantId}`,
   key: `tenant:${item.tenantId}`,
+  tenantId: item.tenantId,
+  tenantName: item.tenantName || `租户 ${item.tenantId}`,
+  current: item.tenantId === currentTenantId.value,
   disabled: switchingTenant.value || item.tenantId === currentTenantId.value,
   icon: () => h('i', {
     class: item.tenantId === currentTenantId.value
@@ -52,6 +56,34 @@ const dropdownOptions = computed(() => displayTenantOptions.value.map(item => ({
       : 'i-material-symbols:corporate-fare-rounded text-14',
   }),
 })))
+
+function renderDropdownLabel(option) {
+  return h('div', {
+    style: {
+      minWidth: '168px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+      padding: '2px 0',
+    },
+  }, [
+    h('span', {
+      style: {
+        color: option.current ? 'var(--primary-color)' : 'var(--text-primary)',
+        fontSize: '13px',
+        fontWeight: option.current ? 700 : 600,
+        lineHeight: 1.25,
+      },
+    }, option.tenantName || option.label),
+    h('span', {
+      style: {
+        color: 'var(--text-tertiary)',
+        fontSize: '12px',
+        lineHeight: 1.2,
+      },
+    }, option.current ? '当前租户' : '可切换租户'),
+  ])
+}
 
 async function loadTenantOptions() {
   if (!userStore.userInfo)
@@ -105,19 +137,23 @@ watch(() => userStore.userInfo?.tenantId, () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: var(--top-menu-text-color, var(--layout-header-text-color));
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
   margin-right: 8px;
 }
 
 .tenant-switcher:hover {
-  border-color: var(--border-default);
-  color: var(--text-primary);
+  border-color: color-mix(in srgb, currentColor 34%, transparent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: var(--top-menu-text-color-hover, var(--top-menu-text-color, var(--layout-header-text-color)));
 }
 
 .tenant-switcher.is-single {
@@ -128,6 +164,7 @@ watch(() => userStore.userInfo?.tenantId, () => {
 .tenant-arrow {
   flex-shrink: 0;
   font-size: 16px;
+  color: inherit;
 }
 
 .tenant-name {
@@ -136,5 +173,6 @@ watch(() => userStore.userInfo?.tenantId, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+  font-weight: 600;
 }
 </style>

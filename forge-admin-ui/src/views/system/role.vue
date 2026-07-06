@@ -317,18 +317,18 @@
         <div class="users-toolbar">
           <n-space justify="space-between">
             <div class="user-count-info">
-              <NTag type="info" size="small">
+              <NTag class="toolbar-count-tag" size="small" :bordered="false">
                 共 {{ userPagination.itemCount }} 个用户
               </NTag>
             </div>
             <n-space size="small">
-              <n-button size="small" type="primary" @click="handleAddUser">
+              <n-button class="toolbar-primary-btn" size="small" type="primary" @click="handleAddUser">
                 <template #icon>
                   <i class="i-material-symbols:person-add" />
                 </template>
                 添加用户
               </n-button>
-              <n-button size="small" @click="loadRoleUsers">
+              <n-button class="toolbar-ghost-btn" size="small" @click="loadRoleUsers">
                 <template #icon>
                   <i class="i-material-symbols:refresh" />
                 </template>
@@ -1445,28 +1445,51 @@ onMounted(() => {
 }
 
 .users-toolbar {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  padding: 10px 14px;
+  background: var(--bg-secondary, #f7f8fa);
+  border: 1px solid var(--border-light, #e5e7eb);
   border-radius: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(79, 172, 254, 0.15);
 }
 
-.users-toolbar :deep(.n-button) {
-  color: white;
-  border-color: rgba(255, 255, 255, 0.3);
+.toolbar-count-tag {
+  --n-color: color-mix(in srgb, var(--primary-color, #165dff) 9%, var(--bg-primary, #fff)) !important;
+  --n-text-color: var(--primary-color, #165dff) !important;
+  --n-border: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 16%, var(--border-light, #e5e7eb)) !important;
+
+  color: var(--primary-color, #165dff);
+  background: color-mix(in srgb, var(--primary-color, #165dff) 9%, var(--bg-primary, #fff));
+  border: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 16%, var(--border-light, #e5e7eb));
 }
 
-.users-toolbar :deep(.n-button:hover) {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
+.toolbar-primary-btn {
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary-color, #165dff) 16%, transparent);
 }
 
-.users-toolbar :deep(.n-tag) {
-  color: white;
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+.toolbar-ghost-btn {
+  --n-color: var(--bg-primary, #fff) !important;
+  --n-color-hover: color-mix(in srgb, var(--primary-color, #165dff) 7%, var(--bg-primary, #fff)) !important;
+  --n-color-focus: color-mix(in srgb, var(--primary-color, #165dff) 7%, var(--bg-primary, #fff)) !important;
+  --n-color-pressed: color-mix(in srgb, var(--primary-color, #165dff) 10%, var(--bg-primary, #fff)) !important;
+  --n-text-color: var(--text-secondary, #4e5969) !important;
+  --n-text-color-hover: var(--primary-color, #165dff) !important;
+  --n-text-color-focus: var(--primary-color, #165dff) !important;
+  --n-text-color-pressed: var(--primary-color, #165dff) !important;
+  --n-border: 1px solid var(--border-light, #e5e7eb) !important;
+  --n-border-hover: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb)) !important;
+  --n-border-focus: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb)) !important;
+  --n-border-pressed: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 36%, var(--border-light, #e5e7eb)) !important;
+
+  color: var(--text-secondary, #4e5969);
+  background: var(--bg-primary, #fff);
+  border-color: var(--border-light, #e5e7eb);
+}
+
+.toolbar-ghost-btn:hover {
+  color: var(--primary-color, #165dff);
+  background: color-mix(in srgb, var(--primary-color, #165dff) 7%, var(--bg-primary, #fff));
+  border-color: color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb));
 }
 
 .user-count-info {
@@ -1562,7 +1585,18 @@ onMounted(() => {
 }
 
 .dark .users-toolbar {
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  background: var(--bg-secondary, #1e293b);
+  border-color: var(--border-light, #334155);
+}
+
+.dark .toolbar-count-tag {
+  background: color-mix(in srgb, var(--primary-color, #4080ff) 16%, var(--bg-primary, #0f172a));
+  border-color: color-mix(in srgb, var(--primary-color, #4080ff) 24%, var(--border-light, #334155));
+}
+
+.dark .toolbar-ghost-btn {
+  background: var(--bg-primary, #0f172a);
+  border-color: var(--border-light, #334155);
 }
 
 .dark .users-table-container {

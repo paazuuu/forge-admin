@@ -6,7 +6,6 @@
     <!-- 顶部一级菜单 -->
     <header
       class="layout-header top-layout-header h-60 flex flex-shrink-0 items-center px-20"
-      border-b="1px solid light_border dark:dark_border"
     >
       <TheLogo class="brand-logo mr-20" />
       <TheTitle class="brand-title" />
@@ -32,7 +31,7 @@
       <AppCard :bordered="false" :padding="false" class="px-10 py-0" shadow="none" radius="none">
         <AppTab class="w-0 flex-1" />
       </AppCard>
-      <div class="flex-1 overflow-auto bg-[#f2f3f5] p-12" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
+      <div class="layout-page-content flex-1 bg-[#f2f3f5] p-12" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -68,7 +67,27 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
   min-width: 0;
 }
 
+.header-search {
+  margin-right: 8px !important;
+  margin-left: 8px !important;
+}
+
+.header-actions-inner {
+  color: var(--top-menu-text-color, var(--layout-header-text-color));
+}
+
+.header-actions :deep(.message-notification-wrapper) {
+  color: var(--top-menu-text-color, var(--layout-header-text-color));
+}
+
+.layout-page-content {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .flow-task-layout-content {
+  overflow: hidden;
   padding: 0 !important;
 }
 

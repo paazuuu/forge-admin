@@ -42,25 +42,21 @@ defineProps({
 .ai-form-section-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  margin: 6px 0 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(22, 93, 255, 0.12);
-  border-radius: 6px;
-  background:
-    linear-gradient(135deg, rgba(22, 93, 255, 0.08), rgba(22, 93, 255, 0.02) 46%, rgba(255, 255, 255, 0)),
-    var(--bg-secondary, #f7f8fa);
+  margin: 8px 0 10px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
 }
 
 .ai-form-section-title__rail {
-  width: 4px;
-  height: 28px;
-  flex: 0 0 4px;
+  width: 3px;
+  height: 16px;
+  flex: 0 0 3px;
   border-radius: 2px;
-  background: linear-gradient(180deg, #6aa1ff 0%, #67e8f9 100%);
-  box-shadow: 0 0 0 3px rgba(64, 128, 255, 0.06);
+  background: var(--primary-color, #2563eb);
 }
 
 .ai-form-section-title__content {
@@ -77,9 +73,9 @@ defineProps({
 
 .ai-form-section-title__text {
   overflow: hidden;
-  color: var(--text-primary, #1d2129);
+  color: var(--text-primary, #111827);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -89,10 +85,10 @@ defineProps({
   flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(22, 93, 255, 0.1);
-  color: #165dff;
+  background: var(--bg-secondary, #f6f8fb);
+  color: var(--text-tertiary, #9ca3af);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 18px;
 }
 
@@ -107,19 +103,16 @@ defineProps({
   height: 1px;
   min-width: 24px;
   flex: 1 1 auto;
-  background: linear-gradient(90deg, rgba(22, 93, 255, 0.18), rgba(22, 93, 255, 0));
+  background: var(--border-light, #e5e7eb);
 }
 
 :global(.dark) .ai-form-section-title {
-  border-color: rgba(64, 128, 255, 0.22);
-  background:
-    linear-gradient(135deg, rgba(64, 128, 255, 0.16), rgba(20, 184, 166, 0.06) 46%, rgba(15, 23, 42, 0)),
-    var(--bg-secondary, #1e293b);
+  background: transparent;
 }
 
 :global(.dark) .ai-form-section-title__badge {
-  background: rgba(64, 128, 255, 0.16);
-  color: #94bfff;
+  background: #162033;
+  color: #94a3b8;
 }
 
 @media (max-width: 640px) {

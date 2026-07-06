@@ -1,176 +1,411 @@
 <template>
-  <n-menu
-    ref="menu"
-    class="modern-side-menu"
-    accordion
-    :indent="18"
-    :collapsed-icon-size="22"
-    :collapsed-width="64"
-    :collapsed="appStore.collapsed"
-    :options="processedMenus"
-    :value="activeKey"
-    @update:value="handleMenuSelect"
-  />
+  <nav
+    class="forge-side-menu"
+    :class="{ 'forge-side-menu--collapsed': appStore.collapsed }"
+    aria-label="主导航"
+  >
+    <div class="forge-side-menu__scroll">
+      <template v-for="item in menuOptions" :key="item.key">
+        <SideMenuNode
+          :item="item"
+          :level="0"
+          :active-key="currentActiveKey"
+          :expanded-keys="expandedKeys"
+          :collapsed="appStore.collapsed"
+          @select="handleSelect"
+        />
+      </template>
+    </div>
+  </nav>
 </template>
 
 <script setup>
+import { computed, ref, watch } from 'vue'
 import { useMenu } from '@/composables'
 import { useAppStore } from '@/store'
+import SideMenuNode from './SideMenuNode.vue'
+
+const props = defineProps({
+  options: {
+    type: Array,
+    default: undefined,
+  },
+  activeKeyOverride: {
+    type: [String, Number],
+    default: '',
+  },
+})
 
 const appStore = useAppStore()
 
 const { processedMenus, activeKey, handleMenuSelect } = useMenu()
+const expandedKeys = ref([])
+const menuOptions = computed(() => Array.isArray(props.options) ? props.options : processedMenus.value)
+const currentActiveKey = computed(() => props.activeKeyOverride || activeKey.value)
 
-const menu = ref(null)
-const route = useRoute()
-watch(route, async () => {
-  await nextTick()
-  menu.value?.showOption()
-})
+function normalizeKey(key) {
+  return key === undefined || key === null ? '' : String(key)
+}
+
+function hasChildren(item) {
+  return Array.isArray(item?.children) && item.children.length > 0
+}
+
+function findAncestorKeys(items, targetKey, ancestors = []) {
+  for (const item of items || []) {
+    const itemKey = normalizeKey(item.key)
+    if (itemKey === targetKey)
+      return ancestors
+    if (hasChildren(item)) {
+      const found = findAncestorKeys(item.children, targetKey, [...ancestors, itemKey])
+      if (found)
+        return found
+    }
+  }
+  return null
+}
+
+watch(
+  [menuOptions, currentActiveKey],
+  ([menus, key]) => {
+    const ancestors = findAncestorKeys(menus, normalizeKey(key)) || []
+    const merged = new Set([...expandedKeys.value, ...ancestors])
+    expandedKeys.value = Array.from(merged)
+  },
+  { immediate: true },
+)
+
+function toggleExpanded(key) {
+  const normalizedKey = normalizeKey(key)
+  if (!normalizedKey)
+    return
+  if (expandedKeys.value.includes(normalizedKey)) {
+    expandedKeys.value = expandedKeys.value.filter(item => item !== normalizedKey)
+    return
+  }
+  expandedKeys.value = [...expandedKeys.value, normalizedKey]
+}
+
+function handleSelect(item) {
+  if (hasChildren(item)) {
+    if (appStore.collapsed) {
+      handleMenuSelect(item.key, item.path)
+      return
+    }
+    toggleExpanded(item.key)
+    return
+  }
+  handleMenuSelect(item.key, item.path)
+}
 </script>
 
 <style>
-.modern-side-menu {
-  padding: 6px 0;
+.forge-side-menu {
+  height: 100%;
+  padding: 8px 0;
   background: transparent;
+  color: var(--side-menu-text-color);
 }
 
-/* 菜单项 - SnowAdmin 风格 */
-.modern-side-menu .n-menu-item-content {
-  margin: 1px 6px;
-  border-radius: var(--radius-md);
+.forge-side-menu__scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 8px 10px;
+}
+
+.forge-side-menu-node + .forge-side-menu-node {
+  margin-top: 2px;
+}
+
+.forge-side-menu-item {
+  width: 100%;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  padding: 0 10px 0 calc(12px + var(--menu-level) * 20px);
+  border: 0;
+  border-radius: 8px;
+  color: var(--side-menu-text-color);
+  background: transparent;
+  font-size: calc(var(--side-menu-font-size, 14px) * var(--font-scale, 1));
+  font-weight: var(--side-menu-font-weight, 400);
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transform: translateX(0);
   transition:
     background-color var(--transition-fast),
-    color var(--transition-fast);
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--text-secondary);
-  min-height: 38px;
-  padding: 0 12px !important;
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
-.modern-side-menu .n-menu-item-content:hover {
-  color: var(--primary-500);
-  background: var(--primary-50);
-}
-
-/* 选中状态 */
-.modern-side-menu .n-menu-item-content--selected {
-  background: var(--primary-50) !important;
-  color: var(--primary-500) !important;
-  font-weight: 500;
-}
-
-.modern-side-menu .n-menu-item-content--selected:hover {
-  background: var(--primary-50) !important;
-  color: var(--primary-500) !important;
-}
-
-/* 选中项左侧指示条 */
-.modern-side-menu .n-menu-item-content--selected::after {
+.forge-side-menu-item::after {
   content: '';
   position: absolute;
-  left: 0;
-  top: 20%;
-  height: 60%;
-  width: 3px;
-  background: var(--primary-500);
-  border-radius: 0 2px 2px 0;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0.6);
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
+  transform-origin: left center;
 }
 
-/* 图标 */
-.modern-side-menu .n-menu-item-content__icon {
-  font-size: 16px;
-  margin-right: 8px !important;
-  color: var(--text-tertiary);
-  opacity: 0.8;
+.forge-side-menu-item:hover {
+  color: var(--side-menu-text-color-hover);
+  background: var(--side-menu-bg-color-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side-menu-text-color-hover) 12%, transparent);
+  transform: translateX(3px);
 }
 
-.modern-side-menu .n-menu-item-content:hover .n-menu-item-content__icon {
-  color: var(--primary-500);
-  opacity: 1;
+.forge-side-menu-item:hover::after {
+  opacity: 0.045;
+  transform: scaleX(1);
 }
 
-.modern-side-menu .n-menu-item-content--selected .n-menu-item-content__icon {
-  color: var(--primary-500) !important;
-  opacity: 1;
+.forge-side-menu-item:active {
+  transform: translateX(1px) scale(0.985);
 }
 
-/* 菜单文字 */
-.modern-side-menu .n-menu-item-content__label {
-  font-size: 13px;
-  line-height: 1.4;
+.forge-side-menu-item:active::after {
+  opacity: 0.09;
 }
 
-.modern-side-menu .n-menu-item-content--selected .n-menu-item-content__label {
-  color: var(--primary-500) !important;
-}
-
-.modern-side-menu .n-menu-item-content:hover .n-menu-item-content__label {
-  color: var(--primary-500) !important;
-}
-
-/* 子菜单缩进 */
-.modern-side-menu .n-submenu-children {
-  padding-left: 0;
-}
-
-.modern-side-menu .n-submenu-children .n-menu-item-content {
-  font-size: 13px;
-}
-
-/* 分组标题 */
-.modern-side-menu .n-menu-item-group-title {
-  padding: 14px 16px 4px !important;
-  font-size: 11px !important;
+.forge-side-menu-node.is-active > .forge-side-menu-item {
+  color: var(--side-menu-text-color-active);
+  background: var(--side-menu-bg-color-active);
   font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side-menu-text-color-active) 10%, transparent);
+  transform: none;
 }
 
-/* 折叠状态 */
-.modern-side-menu.n-menu--collapsed .n-menu-item-content {
+.forge-side-menu-node.is-active > .forge-side-menu-item:hover {
+  color: var(--side-menu-text-color-active);
+  background: var(--side-menu-bg-color-active);
+}
+
+.forge-side-menu-node.is-child-active:not(.is-active) > .forge-side-menu-item:not(:hover) {
+  color: var(--side-menu-parent-text-color-active);
+  background: var(--side-menu-parent-bg-color-active);
+  font-weight: 600;
+}
+
+.forge-side-menu-node.is-active > .forge-side-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--side-menu-text-color-active);
+  transform: translateY(-50%);
+}
+
+.forge-side-menu-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 0 !important;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 22px;
+  color: var(--side-menu-icon-color);
+  font-size: 18px;
+  transform: scale(1);
+  transition:
+    color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.forge-side-menu-item:hover .forge-side-menu-icon,
+.forge-side-menu-node.is-child-active > .forge-side-menu-item .forge-side-menu-icon {
+  color: var(--side-menu-text-color-hover);
+}
+
+.forge-side-menu-item:hover .forge-side-menu-icon {
+  transform: scale(1.12);
+}
+
+.forge-side-menu-node.is-child-active:not(.is-active) > .forge-side-menu-item:not(:hover) .forge-side-menu-icon {
+  color: var(--side-menu-parent-text-color-active);
+}
+
+.forge-side-menu-node.is-child-active:not(.is-active) > .forge-side-menu-item:not(:hover) .forge-side-menu-arrow {
+  color: var(--side-menu-parent-text-color-active);
+  opacity: 1;
+}
+
+.forge-side-menu-node.is-active > .forge-side-menu-item .forge-side-menu-icon {
+  color: var(--side-menu-icon-color-active);
+  transform: scale(1.08);
+}
+
+.forge-side-menu-icon .icon-renderer,
+.forge-side-menu-icon .xicon,
+.forge-side-menu-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.forge-side-menu-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forge-side-menu-arrow {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 22px;
+  font-size: 18px;
+  color: inherit;
+  opacity: 0.72;
+  transition:
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.forge-side-menu-node.is-expanded > .forge-side-menu-item .forge-side-menu-arrow {
+  opacity: 1;
+  transform: rotate(180deg);
+}
+
+.forge-side-menu-children {
+  margin: 2px 0 4px;
+}
+
+.forge-side-menu--collapsed .forge-side-menu__scroll {
+  padding: 0 8px 10px;
+}
+
+.forge-side-menu--collapsed .forge-side-menu-item {
+  width: 40px;
+  height: 40px;
+  justify-content: center;
   margin: 2px auto;
-  border-radius: var(--radius-md);
+  padding: 0;
 }
 
-/* 折叠状态下强制图标居中 - 隐藏文字和箭头占位区域 */
-.modern-side-menu.n-menu--collapsed .n-menu-item-content__icon {
-  margin-right: 0 !important;
+.forge-side-menu--collapsed .forge-side-menu-item:hover,
+.forge-side-menu--collapsed .forge-side-menu-node.is-active > .forge-side-menu-item {
+  transform: scale(1.04);
 }
 
-.modern-side-menu.n-menu--collapsed .n-menu-item-content-header {
-  display: none !important;
+.forge-side-menu--collapsed .forge-side-menu-item:active {
+  transform: scale(0.96);
 }
 
-.modern-side-menu.n-menu--collapsed .n-menu-item-content__arrow {
-  display: none !important;
-}
-
-.modern-side-menu.n-menu--collapsed .n-menu-item-content--selected::after {
+.forge-side-menu--collapsed .forge-side-menu-label,
+.forge-side-menu--collapsed .forge-side-menu-arrow,
+.forge-side-menu--collapsed .forge-side-menu-node.is-active > .forge-side-menu-item::before {
   display: none;
 }
 
-/* 滚动条 */
-.modern-side-menu::-webkit-scrollbar {
+.forge-side-menu__scroll::-webkit-scrollbar {
   width: 4px;
 }
 
-.modern-side-menu::-webkit-scrollbar-track {
+.forge-side-menu__scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.modern-side-menu::-webkit-scrollbar-thumb {
+.forge-side-menu__scroll::-webkit-scrollbar-thumb {
   background: var(--border-light);
   border-radius: var(--radius-full);
 }
 
-.modern-side-menu::-webkit-scrollbar-thumb:hover {
+.forge-side-menu__scroll::-webkit-scrollbar-thumb:hover {
   background: var(--border-default);
+}
+
+.forge-side-menu-flyout {
+  min-width: 190px;
+  max-width: 280px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--side-menu-bg-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.forge-side-menu-popover-content,
+.n-popover__content.forge-side-menu-popover-content {
+  padding: 0 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: var(--side-menu-bg-color) !important;
+}
+
+.forge-side-menu-flyout-title {
+  padding: 4px 8px 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.forge-side-menu-flyout-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--side-menu-text-color);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.forge-side-menu-flyout-item:hover {
+  color: var(--side-menu-text-color-hover);
+  background: var(--side-menu-bg-color-hover);
+}
+
+.forge-side-menu-flyout-item.is-active {
+  color: var(--side-menu-text-color-active);
+  background: var(--side-menu-bg-color-active);
+  font-weight: 600;
+}
+
+.forge-side-menu-flyout-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  color: inherit;
+}
+
+.forge-side-menu-flyout-icon .icon-renderer,
+.forge-side-menu-flyout-icon .xicon,
+.forge-side-menu-flyout-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.forge-side-menu-flyout-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

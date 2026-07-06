@@ -9,12 +9,7 @@
     }"
   >
     <div class="loading-container">
-      <div class="spinner">
-        <div class="spinner-ring" />
-        <div class="spinner-ring" />
-        <div class="spinner-ring" />
-        <div class="spinner-ring" />
-      </div>
+      <div class="loading-loader" aria-hidden="true" />
       <div v-if="text" class="loading-text">
         {{ text }}
       </div>
@@ -94,69 +89,42 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 18px;
   padding: 24px;
 }
 
 .loading-text {
-  margin-top: 16px;
   font-size: var(--font-size-base);
   font-weight: 500;
   color: v-bind(color);
 }
 
-.spinner {
-  position: relative;
-  width: 50px;
-  height: 50px;
-  animation: rotate 2s linear infinite;
+.loading-loader {
+  --size: 1px;
+  --loader-color: var(--primary-color, var(--base-primary-color, #165dff));
+
+  width: calc(48 * var(--size));
+  height: calc(48 * var(--size));
+  background: var(--loader-color);
+  border-radius: 10%;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--loader-color) 34%, transparent);
+  animation: loading-loader-rotate 1s linear infinite;
 }
 
-.spinner-ring {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border: 4px solid transparent;
-  border-radius: 50%;
-}
-
-.spinner-ring:nth-child(1) {
-  border-top-color: var(--base-primary-color);
-  animation: spin 1.5s ease-in-out infinite;
-}
-
-.spinner-ring:nth-child(2) {
-  border-top-color: var(--base-primary-color);
-  animation: spin 1.5s ease-in-out infinite 0.1s;
-}
-
-.spinner-ring:nth-child(3) {
-  border-top-color: var(--base-primary-color);
-  animation: spin 1.5s ease-in-out infinite 0.2s;
-}
-
-.spinner-ring:nth-child(4) {
-  border-top-color: var(--base-primary-color);
-  animation: spin 1.5s ease-in-out infinite 0.3s;
-}
-
-@keyframes rotate {
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes spin {
+@keyframes loading-loader-rotate {
   0% {
-    transform: rotate(0deg);
-    opacity: 0.8;
+    transform: rotate(0deg) scale(0.2);
+    border-radius: 10%;
   }
+
   50% {
-    transform: rotate(180deg);
-    opacity: 0.2;
+    transform: rotate(180deg) scale(1.5);
+    border-radius: 50%;
   }
+
   100% {
-    transform: rotate(360deg);
-    opacity: 0.8;
+    transform: rotate(360deg) scale(0.2);
+    border-radius: 10%;
   }
 }
 
@@ -166,13 +134,11 @@ onUnmounted(() => {
     padding: 16px;
   }
 
-  .spinner {
-    width: 40px;
-    height: 40px;
+  .loading-loader {
+    --size: 0.84px;
   }
 
   .loading-text {
-    margin-top: 12px;
     font-size: var(--font-size-sm);
   }
 }

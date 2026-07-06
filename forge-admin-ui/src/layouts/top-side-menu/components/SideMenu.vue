@@ -1,29 +1,26 @@
 <template>
-  <n-menu
-    ref="menu"
+  <SharedSideMenu
     class="side-menu"
-    accordion
-    :indent="10"
-    :collapsed-icon-size="22"
-    :collapsed-width="64"
-    :collapsed="appStore.collapsed"
     :options="sideMenuOptions"
-    :value="activeKey"
-    @update:value="handleMenuSelect"
+    :active-key-override="activeKey"
   />
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { findTopMenuByPath, useMenu } from '@/composables'
+import { findTopMenuByPath } from '@/composables'
+import SharedSideMenu from '@/layouts/components/SideMenu.vue'
 import { useAppStore, usePermissionStore } from '@/store'
-import { processMenuData, processTopMenus } from '@/utils/menu-utils'
+import { findMenuIdByPath, processMenuData, processTopMenus } from '@/utils/menu-utils'
 
 const route = useRoute()
 const appStore = useAppStore()
 const permissionStore = usePermissionStore()
 
-const { activeKey: baseActiveKey, handleMenuSelect: baseHandleMenuSelect, findMenuIdByPath } = useMenu()
+function isDirectoryMenu(menu) {
+  return menu?.type === 'module' && Array.isArray(menu.children) && menu.children.length > 0
+}
 
 // Get side menu options based on selected top menu
 const sideMenuOptions = computed(() => {
@@ -64,7 +61,7 @@ const sideMenuOptions = computed(() => {
     appStore.setSelectedTopMenuId(activeTopMenu.id)
   }
 
-  if (activeTopMenu && activeTopMenu.children) {
+  if (isDirectoryMenu(activeTopMenu)) {
     return processMenuData(activeTopMenu.children)
   }
   return []
@@ -90,28 +87,4 @@ const activeKey = computed(() => {
 
   return menuId || route.path
 })
-
-const menu = ref(null)
-watch(route, async () => {
-  await nextTick()
-  menu.value?.showOption()
-})
-
-function handleMenuSelect(key) {
-  baseHandleMenuSelect(key)
-}
 </script>
-
-<style>
-.side-menu:not(.n-menu--collapsed) {
-  .n-menu-item-content {
-    &::before {
-      left: 8px;
-      right: 8px;
-    }
-    &.n-menu-item-content--selected::before {
-      border-left: 4px solid rgb(var(--primary-color));
-    }
-  }
-}
-</style>

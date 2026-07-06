@@ -7,13 +7,13 @@
  * @returns {object} 主题覆盖配置对象
  */
 export function getTopMenuThemeOverrides() {
-  const textColor = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color').trim() || '#333333'
-  const textColorHover = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color-hover').trim() || '#316cfa'
-  const textColorActive = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color-active').trim() || '#316cfa'
+  const textColor = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color').trim() || 'rgba(255, 255, 255, 0.75)'
+  const textColorHover = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color-hover').trim() || '#ffffff'
+  const textColorActive = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color-active').trim() || '#ffffff'
   const textColorActiveHover = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color-active-hover').trim() || textColorHover
   const textColorActiveHorizontal = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-text-color-active-horizontal').trim() || textColorActive
-  const bgColorHover = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-bg-color-hover').trim() || '#f5f5f5'
-  const bgColorActive = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-bg-color-active').trim() || '#e8f0fe'
+  const bgColorHover = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-bg-color-hover').trim() || 'transparent'
+  const bgColorActive = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-bg-color-active').trim() || 'transparent'
   const bgColorActiveHover = getComputedStyle(document.documentElement).getPropertyValue('--top-menu-bg-color-active-hover').trim() || bgColorHover
 
   return {

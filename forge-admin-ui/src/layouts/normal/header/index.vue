@@ -28,8 +28,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-light);
+  background: var(--layout-header-bg-color);
+  border-bottom: 1px solid var(--layout-header-border-color);
   padding: 0;
 }
 
@@ -70,8 +70,4 @@
 <script setup>
 import { ToggleTheme } from '@/components'
 import { AppTab, BeginnerGuide, Fullscreen, MenuCollapse, MenuSearch, MessageNotification, TenantSwitcher, UserAvatar } from '@/layouts/components'
-
-function handleLinkClick(link) {
-  window.open(link)
-}
 </script>

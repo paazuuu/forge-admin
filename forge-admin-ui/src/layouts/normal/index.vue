@@ -16,7 +16,7 @@
     <!-- 主内容区 -->
     <article class="main-content">
       <AppHeader class="header-glass" />
-      <div class="content-area cus-scroll">
+      <div class="content-area cus-scroll" :class="{ 'content-area-flush': isFlowTaskListPage }">
         <slot />
       </div>
     </article>
@@ -24,12 +24,17 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import DemoBanner from '@/components/DemoBanner.vue'
 import { useAppStore } from '@/store'
+import { isFlowTaskListPath } from '@/utils/flow-task-layout'
 import AppHeader from './header/index.vue'
 import SideBar from './sidebar/index.vue'
 
 const appStore = useAppStore()
+const route = useRoute()
+const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 </script>
 
 <style scoped>
@@ -45,18 +50,17 @@ const appStore = useAppStore()
 /* 侧边栏 - 无外边距直接展开 */
 .sidebar-wrapper {
   flex-shrink: 0;
-  width: 200px;
+  width: var(--side-menu-width);
   transition: width var(--transition-slow);
   position: relative;
   z-index: 100;
-  border-right: 1px solid var(--border-light);
-  background: var(--bg-primary);
+  background: var(--side-menu-bg-color);
   display: flex;
   flex-direction: column;
 }
 
 .sidebar-wrapper.sidebar-collapsed {
-  width: 64px;
+  width: var(--side-menu-collapsed-width);
 }
 
 .sidebar-glass {
@@ -85,9 +89,14 @@ const appStore = useAppStore()
 .content-area {
   flex: 1;
   background: var(--gray-100);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 0;
   min-height: 0;
+}
+
+.content-area-flush {
+  overflow: hidden;
 }
 
 /* 响应式 */

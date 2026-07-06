@@ -2816,21 +2816,13 @@ function resolveColumnWidth(value) {
 }
 
 /**
- * 计算最大高度
- * 如果没有设置 maxHeight，使用默认值
+ * 表格高度交给外层 flex 容器和 Naive flex-height 处理，避免页面级滚动条。
  */
 const computedMaxHeight = computed(() => {
   if (props.maxHeight !== undefined) {
     return props.maxHeight
   }
-
-  // 少量数据不启用 Naive 的内置纵向滚动容器，避免单行也出现竖向滚动条。
-  // 表头固定由全局 sticky 样式兜底，多数据场景再限制表体高度。
-  if (dataSource.value.length <= 8) {
-    return undefined
-  }
-
-  return 'calc(100vh - 280px)'
+  return undefined
 })
 
 /**
@@ -4777,6 +4769,7 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 .ai-crud-search {
   background: var(--bg-primary);
   flex-shrink: 0;
+  min-height: 0;
 }
 
 /* 主内容区域 */
@@ -4824,10 +4817,11 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 
 /* 表格区域 */
 .ai-crud-table {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .ai-crud-main.has-inline-workspace:not(.is-tab-workspace) .ai-crud-table {
@@ -4841,19 +4835,36 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 
 .ai-crud-table :deep(.ai-table-wrapper) {
   height: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-crud-table :deep(.n-data-table-wrapper) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.ai-crud-table :deep(.n-data-table) {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.ai-crud-table :deep(.n-data-table-wrapper) {
-  flex: 1;
-  overflow: auto;
+.ai-crud-table :deep(.n-data-table-base-table) {
+  flex: 1 1 auto;
   min-height: 0;
 }
 
-.ai-crud-table :deep(.n-data-table) {
-  flex: 0 0 auto;
+.ai-crud-table :deep(.n-data-table-base-table-body) {
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* 表格工具栏 - 不需要额外内边距因为 AiTable 已处理 */
@@ -5182,7 +5193,7 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
   }
 
   .ai-crud-main {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .ai-crud-main.has-inline-workspace:not(.is-tab-workspace) .ai-crud-table {
@@ -5229,18 +5240,27 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 }
 
 /* 分页器样式 */
-:deep(.n-pagination) {
+:deep(.n-data-table__pagination) {
+  width: 100%;
+  margin: 0 !important;
   padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+:deep(.n-data-table__pagination .n-pagination) {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 0;
   justify-content: flex-end;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  border-top: 0;
 }
 
 @media (max-width: 768px) {
-  :deep(.n-pagination) {
+  :deep(.n-data-table__pagination .n-pagination) {
     justify-content: center;
-    padding: 12px;
   }
 
   :deep(.n-pagination .n-pagination-item) {
@@ -5263,8 +5283,11 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 }
 
 @media (max-width: 576px) {
-  :deep(.n-pagination) {
-    padding: 10px 4px;
+  :deep(.n-data-table__pagination) {
+    padding: 10px;
+  }
+
+  :deep(.n-data-table__pagination .n-pagination) {
     gap: 4px;
   }
 

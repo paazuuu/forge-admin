@@ -59,13 +59,15 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 /* 主内容区 */
 .immersive-content {
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--gray-100);
   padding: 10px;
   min-height: 0;
 }
 
 .immersive-content-flush {
+  overflow: hidden;
   padding: 0;
 }
 

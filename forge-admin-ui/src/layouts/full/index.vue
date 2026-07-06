@@ -54,8 +54,7 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 .sidebar-full {
   flex-shrink: 0;
   width: 200px;
-  background: var(--bg-primary, #ffffff);
-  border-right: 1px solid var(--border-light, #e2e8f0);
+  background: var(--side-menu-bg-color, #ffffff);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
@@ -105,12 +104,15 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 
 .content-full {
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px;
   background: #f8fafc;
+  min-height: 0;
 }
 
 .content-full-flush {
+  overflow: hidden;
   padding: 0;
 }
 

@@ -1,13 +1,9 @@
 <template>
-  <n-menu
-    ref="menu"
+  <TopMenuBar
     class="top-menu"
-    mode="horizontal"
-    :options="topMenuOptions"
-    :value="activeKey"
-    :theme-overrides="topMenuThemeOverrides"
-    responsive
-    @update:value="handleMenuSelect"
+    :items="topMenuOptions"
+    :active-key="activeKey"
+    @select="handleMenuSelect"
   />
 </template>
 
@@ -15,8 +11,8 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { findFirstMenuWithPath, findTopMenuByPath, useMenu } from '@/composables'
+import TopMenuBar from '@/layouts/components/TopMenuBar.vue'
 import { useAppStore, usePermissionStore } from '@/store'
-import { getTopMenuThemeOverrides } from '@/utils/menu-theme.js'
 import { processTopMenus } from '@/utils/menu-utils'
 
 const route = useRoute()
@@ -24,9 +20,6 @@ const permissionStore = usePermissionStore()
 const appStore = useAppStore()
 
 const { handleMenuSelect: baseHandleMenuSelect } = useMenu()
-
-// Top menu theme override
-const topMenuThemeOverrides = computed(() => getTopMenuThemeOverrides())
 
 // Extract first-level menu items
 const topMenuOptions = computed(() => {
@@ -66,9 +59,8 @@ const activeKey = computed(() => {
   return null
 })
 
-const menu = ref(null)
-
-function handleMenuSelect(key, _item) {
+function handleMenuSelect(item) {
+  const key = item.key
   const menus = permissionStore.menus || []
   const topMenus = processTopMenus(menus)
 
@@ -92,9 +84,3 @@ function handleMenuSelect(key, _item) {
   }
 }
 </script>
-
-<style>
-.top-menu {
-  border: none !important;
-}
-</style>

@@ -241,7 +241,7 @@ function handleArrowLeft() {
   position: absolute;
   z-index: 0;
   pointer-events: none;
-  background: rgba(148, 163, 184, 0.42);
+  background: var(--border-light, #e5e7eb);
 }
 
 .tree-guide-vertical {
@@ -256,42 +256,37 @@ function handleArrowLeft() {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 30px;
+  min-height: 32px;
   padding-top: 3px;
   padding-right: 8px;
   padding-bottom: 3px;
   margin: 1px 0;
   border: 1px solid transparent;
-  border-radius: 7px;
-  color: #475569;
+  border-radius: 6px;
+  color: var(--text-secondary, #4b5563);
   cursor: pointer;
   outline: none;
   transition:
     background-color 0.18s ease,
     border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
+    color 0.18s ease;
 }
 
 .premium-tree-row:hover {
-  background: rgba(239, 246, 255, 0.82);
-  border-color: rgba(191, 219, 254, 0.78);
-  transform: translateX(2px);
+  background: var(--bg-secondary, #f6f8fb);
+  border-color: var(--border-light, #e5e7eb);
 }
 
 .premium-tree-row:focus-visible {
-  border-color: rgba(47, 111, 237, 0.42);
-  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.12);
+  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 34%, var(--border-light, #e5e7eb));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color, #2563eb) 10%, transparent);
 }
 
 .premium-tree-row.is-selected {
-  background: linear-gradient(135deg, rgba(219, 234, 254, 0.98) 0%, rgba(191, 219, 254, 0.88) 100%);
-  border-color: rgba(96, 165, 250, 0.52);
-  color: #1d4ed8;
-  box-shadow:
-    inset 3px 0 0 #2563eb,
-    0 6px 16px rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--primary-color, #2563eb) 8%, var(--bg-primary, #fff));
+  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 18%, var(--border-light, #e5e7eb));
+  color: var(--primary-color, #2563eb);
+  box-shadow: inset 3px 0 0 var(--primary-color, #2563eb);
 }
 
 .premium-tree-switcher {
@@ -311,13 +306,13 @@ function handleArrowLeft() {
 }
 
 .premium-tree-switcher.is-visible {
-  color: #94a3b8;
+  color: var(--text-tertiary, #9ca3af);
   cursor: pointer;
 }
 
 .premium-tree-switcher.is-visible:hover {
-  background: rgba(148, 163, 184, 0.14);
-  color: #475569;
+  background: var(--bg-secondary, #f6f8fb);
+  color: var(--text-secondary, #4b5563);
 }
 
 .premium-tree-switcher i {
@@ -334,7 +329,7 @@ function handleArrowLeft() {
   width: 15px;
   height: 15px;
   margin: 0 8px 0 0;
-  accent-color: #2563eb;
+  accent-color: var(--primary-color, #2563eb);
   cursor: pointer;
 }
 
@@ -347,11 +342,9 @@ function handleArrowLeft() {
   height: 24px;
   margin-right: 8px;
   border-radius: 6px;
-  background: rgba(241, 245, 249, 0.8);
-  color: #64748b;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
+  background: transparent;
+  color: var(--text-tertiary, #9ca3af);
+  transition: color 0.18s ease;
 }
 
 .premium-tree-icon i {
@@ -370,9 +363,9 @@ function handleArrowLeft() {
 .premium-tree-title {
   min-width: 0;
   overflow: hidden;
-  color: #475569;
+  color: var(--text-secondary, #4b5563);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -382,7 +375,7 @@ function handleArrowLeft() {
 .premium-tree-subtitle {
   min-width: 0;
   overflow: hidden;
-  color: #94a3b8;
+  color: var(--text-tertiary, #9ca3af);
   font-size: 11px;
   line-height: 18px;
   text-overflow: ellipsis;
@@ -397,67 +390,57 @@ function handleArrowLeft() {
   min-width: 46px;
   gap: 4px;
   padding: 1px 7px;
-  border: 1px solid rgba(147, 197, 253, 0.9);
+  border: 1px solid var(--border-light, #e5e7eb);
   border-radius: 999px;
-  background: rgba(239, 246, 255, 0.9);
-  color: #1d4ed8;
+  background: var(--bg-secondary, #f6f8fb);
+  color: var(--text-tertiary, #9ca3af);
   font-size: 11px;
   font-weight: 650;
   line-height: 16px;
 }
 
 .premium-tree-meta strong {
-  color: #1e3a8a;
+  color: var(--text-secondary, #4b5563);
   font-size: 12px;
   font-weight: 750;
 }
 
 .premium-tree-row.is-selected .premium-tree-title {
-  color: #1e3a8a;
-  font-weight: 700;
-}
-
-.premium-tree-row:hover .premium-tree-icon {
-  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary, #111827);
+  font-weight: 600;
 }
 
 .premium-tree-row.tone-root .premium-tree-icon {
-  background: #f1f5f9;
-  color: #64748b;
+  color: var(--text-tertiary, #9ca3af);
 }
 
 .premium-tree-row.tone-folder .premium-tree-icon {
-  background: #eaf2ff;
-  color: #3b82f6;
+  color: #64748b;
 }
 
 .premium-tree-row.tone-menu .premium-tree-icon {
-  background: #eaf8ef;
-  color: #16a34a;
+  color: #64748b;
 }
 
 .premium-tree-row.tone-action .premium-tree-icon {
-  background: #fff1e6;
-  color: #ea580c;
+  color: #64748b;
 }
 
 .premium-tree-row.tone-api .premium-tree-icon {
-  background: #feeceb;
-  color: #dc2626;
+  color: #64748b;
 }
 
 .premium-tree-row.is-selected .premium-tree-icon {
-  background: #2563eb;
-  color: #fff;
+  color: var(--primary-color, #2563eb);
 }
 
 .premium-tree-row.is-selected .premium-tree-subtitle {
-  color: #3b82f6;
+  color: var(--text-tertiary, #9ca3af);
 }
 
 .premium-tree-row.is-selected .premium-tree-meta {
-  background: #fff;
-  border-color: rgba(96, 165, 250, 0.5);
+  background: var(--bg-primary, #fff);
+  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 18%, var(--border-light, #e5e7eb));
 }
 
 .premium-tree-children {
@@ -495,17 +478,15 @@ function handleArrowLeft() {
 }
 
 :global(.dark) .premium-tree-row:hover {
-  background: rgba(30, 64, 175, 0.26);
-  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(30, 41, 59, 0.86);
+  border-color: rgba(71, 85, 105, 0.86);
 }
 
 :global(.dark) .premium-tree-row.is-selected {
-  background: linear-gradient(135deg, rgba(30, 64, 175, 0.62) 0%, rgba(29, 78, 216, 0.36) 100%);
-  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(30, 64, 175, 0.22);
+  border-color: rgba(96, 165, 250, 0.28);
   color: #dbeafe;
-  box-shadow:
-    inset 3px 0 0 #60a5fa,
-    0 8px 18px rgba(15, 23, 42, 0.28);
+  box-shadow: inset 3px 0 0 #60a5fa;
 }
 
 :global(.dark) .premium-tree-title {
