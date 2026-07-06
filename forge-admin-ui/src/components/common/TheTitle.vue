@@ -1,5 +1,5 @@
 <template>
-  <router-link to="/" class="text-14 mr-10 cursor-pointer color-[#ffffff] transition-opacity hover:opacity-80">
+  <router-link to="/" class="the-title text-14 mr-10 cursor-pointer transition-opacity hover:opacity-80">
     {{ systemName }}
   </router-link>
 </template>
@@ -16,3 +16,9 @@ const systemName = computed(() => {
   return tenantStore.systemName || getDefaultPageTitle()
 })
 </script>
+
+<style scoped>
+.the-title {
+  color: var(--brand-title-text-color, var(--layout-header-text-color, #ffffff));
+}
+</style>

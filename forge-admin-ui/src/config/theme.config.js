@@ -14,6 +14,7 @@ export const defaultThemeConfig = {
   header: {
     backgroundColor: '#4242F7',
     textColor: '#FFFFFF',
+    brandTitleTextColor: '#FFFFFF',
     fontSize: 'var(--font-size-base)',
     height: '60px',
     borderColor: '#FFFFFF',
@@ -23,6 +24,7 @@ export const defaultThemeConfig = {
   headerDark: {
     backgroundColor: '#18181c',
     textColor: '#e5e7eb',
+    brandTitleTextColor: '#e5e7eb',
     fontSize: 'var(--font-size-base)',
     height: '60px',
     borderColor: '#2d2d30',
@@ -181,6 +183,7 @@ export function applyThemeConfig(config, isDark = false) {
   if (headerConfig) {
     root.style.setProperty('--layout-header-bg-color', headerConfig.backgroundColor)
     root.style.setProperty('--layout-header-text-color', headerConfig.textColor)
+    root.style.setProperty('--brand-title-text-color', headerConfig.brandTitleTextColor || headerConfig.textColor || '#FFFFFF')
     root.style.setProperty('--layout-header-font-size', headerConfig.fontSize)
     root.style.setProperty('--layout-header-height', headerConfig.height)
     root.style.setProperty('--layout-header-border-color', headerConfig.borderColor)
@@ -190,7 +193,7 @@ export function applyThemeConfig(config, isDark = false) {
   const topMenuConfig = isDark ? (config.topMenuDark || config.topMenu) : config.topMenu
   if (topMenuConfig) {
     root.style.setProperty('--top-menu-text-color', topMenuConfig.textColor)
-    root.style.setProperty('--top-menu-text-color-hover', topMenuConfig.textColorHover)
+    root.style.setProperty('--top-menu-text-color-hover', topMenuConfig.textColorHover || topMenuConfig.textColorActive || topMenuConfig.textColor)
     root.style.setProperty('--top-menu-text-color-active', topMenuConfig.textColorActive)
     root.style.setProperty('--top-menu-text-color-active-hover', topMenuConfig.textColorActiveHover || topMenuConfig.textColorHover)
     root.style.setProperty('--top-menu-text-color-active-horizontal', topMenuConfig.textColorActiveHorizontal || topMenuConfig.textColorActive)

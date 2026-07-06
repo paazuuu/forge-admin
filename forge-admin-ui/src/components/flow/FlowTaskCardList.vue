@@ -301,10 +301,11 @@ function clearSelection() {
 .task-card-row {
   box-sizing: border-box;
   display: grid;
+  flex: 0 0 auto;
   width: 100%;
   min-height: 82px;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   column-gap: 12px;
   border: 1px solid var(--border-light);
   border-radius: 7px;
@@ -316,6 +317,7 @@ function clearSelection() {
     background-color 160ms ease,
     box-shadow 160ms ease,
     transform 160ms ease;
+  overflow: hidden;
 }
 
 .task-card-row:hover,
@@ -339,6 +341,7 @@ function clearSelection() {
 
 .task-card-main {
   min-width: 0;
+  overflow: hidden;
 }
 
 .task-card-heading {
@@ -373,23 +376,36 @@ function clearSelection() {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 20px;
+  overflow: hidden;
 }
 
 .task-card-summary {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   margin-top: 8px;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.task-card-summary > * {
+  min-width: 0;
 }
 
 .task-card-actions {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
   justify-self: end;
   gap: 8px;
   min-width: 168px;
+  max-width: 260px;
   flex-wrap: wrap;
 }
 

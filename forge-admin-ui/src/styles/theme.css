@@ -13,6 +13,7 @@
   /* Header 配置 */
   --layout-header-bg-color: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%);
   --layout-header-text-color: #ffffffff;
+  --brand-title-text-color: var(--layout-header-text-color);
   --layout-header-font-size: var(--font-size-base);
   --layout-header-height: 60px;
   --layout-header-border-color: rgba(255, 255, 255, 0.1);

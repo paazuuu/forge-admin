@@ -328,7 +328,9 @@ const tenantThemePresets = [
       primary: '#4242F7',
       headerBackground: '#4242F7',
       headerText: '#FFFFFF',
+      brandTitleText: '#FFFFFF',
       topText: 'rgba(255, 255, 255, 0.78)',
+      topHoverText: '#FFFFFF',
       topActiveText: '#FFFFFF',
       sideBackground: '#FFFFFF',
       sideText: '#334155',
@@ -350,7 +352,9 @@ const tenantThemePresets = [
       primary: '#D12723',
       headerBackground: '#B91C1C',
       headerText: '#FFFFFF',
+      brandTitleText: '#FFFFFF',
       topText: 'rgba(255, 255, 255, 0.8)',
+      topHoverText: '#FFFFFF',
       topActiveText: '#FFFFFF',
       sideBackground: '#FFFFFF',
       sideText: '#3F3333',
@@ -365,6 +369,54 @@ const tenantThemePresets = [
     },
   },
   {
+    key: 'mist-blue-unified',
+    name: '雾蓝同色',
+    description: '顶部和侧栏同色浅蓝，清爽统一，适合通用业务后台。',
+    colors: {
+      primary: '#2F6FED',
+      headerBackground: '#EEF4FF',
+      headerText: '#1E3A5F',
+      brandTitleText: '#1E3A5F',
+      topText: '#4E668A',
+      topHoverText: '#1D4ED8',
+      topActiveText: '#1D4ED8',
+      sideBackground: '#EEF4FF',
+      sideText: '#334155',
+      sideHoverText: '#1D4ED8',
+      sideHoverBackground: '#DBEAFE',
+      sideActiveText: '#1D4ED8',
+      sideActiveBackground: '#DCEBFF',
+      parentText: '#1D4ED8',
+      parentBackground: '#E4EEFF',
+      sideIcon: '#64748B',
+      sideIconActive: '#2F6FED',
+    },
+  },
+  {
+    key: 'mint-unified',
+    name: '浅青同色',
+    description: '顶部和侧栏同色浅青绿，轻量柔和，适合协作和数据管理。',
+    colors: {
+      primary: '#0E8F7E',
+      headerBackground: '#ECFDF5',
+      headerText: '#134E4A',
+      brandTitleText: '#134E4A',
+      topText: '#4B6863',
+      topHoverText: '#0F766E',
+      topActiveText: '#0F766E',
+      sideBackground: '#ECFDF5',
+      sideText: '#2F4F4A',
+      sideHoverText: '#0F766E',
+      sideHoverBackground: '#D1FAE5',
+      sideActiveText: '#0F766E',
+      sideActiveBackground: '#CCFBF1',
+      parentText: '#0F766E',
+      parentBackground: '#DFFCF1',
+      sideIcon: '#5B7772',
+      sideIconActive: '#0E8F7E',
+    },
+  },
+  {
     key: 'teal-business',
     name: '松石绿',
     description: '清爽耐看，适合业务系统、数据管理和协作场景。',
@@ -372,7 +424,9 @@ const tenantThemePresets = [
       primary: '#0F9F8F',
       headerBackground: '#0F766E',
       headerText: '#FFFFFF',
+      brandTitleText: '#FFFFFF',
       topText: 'rgba(255, 255, 255, 0.78)',
+      topHoverText: '#FFFFFF',
       topActiveText: '#FFFFFF',
       sideBackground: '#FFFFFF',
       sideText: '#28413E',
@@ -394,7 +448,9 @@ const tenantThemePresets = [
       primary: '#334155',
       headerBackground: '#1F2937',
       headerText: '#F8FAFC',
+      brandTitleText: '#F8FAFC',
       topText: 'rgba(248, 250, 252, 0.76)',
+      topHoverText: '#FFFFFF',
       topActiveText: '#FFFFFF',
       sideBackground: '#FFFFFF',
       sideText: '#334155',
@@ -726,6 +782,14 @@ const editSchema = computed(() => [
     props: { showAlpha: false, modes: ['hex'] },
   },
   {
+    field: 'theme_brand_titleTextColor',
+    label: '品牌标题文字',
+    type: 'color',
+    defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--header',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
     field: 'theme_header_height',
     label: 'Header高度',
     type: 'input',
@@ -736,6 +800,14 @@ const editSchema = computed(() => [
   {
     field: 'theme_topMenu_textColor',
     label: '顶部菜单文字',
+    type: 'color',
+    defaultValue: '#FFFFFF',
+    gridClass: 'tenant-config-field tenant-config-field--top',
+    props: { showAlpha: false, modes: ['hex'] },
+  },
+  {
+    field: 'theme_topMenu_textColorHover',
+    label: '顶部悬停文字',
     type: 'color',
     defaultValue: '#FFFFFF',
     gridClass: 'tenant-config-field tenant-config-field--top',
@@ -956,7 +1028,9 @@ function applyTenantThemePreset(preset, formData, updateValue) {
     systemTheme: colors.primary,
     theme_header_backgroundColor: colors.headerBackground,
     theme_header_textColor: colors.headerText,
+    theme_brand_titleTextColor: colors.brandTitleText || colors.headerText,
     theme_topMenu_textColor: colors.topText,
+    theme_topMenu_textColorHover: colors.topHoverText || colors.topActiveText || colors.topText,
     theme_topMenu_textColorActive: colors.topActiveText,
     theme_topMenu_iconColor: colors.topText,
     theme_topMenu_iconActiveColor: colors.topActiveText,
@@ -1248,8 +1322,10 @@ function handleBeforeSubmit(formData) {
   // 检查是否有任何主题配置字段
   const hasThemeConfig = formData.theme_header_backgroundColor
     || formData.theme_header_textColor
+    || formData.theme_brand_titleTextColor
     || formData.theme_header_height
     || formData.theme_topMenu_textColor
+    || formData.theme_topMenu_textColorHover
     || formData.theme_topMenu_textColorActive
     || formData.theme_topMenu_iconColor
     || formData.theme_topMenu_iconActiveColor
@@ -1273,10 +1349,12 @@ function handleBeforeSubmit(formData) {
       header: {
         backgroundColor: formData.theme_header_backgroundColor || '#4242F7',
         textColor: formData.theme_header_textColor || '#FFFFFF',
+        brandTitleTextColor: formData.theme_brand_titleTextColor || formData.theme_header_textColor || '#FFFFFF',
         height: formData.theme_header_height || '60px',
       },
       topMenu: {
         textColor: formData.theme_topMenu_textColor || '#FFFFFF',
+        textColorHover: formData.theme_topMenu_textColorHover || formData.theme_topMenu_textColorActive || formData.theme_topMenu_textColor || '#FFFFFF',
         textColorActive: formData.theme_topMenu_textColorActive || '#FFFFFF',
         backgroundColorHover: 'transparent',
         backgroundColorActive: 'transparent',
@@ -1306,9 +1384,11 @@ function handleBeforeSubmit(formData) {
   // 删除临时字段
   delete formData.theme_header_backgroundColor
   delete formData.theme_header_textColor
+  delete formData.theme_brand_titleTextColor
   delete formData.theme_header_height
   delete formData.themePreset
   delete formData.theme_topMenu_textColor
+  delete formData.theme_topMenu_textColorHover
   delete formData.theme_topMenu_textColorActive
   delete formData.theme_topMenu_iconColor
   delete formData.theme_topMenu_iconActiveColor
@@ -1339,8 +1419,10 @@ function handleBeforeRenderDetail(data) {
       data.systemTheme = themeConfig.primaryColor // 主题颜色
       data.theme_header_backgroundColor = themeConfig.header?.backgroundColor || themeConfig.primaryColor
       data.theme_header_textColor = themeConfig.header?.textColor
+      data.theme_brand_titleTextColor = themeConfig.header?.brandTitleTextColor || themeConfig.header?.textColor
       data.theme_header_height = themeConfig.header?.height
       data.theme_topMenu_textColor = themeConfig.topMenu?.textColor
+      data.theme_topMenu_textColorHover = themeConfig.topMenu?.textColorHover
       data.theme_topMenu_textColorActive = themeConfig.topMenu?.textColorActive
       data.theme_topMenu_iconColor = themeConfig.topMenu?.iconColor
       data.theme_topMenu_iconActiveColor = themeConfig.topMenu?.iconActiveColor
