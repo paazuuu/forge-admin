@@ -21,81 +21,94 @@
           </n-button>
         </div>
 
-        <div class="suite-pill-list">
-          <template v-if="showSuiteSkeleton">
-            <n-skeleton v-for="idx in 6" :key="idx" height="32px" :sharp="false" />
-          </template>
-          <template v-else>
-            <div
-              class="suite-pill all-suite"
-              :class="{ active: !suiteCode }"
-              role="button"
-              tabindex="0"
-              @click="selectSuite(null)"
-              @keydown.enter.prevent="selectSuite(null)"
-              @keydown.space.prevent="selectSuite(null)"
-            >
-              <span class="suite-pill-icon all">
-                <n-icon><GridOutline /></n-icon>
-              </span>
-              <span class="suite-pill-copy">
-                <strong>全部业务域</strong>
-                <small>{{ suiteObjectTotal }} 对象 · {{ suiteAppTotal }} 入口</small>
-              </span>
+        <div class="suite-pill-list" :class="{ 'is-refreshing': showSuiteRefreshHint }">
+          <Transition name="fade-slide" mode="out-in">
+            <div v-if="showSuiteInitialLoader" key="suite-loading" class="suite-loading-panel" role="status" aria-busy="true">
+              <div class="suite-loading-mark">
+                <span class="suite-loading-dot" />
+                <span class="suite-loading-dot" />
+                <span class="suite-loading-dot" />
+              </div>
+              <div class="suite-loading-copy">
+                <strong>正在加载业务域</strong>
+                <span>同步目录层级和入口统计</span>
+              </div>
+              <div class="suite-loading-flow" aria-hidden="true">
+                <span v-for="idx in 4" :key="idx" :style="{ '--row-index': idx }" />
+              </div>
             </div>
-
-            <div
-              v-for="suiteRow in suiteTreeRows"
-              :key="suiteRow.suite.id || suiteRow.suite.suiteCode"
-              class="suite-pill"
-              :class="{
-                'active': suiteCode === suiteRow.suite.suiteCode,
-                'child': suiteRow.level > 0,
-                'has-children': suiteRow.hasChildren,
-              }"
-              :style="{ '--suite-indent': `${suiteRow.level * 16}px` }"
-              role="button"
-              tabindex="0"
-              @click="selectSuite(suiteRow.suite)"
-              @keydown.enter.prevent="selectSuite(suiteRow.suite)"
-              @keydown.space.prevent="selectSuite(suiteRow.suite)"
-            >
-              <button
-                v-if="suiteRow.hasChildren"
-                class="suite-tree-toggle"
-                type="button"
-                :aria-label="isSuiteExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
-                @click.stop="toggleSuiteExpanded(suiteRow.suite)"
+            <div v-else key="suite-list" class="suite-list-content">
+              <div
+                class="suite-pill all-suite"
+                :class="{ active: !suiteCode }"
+                role="button"
+                tabindex="0"
+                @click="selectSuite(null)"
+                @keydown.enter.prevent="selectSuite(null)"
+                @keydown.space.prevent="selectSuite(null)"
               >
-                <n-icon>
-                  <ChevronDownOutline v-if="isSuiteExpanded(suiteRow.suite)" />
-                  <ChevronForwardOutline v-else />
-                </n-icon>
-              </button>
-              <span v-else class="suite-tree-spacer" />
-              <span class="suite-pill-icon" :class="{ 'has-icon': suiteRow.suite.icon }">
-                <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="18" />
-                <template v-else>{{ suiteInitial(suiteRow.suite) }}</template>
-              </span>
-              <span class="suite-pill-copy">
-                <strong>{{ suiteRow.suite.suiteName || suiteRow.suite.suiteCode }}</strong>
-                <small>{{ suitePillMetaText(suiteRow.suite) }}</small>
-              </span>
-              <span class="suite-pill-actions" @click.stop>
-                <n-dropdown
-                  trigger="click"
-                  :options="getSuiteActionOptions(suiteRow.suite)"
-                  @select="key => handleSuiteAction(key, suiteRow.suite)"
+                <span class="suite-pill-icon all">
+                  <n-icon><GridOutline /></n-icon>
+                </span>
+                <span class="suite-pill-copy">
+                  <strong>全部业务域</strong>
+                  <small>{{ suiteObjectTotal }} 对象 · {{ suiteAppTotal }} 入口</small>
+                </span>
+              </div>
+
+              <div
+                v-for="suiteRow in suiteTreeRows"
+                :key="suiteRow.suite.id || suiteRow.suite.suiteCode"
+                class="suite-pill"
+                :class="{
+                  'active': suiteCode === suiteRow.suite.suiteCode,
+                  'child': suiteRow.level > 0,
+                  'has-children': suiteRow.hasChildren,
+                }"
+                :style="{ '--suite-indent': `${suiteRow.level * 16}px` }"
+                role="button"
+                tabindex="0"
+                @click="selectSuite(suiteRow.suite)"
+                @keydown.enter.prevent="selectSuite(suiteRow.suite)"
+                @keydown.space.prevent="selectSuite(suiteRow.suite)"
+              >
+                <button
+                  v-if="suiteRow.hasChildren"
+                  class="suite-tree-toggle"
+                  type="button"
+                  :aria-label="isSuiteExpanded(suiteRow.suite) ? '收起子业务域' : '展开子业务域'"
+                  @click.stop="toggleSuiteExpanded(suiteRow.suite)"
                 >
-                  <n-button quaternary circle size="small" class="suite-item-more" aria-label="业务域操作">
-                    <template #icon>
-                      <n-icon><EllipsisVertical /></n-icon>
-                    </template>
-                  </n-button>
-                </n-dropdown>
-              </span>
+                  <n-icon>
+                    <ChevronDownOutline v-if="isSuiteExpanded(suiteRow.suite)" />
+                    <ChevronForwardOutline v-else />
+                  </n-icon>
+                </button>
+                <span v-else class="suite-tree-spacer" />
+                <span class="suite-pill-icon" :class="{ 'has-icon': suiteRow.suite.icon }">
+                  <IconRenderer v-if="suiteRow.suite.icon" :icon="suiteRow.suite.icon" :size="18" />
+                  <template v-else>{{ suiteInitial(suiteRow.suite) }}</template>
+                </span>
+                <span class="suite-pill-copy">
+                  <strong>{{ suiteRow.suite.suiteName || suiteRow.suite.suiteCode }}</strong>
+                  <small>{{ suitePillMetaText(suiteRow.suite) }}</small>
+                </span>
+                <span class="suite-pill-actions" @click.stop>
+                  <n-dropdown
+                    trigger="click"
+                    :options="getSuiteActionOptions(suiteRow.suite)"
+                    @select="key => handleSuiteAction(key, suiteRow.suite)"
+                  >
+                    <n-button quaternary circle size="small" class="suite-item-more" aria-label="业务域操作">
+                      <template #icon>
+                        <n-icon><EllipsisVertical /></n-icon>
+                      </template>
+                    </n-button>
+                  </n-dropdown>
+                </span>
+              </div>
             </div>
-          </template>
+          </Transition>
         </div>
       </aside>
 
@@ -113,7 +126,7 @@
           />
         </section>
 
-        <section class="workspace-content">
+        <section class="workspace-content" :class="{ 'is-refreshing': showWorkspaceRefreshLayer }">
           <div class="content-head">
             <div>
               <h3>业务对象分组</h3>
@@ -132,30 +145,63 @@
             </div>
           </div>
 
-          <div v-if="showWorkspaceSkeleton" class="object-table-skeleton">
-            <div v-for="idx in 4" :key="idx" class="object-group-skeleton">
-              <n-skeleton height="40px" :sharp="false" />
-              <n-skeleton text :repeat="3" />
+          <Transition name="fade-slide" mode="out-in">
+            <div v-if="showWorkspaceInitialLoader" key="workspace-loading" class="workspace-loading-state" role="status" aria-busy="true">
+              <div class="workspace-loading-main">
+                <div class="workspace-loading-mark">
+                  <span class="workspace-loading-icon">
+                    <n-icon><GridOutline /></n-icon>
+                  </span>
+                  <span class="workspace-loading-ring" />
+                </div>
+                <div class="workspace-loading-copy">
+                  <strong>正在整理应用概览</strong>
+                  <span>汇总业务对象、关系和访问入口</span>
+                </div>
+                <div class="workspace-loading-progress" aria-hidden="true">
+                  <span />
+                </div>
+              </div>
+              <div class="workspace-loading-preview" aria-hidden="true">
+                <div v-for="idx in 3" :key="idx" class="workspace-preview-card" :style="{ '--card-index': idx }">
+                  <span class="preview-accent" />
+                  <span class="preview-title" />
+                  <span class="preview-row wide" />
+                  <span class="preview-row" />
+                  <span class="preview-foot" />
+                </div>
+              </div>
             </div>
-          </div>
-          <BusinessObjectTable
-            v-else-if="pagedObjectGroups.length"
-            :groups="pagedObjectGroups"
-            :show-suite="!suiteCode"
-            @open-object="openObject"
-            @edit-object="openObjectEditor"
-            @design-object="openObjectDesigner"
-            @stats-object="openObjectStats"
-            @toggle-object="toggleObject"
-            @delete-object="deleteObject"
-            @open-app="openApp"
-            @code-app="openCodePanel"
-            @config-app="openEditor"
-            @toggle-app="toggleApp"
-            @delete-app="deleteApp"
-            @create-app="createAppForObject"
-          />
-          <n-empty v-else description="当前筛选下暂无业务对象或访问入口" />
+            <div v-else key="workspace-ready" class="workspace-ready-state">
+              <BusinessObjectTable
+                v-if="pagedObjectGroups.length"
+                :groups="pagedObjectGroups"
+                :show-suite="!suiteCode"
+                @open-object="openObject"
+                @edit-object="openObjectEditor"
+                @design-object="openObjectDesigner"
+                @stats-object="openObjectStats"
+                @toggle-object="toggleObject"
+                @delete-object="deleteObject"
+                @open-app="openApp"
+                @code-app="openCodePanel"
+                @config-app="openEditor"
+                @toggle-app="toggleApp"
+                @delete-app="deleteApp"
+                @create-app="createAppForObject"
+              />
+              <n-empty v-else description="当前筛选下暂无业务对象或访问入口" />
+            </div>
+          </Transition>
+
+          <Transition name="fade-soft">
+            <div v-if="showWorkspaceRefreshLayer" class="workspace-refresh-layer" role="status" aria-live="polite">
+              <span class="workspace-refresh-track">
+                <span />
+              </span>
+              <span class="workspace-refresh-copy">正在更新概览</span>
+            </div>
+          </Transition>
 
           <div v-if="objectGroupTotal > groupPagination.pageSize" class="card-pagination">
             <n-pagination
@@ -317,8 +363,11 @@ const selectedSuiteCodes = computed(() => {
 const suiteObjectTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.objectCount || 0), 0))
 const suiteAppTotal = computed(() => suites.value.reduce((sum, item) => sum + Number(item.appCount || 0), 0))
 const workspaceLoading = computed(() => loadingObjects.value || loadingApps.value || loadingRelations.value)
-const showSuiteSkeleton = computed(() => bootstrapping.value || loadingSuites.value)
-const showWorkspaceSkeleton = computed(() => bootstrapping.value || workspaceLoading.value)
+const showSuiteInitialLoader = computed(() => (bootstrapping.value || loadingSuites.value) && suites.value.length === 0)
+const showSuiteRefreshHint = computed(() => loadingSuites.value && suites.value.length > 0)
+const hasWorkspaceData = computed(() => objects.value.length > 0 || apps.value.length > 0)
+const showWorkspaceInitialLoader = computed(() => (bootstrapping.value || workspaceLoading.value) && !hasWorkspaceData.value)
+const showWorkspaceRefreshLayer = computed(() => workspaceLoading.value && !showWorkspaceInitialLoader.value)
 const appGroups = computed(() => {
   const groups = new Map()
   apps.value.forEach((app) => {
@@ -1194,6 +1243,7 @@ function deleteApp(app) {
 }
 
 .suite-pill-list {
+  position: relative;
   display: grid;
   flex: 1 1 auto;
   align-content: start;
@@ -1202,6 +1252,113 @@ function deleteApp(app) {
   max-height: 100%;
   overflow-y: auto;
   padding-right: 2px;
+}
+
+.suite-list-content {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+}
+
+.suite-pill-list.is-refreshing .suite-list-content {
+  opacity: 0.72;
+  transition: opacity 180ms ease;
+}
+
+.suite-pill-list.is-refreshing::after {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  left: 0;
+  z-index: 3;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #18a058, #2080f0, transparent);
+  content: '';
+  animation: loading-rail 960ms ease-in-out infinite;
+}
+
+.suite-loading-panel {
+  display: grid;
+  gap: 11px;
+  align-content: start;
+  min-height: 212px;
+  border: 1px solid #d8f3df;
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgb(24 160 88 / 8%), transparent 42%), linear-gradient(180deg, #ffffff 0%, #fbfffd 100%);
+  padding: 13px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 72%);
+}
+
+.suite-loading-mark {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  padding: 5px 7px;
+}
+
+.suite-loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #18a058;
+  animation: loading-dot 860ms ease-in-out infinite;
+}
+
+.suite-loading-dot:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.suite-loading-dot:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.suite-loading-copy strong,
+.suite-loading-copy span {
+  display: block;
+}
+
+.suite-loading-copy strong {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.suite-loading-copy span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.suite-loading-flow {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.suite-loading-flow span {
+  height: 27px;
+  border: 1px solid rgb(24 160 88 / 11%);
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgb(24 160 88 / 8%), rgb(32 128 240 / 10%), rgb(240 160 32 / 8%)), #fff;
+  opacity: 0.68;
+  transform-origin: left center;
+  animation: loading-row 1280ms ease-in-out infinite;
+  animation-delay: calc(var(--row-index) * 90ms);
+}
+
+.suite-loading-flow span:nth-child(2n) {
+  width: 86%;
+}
+
+.suite-loading-flow span:nth-child(3n) {
+  width: 72%;
 }
 
 .suite-pill {
@@ -1377,8 +1534,10 @@ function deleteApp(app) {
 }
 
 .workspace-content {
+  position: relative;
   display: grid;
   min-width: 0;
+  overflow: hidden;
   gap: 10px;
   padding: 12px;
 }
@@ -1412,23 +1571,297 @@ function deleteApp(app) {
   width: 100%;
 }
 
-.object-table-skeleton {
+.workspace-ready-state {
+  min-width: 0;
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease;
+}
+
+.workspace-content.is-refreshing .workspace-ready-state {
+  opacity: 0.44;
+  filter: saturate(0.88) blur(0.5px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.workspace-loading-state {
   display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.workspace-loading-main {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 104px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(32 128 240 / 10%), transparent 45%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 16px;
+}
+
+.workspace-loading-mark {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+}
+
+.workspace-loading-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 20px;
+}
+
+.workspace-loading-ring {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgb(32 128 240 / 16%);
+  border-top-color: #18a058;
+  border-radius: 12px;
+  animation: loading-spin 920ms linear infinite;
+}
+
+.workspace-loading-copy {
+  min-width: 0;
+}
+
+.workspace-loading-copy strong,
+.workspace-loading-copy span {
+  display: block;
+}
+
+.workspace-loading-copy strong {
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.workspace-loading-copy span {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.workspace-loading-progress {
+  grid-column: 2 / 3;
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.workspace-loading-progress span {
+  display: block;
+  width: 46%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #18a058, #2080f0, #f0a020);
+  animation: loading-progress 1180ms ease-in-out infinite;
+}
+
+.workspace-loading-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.object-group-skeleton {
+.workspace-preview-card {
   display: grid;
   gap: 9px;
-  border: 1px solid var(--n-border-color, #eef2f7);
+  min-height: 132px;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: var(--n-color, #fff);
-  padding: 10px;
+  background: #fff;
+  padding: 12px;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 4%);
+  animation: loading-card 1500ms ease-in-out infinite;
+  animation-delay: calc(var(--card-index) * 120ms);
+}
+
+.preview-accent {
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: #18a058;
+}
+
+.preview-title {
+  width: 58%;
+  height: 12px;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.preview-row,
+.preview-foot {
+  height: 9px;
+  border-radius: 999px;
+  background: #edf5ff;
+}
+
+.preview-row.wide {
+  width: 82%;
+}
+
+.preview-row:not(.wide) {
+  width: 64%;
+}
+
+.preview-foot {
+  align-self: end;
+  width: 42%;
+  margin-top: 10px;
+  background: #dcfce7;
+}
+
+.workspace-refresh-layer {
+  position: absolute;
+  top: 58px;
+  right: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid #bbf7d0;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 10px 22px rgb(15 23 42 / 10%);
+  padding: 0 10px;
+  pointer-events: none;
+}
+
+.workspace-refresh-track {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 116px;
+  height: 4px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.workspace-refresh-track span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 44%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #18a058, #2080f0);
+  animation: loading-progress 920ms ease-in-out infinite;
+}
+
+.workspace-refresh-copy {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .card-pagination {
   display: flex;
   justify-content: flex-end;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active,
+.fade-soft-enter-active,
+.fade-soft-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.fade-soft-enter-from,
+.fade-soft-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@keyframes loading-dot {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateY(0);
+  }
+
+  45% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes loading-row {
+  0%,
+  100% {
+    opacity: 0.52;
+    transform: scaleX(0.96);
+  }
+
+  50% {
+    opacity: 0.92;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-progress {
+  0% {
+    transform: translateX(-104%);
+  }
+
+  100% {
+    transform: translateX(228%);
+  }
+}
+
+@keyframes loading-rail {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: translateX(-18%);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: translateX(18%);
+  }
+}
+
+@keyframes loading-card {
+  0%,
+  100% {
+    border-color: #e5e7eb;
+    transform: translateY(0);
+  }
+
+  50% {
+    border-color: #bfdbfe;
+    transform: translateY(-2px);
+  }
 }
 
 @media (max-width: 980px) {
@@ -1452,6 +1885,10 @@ function deleteApp(app) {
     height: 260px;
     max-height: 260px;
   }
+
+  .workspace-loading-preview {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1465,6 +1902,46 @@ function deleteApp(app) {
 
   .content-head-actions {
     justify-content: space-between;
+  }
+
+  .workspace-loading-main {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-loading-progress {
+    grid-column: 1;
+  }
+
+  .workspace-refresh-layer {
+    top: 94px;
+    flex-wrap: wrap;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suite-loading-dot,
+  .suite-loading-flow span,
+  .suite-pill-list.is-refreshing::after,
+  .workspace-loading-ring,
+  .workspace-loading-progress span,
+  .workspace-refresh-track span,
+  .workspace-preview-card {
+    animation: none;
+  }
+
+  .fade-slide-enter-active,
+  .fade-slide-leave-active,
+  .fade-soft-enter-active,
+  .fade-soft-leave-active,
+  .suite-pill,
+  .workspace-ready-state {
+    transition: none;
+  }
+
+  .workspace-content.is-refreshing .workspace-ready-state {
+    filter: none;
   }
 }
 </style>

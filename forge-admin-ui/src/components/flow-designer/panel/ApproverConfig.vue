@@ -84,9 +84,11 @@ const nodeFormForAssetSelect = computed(() => ({
     || normalizedFormAssetOptions.value[0]?.formMode
     || 'BUSINESS_OBJECT_FORM',
   formKey: config.value.formKey || '',
-  formName: config.value.formName || '',
-  providerKey: config.value.providerKey || '',
-  formUrl: config.value.formUrl || '',
+  formName: config.value.formName || selectedFormAsset.value?.formName || '',
+  providerKey: config.value.providerKey || selectedFormAsset.value?.providerKey || '',
+  formUrl: config.value.formUrl || selectedFormAsset.value?.formUrl || '',
+  viewKey: config.value.viewKey || selectedFormAsset.value?.viewKey || 'default',
+  formRef: config.value.formRef || selectedFormAsset.value?.formRef || {},
 }))
 
 function patch(part) {
@@ -113,16 +115,17 @@ function handleFormAssetUpdate(partial = {}) {
     return
   }
   const asset = findFormAsset(partial)
+  const formMode = partial.formMode || asset?.formMode || asset?.type || 'BUSINESS_OBJECT_FORM'
   patch({
     formType: 'dynamic',
-    formMode: partial.formMode || 'BUSINESS_OBJECT_FORM',
+    formMode,
     formKey: partial.formKey || '',
-    formName: partial.formName || partial.formKey || '',
-    providerKey: partial.providerKey || '',
+    formName: partial.formName || asset?.formName || partial.formKey || '',
+    providerKey: partial.providerKey || asset?.providerKey || '',
     formJson: '',
-    formUrl: partial.formUrl || '',
-    viewKey: partial.viewKey || 'default',
-    formRef: partial.formRef || {},
+    formUrl: partial.formUrl || asset?.formUrl || '',
+    viewKey: partial.viewKey || asset?.viewKey || 'default',
+    formRef: partial.formRef || asset?.formRef || buildFormRefFromAsset(asset, formMode),
     formFieldPermissions: buildFormFieldPermissionsForCatalog(
       config.value.formFieldPermissions,
       asset?.fieldCatalog,
@@ -205,6 +208,22 @@ function normalizeFormMode(value) {
   if (normalized === 'BUSINESS_CODE_FORM' || normalized === 'EXTERNAL')
     return normalized
   return 'BUSINESS_OBJECT_FORM'
+}
+
+function buildFormRefFromAsset(asset, formMode) {
+  if (!asset?.formKey)
+    return {}
+  return {
+    type: formMode,
+    formMode,
+    objectCode: asset.objectCode || '',
+    objectName: asset.objectName || '',
+    formKey: asset.formKey,
+    formName: asset.formName || asset.formKey,
+    providerKey: asset.providerKey || '',
+    formUrl: asset.formUrl || '',
+    viewKey: asset.viewKey || 'default',
+  }
 }
 </script>
 

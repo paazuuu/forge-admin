@@ -71,12 +71,22 @@ const availableAssets = computed(() => props.formAssets
   .filter(asset => props.showAllModes || normalizeMode(asset.formMode || asset.type) === formMode.value)
   .filter(asset => asset.formKey))
 const selectedAssetKey = computed(() => {
-  const formKey = props.nodeForm?.formKey
+  const formKey = normalizeText(props.nodeForm?.formKey)
   if (!formKey)
     return null
-  const providerKey = props.nodeForm?.providerKey || ''
+  const providerKey = normalizeText(props.nodeForm?.providerKey)
+  const currentMode = normalizeMode(props.nodeForm?.formMode || props.nodeForm?.formRef?.formMode || props.nodeForm?.formRef?.type)
+  const exactAsset = availableAssets.value.find(asset =>
+    normalizeText(asset.formKey) === formKey
+    && normalizeMode(asset.formMode || asset.type) === currentMode
+    && normalizeText(asset.providerKey) === providerKey,
+  )
+  if (exactAsset)
+    return assetKey(exactAsset)
   const current = availableAssets.value.find(asset =>
-    asset.formKey === formKey && String(asset.providerKey || '') === String(providerKey))
+    normalizeText(asset.formKey) === formKey
+    && (!providerKey || normalizeText(asset.providerKey) === providerKey),
+  )
   return current ? assetKey(current) : null
 })
 
@@ -104,15 +114,22 @@ function handleAssetChange(value) {
     formRef: normalizedMode === 'BUSINESS_CODE_FORM'
       ? {
           type: 'BUSINESS_CODE_FORM',
+          formMode: 'BUSINESS_CODE_FORM',
           objectCode: asset.objectCode || '',
+          objectName: asset.objectName || '',
           providerKey,
           formKey: asset.formKey || '',
+          formName: asset.formName || asset.formKey || '',
           formUrl: asset.formUrl || '',
+          viewKey: asset.viewKey || 'default',
         }
       : {
           type: 'BUSINESS_OBJECT_FORM',
+          formMode: 'BUSINESS_OBJECT_FORM',
           objectCode: asset.objectCode || '',
+          objectName: asset.objectName || '',
           formKey: asset.formKey || '',
+          formName: asset.formName || asset.formKey || '',
           viewKey: asset.viewKey || 'default',
         },
   })
@@ -165,6 +182,10 @@ function normalizeMode(value) {
   if (normalized === 'BUSINESS_CODE_FORM' || normalized === 'EXTERNAL')
     return normalized
   return 'BUSINESS_OBJECT_FORM'
+}
+
+function normalizeText(value) {
+  return String(value || '').trim()
 }
 </script>
 

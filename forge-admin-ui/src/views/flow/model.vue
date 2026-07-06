@@ -381,7 +381,7 @@
             :business-object-code="currentDesignBinding?.objectCode || ''"
             :business-object-name="currentDesignBinding?.objectName || ''"
             :business-entry-route="currentDesignBinding?.entryRoute || ''"
-            :code-app="currentDesignBinding?.codeApp === true"
+            :code-app="isCodeAppBinding(currentDesignBinding)"
             @close="handleDesignModalClose"
             @saved="fetchData"
             @deployed="fetchData"
@@ -477,7 +477,7 @@ const VersionHistory = defineAsyncComponent({
 })
 
 const statusOptions = computed(() => toNumberOptions(dict.value.flow_model_status))
-const formTypeOptions = computed(() => dict.value.flow_process_form_type || [])
+const formTypeOptions = computed(() => appendBusinessFormTypeOption(dict.value.flow_process_form_type || []))
 const categoryTreeOptions = ref([])
 const designerTypeOptions = [
   {
@@ -553,8 +553,30 @@ function designerTypeClass(value) {
   return normalizeDesignerType(value) === 'business' ? 'business' : 'approval'
 }
 
+function appendBusinessFormTypeOption(options = []) {
+  const result = Array.isArray(options)
+    ? options.map(item => item?.value === 'dynamic'
+        ? { ...item, label: '动态表单（应用表单）' }
+        : item)
+    : []
+  if (!result.some(item => item?.value === 'business')) {
+    result.push({
+      label: '业务应用表单',
+      value: 'business',
+    })
+  }
+  return result
+}
+
 function getCategoryDisplayName(row) {
   return row?.categoryName || resolveFlowCategoryLabel(row?.category, categoryTreeOptions.value, '')
+}
+
+function isCodeAppBinding(binding) {
+  const value = binding?.codeApp
+  if (value === true || value === 1)
+    return true
+  return ['true', '1', 'yes', 'y'].includes(String(value || '').trim().toLowerCase())
 }
 
 function getActionOptions(row) {

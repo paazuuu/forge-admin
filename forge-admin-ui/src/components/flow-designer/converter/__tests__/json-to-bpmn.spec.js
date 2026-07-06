@@ -115,6 +115,40 @@ describe('convertJsonToBpmn - 主结构', () => {
     ])
   })
 
+  it('userTask 写入业务表单资产引用', () => {
+    const json = baseJson()
+    Object.assign(json.nodes[1].config, {
+      formMode: 'BUSINESS_CODE_FORM',
+      formKey: 'sample_purchase_order_approval_form',
+      formName: '采购单审批表单',
+      providerKey: 'samplePurchaseOrder',
+      formUrl: '/business/purchase-order-test',
+      viewKey: 'approve',
+      formRef: {
+        type: 'BUSINESS_CODE_FORM',
+        objectCode: 'sample_purchase_order',
+        providerKey: 'samplePurchaseOrder',
+        formKey: 'sample_purchase_order_approval_form',
+      },
+    })
+
+    const doc = parseBpmnXml(convertJsonToBpmn(json))
+    const t = findElementsByLocalName(doc, 'userTask')[0]
+
+    expect(getFlowableAttr(t, 'formMode')).toBe('BUSINESS_CODE_FORM')
+    expect(getFlowableAttr(t, 'formKey')).toBe('sample_purchase_order_approval_form')
+    expect(getFlowableAttr(t, 'formName')).toBe('采购单审批表单')
+    expect(getFlowableAttr(t, 'providerKey')).toBe('samplePurchaseOrder')
+    expect(getFlowableAttr(t, 'formUrl')).toBe('/business/purchase-order-test')
+    expect(getFlowableAttr(t, 'viewKey')).toBe('approve')
+    expect(JSON.parse(getFlowableAttr(t, 'formRef'))).toEqual({
+      type: 'BUSINESS_CODE_FORM',
+      objectCode: 'sample_purchase_order',
+      providerKey: 'samplePurchaseOrder',
+      formKey: 'sample_purchase_order_approval_form',
+    })
+  })
+
   it('carbonCopy 写入抄送人配置和默认平台抄送委托', () => {
     const json = baseJson()
     json.nodes.splice(2, 0, {
