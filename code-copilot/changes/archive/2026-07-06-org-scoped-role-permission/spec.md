@@ -1,5 +1,5 @@
 # 组织上下文角色权限改造
-> status: apply
+> status: done
 > created: 2026-07-06
 > complexity: 🔴复杂
 > change_id: org-scoped-role-permission
@@ -243,3 +243,8 @@
 - **确认时间**：2026-07-06
 - **确认人**：用户通过 `apply org-scoped-role-permission` 确认进入实施
 - **进入 Apply 条件**：已满足；本轮已实施并完成最小静态验证闭环。
+- **归档时间**：2026-07-06
+- **归档人**：code-copilot
+- **归档路径**：`code-copilot/changes/archive/2026-07-06-org-scoped-role-permission/`
+- **知识沉淀**：`code-copilot/knowledge/tech-org-scoped-role-permission.md`；`code-copilot/memory/decisions.md` 第 15 条；`code-copilot/memory/pitfalls.md` 第 102 条。
+- **归档验收结论**：后端编译、前端构建、Flyway 占位符扫描和 `git diff --check` 已有执行证据；服务级接口/数据库实测仍受当前 dev 远端库和本地 MySQL/Redis 不可用限制，按执行日志保留为后续补测项。

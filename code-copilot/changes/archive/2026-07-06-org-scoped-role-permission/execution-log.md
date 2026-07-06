@@ -20,6 +20,9 @@
 | 2026-07-06 | verify | 执行显式组织绑定边界二次验证 | 后端编译、Flyway 占位符扫描和 `git diff --check` 通过；本轮未改前端，未启动服务写库 |
 | 2026-07-06 | fix | 收敛组织绑定查询到 Mapper XML | 新增 `SysUserOrgMapper.xml` 查询当前用户显式绑定组织；新增 `SysOrgMapper.selectEnabledOrgsByIds` 查询启用组织，服务层不再新增直接查询拼装 |
 | 2026-07-06 | verify | 执行 Mapper XML 收敛后验证 | 后端编译、Flyway 占位符扫描和 `git diff --check` 通过；本轮未改前端，未启动服务写库 |
+| 2026-07-06 | archive | 归档前知识沉淀 | 新增 `tech-org-scoped-role-permission.md`，更新 `knowledge/index.md`，补充 `memory/decisions.md` 第 15 条和 `memory/pitfalls.md` 第 102 条 |
+| 2026-07-06 | archive | 归档状态回填 | `spec.md` 状态改为 done，补充归档路径、知识沉淀和服务级验证缺口说明；`tasks.md`、`test-spec.md` 同步归档状态 |
+| 2026-07-06 | archive | 移动变更目录 | 已移动到 `code-copilot/changes/archive/2026-07-06-org-scoped-role-permission/` |
 
 ## 技术决策
 

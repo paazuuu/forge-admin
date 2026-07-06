@@ -1,5 +1,5 @@
 # 单测 Spec — 组织上下文角色权限改造
-> status: apply
+> status: done
 > created: 2026-07-06
 
 ## 0. 测试原则
