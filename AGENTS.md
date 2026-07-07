@@ -25,6 +25,7 @@ forge-server/                          # 后端根目录
 forge-admin-ui/                 # 前端主项目
 forge-docs/                     # VitePress 文档站
 code-copilot/                   # AI 辅助编码规则 & 变更管理
+.agents/                        # 项目级 Agent Skill 目录（进入仓库后统一识别）
 .opencode/                      # OpenCode 配置 & 记忆文件
 ```
 
@@ -92,6 +93,18 @@ pnpm lint:fix
 | `forge/forge-admin-server/src/main/resources/application-dev.example.yml` | 后端配置模板（可提交） |
 | `forge-admin-ui/.env.local` | 前端本地环境变量 |
 | `forge-admin-ui/.env.example` | 前端环境变量模板（可提交） |
+
+### 2.5 Agent 与 Skill 使用规范
+
+> 所有 AI 编程助手进入仓库后必须统一按本节识别和使用项目级 Skill，避免不同 Agent 使用不同规则。
+
+- **项目级 Skill 目录固定为 `.agents/skills/`**（目录名为复数 `agents`）。其它 Agent 启动后必须优先扫描该目录下的 `*/SKILL.md`，并将其作为 Forge 项目专用 Skill 来源；若工具链默认识别 `.agent/skills/`，必须在适配层映射到本目录，禁止在仓库内复制两套 Skill。
+- **不要使用 `superpowers/` 目录承载 Forge 项目规范**；项目内专用能力统一沉淀到 `.agents/skills/`，全局个人能力才放到用户级技能目录。
+- **触发即读取**：当用户请求明确命中某个 Skill 描述，或任务类型明显匹配该 Skill（例如 CRUD 生成、流程开发、UI 检查），执行前必须完整读取对应 `SKILL.md`。
+- **最小必要原则**：只读取本轮任务需要的 Skill；多个 Skill 同时适用时按任务链路排序读取，避免无关上下文污染判断。
+- **Forge 编码类任务默认遵循本文件第 5 章关键约定**；需要更细规范时继续读取 `code-copilot/rules/coding-style.md` 和 `forge-docs/guide/conventions.md`。若当前环境额外暴露用户级 `forge-coding-standards` Skill，可作为补充，但不得替代本文件和项目级 `.agents/skills/`。
+- **CRUD 代码生成/审查优先使用 `.agents/skills/forge-codegen-crud/SKILL.md`**；流程业务开发/审查优先使用 `.agents/skills/forge-business-flow-development/SKILL.md`；后台页面 UI/UX 检查优先使用 `.agents/skills/ui-ux-pro-max/SKILL.md`。
+- **Skill 规范优先级**：`AGENTS.md` > 当前变更 `spec.md` > `.agents/skills/*/SKILL.md` > `code-copilot/rules/*` > 其它参考文档。若 Skill 与本文件冲突，以本文件为准。
 
 ---
 
@@ -348,7 +361,41 @@ forge-admin-ui/src/
 - 金额字段用 `long`，单位**分**
 - 时间字段用 `LocalDateTime`
 
-### 5.11 数据库脚本维护规范
+### 5.11 逻辑删除规范
+
+> Forge 项目默认优先逻辑删除，只有明确属于运行时中间表、关系重建表、框架表或留存清理任务的场景才允许物理删除。
+
+#### 适用范围
+
+- 用户可见的主数据、配置数据、设计态元数据、业务单据、可恢复/可审计数据，删除必须走逻辑删除。
+- 新增业务主表、配置表、设计态元数据表默认增加 `del_flag` 字段，取值约定 `0` 未删除、`1` 已删除。
+- 历史表已经使用 `deleted`、`status=0` 等字段表达软删除时，可以保持现有语义，但必须在实体、Mapper XML 和查询条件中保持一致。
+- Flowable 引擎原生表（如 `ACT_*`）和定时任务框架自身运行表不纳入 Forge 逻辑删除改造。
+- `sys_job_config`、`sys_job_log` 属于 Forge 内部表，不因“定时任务”命名而排除；行级删除按逻辑删除规范处理。日志留存清理类专用任务可以按策略物理清理历史数据，但必须在代码和 Spec 中说明。
+
+#### 实体与 SQL 规则
+
+- 表有逻辑删除字段时，实体必须显式声明对应字段并加 `@TableLogic`；禁止只依赖 MyBatis-Plus 全局配置兜底。
+- `@TableLogic` 字段类型必须匹配数据库字段类型：`tinyint` 用 `Integer`，`char(1)`/`varchar` 用 `String`。
+- Mapper XML 中的查询必须显式过滤未删除数据，例如 `AND del_flag = 0` 或 `AND deleted = 0`；不要假设自定义 XML 会被 MP 自动补全。
+- 删除接口协议可以保持不变（例如 `DELETE /:id` 或既有 `POST /remove`），但 Service/Mapper 底层必须从物理 `DELETE` 改为逻辑删除。
+- 批量删除必须批量更新逻辑删除字段，避免循环逐条物理删除。
+
+#### 唯一键与迁移规则
+
+- 逻辑删除会改变唯一键语义；存在业务唯一键的表必须评估“已删除记录阻塞重新创建”的问题。
+- MySQL 中推荐新增生成列 `logic_delete_active` 并用唯一索引约束未删除记录，避免删除后相同编码/名称无法重建。
+- Flyway 迁移必须先补字段，再补索引，再改代码；脚本必须具备 `information_schema` 防重复保护。
+- 只给实体加 `@TableLogic` 但数据库缺字段会导致运行时 SQL 报错，禁止这样提交。
+
+#### 允许物理删除的场景
+
+- Flowable/Quartz/SnailJob 等第三方框架自带运行表，按框架语义处理。
+- 纯关联关系重建表、临时表、缓存表、短期会话表、导入暂存表，可以物理删除，但必须确认无恢复/审计要求。
+- 日志归档和留存清理任务可以物理清理超期历史数据；普通行级删除仍按该表的逻辑删除规则执行。
+- 任何新增物理删除点必须在 Spec 或任务说明中写明原因、影响范围和回滚方式。
+
+### 5.12 数据库脚本维护规范
 
 所有数据库结构和内置数据变更必须走统一脚本，不允许只改实体、Mapper 或本地数据库。
 
