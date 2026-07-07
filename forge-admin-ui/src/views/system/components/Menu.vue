@@ -199,13 +199,11 @@ const columns = [
     title: '菜单名称',
     key: 'title',
     width: 180,
-    align: 'center',
   },
   {
     title: '路径',
     key: 'url',
     width: 200,
-    align: 'center',
   },
   {
     title: '图标',
@@ -491,7 +489,7 @@ function handleDelete(row) {
         // 通知父组件刷新
         emit('refresh')
       }
-      catch (error) {
+      catch {
       }
     },
   })
@@ -533,7 +531,7 @@ function handleSubmit() {
       // 通知父组件刷新
       emit('refresh')
     }
-    catch (error) {
+    catch {
     }
     finally {
       submitLoading.value = false

@@ -17,15 +17,21 @@ const tenantStore = useTenantStore()
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   cursor: pointer;
   flex-shrink: 0;
+  border-radius: 4px;
+  transition: opacity 0.16s ease;
+}
+
+.logo-container:hover {
+  opacity: 0.86;
 }
 
 .logo-image {
-  max-width: 100%;
-  max-height: 100%;
+  max-width: 28px;
+  max-height: 28px;
   object-fit: contain;
 }
 </style>

@@ -166,13 +166,11 @@ const columns = [
     title: '模块名称',
     key: 'name',
     width: 150,
-    align: 'center',
   },
   {
     title: '系统名称',
     key: 'subAppName',
     width: 150,
-    align: 'center',
   },
   {
     title: '排序',
@@ -191,7 +189,6 @@ const columns = [
     title: '模块ID',
     key: 'id',
     width: 215,
-    align: 'center',
   },
   {
     title: 'icon',
@@ -253,10 +250,10 @@ function handleBatchDelete() {
         })
         message.success('批量删除成功')
         checkedRowKeys.value = []
-        loadMenuData()
+        loadData()
         emit('refresh')
       }
-      catch (error) {
+      catch {
       }
     },
   })
@@ -273,7 +270,7 @@ function handleIconChange(row, value) {
       await request.put('/module', row)
       loadData()
     }
-    catch (error) {
+    catch {
     }
   }, 300)
 }
@@ -290,7 +287,7 @@ function handleOrderChange(row, value) {
       await request.put('/module', row)
       loadData()
     }
-    catch (error) {
+    catch {
     }
   }, 300)
 }
@@ -320,7 +317,7 @@ async function loadData() {
     // 确保 total是数字类型
     pagination.value.itemCount = Number(total)
   }
-  catch (error) {
+  catch {
   }
   finally {
     loading.value = false
@@ -374,7 +371,7 @@ function handleDelete(row) {
         // 通知父组件刷新
         emit('refresh')
       }
-      catch (error) {
+      catch {
       }
     },
   })
@@ -411,7 +408,7 @@ function handleSubmit() {
       // 通知父组件刷新树
       emit('refresh')
     }
-    catch (error) {
+    catch {
     }
     finally {
       submitLoading.value = false

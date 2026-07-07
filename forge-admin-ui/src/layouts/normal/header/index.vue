@@ -25,7 +25,7 @@
 <style scoped>
 .app-header-bar {
   width: 100%;
-  height: 52px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -47,7 +47,7 @@
 .header-tabs {
   flex: 1;
   min-width: 0;
-  height: 100%;
+  height: 38px;
   padding: 0 4px;
 }
 

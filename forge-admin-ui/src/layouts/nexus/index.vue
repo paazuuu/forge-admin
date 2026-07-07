@@ -260,10 +260,9 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   border-bottom: 1px solid var(--nexus-border);
   background: var(--nexus-tab-bg);
-  padding: 0 6px;
+  padding: 0 8px;
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
   overflow: hidden;
 }
 
@@ -278,37 +277,37 @@ onBeforeUnmount(() => {
 }
 
 .nexus-tab-bar :deep(.n-tabs-tab) {
-  border: 1px solid transparent !important;
-  border-bottom: none !important;
-  border-radius: 8px 8px 0 0 !important;
+  border: 0 !important;
+  border-radius: 3px !important;
   background: transparent !important;
-  color: var(--text-tertiary) !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  padding: 5px 10px !important;
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 0 12px !important;
   height: 30px !important;
-  transition: all var(--transition-base) !important;
+  box-shadow: none !important;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease !important;
 }
 
 .nexus-tab-bar :deep(.n-tabs-tab:hover) {
-  background: var(--bg-secondary) !important;
-  color: var(--text-secondary) !important;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent) !important;
+  color: var(--text-primary) !important;
 }
 
 .nexus-tab-bar :deep(.n-tabs-tab.n-tabs-tab--active) {
-  background: var(--bg-primary) !important;
-  border-color: var(--nexus-border) !important;
-  border-bottom-color: var(--bg-primary) !important;
-  color: var(--text-primary) !important;
-  font-weight: 700 !important;
+  background: color-mix(in srgb, var(--primary-color, #4242f7) 9%, transparent) !important;
+  color: var(--primary-color, #4242f7) !important;
+  font-weight: 600 !important;
   z-index: 1;
-  margin-bottom: -1px;
 }
 
 /* 深色模式下选中态增强 */
 .dark .nexus-tab-bar :deep(.n-tabs-tab.n-tabs-tab--active) {
-  color: #f8fafc !important;
-  font-weight: 700 !important;
+  background: color-mix(in srgb, var(--primary-color, #6a7dff) 18%, transparent) !important;
+  color: var(--primary-200, #c7d2fe) !important;
+  font-weight: 600 !important;
 }
 
 /* 侧边栏深色模式 */

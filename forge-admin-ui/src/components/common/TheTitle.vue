@@ -1,5 +1,5 @@
 <template>
-  <router-link to="/" class="the-title text-14 mr-10 cursor-pointer transition-opacity hover:opacity-80">
+  <router-link to="/" class="the-title">
     {{ systemName }}
   </router-link>
 </template>
@@ -19,6 +19,26 @@ const systemName = computed(() => {
 
 <style scoped>
 .the-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
   color: var(--brand-title-text-color, var(--layout-header-text-color, #ffffff));
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.16s ease;
+}
+
+.the-title:hover {
+  opacity: 0.82;
+}
+
+.the-title:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 3px;
 }
 </style>

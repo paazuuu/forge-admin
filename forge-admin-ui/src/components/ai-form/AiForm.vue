@@ -14,6 +14,7 @@
   <n-form
     ref="formRef"
     class="ai-form"
+    :class="{ 'ai-form--search': isSearchForm }"
     :model="formValue"
     :rules="formRules"
     :label-placement="labelPlacement"
@@ -55,19 +56,28 @@
 
           <template v-if="hasInlineActions" #gridAppend>
             <!-- 表单操作区域 -->
-            <n-gi :span="actionCellSpan" class="af-action-cell">
-              <n-space align="baseline" :wrap="false">
+            <n-gi
+              :span="actionCellSpan"
+              class="af-action-cell"
+              :class="{ 'af-action-cell--search': isSearchForm }"
+            >
+              <n-space class="af-action-space" align="baseline" :wrap="isSearchForm">
                 <!-- 自定义操作按钮 -->
                 <slot name="formAction" :form-data="formValue" />
 
                 <!-- 折叠/展开按钮 -->
                 <n-button
                   v-if="showCollapseToggle"
+                  class="af-collapse-toggle"
+                  :class="{ 'af-collapse-toggle--search': isSearchForm }"
                   text
                   type="primary"
+                  :circle="isSearchForm"
+                  :title="isCollapsed ? '展开更多搜索条件' : '收起搜索条件'"
+                  :aria-label="isCollapsed ? '展开更多搜索条件' : '收起搜索条件'"
                   @click="toggleCollapse"
                 >
-                  {{ isCollapsed ? '展开' : '收起' }}
+                  <span v-if="!isSearchForm">{{ isCollapsed ? '展开' : '收起' }}</span>
                   <template #icon>
                     <n-icon>
                       <component :is="isCollapsed ? ChevronDownOutline : ChevronUpOutline" />
@@ -466,6 +476,7 @@ const showCollapseToggle = computed(() => props.enableCollapse && visibleFieldSc
 const sectionNavItems = computed(() => collectSectionNavItems(visibleSchema.value))
 const showSectionNav = computed(() => sectionNavItems.value.length >= 3)
 const hasInlineActions = computed(() => !!slots.formAction || showCollapseToggle.value)
+const isSearchForm = computed(() => props.context?.isSearch === true)
 const actionCellSpan = computed(() => {
   const cols = Math.max(1, Number(props.gridCols) || 1)
 
@@ -1083,8 +1094,24 @@ function isLegacyGroupTitleNode(node = {}) {
   min-width: 0;
 }
 
-.af-action-cell :deep(.n-space) {
-  flex-wrap: nowrap !important;
+.af-action-space {
+  max-width: 100%;
+  justify-content: flex-end;
+}
+
+.af-action-cell--search {
+  align-items: center;
+}
+
+.af-action-cell--search :deep(.n-space) {
+  row-gap: 6px !important;
+  column-gap: 6px !important;
+}
+
+.af-collapse-toggle--search {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
 }
 
 :global(.dark) .ai-form-section-nav {

@@ -81,9 +81,147 @@ async function handleContextMenu(e, tagItem) {
 
 <style scoped>
 #top-tab {
-  width: auto;
-  height: 100%;
   display: flex;
   align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  overflow: hidden;
+  --forge-tab-height: 30px;
+  --forge-tab-gap: 5px;
+  --forge-tab-text: var(--text-secondary, #4e5969);
+  --forge-tab-muted: var(--text-tertiary, #86909c);
+  --forge-tab-active-bg: color-mix(in srgb, var(--primary-color, #4242f7) 9%, transparent);
+  --forge-tab-hover-bg: color-mix(in srgb, var(--text-primary, #1d2129) 5%, transparent);
+}
+
+#top-tab :deep(.n-tabs) {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  overflow: hidden;
+}
+
+#top-tab :deep(.n-tabs-nav) {
+  height: 38px;
+  min-height: 38px;
+  border: 0 !important;
+  background: transparent !important;
+  line-height: 1;
+}
+
+#top-tab :deep(.n-tabs-nav::before),
+#top-tab :deep(.n-tabs-nav::after) {
+  display: none !important;
+}
+
+#top-tab :deep(.n-tabs-nav-scroll-wrapper),
+#top-tab :deep(.n-tabs-nav-scroll-content),
+#top-tab :deep(.n-tabs-nav-scroll-content > div) {
+  height: 38px;
+}
+
+#top-tab :deep(.n-tabs-nav-scroll-content) {
+  display: flex;
+  align-items: center;
+  gap: var(--forge-tab-gap);
+}
+
+#top-tab :deep(.n-tabs-tab-wrapper) {
+  display: flex;
+  align-items: center;
+  height: 38px;
+}
+
+#top-tab :deep(.n-tabs-tab) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--forge-tab-height) !important;
+  min-height: var(--forge-tab-height) !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  background: transparent !important;
+  color: var(--forge-tab-text) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: var(--forge-tab-height) !important;
+  box-shadow: none !important;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease !important;
+}
+
+#top-tab :deep(.n-tabs-tab::after) {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  background: var(--primary-color, #4242f7);
+  content: '';
+  opacity: 0;
+  transform: scaleX(0.35);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+#top-tab :deep(.n-tabs-tab:hover) {
+  background: var(--forge-tab-hover-bg) !important;
+  color: var(--text-primary, #1d2129) !important;
+}
+
+#top-tab :deep(.n-tabs-tab.n-tabs-tab--active) {
+  background: var(--forge-tab-active-bg) !important;
+  color: var(--primary-color, #4242f7) !important;
+  font-weight: 600 !important;
+}
+
+#top-tab :deep(.n-tabs-tab.n-tabs-tab--active::after) {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+#top-tab :deep(.n-tabs-tab__label) {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#top-tab :deep(.n-tabs-tab__close) {
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  border-radius: 3px;
+  color: var(--forge-tab-muted);
+  font-size: 12px !important;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+#top-tab :deep(.n-tabs-tab__close .n-icon),
+#top-tab :deep(.n-tabs-tab__close svg) {
+  width: 12px !important;
+  height: 12px !important;
+  font-size: 12px !important;
+}
+
+#top-tab :deep(.n-tabs-tab__close:hover) {
+  background: color-mix(in srgb, var(--text-primary, #1d2129) 9%, transparent);
+  color: var(--text-secondary, #4e5969);
+}
+
+#top-tab :deep(.n-tabs-tab-pad),
+#top-tab :deep(.n-tabs-tab-pane) {
+  display: none;
+}
+
+.dark #top-tab {
+  --forge-tab-active-bg: color-mix(in srgb, var(--primary-color, #6a7dff) 18%, transparent);
+  --forge-tab-hover-bg: rgba(255, 255, 255, 0.06);
 }
 </style>

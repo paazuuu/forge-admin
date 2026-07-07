@@ -5,6 +5,10 @@ import { getSessionStorage, removeSessionStorage, setSessionStorage } from '@/ut
 
 const TABS_KEY = `${import.meta.env.VITE_TENANT || 'default'}_tabs`
 
+function waitFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()))
+}
+
 export const useTabStore = defineStore('tab', {
   state: () => ({
     tabs: getSessionStorage(TABS_KEY) || [],
@@ -195,8 +199,9 @@ export const useTabStore = defineStore('tab', {
         }
       }
 
-      // 触发重新渲染
+      // 触发重新渲染，至少等待一帧，保证 router-view 先卸载再重新挂载。
       await nextTick()
+      await waitFrame()
 
       // 重置reloading状态
       this.reloading = false

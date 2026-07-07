@@ -4641,10 +4641,12 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .ai-crud-page-loading-mask {
@@ -4858,7 +4860,7 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 }
 
 .ai-crud-table :deep(.n-data-table-wrapper) {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4873,12 +4875,13 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 }
 
 .ai-crud-table :deep(.n-data-table-base-table) {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table-base-table-body) {
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 144px;
   overflow: hidden;
 }
 

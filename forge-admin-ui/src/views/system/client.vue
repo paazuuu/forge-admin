@@ -42,7 +42,6 @@
 <script setup lang="ts">
 import { NButton, NTag } from 'naive-ui'
 import { computed, h, ref } from 'vue'
-import { AiCrudPage } from '@/components/ai-form'
 import { request } from '@/utils'
 
 defineOptions({ name: 'SystemClient' })
@@ -448,14 +447,16 @@ async function handleReloadCache(row) {
 
 <style scoped lang="scss">
 .client-management-page {
+  display: flex;
+  width: 100%;
   height: 100%;
   min-height: 0;
-  display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .client-management-page :deep(.ai-crud-page) {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
 }
 </style>
