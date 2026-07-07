@@ -376,7 +376,70 @@ const currentSize = ref(normalizeTableSize(props.size))
 const currentRenderMode = ref(props.renderMode)
 const visibleColumns = ref([])
 
-const DEFAULT_COLUMN_ALIGN = 'center'
+const DEFAULT_TEXT_COLUMN_ALIGN = 'left'
+const CENTER_COLUMN_KEYS = new Set([
+  'status',
+  'state',
+  'enabled',
+  'enabledMark',
+  'enabled_mark',
+  'type',
+  'category',
+  'gender',
+  'sex',
+  'userType',
+  'userStatus',
+  'postType',
+  'postStatus',
+  'orgType',
+  'orgStatus',
+  'captchaType',
+  'concurrentLogin',
+  'shareToken',
+  'visible',
+  'isDefault',
+  'defaultFlag',
+])
+const CENTER_COLUMN_TITLES = new Set([
+  '状态',
+  '类型',
+  '分类',
+  '性别',
+  '用户类型',
+  '岗位类型',
+  '组织类型',
+  '验证码覆盖',
+  '并发登录',
+  '共享Token',
+  '是否默认',
+  '默认',
+  '显示',
+  '隐藏',
+])
+const RIGHT_COLUMN_KEYS = new Set([
+  'sort',
+  'orderNo',
+  'orderNum',
+  'order_num',
+  'count',
+  'total',
+  'amount',
+  'price',
+  'size',
+  'fileSize',
+  'tokenTimeout',
+  'tokenActivityTimeout',
+])
+const RIGHT_COLUMN_TITLES = new Set([
+  '排序',
+  '数量',
+  '次数',
+  '金额',
+  '价格',
+  '大小',
+  'Token有效期',
+  'Token活跃超时',
+])
 
 const RenderCell = props => props.render?.() ?? null
 
@@ -437,7 +500,7 @@ const tableColumns = computed(() => {
 
     const actionColumn = isActionColumn(col)
     const resolvedFixed = shouldDefaultRightFixed(col) ? 'right' : col.fixed
-    const columnAlign = col.align || DEFAULT_COLUMN_ALIGN
+    const columnAlign = col.align || inferColumnAlign(col, actionColumn)
     const columnTitleAlign = col.titleAlign || col.headerAlign || columnAlign
 
     const column = {
@@ -534,6 +597,22 @@ function isActionColumn(column) {
   const key = String(column?.key || column?.prop || column?.dataIndex || '').trim()
   const title = String(column?.label || column?.title || '').trim()
   return ['action', 'actions', 'operation', 'operations'].includes(key) || title === '操作'
+}
+
+function inferColumnAlign(column, actionColumn = false) {
+  if (actionColumn || column?.type === 'selection' || column?.type === 'expand')
+    return 'center'
+
+  const key = String(column?.key || column?.prop || column?.dataIndex || '').trim()
+  const title = String(column?.label || column?.title || '').trim()
+
+  if (RIGHT_COLUMN_KEYS.has(key) || RIGHT_COLUMN_TITLES.has(title))
+    return 'right'
+
+  if (CENTER_COLUMN_KEYS.has(key) || CENTER_COLUMN_TITLES.has(title))
+    return 'center'
+
+  return DEFAULT_TEXT_COLUMN_ALIGN
 }
 
 function shouldDefaultRightFixed(column) {

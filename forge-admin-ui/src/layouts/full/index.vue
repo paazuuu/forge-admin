@@ -16,7 +16,7 @@
     <!-- 主内容区 -->
     <article class="main-content-full">
       <AppHeader class="header-full" />
-      <AppCard class="tab-bar-full">
+      <AppCard :bordered="false" :padding="false" class="tab-bar-full" shadow="none" radius="none">
         <AppTab class="tab-content" />
       </AppCard>
       <div class="content-full" :class="{ 'content-full-flush': isFlowTaskListPage }">
@@ -88,18 +88,17 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 }
 
 .tab-bar-full {
-  height: 48px;
+  height: 38px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 8px;
   border-bottom: 1px solid #e2e8f0;
 }
 
 .tab-content {
   flex: 1;
   min-width: 0;
-  padding: 0 12px;
 }
 
 .content-full {

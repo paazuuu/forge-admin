@@ -134,25 +134,21 @@ const columns = [
     title: '系统名称',
     key: 'name',
     width: 200,
-    align: 'center',
   },
   {
     title: '系统ID',
     key: 'id',
     width: 150,
-    align: 'center',
   },
   {
     title: '别名',
     key: 'alias',
     width: 150,
-    align: 'center',
   },
   {
     title: 'URL',
     key: 'url',
     width: 200,
-    align: 'center',
   },
   {
     title: '图标',

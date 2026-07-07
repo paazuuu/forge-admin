@@ -1,15 +1,15 @@
 <template>
   <n-dropdown
+    v-if="showOrgSwitcher"
     trigger="click"
     :options="dropdownOptions"
-    :disabled="dropdownOptions.length === 0 || switchingOrg"
+    :disabled="switchingOrg"
     @select="handleSelect"
   >
-    <div class="org-switcher" :class="{ 'is-single': switchableOrgCount <= 1 }">
+    <div class="org-switcher">
       <i class="i-material-symbols:account-tree-rounded org-icon" />
-      <span class="org-label">当前组织</span>
       <span class="org-name">{{ currentOrgName }}</span>
-      <i v-if="switchableOrgCount > 1" class="i-material-symbols:expand-more-rounded org-arrow" />
+      <i class="i-material-symbols:expand-more-rounded org-arrow" />
     </div>
   </n-dropdown>
 </template>
@@ -40,6 +40,7 @@ const displayOrgOptions = computed(() => {
   }]
 })
 const switchableOrgCount = computed(() => displayOrgOptions.value.length)
+const showOrgSwitcher = computed(() => switchableOrgCount.value > 1)
 const currentOrgName = computed(() => {
   const current = displayOrgOptions.value.find(item => Number(item.id) === Number(currentOrgId.value))
   return current?.orgName || userStore.activeOrgName || userStore.userInfo?.activeOrgName || '未选择组织'
@@ -134,20 +135,10 @@ watch(() => [userStore.userInfo?.tenantId, userStore.userInfo?.activeOrgId], () 
   color: var(--text-primary);
 }
 
-.org-switcher.is-single {
-  cursor: default;
-}
-
 .org-icon,
 .org-arrow {
   flex-shrink: 0;
   font-size: 16px;
-}
-
-.org-label {
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
 }
 
 .org-name {
@@ -156,11 +147,5 @@ watch(() => [userStore.userInfo?.tenantId, userStore.userInfo?.activeOrgId], () 
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-}
-
-@media (max-width: 900px) {
-  .org-label {
-    display: none;
-  }
 }
 </style>

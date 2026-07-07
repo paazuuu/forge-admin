@@ -54,11 +54,11 @@ const isFlowTaskListPage = computed(() => isFlowTaskListPath(route.path))
 
 /* Tab 标签栏 */
 .bento-tab-bar {
-  height: 48px;
+  height: 38px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--border-light);
   border-radius: 0;
   overflow: hidden;

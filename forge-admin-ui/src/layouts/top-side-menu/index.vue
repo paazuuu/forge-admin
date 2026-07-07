@@ -5,11 +5,13 @@
 
     <!-- 顶部一级菜单 -->
     <header
-      class="layout-header top-layout-header h-60 flex flex-shrink-0 items-center px-20"
+      class="layout-header top-layout-header flex flex-shrink-0 items-center"
     >
-      <TheLogo class="brand-logo mr-20" />
-      <TheTitle class="brand-title" />
-      <MenuCollapse class="menu-collapse-action mr-10" />
+      <div class="brand-section">
+        <TheLogo class="brand-logo" />
+        <TheTitle class="brand-title" />
+      </div>
+      <PageRefresh class="header-refresh-action" />
       <TopMenu class="top-menu-wrapper main-top-menu flex-1" />
 
       <!-- 菜单搜索 -->
@@ -41,11 +43,14 @@
         border-r="1px solid #999999"
       >
         <SideMenu />
+        <div class="side-collapse-dock">
+          <MenuCollapse class="side-collapse-action" />
+        </div>
       </aside>
 
       <!-- 主内容区域 -->
       <article class="w-0 flex flex-col flex-1">
-        <AppCard :bordered="false" :padding="false" class="px-10 py-3" shadow="none" radius="none">
+        <AppCard :bordered="false" :padding="false" class="top-side-layout-tab-bar px-8 py-0" shadow="none" radius="none">
           <AppTab class="w-0 flex-1" />
         </AppCard>
         <div class="layout-page-content flex-1 bg-[#f2f3f5] p-12" :class="{ 'flow-task-layout-content': isFlowTaskListPage }">
@@ -70,6 +75,7 @@ import {
   MenuSearch,
   MessageNotification,
   OrgSwitcher,
+  PageRefresh,
   TenantSwitcher,
   UserAvatar,
 } from '@/layouts/components'
@@ -120,9 +126,38 @@ const showSidebar = computed(() => {
   min-width: 0;
 }
 
+.top-layout-header {
+  height: 56px !important;
+  padding-right: 16px !important;
+  padding-left: 16px !important;
+  gap: 10px;
+}
+
+.brand-section {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  max-width: 320px;
+  gap: 10px;
+}
+
+.brand-logo {
+  flex-shrink: 0;
+}
+
+.brand-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-refresh-action {
+  flex-shrink: 0;
+  color: var(--top-menu-text-color, var(--layout-header-text-color));
+}
+
 .header-search {
-  margin-right: 8px !important;
-  margin-left: 8px !important;
+  margin-right: 4px !important;
+  margin-left: 4px !important;
 }
 
 .header-actions-inner {
@@ -139,9 +174,51 @@ const showSidebar = computed(() => {
   overflow-y: auto;
 }
 
+.top-side-layout-tab-bar {
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+}
+
 .flow-task-layout-content {
   overflow: hidden;
   padding: 0 !important;
+}
+
+.side-menu-wrapper {
+  background: var(--side-menu-bg-color, var(--bg-primary));
+}
+
+.side-collapse-dock {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 12px;
+  border-top: 1px solid var(--side-menu-border-color, var(--border-light));
+  background: color-mix(in srgb, var(--side-menu-bg-color, var(--bg-primary)) 94%, var(--text-primary) 6%);
+}
+
+.side-collapse-dock :deep(.menu-collapse-button) {
+  width: 100%;
+  height: 30px;
+  justify-content: flex-start;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.side-menu-wrapper.collapsed .side-collapse-dock {
+  justify-content: center;
+  padding: 0;
+}
+
+.side-menu-wrapper.collapsed .side-collapse-dock :deep(.menu-collapse-button) {
+  width: 32px;
+  justify-content: center;
 }
 
 @media (max-width: 640px) {
@@ -151,20 +228,18 @@ const showSidebar = computed(() => {
     padding-left: 12px !important;
   }
 
-  .brand-logo {
-    flex-shrink: 0;
-    margin-right: 4px !important;
+  .brand-section {
+    flex: 0 0 auto;
+    min-width: 0;
+    gap: 0;
   }
 
   .brand-title,
+  .header-refresh-action,
   .header-search,
   .header-divider,
   .mobile-hidden-action {
     display: none !important;
-  }
-
-  .menu-collapse-action {
-    margin-right: 0 !important;
   }
 
   .main-top-menu {

@@ -243,6 +243,8 @@ watch(() => props.activeKey, () => {
 }
 
 .forge-top-menu-track {
+  display: flex;
+  justify-content: flex-start;
   min-width: 0;
   width: 100%;
   height: 100%;
@@ -262,6 +264,7 @@ watch(() => props.activeKey, () => {
   height: 100%;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 4px;
 }
 
@@ -289,21 +292,18 @@ watch(() => props.activeKey, () => {
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transform: translateY(0);
   transition:
     background-color var(--transition-fast),
-    color var(--transition-fast),
-    transform var(--transition-fast);
+    color var(--transition-fast);
 }
 
 .forge-top-menu-item:hover {
   color: var(--top-menu-text-color-hover);
   background: transparent;
-  transform: translateY(-1px);
 }
 
 .forge-top-menu-item:active {
-  transform: translateY(0) scale(0.985);
+  background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
 .forge-top-menu-node.is-active > .forge-top-menu-item {
@@ -338,16 +338,6 @@ watch(() => props.activeKey, () => {
 .forge-top-menu-icon {
   width: 18px;
   height: 18px;
-  transform: scale(1);
-  transition: transform var(--transition-fast);
-}
-
-.forge-top-menu-item:hover .forge-top-menu-icon {
-  transform: scale(1.12);
-}
-
-.forge-top-menu-node.is-active > .forge-top-menu-item .forge-top-menu-icon {
-  transform: scale(1.08);
 }
 
 .forge-top-menu-icon :deep(.icon-renderer),

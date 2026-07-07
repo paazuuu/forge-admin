@@ -27,6 +27,14 @@ export const naiveThemeOverrides = {
     primaryColorHover: '#5388ff',
     primaryColorSuppl: '#5388ff',
     primaryColorPressed: '#2058f5',
+    borderRadius: '3px',
+  },
+  Button: {
+    borderRadiusTiny: '3px',
+    borderRadiusSmall: '3px',
+    borderRadiusMedium: '3px',
+    borderRadiusLarge: '4px',
+    fontWeight: '500',
   },
 }
 
