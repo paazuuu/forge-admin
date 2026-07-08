@@ -1,5 +1,6 @@
 import { normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
 import { useAuthStore } from '@/store/modules/auth'
+import { managedFetch } from '@/composables/useGlobalLoading'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 
@@ -160,13 +161,16 @@ export async function businessDownloadAppCode(id, params = {}) {
       search.append(key, value)
   })
   const query = search.toString()
-  const resp = await fetch(`${BASE_URL}/ai/business/app/${id}/code/download${query ? `?${query}` : ''}`, {
+  const resp = await managedFetch(`${BASE_URL}/ai/business/app/${id}/code/download${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: {
       'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
       'X-Timestamp': Date.now().toString(),
       'X-Nonce': generateUUID(),
     },
+  }, {
+    globalLoadingType: 'download',
+    globalLoadingText: '文件下载处理中，请稍候...',
   })
   if (!resp.ok)
     throw new Error(await resp.text() || resp.statusText)

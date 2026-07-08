@@ -1,12 +1,32 @@
 import { useAppStore } from '@/store'
+import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
 
 export function createPageLoadingGuard(router) {
+  let routeLoadingToken = null
+
+  function startRouteLoading() {
+    if (routeLoadingToken)
+      return
+
+    routeLoadingToken = startGlobalLoading({
+      globalLoadingType: 'route',
+      globalLoadingText: '页面加载中，请稍候...',
+    })
+  }
+
+  function finishRouteLoading() {
+    finishGlobalLoading(routeLoadingToken)
+    routeLoadingToken = null
+  }
+
   router.beforeEach(() => {
+    startRouteLoading()
     $loadingBar.start()
   })
 
   router.afterEach(() => {
     setTimeout(() => {
+      finishRouteLoading()
       $loadingBar.finish()
       // 确保路由守卫完成状态被设置
       const appStore = useAppStore()
@@ -18,6 +38,7 @@ export function createPageLoadingGuard(router) {
   })
 
   router.onError(() => {
+    finishRouteLoading()
     $loadingBar.error()
     // 发生错误时也要确保路由守卫完成状态被设置
     const appStore = useAppStore()

@@ -120,6 +120,7 @@ import {
 import { NIcon, NInput, NModal, NText, NUpload } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useStorageConfig } from '@/composables/useStorageConfig'
+import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
 import { useAuthStore } from '@/store'
 import { downloadFile, generateUUID, getFileUrl, request, resolveRenderableFileUrl } from '@/utils'
 
@@ -207,6 +208,7 @@ const renameVisible = ref(false)
 const renameFile = ref(null)
 const renameName = ref('')
 let loadSeq = 0
+const uploadLoadingTokens = new Map()
 
 // 上传提示文案
 const uploadHint = computed(() => {
@@ -444,12 +446,38 @@ function handleBeforeUpload({ file }) {
     return false
   }
 
+  startUploadLoading(file)
   return true
+}
+
+function resolveUploadLoadingKey(file) {
+  return file?.id || file?.name || `file-${Date.now()}`
+}
+
+function startUploadLoading(file) {
+  const key = resolveUploadLoadingKey(file)
+  if (uploadLoadingTokens.has(key))
+    return
+
+  const token = startGlobalLoading({
+    globalLoadingType: 'upload',
+    globalLoadingText: '文件上传中，请稍候...',
+  })
+  uploadLoadingTokens.set(key, token)
+}
+
+function finishUploadLoading(file) {
+  const key = resolveUploadLoadingKey(file)
+  const token = uploadLoadingTokens.get(key)
+  finishGlobalLoading(token)
+  uploadLoadingTokens.delete(key)
 }
 
 // 上传完成（⚠ 必须同步返回，Naive Upload 不等待 Promise，
 // 否则 id 变 undefined 导致图片不显示 + warning）
 function handleFinish({ file, event }) {
+  finishUploadLoading(file)
+
   try {
     const response = JSON.parse(event.target.response)
 
@@ -510,8 +538,16 @@ function handleFinish({ file, event }) {
 
 // 上传失败
 function handleError({ file, event }) {
+  finishUploadLoading(file)
+
   const { response } = event.target
-  const { msg } = JSON.parse(response)
+  let msg = ''
+  try {
+    msg = JSON.parse(response)?.msg
+  }
+  catch {
+    msg = ''
+  }
   window.$message.error(msg || '上传失败，请重试')
   emit('error', { file, event })
 }

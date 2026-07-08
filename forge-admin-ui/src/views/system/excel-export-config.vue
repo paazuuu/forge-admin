@@ -77,6 +77,7 @@ import { computed, h, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
+import { managedFetch } from '@/composables/useGlobalLoading'
 import { useAuthStore } from '@/store'
 import { request } from '@/utils'
 import ExcelColumnConfig from './excel-column-config.vue'
@@ -499,11 +500,14 @@ async function handleTestExport(row) {
     const url = `${baseUrl}/system/excel/export-config/test/${row.id}`
 
     // 使用 fetch 下载文件
-    const response = await fetch(url, {
+    const response = await managedFetch(url, {
       method: 'GET',
       headers: {
         Authorization: token ? `Bearer ${token}` : '',
       },
+    }, {
+      globalLoadingType: 'export',
+      globalLoadingText: '文件导出处理中，请稍候...',
     })
 
     if (!response.ok) {

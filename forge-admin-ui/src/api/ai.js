@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/modules/auth'
+import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
 import { generateUUID, request } from '@/utils'
 
 const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
@@ -33,12 +34,26 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
   const { maxRetries = 0, retryDelay = 800 } = options
   const controller = new AbortController()
   const authStore = useAuthStore()
+  const loadingToken = startGlobalLoading({
+    globalLoadingType: 'submit',
+    globalLoadingText: '智能体请求处理中，请稍候...',
+  })
   let currentRetry = 0
   let isAborted = false
   let completed = false
+  let loadingFinished = false
+
+  function finishStreamLoading() {
+    if (loadingFinished)
+      return
+
+    loadingFinished = true
+    finishGlobalLoading(loadingToken)
+  }
 
   controller.signal.addEventListener('abort', () => {
     isAborted = true
+    finishStreamLoading()
   })
 
   function completeOnce(data) {
@@ -46,6 +61,7 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
       return
 
     completed = true
+    finishStreamLoading()
     onComplete(data)
   }
 
@@ -104,6 +120,7 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
 
     if (eventType === 'error') {
       completed = true
+      finishStreamLoading()
       onError(parsedData?.message || parsedData?.reason || eventData || '智能体测试失败')
       return
     }
@@ -213,6 +230,7 @@ export function streamAgentChat(data, onChunk, onComplete, onError, options = {}
       setTimeout(doFetch, retryDelay)
     }
     else {
+      finishStreamLoading()
       onError(`连接失败: ${errorMessage}`)
     }
   }

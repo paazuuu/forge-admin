@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/modules/auth'
+import { finishGlobalLoading, managedFetch, startGlobalLoading } from '@/composables/useGlobalLoading'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 
@@ -83,6 +84,23 @@ export function lowcodeAiGenerateApp(data) {
 export function lowcodeAiStreamGenerateApp(data, onEvent, onComplete, onError) {
   const controller = new AbortController()
   const authStore = useAuthStore()
+  const loadingToken = startGlobalLoading({
+    globalLoadingType: 'submit',
+    globalLoadingText: 'AI 应用生成中，请稍候...',
+  })
+  let loadingFinished = false
+
+  function finishStreamLoading() {
+    if (loadingFinished)
+      return
+
+    loadingFinished = true
+    finishGlobalLoading(loadingToken)
+  }
+
+  controller.signal.addEventListener('abort', () => {
+    finishStreamLoading()
+  })
 
   fetch(`${BASE_URL}/ai/lowcode/app/ai/stream-generate`, {
     method: 'POST',
@@ -105,8 +123,10 @@ export function lowcodeAiStreamGenerateApp(data, onEvent, onComplete, onError) {
 
       function read() {
         reader.read().then(({ done, value }) => {
-          if (done)
+          if (done) {
+            finishStreamLoading()
             return
+          }
           buffer += decoder.decode(value, { stream: true })
           const events = buffer.split('\n\n')
           buffer = events.pop() || ''
@@ -127,10 +147,14 @@ export function lowcodeAiStreamGenerateApp(data, onEvent, onComplete, onError) {
               continue
             try {
               const parsed = JSON.parse(eventData)
-              if (eventType === 'complete')
+              if (eventType === 'complete') {
+                finishStreamLoading()
                 onComplete?.(parsed)
-              else if (eventType === 'error')
+              }
+              else if (eventType === 'error') {
+                finishStreamLoading()
                 onError?.(parsed.message || 'AI 生成失败')
+              }
               else
                 onEvent?.({ event: eventType, data: parsed })
             }
@@ -140,15 +164,19 @@ export function lowcodeAiStreamGenerateApp(data, onEvent, onComplete, onError) {
           }
           read()
         }).catch((error) => {
-          if (error.name !== 'AbortError')
+          if (error.name !== 'AbortError') {
+            finishStreamLoading()
             onError?.(error.message || 'AI 生成失败')
+          }
         })
       }
       read()
     })
     .catch((error) => {
-      if (error.name !== 'AbortError')
+      if (error.name !== 'AbortError') {
+        finishStreamLoading()
         onError?.(error.message || 'AI 生成失败')
+      }
     })
 
   return controller
@@ -174,13 +202,16 @@ export async function lowcodeDownloadAppCode(id, params = {}) {
       search.append(key, value)
   })
   const query = search.toString()
-  const resp = await fetch(`${BASE_URL}/ai/lowcode/app/${id}/code/download${query ? `?${query}` : ''}`, {
+  const resp = await managedFetch(`${BASE_URL}/ai/lowcode/app/${id}/code/download${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: {
       'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
       'X-Timestamp': Date.now().toString(),
       'X-Nonce': generateUUID(),
     },
+  }, {
+    globalLoadingType: 'download',
+    globalLoadingText: '文件下载处理中，请稍候...',
   })
   if (!resp.ok)
     throw new Error(await resp.text() || resp.statusText)

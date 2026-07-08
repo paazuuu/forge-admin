@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/modules/auth'
+import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
 import { generateUUID } from '@/utils/common'
 
 const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
@@ -7,11 +8,25 @@ export function streamFlowGenerate(data, onChunk, onComplete, onError, options =
   const { maxRetries = 1, retryDelay = 1000 } = options
   const controller = new AbortController()
   const authStore = useAuthStore()
+  const loadingToken = startGlobalLoading({
+    globalLoadingType: 'submit',
+    globalLoadingText: '流程生成中，请稍候...',
+  })
   let currentRetry = 0
   let isAborted = false
+  let loadingFinished = false
+
+  function finishStreamLoading() {
+    if (loadingFinished)
+      return
+
+    loadingFinished = true
+    finishGlobalLoading(loadingToken)
+  }
 
   controller.signal.addEventListener('abort', () => {
     isAborted = true
+    finishStreamLoading()
   })
 
   function doFetch() {
@@ -42,6 +57,9 @@ export function streamFlowGenerate(data, onChunk, onComplete, onError, options =
             if (done) {
               if (!hasReceivedData) {
                 handleRetry('服务器未返回数据')
+              }
+              else {
+                finishStreamLoading()
               }
               return
             }
@@ -75,9 +93,11 @@ export function streamFlowGenerate(data, onChunk, onComplete, onError, options =
                     onChunk({ event: eventType, data: parsed })
                   }
                   else if (eventType === 'complete') {
+                    finishStreamLoading()
                     onComplete(parsed)
                   }
                   else if (eventType === 'error') {
+                    finishStreamLoading()
                     onError(parsed.message)
                   }
                 }
@@ -118,6 +138,7 @@ export function streamFlowGenerate(data, onChunk, onComplete, onError, options =
       setTimeout(doFetch, retryDelay)
     }
     else {
+      finishStreamLoading()
       onError(`连接失败: ${errorMessage}`)
     }
   }

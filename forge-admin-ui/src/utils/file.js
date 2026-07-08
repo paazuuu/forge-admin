@@ -3,6 +3,7 @@
  */
 
 import { useAuthStore } from '@/store'
+import { managedFetch } from '@/composables/useGlobalLoading'
 import { generateUUID } from './common'
 import { request } from './http'
 import { getLocalStorage, setLocalStorage } from './storage'
@@ -222,6 +223,7 @@ export async function resolveFileAccessUrl(fileData, expires = FILE_URL_CACHE_EX
     params: { expires },
     needTip: false,
     encrypt: false,
+    skipGlobalLoading: true,
   })
   if (result.code !== 200 || !result.data) {
     throw new Error(result.msg || result.message || '文件访问地址获取失败')
@@ -259,8 +261,11 @@ export async function resolveRenderableFileUrl(fileData, expires = FILE_URL_CACH
     return url
   }
 
-  const response = await fetch(url, {
+  const response = await managedFetch(url, {
     headers: getAuthHeaders(),
+  }, {
+    globalLoadingType: 'download',
+    globalLoadingText: '文件下载处理中，请稍候...',
   })
   if (!response.ok) {
     throw new Error('文件加载失败')
@@ -314,7 +319,8 @@ export async function downloadFile(fileData, filename, expires = FILE_URL_CACHE_
     headers: getAuthHeaders(),
   })
   if (!response.ok) {
-    throw new Error('下载失败')
+    const errorText = await response.text().catch(() => '')
+    throw new Error(errorText || '下载失败')
   }
 
   const blob = await response.blob()

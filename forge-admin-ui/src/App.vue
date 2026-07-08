@@ -28,6 +28,7 @@
 
       <!-- 全局水印 -->
       <div v-if="watermarkConfig.enable" class="watermark-layer" :style="watermarkStyle" />
+      <GlobalLoadingOverlay />
     </n-message-provider>
   </n-config-provider>
 </template>
@@ -38,6 +39,7 @@ import { computed, defineAsyncComponent, markRaw, onMounted, shallowRef, watch }
 // 初始化响应式字体功能
 import { useRoute } from 'vue-router'
 import { LayoutSetting } from '@/components'
+import GlobalLoadingOverlay from '@/components/common/GlobalLoadingOverlay.vue'
 import { useWatermark } from '@/composables/useWatermark'
 import { useAppStore, usePermissionStore, useTabStore, useUserStore } from '@/store'
 import { initResponsiveFont } from '@/utils/responsive-font'

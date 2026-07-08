@@ -377,6 +377,7 @@ const currentRenderMode = ref(props.renderMode)
 const visibleColumns = ref([])
 
 const DEFAULT_TEXT_COLUMN_ALIGN = 'left'
+const SELECTION_COLUMN_WIDTH = 48
 const CENTER_COLUMN_KEYS = new Set([
   'status',
   'state',
@@ -488,6 +489,7 @@ const tableColumns = computed(() => {
     cols.push({
       type: 'selection',
       fixed: 'left',
+      width: SELECTION_COLUMN_WIDTH,
     })
   }
 
@@ -1078,6 +1080,37 @@ defineExpose({
 
 :deep(.n-data-table-base-table-body .n-scrollbar-container) {
   min-height: 0;
+}
+
+:deep(.n-data-table-th--fixed-left) {
+  z-index: 4;
+  background-color: var(--n-merged-th-color) !important;
+}
+
+:deep(.n-data-table-td--fixed-left) {
+  z-index: 3;
+  background-color: var(--n-merged-td-color) !important;
+}
+
+:deep(.n-data-table-th--selection.n-data-table-th--fixed-left) {
+  z-index: 5;
+}
+
+:deep(.n-data-table-td--selection.n-data-table-td--fixed-left) {
+  z-index: 4;
+}
+
+:deep(.n-data-table-th--selection),
+:deep(.n-data-table-td--selection) {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  padding: 0 !important;
+  background-clip: padding-box;
+}
+
+:deep(.n-data-table-tr:hover .n-data-table-td--fixed-left) {
+  background: var(--bg-secondary) !important;
 }
 
 .ai-table-toolbar-left,

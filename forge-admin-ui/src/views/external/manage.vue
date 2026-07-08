@@ -284,6 +284,7 @@ import { getExternalSystemList } from '@/api/external/system'
 import { AiCrudPage } from '@/components/ai-form'
 import FileUpload from '@/components/file-upload/index.vue'
 import { useDict } from '@/composables/useDict'
+import { managedFetch } from '@/composables/useGlobalLoading'
 import { useAuthStore } from '@/store'
 import { generateUUID, getFileDownloadUrl } from '@/utils'
 
@@ -1067,13 +1068,16 @@ async function downloadDoc() {
     return
   }
   try {
-    const response = await fetch(getFileDownloadUrl(docApi.value.docFileId), {
+    const response = await managedFetch(getFileDownloadUrl(docApi.value.docFileId), {
       method: 'GET',
       headers: {
         'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
         'X-Timestamp': Date.now().toString(),
         'X-Nonce': generateUUID(),
       },
+    }, {
+      globalLoadingType: 'download',
+      globalLoadingText: '文件下载处理中，请稍候...',
     })
 
     if (!response.ok) {

@@ -194,6 +194,7 @@ import versionApi from '@/api/version'
 import DictTag from '@/components/DictTag.vue'
 import { DingFlowViewer } from '@/components/flow-designer'
 import { useDict } from '@/composables/useDict'
+import { managedFetch } from '@/composables/useGlobalLoading'
 import { useAuthStore } from '@/store'
 import { generateUUID } from '@/utils/common'
 import VersionCompare from './versionCompare.vue'
@@ -470,13 +471,16 @@ async function handleDownload(row) {
   try {
     window.$message?.loading('正在下载版本文件...', { duration: 0, key: 'version-download' })
     const baseUrl = import.meta.env.VITE_REQUEST_PREFIX || ''
-    const response = await fetch(`${baseUrl}/api/flow/model/version/download/${row.id}`, {
+    const response = await managedFetch(`${baseUrl}/api/flow/model/version/download/${row.id}`, {
       method: 'GET',
       headers: {
         'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
         'X-Timestamp': Date.now().toString(),
         'X-Nonce': generateUUID(),
       },
+    }, {
+      globalLoadingType: 'download',
+      globalLoadingText: '文件下载处理中，请稍候...',
     })
 
     if (!response.ok) {

@@ -1,4 +1,6 @@
+import { nextTick } from 'vue'
 import { useAuthStore, usePermissionStore, useTabStore, useTenantStore } from '@/store'
+import { attachRequestGlobalLoading, finishRequestGlobalLoading } from '@/composables/useGlobalLoading'
 import { cryptoConfig, decryptResponse, encryptRequest, matchPath, shouldEncrypt } from '@/utils/crypto'
 import { getSessionKey, initKeyExchange, resetKeyExchange } from '@/utils/crypto/key-exchange'
 import { getTenantPageBaseTitle } from '@/utils/page-title'
@@ -265,6 +267,8 @@ export function setupInterceptors(axiosInstance) {
    * 响应成功拦截器
    */
   async function resResolve(response) {
+    finishRequestGlobalLoading(response?.config)
+
     // 先进行解密处理
     try {
       response = decryptResponse(response)
@@ -288,6 +292,7 @@ export function setupInterceptors(axiosInstance) {
 
         // 提示用户
         const message = '安全会话已过期，请重新操作'
+        await nextTick()
         window.$message?.error(message)
 
         // 抛出异常防止后续逻辑执行
@@ -330,6 +335,7 @@ export function setupInterceptors(axiosInstance) {
       status,
       responseData: data,
     }, data ?? response)
+    await nextTick()
     const finalMessage = resolveResError(code, message, needTip, detail)
     if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
       return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
@@ -341,10 +347,14 @@ export function setupInterceptors(axiosInstance) {
    * 响应失败拦截器 - 统一错误处理入口
    */
   async function resReject(error) {
+    finishRequestGlobalLoading(error?.config || error?.response?.config)
+
     // 1. 处理已经在 resResolve 中标记了 skipErrorHandler 的错误（解密错误等）
     if (error?.skipErrorHandler) {
       return Promise.reject(error)
     }
+
+    await nextTick()
 
     // 2. 处理网络错误（没有 response）
     if (!error || !error.response) {
@@ -453,7 +463,6 @@ async function ensureEncryptionSession(config, axiosInstance, authStore) {
   const exchanged = await initKeyExchange(axiosInstance, authStore.accessToken)
   if (!exchanged || !getSessionKey()) {
     const error = createEncryptSessionError(config)
-    window.$message?.error(error.message)
     throw error
   }
 }
@@ -462,56 +471,69 @@ async function ensureEncryptionSession(config, axiosInstance, authStore) {
  * 请求拦截器
  */
 async function reqResolve(config, axiosInstance) {
-  // 获取认证存储实例
-  const authStore = useAuthStore()
+  config = attachRequestGlobalLoading(config)
 
-  // 设置默认headers
-  config.headers = config.headers || {}
+  try {
+    // 获取认证存储实例
+    const authStore = useAuthStore()
 
-  // 生成traceid: 时间戳+5位随机数
-  const timestamp = Date.now()
-  const random = Math.floor(10000 + Math.random() * 90000)
-  config.headers.traceId = `${timestamp}${random}`
+    // 设置默认headers
+    config.headers = config.headers || {}
 
-  // 添加认证token
-  if (authStore.accessToken) {
-    config.headers.Authorization = `Bearer ${authStore.accessToken}`
-  }
+    // 生成traceid: 时间戳+5位随机数
+    const timestamp = Date.now()
+    const random = Math.floor(10000 + Math.random() * 90000)
+    config.headers.traceId = `${timestamp}${random}`
 
-  Object.assign(config.headers, resolvePageAuditHeaders())
+    // 添加认证token
+    if (authStore.accessToken) {
+      config.headers.Authorization = `Bearer ${authStore.accessToken}`
+    }
 
-  // 添加防重放参数
-  const enableReplay = cryptoConfig?.enableReplay !== false
-  if (enableReplay && config.replay !== false) {
-    const url = config.url || ''
-    const path = url.split('?')[0]
-    const excludePaths = cryptoConfig?.replayExcludePaths || ['/auth/captcha', '/auth/captcha/**', '/auth/loginConfig', '/crypto/public-key']
+    Object.assign(config.headers, resolvePageAuditHeaders())
 
-    let excluded = false
-    for (const pattern of excludePaths) {
-      if (matchPath(path, pattern)) {
-        excluded = true
-        break
+    // 添加防重放参数
+    const enableReplay = cryptoConfig?.enableReplay !== false
+    if (enableReplay && config.replay !== false) {
+      const url = config.url || ''
+      const path = url.split('?')[0]
+      const excludePaths = cryptoConfig?.replayExcludePaths || ['/auth/captcha', '/auth/captcha/**', '/auth/loginConfig', '/crypto/public-key']
+
+      let excluded = false
+      for (const pattern of excludePaths) {
+        if (matchPath(path, pattern)) {
+          excluded = true
+          break
+        }
+      }
+
+      if (!excluded) {
+        config.headers['X-Timestamp'] = Date.now().toString()
+        config.headers['X-Nonce'] = generateUUID()
       }
     }
 
-    if (!excluded) {
-      config.headers['X-Timestamp'] = Date.now().toString()
-      config.headers['X-Nonce'] = generateUUID()
-    }
+    // 显式加密接口必须先完成会话密钥协商，禁止在无密钥时降级成明文请求
+    await ensureEncryptionSession(config, axiosInstance, authStore)
+
+    assertBusinessSelectorRequest(config)
+
+    // 加密处理
+    config = encryptRequest(config)
+
+    return config
   }
-
-  // 显式加密接口必须先完成会话密钥协商，禁止在无密钥时降级成明文请求
-  await ensureEncryptionSession(config, axiosInstance, authStore)
-
-  assertBusinessSelectorRequest(config)
-
-  // 加密处理
-  config = encryptRequest(config)
-
-  return config
+  catch (error) {
+    finishRequestGlobalLoading(config)
+    if (error?.code === 'ENCRYPT_KEY_MISSING') {
+      await nextTick()
+      window.$message?.error(error.message)
+    }
+    throw error
+  }
 }
 
 function reqReject(error) {
+  finishRequestGlobalLoading(error?.config)
   return Promise.reject(error)
 }

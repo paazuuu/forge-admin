@@ -545,6 +545,7 @@ import { AddOutline, ArrowBackOutline, ChevronBackOutline, ChevronDownOutline, C
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCrudGenerator } from '@/composables/useCrudGenerator'
+import { managedFetch } from '@/composables/useGlobalLoading'
 import { request } from '@/utils'
 import ApiConfigEditor from './components/ApiConfigEditor.vue'
 import DesensitizeConfigPanel from './components/DesensitizeConfigPanel.vue'
@@ -892,13 +893,16 @@ async function handleDownloadCode() {
     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
   })
   try {
-    const resp = await fetch(url, {
+    const resp = await managedFetch(url, {
       method: 'GET',
       headers: {
         'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
         'X-Timestamp': Date.now().toString(),
         'X-Nonce': uuid,
       },
+    }, {
+      globalLoadingType: 'download',
+      globalLoadingText: '文件下载处理中，请稍候...',
     })
     if (!resp.ok) {
       const text = await resp.text()

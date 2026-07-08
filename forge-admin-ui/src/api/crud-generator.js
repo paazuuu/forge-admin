@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/modules/auth'
+import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 
@@ -19,12 +20,26 @@ export function streamGenerate(data, onChunk, onComplete, onError, options = {})
   const { maxRetries = 2, retryDelay = 1000 } = options
   const controller = new AbortController()
   const authStore = useAuthStore()
+  const loadingToken = startGlobalLoading({
+    globalLoadingType: 'submit',
+    globalLoadingText: '代码生成中，请稍候...',
+  })
   let currentRetry = 0
   let isAborted = false
+  let loadingFinished = false
+
+  function finishStreamLoading() {
+    if (loadingFinished)
+      return
+
+    loadingFinished = true
+    finishGlobalLoading(loadingToken)
+  }
 
   // 监听abort事件
   controller.signal.addEventListener('abort', () => {
     isAborted = true
+    finishStreamLoading()
   })
 
   function doFetch() {
@@ -53,6 +68,9 @@ export function streamGenerate(data, onChunk, onComplete, onError, options = {})
               // 如果流结束但没有收到任何数据，可能是异常
               if (!hasReceivedData) {
                 handleRetry('服务器未返回数据')
+              }
+              else {
+                finishStreamLoading()
               }
               return
             }
@@ -86,9 +104,11 @@ export function streamGenerate(data, onChunk, onComplete, onError, options = {})
                     onChunk({ event: eventType, data: parsed })
                   }
                   else if (eventType === 'complete') {
+                    finishStreamLoading()
                     onComplete(parsed)
                   }
                   else if (eventType === 'error') {
+                    finishStreamLoading()
                     onError(parsed.message)
                   }
                 }
@@ -131,6 +151,7 @@ export function streamGenerate(data, onChunk, onComplete, onError, options = {})
       setTimeout(doFetch, retryDelay)
     }
     else {
+      finishStreamLoading()
       onError(`连接失败: ${errorMessage} (已重试${maxRetries}次)`)
     }
   }
