@@ -1,6 +1,6 @@
 import { normalizeRecordSelectorConfig } from '@/components/ai-form/record-selector-utils'
-import { useAuthStore } from '@/store/modules/auth'
 import { managedFetch } from '@/composables/useGlobalLoading'
+import { useAuthStore } from '@/store/modules/auth'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 

@@ -743,8 +743,8 @@ import {
   businessObjectRelations,
   saveBusinessObjectDesigner,
 } from '@/api/business-app'
-import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import LowcodeErDiagram from '@/components/lowcode-builder/model/LowcodeErDiagram.vue'
+import { cloneSchema, isSameSchema } from '@/components/lowcode-builder/model/model-schema'
 import {
   applyLinkageSchemaToFields,
   createLinkageSchemaFromFields,

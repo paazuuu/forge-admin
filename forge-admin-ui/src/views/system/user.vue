@@ -88,6 +88,7 @@
             add: 'post@/system/user/add',
             update: 'post@/system/user/edit',
             delete: 'post@/system/user/removeBatch',
+            export: 'post@/api/excel/export/sys_user_export',
           }"
           :search-schema="searchSchema"
           :columns="tableColumns"
@@ -102,6 +103,12 @@
           :edit-grid-cols="2"
           modal-width="900px"
           add-button-text="新增用户"
+          :show-import="true"
+          import-api="/system/user/import"
+          import-template-url="/api/excel/template/sys_user_import"
+          :show-export="true"
+          export-button-text="导出用户"
+          export-file-name="用户列表.xlsx"
           @selection-change="handleUserSelectionChange"
         >
           <!-- 自定义工具栏提示 -->
@@ -178,96 +185,219 @@
       </template>
     </n-modal>
 
-    <!-- 授权弹窗 -->
+    <!-- 关联管理弹窗（整合授权/组织/岗位/租户） -->
     <n-modal
-      v-model:show="authModalVisible"
-      :title="`用户授权 - ${currentUser.username || ''}`"
+      v-model:show="relationModalVisible"
+      :title="`关联管理 - ${currentUser.username || ''}`"
       preset="card"
-      style="width: 860px"
+      style="width: 880px"
       :mask-closable="false"
     >
-      <div class="auth-modal-content">
-        <n-alert type="info" :bordered="false" class="batch-action-alert">
-          角色授权按组织生效，切换授权组织后会分别加载该组织可用角色和用户已拥有角色。
-        </n-alert>
-        <n-form label-placement="left" label-width="90" class="batch-action-form">
-          <n-form-item label="授权组织">
-            <n-select
-              v-model:value="authOrgId"
-              :options="authOrgOptions"
-              placeholder="请选择授权组织"
-              filterable
-              :disabled="authOrgOptions.length === 0"
-            />
-          </n-form-item>
-        </n-form>
+      <n-tabs v-model:value="relationActiveTab" type="line" @update:value="handleRelationTabChange">
+        <!-- 角色授权 -->
+        <n-tab-pane name="auth" tab="角色授权">
+          <div class="auth-modal-content">
+            <n-alert type="info" :bordered="false" class="batch-action-alert">
+              角色授权按组织生效，切换授权组织后会分别加载该组织可用角色和用户已拥有角色。
+            </n-alert>
+            <n-form label-placement="left" label-width="90" class="batch-action-form">
+              <n-form-item label="授权组织">
+                <n-select
+                  v-model:value="authOrgId"
+                  :options="authOrgOptions"
+                  placeholder="请选择授权组织"
+                  filterable
+                  :disabled="authOrgOptions.length === 0"
+                />
+              </n-form-item>
+            </n-form>
 
-        <!-- 操作按钮 -->
-        <div class="auth-toolbar">
-          <n-input
-            v-model:value="roleSearchKeyword"
-            class="auth-role-search"
-            clearable
-            size="small"
-            placeholder="按角色名称搜索"
-            @clear="handleRoleSearch"
-            @keyup.enter="handleRoleSearch"
-          >
-            <template #prefix>
-              <i class="i-material-symbols:search-rounded" />
-            </template>
-          </n-input>
-          <n-space size="small" class="auth-toolbar-actions">
-            <n-button size="small" @click="handleRoleSearch">
-              <template #icon>
-                <i class="i-material-symbols:search-rounded" />
-              </template>
-              查询
-            </n-button>
-            <n-button size="small" @click="handleCheckAll">
-              <template #icon>
-                <i class="i-material-symbols:check-box-outline" />
-              </template>
-              全选本页
-            </n-button>
-            <n-button size="small" @click="handleUncheckAll">
-              <template #icon>
-                <i class="i-material-symbols:check-box-outline-blank" />
-              </template>
-              清空选择
-            </n-button>
-          </n-space>
-        </div>
+            <div class="auth-toolbar">
+              <n-input
+                v-model:value="roleSearchKeyword"
+                class="auth-role-search"
+                clearable
+                size="small"
+                placeholder="按角色名称搜索"
+                @clear="handleRoleSearch"
+                @keyup.enter="handleRoleSearch"
+              >
+                <template #prefix>
+                  <i class="i-material-symbols:search-rounded" />
+                </template>
+              </n-input>
+              <n-space size="small" class="auth-toolbar-actions">
+                <n-button size="small" @click="handleRoleSearch">
+                  <template #icon>
+                    <i class="i-material-symbols:search-rounded" />
+                  </template>
+                  查询
+                </n-button>
+                <n-button size="small" @click="handleCheckAll">
+                  <template #icon>
+                    <i class="i-material-symbols:check-box-outline" />
+                  </template>
+                  全选本页
+                </n-button>
+                <n-button size="small" @click="handleUncheckAll">
+                  <template #icon>
+                    <i class="i-material-symbols:check-box-outline-blank" />
+                  </template>
+                  清空选择
+                </n-button>
+              </n-space>
+            </div>
 
-        <!-- 角色列表区域 -->
-        <div class="auth-tree-container">
-          <n-spin :show="authLoading">
-            <n-data-table
-              :columns="authRoleColumns"
-              :data="roleTableData"
-              :checked-row-keys="checkedRoleKeys"
-              :pagination="rolePaginationConfig"
-              :row-key="row => row.id"
-              remote
-              striped
-              size="small"
-              @update:checked-row-keys="handleCheckedKeysChange"
-              @update:page="handleRolePageChange"
-              @update:page-size="handleRolePageSizeChange"
-            />
-          </n-spin>
-        </div>
-      </div>
+            <div class="auth-tree-container">
+              <n-spin :show="authLoading">
+                <n-data-table
+                  :columns="authRoleColumns"
+                  :data="roleTableData"
+                  :checked-row-keys="checkedRoleKeys"
+                  :pagination="rolePaginationConfig"
+                  :row-key="row => row.id"
+                  remote
+                  striped
+                  size="small"
+                  @update:checked-row-keys="handleCheckedKeysChange"
+                  @update:page="handleRolePageChange"
+                  @update:page-size="handleRolePageSizeChange"
+                />
+              </n-spin>
+            </div>
+          </div>
+        </n-tab-pane>
+
+        <!-- 组织绑定 -->
+        <n-tab-pane name="org" tab="组织绑定">
+          <div class="org-modal-content">
+            <div class="org-toolbar">
+              <n-space size="small">
+                <n-button size="small" @click="toggleUserOrgExpandAll">
+                  <template #icon>
+                    <i :class="orgTreeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
+                  </template>
+                  {{ orgTreeExpandAll ? '折叠全部' : '展开全部' }}
+                </n-button>
+              </n-space>
+              <div class="org-main-hint">
+                <span>已选 {{ checkedOrgKeys.length }} 个组织</span>
+                <strong>主组织：{{ mainOrgName || '请选择主组织' }}</strong>
+              </div>
+            </div>
+            <n-form label-placement="left" label-width="90" class="org-main-form">
+              <n-form-item label="主组织">
+                <n-select
+                  v-model:value="mainOrgId"
+                  :options="selectedOrgOptions"
+                  placeholder="请选择主组织"
+                  filterable
+                  :disabled="checkedOrgKeys.length === 0"
+                />
+              </n-form-item>
+            </n-form>
+
+            <div class="org-tree-container">
+              <n-spin :show="orgLoading">
+                <PremiumTree
+                  v-if="orgTreeData.length > 0"
+                  :data="orgTreeData"
+                  checkable
+                  :cascade="false"
+                  :selected-keys="mainOrgId ? [mainOrgId] : []"
+                  :checked-keys="checkedOrgKeys"
+                  :expanded-keys="orgTreeExpandedKeys"
+                  key-field="id"
+                  label-field="orgName"
+                  children-field="children"
+                  :get-node-icon="getLeftOrgNodeIcon"
+                  :get-node-meta="getUserOrgNodeMeta"
+                  :get-node-tone="getLeftOrgNodeTone"
+                  show-meta
+                  @update:expanded-keys="handleOrgExpandedKeysChange"
+                  @update:checked-keys="handleOrgCheckedKeysChange"
+                />
+                <n-empty v-else description="暂无组织数据" />
+              </n-spin>
+            </div>
+          </div>
+        </n-tab-pane>
+
+        <!-- 岗位绑定 -->
+        <n-tab-pane name="post" tab="岗位绑定">
+          <div class="post-modal-content">
+            <n-spin :show="postLoading">
+              <n-form label-placement="left" label-width="90">
+                <n-form-item label="主岗位">
+                  <n-select
+                    v-model:value="mainPostId"
+                    :options="selectedPostOptions"
+                    placeholder="请选择主岗位"
+                    clearable
+                  />
+                </n-form-item>
+                <n-form-item label="绑定岗位">
+                  <n-checkbox-group v-model:value="checkedPostKeys">
+                    <n-space vertical>
+                      <n-checkbox
+                        v-for="post in postList"
+                        :key="post.id"
+                        :value="post.id"
+                      >
+                        {{ post.postName }}
+                        <NTag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
+                          {{ post.postCode }}
+                        </NTag>
+                      </n-checkbox>
+                    </n-space>
+                  </n-checkbox-group>
+                  <n-empty v-if="!postLoading && postList.length === 0" description="暂无岗位数据" size="small" />
+                </n-form-item>
+              </n-form>
+            </n-spin>
+          </div>
+        </n-tab-pane>
+
+        <!-- 租户绑定（仅管理员可见） -->
+        <n-tab-pane v-if="userStore.isAdmin" name="tenant" tab="租户绑定">
+          <div class="tenant-modal-content">
+            <n-spin :show="tenantLoading">
+              <n-form label-placement="left" label-width="90">
+                <n-form-item label="绑定租户">
+                  <n-checkbox-group v-model:value="checkedTenantKeys">
+                    <n-space vertical>
+                      <n-checkbox
+                        v-for="tenant in tenantOptions"
+                        :key="tenant.id"
+                        :value="tenant.id"
+                      >
+                        {{ tenant.tenantName }}
+                      </n-checkbox>
+                    </n-space>
+                  </n-checkbox-group>
+                </n-form-item>
+                <n-form-item label="默认租户">
+                  <n-select
+                    v-model:value="defaultTenantId"
+                    :options="selectedTenantOptions"
+                    placeholder="请选择默认租户"
+                  />
+                </n-form-item>
+              </n-form>
+            </n-spin>
+          </div>
+        </n-tab-pane>
+      </n-tabs>
 
       <template #footer>
         <n-space justify="end">
-          <n-button @click="authModalVisible = false">
+          <n-button @click="relationModalVisible = false">
             取消
           </n-button>
           <n-button
             type="primary"
-            :loading="authSubmitLoading"
-            @click="handleSubmitAuth"
+            :loading="relationSubmitLoading"
+            @click="handleRelationSubmit"
           >
             确定
           </n-button>
@@ -381,135 +511,6 @@
       </template>
     </n-modal>
 
-    <!-- 组织选择弹窗 -->
-    <n-modal
-      v-model:show="orgModalVisible"
-      :title="`用户组织 - ${currentUser.username || ''}`"
-      preset="card"
-      style="width: 700px"
-      :mask-closable="false"
-    >
-      <div class="org-modal-content">
-        <!-- 操作按钮 -->
-        <div class="org-toolbar">
-          <n-space size="small">
-            <n-button size="small" @click="toggleUserOrgExpandAll">
-              <template #icon>
-                <i :class="orgTreeExpandAll ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
-              </template>
-              {{ orgTreeExpandAll ? '折叠全部' : '展开全部' }}
-            </n-button>
-          </n-space>
-          <div class="org-main-hint">
-            <span>已选 {{ checkedOrgKeys.length }} 个组织</span>
-            <strong>主组织：{{ mainOrgName || '请选择主组织' }}</strong>
-          </div>
-        </div>
-        <n-form label-placement="left" label-width="90" class="org-main-form">
-          <n-form-item label="主组织">
-            <n-select
-              v-model:value="mainOrgId"
-              :options="selectedOrgOptions"
-              placeholder="请选择主组织"
-              filterable
-              :disabled="checkedOrgKeys.length === 0"
-            />
-          </n-form-item>
-        </n-form>
-
-        <!-- 组织树形区域 -->
-        <div class="org-tree-container">
-          <n-spin :show="orgLoading">
-            <PremiumTree
-              v-if="orgTreeData.length > 0"
-              :data="orgTreeData"
-              checkable
-              :cascade="false"
-              :selected-keys="mainOrgId ? [mainOrgId] : []"
-              :checked-keys="checkedOrgKeys"
-              :expanded-keys="orgTreeExpandedKeys"
-              key-field="id"
-              label-field="orgName"
-              children-field="children"
-              :get-node-icon="getLeftOrgNodeIcon"
-              :get-node-meta="getUserOrgNodeMeta"
-              :get-node-tone="getLeftOrgNodeTone"
-              show-meta
-              @update:expanded-keys="handleOrgExpandedKeysChange"
-              @update:checked-keys="handleOrgCheckedKeysChange"
-            />
-            <n-empty v-else description="暂无组织数据" />
-          </n-spin>
-        </div>
-      </div>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="orgModalVisible = false">
-            取消
-          </n-button>
-          <n-button
-            type="primary"
-            :loading="orgSubmitLoading"
-            @click="handleSubmitOrg"
-          >
-            确定
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
-    <!-- 租户绑定弹窗 -->
-    <n-modal
-      v-model:show="tenantModalVisible"
-      :title="`用户租户 - ${currentUser.username || ''}`"
-      preset="card"
-      style="width: 640px"
-      :mask-closable="false"
-    >
-      <div class="tenant-modal-content">
-        <n-spin :show="tenantLoading">
-          <n-form label-placement="left" label-width="90">
-            <n-form-item label="绑定租户">
-              <n-checkbox-group v-model:value="checkedTenantKeys">
-                <n-space vertical>
-                  <n-checkbox
-                    v-for="tenant in tenantOptions"
-                    :key="tenant.id"
-                    :value="tenant.id"
-                  >
-                    {{ tenant.tenantName }}
-                  </n-checkbox>
-                </n-space>
-              </n-checkbox-group>
-            </n-form-item>
-            <n-form-item label="默认租户">
-              <n-select
-                v-model:value="defaultTenantId"
-                :options="selectedTenantOptions"
-                placeholder="请选择默认租户"
-              />
-            </n-form-item>
-          </n-form>
-        </n-spin>
-      </div>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="tenantModalVisible = false">
-            取消
-          </n-button>
-          <n-button
-            type="primary"
-            :loading="tenantSubmitLoading"
-            @click="handleSubmitTenant"
-          >
-            确定
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
     <!-- 批量加入租户弹窗 -->
     <n-modal
       v-model:show="batchTenantModalVisible"
@@ -554,62 +555,6 @@
         </n-space>
       </template>
     </n-modal>
-
-    <!-- 岗位绑定弹窗 -->
-    <n-modal
-      v-model:show="postModalVisible"
-      :title="`用户岗位 - ${currentUser.username || ''}`"
-      preset="card"
-      style="width: 640px"
-      :mask-closable="false"
-    >
-      <div class="post-modal-content">
-        <n-spin :show="postLoading">
-          <n-form label-placement="left" label-width="90">
-            <n-form-item label="主岗位">
-              <n-select
-                v-model:value="mainPostId"
-                :options="selectedPostOptions"
-                placeholder="请选择主岗位"
-                clearable
-              />
-            </n-form-item>
-            <n-form-item label="绑定岗位">
-              <n-checkbox-group v-model:value="checkedPostKeys">
-                <n-space vertical>
-                  <n-checkbox
-                    v-for="post in postList"
-                    :key="post.id"
-                    :value="post.id"
-                  >
-                    {{ post.postName }}
-                    <NTag v-if="post.postCode" size="small" type="info" :bordered="false" style="margin-left: 6px">
-                      {{ post.postCode }}
-                    </NTag>
-                  </n-checkbox>
-                </n-space>
-              </n-checkbox-group>
-              <n-empty v-if="!postLoading && postList.length === 0" description="暂无岗位数据" size="small" />
-            </n-form-item>
-          </n-form>
-        </n-spin>
-      </div>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="postModalVisible = false">
-            取消
-          </n-button>
-          <n-button
-            type="primary"
-            :loading="postSubmitLoading"
-            @click="handleSubmitPost"
-          >
-            确定
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
   </div>
 </template>
 
@@ -639,15 +584,19 @@ const selectedUserIds = ref([])
 // 左侧组织树相关
 const leftOrgTreeData = ref([])
 const leftOrgTreeLoading = ref(false)
-const leftOrgExpandAll = ref(true)
+const leftOrgExpandAll = ref(false)
 const leftOrgExpandedKeys = ref([])
 const leftOrgPanelCollapsed = ref(false)
 const selectedOrgKeys = ref([])
 const selectedOrgNode = ref(null)
 const isShowAllUsers = ref(true)
 
+// 关联管理弹窗（整合授权/组织/岗位/租户）
+const relationModalVisible = ref(false)
+const relationActiveTab = ref('auth')
+const relationSubmitLoading = ref(false)
+
 // 授权相关
-const authModalVisible = ref(false)
 const authLoading = ref(false)
 const authSubmitLoading = ref(false)
 const batchAuthModalVisible = ref(false)
@@ -681,7 +630,6 @@ const resetPwdRules = {
 }
 
 // 组织弹窗相关（用户组织绑定）
-const orgModalVisible = ref(false)
 const orgLoading = ref(false)
 const orgSubmitLoading = ref(false)
 const orgTreeData = ref([])
@@ -691,7 +639,6 @@ const orgTreeExpandAll = ref(true)
 const orgTreeExpandedKeys = ref([])
 
 // 岗位绑定相关
-const postModalVisible = ref(false)
 const postLoading = ref(false)
 const postSubmitLoading = ref(false)
 const postList = ref([])
@@ -699,7 +646,6 @@ const checkedPostKeys = ref([])
 const mainPostId = ref(null)
 
 // 租户绑定相关
-const tenantModalVisible = ref(false)
 const tenantLoading = ref(false)
 const tenantSubmitLoading = ref(false)
 const tenantOptions = ref([])
@@ -801,7 +747,7 @@ watch(checkedTenantKeys, (keys) => {
 })
 
 watch(authOrgId, (orgId, previousOrgId) => {
-  if (!authModalVisible.value || isSameKey(orgId, previousOrgId))
+  if (!relationModalVisible.value || isSameKey(orgId, previousOrgId))
     return
   checkedRoleKeys.value = []
   rolePagination.value.page = 1
@@ -922,9 +868,16 @@ const tableColumns = computed(() => [
     minWidth: 130,
   },
   {
-    prop: 'email',
-    label: '邮箱',
-    minWidth: 180,
+    prop: 'orgName',
+    label: '所属组织',
+    minWidth: 150,
+    render: row => row.orgName || '-',
+  },
+  {
+    prop: 'postName',
+    label: '岗位',
+    minWidth: 120,
+    render: row => row.postName || '-',
   },
   ...(userStore.isAdmin
     ? [{
@@ -934,17 +887,6 @@ const tableColumns = computed(() => [
         render: row => renderTenantNames(row),
       }]
     : []),
-  {
-    prop: 'regionCode',
-    label: '行政区划',
-    minWidth: 150,
-    render: (row) => {
-      if (!row.regionCode)
-        return '-'
-      const name = findRegionName(searchRegionOptions.value, row.regionCode)
-      return name || row.regionCode
-    },
-  },
   {
     prop: 'userType',
     label: '用户类型',
@@ -964,21 +906,15 @@ const tableColumns = computed(() => [
     render: row => renderDictTag(userStatusOptions.value, normalizeSingleNumber(row.userStatus), 'user-status-tag'),
   },
   {
-    prop: 'remark',
-    label: '备注',
-    minWidth: 150,
-  },
-  {
     prop: 'action',
     label: '操作',
     width: 200,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', onClick: handleEdit },
-      { label: '授权', key: 'auth', onClick: handleAuth, visible: row => !isCurrentLoginUser(row.id) },
-      { label: '组织', key: 'org', onClick: handleOrg, visible: row => userStore.isAdmin || !isCurrentLoginUser(row.id) },
-      { label: '岗位', key: 'post', onClick: handlePost, visible: row => !isCurrentLoginUser(row.id) },
-      { label: '租户', key: 'tenant', onClick: handleTenant, visible: row => userStore.isAdmin && !isCurrentLoginUser(row.id) },
+      { label: '禁用', key: 'disable', type: 'warning', onClick: row => handleUpdateStatus(row, 0), visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus === 1 },
+      { label: '启用', key: 'enable', type: 'success', onClick: handleUntieDisable, visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus !== 1 },
+      { label: '关联管理', key: 'relation', onClick: handleRelation, visible: row => !isCurrentLoginUser(row.id) },
       {
         label: '重置密码',
         key: 'resetPwd',
@@ -989,8 +925,6 @@ const tableColumns = computed(() => [
           resetPwdModalVisible.value = true
         },
       },
-      { label: '禁用', key: 'disable', type: 'warning', onClick: row => handleUpdateStatus(row, 0), visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus === 1 },
-      { label: '启用', key: 'enable', type: 'success', onClick: handleUntieDisable, visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) && row.userStatus !== 1 },
       { label: '删除', key: 'delete', type: 'error', onClick: handleDelete, visible: row => row.id !== 1 && !isCurrentLoginUser(row.id) },
     ],
   },
@@ -1579,20 +1513,6 @@ function convertRegionToTreeSelect(list, virtualDisabled = true) {
   })
 }
 
-// 在区划树中根据code查找名称
-function findRegionName(options, code) {
-  for (const item of options) {
-    if (item.value === code)
-      return item.label
-    if (item.children) {
-      const name = findRegionName(item.children, code)
-      if (name)
-        return name
-    }
-  }
-  return null
-}
-
 // 左侧组织树节点选择
 function handleOrgNodeSelect(keys) {
   selectedOrgKeys.value = keys
@@ -1881,23 +1801,75 @@ async function handleOpenBatchAuth() {
   await loadRoleList(batchAuthTenantId.value, batchAuthOrgId.value)
 }
 
-async function handleAuth(row) {
+async function handleRelation(row) {
   currentUser.value = row
-  authModalVisible.value = true
-  batchAuthModalVisible.value = false
-  roleSearchKeyword.value = ''
-  rolePagination.value.page = 1
-  checkedRoleKeys.value = []
-  authOrgId.value = null
+  relationModalVisible.value = true
+  relationActiveTab.value = 'auth'
+  await loadRelationTab('auth', row)
+}
 
-  await loadUserOrgBindings(row.id, resolveOperationTenantId(row))
-  authOrgId.value = resolveDefaultAuthOrgId()
-  if (!authOrgId.value) {
-    window.$message.warning('请先给用户绑定组织')
+async function loadRelationTab(tab, row) {
+  const user = row || currentUser.value
+  if (!user?.id)
     return
+  if (tab === 'auth') {
+    roleSearchKeyword.value = ''
+    rolePagination.value.page = 1
+    checkedRoleKeys.value = []
+    authOrgId.value = null
+    await loadUserOrgBindings(user.id, resolveOperationTenantId(user))
+    authOrgId.value = resolveDefaultAuthOrgId()
+    if (authOrgId.value) {
+      await loadRoleList(resolveOperationTenantId(user), authOrgId.value)
+      await loadUserRoles(user.id, authOrgId.value)
+    }
   }
-  await loadRoleList(resolveOperationTenantId(row), authOrgId.value)
-  await loadUserRoles(row.id, authOrgId.value)
+  else if (tab === 'org') {
+    mainOrgId.value = null
+    checkedOrgKeys.value = []
+    await loadOrgTree(resolveOperationTenantId(user))
+    await loadUserOrgs(user.id)
+  }
+  else if (tab === 'post') {
+    checkedPostKeys.value = []
+    mainPostId.value = null
+    await loadPostList(resolveOperationTenantId(user))
+    await loadUserPosts(user.id)
+  }
+  else if (tab === 'tenant') {
+    checkedTenantKeys.value = []
+    defaultTenantId.value = null
+    if (tenantOptions.value.length === 0) {
+      await loadTenantOptions()
+    }
+    await loadUserTenants(user.id)
+  }
+}
+
+async function handleRelationTabChange(tab) {
+  await loadRelationTab(tab, currentUser.value)
+}
+
+async function handleRelationSubmit() {
+  const tab = relationActiveTab.value
+  relationSubmitLoading.value = true
+  try {
+    if (tab === 'auth') {
+      await handleSubmitAuth()
+    }
+    else if (tab === 'org') {
+      await handleSubmitOrg()
+    }
+    else if (tab === 'post') {
+      await handleSubmitPost()
+    }
+    else if (tab === 'tenant') {
+      await handleSubmitTenant()
+    }
+  }
+  finally {
+    relationSubmitLoading.value = false
+  }
 }
 
 async function loadUserOrgBindings(userId, tenantId = resolveOperationTenantId()) {
@@ -2052,8 +2024,9 @@ async function handleSubmitAuth() {
       },
     )
     if (res.code === 200) {
-      window.$message.success('授权成功')
-      authModalVisible.value = false
+      window.$message.success('角色授权成功')
+      relationModalVisible.value = false
+      crudRef.value?.refresh()
     }
   }
   catch (error) {
@@ -2117,17 +2090,6 @@ async function handleSubmitBatchAuth() {
   finally {
     batchAuthSubmitLoading.value = false
   }
-}
-
-// 组织管理
-async function handleOrg(row) {
-  currentUser.value = row
-  orgModalVisible.value = true
-  mainOrgId.value = null
-  checkedOrgKeys.value = []
-
-  await loadOrgTree(resolveOperationTenantId(row))
-  await loadUserOrgs(row.id)
 }
 
 // 加载组织树
@@ -2209,7 +2171,7 @@ async function handleSubmitOrg() {
     )
     if (res.code === 200) {
       window.$message.success('组织绑定成功')
-      orgModalVisible.value = false
+      relationModalVisible.value = false
       crudRef.value?.refresh()
     }
   }
@@ -2220,17 +2182,6 @@ async function handleSubmitOrg() {
   finally {
     orgSubmitLoading.value = false
   }
-}
-
-// 岗位管理
-async function handlePost(row) {
-  currentUser.value = row
-  postModalVisible.value = true
-  checkedPostKeys.value = []
-  mainPostId.value = null
-
-  await loadPostList(resolveOperationTenantId(row))
-  await loadUserPosts(row.id)
 }
 
 // 加载岗位列表
@@ -2293,7 +2244,7 @@ async function handleSubmitPost() {
     )
     if (res.code === 200) {
       window.$message.success('岗位绑定成功')
-      postModalVisible.value = false
+      relationModalVisible.value = false
       crudRef.value?.refresh()
     }
   }
@@ -2324,18 +2275,6 @@ async function handleOpenBatchTenant() {
     memberType: 2,
   }
   batchTenantModalVisible.value = true
-}
-
-async function handleTenant(row) {
-  currentUser.value = row
-  tenantModalVisible.value = true
-  checkedTenantKeys.value = []
-  defaultTenantId.value = null
-
-  if (tenantOptions.value.length === 0) {
-    await loadTenantOptions()
-  }
-  await loadUserTenants(row.id)
 }
 
 async function loadUserTenants(userId) {
@@ -2382,7 +2321,7 @@ async function handleSubmitTenant() {
     )
     if (res.code === 200) {
       window.$message.success('租户绑定成功')
-      tenantModalVisible.value = false
+      relationModalVisible.value = false
       crudRef.value?.refresh()
     }
   }

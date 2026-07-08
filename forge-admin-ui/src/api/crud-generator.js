@@ -1,5 +1,5 @@
-import { useAuthStore } from '@/store/modules/auth'
 import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
+import { useAuthStore } from '@/store/modules/auth'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 

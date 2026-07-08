@@ -1,5 +1,5 @@
-import { useAuthStore } from '@/store/modules/auth'
 import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
+import { useAuthStore } from '@/store/modules/auth'
 import { generateUUID, request } from '@/utils'
 
 const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''

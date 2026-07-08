@@ -89,14 +89,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(
-      circle at center,
-      color-mix(in srgb, var(--primary-color, #165dff) 9%, transparent),
-      transparent 35%
-    ),
-    color-mix(in srgb, var(--bg-primary, #ffffff) 70%, transparent);
-  backdrop-filter: blur(2px);
+  background: color-mix(in srgb, var(--bg-primary, #ffffff) 68%, transparent);
+  backdrop-filter: blur(1px);
   pointer-events: auto;
   user-select: none;
 }
@@ -106,21 +100,25 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 14px;
   min-width: 180px;
-  padding: 24px 28px;
+  padding: 22px 26px;
   color: var(--text-primary, #1d2129);
+  background: color-mix(in srgb, var(--bg-primary, #ffffff) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color, #e5e6eb) 86%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px color-mix(in srgb, #000000 12%, transparent);
 }
 
 .global-loading-spinner {
   --loader-color: var(--primary-color, #165dff);
 
-  width: 46px;
-  height: 46px;
-  background: var(--loader-color);
-  border-radius: 10%;
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--loader-color) 34%, transparent);
-  animation: global-loading-rotate 1s linear infinite;
+  width: 34px;
+  height: 34px;
+  border: 3px solid color-mix(in srgb, var(--loader-color) 18%, transparent);
+  border-top-color: var(--loader-color);
+  border-radius: 50%;
+  animation: global-loading-rotate 0.8s linear infinite;
 }
 
 .global-loading-text {
@@ -150,13 +148,13 @@ onBeforeUnmount(() => {
 }
 
 :global(.dark) .global-loading-overlay {
-  background:
-    radial-gradient(
-      circle at center,
-      color-mix(in srgb, var(--primary-color, #4080ff) 18%, transparent),
-      transparent 36%
-    ),
-    color-mix(in srgb, var(--bg-primary, #0f172a) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-primary, #0f172a) 74%, transparent);
+}
+
+:global(.dark) .global-loading-panel {
+  background: color-mix(in srgb, var(--bg-primary, #0f172a) 92%, transparent);
+  border-color: color-mix(in srgb, var(--border-color, #334155) 70%, transparent);
+  box-shadow: 0 18px 42px color-mix(in srgb, #000000 34%, transparent);
 }
 
 :global(.dark) .global-loading-text {
@@ -164,19 +162,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes global-loading-rotate {
-  0% {
-    transform: rotate(0deg) scale(0.2);
-    border-radius: 10%;
-  }
-
-  50% {
-    transform: rotate(180deg) scale(1.45);
-    border-radius: 50%;
-  }
-
   100% {
-    transform: rotate(360deg) scale(0.2);
-    border-radius: 10%;
+    transform: rotate(360deg);
   }
 }
 

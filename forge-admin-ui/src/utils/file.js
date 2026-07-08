@@ -2,8 +2,8 @@
  * 文件相关工具函数
  */
 
-import { useAuthStore } from '@/store'
 import { managedFetch } from '@/composables/useGlobalLoading'
+import { useAuthStore } from '@/store'
 import { generateUUID } from './common'
 import { request } from './http'
 import { getLocalStorage, setLocalStorage } from './storage'

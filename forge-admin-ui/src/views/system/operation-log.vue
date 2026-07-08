@@ -101,7 +101,9 @@
               </div>
               <div class="audit-section__full">
                 <dt>User-Agent</dt>
-                <dd class="audit-section__muted">{{ currentLog.userAgent || '-' }}</dd>
+                <dd class="audit-section__muted">
+                  {{ currentLog.userAgent || '-' }}
+                </dd>
               </div>
             </dl>
           </section>

@@ -27,6 +27,14 @@ public interface ISysUserService extends IService<SysUser> {
     IPage<SysUser> selectUserPage(SysUserQuery query);
 
     /**
+     * 导出查询用户列表（不分页）
+     *
+     * @param query 查询条件
+     * @return 用户列表
+     */
+    List<SysUser> selectExportList(SysUserQuery query);
+
+    /**
      * 根据ID查询用户详情
      *
      * @param id 用户ID

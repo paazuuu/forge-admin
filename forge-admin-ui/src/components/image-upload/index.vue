@@ -113,8 +113,8 @@
 import { AddOutline, CloseCircleOutline, CloseOutline, EyeOutline, TrashOutline } from '@vicons/ionicons5'
 import { NIcon, NInput, NModal, NProgress, NText, NUpload } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useStorageConfig } from '@/composables/useStorageConfig'
 import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
+import { useStorageConfig } from '@/composables/useStorageConfig'
 import { useAuthStore } from '@/store'
 import { generateUUID, getFileUrl, request, resolveRenderableFileUrl } from '@/utils'
 

@@ -22,9 +22,15 @@ import com.mdframe.forge.starter.core.domain.OperationType;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
+import com.mdframe.forge.starter.excel.model.GenericRowData;
+import com.mdframe.forge.starter.excel.model.ImportErrorRecord;
+import com.mdframe.forge.starter.excel.model.ImportResult;
+import com.mdframe.forge.starter.excel.service.ExcelImportService;
 import com.mdframe.forge.starter.log.context.OperationAuditContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -47,6 +53,9 @@ import java.util.function.Supplier;
 public class SysUserController {
 
     private final ISysUserService userService;
+
+    @Autowired(required = false)
+    private ExcelImportService excelImportService;
 
     /**
      * 分页查询用户列表
@@ -520,5 +529,119 @@ public class SysUserController {
         }
         user.setPassword(null);
         user.setSalt(null);
+    }
+
+    /**
+     * 批量导入用户
+     * 复用通用 Excel 导入框架解析文件，再调用 userService.insertUser 落库。
+     */
+    @OperationLog(module = "用户管理", type = OperationType.IMPORT, desc = "批量导入用户")
+    @PostMapping("/import")
+    public RespInfo<ImportResult<?>> importUsers(@RequestParam("file") MultipartFile file) {
+        if (excelImportService == null) {
+            return RespInfo.error("导入服务未启用");
+        }
+        ImportResult<Object> result = new ImportResult<>();
+        try {
+            ImportResult<GenericRowData> parsed = excelImportService.importData(file, "sys_user_import", GenericRowData.class);
+            // 解析阶段产生的错误直接合并
+            parsed.getErrors().forEach(result::addError);
+            result.setTotalRows(parsed.getTotalRows());
+
+            LoginUser loginUser = SessionHelper.getLoginUser();
+            Long tenantId = loginUser != null ? loginUser.getTenantId() : null;
+
+            for (GenericRowData row : parsed.getSuccessData()) {
+                try {
+                    SysUserDTO dto = buildUserDtoFromRow(row, tenantId, loginUser);
+                    userService.insertUser(dto);
+                    result.getSuccessData().add(row);
+                } catch (Exception e) {
+                    ImportErrorRecord error = new ImportErrorRecord();
+                    error.setRowNum(row.getRowNum());
+                    error.setErrorType("写入失败");
+                    error.setErrorMessage(e.getMessage());
+                    error.setSuggestion("请检查用户名是否重复或字段格式是否正确");
+                    result.addError(error);
+                }
+            }
+            result.setSuccessRows(result.getSuccessData().size());
+            result.setFailedRows(result.getErrors().size());
+            result.buildSummary();
+            result.setSuccess(result.getErrors().isEmpty());
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setSummary("导入失败：" + e.getMessage());
+        }
+        return RespInfo.success(result);
+    }
+
+    /**
+     * 将 Excel 解析出的行数据构造为用户新增 DTO。
+     * 字段名与 sys_excel_column_config 的 field_name 保持一致。
+     */
+    private SysUserDTO buildUserDtoFromRow(GenericRowData row, Long tenantId, LoginUser loginUser) {
+        SysUserDTO dto = new SysUserDTO();
+        dto.setUsername(getStringField(row, "username"));
+        dto.setRealName(getStringField(row, "realName"));
+        dto.setPhone(getStringField(row, "phone"));
+        dto.setPassword(getStringField(row, "password"));
+        dto.setEmail(getStringField(row, "email"));
+        dto.setRemark(getStringField(row, "remark"));
+        Integer gender = getIntegerField(row, "gender");
+        if (gender != null) {
+            dto.setGender(gender);
+        }
+        Integer userType = getIntegerField(row, "userType");
+        if (userType == null) {
+            userType = loginUser != null && loginUser.isAdmin() ? 2 : 2;
+        }
+        dto.setUserType(userType);
+        if (tenantId != null) {
+            dto.setTenantId(tenantId);
+            dto.setTenantIds(List.of(tenantId));
+        }
+        // 校验必填字段
+        if (dto.getUsername() == null || dto.getUsername().isBlank()) {
+            throw new RuntimeException("用户名不能为空");
+        }
+        if (dto.getRealName() == null || dto.getRealName().isBlank()) {
+            throw new RuntimeException("真实姓名不能为空");
+        }
+        if (dto.getPhone() == null || dto.getPhone().isBlank()) {
+            throw new RuntimeException("手机号不能为空");
+        }
+        if (dto.getPassword() == null || dto.getPassword().isBlank()) {
+            throw new RuntimeException("密码不能为空");
+        }
+        return dto;
+    }
+
+    private String getStringField(GenericRowData row, String key) {
+        Object value = row.getField(key);
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private Integer getIntegerField(GenericRowData row, String key) {
+        Object value = row.getField(key);
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            if (text.endsWith(".0")) {
+                text = text.substring(0, text.length() - 2);
+            }
+            return Integer.valueOf(text);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

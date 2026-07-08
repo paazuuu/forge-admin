@@ -138,6 +138,12 @@ public class SysUser extends TenantEntity {
     private String orgName;
 
     /**
+     * 所属岗位名称（查询列表时填充，多个用逗号分隔）
+     */
+    @TableField(exist = false)
+    private String postName;
+
+    /**
      * 所属租户名称（查询列表时填充）
      */
     @TableField(exist = false)

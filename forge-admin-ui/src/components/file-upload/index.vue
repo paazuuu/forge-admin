@@ -119,8 +119,8 @@ import {
 } from '@vicons/ionicons5'
 import { NIcon, NInput, NModal, NText, NUpload } from 'naive-ui'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useStorageConfig } from '@/composables/useStorageConfig'
 import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
+import { useStorageConfig } from '@/composables/useStorageConfig'
 import { useAuthStore } from '@/store'
 import { downloadFile, generateUUID, getFileUrl, request, resolveRenderableFileUrl } from '@/utils'
 

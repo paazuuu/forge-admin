@@ -6,14 +6,19 @@ const SUBMIT_LOADING_TEXT = '数据提交中，请稍候...'
 const EXPORT_LOADING_TEXT = '文件导出处理中，请稍候...'
 const DOWNLOAD_LOADING_TEXT = '文件下载处理中，请稍候...'
 const UPLOAD_LOADING_TEXT = '文件上传中，请稍候...'
+const DEFAULT_SHOW_DELAY = 280
+const DEFAULT_MIN_VISIBLE_MS = 220
 
 const state = reactive({
   entries: [],
-  locked: false,
+  visible: false,
   message: DEFAULT_LOADING_TEXT,
 })
 
 let tokenSeed = 0
+let showTimer = null
+let hideTimer = null
+let visibleSince = 0
 
 function normalizeText(text) {
   return String(text || '').trim()
@@ -45,6 +50,15 @@ function isGlobalLoadingSkipped(options = {}) {
     || options.globalLoading === false
     || headerSkip === true
     || String(headerSkip || '').toLowerCase() === 'true'
+}
+
+function normalizeDelay(value, fallback) {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : fallback
+}
+
+function resolveShowDelay(options = {}) {
+  return normalizeDelay(options.globalLoadingDelay ?? options.loadingDelay, DEFAULT_SHOW_DELAY)
 }
 
 export function resolveRequestLoadingText(options = {}) {
@@ -88,10 +102,88 @@ function applyDocumentLock(locked) {
   document.body?.classList.toggle(className, locked)
 }
 
-function syncState() {
-  state.locked = state.entries.length > 0
+function syncMessage() {
   state.message = state.entries[state.entries.length - 1]?.text || DEFAULT_LOADING_TEXT
-  applyDocumentLock(state.locked)
+}
+
+function clearShowTimer() {
+  if (!showTimer)
+    return
+
+  clearTimeout(showTimer)
+  showTimer = null
+}
+
+function clearHideTimer() {
+  if (!hideTimer)
+    return
+
+  clearTimeout(hideTimer)
+  hideTimer = null
+}
+
+function showNow() {
+  clearShowTimer()
+  if (state.entries.length === 0)
+    return
+
+  clearHideTimer()
+  syncMessage()
+  state.visible = true
+  visibleSince = Date.now()
+  applyDocumentLock(true)
+}
+
+function hideNow() {
+  clearShowTimer()
+  clearHideTimer()
+  state.visible = false
+  visibleSince = 0
+  state.message = DEFAULT_LOADING_TEXT
+  applyDocumentLock(false)
+}
+
+function scheduleShow() {
+  clearHideTimer()
+  syncMessage()
+  if (state.visible) {
+    applyDocumentLock(true)
+    return
+  }
+  if (showTimer)
+    return
+
+  const delay = state.entries[state.entries.length - 1]?.delay ?? DEFAULT_SHOW_DELAY
+  if (delay <= 0) {
+    showNow()
+    return
+  }
+
+  showTimer = setTimeout(showNow, delay)
+}
+
+function scheduleHide() {
+  clearShowTimer()
+  if (!state.visible) {
+    hideNow()
+    return
+  }
+
+  const elapsed = Date.now() - visibleSince
+  if (elapsed >= DEFAULT_MIN_VISIBLE_MS) {
+    hideNow()
+    return
+  }
+
+  clearHideTimer()
+  hideTimer = setTimeout(hideNow, DEFAULT_MIN_VISIBLE_MS - elapsed)
+}
+
+function syncState() {
+  if (state.entries.length > 0)
+    scheduleShow()
+  else
+    scheduleHide()
 }
 
 export function startGlobalLoading(options = {}) {
@@ -104,6 +196,7 @@ export function startGlobalLoading(options = {}) {
     {
       token,
       text: resolveRequestLoadingText(options),
+      delay: resolveShowDelay(options),
       startedAt: Date.now(),
     },
   ]
@@ -225,7 +318,7 @@ export function finishRequestGlobalLoading(config = {}) {
 
 export function useGlobalLoading() {
   return {
-    active: computed(() => state.locked),
+    active: computed(() => state.visible),
     count: computed(() => state.entries.length),
     message: computed(() => state.message),
     state,

@@ -1,6 +1,6 @@
 import { nextTick } from 'vue'
-import { useAuthStore, usePermissionStore, useTabStore, useTenantStore } from '@/store'
 import { attachRequestGlobalLoading, finishRequestGlobalLoading } from '@/composables/useGlobalLoading'
+import { useAuthStore, usePermissionStore, useTabStore, useTenantStore } from '@/store'
 import { cryptoConfig, decryptResponse, encryptRequest, matchPath, shouldEncrypt } from '@/utils/crypto'
 import { getSessionKey, initKeyExchange, resetKeyExchange } from '@/utils/crypto/key-exchange'
 import { getTenantPageBaseTitle } from '@/utils/page-title'

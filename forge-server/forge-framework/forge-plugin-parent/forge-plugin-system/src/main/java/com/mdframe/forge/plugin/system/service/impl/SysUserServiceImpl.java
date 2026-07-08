@@ -93,6 +93,12 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     }
 
     @Override
+    public List<SysUser> selectExportList(SysUserQuery query) {
+        normalizeUserQueryTenant(query);
+        return TenantContextHolder.executeIgnore(() -> userMapper.selectExportList(query));
+    }
+
+    @Override
     public SysUser selectUserById(Long id) {
         assertCanReadUser(id);
         return TenantContextHolder.executeIgnore(() -> userMapper.selectById(id));

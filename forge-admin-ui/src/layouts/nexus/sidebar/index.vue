@@ -5,7 +5,7 @@
       <div class="logo-icon">
         <TheLogo />
       </div>
-      <span class="logo-text">{{systemName}}</span>
+      <span class="logo-text">{{ systemName }}</span>
     </div>
 
     <!-- 菜单区域 -->
@@ -137,8 +137,7 @@ import TheLogo from '@/components/common/TheLogo.vue'
 import IconRenderer from '@/components/IconRenderer.vue'
 import { useMenu, useUser } from '@/composables'
 import MenuCollapse from '@/layouts/components/MenuCollapse.vue'
-import { usePermissionStore } from '@/store'
-import { useTenantStore } from '@/store'
+import { usePermissionStore, useTenantStore } from '@/store'
 import { getDefaultPageTitle } from '@/utils/page-title'
 
 const tenantStore = useTenantStore()

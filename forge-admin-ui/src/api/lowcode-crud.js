@@ -1,5 +1,5 @@
-import { useAuthStore } from '@/store/modules/auth'
 import { finishGlobalLoading, managedFetch, startGlobalLoading } from '@/composables/useGlobalLoading'
+import { useAuthStore } from '@/store/modules/auth'
 import { request } from '@/utils'
 import { generateUUID } from '@/utils/common'
 
@@ -155,8 +155,9 @@ export function lowcodeAiStreamGenerateApp(data, onEvent, onComplete, onError) {
                 finishStreamLoading()
                 onError?.(parsed.message || 'AI 生成失败')
               }
-              else
+              else {
                 onEvent?.({ event: eventType, data: parsed })
+              }
             }
             catch (error) {
               console.warn('[lowcodeAiStreamGenerateApp] parse event failed:', error)

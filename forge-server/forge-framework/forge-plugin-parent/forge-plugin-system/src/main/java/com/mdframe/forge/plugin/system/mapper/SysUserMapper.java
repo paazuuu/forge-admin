@@ -8,6 +8,8 @@ import com.mdframe.forge.plugin.system.entity.SysUser;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * 用户Mapper接口
  */
@@ -18,6 +20,11 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
      * 分页查询用户列表
      */
     IPage<SysUser> selectUserPage(Page<SysUser> page, @Param("query") SysUserQuery query);
+
+    /**
+     * 导出查询用户列表（不分页）
+     */
+    List<SysUser> selectExportList(@Param("query") SysUserQuery query);
 
     /**
      * 登录时按用户名和当前租户查询用户
