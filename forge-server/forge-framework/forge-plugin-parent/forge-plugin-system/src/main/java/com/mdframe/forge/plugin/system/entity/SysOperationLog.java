@@ -26,11 +26,19 @@ public class SysOperationLog implements Serializable {
 
     private String username;
 
+    private String operatorName;
+
     private String operationModule;
 
     private String operationType;
 
     private String operationDesc;
+
+    private String operationPage;
+
+    private String operationPageTitle;
+
+    private String operationContent;
 
     private String requestMethod;
 
@@ -39,6 +47,12 @@ public class SysOperationLog implements Serializable {
     private String requestParams;
 
     private String responseResult;
+
+    private String beforeData;
+
+    private String afterData;
+
+    private String diffData;
 
     private String errorMsg;
 

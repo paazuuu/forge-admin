@@ -74,6 +74,7 @@ public class SystemLogServiceImpl implements ILogService {
                 return;
             }
             logInfo.setUsername(sysUser.getUsername());
+            logInfo.setOperatorName(resolveOperatorName(sysUser));
             if (logInfo.getTenantId() == null) {
                 logInfo.setTenantId(sysUser.getTenantId());
             }
@@ -100,5 +101,12 @@ public class SystemLogServiceImpl implements ILogService {
 
     private SysUser selectUserIgnoreTenant(Long userId) {
         return TenantContextHolder.executeIgnore(() -> sysUserMapper.selectById(userId));
+    }
+
+    private String resolveOperatorName(SysUser sysUser) {
+        if (sysUser.getRealName() != null && !sysUser.getRealName().isBlank()) {
+            return sysUser.getRealName();
+        }
+        return sysUser.getUsername();
     }
 }

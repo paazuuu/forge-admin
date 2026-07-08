@@ -8,6 +8,7 @@ import com.mdframe.forge.starter.apiconfig.service.IApiConfigManager;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import com.mdframe.forge.starter.core.context.LogProperties;
+import com.mdframe.forge.starter.log.context.OperationAuditContext;
 import com.mdframe.forge.starter.log.domain.OperationLogInfo;
 import com.mdframe.forge.starter.log.service.ILogService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +29,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -53,6 +56,9 @@ public class OperationLogAspect {
 
     private static final DateTimeFormatter TRACE_ID_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
     private static final String TRACE_ID_KEY = "traceId";
+    private static final String PAGE_PATH_HEADER = "X-Page-Path";
+    private static final String PAGE_TITLE_HEADER = "X-Page-Title";
+    private static final String DECRYPTED_REQUEST_BODY_OMITTED = "[DECRYPTED_REQUEST_BODY_OMITTED]";
 
     /**
      * 定义切点：拦截所有标注@OperationLog的方法
@@ -86,13 +92,6 @@ public class OperationLogAspect {
             return joinPoint.proceed();
         }
 
-        // 生成traceId并放入MDC
-        String traceId = generateTraceId();
-        MDC.put(TRACE_ID_KEY, traceId);
-
-        // 记录开始时间
-        long startTime = System.currentTimeMillis();
-
         // 构建日志对象
         OperationLogInfo logInfo = new OperationLogInfo();
         logInfo.setOperationTime(LocalDateTime.now());
@@ -100,6 +99,8 @@ public class OperationLogAspect {
         logInfo.setRequestMethod(request.getMethod());
         logInfo.setOperationIp(getClientIp(request));
         logInfo.setUserAgent(request.getHeader("User-Agent"));
+        logInfo.setOperationPage(truncate(request.getHeader(PAGE_PATH_HEADER), 500));
+        logInfo.setOperationPageTitle(truncate(decodeHeader(request.getHeader(PAGE_TITLE_HEADER)), 200));
 
         // 获取注解信息
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
@@ -109,26 +110,46 @@ public class OperationLogAspect {
         boolean decryptEndpoint = isApiDecryptEndpoint(joinPoint, method);
 
         String requestParams = "";
+        ApiConfigInfo apiConfig = null;
         if (annotation != null) {
             logInfo.setOperationModule(annotation.module());
             logInfo.setOperationType(annotation.type().name());
             logInfo.setOperationDesc(annotation.desc());
+        } else {
+            apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
+            if (apiConfig != null) {
+                logInfo.setOperationModule(apiConfig.getModuleCode());
+                logInfo.setOperationType(resolveDefaultOperationType(apiConfig.getReqMethod(), requestUrl));
+                logInfo.setOperationDesc(apiConfig.getApiName());
+            } else {
+                logInfo.setOperationType(resolveDefaultOperationType(request.getMethod(), requestUrl));
+            }
+        }
+        normalizeAuditMetadata(logInfo, requestUrl);
 
-            // 保存请求参数
+        if (shouldSkipOperationLog(logInfo.getOperationType(), request.getMethod())) {
+            return proceedWithoutOperationLog(joinPoint);
+        }
+
+        // 生成traceId并放入MDC
+        String traceId = generateTraceId();
+        MDC.put(TRACE_ID_KEY, traceId);
+
+        // 记录开始时间
+        long startTime = System.currentTimeMillis();
+
+        // 保存请求参数
+        if (annotation != null) {
             if (annotation.saveRequestParams()) {
                 requestParams = getRequestParams(joinPoint, request, decryptEndpoint);
                 logInfo.setRequestParams(truncate(requestParams, logProperties.getRequestParamsMaxLength()));
             }
         } else {
-            ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
-            if (apiConfig != null) {
-                logInfo.setOperationModule(apiConfig.getModuleCode());
-                logInfo.setOperationType("GET".equals(apiConfig.getReqMethod()) ? "QUERY" : "UPDATE");
-                logInfo.setOperationDesc(apiConfig.getApiName());
-                requestParams = getRequestParams(joinPoint, request, decryptEndpoint);
-                logInfo.setRequestParams(truncate(requestParams, logProperties.getRequestParamsMaxLength()));
-            }
+            requestParams = getRequestParams(joinPoint, request, decryptEndpoint);
+            logInfo.setRequestParams(truncate(requestParams, logProperties.getRequestParamsMaxLength()));
         }
+
+        logInfo.setOperationContent(buildOperationContent(logInfo, requestUrl));
         // 获取当前登录用户信息
         try {
             if (StpUtil.isLogin()) {
@@ -159,6 +180,7 @@ public class OperationLogAspect {
                 responseResult = JSONObject.toJSONString(result);
                 logInfo.setResponseResult(truncate(responseResult, logProperties.getResponseResultMaxLength()));
             }
+            fillAuditSnapshot(logInfo, requestParams, responseResult);
 
             // 计算执行时长
             long executeTime = System.currentTimeMillis() - startTime;
@@ -175,6 +197,7 @@ public class OperationLogAspect {
         } catch (Throwable e) {
             logInfo.setOperationStatus(0);  // 失败
             logInfo.setErrorMsg(truncate(e.getMessage(), 500));
+            fillAuditSnapshot(logInfo, requestParams, null);
 
             // 计算执行时长
             long executeTime = System.currentTimeMillis() - startTime;
@@ -192,11 +215,214 @@ public class OperationLogAspect {
         } finally {
             // 异步保存日志
             saveLogAsync(logInfo);
+            OperationAuditContext.clear();
             // 清除MDC
             MDC.remove(TRACE_ID_KEY);
         }
 
         return result;
+    }
+
+    private Object proceedWithoutOperationLog(ProceedingJoinPoint joinPoint) throws Throwable {
+        try {
+            return joinPoint.proceed();
+        } finally {
+            OperationAuditContext.clear();
+        }
+    }
+
+    /**
+     * 填充页面操作审计快照。
+     */
+    private void fillAuditSnapshot(OperationLogInfo logInfo, String requestParams, String responseResult) {
+        OperationAuditContext.Snapshot snapshot = OperationAuditContext.snapshot();
+        if (snapshot.getOperationContent() != null) {
+            logInfo.setOperationContent(truncate(toJsonString(snapshot.getOperationContent()), 1000));
+        }
+        if (snapshot.getBeforeData() != null) {
+            logInfo.setBeforeData(truncate(toJsonString(snapshot.getBeforeData()), logProperties.getResponseResultMaxLength()));
+        }
+        if (snapshot.getAfterData() != null) {
+            logInfo.setAfterData(truncate(toJsonString(snapshot.getAfterData()), logProperties.getResponseResultMaxLength()));
+        }
+        if (snapshot.getDiffData() != null) {
+            logInfo.setDiffData(truncate(toJsonString(snapshot.getDiffData()), logProperties.getResponseResultMaxLength()));
+        }
+        if (StrUtil.isBlank(logInfo.getAfterData()) && isMutatingOperation(logInfo.getOperationType())) {
+            String fallbackAfterData = resolveFallbackAfterData(requestParams, responseResult);
+            if (StrUtil.isNotBlank(fallbackAfterData)) {
+                logInfo.setAfterData(truncate(fallbackAfterData, logProperties.getResponseResultMaxLength()));
+            }
+        }
+    }
+
+    private String resolveFallbackAfterData(String requestParams, String responseResult) {
+        if (StrUtil.isNotBlank(requestParams) && !containsOmittedRequestBody(requestParams)) {
+            return requestParams;
+        }
+        if (StrUtil.isNotBlank(responseResult) && !containsOmittedRequestBody(responseResult)) {
+            return responseResult;
+        }
+        return "";
+    }
+
+    private boolean containsOmittedRequestBody(String value) {
+        return StrUtil.isNotBlank(value) && value.contains(DECRYPTED_REQUEST_BODY_OMITTED);
+    }
+
+    private boolean isMutatingOperation(String operationType) {
+        return "ADD".equals(operationType)
+                || "UPDATE".equals(operationType)
+                || "DELETE".equals(operationType)
+                || "IMPORT".equals(operationType)
+                || "EXPORT".equals(operationType)
+                || "OTHER".equals(operationType);
+    }
+
+    private boolean shouldSkipOperationLog(String operationType, String requestMethod) {
+        if ("QUERY".equals(operationType)) {
+            return true;
+        }
+        if (isMutatingOperation(operationType)) {
+            return false;
+        }
+        return isReadOnlyMethod(requestMethod);
+    }
+
+    private boolean isReadOnlyMethod(String requestMethod) {
+        return "GET".equalsIgnoreCase(requestMethod)
+                || "HEAD".equalsIgnoreCase(requestMethod)
+                || "OPTIONS".equalsIgnoreCase(requestMethod);
+    }
+
+    private String resolveDefaultOperationType(String requestMethod, String requestUrl) {
+        if (isReadOnlyMethod(requestMethod)) {
+            return "QUERY";
+        }
+        if (isQueryLikeRequest(requestUrl)) {
+            return "QUERY";
+        }
+        if ("DELETE".equalsIgnoreCase(requestMethod) || isDeleteLikeRequest(requestUrl)) {
+            return "DELETE";
+        }
+        if (isAddLikeRequest(requestUrl)) {
+            return "ADD";
+        }
+        return "UPDATE";
+    }
+
+    private boolean isQueryLikeRequest(String requestUrl) {
+        String normalizedUrl = normalizeRequestUrl(requestUrl);
+        return normalizedUrl.endsWith("/page")
+                || normalizedUrl.endsWith("/list")
+                || normalizedUrl.endsWith("/tree")
+                || normalizedUrl.endsWith("/detail")
+                || normalizedUrl.endsWith("/getbyid")
+                || normalizedUrl.endsWith("/options")
+                || normalizedUrl.endsWith("/profile")
+                || normalizedUrl.endsWith("/query");
+    }
+
+    private boolean isDeleteLikeRequest(String requestUrl) {
+        String normalizedUrl = normalizeRequestUrl(requestUrl);
+        return normalizedUrl.endsWith("/remove")
+                || normalizedUrl.endsWith("/removebatch")
+                || normalizedUrl.endsWith("/delete")
+                || normalizedUrl.endsWith("/deletebatch");
+    }
+
+    private boolean isAddLikeRequest(String requestUrl) {
+        String normalizedUrl = normalizeRequestUrl(requestUrl);
+        return normalizedUrl.endsWith("/add")
+                || normalizedUrl.endsWith("/create")
+                || normalizedUrl.endsWith("/import");
+    }
+
+    private String normalizeRequestUrl(String requestUrl) {
+        if (StrUtil.isBlank(requestUrl)) {
+            return "";
+        }
+        return requestUrl.trim().toLowerCase();
+    }
+
+    private void normalizeAuditMetadata(OperationLogInfo logInfo, String requestUrl) {
+        if (StrUtil.isBlank(logInfo.getOperationModule())) {
+            String pageTitle = StrUtil.blankToDefault(logInfo.getOperationPageTitle(), "");
+            if (StrUtil.isNotBlank(pageTitle) && !isGenericPageTitle(pageTitle)) {
+                logInfo.setOperationModule(pageTitle);
+            }
+        }
+        if (StrUtil.isBlank(logInfo.getOperationDesc())) {
+            logInfo.setOperationDesc(resolveDefaultOperationDesc(logInfo.getOperationType(), requestUrl));
+        }
+    }
+
+    private boolean isGenericPageTitle(String pageTitle) {
+        return "企业级中后台管理系统".equals(pageTitle)
+                || "企业级中后台基础框架".equals(pageTitle);
+    }
+
+    private String resolveDefaultOperationDesc(String operationType, String requestUrl) {
+        if ("ADD".equals(operationType)) {
+            return "新增数据";
+        }
+        if ("UPDATE".equals(operationType)) {
+            return "修改数据";
+        }
+        if ("DELETE".equals(operationType)) {
+            return "删除数据";
+        }
+        if ("IMPORT".equals(operationType)) {
+            return "导入数据";
+        }
+        if ("EXPORT".equals(operationType)) {
+            return "导出数据";
+        }
+        return StrUtil.blankToDefault(requestUrl, "执行操作");
+    }
+
+    private String buildOperationContent(OperationLogInfo logInfo, String requestUrl) {
+        String desc = StrUtil.blankToDefault(logInfo.getOperationDesc(), "");
+        String module = StrUtil.blankToDefault(logInfo.getOperationModule(), "");
+        String type = StrUtil.blankToDefault(logInfo.getOperationType(), "");
+        String pageTitle = StrUtil.blankToDefault(logInfo.getOperationPageTitle(), "");
+        StringBuilder content = new StringBuilder();
+        if (StrUtil.isNotBlank(pageTitle)) {
+            content.append("页面[").append(pageTitle).append("] ");
+        }
+        if (StrUtil.isNotBlank(module)) {
+            content.append("模块[").append(module).append("] ");
+        }
+        if (StrUtil.isNotBlank(type)) {
+            content.append("类型[").append(type).append("] ");
+        }
+        if (StrUtil.isNotBlank(desc)) {
+            content.append(desc);
+        } else {
+            content.append(requestUrl);
+        }
+        return truncate(content.toString(), 1000);
+    }
+
+    private String toJsonString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String stringValue) {
+            return stringValue;
+        }
+        return JSONObject.toJSONString(value);
+    }
+
+    private String decodeHeader(String value) {
+        if (StrUtil.isBlank(value)) {
+            return value;
+        }
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return value;
+        }
     }
 
     /**

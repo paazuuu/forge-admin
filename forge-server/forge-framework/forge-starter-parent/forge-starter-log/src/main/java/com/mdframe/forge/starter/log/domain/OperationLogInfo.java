@@ -34,6 +34,11 @@ public class OperationLogInfo implements Serializable {
     private String username;
 
     /**
+     * 操作人姓名
+     */
+    private String operatorName;
+
+    /**
      * 操作模块
      */
     private String operationModule;
@@ -47,6 +52,21 @@ public class OperationLogInfo implements Serializable {
      * 操作描述
      */
     private String operationDesc;
+
+    /**
+     * 操作页面路径
+     */
+    private String operationPage;
+
+    /**
+     * 操作页面标题
+     */
+    private String operationPageTitle;
+
+    /**
+     * 操作内容
+     */
+    private String operationContent;
 
     /**
      * 请求方式
@@ -67,6 +87,21 @@ public class OperationLogInfo implements Serializable {
      * 响应结果
      */
     private String responseResult;
+
+    /**
+     * 操作前数据
+     */
+    private String beforeData;
+
+    /**
+     * 操作后数据
+     */
+    private String afterData;
+
+    /**
+     * 操作数据差异
+     */
+    private String diffData;
 
     /**
      * 错误信息

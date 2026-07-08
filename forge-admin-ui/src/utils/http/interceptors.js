@@ -1,6 +1,7 @@
-import { useAuthStore } from '@/store'
+import { useAuthStore, usePermissionStore, useTabStore, useTenantStore } from '@/store'
 import { cryptoConfig, decryptResponse, encryptRequest, matchPath, shouldEncrypt } from '@/utils/crypto'
 import { getSessionKey, initKeyExchange, resetKeyExchange } from '@/utils/crypto/key-exchange'
+import { getTenantPageBaseTitle } from '@/utils/page-title'
 import { isAuthErrorCode, resolveResError, shouldSilenceAuthError } from './helpers'
 
 // 生成 UUID
@@ -96,6 +97,127 @@ function assertBusinessSelectorRequest(config = {}) {
   }
   console.error('[BusinessRecordSelector] 阻止缺少业务对象编码的接口请求', error)
   throw error
+}
+
+function normalizePageTitle(title = '') {
+  const text = String(title || '').trim()
+  if (!text)
+    return ''
+  return text.split('|')[0]?.trim() || text
+}
+
+function normalizeRoutePath(path) {
+  const value = String(path || '').trim()
+  const [pathWithoutHash] = value.split('#')
+  const [pathname] = pathWithoutHash.split('?')
+  const normalized = String(pathname || '').replace(/\/+/g, '/')
+  if (!normalized || normalized === '/')
+    return normalized
+  return normalized.startsWith('/') ? normalized : `/${normalized}`
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function isSameRoutePath(menuPath, targetPath) {
+  const normalizedMenuPath = normalizeRoutePath(menuPath)
+  const normalizedTargetPath = normalizeRoutePath(targetPath)
+  if (!normalizedMenuPath || !normalizedTargetPath)
+    return false
+  if (normalizedMenuPath === normalizedTargetPath)
+    return true
+  if (!normalizedMenuPath.includes(':'))
+    return false
+  const pattern = normalizedMenuPath
+    .split('/')
+    .map(segment => segment.startsWith(':') ? '[^/]+' : escapeRegExp(segment))
+    .join('/')
+  return new RegExp(`^${pattern}$`).test(normalizedTargetPath)
+}
+
+function resolveCurrentPagePath() {
+  if (typeof window === 'undefined')
+    return ''
+  const hashPath = window.location.hash?.replace(/^#/, '')
+  if (hashPath)
+    return hashPath
+  return `${window.location.pathname || ''}${window.location.search || ''}`
+}
+
+function resolvePageQueryParam(pagePath, names = []) {
+  const queryString = String(pagePath || '').split('?')[1] || ''
+  if (!queryString)
+    return ''
+  try {
+    const params = new URLSearchParams(queryString)
+    return names.map(name => params.get(name)).find(Boolean) || ''
+  }
+  catch {
+    return ''
+  }
+}
+
+function findTitleFromAllMenus(allMenus, targetPath, menuKey) {
+  if (!Array.isArray(allMenus))
+    return ''
+  if (menuKey !== undefined && menuKey !== null && menuKey !== '') {
+    const menu = allMenus.find(item => String(item.key || item.id) === String(menuKey))
+    if (menu)
+      return menu.label || menu.name || menu.meta?.title || ''
+  }
+  const found = allMenus.find(menu => isSameRoutePath(menu.path, targetPath))
+  return found?.label || found?.name || found?.meta?.title || ''
+}
+
+function resolveTitleFromStores(pagePath) {
+  try {
+    const permissionStore = usePermissionStore()
+    const tabStore = useTabStore()
+    const normalizedPath = normalizeRoutePath(pagePath)
+    const matchedTab = tabStore.tabs?.find(tab => tab.path === pagePath || normalizeRoutePath(tab.path) === normalizedPath)
+    if (matchedTab?.title && matchedTab.title !== '业务页面')
+      return matchedTab.title
+    const menuKey = resolvePageQueryParam(pagePath, ['menuKey', 'menuResourceId'])
+    return findTitleFromAllMenus(permissionStore.allMenus, normalizedPath, menuKey)
+  }
+  catch {
+    return ''
+  }
+}
+
+function resolveBasePageTitle() {
+  try {
+    return getTenantPageBaseTitle(useTenantStore())
+  }
+  catch {
+    return ''
+  }
+}
+
+function resolveTitleFromDocument() {
+  const pageTitle = normalizePageTitle(document.title)
+  const baseTitle = normalizePageTitle(resolveBasePageTitle())
+  if (!pageTitle || (baseTitle && pageTitle === baseTitle))
+    return ''
+  return pageTitle
+}
+
+function resolvePageAuditTitle(pagePath) {
+  return resolveTitleFromStores(pagePath) || resolveTitleFromDocument()
+}
+
+function resolvePageAuditHeaders() {
+  if (typeof window === 'undefined')
+    return {}
+  const pagePath = resolveCurrentPagePath()
+  const pageTitle = resolvePageAuditTitle(pagePath)
+  const headers = {}
+  if (pagePath)
+    headers['X-Page-Path'] = pagePath.slice(0, 500)
+  if (pageTitle)
+    headers['X-Page-Title'] = encodeURIComponent(pageTitle.slice(0, 200))
+  return headers
 }
 
 function buildErrorDetail(config, payload = {}, fallbackError) {
@@ -355,6 +477,8 @@ async function reqResolve(config, axiosInstance) {
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
   }
+
+  Object.assign(config.headers, resolvePageAuditHeaders())
 
   // 添加防重放参数
   const enableReplay = cryptoConfig?.enableReplay !== false

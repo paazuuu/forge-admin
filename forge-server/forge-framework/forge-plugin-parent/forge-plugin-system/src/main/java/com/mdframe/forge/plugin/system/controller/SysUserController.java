@@ -17,13 +17,23 @@ import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.annotation.log.OperationLog;
+import com.mdframe.forge.starter.core.domain.OperationType;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.core.util.SensitiveDataUtil;
+import com.mdframe.forge.starter.log.context.OperationAuditContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 用户管理Controller
@@ -51,6 +61,7 @@ public class SysUserController {
     /**
      * 根据ID查询用户详情
      */
+    @OperationLog(module = "用户管理", type = OperationType.QUERY, desc = "查询用户详情")
     @PostMapping("/getById")
     public RespInfo<SysUser> getById(@RequestParam Long id) {
         SysUser user = userService.selectUserById(id);
@@ -84,48 +95,83 @@ public class SysUserController {
     /**
      * 新增用户
      */
+    @OperationLog(module = "用户管理", type = OperationType.ADD, desc = "新增用户")
     @PostMapping("/add")
     public RespInfo<Void> add(@RequestBody SysUserDTO dto) {
         boolean result = userService.insertUser(dto);
+        if (result) {
+            Map<String, Object> afterData = buildUserDtoAuditData(dto);
+            OperationAuditContext.setAfterData(afterData);
+            OperationAuditContext.setDiffData(buildDiffData(null, afterData));
+        }
         return result ? RespInfo.success() : RespInfo.error("新增失败");
     }
 
     /**
      * 修改用户
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "修改用户")
     @PostMapping("/edit")
     public RespInfo<Void> edit(@RequestBody SysUserDTO dto) {
+        Map<String, Object> beforeData = buildUserAuditData(dto.getId());
+        OperationAuditContext.setBeforeData(beforeData);
         boolean result = userService.updateUser(dto);
+        if (result) {
+            recordUserAfterSnapshot(beforeData, dto.getId());
+        }
         return result ? RespInfo.success() : RespInfo.error("修改失败");
     }
 
     /**
      * 删除用户
      */
+    @OperationLog(module = "用户管理", type = OperationType.DELETE, desc = "删除用户")
     @PostMapping("/remove")
     public RespInfo<Void> remove(@RequestParam Long id) {
+        Map<String, Object> beforeData = buildUserAuditData(id);
+        OperationAuditContext.setBeforeData(beforeData);
         boolean result = userService.deleteUserById(id);
+        if (result) {
+            recordUserDeletedSnapshot(beforeData, id);
+        }
         return result ? RespInfo.success() : RespInfo.error("删除失败");
     }
-    
+
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "解除用户锁定")
     @PostMapping("/doUntieDisable")
     public RespInfo<Void> doUntieDisable(@RequestParam Long id) {
+        Map<String, Object> beforeData = buildUserAuditData(id);
+        OperationAuditContext.setBeforeData(beforeData);
         userService.doUntieDisable(id);
+        recordUserAfterSnapshot(beforeData, id);
         return RespInfo.success();
     }
 
     /**
      * 批量删除用户
      */
+    @OperationLog(module = "用户管理", type = OperationType.DELETE, desc = "批量删除用户")
     @PostMapping("/removeBatch")
     public RespInfo<Void> removeBatch(@RequestBody Long[] ids) {
+        List<Map<String, Object>> beforeData = Arrays.stream(ids == null ? new Long[0] : ids)
+                .map(this::buildUserAuditData)
+                .toList();
+        OperationAuditContext.setBeforeData(beforeData);
         boolean result = userService.deleteUserByIds(ids);
+        if (result) {
+            Map<String, Object> afterData = new LinkedHashMap<>();
+            afterData.put("ids", ids == null ? List.of() : Arrays.asList(ids));
+            afterData.put("deleted", true);
+            OperationAuditContext.setAfterData(afterData);
+            OperationAuditContext.setDiffData(afterData);
+        }
         return result ? RespInfo.success() : RespInfo.error("批量删除失败");
     }
 
     /**
      * 给用户绑定角色
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "绑定用户角色")
     @PostMapping("/{userId}/roles")
     public RespInfo<Void> bindRoles(@PathVariable Long userId,
                                     @RequestBody Long[] roleIds,
@@ -137,6 +183,7 @@ public class SysUserController {
     /**
      * 批量给用户追加角色。
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "批量授权用户角色")
     @PostMapping("/batch/roles")
     public RespInfo<Void> batchBindRoles(@RequestBody BatchUserRoleBindDTO dto) {
         boolean result = userService.batchBindUserRoles(dto);
@@ -146,6 +193,7 @@ public class SysUserController {
     /**
      * 解除用户角色
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "解除用户角色")
     @PostMapping("/{userId}/roles/unbind")
     public RespInfo<Void> unbindRoles(@PathVariable Long userId, @RequestBody Long[] roleIds) {
         boolean result = userService.unbindUserRoles(userId, roleIds);
@@ -155,6 +203,7 @@ public class SysUserController {
     /**
      * 给用户绑定组织
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "绑定用户组织")
     @PostMapping("/{userId}/org")
     public RespInfo<Void> bindOrg(@PathVariable Long userId, @RequestParam Long orgId, @RequestParam(required = false, defaultValue = "0") Integer isMain) {
         boolean result = userService.bindUserOrg(userId, orgId, isMain);
@@ -164,6 +213,7 @@ public class SysUserController {
     /**
      * 解除用户组织
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "解除用户组织")
     @PostMapping("/{userId}/org/unbind")
     public RespInfo<Void> unbindOrg(@PathVariable Long userId, @RequestParam Long orgId) {
         boolean result = userService.unbindUserOrg(userId, orgId);
@@ -210,6 +260,7 @@ public class SysUserController {
     /**
      * 批量绑定用户租户
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "绑定用户租户")
     @PostMapping("/{userId}/tenants")
     public RespInfo<Void> bindTenants(@PathVariable Long userId, @RequestBody UserTenantBindDTO dto) {
         boolean result = userService.bindUserTenants(userId, dto);
@@ -219,6 +270,7 @@ public class SysUserController {
     /**
      * 批量将用户加入租户。
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "批量加入租户")
     @PostMapping("/batch/tenants")
     public RespInfo<Void> batchBindTenant(@RequestBody BatchUserTenantBindDTO dto) {
         boolean result = userService.batchBindUserTenant(dto);
@@ -228,6 +280,7 @@ public class SysUserController {
     /**
      * 批量绑定用户组织
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "批量绑定用户组织")
     @PostMapping("/{userId}/orgs")
     public RespInfo<Void> bindOrgs(@PathVariable Long userId,
                                    @RequestBody UserOrgBindDTO dto,
@@ -249,6 +302,7 @@ public class SysUserController {
     /**
      * 保存用户在指定组织下的角色。
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "保存用户组织角色")
     @PostMapping("/{userId}/org-roles")
     public RespInfo<Void> bindUserOrgRoles(@PathVariable Long userId,
                                            @RequestBody UserOrgRoleBindDTO dto) {
@@ -269,6 +323,7 @@ public class SysUserController {
     /**
      * 批量绑定用户岗位
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "绑定用户岗位")
     @PostMapping("/{userId}/posts")
     public RespInfo<Void> bindPosts(@PathVariable Long userId,
                                     @RequestBody UserPostBindDTO dto,
@@ -280,27 +335,49 @@ public class SysUserController {
     /**
      * 重置用户密码
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "重置用户密码", saveRequestParams = false)
     @PostMapping("/resetPwd")
     public RespInfo<Void> resetPwd(@RequestParam Long id, @RequestParam String password) {
+        Map<String, Object> beforeData = buildUserAuditData(id);
+        OperationAuditContext.setBeforeData(beforeData);
         boolean result = userService.resetPassword(id, password);
+        if (result) {
+            Map<String, Object> afterData = buildUserAuditData(id);
+            afterData.put("passwordChanged", true);
+            OperationAuditContext.setAfterData(afterData);
+            OperationAuditContext.setDiffData(buildDiffData(beforeData, afterData));
+        }
         return result ? RespInfo.success() : RespInfo.error("重置密码失败");
     }
 
     /**
      * 更新用户状态
      */
+    @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "更新用户状态")
     @PostMapping("/updateStatus")
     public RespInfo<Void> updateStatus(@RequestParam Long id, @RequestParam Integer status) {
+        Map<String, Object> beforeData = buildUserAuditData(id);
+        OperationAuditContext.setBeforeData(beforeData);
         boolean result = userService.updateUserStatus(id, status);
+        if (result) {
+            recordUserAfterSnapshot(beforeData, id);
+        }
         return result ? RespInfo.success() : RespInfo.error("操作失败");
     }
 
     /**
      * 更新用户资料
      */
+    @OperationLog(module = "个人资料", type = OperationType.UPDATE, desc = "更新用户资料")
     @PostMapping("/updateProfile")
     public RespInfo<Void> updateProfile(@RequestBody SysUserDTO dto) {
+        Long currentUserId = SessionHelper.getUserId();
+        Map<String, Object> beforeData = buildUserAuditData(currentUserId);
+        OperationAuditContext.setBeforeData(beforeData);
         boolean result = userService.updateUserProfile(dto);
+        if (result) {
+            recordUserAfterSnapshot(beforeData, currentUserId);
+        }
         return result ? RespInfo.success() : RespInfo.error("更新资料失败");
     }
 
@@ -313,6 +390,116 @@ public class SysUserController {
         SysUser user = userService.getById(userId);
         clearAuthFields(user);
         return RespInfo.success(user);
+    }
+
+    private void recordUserAfterSnapshot(Map<String, Object> beforeData, Long userId) {
+        Map<String, Object> afterData = buildUserAuditData(userId);
+        OperationAuditContext.setAfterData(afterData);
+        OperationAuditContext.setDiffData(buildDiffData(beforeData, afterData));
+    }
+
+    private void recordUserDeletedSnapshot(Map<String, Object> beforeData, Long userId) {
+        Map<String, Object> afterData = new LinkedHashMap<>();
+        afterData.put("id", userId);
+        afterData.put("deleted", true);
+        OperationAuditContext.setAfterData(afterData);
+        OperationAuditContext.setDiffData(buildDiffData(beforeData, afterData));
+    }
+
+    private Map<String, Object> buildUserAuditData(Long userId) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("id", userId);
+        if (userId == null) {
+            return data;
+        }
+        SysUser user = userService.selectUserById(userId);
+        if (user == null) {
+            data.put("exists", false);
+            return data;
+        }
+        data.put("exists", true);
+        data.put("tenantId", user.getTenantId());
+        data.put("username", user.getUsername());
+        data.put("realName", user.getRealName());
+        data.put("userType", user.getUserType());
+        data.put("userClient", user.getUserClient());
+        data.put("email", SensitiveDataUtil.maskEmail(user.getEmail()));
+        data.put("phone", SensitiveDataUtil.maskPhone(user.getPhone()));
+        data.put("idCard", SensitiveDataUtil.maskIdCard(user.getIdCard()));
+        data.put("gender", user.getGender());
+        data.put("userStatus", user.getUserStatus());
+        data.put("avatar", user.getAvatar());
+        data.put("regionCode", user.getRegionCode());
+        data.put("forcePasswordChange", user.getForcePasswordChange());
+        data.put("remark", user.getRemark());
+        data.put("createDept", user.getCreateDept());
+        data.put("roleIds", safeList(() -> userService.selectUserRoleIds(userId)));
+        data.put("postIds", safeList(() -> userService.selectUserPostIds(userId)));
+        data.put("orgIds", safeList(() -> userService.selectUserOrgIds(userId)));
+        data.put("tenantIds", safeList(() -> userService.selectUserTenants(userId).stream()
+                .map(SysUserTenantVO::getTenantId)
+                .toList()));
+        return data;
+    }
+
+    private Map<String, Object> buildUserDtoAuditData(SysUserDTO dto) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (dto == null) {
+            return data;
+        }
+        data.put("id", dto.getId());
+        data.put("tenantId", dto.getTenantId());
+        data.put("tenantIds", dto.getTenantIds());
+        data.put("username", dto.getUsername());
+        data.put("realName", dto.getRealName());
+        data.put("userType", dto.getUserType());
+        data.put("userClient", dto.getUserClient());
+        data.put("email", SensitiveDataUtil.maskEmail(dto.getEmail()));
+        data.put("phone", SensitiveDataUtil.maskPhone(dto.getPhone()));
+        data.put("idCard", SensitiveDataUtil.maskIdCard(dto.getIdCard()));
+        data.put("gender", dto.getGender());
+        data.put("userStatus", dto.getUserStatus());
+        data.put("avatar", dto.getAvatar());
+        data.put("regionCode", dto.getRegionCode());
+        data.put("remark", dto.getRemark());
+        data.put("createDept", dto.getCreateDept());
+        data.put("postIds", dto.getPostIds());
+        data.put("roleIds", dto.getRoleIds());
+        data.put("orgIds", dto.getOrgIds());
+        data.put("mainOrgId", dto.getMainOrgId());
+        data.put("passwordConfigured", dto.getPassword() != null && !dto.getPassword().isBlank());
+        return data;
+    }
+
+    private Map<String, Object> buildDiffData(Map<String, Object> beforeData, Map<String, Object> afterData) {
+        Map<String, Object> diffData = new LinkedHashMap<>();
+        Set<String> keys = new LinkedHashSet<>();
+        if (beforeData != null) {
+            keys.addAll(beforeData.keySet());
+        }
+        if (afterData != null) {
+            keys.addAll(afterData.keySet());
+        }
+        for (String key : keys) {
+            Object beforeValue = beforeData == null ? null : beforeData.get(key);
+            Object afterValue = afterData == null ? null : afterData.get(key);
+            if (!Objects.equals(beforeValue, afterValue)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("before", beforeValue);
+                item.put("after", afterValue);
+                diffData.put(key, item);
+            }
+        }
+        return diffData;
+    }
+
+    private List<Long> safeList(Supplier<List<Long>> supplier) {
+        try {
+            List<Long> result = supplier.get();
+            return result == null ? List.of() : result;
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private void sanitizeUserPage(IPage<SysUser> page) {
