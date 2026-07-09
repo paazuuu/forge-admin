@@ -52,14 +52,33 @@
         <i :class="nodeIcon" />
       </span>
 
-      <span class="premium-tree-copy">
-        <span class="premium-tree-title">{{ nodeLabel }}</span>
-        <small v-if="nodeSubtitle" class="premium-tree-subtitle">{{ nodeSubtitle }}</small>
+      <span class="premium-tree-copy" :title="nodeTooltip">
+        <span class="premium-tree-title" :title="nodeLabel">{{ nodeLabel }}</span>
+        <small v-if="nodeSubtitle" class="premium-tree-subtitle" :title="nodeSubtitle">{{ nodeSubtitle }}</small>
       </span>
 
       <span v-if="nodeMeta" class="premium-tree-meta">
         <span v-if="nodeMeta.label">{{ nodeMeta.label }}</span>
         <strong>{{ nodeMeta.value }}</strong>
+      </span>
+
+      <span v-if="nodeActions.length" class="premium-tree-actions" @click.stop>
+        <button
+          v-for="action in nodeActions"
+          :key="action.key || action.title || action.label"
+          class="premium-tree-action"
+          :class="[
+            action.type ? `type-${action.type}` : '',
+            { 'is-disabled': resolveActionDisabled(action) },
+          ]"
+          type="button"
+          :title="action.title || action.label"
+          :aria-label="action.title || action.label"
+          :disabled="resolveActionDisabled(action)"
+          @click.stop="handleActionClick(action)"
+        >
+          <i :class="action.icon || 'i-material-symbols:more-horiz-rounded'" />
+        </button>
       </span>
     </div>
 
@@ -83,11 +102,13 @@
             :get-node-meta="getNodeMeta"
             :get-node-subtitle="getNodeSubtitle"
             :get-node-tone="getNodeTone"
+            :actions="actions"
             :show-meta="showMeta"
             :show-subtitle="showSubtitle"
             @select="$emit('select', $event)"
             @check="(treeNode, checked) => $emit('check', treeNode, checked)"
             @toggle="(treeNode, nextExpanded) => $emit('toggle', treeNode, nextExpanded)"
+            @action="(action, treeNode) => $emit('action', action, treeNode)"
           />
         </div>
       </div>
@@ -157,6 +178,10 @@ const props = defineProps({
     type: Function,
     default: null,
   },
+  actions: {
+    type: [Array, Function],
+    default: () => [],
+  },
   showMeta: {
     type: Boolean,
     default: false,
@@ -167,7 +192,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['select', 'toggle', 'check'])
+const emit = defineEmits(['select', 'toggle', 'check', 'action'])
 
 const nodeKey = computed(() => getNodeKey(props.node))
 const nodeChildren = computed(() => props.node?.[props.childrenField] || [])
@@ -189,6 +214,8 @@ const nodeMeta = computed(() => {
   return props.getNodeMeta?.(props.node) || null
 })
 const nodeTone = computed(() => props.getNodeTone?.(props.node) || 'default')
+const nodeActions = computed(() => resolveNodeActions(props.node))
+const nodeTooltip = computed(() => [nodeLabel.value, nodeSubtitle.value].filter(Boolean).join(' / '))
 
 const guideLeft = computed(() => `${(props.level - 1) * 20 + 14}px`)
 const guideVerticalStyle = computed(() => ({
@@ -218,6 +245,13 @@ function handleToggle() {
     emit('toggle', props.node)
 }
 
+function handleActionClick(action) {
+  if (resolveActionDisabled(action))
+    return
+  action.onClick?.(props.node, action)
+  emit('action', action, props.node)
+}
+
 function handleArrowRight() {
   if (hasChildren.value && !isExpanded.value)
     emit('toggle', props.node, true)
@@ -226,6 +260,26 @@ function handleArrowRight() {
 function handleArrowLeft() {
   if (hasChildren.value && isExpanded.value)
     emit('toggle', props.node, false)
+}
+
+function resolveNodeActions(node) {
+  const actions = typeof props.actions === 'function'
+    ? props.actions(node)
+    : props.actions
+  return (Array.isArray(actions) ? actions : [])
+    .filter((action) => {
+      if (!action)
+        return false
+      if (typeof action.visible === 'function')
+        return action.visible(node) !== false
+      return action.visible !== false
+    })
+}
+
+function resolveActionDisabled(action) {
+  if (typeof action.disabled === 'function')
+    return action.disabled(props.node)
+  return action.disabled === true
 }
 </script>
 
@@ -356,6 +410,7 @@ function handleArrowLeft() {
   display: flex;
   align-items: baseline;
   min-width: 0;
+  overflow: hidden;
   flex: 1;
   gap: 8px;
 }
@@ -403,6 +458,66 @@ function handleArrowLeft() {
   color: var(--text-secondary, #4b5563);
   font-size: 12px;
   font-weight: 750;
+}
+
+.premium-tree-actions {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-left: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.premium-tree-row:hover .premium-tree-actions,
+.premium-tree-row:focus-within .premium-tree-actions,
+.premium-tree-row.is-selected .premium-tree-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.premium-tree-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary, #9ca3af);
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.premium-tree-action:hover {
+  background: var(--bg-secondary, #f6f8fb);
+  color: var(--primary-color, #2563eb);
+}
+
+.premium-tree-action.type-error:hover,
+.premium-tree-action.type-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.premium-tree-action.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.premium-tree-action i {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .premium-tree-row.is-selected .premium-tree-title {
@@ -503,6 +618,17 @@ function handleArrowLeft() {
 
 :global(.dark) .premium-tree-row.is-selected .premium-tree-subtitle {
   color: #bfdbfe;
+}
+
+:global(.dark) .premium-tree-action:hover {
+  background: rgba(30, 41, 59, 0.86);
+  color: #bfdbfe;
+}
+
+:global(.dark) .premium-tree-action.type-error:hover,
+:global(.dark) .premium-tree-action.type-danger:hover {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
 }
 
 :global(.dark) .tree-guide {

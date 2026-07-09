@@ -667,6 +667,9 @@ const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, USER_SEX_DICT, ROLE_D
 const userTypeOptions = computed(() => toNumberOptions(dict.value[USER_TYPE_DICT]))
 const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
 const genderOptions = computed(() => toNumberOptions(dict.value[USER_SEX_DICT]))
+const roleTypeOptions = computed(() => toNumberOptions(dict.value[ROLE_TYPE_DICT]))
+const roleDataScopeOptions = computed(() => toNumberOptions(dict.value[ROLE_DATA_SCOPE_DICT]))
+const normalDisableOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
 const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
@@ -706,19 +709,31 @@ const authRoleColumns = computed(() => [
     title: '角色类型',
     key: 'roleType',
     width: 110,
-    render: row => h(DictTag, { dictType: ROLE_TYPE_DICT, value: row.roleType, size: 'small', forceTag: true }),
+    render: row => renderDictTag(
+      roleTypeOptions.value,
+      resolveRoleDictValue(row, 'roleType'),
+      'role-type-tag',
+    ),
   },
   {
     title: '数据范围',
     key: 'dataScope',
     width: 140,
-    render: row => h(DictTag, { dictType: ROLE_DATA_SCOPE_DICT, value: row.dataScope, size: 'small', forceTag: true }),
+    render: row => renderDictTag(
+      roleDataScopeOptions.value,
+      resolveRoleDictValue(row, 'dataScope'),
+      'role-data-scope-tag',
+    ),
   },
   {
     title: '状态',
     key: 'roleStatus',
     width: 90,
-    render: row => h(DictTag, { dictType: NORMAL_DISABLE_DICT, value: row.roleStatus, size: 'small', forceTag: true }),
+    render: row => renderDictTag(
+      normalDisableOptions.value,
+      resolveRoleDictValue(row, 'roleStatus'),
+      'role-status-tag',
+    ),
   },
 ])
 const selectedTenantOptions = computed(() => tenantOptions.value
@@ -1358,6 +1373,17 @@ function renderDictTag(options = [], value, className = '') {
   return h('span', { class: ['user-table-tag', className] }, [
     h(DictTag, { options, value, size: 'small', forceTag: true }),
   ])
+}
+
+function resolveRoleDictValue(row = {}, field) {
+  const aliasMap = {
+    roleType: ['roleType', 'role_type', 'type'],
+    dataScope: ['dataScope', 'data_scope'],
+    roleStatus: ['roleStatus', 'role_status', 'status'],
+  }
+  const keys = aliasMap[field] || [field]
+  const value = keys.map(key => row[key]).find(item => item !== null && item !== undefined && item !== '')
+  return normalizeSingleNumber(value, value ?? '')
 }
 
 function getLeftOrgNodeIcon(node = {}) {

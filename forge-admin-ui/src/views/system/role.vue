@@ -1,7 +1,186 @@
 <template>
   <div class="system-role-page">
-    <!-- 角色列表 -->
-    <div class="role-content">
+    <div class="role-workspace">
+      <aside class="role-list-panel">
+        <div class="role-tabs">
+          <button
+            v-for="tab in roleTypeTabs"
+            :key="tab.value"
+            type="button"
+            :class="{ 'is-active': String(activeRoleType) === String(tab.value) }"
+            @click="handleRoleTypeChange(tab.value)"
+          >
+            {{ tab.label }}
+          </button>
+          <n-button quaternary circle size="small" title="新增角色" @click="handleAddRole">
+            <template #icon>
+              <i class="i-material-symbols:add-rounded" />
+            </template>
+          </n-button>
+        </div>
+
+        <div class="role-search">
+          <n-input
+            v-model:value="roleKeyword"
+            clearable
+            size="small"
+            placeholder="搜索角色"
+            @clear="handleRoleSearch"
+            @keyup.enter="handleRoleSearch"
+          >
+            <template #prefix>
+              <i class="i-material-symbols:search-rounded" />
+            </template>
+          </n-input>
+        </div>
+
+        <n-spin :show="roleListLoading" class="role-list-spin">
+          <div class="role-list">
+            <button
+              v-for="role in roleList"
+              :key="role.id"
+              class="role-list-item"
+              :class="{ 'is-selected': currentRole.id === role.id }"
+              type="button"
+              @click="handleSelectRole(role)"
+            >
+              <span class="role-list-main">
+                <strong :title="role.roleName">{{ role.roleName }}</strong>
+                <small :title="role.roleKey || '-'">{{ role.roleKey || '-' }}</small>
+              </span>
+              <span class="role-list-side">
+                <NTag v-if="Number(role.isSystem) === 1" size="small" :bordered="false">
+                  系统
+                </NTag>
+                <span class="role-inline-actions" @click.stop>
+                  <button type="button" title="编辑角色" aria-label="编辑角色" @click="handleEdit(role)">
+                    <i class="i-material-symbols:edit-outline-rounded" />
+                  </button>
+                  <button type="button" title="适用组织" aria-label="适用组织" @click="handleRoleOrgScope(role)">
+                    <i class="i-material-symbols:account-tree-rounded" />
+                  </button>
+                  <button type="button" title="权限授权" aria-label="权限授权" @click="handleAuth(role)">
+                    <i class="i-material-symbols:admin-panel-settings-outline-rounded" />
+                  </button>
+                  <button
+                    v-if="role.id !== 1"
+                    type="button"
+                    title="删除角色"
+                    aria-label="删除角色"
+                    class="type-error"
+                    @click="handleDelete(role)"
+                  >
+                    <i class="i-material-symbols:delete-outline-rounded" />
+                  </button>
+                </span>
+              </span>
+            </button>
+            <n-empty v-if="!roleListLoading && roleList.length === 0" description="暂无角色" size="small" />
+          </div>
+        </n-spin>
+      </aside>
+
+      <section class="role-user-panel">
+        <header class="role-user-header">
+          <div class="role-user-title">
+            <h2>用户列表</h2>
+            <NTag v-if="currentRole.id" size="small" :type="currentRoleScopeTagType" :bordered="false">
+              {{ currentRoleScopeLabel }}
+            </NTag>
+          </div>
+          <n-space size="small">
+            <n-button
+              size="small"
+              secondary
+              :disabled="!currentRole.id"
+              @click="handleRoleOrgScope(currentRole)"
+            >
+              <template #icon>
+                <i class="i-material-symbols:account-tree-rounded" />
+              </template>
+              适用组织
+            </n-button>
+            <n-button
+              size="small"
+              type="primary"
+              :disabled="!currentRole.id || roleUserOrgOptions.length === 0"
+              @click="handleAddUser"
+            >
+              <template #icon>
+                <i class="i-material-symbols:person-add-rounded" />
+              </template>
+              添加用户
+            </n-button>
+            <n-button size="small" secondary :disabled="!currentRole.id" @click="loadRoleUsers">
+              <template #icon>
+                <i class="i-material-symbols:refresh-rounded" />
+              </template>
+              刷新
+            </n-button>
+          </n-space>
+        </header>
+
+        <div class="role-user-search">
+          <n-input
+            v-model:value="roleUserKeyword"
+            clearable
+            size="small"
+            placeholder="搜索账号"
+            @clear="handleUserSearch"
+            @keyup.enter="handleUserSearch"
+          >
+            <template #prefix>
+              <i class="i-material-symbols:search-rounded" />
+            </template>
+          </n-input>
+          <n-tree-select
+            v-model:value="roleUserOrgId"
+            placeholder="全部授权组织"
+            clearable
+            filterable
+            size="small"
+            :disabled="!currentRole.id || roleUserOrgOptions.length === 0"
+            :options="roleUserOrgTreeOptions"
+            key-field="value"
+            label-field="label"
+            children-field="children"
+            @update:value="handleRoleUserOrgChange"
+          />
+          <n-select
+            v-model:value="userSearchParams.userStatus"
+            placeholder="状态"
+            clearable
+            size="small"
+            :options="userStatusOptions"
+            @update:value="handleUserSearch"
+          />
+          <n-button size="small" type="primary" :disabled="!currentRole.id" @click="handleUserSearch">
+            查询
+          </n-button>
+          <n-button size="small" :disabled="!currentRole.id" @click="handleUserSearchReset">
+            重置
+          </n-button>
+        </div>
+
+        <div class="role-user-table">
+          <n-data-table
+            :columns="userTableColumns"
+            :data="roleUsers"
+            :loading="usersLoading"
+            :pagination="userPaginationConfig"
+            :row-key="row => row.id"
+            remote
+            striped
+            size="small"
+            flex-height
+            @update:page="handleUserPageChange"
+            @update:page-size="handleUserPageSizeChange"
+          />
+        </div>
+      </section>
+    </div>
+
+    <div class="crud-driver" aria-hidden="true">
       <AiCrudPage
         ref="crudRef"
         api="/system/role"
@@ -18,8 +197,15 @@
         :before-submit="beforeSubmit"
         row-key="id"
         :edit-grid-cols="2"
+        edit-label-align="left"
         modal-width="800px"
         add-button-text="新增角色"
+        :show-search="false"
+        :show-pagination="false"
+        :hide-toolbar="true"
+        :hide-selection="true"
+        :hide-batch-delete="true"
+        @submit-success="handleRoleMutationSuccess"
       />
     </div>
 
@@ -254,129 +440,6 @@
       </template>
     </n-modal>
 
-    <!-- 用户列表弹窗 -->
-    <n-modal
-      v-model:show="usersModalVisible"
-      :title="`角色用户 - ${currentRole.roleName || ''}`"
-      preset="card"
-      style="width: 900px"
-      :mask-closable="false"
-    >
-      <div class="users-modal-content">
-        <!-- 搜索表单 -->
-        <div class="users-search-form">
-          <n-space>
-            <n-input
-              v-model:value="userSearchParams.username"
-              placeholder="用户名"
-              clearable
-              size="small"
-              style="width: 150px"
-              @clear="handleUserSearch"
-              @keyup.enter="handleUserSearch"
-            />
-            <n-input
-              v-model:value="userSearchParams.realName"
-              placeholder="真实姓名"
-              clearable
-              size="small"
-              style="width: 150px"
-              @clear="handleUserSearch"
-              @keyup.enter="handleUserSearch"
-            />
-            <n-input
-              v-model:value="userSearchParams.phone"
-              placeholder="手机号"
-              clearable
-              size="small"
-              style="width: 150px"
-              @clear="handleUserSearch"
-              @keyup.enter="handleUserSearch"
-            />
-            <n-select
-              v-model:value="userSearchParams.userStatus"
-              placeholder="用户状态"
-              clearable
-              size="small"
-              style="width: 120px"
-              :options="userStatusOptions"
-            />
-            <n-select
-              v-model:value="roleUserOrgId"
-              placeholder="授权组织"
-              clearable
-              filterable
-              size="small"
-              style="width: 180px"
-              :options="roleUserOrgOptions"
-              @update:value="handleRoleUserOrgChange"
-            />
-            <n-button size="small" type="primary" @click="handleUserSearch">
-              <template #icon>
-                <i class="i-material-symbols:search" />
-              </template>
-              查询
-            </n-button>
-            <n-button size="small" @click="handleUserSearchReset">
-              重置
-            </n-button>
-          </n-space>
-        </div>
-
-        <!-- 统计和操作 -->
-        <div class="users-toolbar">
-          <n-space justify="space-between">
-            <div class="user-count-info">
-              <NTag class="toolbar-count-tag" size="small" :bordered="false">
-                共 {{ userPagination.itemCount }} 个用户
-              </NTag>
-            </div>
-            <n-space size="small">
-              <n-button class="toolbar-primary-btn" size="small" type="primary" @click="handleAddUser">
-                <template #icon>
-                  <i class="i-material-symbols:person-add" />
-                </template>
-                添加用户
-              </n-button>
-              <n-button class="toolbar-ghost-btn" size="small" @click="loadRoleUsers">
-                <template #icon>
-                  <i class="i-material-symbols:refresh" />
-                </template>
-                刷新
-              </n-button>
-            </n-space>
-          </n-space>
-        </div>
-
-        <!-- 用户列表表格 -->
-        <div class="users-table-container">
-          <n-spin :show="usersLoading">
-            <n-data-table
-              v-if="roleUsers.length > 0 || !usersLoading"
-              :columns="userTableColumns"
-              :data="roleUsers"
-              :pagination="userPaginationConfig"
-              :row-key="row => row.id"
-              remote
-              striped
-              size="small"
-              @update:page="handleUserPageChange"
-              @update:page-size="handleUserPageSizeChange"
-            />
-            <n-empty v-if="roleUsers.length === 0 && !usersLoading" description="该角色暂无用户" size="small" />
-          </n-spin>
-        </div>
-      </div>
-
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="usersModalVisible = false">
-            关闭
-          </n-button>
-        </n-space>
-      </template>
-    </n-modal>
-
     <!-- 添加用户弹窗 -->
     <UserSelectPanel
       :show="addUserModalVisible"
@@ -400,7 +463,24 @@
       :mask-closable="false"
     >
       <div class="role-org-modal-content">
-        <div class="auth-toolbar">
+        <div class="role-org-toolbar">
+          <div class="role-scope-mode">
+            <n-radio-group
+              :value="roleScopeMode"
+              size="small"
+              @update:value="handleRoleScopeModeChange"
+            >
+              <n-radio-button value="global">
+                租户全局
+              </n-radio-button>
+              <n-radio-button value="custom">
+                指定组织
+              </n-radio-button>
+            </n-radio-group>
+            <NTag size="small" :type="roleOrgScopeTagType" :bordered="false">
+              {{ roleOrgScopeSummary }}
+            </NTag>
+          </div>
           <n-space size="small" align="center">
             <n-button size="small" :disabled="roleOrgLoading" @click="toggleRoleOrgExpandAll">
               <template #icon>
@@ -408,9 +488,6 @@
               </template>
               {{ roleOrgTreeExpandAll ? '折叠全部' : '展开全部' }}
             </n-button>
-            <NTag type="info" size="small">
-              已选 {{ checkedRoleOrgKeys.length }} 个组织
-            </NTag>
           </n-space>
         </div>
         <div class="auth-tree-container">
@@ -418,10 +495,10 @@
             <PremiumTree
               v-if="roleOrgTreeData.length > 0"
               :data="roleOrgTreeData"
-              checkable
+              :checkable="roleScopeMode === 'custom'"
               :cascade="false"
               :expanded-keys="roleOrgExpandedKeys"
-              :checked-keys="checkedRoleOrgKeys"
+              :checked-keys="roleScopeMode === 'global' ? allRoleOrgIds : checkedRoleOrgKeys"
               key-field="id"
               label-field="orgName"
               children-field="children"
@@ -462,7 +539,6 @@ import { request } from '@/utils'
 
 defineOptions({ name: 'SystemRole' })
 
-const USER_TYPE_DICT = 'sys_user_type'
 const USER_STATUS_DICT = 'sys_user_status'
 const ROLE_DATA_SCOPE_DICT = 'sys_role_data_scope'
 const ROLE_TYPE_DICT = 'sys_role_type'
@@ -472,6 +548,10 @@ const YES_NO_DICT = 'sys_yes_no'
 const crudRef = ref(null)
 const userStore = useUserStore()
 const tenantOptions = ref([])
+const roleList = ref([])
+const roleListLoading = ref(false)
+const roleKeyword = ref('')
+const activeRoleType = ref(null)
 
 // 授权相关
 const authModalVisible = ref(false)
@@ -487,7 +567,6 @@ const clientList = ref([])
 const currentAuthClientCode = ref('pc')
 
 // 用户列表相关
-const usersModalVisible = ref(false)
 const usersLoading = ref(false)
 const roleUsers = ref([]) // 角色下的用户列表
 const currentRole = ref({})
@@ -495,12 +574,10 @@ const addUserModalVisible = ref(false)
 const addUserLoading = ref(false)
 const assignedUserIds = ref([]) // 当前角色已授权的用户ID列表
 const roleUserOrgId = ref(null)
+const roleUserKeyword = ref('')
 const roleApplicableOrgIds = ref([])
 const roleOrgTreeData = ref([])
 const userSearchParams = ref({
-  username: '',
-  realName: '',
-  phone: '',
   userStatus: null,
 })
 const userPagination = ref({
@@ -513,11 +590,12 @@ const userPagination = ref({
 const roleOrgModalVisible = ref(false)
 const roleOrgLoading = ref(false)
 const roleOrgSubmitLoading = ref(false)
+const roleScopeMode = ref('custom')
 const checkedRoleOrgKeys = ref([])
 const roleOrgExpandedKeys = ref([])
 const roleOrgTreeExpandAll = ref(true)
 
-const { dict } = useDict(USER_TYPE_DICT, USER_STATUS_DICT, ROLE_DATA_SCOPE_DICT, ROLE_TYPE_DICT, NORMAL_DISABLE_DICT, YES_NO_DICT)
+const { dict } = useDict(USER_STATUS_DICT, ROLE_DATA_SCOPE_DICT, ROLE_TYPE_DICT, NORMAL_DISABLE_DICT, YES_NO_DICT)
 
 const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
 const dataScopeOptions = computed(() => toNumberOptions(dict.value[ROLE_DATA_SCOPE_DICT]))
@@ -534,6 +612,12 @@ const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
+const roleTypeTabs = computed(() => {
+  const options = roleTypeOptions.value || []
+  if (options.length > 0)
+    return options.map(item => ({ label: item.label, value: item.value }))
+  return [{ label: '角色', value: null }]
+})
 const roleUserOrgOptions = computed(() => {
   const scopedOrgIds = new Set(normalizeNumberList(roleApplicableOrgIds.value))
   if (roleOrgTreeData.value.length > 0 && scopedOrgIds.size === 0)
@@ -545,6 +629,43 @@ const roleUserOrgOptions = computed(() => {
       value: normalizeSingleNumber(item.id),
     }))
     .filter(item => item.value !== null)
+})
+const roleUserOrgTreeOptions = computed(() => {
+  const scopedOrgIds = new Set(normalizeNumberList(roleApplicableOrgIds.value))
+  if (roleOrgTreeData.value.length > 0 && scopedOrgIds.size === 0)
+    return []
+  return buildRoleUserOrgTreeOptions(roleOrgTreeData.value, scopedOrgIds)
+})
+const allRoleOrgIds = computed(() => flattenOrgNodes(roleOrgTreeData.value)
+  .map(item => normalizeSingleNumber(item.id))
+  .filter(item => item !== null))
+const currentRoleScopeLabel = computed(() => {
+  if (!currentRole.value?.id)
+    return ''
+  if (coversAllRoleOrgs(roleApplicableOrgIds.value))
+    return '租户全局'
+  if (roleApplicableOrgIds.value.length > 0)
+    return `${roleApplicableOrgIds.value.length} 个组织`
+  return '未设置范围'
+})
+const currentRoleScopeTagType = computed(() => {
+  if (coversAllRoleOrgs(roleApplicableOrgIds.value))
+    return 'success'
+  return roleApplicableOrgIds.value.length > 0 ? 'info' : 'warning'
+})
+const roleOrgScopeSummary = computed(() => {
+  if (allRoleOrgIds.value.length === 0)
+    return '暂无组织'
+  if (roleScopeMode.value === 'global')
+    return `${allRoleOrgIds.value.length} 个组织`
+  if (checkedRoleOrgKeys.value.length === 0)
+    return '未设置'
+  return `${checkedRoleOrgKeys.value.length} 个组织`
+})
+const roleOrgScopeTagType = computed(() => {
+  if (allRoleOrgIds.value.length === 0 || (roleScopeMode.value === 'custom' && checkedRoleOrgKeys.value.length === 0))
+    return 'warning'
+  return roleScopeMode.value === 'global' ? 'success' : 'info'
 })
 
 // 计算分页配置
@@ -591,8 +712,15 @@ const currentAuthClientName = computed(() => {
 watch(roleUserOrgOptions, (options) => {
   if (roleUserOrgId.value && options.some(item => item.value === roleUserOrgId.value))
     return
-  roleUserOrgId.value = options[0]?.value || null
+  roleUserOrgId.value = null
 })
+
+watch(roleTypeTabs, (tabs) => {
+  if (activeRoleType.value !== null || tabs.length === 0)
+    return
+  activeRoleType.value = tabs[0].value
+  loadRoleList()
+}, { immediate: true })
 
 function countResources(data) {
   if (!Array.isArray(data))
@@ -892,32 +1020,20 @@ const editSchema = computed(() => [
 // 用户表格列配置（用于角色用户列表）
 const userTableColumns = [
   {
-    title: '用户名',
-    key: 'username',
-    width: 150,
-  },
-  {
-    title: '真实姓名',
+    title: '用户',
     key: 'realName',
-    width: 120,
+    minWidth: 180,
+    render: row => h('div', { class: 'role-user-cell' }, [
+      h('strong', resolveUserDisplayName(row)),
+      h('em', ' / '),
+      h('span', row.username || '-'),
+    ]),
   },
   {
     title: '手机号',
     key: 'phone',
     width: 130,
-  },
-  {
-    title: '邮箱',
-    key: 'email',
-    width: 180,
-  },
-  {
-    title: '用户类型',
-    key: 'userType',
-    width: 120,
-    render: (row) => {
-      return h(DictTag, { dictType: USER_TYPE_DICT, value: row.userType, size: 'small' })
-    },
+    render: row => row.phone || '-',
   },
   {
     title: '状态',
@@ -930,7 +1046,7 @@ const userTableColumns = [
   {
     title: '操作',
     key: 'action',
-    width: 100,
+    width: 90,
     fixed: 'right',
     render: (row) => {
       return h('a', {
@@ -966,12 +1082,42 @@ function normalizeNumberList(value) {
     .filter(item => item !== null)))
 }
 
+function resolveUserDisplayName(row = {}) {
+  return row.realName || row.name || row.nickname || row.username || `用户${row.id}`
+}
+
 function flattenOrgNodes(list = []) {
   return (list || []).flatMap((item) => {
     const current = [item]
     const children = flattenOrgNodes(item.children || [])
     return [...current, ...children]
   })
+}
+
+function buildRoleUserOrgTreeOptions(list = [], scopedOrgIds = new Set()) {
+  return (list || [])
+    .map((item) => {
+      const value = normalizeSingleNumber(item.id)
+      const children = buildRoleUserOrgTreeOptions(item.children || [], scopedOrgIds)
+      const selectable = value !== null && scopedOrgIds.has(value)
+      if (!selectable && children.length === 0)
+        return null
+      return {
+        label: item.orgName || item.label || '-',
+        value,
+        disabled: !selectable,
+        children,
+      }
+    })
+    .filter(Boolean)
+}
+
+function coversAllRoleOrgs(orgIds = []) {
+  const allIds = allRoleOrgIds.value
+  if (allIds.length === 0)
+    return false
+  const selectedSet = new Set(normalizeNumberList(orgIds))
+  return allIds.every(orgId => selectedSet.has(orgId))
 }
 
 function getOrgNodeIcon(node = {}) {
@@ -1018,14 +1164,6 @@ async function loadRoleApplicableOrgIds(roleId = currentRole.value?.id) {
   return []
 }
 
-function resolveDefaultRoleUserOrgId() {
-  const activeOrgId = normalizeSingleNumber(userStore.activeOrgId || userStore.userInfo?.activeOrgId)
-  const availableOrgIds = new Set(roleUserOrgOptions.value.map(item => item.value))
-  if (activeOrgId !== null && availableOrgIds.has(activeOrgId))
-    return activeOrgId
-  return roleUserOrgOptions.value[0]?.value || null
-}
-
 // 表单提交前处理
 function beforeSubmit(formData) {
   if (!userStore.isAdmin) {
@@ -1053,6 +1191,82 @@ async function loadTenantOptions() {
   }
 }
 
+async function loadRoleList() {
+  try {
+    roleListLoading.value = true
+    const params = {
+      pageNum: 1,
+      pageSize: 200,
+      roleName: roleKeyword.value || undefined,
+      roleType: activeRoleType.value === null ? undefined : activeRoleType.value,
+    }
+    const res = await request.get('/system/role/page', { params })
+    if (res.code === 200) {
+      roleList.value = res.data?.records || res.data?.list || []
+      if (!roleList.value.some(item => item.id === currentRole.value?.id)) {
+        const firstRole = roleList.value[0]
+        if (firstRole) {
+          await handleSelectRole(firstRole)
+        }
+        else {
+          currentRole.value = {}
+          roleUsers.value = []
+          userPagination.value.itemCount = 0
+        }
+      }
+    }
+  }
+  catch (error) {
+    console.error('加载角色列表失败:', error)
+    window.$message.error('加载角色列表失败')
+  }
+  finally {
+    roleListLoading.value = false
+  }
+}
+
+function handleRoleTypeChange(value) {
+  activeRoleType.value = value
+  roleKeyword.value = ''
+  loadRoleList()
+}
+
+function handleRoleSearch() {
+  loadRoleList()
+}
+
+function handleAddRole() {
+  crudRef.value?.showAdd()
+}
+
+async function handleSelectRole(row) {
+  if (!row?.id)
+    return
+  currentRole.value = row
+  roleUserKeyword.value = ''
+  userSearchParams.value = {
+    userStatus: null,
+  }
+  userPagination.value.page = 1
+  roleUserOrgId.value = null
+  try {
+    await Promise.all([
+      loadRoleOrgTree(row.tenantId),
+      loadRoleApplicableOrgIds(row.id),
+    ])
+    await loadRoleUsers()
+  }
+  catch (error) {
+    console.error('加载角色用户上下文失败:', error)
+    window.$message.error('加载角色用户失败')
+  }
+}
+
+async function handleRoleMutationSuccess() {
+  await loadRoleList()
+  crudRef.value?.refresh()
+}
+
 // 编辑
 function handleEdit(row) {
   crudRef.value?.showEdit(row)
@@ -1070,7 +1284,7 @@ function handleDelete(row) {
         const res = await request.post('/system/role/remove', null, { params: { id: row.id } })
         if (res.code === 200) {
           window.$message.success('删除成功')
-          crudRef.value?.refresh()
+          await handleRoleMutationSuccess()
         }
       }
       catch {
@@ -1081,17 +1295,17 @@ function handleDelete(row) {
 }
 
 async function handleRoleOrgScope(row) {
-  currentRole.value = row
+  if (!row?.id)
+    return
+  if (currentRole.value?.id !== row.id)
+    await handleSelectRole(row)
   roleOrgModalVisible.value = true
   checkedRoleOrgKeys.value = []
   roleOrgExpandedKeys.value = []
   try {
     roleOrgLoading.value = true
-    await Promise.all([
-      loadRoleOrgTree(row.tenantId),
-      loadRoleApplicableOrgIds(row.id),
-    ])
     checkedRoleOrgKeys.value = normalizeNumberList(roleApplicableOrgIds.value)
+    roleScopeMode.value = coversAllRoleOrgs(checkedRoleOrgKeys.value) ? 'global' : 'custom'
   }
   catch (error) {
     console.error('加载角色适用组织失败:', error)
@@ -1116,22 +1330,24 @@ function handleRoleOrgCheckedKeysChange(keys) {
 }
 
 async function handleSubmitRoleOrgs() {
-  if (checkedRoleOrgKeys.value.length === 0) {
+  const nextOrgIds = roleScopeMode.value === 'global'
+    ? normalizeNumberList(allRoleOrgIds.value)
+    : normalizeNumberList(checkedRoleOrgKeys.value)
+  if (nextOrgIds.length === 0) {
     window.$message.warning('请至少选择一个适用组织')
     return
   }
   try {
     roleOrgSubmitLoading.value = true
-    const res = await request.post(`/system/role/${currentRole.value.id}/orgs`, checkedRoleOrgKeys.value)
+    const res = await request.post(`/system/role/${currentRole.value.id}/orgs`, nextOrgIds)
     if (res.code === 200) {
       window.$message.success('适用组织保存成功')
       roleOrgModalVisible.value = false
-      roleApplicableOrgIds.value = normalizeNumberList(checkedRoleOrgKeys.value)
+      roleApplicableOrgIds.value = nextOrgIds
       if (roleUserOrgId.value && !roleApplicableOrgIds.value.includes(roleUserOrgId.value)) {
-        roleUserOrgId.value = resolveDefaultRoleUserOrgId()
-        if (usersModalVisible.value)
-          loadRoleUsers()
+        roleUserOrgId.value = null
       }
+      await loadRoleUsers()
     }
   }
   catch (error) {
@@ -1143,33 +1359,30 @@ async function handleSubmitRoleOrgs() {
   }
 }
 
+function handleRoleScopeModeChange(value) {
+  roleScopeMode.value = value
+  if (value === 'global')
+    checkedRoleOrgKeys.value = normalizeNumberList(allRoleOrgIds.value)
+}
+
 // 查看角色用户
 async function handleViewUsers(row) {
-  currentRole.value = row
-  usersModalVisible.value = true
-  // 重置搜索条件和分页
-  userSearchParams.value = {
-    username: '',
-    realName: '',
-    phone: '',
-    userStatus: null,
-  }
-  userPagination.value.page = 1
-  roleUserOrgId.value = null
-  await Promise.all([
-    loadRoleOrgTree(row.tenantId),
-    loadRoleApplicableOrgIds(row.id),
-  ])
-  roleUserOrgId.value = resolveDefaultRoleUserOrgId()
-  await loadRoleUsers()
+  await handleSelectRole(row)
 }
 
 // 加载角色用户列表
 async function loadRoleUsers() {
+  if (!currentRole.value?.id) {
+    roleUsers.value = []
+    userPagination.value.itemCount = 0
+    return
+  }
   try {
     usersLoading.value = true
+    const keyword = String(roleUserKeyword.value || '').trim()
     const params = {
-      ...userSearchParams.value,
+      username: keyword || undefined,
+      userStatus: userSearchParams.value.userStatus,
       pageNum: userPagination.value.page,
       pageSize: userPagination.value.pageSize,
       orgId: roleUserOrgId.value || undefined,
@@ -1209,10 +1422,8 @@ function handleRoleUserOrgChange() {
 
 // 用户搜索重置
 function handleUserSearchReset() {
+  roleUserKeyword.value = ''
   userSearchParams.value = {
-    username: '',
-    realName: '',
-    phone: '',
     userStatus: null,
   }
   userPagination.value.page = 1
@@ -1235,17 +1446,28 @@ function handleUserPageSizeChange(pageSize) {
 // 移除角色用户
 async function handleRemoveUserRole(user) {
   const orgId = normalizeSingleNumber(roleUserOrgId.value)
-  if (orgId === null) {
-    window.$message.warning('请选择授权组织')
-    return
-  }
   window.$dialog.warning({
     title: '确认移除',
-    content: `确定要从当前组织的角色“${currentRole.value.roleName}”中移除用户“${user.username}”吗？`,
+    content: orgId === null
+      ? `确定移除用户“${user.username}”在全部授权组织下的角色“${currentRole.value.roleName}”吗？`
+      : `确定移除用户“${user.username}”在当前授权组织下的角色“${currentRole.value.roleName}”吗？`,
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
+        if (orgId === null) {
+          const res = await request.post('/system/role/removeUserRole', null, {
+            params: {
+              roleId: currentRole.value.id,
+              userId: user.id,
+            },
+          })
+          if (res.code === 200) {
+            window.$message.success('移除成功')
+            await loadRoleUsers()
+          }
+          return
+        }
         const currentRes = await request.get(`/system/user/${user.id}/org-roles`, {
           params: {
             tenantId: currentRole.value.tenantId,
@@ -1295,7 +1517,7 @@ async function loadAssignedUserIds() {
 // 打开添加用户弹窗
 async function handleAddUser() {
   if (!roleUserOrgId.value) {
-    window.$message.warning('请选择授权组织')
+    window.$message.warning('请选择授权组织后再添加用户')
     return
   }
   await loadAssignedUserIds()
@@ -1304,13 +1526,7 @@ async function handleAddUser() {
 
 // 从角色列表直接添加用户
 async function handleAddUserFromList(row) {
-  currentRole.value = row
-  roleUserOrgId.value = null
-  await Promise.all([
-    loadRoleOrgTree(row.tenantId),
-    loadRoleApplicableOrgIds(row.id),
-  ])
-  roleUserOrgId.value = resolveDefaultRoleUserOrgId()
+  await handleSelectRole(row)
   if (!roleUserOrgId.value) {
     window.$message.warning('请先配置角色适用组织')
     return
@@ -1365,7 +1581,10 @@ async function handleConfirmAddUsers(userIds) {
 
 // 授权
 async function handleAuth(row) {
-  currentRole.value = row
+  if (!row?.id)
+    return
+  if (currentRole.value?.id !== row.id)
+    await handleSelectRole(row)
   authModalVisible.value = true
 
   await loadClientList()
@@ -1522,29 +1741,298 @@ async function handleSubmitAuth() {
 
 onMounted(() => {
   loadTenantOptions()
+  loadRoleList()
 })
 </script>
 
 <style scoped>
 .system-role-page {
   height: 100%;
-  //padding: 20px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-/* 角色列表内容 */
-.role-content {
-  flex: 1;
+.role-workspace {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  overflow: hidden;
   background: #fff;
-  border-radius: 12px;
-  //padding: 16px 20px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
-.role-content :deep(.ai-crud-page) {
+.role-list-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #dbe4f0;
+  background: #fff;
+}
+
+.role-tabs {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 42px;
+  padding: 0 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.role-tabs button {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.role-tabs button:hover,
+.role-tabs button.is-active {
+  color: #2563eb;
+}
+
+.role-tabs button.is-active {
+  border-bottom-color: #2563eb;
+}
+
+.role-tabs :deep(.n-button) {
+  margin-left: auto;
+}
+
+.role-search {
+  flex-shrink: 0;
+  padding: 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.role-list-spin {
+  flex: 1;
+  min-height: 0;
+}
+
+.role-list-spin :deep(.n-spin-container),
+.role-list-spin :deep(.n-spin-content) {
   height: 100%;
+  min-height: 0;
+}
+
+.role-list {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 6px 8px;
+}
+
+.role-list-item {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 6px;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.role-list-item:hover {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.role-list-item.is-selected {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.role-list-main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.role-list-main strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-list-main small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-list-side {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.role-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.role-list-item:hover .role-inline-actions,
+.role-list-item.is-selected .role-inline-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.role-inline-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.role-inline-actions button:hover {
+  background: #eef2ff;
+  color: #2563eb;
+}
+
+.role-inline-actions button.type-error:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.role-inline-actions i {
+  font-size: 14px;
+}
+
+.role-user-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  overflow: hidden;
+}
+
+.role-user-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.role-user-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.role-user-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-user-search {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) minmax(180px, 240px) 120px auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.role-user-table {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  overflow: hidden;
+}
+
+.role-user-table :deep(.n-data-table) {
+  height: 100%;
+}
+
+.role-user-cell {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.role-user-cell strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.role-user-cell em {
+  flex: 0 0 auto;
+  color: #cbd5e1;
+  font-style: normal;
+}
+
+.role-user-cell span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.crud-driver {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.crud-driver :deep(.n-modal-container),
+.crud-driver :deep(.n-drawer-container) {
+  opacity: 1;
 }
 
 /* 授权弹窗样式 */
@@ -1628,6 +2116,25 @@ onMounted(() => {
 .auth-toolbar :deep(.n-checkbox .n-checkbox__label) {
   color: #475569;
   font-size: 13px;
+}
+
+.role-org-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.role-scope-mode {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 标签页样式 */
@@ -1733,123 +2240,64 @@ onMounted(() => {
   background-color: #f8fafc;
 }
 
-/* 用户列表弹窗样式 */
-.users-modal-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-height: 600px;
-}
-
-.users-search-form {
-  padding: 12px 16px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  flex-shrink: 0;
-}
-
-.users-toolbar {
-  padding: 10px 14px;
-  background: var(--bg-secondary, #f7f8fa);
-  border: 1px solid var(--border-light, #e5e7eb);
-  border-radius: 8px;
-  margin-bottom: 12px;
-  flex-shrink: 0;
-}
-
-.toolbar-count-tag {
-  --n-color: color-mix(in srgb, var(--primary-color, #165dff) 9%, var(--bg-primary, #fff)) !important;
-  --n-text-color: var(--primary-color, #165dff) !important;
-  --n-border: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 16%, var(--border-light, #e5e7eb)) !important;
-
-  color: var(--primary-color, #165dff);
-  background: color-mix(in srgb, var(--primary-color, #165dff) 9%, var(--bg-primary, #fff));
-  border: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 16%, var(--border-light, #e5e7eb));
-}
-
-.toolbar-primary-btn {
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary-color, #165dff) 16%, transparent);
-}
-
-.toolbar-ghost-btn {
-  --n-color: var(--bg-primary, #fff) !important;
-  --n-color-hover: color-mix(in srgb, var(--primary-color, #165dff) 7%, var(--bg-primary, #fff)) !important;
-  --n-color-focus: color-mix(in srgb, var(--primary-color, #165dff) 7%, var(--bg-primary, #fff)) !important;
-  --n-color-pressed: color-mix(in srgb, var(--primary-color, #165dff) 10%, var(--bg-primary, #fff)) !important;
-  --n-text-color: var(--text-secondary, #4e5969) !important;
-  --n-text-color-hover: var(--primary-color, #165dff) !important;
-  --n-text-color-focus: var(--primary-color, #165dff) !important;
-  --n-text-color-pressed: var(--primary-color, #165dff) !important;
-  --n-border: 1px solid var(--border-light, #e5e7eb) !important;
-  --n-border-hover: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb)) !important;
-  --n-border-focus: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb)) !important;
-  --n-border-pressed: 1px solid color-mix(in srgb, var(--primary-color, #165dff) 36%, var(--border-light, #e5e7eb)) !important;
-
-  color: var(--text-secondary, #4e5969);
-  background: var(--bg-primary, #fff);
-  border-color: var(--border-light, #e5e7eb);
-}
-
-.toolbar-ghost-btn:hover {
-  color: var(--primary-color, #165dff);
-  background: color-mix(in srgb, var(--primary-color, #165dff) 7%, var(--bg-primary, #fff));
-  border-color: color-mix(in srgb, var(--primary-color, #165dff) 28%, var(--border-light, #e5e7eb));
-}
-
-.user-count-info {
-  display: flex;
-  align-items: center;
-}
-
-.users-table-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  border: 1px solid var(--n-border-color);
-  border-radius: 8px;
-  min-height: 300px;
-  max-height: 450px;
-  background-color: var(--n-color);
-}
-
-.users-table-container :deep(.n-data-table) {
-  font-size: 14px;
-}
-
-.users-table-container :deep(.n-data-table-th) {
-  font-weight: 600;
-  background-color: #f8f9fa;
-}
-
-.users-table-container :deep(.n-data-table-td) {
-  padding: 12px 16px;
-}
-
-.users-table-container::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.users-table-container::-webkit-scrollbar-track {
-  background: var(--n-scrollbar-color);
-  border-radius: 4px;
-}
-
-.users-table-container::-webkit-scrollbar-thumb {
-  background: var(--n-scrollbar-color-hover);
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.users-table-container::-webkit-scrollbar-thumb:hover {
-  background: var(--n-border-color);
-}
-
 /* 深色模式 */
-.dark .role-content {
+.dark .role-workspace,
+.dark .role-list-panel,
+.dark .role-user-panel {
   background: #0f172a !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border-color: #334155;
+}
+
+.dark .role-tabs,
+.dark .role-search,
+.dark .role-user-header,
+.dark .role-user-search {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+.dark .role-tabs button {
+  color: #cbd5e1;
+}
+
+.dark .role-tabs button:hover,
+.dark .role-tabs button.is-active {
+  color: #93c5fd;
+}
+
+.dark .role-list-item {
+  background: #111827;
+  color: #e2e8f0;
+}
+
+.dark .role-list-item:hover {
+  border-color: #334155;
+  background: #162033;
+}
+
+.dark .role-list-item.is-selected {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.dark .role-list-main small,
+.dark .role-user-cell span {
+  color: #94a3b8;
+}
+
+.dark .role-user-header h2,
+.dark .role-user-cell strong {
+  color: #f1f5f9;
+}
+
+.dark .role-inline-actions button:hover {
+  background: rgba(30, 41, 59, 0.86);
+  color: #bfdbfe;
+}
+
+.dark .role-inline-actions button.type-error:hover {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
 }
 
 .dark .auth-modal-content {
@@ -1857,7 +2305,8 @@ onMounted(() => {
 }
 
 .dark .auth-summary,
-.dark .auth-toolbar {
+.dark .auth-toolbar,
+.dark .role-org-toolbar {
   background: #111827;
   border-color: #334155;
 }
@@ -1885,31 +2334,25 @@ onMounted(() => {
   border-color: #334155;
 }
 
-.dark .users-search-form {
-  background-color: #1e293b;
+@media (max-width: 1120px) {
+  .role-workspace {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .role-user-search {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
-.dark .users-toolbar {
-  background: var(--bg-secondary, #1e293b);
-  border-color: var(--border-light, #334155);
-}
+@media (max-width: 860px) {
+  .role-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(260px, 38vh) minmax(360px, 1fr);
+  }
 
-.dark .toolbar-count-tag {
-  background: color-mix(in srgb, var(--primary-color, #4080ff) 16%, var(--bg-primary, #0f172a));
-  border-color: color-mix(in srgb, var(--primary-color, #4080ff) 24%, var(--border-light, #334155));
-}
-
-.dark .toolbar-ghost-btn {
-  background: var(--bg-primary, #0f172a);
-  border-color: var(--border-light, #334155);
-}
-
-.dark .users-table-container {
-  background: #0f172a;
-  border-color: #334155;
-}
-
-.dark .users-table-container :deep(.n-data-table-th) {
-  background-color: #1e293b;
+  .role-list-panel {
+    border-right: 0;
+    border-bottom: 1px solid #dbe4f0;
+  }
 }
 </style>

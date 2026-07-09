@@ -17,11 +17,13 @@
       :get-node-meta="getNodeMeta"
       :get-node-subtitle="getNodeSubtitle"
       :get-node-tone="getNodeTone"
+      :actions="actions"
       :show-meta="showMeta"
       :show-subtitle="showSubtitle"
       @select="handleSelect"
       @check="handleCheck"
       @toggle="handleToggle"
+      @action="handleAction"
     />
   </div>
 </template>
@@ -89,6 +91,10 @@ const props = defineProps({
     type: Function,
     default: null,
   },
+  actions: {
+    type: [Array, Function],
+    default: () => [],
+  },
   showMeta: {
     type: Boolean,
     default: false,
@@ -99,7 +105,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:selected-keys', 'update:expanded-keys', 'update:checked-keys', 'select', 'check'])
+const emit = defineEmits(['update:selected-keys', 'update:expanded-keys', 'update:checked-keys', 'select', 'check', 'action'])
 
 const selectedKey = computed(() => props.selectedKeys?.[0])
 const expandedKeySet = computed(() => new Set(props.expandedKeys || []))
@@ -171,6 +177,10 @@ function handleToggle(node, nextExpanded) {
     keys.delete(key)
 
   emit('update:expanded-keys', Array.from(keys), node)
+}
+
+function handleAction(action, node) {
+  emit('action', action, node)
 }
 
 function collectLeafNodeKeys(node = {}) {

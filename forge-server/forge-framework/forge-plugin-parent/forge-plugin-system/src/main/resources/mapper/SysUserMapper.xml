@@ -99,6 +99,21 @@
         <if test="query.createDept != null">
             AND u.create_dept = #{query.createDept}
         </if>
+        <if test="query.postId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM sys_user_post up
+                INNER JOIN sys_post p
+                    ON p.id = up.post_id
+                   AND p.tenant_id = up.tenant_id
+                   AND p.del_flag = 0
+                WHERE up.user_id = u.id
+                  AND up.post_id = #{query.postId}
+                <if test="query.tenantId != null">
+                  AND up.tenant_id = #{query.tenantId}
+                </if>
+            )
+        </if>
         <!-- 组织ID过滤：默认查询该组织及其子组织；directOrgOnly=true 时只查直接成员 -->
         <if test="query.orgId != null">
             <choose>

@@ -37,18 +37,22 @@
         ref="crudRef"
         :api-config="{
           list: 'get@/job/config/page',
-          detail: 'get@/job/config/{id}',
+          detail: 'get@/job/config/:id',
           add: 'post@/job/config',
           update: 'put@/job/config',
-          delete: 'delete@/job/config/{id}',
+          delete: 'delete@/job/config/:id',
         }"
         :search-schema="searchSchema"
         :columns="tableColumns"
         :edit-schema="editSchema"
         row-key="id"
         :edit-grid-cols="2"
+        :edit-x-gap="20"
+        :edit-y-gap="14"
+        edit-form-class="job-config-edit-form"
         edit-label-placement="top"
-        modal-width="720px"
+        edit-label-align="left"
+        modal-width="min(980px, calc(100vw - 48px))"
         add-button-text="新增定时任务"
         :before-submit="beforeSubmit"
         modal-type="modal"
@@ -57,11 +61,10 @@
       >
         <!-- Cron表达式自定义插槽 -->
         <template #form-cronExpression="{ value, updateValue }">
-          <div class="flex items-center gap-8" style="width: 100%">
+          <div class="cron-expression-field">
             <NInput
               :value="value"
               placeholder="请输入Cron表达式，如：0 0 12 * * ?"
-              style="flex: 1"
               @update:value="updateValue"
             />
             <NPopover
@@ -71,7 +74,7 @@
               :style="{ maxHeight: '500px' }"
             >
               <template #trigger>
-                <NButton text type="primary" size="small">
+                <NButton secondary type="primary" size="small">
                   选择常用
                 </NButton>
               </template>
@@ -161,6 +164,11 @@ const commonCronList = [
   { description: '工作日上午9点到下午6点，每小时执行一次', expression: '0 0 9-18 ? * MON-FRI' },
 ]
 
+function findDictLabel(options, value) {
+  const item = options.find(option => String(option.value) === String(value))
+  return item?.label || value || '-'
+}
+
 // 搜索表单
 const searchSchema = computed(() => [
   {
@@ -199,7 +207,7 @@ const tableColumns = computed(() => [
   {
     prop: 'jobName',
     label: '任务名称',
-    width: 150,
+    minWidth: 180,
     ellipsis: { tooltip: true },
   },
   {
@@ -210,13 +218,22 @@ const tableColumns = computed(() => [
   {
     prop: 'executeMode',
     label: '执行模式',
-    width: 100,
+    width: 190,
+    minWidth: 190,
+    className: 'job-run-mode-column',
     render: (row) => {
-      return h(DictTag, {
-        options: jobRunModeOptions.value,
-        value: row.executeMode,
-        size: 'small',
-      })
+      const label = findDictLabel(jobRunModeOptions.value, row.executeMode)
+      return h('div', {
+        class: 'job-run-mode-cell',
+        title: label,
+      }, [
+        h(DictTag, {
+          options: jobRunModeOptions.value,
+          value: row.executeMode,
+          size: 'small',
+          forceTag: true,
+        }),
+      ])
     },
   },
   {
@@ -248,7 +265,7 @@ const tableColumns = computed(() => [
   {
     prop: 'status',
     label: '状态',
-    width: 90,
+    width: 100,
     render: (row) => {
       return h(DictTag, {
         options: jobStatusOptions.value,
@@ -267,7 +284,7 @@ const tableColumns = computed(() => [
   {
     prop: 'action',
     label: '操作',
-    width: 150,
+    width: 176,
     fixed: 'right',
     actions: [
       { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },
@@ -283,9 +300,8 @@ const tableColumns = computed(() => [
 // 编辑表单配置
 const editSchema = computed(() => [
   {
-    type: 'divider',
+    type: 'title',
     label: '基本信息',
-    props: { titlePlacement: 'left' },
     span: 2,
   },
   {
@@ -311,19 +327,19 @@ const editSchema = computed(() => [
     props: { placeholder: '请输入任务描述', rows: 2 },
   },
   {
-    type: 'divider',
+    type: 'title',
     label: '执行配置',
-    props: { titlePlacement: 'left' },
     span: 2,
   },
   {
     field: 'executeMode',
     label: '执行模式',
-    type: 'radio',
+    type: 'radioButton',
     defaultValue: 'BEAN',
     span: 2,
     rules: [{ required: true, message: '请选择执行模式', trigger: 'change' }],
     props: {
+      class: 'job-config-segmented',
       options: jobRunModeOptions.value,
     },
   },
@@ -357,12 +373,11 @@ const editSchema = computed(() => [
     label: '任务参数',
     type: 'textarea',
     span: 2,
-    props: { placeholder: '请输入任务参数（JSON格式，可选）', rows: 2 },
+    props: { placeholder: '请输入任务参数（JSON格式，可选）', rows: 3 },
   },
   {
-    type: 'divider',
+    type: 'title',
     label: '调度配置',
-    props: { titlePlacement: 'left' },
     span: 2,
   },
   {
@@ -376,17 +391,17 @@ const editSchema = computed(() => [
   {
     field: 'status',
     label: '任务状态',
-    type: 'radio',
+    type: 'radioButton',
     defaultValue: '0',
     span: 2,
     props: {
+      class: 'job-config-segmented',
       options: jobStatusOptions.value,
     },
   },
   {
-    type: 'divider',
+    type: 'title',
     label: '高级配置',
-    props: { titlePlacement: 'left' },
     span: 2,
   },
   {
@@ -640,6 +655,101 @@ function handleCleanLogs(days) {
   padding: 8px 12px;
 }
 
+.job-content :deep(.job-run-mode-column) {
+  overflow: visible;
+}
+
+.job-content :deep(.job-run-mode-cell) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.job-content :deep(.job-run-mode-cell .n-tag) {
+  max-width: 168px;
+}
+
+.job-content :deep(.job-run-mode-cell .n-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-config-page :deep(.job-config-edit-form) {
+  width: 100%;
+}
+
+.job-config-page :deep(.job-config-edit-form .ai-form-body--with-nav) {
+  display: block;
+}
+
+.job-config-page :deep(.job-config-edit-form .ai-form-section-nav) {
+  display: none;
+}
+
+.job-config-page :deep(.job-config-edit-form .ai-form-content) {
+  width: 100%;
+  min-width: 0;
+}
+
+.job-config-page :deep(.job-config-edit-form .af-layout-grid) {
+  align-items: start;
+}
+
+.job-config-page :deep(.job-config-edit-form .n-form-item) {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.job-config-page :deep(.job-config-edit-form .n-form-item-label) {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.job-config-page :deep(.job-config-edit-form .ai-form-item-label) {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+}
+
+.job-config-page :deep(.job-config-edit-form .ai-form-group-title),
+.job-config-page :deep(.job-config-edit-form .ai-form-section-title) {
+  justify-content: flex-start;
+  margin: 6px 0 2px;
+  text-align: left;
+}
+
+.job-config-page :deep(.job-config-edit-form .ai-form-group-title__text),
+.job-config-page :deep(.job-config-edit-form .ai-form-section-title__text) {
+  font-size: 14px;
+}
+
+.job-config-page :deep(.job-config-edit-form .n-input),
+.job-config-page :deep(.job-config-edit-form .n-input-number),
+.job-config-page :deep(.job-config-edit-form .n-input-number .n-input) {
+  width: 100%;
+}
+
+.job-config-page :deep(.job-config-edit-form .job-config-segmented) {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.job-config-page :deep(.job-config-edit-form .job-config-segmented .n-radio-button) {
+  min-width: 132px;
+  text-align: center;
+}
+
+.cron-expression-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
 /* Cron选择器样式 */
 .job-content :deep(.cron-selector-list) {
   max-height: 450px;
@@ -746,6 +856,18 @@ function handleCleanLogs(days) {
   .job-content {
     padding: 10px;
     border-radius: 10px;
+  }
+
+  .cron-expression-field {
+    grid-template-columns: 1fr;
+  }
+
+  .job-config-page :deep(.job-config-edit-form .job-config-segmented) {
+    display: flex;
+  }
+
+  .job-config-page :deep(.job-config-edit-form .job-config-segmented .n-radio-button) {
+    flex: 1 1 140px;
   }
 }
 

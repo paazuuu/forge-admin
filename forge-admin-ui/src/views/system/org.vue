@@ -1,9 +1,230 @@
 <template>
   <div class="system-org-page">
-    <!-- 组织列表 -->
-    <div class="org-content">
+    <div class="org-workspace" :class="{ 'is-org-collapsed': leftOrgPanelCollapsed }">
+      <aside class="org-tree-panel" :class="{ 'is-collapsed': leftOrgPanelCollapsed }">
+        <div class="org-tree-header">
+          <div class="header-title">
+            <div v-if="!leftOrgPanelCollapsed" class="header-copy">
+              <span>组织架构</span>
+              <small>{{ orgTreeSummaryText }}</small>
+            </div>
+          </div>
+          <div class="header-actions">
+            <n-button
+              v-if="!leftOrgPanelCollapsed"
+              quaternary
+              circle
+              size="small"
+              title="新增顶级组织"
+              @click="handleAddRootOrg"
+            >
+              <template #icon>
+                <i class="i-material-symbols:add-rounded" />
+              </template>
+            </n-button>
+            <n-button
+              quaternary
+              circle
+              size="small"
+              :title="leftOrgPanelCollapsed ? '展开左侧组织树' : '收起左侧组织树'"
+              @click="toggleLeftOrgPanel"
+            >
+              <template #icon>
+                <i :class="leftOrgPanelCollapsed ? 'i-material-symbols:chevron-right-rounded' : 'i-material-symbols:left-panel-close-rounded'" />
+              </template>
+            </n-button>
+          </div>
+        </div>
+
+        <div v-show="!leftOrgPanelCollapsed && userStore.isAdmin" class="org-tree-tools">
+          <n-select
+            v-if="userStore.isAdmin"
+            v-model:value="selectedTenantId"
+            :options="tenantSelectOptions"
+            clearable
+            filterable
+            size="small"
+            placeholder="全部租户"
+            @update:value="handleTenantChange"
+          />
+        </div>
+
+        <div v-show="!leftOrgPanelCollapsed" class="org-tree-content">
+          <n-spin :show="leftOrgTreeLoading">
+            <PremiumTree
+              v-if="leftOrgTreeData.length > 0"
+              :data="leftOrgTreeData"
+              :selected-keys="selectedOrgKeys"
+              :expanded-keys="leftOrgExpandedKeys"
+              key-field="id"
+              label-field="orgName"
+              children-field="children"
+              :get-node-icon="getLeftOrgNodeIcon"
+              :get-node-tone="getLeftOrgNodeTone"
+              :actions="orgTreeActions"
+              @update:selected-keys="handleOrgNodeSelect"
+              @update:expanded-keys="handleLeftOrgExpandedKeysChange"
+              @action="handleOrgTreeAction"
+            />
+            <n-empty v-else description="暂无组织数据" size="small" />
+          </n-spin>
+        </div>
+
+        <div
+          v-show="leftOrgPanelCollapsed"
+          class="org-tree-collapsed-hint"
+          :class="{ 'has-active-filter': selectedOrgNode && !isShowAllOrganizations }"
+          @click="toggleLeftOrgPanel"
+        >
+          <i class="i-material-symbols:account-tree-rounded" />
+          <span>组织架构</span>
+        </div>
+      </aside>
+
+      <section class="post-panel">
+        <header class="panel-header">
+          <div>
+            <h2>岗位列表</h2>
+          </div>
+          <n-button
+            size="small"
+            type="primary"
+            :disabled="isShowAllOrganizations || !selectedOrgNode"
+            @click="handleAddPost"
+          >
+            <template #icon>
+              <i class="i-material-symbols:add-rounded" />
+            </template>
+            新增岗位
+          </n-button>
+        </header>
+
+        <div class="post-search">
+          <n-input
+            v-model:value="postKeyword"
+            clearable
+            size="small"
+            placeholder="搜索岗位名称 / 编码"
+          >
+            <template #prefix>
+              <i class="i-material-symbols:search-rounded" />
+            </template>
+          </n-input>
+          <n-button quaternary circle size="small" title="刷新岗位" :loading="postLoading" @click="loadPostList()">
+            <template #icon>
+              <i class="i-material-symbols:refresh-rounded" />
+            </template>
+          </n-button>
+        </div>
+
+        <n-spin :show="postLoading" class="post-spin">
+          <div class="post-list">
+            <div
+              v-for="post in filteredPostList"
+              :key="post.id"
+              class="post-item"
+              :class="{ 'is-selected': isSameKey(selectedPostKey, post.id) }"
+              role="button"
+              tabindex="0"
+              @click="handlePostSelect(post)"
+              @keydown.enter.prevent="handlePostSelect(post)"
+              @keydown.space.prevent="handlePostSelect(post)"
+            >
+              <span class="post-main">
+                <strong>{{ post.postName }}</strong>
+                <small v-if="post.postCode || resolveOptionLabel(postTypeOptions, post.postType)">
+                  {{ post.postCode || resolveOptionLabel(postTypeOptions, post.postType) }}
+                </small>
+              </span>
+              <span class="post-side">
+                <DictTag :dict-type="NORMAL_DISABLE_DICT" :value="post.postStatus" size="small" force-tag />
+                <span class="post-actions" @click.stop>
+                  <button type="button" title="编辑岗位" aria-label="编辑岗位" @click="handleEditPost(post)">
+                    <i class="i-material-symbols:edit-outline-rounded" />
+                  </button>
+                  <button type="button" title="删除岗位" aria-label="删除岗位" class="type-error" @click="handleDeletePost(post)">
+                    <i class="i-material-symbols:delete-outline-rounded" />
+                  </button>
+                </span>
+              </span>
+            </div>
+
+            <n-empty
+              v-if="!postLoading && filteredPostList.length === 0"
+              description="暂无岗位"
+              size="small"
+              class="post-empty"
+            />
+          </div>
+        </n-spin>
+      </section>
+
+      <section class="member-panel">
+        <header class="member-context">
+          <div>
+            <h2>用户列表</h2>
+          </div>
+          <n-space size="small">
+            <n-button
+              size="small"
+              type="primary"
+              :disabled="isShowAllOrganizations || !selectedOrgNode"
+              @click="handleOpenAddUser"
+            >
+              <template #icon>
+                <i class="i-material-symbols:person-add-rounded" />
+              </template>
+              添加用户
+            </n-button>
+          </n-space>
+        </header>
+
+        <div class="member-body">
+          <AiCrudPage
+            ref="userCrudRef"
+            api="/system/user"
+            :api-config="{
+              list: 'get@/system/user/page',
+              detail: 'post@/system/user/getById',
+            }"
+            :search-schema="userSearchSchema"
+            :columns="userTableColumns"
+            :before-load-list="beforeLoadUserList"
+            row-key="id"
+            :hide-add="true"
+            :hide-batch-delete="true"
+            :hide-selection="true"
+            :show-render-mode-switch="false"
+            :search-grid-cols="3"
+            :search-max-visible-fields="3"
+            :page-size="10"
+            :scroll-x="700"
+            :table-props="{ dragScroll: false }"
+          >
+            <template #toolbar-end>
+              <n-button size="small" secondary @click="refreshUserList">
+                <template #icon>
+                  <i class="i-material-symbols:refresh-rounded" />
+                </template>
+                刷新
+              </n-button>
+            </template>
+          </AiCrudPage>
+        </div>
+      </section>
+    </div>
+
+    <UserSelectModal
+      v-model:show="userSelectVisible"
+      title="添加组织成员"
+      multiple
+      :selected-users="[]"
+      @confirm="handleAddUsersConfirm"
+    />
+
+    <div class="crud-driver" aria-hidden="true">
       <AiCrudPage
-        ref="crudRef"
+        ref="orgCrudRef"
         api="/system/org"
         :api-config="{
           list: 'get@/system/org/lazyTree',
@@ -12,36 +233,56 @@
           update: 'post@/system/org/edit',
           delete: 'post@/system/org/remove?id=:id',
         }"
-        :search-schema="searchSchema"
-        :columns="tableColumns"
-        :edit-schema="editSchema"
-        :before-render-list="beforeRenderList"
-        :before-submit="beforeSubmit"
-        :before-load-list="beforeLoadList"
-        :before-render-form="beforeRenderForm"
+        :search-schema="[]"
+        :columns="orgDriverColumns"
+        :edit-schema="orgEditSchema"
+        :before-render-list="beforeRenderOrgList"
+        :before-submit="beforeSubmitOrg"
+        :before-load-list="beforeLoadOrgDriverList"
+        :before-render-form="beforeRenderOrgForm"
         row-key="id"
         :edit-grid-cols="2"
+        edit-label-align="left"
         modal-width="900px"
+        :show-search="false"
         :show-pagination="false"
-        :lazy="false"
+        :hide-toolbar="true"
+        :hide-selection="true"
         :hide-batch-delete="true"
-        add-button-text="新增组织"
         :table-props="{
-          expandedRowKeys: expandedKeys,
-          onUpdateExpandedRowKeys: handleExpandedKeysUpdate,
-          onLoad: handleLoad,
+          onLoad: handleOrgDriverLoad,
         }"
-      >
-        <!-- 自定义工具栏 -->
-        <template #toolbar-end>
-          <n-button @click="toggleExpandLoaded">
-            <template #icon>
-              <i :class="expandLoaded ? 'i-material-symbols:unfold-less' : 'i-material-symbols:unfold-more'" />
-            </template>
-            {{ expandLoaded ? '折叠已加载' : '展开已加载' }}
-          </n-button>
-        </template>
-      </AiCrudPage>
+        @submit-success="handleOrgMutationSuccess"
+      />
+
+      <AiCrudPage
+        ref="postCrudRef"
+        api="/system/post"
+        :api-config="{
+          list: 'get@/system/post/page',
+          detail: 'post@/system/post/getById',
+          add: 'post@/system/post/add',
+          update: 'post@/system/post/edit',
+          delete: 'post@/system/post/removeBatch',
+        }"
+        :search-schema="[]"
+        :columns="postDriverColumns"
+        :edit-schema="postEditSchema"
+        :before-submit="beforeSubmitPost"
+        :before-load-list="beforeLoadPostDriverList"
+        :before-render-form="beforeRenderPostForm"
+        row-key="id"
+        :edit-grid-cols="2"
+        edit-label-align="left"
+        modal-width="800px"
+        add-button-text="新增岗位"
+        :show-search="false"
+        :show-pagination="false"
+        :hide-toolbar="true"
+        :hide-selection="true"
+        :hide-batch-delete="true"
+        @submit-success="handlePostMutationSuccess"
+      />
     </div>
   </div>
 </template>
@@ -49,6 +290,8 @@
 <script setup>
 import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { AiCrudPage } from '@/components/ai-form'
+import PremiumTree from '@/components/common/PremiumTree.vue'
+import UserSelectModal from '@/components/common/UserSelectModal.vue'
 import DictTag from '@/components/DictTag.vue'
 import { useDict } from '@/composables/useDict'
 import { useUserStore } from '@/store'
@@ -56,160 +299,88 @@ import { request } from '@/utils'
 
 defineOptions({ name: 'SystemOrg' })
 
-const { dict } = useDict('sys_org_type', 'sys_normal_disable')
+const ORG_TYPE_DICT = 'sys_org_type'
+const NORMAL_DISABLE_DICT = 'sys_normal_disable'
+const POST_TYPE_DICT = 'sys_post_type'
+const USER_STATUS_DICT = 'sys_user_status'
+const ALL_POST_KEY = '__all__'
 
-const crudRef = ref(null)
+const { dict } = useDict(
+  ORG_TYPE_DICT,
+  NORMAL_DISABLE_DICT,
+  POST_TYPE_DICT,
+  USER_STATUS_DICT,
+)
+
 const userStore = useUserStore()
-const expandLoaded = ref(false)
-const expandedKeys = ref([])
+const orgCrudRef = ref(null)
+const postCrudRef = ref(null)
+const userCrudRef = ref(null)
+
+const tenantOptions = ref([])
+const selectedTenantId = ref(userStore.userInfo?.tenantId || null)
+const leftOrgTreeData = ref([])
+const leftOrgTreeLoading = ref(false)
+const leftOrgExpandAll = ref(false)
+const leftOrgExpandedKeys = ref([])
+const leftOrgPanelCollapsed = ref(false)
+const selectedOrgKeys = ref([])
+const selectedOrgNode = ref(null)
+const isShowAllOrganizations = ref(true)
 const parentOrgOptions = ref([{ label: '顶级组织', value: 0, key: 0 }])
-const searchRegionOptions = ref([])
 const editRegionOptions = ref([])
 const defaultParentId = ref(0)
-const tenantOptions = ref([])
+
+const postList = ref([])
+const postLoading = ref(false)
+const postKeyword = ref('')
+const selectedPostKey = ref(ALL_POST_KEY)
+const selectedPostNode = ref(null)
+const userSelectVisible = ref(false)
+
 const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
   label: item.tenantName,
   value: item.id,
 })))
+const orgStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
+const postTypeOptions = computed(() => toNumberOptions(dict.value[POST_TYPE_DICT]))
+const postStatusOptions = computed(() => toNumberOptions(dict.value[NORMAL_DISABLE_DICT]))
+const userStatusOptions = computed(() => toNumberOptions(dict.value[USER_STATUS_DICT]))
 
-const searchSchema = computed(() => [
+const orgTreeSummaryText = computed(() => {
+  const total = countTreeNodes(leftOrgTreeData.value)
+  if (!total)
+    return '未加载组织'
+  return `${total} 个组织节点`
+})
+
+const filteredPostList = computed(() => {
+  const keyword = String(postKeyword.value || '').trim().toLowerCase()
+  if (!keyword)
+    return postList.value
+  return postList.value.filter((item) => {
+    return String(item.postName || '').toLowerCase().includes(keyword)
+      || String(item.postCode || '').toLowerCase().includes(keyword)
+  })
+})
+
+const orgDriverColumns = computed(() => [
+  { prop: 'orgName', label: '组织名称', minWidth: 180 },
+  { prop: 'leaderName', label: '负责人', width: 120 },
+])
+
+const postDriverColumns = computed(() => [
+  { prop: 'postName', label: '岗位名称', minWidth: 160 },
+  { prop: 'postCode', label: '岗位编码', width: 140 },
+])
+
+const orgEditSchema = computed(() => [
   ...(userStore.isAdmin
     ? [{
         field: 'tenantId',
         label: '所属租户',
         type: 'select',
-        props: {
-          placeholder: '请选择租户',
-          clearable: true,
-          options: tenantSelectOptions.value,
-        },
-      }]
-    : []),
-  {
-    field: 'orgName',
-    label: '组织名称',
-    type: 'input',
-    props: {
-      placeholder: '请输入组织名称',
-    },
-  },
-  {
-    field: 'regionCode',
-    label: '行政区划',
-    type: 'treeSelect',
-    props: {
-      placeholder: '请选择行政区划',
-      clearable: true,
-      filterable: true,
-    },
-    options: () => searchRegionOptions.value,
-  },
-  {
-    field: 'orgType',
-    label: '组织类型',
-    type: 'select',
-    props: {
-      placeholder: '请选择组织类型',
-      options: dict.value.sys_org_type || [],
-    },
-  },
-  {
-    field: 'orgStatus',
-    label: '状态',
-    type: 'select',
-    props: {
-      placeholder: '请选择状态',
-      options: dict.value.sys_normal_disable || [],
-    },
-  },
-])
-
-const tableColumns = computed(() => [
-  ...(userStore.isAdmin
-    ? [{
-        prop: 'tenantName',
-        label: '所属租户',
-        width: 160,
-        render: row => row.tenantName || row.tenantId || '-',
-      }]
-    : []),
-  {
-    prop: 'orgName',
-    label: '组织名称',
-    width: 200,
-  },
-  {
-    prop: 'orgType',
-    label: '组织类型',
-    width: 100,
-    render: (row) => {
-      return h(DictTag, { options: dict.value.sys_org_type, value: row.orgType })
-    },
-  },
-  {
-    prop: 'leaderName',
-    label: '负责人',
-    width: 120,
-  },
-  {
-    prop: 'phone',
-    label: '联系电话',
-    width: 130,
-  },
-  {
-    prop: 'address',
-    label: '地址',
-    width: 200,
-  },
-  {
-    prop: 'regionCode',
-    label: '行政区划',
-    width: 150,
-    render: (row) => {
-      if (!row.regionCode)
-        return '-'
-      const name = findRegionName(searchRegionOptions.value, row.regionCode)
-      return name || row.regionCode
-    },
-  },
-  {
-    prop: 'sort',
-    label: '排序',
-    width: 80,
-  },
-  {
-    prop: 'orgStatus',
-    label: '状态',
-    width: 80,
-    render: (row) => {
-      return h(DictTag, { options: dict.value.sys_normal_disable, value: row.orgStatus })
-    },
-  },
-  {
-    prop: 'remark',
-    label: '备注',
-    minWidth: 150,
-  },
-  {
-    prop: 'action',
-    label: '操作',
-    width: 150,
-    fixed: 'right',
-    actions: [
-      { label: '新增', key: 'add', type: 'primary', onClick: handleAdd },
-      { label: '编辑', key: 'edit', type: 'primary', onClick: handleEdit },
-      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
-    ],
-  },
-])
-
-const editSchema = computed(() => [
-  ...(userStore.isAdmin
-    ? [{
-        field: 'tenantId',
-        label: '所属租户',
-        type: 'select',
-        defaultValue: userStore.userInfo?.tenantId,
+        defaultValue: resolveSelectedTenantId(),
         rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
         props: {
           placeholder: '请选择所属租户',
@@ -251,11 +422,11 @@ const editSchema = computed(() => [
     field: 'orgType',
     label: '组织类型',
     type: 'select',
-    defaultValue: dict.value.sys_org_type?.[0]?.value || '2',
+    defaultValue: dict.value[ORG_TYPE_DICT]?.[0]?.value || '2',
     rules: [{ required: true, message: '请选择组织类型', trigger: 'change' }],
     props: {
       placeholder: '请选择组织类型',
-      options: dict.value.sys_org_type || [],
+      options: dict.value[ORG_TYPE_DICT] || [],
     },
   },
   {
@@ -329,7 +500,7 @@ const editSchema = computed(() => [
     type: 'radio',
     defaultValue: 1,
     props: {
-      options: dict.value.sys_normal_disable || [],
+      options: orgStatusOptions.value,
     },
   },
   {
@@ -344,47 +515,255 @@ const editSchema = computed(() => [
   },
 ])
 
-onMounted(() => {
-  loadTenantOptions()
-  loadParentOrgOptions()
+const postEditSchema = computed(() => [
+  ...(userStore.isAdmin
+    ? [{
+        field: 'tenantId',
+        label: '所属租户',
+        type: 'select',
+        defaultValue: resolveSelectedTenantId(),
+        rules: [{ required: true, type: 'number', message: '请选择所属租户', trigger: 'change' }],
+        props: {
+          placeholder: '请选择所属租户',
+          options: tenantSelectOptions.value,
+        },
+      }]
+    : []),
+  {
+    type: 'divider',
+    label: '基础信息',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+  },
+  {
+    field: 'postCode',
+    label: '岗位编码',
+    type: 'input',
+    rules: [{ required: true, message: '请输入岗位编码', trigger: 'blur' }],
+    props: {
+      placeholder: '请输入岗位编码',
+    },
+  },
+  {
+    field: 'postName',
+    label: '岗位名称',
+    type: 'input',
+    rules: [{ required: true, message: '请输入岗位名称', trigger: 'blur' }],
+    props: {
+      placeholder: '请输入岗位名称',
+    },
+  },
+  {
+    field: 'orgId',
+    label: '所属组织',
+    type: 'treeSelect',
+    required: true,
+    rules: [{ required: true, type: 'number', message: '请选择所属组织', trigger: 'change' }],
+    optionSource: {
+      type: 'tree',
+      api: 'get@/system/org/tree',
+      // eslint-disable-next-line no-template-curly-in-string
+      params: { tenantId: '${tenantId}' },
+      valueField: 'id',
+      keyField: 'id',
+      labelField: 'orgName',
+      childrenField: 'children',
+    },
+    props: {
+      placeholder: '请选择所属组织',
+      clearable: true,
+      filterable: true,
+      defaultExpandAll: true,
+    },
+  },
+  {
+    field: 'postType',
+    label: '岗位类型',
+    type: 'radio',
+    defaultValue: 2,
+    rules: [{ required: true, type: 'number', message: '请选择岗位类型', trigger: 'change' }],
+    props: {
+      options: postTypeOptions.value,
+    },
+  },
+  {
+    field: 'sort',
+    label: '排序',
+    type: 'input-number',
+    defaultValue: 0,
+    props: {
+      placeholder: '排序值',
+      min: 0,
+    },
+  },
+  {
+    type: 'divider',
+    label: '状态配置',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+  },
+  {
+    field: 'postStatus',
+    label: '岗位状态',
+    type: 'radio',
+    defaultValue: 1,
+    props: {
+      options: postStatusOptions.value,
+    },
+  },
+  {
+    field: 'remark',
+    label: '备注',
+    type: 'textarea',
+    span: 2,
+    props: {
+      placeholder: '请输入备注',
+      rows: 3,
+    },
+  },
+])
+
+const userSearchSchema = computed(() => [
+  {
+    field: 'keyword',
+    label: '用户',
+    type: 'input',
+    props: {
+      placeholder: '用户名 / 真实姓名',
+    },
+  },
+  {
+    field: 'phone',
+    label: '手机号',
+    type: 'input',
+    props: {
+      placeholder: '请输入手机号',
+    },
+  },
+  {
+    field: 'userStatus',
+    label: '状态',
+    type: 'select',
+    props: {
+      placeholder: '请选择状态',
+      clearable: true,
+      options: userStatusOptions.value,
+    },
+  },
+])
+
+const userTableColumns = computed(() => [
+  {
+    prop: 'realName',
+    label: '用户',
+    minWidth: 180,
+    render: row => h('div', { class: 'member-user-inline' }, [
+      h('strong', resolveUserDisplayName(row)),
+      h('em', ' / '),
+      h('span', row.username || '-'),
+    ]),
+  },
+  {
+    prop: 'phone',
+    label: '手机号',
+    width: 130,
+    render: row => row.phone || '-',
+  },
+  {
+    prop: 'postName',
+    label: '岗位',
+    minWidth: 150,
+    ellipsis: { tooltip: true },
+    render: row => row.postName || '-',
+  },
+  ...(!selectedOrgNode.value || isShowAllOrganizations.value
+    ? [{
+        prop: 'orgName',
+        label: '所属组织',
+        minWidth: 150,
+        ellipsis: { tooltip: true },
+        render: row => row.orgName || '-',
+      }]
+    : []),
+  {
+    prop: 'userStatus',
+    label: '状态',
+    width: 90,
+    render: row => h(DictTag, { dictType: USER_STATUS_DICT, value: row.userStatus, size: 'small', forceTag: true }),
+  },
+  {
+    prop: 'actions',
+    label: '操作',
+    width: 136,
+    fixed: 'right',
+    actions: [
+      {
+        label: '设负责人',
+        key: 'setLeader',
+        type: 'primary',
+        visible: () => Boolean(selectedOrgNode.value && !isShowAllOrganizations.value),
+        onClick: row => handleSetOrgLeader(row),
+      },
+      {
+        label: '移除',
+        key: 'remove',
+        type: 'error',
+        visible: () => Boolean(selectedOrgNode.value && !isShowAllOrganizations.value),
+        onClick: row => handleRemoveUserFromOrg(row),
+      },
+    ],
+  },
+])
+
+onMounted(async () => {
+  await loadTenantOptions()
+  await loadRegionOptions()
+  await loadParentOrgOptions()
+  await loadLeftOrgTree()
+  await loadPostList()
 })
 
-function buildTenantParams(tenantId) {
+function toNumberOptions(options = []) {
+  return (options || []).map(item => ({
+    ...item,
+    value: normalizeSingleNumber(item.value, item.value),
+  }))
+}
+
+function normalizeSingleNumber(value, fallback = null) {
+  if (Array.isArray(value)) {
+    const first = value.find(item => item !== null && item !== undefined && item !== '')
+    return normalizeSingleNumber(first, fallback)
+  }
+  if (value === null || value === undefined || value === '')
+    return fallback
+  const numberValue = Number(value)
+  return Number.isNaN(numberValue) ? fallback : numberValue
+}
+
+function isSameKey(left, right) {
+  return String(left) === String(right)
+}
+
+function resolveOptionLabel(options = [], value) {
+  const normalized = normalizeSingleNumber(value, value)
+  const match = (options || []).find(item => isSameKey(item.value, normalized))
+  return match?.label
+}
+
+function buildTenantParams(tenantId = resolveSelectedTenantId()) {
   const resolvedTenantId = userStore.isAdmin ? tenantId : userStore.userInfo?.tenantId
   return resolvedTenantId ? { tenantId: resolvedTenantId } : {}
 }
 
 function resolveSelectedTenantId(row) {
   return row?.tenantId
-    || (userStore.isAdmin ? crudRef.value?.getSearchParams?.()?.tenantId : null)
+    || selectedTenantId.value
     || userStore.userInfo?.tenantId
-}
-
-function beforeLoadList(params) {
-  Object.assign(params, buildTenantParams(params.tenantId))
-  return params
-}
-
-function beforeSubmit(formData) {
-  if (!userStore.isAdmin) {
-    formData.tenantId = userStore.userInfo?.tenantId
-  }
-  else if (!formData.tenantId) {
-    formData.tenantId = userStore.userInfo?.tenantId
-  }
-  return formData
-}
-
-async function beforeRenderForm(row) {
-  const tenantId = resolveSelectedTenantId(row)
-  await loadParentOrgOptions(tenantId)
-  if (row) {
-    return row
-  }
-  return {
-    tenantId,
-    parentId: 0,
-  }
 }
 
 async function loadTenantOptions() {
@@ -392,11 +771,26 @@ async function loadTenantOptions() {
     const res = await request.get('/system/tenant/assignable/options')
     if (res.code === 200) {
       tenantOptions.value = res.data || []
+      if (userStore.isAdmin && !selectedTenantId.value && tenantOptions.value.length > 0) {
+        selectedTenantId.value = tenantOptions.value[0].id
+      }
     }
   }
   catch (error) {
     console.error('加载租户选项失败:', error)
   }
+}
+
+async function handleTenantChange() {
+  selectedOrgKeys.value = []
+  selectedOrgNode.value = null
+  isShowAllOrganizations.value = true
+  selectedPostKey.value = ALL_POST_KEY
+  selectedPostNode.value = null
+  await loadParentOrgOptions()
+  await loadLeftOrgTree()
+  await loadPostList()
+  refreshRightPanels()
 }
 
 async function loadParentOrgOptions(tenantId = resolveSelectedTenantId()) {
@@ -405,22 +799,10 @@ async function loadParentOrgOptions(tenantId = resolveSelectedTenantId()) {
       params: buildTenantParams(tenantId),
     })
     if (res.code === 200) {
-      const convertToTreeSelect = (list) => {
-        return list.map(item => ({
-          label: item.orgName,
-          value: item.id,
-          key: item.id,
-          children: item.children && item.children.length > 0
-            ? convertToTreeSelect(item.children)
-            : undefined,
-        }))
-      }
       parentOrgOptions.value = [
         { label: '顶级组织', value: 0, key: 0 },
-        ...convertToTreeSelect(res.data || []),
+        ...convertOrgToTreeSelect(res.data || []),
       ]
-
-      await loadRegionOptions()
     }
   }
   catch (error) {
@@ -432,9 +814,7 @@ async function loadRegionOptions() {
   try {
     const res = await request.get('/system/region/treeAll', { params: { dataRight: true } })
     if (res.code === 200) {
-      const data = res.data || []
-      searchRegionOptions.value = convertRegionToTreeSelect(data, false)
-      editRegionOptions.value = convertRegionToTreeSelect(data, true)
+      editRegionOptions.value = convertRegionToTreeSelect(res.data || [], true)
     }
   }
   catch (error) {
@@ -442,8 +822,17 @@ async function loadRegionOptions() {
   }
 }
 
+function convertOrgToTreeSelect(list = []) {
+  return (list || []).map(item => ({
+    label: item.orgName || item.label || String(item.id),
+    value: normalizeSingleNumber(item.id),
+    key: normalizeSingleNumber(item.id),
+    children: item.children?.length ? convertOrgToTreeSelect(item.children) : undefined,
+  }))
+}
+
 function convertRegionToTreeSelect(list, virtualDisabled = true) {
-  return list.map((item) => {
+  return (list || []).map((item) => {
     const node = {
       label: item.name,
       value: item.code,
@@ -459,27 +848,190 @@ function convertRegionToTreeSelect(list, virtualDisabled = true) {
   })
 }
 
-function findRegionName(options, code) {
-  for (const item of options) {
-    if (item.value === code)
-      return item.label
-    if (item.children) {
-      const name = findRegionName(item.children, code)
-      if (name)
-        return name
+function getAllKeys(list, keys = []) {
+  list.forEach((item) => {
+    keys.push(item.id)
+    if (item.children && item.children.length > 0)
+      getAllKeys(item.children, keys)
+  })
+  return keys
+}
+
+function countTreeNodes(list = []) {
+  return list.reduce((total, item) => total + 1 + countTreeNodes(item.children || []), 0)
+}
+
+function getLeftOrgNodeIcon(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'i-material-symbols:account-tree-rounded'
+  if (node.children?.length)
+    return 'i-material-symbols:corporate-fare-rounded'
+  return 'i-material-symbols:groups-rounded'
+}
+
+function getLeftOrgNodeTone(node = {}) {
+  if (!node.parentId || Number(node.parentId) === 0)
+    return 'folder'
+  return node.children?.length ? 'folder' : 'menu'
+}
+
+function orgTreeActions() {
+  return [
+    {
+      key: 'addChild',
+      title: '新增下级组织',
+      label: '新增下级',
+      icon: 'i-material-symbols:subdirectory-arrow-right-rounded',
+      type: 'primary',
+    },
+    {
+      key: 'edit',
+      title: '编辑组织',
+      label: '编辑',
+      icon: 'i-material-symbols:edit-outline-rounded',
+    },
+    {
+      key: 'delete',
+      title: '删除组织',
+      label: '删除',
+      icon: 'i-material-symbols:delete-outline-rounded',
+      type: 'error',
+    },
+  ]
+}
+
+function handleOrgTreeAction(action, node) {
+  if (action.key === 'addChild') {
+    handleAddChildOrg(node)
+    return
+  }
+  if (action.key === 'edit') {
+    handleEditOrg(node)
+    return
+  }
+  if (action.key === 'delete')
+    handleDeleteOrg(node)
+}
+
+function normalizeOrgTreeNodes(list = []) {
+  return (list || []).map(item => ({
+    ...item,
+    children: Array.isArray(item.children) ? normalizeOrgTreeNodes(item.children) : [],
+  }))
+}
+
+async function fetchOrgRootNodes(tenantId) {
+  const res = await request.get('/system/org/lazyTree', {
+    params: {
+      parentId: 0,
+      ...buildTenantParams(tenantId),
+    },
+  })
+  if (res.code !== 200)
+    return []
+  return normalizeOrgTreeNodes(res.data || [])
+}
+
+async function fetchOrgChildrenNodes(parentId, tenantId) {
+  const res = await request.get(`/system/org/children/${parentId}`, {
+    params: buildTenantParams(tenantId),
+  })
+  if (res.code !== 200)
+    return []
+  return normalizeOrgTreeNodes(res.data || [])
+}
+
+async function hydrateOrgTreeNodes(nodes, tenantId) {
+  await Promise.all((nodes || []).map(async (node) => {
+    if (!node?.hasChildren) {
+      node.children = Array.isArray(node.children) ? node.children : []
+      return
+    }
+    const children = await fetchOrgChildrenNodes(node.id, tenantId)
+    node.children = children
+    if (children.length > 0)
+      await hydrateOrgTreeNodes(children, tenantId)
+  }))
+}
+
+async function loadCompleteOrgTree(tenantId) {
+  const roots = await fetchOrgRootNodes(tenantId)
+  await hydrateOrgTreeNodes(roots, tenantId)
+  return roots
+}
+
+async function loadLeftOrgTree(tenantId = resolveSelectedTenantId()) {
+  try {
+    leftOrgTreeLoading.value = true
+    leftOrgTreeData.value = await loadCompleteOrgTree(tenantId)
+    leftOrgExpandedKeys.value = leftOrgExpandAll.value ? getAllKeys(leftOrgTreeData.value) : []
+    if (selectedOrgNode.value) {
+      const nextSelected = findOrgNode(leftOrgTreeData.value, selectedOrgNode.value.id)
+      selectedOrgNode.value = nextSelected
+      selectedOrgKeys.value = nextSelected ? [nextSelected.id] : []
+      isShowAllOrganizations.value = !nextSelected
+    }
+  }
+  catch (error) {
+    console.error('加载组织树失败:', error)
+    window.$message.error('加载组织树失败')
+  }
+  finally {
+    leftOrgTreeLoading.value = false
+  }
+}
+
+function findOrgNode(treeData, orgId) {
+  for (const node of treeData) {
+    if (isSameKey(node.id, orgId))
+      return node
+    if (node.children && node.children.length > 0) {
+      const found = findOrgNode(node.children, orgId)
+      if (found)
+        return found
     }
   }
   return null
 }
 
-function beforeRenderList(list) {
-  return list.map(item => ({
+async function handleOrgNodeSelect(keys) {
+  selectedOrgKeys.value = keys
+  selectedPostKey.value = ALL_POST_KEY
+  selectedPostNode.value = null
+
+  if (keys.length > 0) {
+    isShowAllOrganizations.value = false
+    selectedOrgNode.value = findOrgNode(leftOrgTreeData.value, keys[0])
+  }
+  else {
+    selectedOrgNode.value = null
+  }
+
+  await loadPostList()
+  refreshRightPanels()
+}
+
+function handleLeftOrgExpandedKeysChange(keys) {
+  leftOrgExpandedKeys.value = keys
+}
+
+function toggleLeftOrgPanel() {
+  leftOrgPanelCollapsed.value = !leftOrgPanelCollapsed.value
+}
+
+function beforeLoadOrgDriverList(params) {
+  Object.assign(params, buildTenantParams(params.tenantId))
+  return params
+}
+
+function beforeRenderOrgList(list) {
+  return (list || []).map(item => ({
     ...item,
     isLeaf: !item.hasChildren,
   }))
 }
 
-function handleLoad(node) {
+function handleOrgDriverLoad(node) {
   return new Promise((resolve) => {
     request.get(`/system/org/children/${node.id}`, {
       params: buildTenantParams(resolveSelectedTenantId(node)),
@@ -499,54 +1051,59 @@ function handleLoad(node) {
   })
 }
 
-function handleExpandedKeysUpdate(keys) {
-  expandedKeys.value = keys
-}
-
-function toggleExpandLoaded() {
-  expandLoaded.value = !expandLoaded.value
-  if (expandLoaded.value) {
-    const tableData = crudRef.value?.getTableData() || []
-    expandedKeys.value = getLoadedKeys(tableData)
+function beforeSubmitOrg(formData) {
+  if (!userStore.isAdmin) {
+    formData.tenantId = userStore.userInfo?.tenantId
   }
-  else {
-    expandedKeys.value = []
+  else if (!formData.tenantId) {
+    formData.tenantId = resolveSelectedTenantId()
   }
+  return formData
 }
 
-function getLoadedKeys(list, keys = []) {
-  list.forEach((item) => {
-    keys.push(item.id)
-    if (item.children && item.children.length > 0) {
-      getLoadedKeys(item.children, keys)
-    }
-  })
-  return keys
-}
-
-async function handleAdd(row) {
+async function beforeRenderOrgForm(row) {
   const tenantId = resolveSelectedTenantId(row)
   await loadParentOrgOptions(tenantId)
-
-  defaultParentId.value = row ? row.id : 0
-
-  crudRef.value?.showAdd({
+  if (row)
+    return row
+  return {
     tenantId,
     parentId: defaultParentId.value,
-  })
+  }
+}
 
+async function handleAddRootOrg() {
+  const tenantId = resolveSelectedTenantId()
+  await loadParentOrgOptions(tenantId)
+  defaultParentId.value = 0
+  orgCrudRef.value?.showAdd({ tenantId, parentId: 0 })
   await nextTick()
-  await nextTick()
-
   defaultParentId.value = 0
 }
 
-async function handleEdit(row) {
-  await loadParentOrgOptions(resolveSelectedTenantId(row))
-  crudRef.value?.showEdit(row)
+async function handleAddChildOrg(row = selectedOrgNode.value) {
+  if (!row) {
+    window.$message.warning('请选择上级组织')
+    return
+  }
+  const tenantId = resolveSelectedTenantId(row)
+  await loadParentOrgOptions(tenantId)
+  defaultParentId.value = row.id
+  orgCrudRef.value?.showAdd({ tenantId, parentId: row.id })
+  await nextTick()
+  defaultParentId.value = 0
 }
 
-function handleDelete(row) {
+async function handleEditOrg(row) {
+  if (!row)
+    return
+  await loadParentOrgOptions(resolveSelectedTenantId(row))
+  orgCrudRef.value?.showEdit(row)
+}
+
+function handleDeleteOrg(row) {
+  if (!row)
+    return
   window.$dialog.warning({
     title: '确认删除',
     content: `确定要删除组织"${row.orgName}"吗？删除后将无法恢复！`,
@@ -557,7 +1114,12 @@ function handleDelete(row) {
         const res = await request.post('/system/org/remove', null, { params: { id: row.id } })
         if (res.code === 200) {
           window.$message.success('删除成功')
-          crudRef.value?.refresh()
+          if (isSameKey(selectedOrgNode.value?.id, row.id)) {
+            selectedOrgNode.value = null
+            selectedOrgKeys.value = []
+            isShowAllOrganizations.value = true
+          }
+          await handleOrgMutationSuccess()
         }
       }
       catch {
@@ -566,29 +1128,786 @@ function handleDelete(row) {
     },
   })
 }
+
+async function handleOrgMutationSuccess() {
+  await loadParentOrgOptions()
+  await loadLeftOrgTree()
+  await loadPostList()
+  refreshRightPanels()
+}
+
+async function loadPostList() {
+  try {
+    postLoading.value = true
+    const params = {
+      ...buildTenantParams(),
+    }
+    if (selectedOrgNode.value && !isShowAllOrganizations.value)
+      params.orgId = selectedOrgNode.value.id
+
+    const res = await request.get('/system/post/list', { params })
+    if (res.code === 200) {
+      postList.value = res.data || []
+      if (selectedPostKey.value !== ALL_POST_KEY) {
+        const nextSelected = postList.value.find(item => isSameKey(item.id, selectedPostKey.value))
+        selectedPostNode.value = nextSelected || null
+        if (!nextSelected)
+          selectedPostKey.value = ALL_POST_KEY
+      }
+    }
+  }
+  catch (error) {
+    console.error('加载岗位列表失败:', error)
+    window.$message.error('加载岗位列表失败')
+  }
+  finally {
+    postLoading.value = false
+  }
+}
+
+function handlePostSelect(post) {
+  if (isSameKey(selectedPostKey.value, post.id)) {
+    selectedPostKey.value = ALL_POST_KEY
+    selectedPostNode.value = null
+    refreshRightPanels()
+    return
+  }
+  selectedPostKey.value = post.id
+  selectedPostNode.value = post
+  refreshRightPanels()
+}
+
+function beforeLoadPostDriverList(params) {
+  Object.assign(params, buildTenantParams(params.tenantId))
+  if (selectedOrgNode.value && !isShowAllOrganizations.value)
+    params.orgId = selectedOrgNode.value.id
+  return params
+}
+
+function beforeSubmitPost(formData) {
+  if (!userStore.isAdmin) {
+    formData.tenantId = userStore.userInfo?.tenantId
+  }
+  else if (!formData.tenantId) {
+    formData.tenantId = resolveSelectedTenantId()
+  }
+  return formData
+}
+
+function beforeRenderPostForm(row) {
+  if (row)
+    return row
+  return {
+    tenantId: resolveSelectedTenantId(),
+    orgId: selectedOrgNode.value?.id,
+  }
+}
+
+function handleAddPost() {
+  if (!selectedOrgNode.value || isShowAllOrganizations.value) {
+    window.$message.warning('请选择一个组织后再新增岗位')
+    return
+  }
+  postCrudRef.value?.showAdd({
+    tenantId: resolveSelectedTenantId(),
+    orgId: selectedOrgNode.value.id,
+  })
+}
+
+function handleEditPost(row) {
+  if (!row)
+    return
+  postCrudRef.value?.showEdit(row)
+}
+
+function handleDeletePost(row) {
+  if (!row)
+    return
+  window.$dialog.warning({
+    title: '确认删除',
+    content: `确定要删除岗位"${row.postName}"吗？删除后将无法恢复！`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await request.post('/system/post/remove', null, { params: { id: row.id } })
+        if (res.code === 200) {
+          window.$message.success('删除成功')
+          if (isSameKey(selectedPostKey.value, row.id)) {
+            selectedPostKey.value = ALL_POST_KEY
+            selectedPostNode.value = null
+          }
+          await handlePostMutationSuccess()
+        }
+      }
+      catch {
+        window.$message.error('删除失败')
+      }
+    },
+  })
+}
+
+async function handlePostMutationSuccess() {
+  await loadPostList()
+  refreshRightPanels()
+}
+
+function beforeLoadUserList(params) {
+  Object.assign(params, buildTenantParams(params.tenantId))
+  if (selectedOrgNode.value && !isShowAllOrganizations.value) {
+    params.orgId = selectedOrgNode.value.id
+    params.directOrgOnly = true
+  }
+  if (selectedPostNode.value && selectedPostKey.value !== ALL_POST_KEY)
+    params.postId = selectedPostNode.value.id
+  return params
+}
+
+function refreshUserList() {
+  userCrudRef.value?.refresh()
+}
+
+function refreshRightPanels() {
+  refreshUserList()
+}
+
+function handleOpenAddUser() {
+  if (!selectedOrgNode.value || isShowAllOrganizations.value) {
+    window.$message.warning('请选择一个组织后再添加用户')
+    return
+  }
+  userSelectVisible.value = true
+}
+
+async function handleAddUsersConfirm(users) {
+  const selectedUsers = (Array.isArray(users) ? users : [users]).filter(Boolean)
+  if (selectedUsers.length === 0)
+    return
+  if (!selectedOrgNode.value || isShowAllOrganizations.value) {
+    window.$message.warning('请选择一个组织后再添加用户')
+    return
+  }
+
+  try {
+    for (const user of selectedUsers) {
+      const bindRes = await request.post(`/system/user/${user.id}/org`, null, {
+        params: {
+          orgId: selectedOrgNode.value.id,
+          isMain: 0,
+        },
+      })
+      if (bindRes.code !== 200)
+        throw new Error(bindRes.msg || '绑定组织失败')
+      if (selectedPostNode.value)
+        await bindUserToSelectedPost(user.id)
+    }
+    window.$message.success('用户添加成功')
+    refreshUserList()
+  }
+  catch (error) {
+    console.error('添加组织成员失败:', error)
+    window.$message.error('添加组织成员失败')
+  }
+}
+
+async function bindUserToSelectedPost(userId) {
+  const postId = normalizeSingleNumber(selectedPostNode.value?.id)
+  if (!postId)
+    return
+
+  const tenantId = resolveSelectedTenantId(selectedOrgNode.value)
+  const currentRes = await request.get(`/system/user/${userId}/posts`, {
+    params: buildTenantParams(tenantId),
+  })
+  const currentPostIds = currentRes.code === 200 ? normalizeNumberList(currentRes.data || []) : []
+  const mergedPostIds = Array.from(new Set([...currentPostIds, postId]))
+  const mainPostId = currentPostIds[0] || postId
+  const bindPostRes = await request.post(
+    `/system/user/${userId}/posts`,
+    {
+      postIds: mergedPostIds,
+      mainPostId,
+    },
+    { params: buildTenantParams(tenantId) },
+  )
+  if (bindPostRes.code !== 200)
+    throw new Error(bindPostRes.msg || '绑定岗位失败')
+}
+
+function handleRemoveUserFromOrg(row) {
+  if (!selectedOrgNode.value || isShowAllOrganizations.value) {
+    window.$message.warning('请选择组织后再移除用户')
+    return
+  }
+  window.$dialog.warning({
+    title: '移除组织成员',
+    content: `确定将"${resolveUserDisplayName(row)}"从"${selectedOrgNode.value.orgName}"移除吗？`,
+    positiveText: '移除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await request.post(`/system/user/${row.id}/org/unbind`, null, {
+          params: { orgId: selectedOrgNode.value.id },
+        })
+        if (res.code === 200) {
+          window.$message.success('已移除')
+          refreshUserList()
+        }
+      }
+      catch (error) {
+        console.error('移除组织成员失败:', error)
+        window.$message.error('移除组织成员失败')
+      }
+    },
+  })
+}
+
+async function handleSetOrgLeader(row) {
+  if (!selectedOrgNode.value || isShowAllOrganizations.value) {
+    window.$message.warning('请选择组织后再设置负责人')
+    return
+  }
+  try {
+    const detailRes = await request.post('/system/org/getById', null, {
+      params: { id: selectedOrgNode.value.id },
+    })
+    const orgDetail = detailRes.code === 200 ? (detailRes.data || {}) : {}
+    const leaderName = resolveUserDisplayName(row)
+    const res = await request.post('/system/org/edit', {
+      ...selectedOrgNode.value,
+      ...orgDetail,
+      id: selectedOrgNode.value.id,
+      leaderId: row.id,
+      leaderName,
+    })
+    if (res.code === 200) {
+      window.$message.success('负责人设置成功')
+      await loadParentOrgOptions()
+      await loadLeftOrgTree()
+    }
+  }
+  catch (error) {
+    console.error('设置组织负责人失败:', error)
+    window.$message.error('设置组织负责人失败')
+  }
+}
+
+function normalizeNumberList(values = []) {
+  return (Array.isArray(values) ? values : [values])
+    .map(value => normalizeSingleNumber(value))
+    .filter(value => value !== null && value !== undefined)
+}
+
+function resolveUserDisplayName(row = {}) {
+  return row.realName || row.name || row.nickname || row.username || `用户${row.id}`
+}
 </script>
 
 <style scoped>
 .system-org-page {
   height: 100%;
+  min-height: 0;
+}
+
+.org-workspace {
+  display: grid;
+  grid-template-columns: 248px minmax(248px, 286px) minmax(0, 1fr);
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.org-workspace.is-org-collapsed {
+  grid-template-columns: 64px minmax(248px, 286px) minmax(0, 1fr);
+}
+
+.org-tree-panel,
+.post-panel,
+.member-panel {
+  min-height: 0;
+  border: 1px solid #dbe4f0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.org-tree-panel {
+  border-radius: 8px 0 0 8px;
+  border-right: 0;
+}
+
+.post-panel {
+  border-right: 0;
+}
+
+.member-panel {
+  border-radius: 0 8px 8px 0;
+}
+
+.org-tree-panel {
+  min-width: 248px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    min-width 0.24s ease,
+    width 0.24s ease;
+}
+
+.org-tree-panel.is-collapsed {
+  width: 64px;
+  min-width: 64px;
+}
+
+.org-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 42px;
+  padding: 7px 8px;
+  border-bottom: 1px solid #e8eef5;
+  background: #fff;
+}
+
+.org-tree-panel.is-collapsed .org-tree-header {
+  flex-direction: column;
+  padding: 10px 6px;
+}
+
+.header-title,
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.header-title {
+  min-width: 0;
+}
+
+.header-actions {
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.header-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header-copy span {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.header-copy small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.org-tree-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.org-tree-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+}
+
+.org-tree-collapsed-hint {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 6px;
+  color: #64748b;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.org-tree-collapsed-hint i {
+  font-size: 22px;
+}
+
+.org-tree-collapsed-hint span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  writing-mode: vertical-rl;
+}
+
+.org-tree-collapsed-hint:hover,
+.org-tree-collapsed-hint.has-active-filter {
+  background: rgba(37, 99, 235, 0.06);
+  color: #2563eb;
+}
+
+.post-panel,
+.member-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header,
+.member-context {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.panel-eyebrow {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.panel-header h2,
+.member-context h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.post-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.post-spin {
+  flex: 1;
+  min-height: 0;
+}
+
+.post-spin :deep(.n-spin-content) {
+  height: 100%;
+}
+
+.post-list {
+  height: 100%;
+  overflow-y: auto;
+  padding: 4px 6px 8px;
+}
+
+.post-item {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 6px;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.post-item:hover {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.post-item.is-selected {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.post-main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.post-main strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-main small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-side {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.post-empty {
+  margin-top: 48px;
+}
+
+.post-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.post-item:hover .post-actions,
+.post-item.is-selected .post-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.post-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.post-actions button:hover {
+  background: #eef2ff;
+  color: #2563eb;
+}
+
+.post-actions button.type-error:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.post-actions i {
+  font-size: 14px;
+}
+
+.member-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 10px 10px;
+}
+
+.member-body :deep(.ai-crud-page) {
+  height: 100%;
+  min-height: 0;
+}
+
+.member-body :deep(.ai-crud-layout),
+.member-body :deep(.ai-crud-content),
+.member-body :deep(.ai-crud-table),
+.member-body :deep(.ai-table-wrapper),
+.member-body :deep(.n-data-table) {
+  min-height: 0;
+}
+
+.member-body :deep(.ai-crud-table) {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.member-body :deep(.ai-table-wrapper) {
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-.org-content {
-  flex: 1;
+.member-body :deep(.n-data-table-wrapper),
+.member-body :deep(.n-data-table-base-table),
+.member-body :deep(.n-data-table-base-table-body) {
   min-height: 0;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
-.org-content :deep(.ai-crud-page) {
-  height: 100%;
+.member-user-inline {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  gap: 2px;
+  white-space: nowrap;
 }
 
-.dark .org-content {
+.member-user-inline strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.member-user-inline em {
+  flex: 0 0 auto;
+  color: #cbd5e1;
+  font-style: normal;
+}
+
+.member-user-inline span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.crud-driver {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.crud-driver :deep(.n-modal-container),
+.crud-driver :deep(.n-drawer-container) {
+  opacity: 1;
+}
+
+.dark .org-tree-panel,
+.dark .post-panel,
+.dark .member-panel {
+  border-color: #334155 !important;
   background: #0f172a !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
+}
+
+.dark .org-tree-header {
+  border-bottom-color: #334155;
+  background: #0f172a;
+}
+
+.dark .header-copy span,
+.dark .panel-header h2,
+.dark .member-context h2,
+.dark .post-main strong,
+.dark .member-user-inline strong {
+  color: #f1f5f9;
+}
+
+.dark .header-copy small,
+.dark .panel-eyebrow,
+.dark .post-main small,
+.dark .member-user-inline span {
+  color: #94a3b8;
+}
+
+.dark .org-tree-tools,
+.dark .panel-header,
+.dark .member-context,
+.dark .post-search {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+.dark .post-item {
+  border-color: transparent;
+  background: #111827;
+  color: #e2e8f0;
+}
+
+.dark .post-item:hover {
+  border-color: #334155;
+  background: #162033;
+}
+
+.dark .post-item.is-selected {
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(37, 99, 235, 0.18);
+  color: #bfdbfe;
+}
+
+.dark .post-actions button:hover {
+  background: rgba(30, 41, 59, 0.86);
+  color: #bfdbfe;
+}
+
+.dark .post-actions button.type-error:hover {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+@media (max-width: 1280px) {
+  .org-workspace {
+    grid-template-columns: 236px 260px minmax(0, 1fr);
+  }
+
+  .org-workspace.is-org-collapsed {
+    grid-template-columns: 64px 260px minmax(0, 1fr);
+  }
+
+  .org-tree-panel {
+    min-width: 236px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .org-workspace {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(260px, auto);
+    overflow-y: auto;
+  }
+
+  .org-tree-panel,
+  .org-tree-panel.is-collapsed {
+    width: auto;
+    min-width: 0;
+    min-height: 320px;
+  }
+
+  .org-tree-panel.is-collapsed {
+    min-height: 72px;
+  }
 }
 </style>

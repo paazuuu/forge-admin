@@ -64,6 +64,11 @@ public class SysUserQuery extends PageQuery {
     private Boolean directOrgOnly;
 
     /**
+     * 岗位ID（用于查询绑定指定岗位的用户）
+     */
+    private Long postId;
+
+    /**
      * 行政区划编码（支持虚拟组织ALL后缀，如150000ALL）
      */
     private String regionCode;
