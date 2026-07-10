@@ -10,7 +10,10 @@
         <where>
             m.del_flag = '0'
             <if test="modelName != null and modelName != ''">
-                AND m.model_name LIKE CONCAT('%', #{modelName}, '%')
+                AND (
+                    m.model_name LIKE CONCAT('%', #{modelName}, '%')
+                    OR m.model_key LIKE CONCAT('%', #{modelName}, '%')
+                )
             </if>
             <if test="category != null and category != ''">
                 AND (
@@ -32,6 +35,41 @@
             </if>
         </where>
         ORDER BY m.create_time DESC
+    </select>
+
+    <!-- 流程模型状态统计（与分页查询保持同一筛选范围，不按状态过滤） -->
+    <select id="selectStatusStatistics" resultType="java.util.Map">
+        SELECT
+            COUNT(1) AS total,
+            COALESCE(SUM(CASE WHEN m.status = 0 THEN 1 ELSE 0 END), 0) AS designing,
+            COALESCE(SUM(CASE WHEN m.status = 1 THEN 1 ELSE 0 END), 0) AS deployed,
+            COALESCE(SUM(CASE WHEN m.status = 2 THEN 1 ELSE 0 END), 0) AS suspended,
+            COALESCE(SUM(CASE WHEN m.status = 3 THEN 1 ELSE 0 END), 0) AS disabled
+        FROM sys_flow_model m
+        <where>
+            m.del_flag = '0'
+            <if test="modelName != null and modelName != ''">
+                AND (
+                    m.model_name LIKE CONCAT('%', #{modelName}, '%')
+                    OR m.model_key LIKE CONCAT('%', #{modelName}, '%')
+                )
+            </if>
+            <if test="category != null and category != ''">
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
+                )
+            </if>
+            <if test="createBy != null and createBy != ''">
+                AND m.create_by = #{createBy}
+            </if>
+        </where>
     </select>
 
 </mapper>

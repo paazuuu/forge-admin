@@ -181,6 +181,8 @@
           :max-height="computedMaxHeight"
           :scroll-x="computedScrollX"
           :resizable="resolvedResizable"
+          :empty-title="resolvedEmptyTitle"
+          :empty-description="resolvedEmptyDescription"
           v-bind="tableProps"
           @page-change="handlePageChange"
           @page-size-change="handlePageSizeChange"
@@ -2350,6 +2352,13 @@ const detailPanelRowKeyValue = computed(() => {
   return resolveRowKeyValue(currentRow.value) || `detail_${modalStatus.value || 'current'}`
 })
 const hasSearchSchema = computed(() => !props.formOnly && props.showSearch && props.searchSchema.length > 0)
+const hasActiveListFilters = computed(() => hasFilledSearchParams(searchParams.value) || !!customQueryPayload.value)
+const resolvedEmptyTitle = computed(() => hasActiveListFilters.value ? '没有匹配结果' : '暂无数据')
+const resolvedEmptyDescription = computed(() => {
+  if (hasActiveListFilters.value)
+    return '调整筛选条件后再试'
+  return '当前列表还没有记录'
+})
 const normalizedSearchSchema = computed(() => {
   return (props.searchSchema || []).map((field) => {
     const propsData = { ...(field.props || {}) }
@@ -2969,6 +2978,16 @@ function stableSerialize(value, seen = new WeakSet()) {
   const result = `{${keys.map(key => `${JSON.stringify(key)}:${stableSerialize(value[key], seen)}`).join(',')}}`
   seen.delete(value)
   return result
+}
+
+function hasFilledSearchParams(params = {}) {
+  return Object.values(params || {}).some((value) => {
+    if (Array.isArray(value))
+      return value.length > 0
+    if (value && typeof value === 'object')
+      return Object.keys(value).length > 0
+    return value !== null && value !== undefined && value !== ''
+  })
 }
 
 /**

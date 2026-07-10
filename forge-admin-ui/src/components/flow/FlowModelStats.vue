@@ -1,7 +1,7 @@
 <template>
   <div class="flow-management-stats">
     <div class="stats-row">
-      <div class="stat-card" @click="$emit('filter', 'all')">
+      <div class="stat-card" :class="{ active: isActive('all') }" @click="$emit('filter', 'all')">
         <div class="stat-icon total">
           <i class="i-material-symbols:device-hub" />
         </div>
@@ -11,7 +11,7 @@
         </div>
       </div>
 
-      <div class="stat-card designing" @click="$emit('filter', 0)">
+      <div class="stat-card designing" :class="{ active: isActive(0) }" @click="$emit('filter', 0)">
         <div class="stat-icon designing">
           <i class="i-material-symbols:edit-note" />
         </div>
@@ -21,7 +21,7 @@
         </div>
       </div>
 
-      <div class="stat-card deployed" @click="$emit('filter', 1)">
+      <div class="stat-card deployed" :class="{ active: isActive(1) }" @click="$emit('filter', 1)">
         <div class="stat-icon deployed">
           <i class="i-material-symbols:rocket-launch" />
         </div>
@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <div class="stat-card suspended" @click="$emit('filter', 2)">
+      <div class="stat-card suspended" :class="{ active: isActive(2) }" @click="$emit('filter', 2)">
         <div class="stat-icon suspended">
           <i class="i-material-symbols:pause-circle" />
         </div>
@@ -41,7 +41,7 @@
         </div>
       </div>
 
-      <div class="stat-card disabled" @click="$emit('filter', 3)">
+      <div class="stat-card disabled" :class="{ active: isActive(3) }" @click="$emit('filter', 3)">
         <div class="stat-icon disabled">
           <i class="i-material-symbols:block" />
         </div>
@@ -55,15 +55,22 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   totalCount: { type: Number, default: 0 },
   designingCount: { type: Number, default: 0 },
   deployedCount: { type: Number, default: 0 },
   suspendedCount: { type: Number, default: 0 },
   disabledCount: { type: Number, default: 0 },
+  activeStatus: { type: [Number, String], default: 'all' },
 })
 
 defineEmits(['filter'])
+
+function isActive(status) {
+  if (status === 'all')
+    return props.activeStatus === 'all'
+  return Number(props.activeStatus) === status
+}
 </script>
 
 <style scoped>
@@ -102,6 +109,20 @@ defineEmits(['filter'])
 .stat-card:hover {
   background: #fff;
   border-color: #cbd5e1;
+}
+
+.stat-card.active {
+  background: #fff;
+  border-color: #2563eb;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.stat-card.active .stat-label {
+  color: #1e293b;
+}
+
+.stat-card.active .stat-value {
+  color: #0f172a;
 }
 
 .stat-icon {

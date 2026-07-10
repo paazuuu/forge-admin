@@ -152,6 +152,12 @@ export default {
     request.get('/api/flow/model/page', { params }),
 
   /**
+   * 获取流程模型状态统计
+   */
+  getModelStatistics: params =>
+    request.get('/api/flow/model/statistics', { params }),
+
+  /**
    * 获取模型详情
    */
   getModelDetail: id =>

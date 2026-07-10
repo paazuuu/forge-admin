@@ -65,7 +65,17 @@
       @update:expanded-row-keys="handleUpdateExpandedKeys"
     >
       <template #empty>
-        <NEmpty description="暂无数据" />
+        <div class="ai-table-empty-state">
+          <div class="ai-table-empty-icon" aria-hidden="true">
+            <i class="i-material-symbols:folder-open" />
+          </div>
+          <div class="ai-table-empty-title">
+            {{ emptyTitle }}
+          </div>
+          <div class="ai-table-empty-desc">
+            {{ emptyDescription }}
+          </div>
+        </div>
       </template>
     </n-data-table>
 
@@ -141,7 +151,17 @@
           </NGridItem>
         </NGrid>
 
-        <NEmpty v-else class="ai-card-empty" description="暂无数据" />
+        <div v-else class="ai-card-empty ai-table-empty-state">
+          <div class="ai-table-empty-icon" aria-hidden="true">
+            <i class="i-material-symbols:folder-open" />
+          </div>
+          <div class="ai-table-empty-title">
+            {{ emptyTitle }}
+          </div>
+          <div class="ai-table-empty-desc">
+            {{ emptyDescription }}
+          </div>
+        </div>
       </NSpin>
 
       <NPagination
@@ -155,7 +175,7 @@
 
 <script setup>
 /* eslint-disable vue/custom-event-name-casing */
-import { NCheckbox, NEmpty, NGrid, NGridItem, NPagination, NSpin } from 'naive-ui'
+import { NCheckbox, NGrid, NGridItem, NPagination, NSpin } from 'naive-ui'
 import { computed, h, ref, useSlots, watch } from 'vue'
 import AiToolbarAction from './AiToolbarAction.vue'
 
@@ -164,7 +184,6 @@ const props = defineProps({
   columns: {
     type: Array,
     default: () => [],
-    required: true,
   },
   // 数据源
   dataSource: {
@@ -350,6 +369,14 @@ const props = defineProps({
   searchVisible: {
     type: Boolean,
     default: true,
+  },
+  emptyTitle: {
+    type: String,
+    default: '暂无数据',
+  },
+  emptyDescription: {
+    type: String,
+    default: '当前列表还没有可展示的记录。',
   },
 })
 
@@ -1020,7 +1047,44 @@ defineExpose({
 }
 
 .ai-card-empty {
-  padding: 56px 0;
+  padding: 48px 0;
+}
+
+.ai-table-empty-state {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.ai-table-empty-icon {
+  display: inline-flex;
+  width: 64px;
+  height: 64px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  color: color-mix(in srgb, var(--text-tertiary) 72%, transparent);
+  font-size: 46px;
+}
+
+.ai-table-empty-title {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 20px;
+}
+
+.ai-table-empty-desc {
+  max-width: 360px;
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .ai-card-pagination {

@@ -7,6 +7,7 @@
       :deployed-count="deployedCount"
       :suspended-count="suspendedCount"
       :disabled-count="disabledCount"
+      :active-status="activeStatsStatus"
       @filter="handleFilter"
     />
 
@@ -48,6 +49,7 @@
           clearable
           class="status-select"
           :options="statusOptions"
+          @update:value="handleStatusSelect"
         />
         <div class="toolbar-actions">
           <button type="button" class="model-toolbar-button query" @click="handleSearch">
@@ -73,7 +75,6 @@
           v-for="item in dataSource"
           :key="item.id"
           class="model-card"
-          @click="handleDesign(item)"
         >
           <div class="card-header">
             <div class="card-icon" :class="iconClass(item)">
@@ -606,9 +607,10 @@ function handleActionSelect(key, row) {
 }
 
 const queryParams = reactive({ modelName: '', category: null, status: null })
+const activeStatsStatus = computed(() => queryParams.status ?? 'all')
 const dataSource = ref([])
 const loading = ref(false)
-const pagination = reactive({ page: 1, pageSize: 20, itemCount: 0 })
+const pagination = reactive({ page: 1, pageSize: 12, itemCount: 0 })
 const showVersionHistory = ref(false)
 const currentModelId = ref('')
 const currentModelVersion = ref(null)
@@ -658,21 +660,10 @@ async function fetchCategories() {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await flowApi.getModelPage({
-      pageNum: pagination.page,
-      pageSize: pagination.pageSize,
-      ...queryParams,
-    })
-    if (res.code === 200) {
-      const records = res.data?.records || []
-      dataSource.value = await enrichModelBusinessBindings(records)
-      pagination.itemCount = res.data?.total || 0
-      totalCount.value = res.data?.total || 0
-      designingCount.value = dataSource.value.filter(r => r.status === 0).length
-      deployedCount.value = dataSource.value.filter(r => r.status === 1).length
-      suspendedCount.value = dataSource.value.filter(r => r.status === 2).length
-      disabledCount.value = dataSource.value.filter(r => r.status === 3).length
-    }
+    await Promise.all([
+      fetchModelPage(),
+      fetchModelStatistics(),
+    ])
   }
   catch {
     console.error('加载模型列表失败')
@@ -682,6 +673,42 @@ async function fetchData() {
   }
 }
 
+async function fetchModelPage() {
+  const res = await flowApi.getModelPage({
+    pageNum: pagination.page,
+    pageSize: pagination.pageSize,
+    ...queryParams,
+  })
+  if (res.code === 200) {
+    const records = res.data?.records || []
+    dataSource.value = await enrichModelBusinessBindings(records)
+    pagination.itemCount = res.data?.total || 0
+  }
+}
+
+async function fetchModelStatistics() {
+  const res = await flowApi.getModelStatistics({
+    modelName: queryParams.modelName,
+    category: queryParams.category,
+  })
+  if (res.code === 200) {
+    applyModelStatistics(res.data || {})
+  }
+}
+
+function applyModelStatistics(data = {}) {
+  totalCount.value = toCount(data.total)
+  designingCount.value = toCount(data.designing)
+  deployedCount.value = toCount(data.deployed)
+  suspendedCount.value = toCount(data.suspended)
+  disabledCount.value = toCount(data.disabled)
+}
+
+function toCount(value) {
+  const count = Number(value)
+  return Number.isFinite(count) ? count : 0
+}
+
 function handlePageSizeChange(v) {
   pagination.pageSize = v
   pagination.page = 1
@@ -689,6 +716,11 @@ function handlePageSizeChange(v) {
 }
 
 function handleSearch() {
+  pagination.page = 1
+  fetchData()
+}
+
+function handleStatusSelect() {
   pagination.page = 1
   fetchData()
 }
@@ -1187,7 +1219,7 @@ onMounted(() => {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 14px;
-  cursor: pointer;
+  cursor: default;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -1463,10 +1495,14 @@ onMounted(() => {
 
 .model-card-action.primary {
   color: #1d4ed8;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  padding: 0 9px;
 }
 
 .model-card-action.primary:hover {
-  background: #eff6ff;
+  border-color: #93c5fd;
+  background: #dbeafe;
   color: #1e40af;
 }
 

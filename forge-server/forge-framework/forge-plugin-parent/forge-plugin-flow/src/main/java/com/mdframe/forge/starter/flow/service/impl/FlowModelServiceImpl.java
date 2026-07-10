@@ -80,6 +80,54 @@ public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel
     }
 
     @Override
+    public Map<String, Object> getStatusStatistics(String modelName, String category) {
+        String currentUsername = SessionHelper.getUsername();
+        if (currentUsername == null || currentUsername.isEmpty()) {
+            return emptyStatusStatistics();
+        }
+
+        Map<String, Object> raw = this.getBaseMapper().selectStatusStatistics(modelName, category, currentUsername);
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", readCount(raw, "total"));
+        result.put("designing", readCount(raw, "designing"));
+        result.put("deployed", readCount(raw, "deployed"));
+        result.put("suspended", readCount(raw, "suspended"));
+        result.put("disabled", readCount(raw, "disabled"));
+        return result;
+    }
+
+    private Map<String, Object> emptyStatusStatistics() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", 0L);
+        result.put("designing", 0L);
+        result.put("deployed", 0L);
+        result.put("suspended", 0L);
+        result.put("disabled", 0L);
+        return result;
+    }
+
+    private long readCount(Map<String, Object> raw, String key) {
+        if (raw == null || raw.isEmpty()) {
+            return 0L;
+        }
+        Object value = raw.get(key);
+        if (value == null) {
+            value = raw.get(key.toUpperCase(Locale.ROOT));
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public FlowModel createModel(FlowModel flowModel) {
         flowModel.setDesignerType(normalizeDesignerType(flowModel.getDesignerType()));

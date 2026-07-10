@@ -56,6 +56,17 @@ public class FlowModelController {
     }
 
     /**
+     * 获取流程模型状态统计
+     */
+    @GetMapping("/statistics")
+    public RespInfo<Map<String, Object>> statistics(
+            @RequestParam(required = false) String modelName,
+            @RequestParam(required = false) String category) {
+        Map<String, Object> statistics = flowModelService.getStatusStatistics(modelName, category);
+        return RespInfo.success(statistics);
+    }
+
+    /**
      * 获取模型详情
      */
     @GetMapping("/{id}")

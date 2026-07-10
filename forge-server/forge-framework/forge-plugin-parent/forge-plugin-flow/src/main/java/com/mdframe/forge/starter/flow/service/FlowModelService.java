@@ -24,6 +24,11 @@ public interface FlowModelService extends IService<FlowModel> {
     List<FlowModel> getEnabledModels(String category);
 
     /**
+     * 获取流程模型状态统计
+     */
+    Map<String, Object> getStatusStatistics(String modelName, String category);
+
+    /**
      * 创建流程模型
      */
     FlowModel createModel(FlowModel flowModel);

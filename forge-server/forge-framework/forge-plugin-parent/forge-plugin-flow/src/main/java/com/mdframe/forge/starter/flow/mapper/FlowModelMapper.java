@@ -7,6 +7,8 @@ import com.mdframe.forge.starter.flow.entity.FlowModel;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Map;
+
 /**
  * 流程模型 Mapper
  */
@@ -19,4 +21,11 @@ public interface FlowModelMapper extends BaseMapper<FlowModel> {
     IPage<FlowModel> selectModelPage(Page<FlowModel> page, @Param("modelName") String modelName,
                                       @Param("category") String category, @Param("status") Integer status,
                                       @Param("createBy") String createBy);
+
+    /**
+     * 按状态统计流程模型数量
+     */
+    Map<String, Object> selectStatusStatistics(@Param("modelName") String modelName,
+                                               @Param("category") String category,
+                                               @Param("createBy") String createBy);
 }
