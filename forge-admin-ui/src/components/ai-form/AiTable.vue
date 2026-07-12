@@ -55,7 +55,6 @@
       :bordered="bordered"
       :single-line="singleLine"
       :size="currentSize"
-      flex-height
       :max-height="maxHeight"
       :scroll-x="scrollX"
       :checked-row-keys="innerCheckedRowKeys"
@@ -872,11 +871,10 @@ defineExpose({
 <style scoped>
 .ai-table-wrapper {
   width: 100%;
-  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ai-card-mode {
@@ -1098,41 +1096,38 @@ defineExpose({
 }
 
 :deep(.n-data-table) {
-  flex: 1 1 auto;
-  height: 100%;
+  flex: 0 1 auto;
+  width: 100%;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 :deep(.n-data-table-wrapper) {
-  flex: 1 1 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
 }
 
 :deep(.n-data-table-base-table) {
-  flex: 1 1 0;
   height: auto;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 :deep(.n-data-table-base-table-body) {
-  flex: 1 1 auto;
   min-height: 144px;
-  overflow: hidden;
 }
 
 :deep(.n-data-table-base-table-body .n-scrollbar) {
-  height: 100%;
+  min-height: 144px;
 }
 
 :deep(.n-data-table-base-table-body .n-scrollbar-container) {
   min-height: 0;
+}
+
+:deep(.n-data-table-empty) {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 :deep(.n-data-table-th--fixed-left) {
