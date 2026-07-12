@@ -256,7 +256,7 @@ defineExpose({
 
 <style scoped>
 .ai-search-box {
-  padding: 16px 16px 4px 16px;
+  padding: 8px 12px 0;
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-light);
 }

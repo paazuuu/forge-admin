@@ -66,7 +66,7 @@ export const aiCrudPageProps = {
    */
   searchYGap: {
     type: Number,
-    default: 16,
+    default: 10,
   },
 
   // ========== 表格相关 ==========
@@ -150,7 +150,7 @@ export const aiCrudPageProps = {
    */
   showRenderModeSwitch: {
     type: Boolean,
-    default: true,
+    default: false,
   },
 
   /**

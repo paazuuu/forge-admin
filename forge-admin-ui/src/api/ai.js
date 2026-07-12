@@ -431,8 +431,8 @@ export function crudConfigAiGenerateFromTable(data) {
 
 // ========== 自定义查询 ==========
 
-export function customQueryExecute(configKey, data) {
-  return request.post(`/ai/custom-query/${configKey}/execute`, data)
+export function customQueryExecute(configKey, data, config = {}) {
+  return request.post(`/ai/custom-query/${configKey}/execute`, data, config)
 }
 
 export function customQuerySchemeList(configKey) {

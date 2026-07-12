@@ -208,58 +208,34 @@
                     </template>
                     {{ addButtonText }}
                   </n-button>
-                  <!-- 批量删除按钮 -->
                   <n-button
-                    v-if="!hideBatchDelete"
+                    v-if="toolbarOverflowOptions.length === 1"
                     size="small"
-                    type="error"
-                    secondary
-                    :disabled="selectedKeys.length === 0"
-                    @click="handleBatchDelete"
+                    :type="toolbarOverflowOptions[0].buttonType"
+                    :secondary="toolbarOverflowOptions[0].secondary"
+                    :disabled="toolbarOverflowOptions[0].disabled"
+                    :loading="toolbarOverflowOptions[0].loading"
+                    @click="handleToolbarOverflowSelect(toolbarOverflowOptions[0].key)"
                   >
                     <template #icon>
-                      <n-icon><TrashOutline /></n-icon>
+                      <n-icon><component :is="toolbarOverflowOptions[0].iconComponent" /></n-icon>
                     </template>
-                    批量删除
+                    {{ toolbarOverflowOptions[0].label }}
                   </n-button>
-                  <!-- 批量导入按钮 -->
-                  <n-button
-                    v-if="showImport"
-                    size="small"
-                    @click="handleShowImport"
+                  <n-dropdown
+                    v-else-if="toolbarOverflowOptions.length > 1"
+                    trigger="click"
+                    placement="bottom-start"
+                    :options="toolbarDropdownOptions"
+                    @select="handleToolbarOverflowSelect"
                   >
-                    <template #icon>
-                      <n-icon><CloudUploadOutline /></n-icon>
-                    </template>
-                    批量导入
-                  </n-button>
-
-                  <!-- 导出按钮 -->
-                  <n-button
-                    v-if="showExport"
-                    size="small"
-                    strong
-                    secondary
-                    :loading="exportLoading"
-                    @click="handleExport"
-                  >
-                    <template #icon>
-                      <n-icon><DownloadOutline /></n-icon>
-                    </template>
-                    {{ exportButtonText }}
-                  </n-button>
-
-                  <n-button
-                    v-if="showExportTaskEntry"
-                    size="small"
-                    tertiary
-                    @click="handleOpenExportTasks"
-                  >
-                    <template #icon>
-                      <n-icon><TimeOutline /></n-icon>
-                    </template>
-                    导出任务
-                  </n-button>
+                    <n-button size="small" secondary class="ai-crud-more-button">
+                      <template #icon>
+                        <n-icon><EllipsisVertical /></n-icon>
+                      </template>
+                      更多
+                    </n-button>
+                  </n-dropdown>
 
                   <AiCustomQuery
                     v-if="enableCustomQuery && resolvedCustomQueryConfigKey"
@@ -770,11 +746,12 @@ import {
   CloseOutline,
   CloudUploadOutline,
   DownloadOutline,
+  EllipsisVertical,
   RefreshOutline,
   TimeOutline,
   TrashOutline,
 } from '@vicons/ionicons5'
-import { NButton, NDropdown, NProgress, NTag } from 'naive-ui'
+import { NButton, NDropdown, NIcon, NProgress, NTag } from 'naive-ui'
 import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { customQueryExecute } from '@/api/ai'
@@ -1924,6 +1901,75 @@ const showExportTaskEntry = computed(() => {
   return props.showExport && props.showExportTasks && !!resolvedExportTaskConfigKey.value
 })
 
+const toolbarOverflowOptions = computed(() => {
+  const options = []
+  if (!props.hideBatchDelete) {
+    options.push({
+      label: '批量删除',
+      key: 'batch-delete',
+      disabled: selectedKeys.value.length === 0,
+      buttonType: 'error',
+      secondary: true,
+      iconComponent: TrashOutline,
+    })
+  }
+  if (props.showImport) {
+    options.push({
+      label: '批量导入',
+      key: 'import',
+      buttonType: 'default',
+      secondary: true,
+      iconComponent: CloudUploadOutline,
+    })
+  }
+  if (props.showExport) {
+    options.push({
+      label: exportLoading.value ? '导出中...' : props.exportButtonText,
+      key: 'export',
+      disabled: exportLoading.value,
+      loading: exportLoading.value,
+      buttonType: 'default',
+      secondary: true,
+      iconComponent: DownloadOutline,
+    })
+  }
+  if (showExportTaskEntry.value) {
+    options.push({
+      label: '导出任务',
+      key: 'export-tasks',
+      buttonType: 'default',
+      secondary: true,
+      iconComponent: TimeOutline,
+    })
+  }
+  return options
+})
+
+const toolbarDropdownOptions = computed(() => toolbarOverflowOptions.value.map(option => ({
+  label: option.label,
+  key: option.key,
+  disabled: option.disabled,
+  icon: () => h(NIcon, null, { default: () => h(option.iconComponent) }),
+})))
+
+function handleToolbarOverflowSelect(key) {
+  if (key === 'batch-delete') {
+    handleBatchDelete()
+    return
+  }
+  if (key === 'import') {
+    handleShowImport()
+    return
+  }
+  if (key === 'export') {
+    handleExport()
+    return
+  }
+  if (key === 'export-tasks') {
+    handleOpenExportTasks()
+  }
+}
+
 const activeExportTask = computed(() => {
   if (!activeExportTaskId.value) {
     return null
@@ -3035,6 +3081,8 @@ async function loadList() {
         ...customQueryPayload.value,
         pageNum: pagination.value.page,
         pageSize: pagination.value.pageSize,
+      }, {
+        globalLoading: false,
       })
     }
     else {
@@ -3054,13 +3102,14 @@ async function loadList() {
 
       if (useEncrypt && requestMethod === 'postEncrypt') {
         // 使用加密请求
-        response = await postEncrypt(url, params)
+        response = await postEncrypt(url, params, { globalLoading: false })
       }
       else {
         // 使用普通请求
         const requestConfig = {
           method: requestMethod,
           url,
+          globalLoading: false,
         }
 
         if (requestMethod === 'get') {
@@ -4679,6 +4728,10 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
   backdrop-filter: blur(1px);
 }
 
+.ai-crud-more-button :deep(.n-button__icon) {
+  margin-right: 4px;
+}
+
 .ai-crud-page.is-form-only {
   overflow: auto;
   background: #f6f8fb;
@@ -4906,7 +4959,7 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 
 /* 表格工具栏 - 不需要额外内边距因为 AiTable 已处理 */
 .ai-crud-table :deep(.ai-table-toolbar) {
-  padding: 10px 16px;
+  padding: 6px 12px;
 }
 
 /* 操作列样式 */
@@ -4923,11 +4976,11 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
   font-size: var(--font-size-sm);
   color: var(--primary-600);
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
+  padding: 1px 3px;
+  border-radius: 4px;
   transition: all var(--transition-fast);
   text-decoration: none;
-  line-height: 1.5;
+  line-height: 1.35;
 }
 
 :deep(.table-action-link:hover) {

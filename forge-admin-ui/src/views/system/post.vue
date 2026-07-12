@@ -648,16 +648,16 @@ function handleDelete(row) {
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: 12px;
+  gap: 8px;
 }
 
 .org-tree-panel {
-  width: 248px;
-  min-width: 248px;
-  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 18%, #ffffff 100%);
-  border: 1px solid #dbe4f0;
-  border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  width: 220px;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -686,44 +686,39 @@ function handleDelete(row) {
 }
 
 .org-tree-header {
-  padding: 14px 12px 12px;
-  border-bottom: 1px solid #e8eef5;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(59, 130, 246, 0.08) 0%,
-    rgba(59, 130, 246, 0.02) 55%,
-    rgba(255, 255, 255, 0.96) 100%
-  );
+  background: #fff;
 }
 
 .header-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .header-icon {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
-  color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  background: transparent;
+  color: #64748b;
+  box-shadow: none;
 }
 
 .header-icon i {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .header-copy {
@@ -735,14 +730,14 @@ function handleDelete(row) {
 
 .header-copy span {
   color: #0f172a;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.2;
 }
 
 .header-copy small {
   color: #64748b;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
@@ -765,7 +760,7 @@ function handleDelete(row) {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 10px 8px 12px;
+  padding: 6px;
 }
 
 .org-tree-content :deep(.n-spin-content) {
@@ -776,32 +771,32 @@ function handleDelete(row) {
 .org-tree-all-node {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  margin-bottom: 6px;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 4px;
   color: #334155;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .org-tree-all-node:hover {
-  border-color: #dbe4f0;
-  background-color: #f8fafc;
+  border-color: transparent;
+  background-color: rgba(37, 99, 235, 0.04);
 }
 
 .org-tree-all-node.is-selected {
-  border-color: rgba(37, 99, 235, 0.18);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
+  border-color: transparent;
+  background: rgba(37, 99, 235, 0.09) !important;
+  box-shadow: inset 2px 0 0 #2563eb;
   color: #2563eb;
 }
 
 .org-tree-all-node i {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .org-tree-content :deep(.premium-tree) {
@@ -865,10 +860,10 @@ function handleDelete(row) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #dbe4f0;
-  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   background: #fff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+  box-shadow: none;
 }
 
 .post-list-panel :deep(.ai-crud-page) {
@@ -886,17 +881,12 @@ function handleDelete(row) {
 .dark .org-tree-panel {
   border-color: #334155 !important;
   background: #0f172a !important;
-  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
+  box-shadow: none;
 }
 
 .dark .org-tree-header {
   border-bottom-color: #334155;
-  background: linear-gradient(
-    135deg,
-    rgba(37, 99, 235, 0.18) 0%,
-    rgba(30, 41, 59, 0.94) 58%,
-    rgba(15, 23, 42, 0.96) 100%
-  );
+  background: #0f172a;
 }
 
 .dark .org-tree-header .header-copy span {
@@ -908,7 +898,8 @@ function handleDelete(row) {
 }
 
 .dark .header-icon {
-  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  background: transparent;
+  color: #94a3b8;
 }
 
 .dark .org-tree-content {
@@ -963,7 +954,7 @@ function handleDelete(row) {
 .dark .post-list-panel {
   border-color: #334155 !important;
   background: #0f172a !important;
-  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
+  box-shadow: none;
 }
 
 .dark .org-filter-tip :deep(.n-tag) {

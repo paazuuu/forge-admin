@@ -15,7 +15,7 @@
           'is-expanded': isExpanded,
         },
       ]"
-      :style="{ paddingLeft: `${level * 20 + 4}px` }"
+      :style="{ paddingLeft: `${level * 14 + 2}px` }"
       role="treeitem"
       :aria-selected="isSelected"
       :aria-expanded="hasChildren ? isExpanded : undefined"
@@ -217,7 +217,7 @@ const nodeTone = computed(() => props.getNodeTone?.(props.node) || 'default')
 const nodeActions = computed(() => resolveNodeActions(props.node))
 const nodeTooltip = computed(() => [nodeLabel.value, nodeSubtitle.value].filter(Boolean).join(' / '))
 
-const guideLeft = computed(() => `${(props.level - 1) * 20 + 14}px`)
+const guideLeft = computed(() => `${(props.level - 1) * 14 + 11}px`)
 const guideVerticalStyle = computed(() => ({
   left: guideLeft.value,
 }))
@@ -300,7 +300,7 @@ function resolveActionDisabled(action) {
 
 .tree-guide-vertical {
   top: -3px;
-  bottom: 15px;
+  bottom: 13px;
   width: 1px;
 }
 
@@ -310,13 +310,13 @@ function resolveActionDisabled(action) {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 32px;
-  padding-top: 3px;
-  padding-right: 8px;
-  padding-bottom: 3px;
-  margin: 1px 0;
+  min-height: 28px;
+  padding-top: 2px;
+  padding-right: 6px;
+  padding-bottom: 2px;
+  margin: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--text-secondary, #4b5563);
   cursor: pointer;
   outline: none;
@@ -327,8 +327,8 @@ function resolveActionDisabled(action) {
 }
 
 .premium-tree-row:hover {
-  background: var(--bg-secondary, #f6f8fb);
-  border-color: var(--border-light, #e5e7eb);
+  background: color-mix(in srgb, var(--primary-color, #2563eb) 4%, var(--bg-secondary, #f6f8fb));
+  border-color: transparent;
 }
 
 .premium-tree-row:focus-visible {
@@ -337,10 +337,10 @@ function resolveActionDisabled(action) {
 }
 
 .premium-tree-row.is-selected {
-  background: color-mix(in srgb, var(--primary-color, #2563eb) 8%, var(--bg-primary, #fff));
-  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 18%, var(--border-light, #e5e7eb));
+  background: color-mix(in srgb, var(--primary-color, #2563eb) 9%, var(--bg-primary, #fff));
+  border-color: transparent;
   color: var(--primary-color, #2563eb);
-  box-shadow: inset 3px 0 0 var(--primary-color, #2563eb);
+  box-shadow: inset 2px 0 0 var(--primary-color, #2563eb);
 }
 
 .premium-tree-switcher {
@@ -348,12 +348,12 @@ function resolveActionDisabled(action) {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  margin: 0 3px 0 0;
+  margin: 0 2px 0 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: transparent;
   cursor: default;
@@ -370,7 +370,7 @@ function resolveActionDisabled(action) {
 }
 
 .premium-tree-switcher i {
-  font-size: 16px;
+  font-size: 15px;
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -382,7 +382,7 @@ function resolveActionDisabled(action) {
   flex: 0 0 auto;
   width: 15px;
   height: 15px;
-  margin: 0 8px 0 0;
+  margin: 0 6px 0 0;
   accent-color: var(--primary-color, #2563eb);
   cursor: pointer;
 }
@@ -392,17 +392,17 @@ function resolveActionDisabled(action) {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  margin-right: 8px;
-  border-radius: 6px;
+  width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-tertiary, #9ca3af);
   transition: color 0.18s ease;
 }
 
 .premium-tree-icon i {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -412,16 +412,16 @@ function resolveActionDisabled(action) {
   min-width: 0;
   overflow: hidden;
   flex: 1;
-  gap: 8px;
+  gap: 6px;
 }
 
 .premium-tree-title {
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary, #4b5563);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 20px;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color 0.18s ease;
@@ -432,7 +432,7 @@ function resolveActionDisabled(action) {
   overflow: hidden;
   color: var(--text-tertiary, #9ca3af);
   font-size: 11px;
-  line-height: 18px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -442,21 +442,21 @@ function resolveActionDisabled(action) {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-width: 46px;
+  min-width: 38px;
   gap: 4px;
-  padding: 1px 7px;
+  padding: 0 6px;
   border: 1px solid var(--border-light, #e5e7eb);
   border-radius: 999px;
   background: var(--bg-secondary, #f6f8fb);
   color: var(--text-tertiary, #9ca3af);
   font-size: 11px;
   font-weight: 650;
-  line-height: 16px;
+  line-height: 15px;
 }
 
 .premium-tree-meta strong {
   color: var(--text-secondary, #4b5563);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 750;
 }
 
@@ -465,7 +465,7 @@ function resolveActionDisabled(action) {
   align-items: center;
   flex: 0 0 auto;
   gap: 2px;
-  margin-left: 6px;
+  margin-left: 4px;
   opacity: 0;
   pointer-events: none;
   transform: translateX(4px);
@@ -486,11 +486,11 @@ function resolveActionDisabled(action) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-tertiary, #9ca3af);
   cursor: pointer;
@@ -516,7 +516,7 @@ function resolveActionDisabled(action) {
 }
 
 .premium-tree-action i {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -594,14 +594,14 @@ function resolveActionDisabled(action) {
 
 :global(.dark) .premium-tree-row:hover {
   background: rgba(30, 41, 59, 0.86);
-  border-color: rgba(71, 85, 105, 0.86);
+  border-color: transparent;
 }
 
 :global(.dark) .premium-tree-row.is-selected {
   background: rgba(30, 64, 175, 0.22);
-  border-color: rgba(96, 165, 250, 0.28);
+  border-color: transparent;
   color: #dbeafe;
-  box-shadow: inset 3px 0 0 #60a5fa;
+  box-shadow: inset 2px 0 0 #60a5fa;
 }
 
 :global(.dark) .premium-tree-title {

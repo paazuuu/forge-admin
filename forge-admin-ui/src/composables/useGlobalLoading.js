@@ -44,6 +44,26 @@ function readHeader(headers, name) {
   return foundKey ? headers[foundKey] : undefined
 }
 
+function hasExplicitGlobalLoading(options = {}) {
+  return options.globalLoading === true
+    || options.forceGlobalLoading === true
+    || normalizeText(options.globalLoadingType || options.loadingType)
+    || normalizeText(options.globalLoadingText || options.loadingText || options.text || options.message)
+}
+
+function hasTransferGlobalLoadingHint(options = {}) {
+  const url = normalizeUrl(options.url)
+  return options.data instanceof FormData
+    || url.includes('upload')
+    || url.includes('import')
+    || url.includes('export')
+    || url.includes('download')
+}
+
+function shouldAttachRequestGlobalLoading(options = {}) {
+  return hasExplicitGlobalLoading(options) || hasTransferGlobalLoadingHint(options)
+}
+
 function isGlobalLoadingSkipped(options = {}) {
   const headerSkip = readHeader(options.headers, 'X-Skip-Global-Loading')
   return options.skipGlobalLoading === true
@@ -292,6 +312,8 @@ export async function managedFetch(input, init = {}, options = {}) {
 
 export function attachRequestGlobalLoading(config = {}) {
   if (config.__globalLoadingToken)
+    return config
+  if (!shouldAttachRequestGlobalLoading(config))
     return config
 
   const token = startGlobalLoading({

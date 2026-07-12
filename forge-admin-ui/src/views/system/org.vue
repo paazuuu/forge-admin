@@ -81,136 +81,126 @@
         </div>
       </aside>
 
-      <section class="post-panel">
-        <header class="panel-header">
-          <div>
-            <h2>岗位列表</h2>
-          </div>
-          <n-button
-            size="small"
-            type="primary"
-            :disabled="isShowAllOrganizations || !selectedOrgNode"
-            @click="handleAddPost"
-          >
-            <template #icon>
-              <i class="i-material-symbols:add-rounded" />
-            </template>
-            新增岗位
-          </n-button>
-        </header>
-
-        <div class="post-search">
-          <n-input
-            v-model:value="postKeyword"
-            clearable
-            size="small"
-            placeholder="搜索岗位名称 / 编码"
-          >
-            <template #prefix>
-              <i class="i-material-symbols:search-rounded" />
-            </template>
-          </n-input>
-          <n-button quaternary circle size="small" title="刷新岗位" :loading="postLoading" @click="loadPostList()">
-            <template #icon>
-              <i class="i-material-symbols:refresh-rounded" />
-            </template>
-          </n-button>
-        </div>
-
-        <n-spin :show="postLoading" class="post-spin">
-          <div class="post-list">
-            <div
-              v-for="post in filteredPostList"
-              :key="post.id"
-              class="post-item"
-              :class="{ 'is-selected': isSameKey(selectedPostKey, post.id) }"
-              role="button"
-              tabindex="0"
-              @click="handlePostSelect(post)"
-              @keydown.enter.prevent="handlePostSelect(post)"
-              @keydown.space.prevent="handlePostSelect(post)"
-            >
-              <span class="post-main">
-                <strong>{{ post.postName }}</strong>
-                <small v-if="post.postCode || resolveOptionLabel(postTypeOptions, post.postType)">
-                  {{ post.postCode || resolveOptionLabel(postTypeOptions, post.postType) }}
-                </small>
-              </span>
-              <span class="post-side">
-                <DictTag :dict-type="NORMAL_DISABLE_DICT" :value="post.postStatus" size="small" force-tag />
-                <span class="post-actions" @click.stop>
-                  <button type="button" title="编辑岗位" aria-label="编辑岗位" @click="handleEditPost(post)">
-                    <i class="i-material-symbols:edit-outline-rounded" />
-                  </button>
-                  <button type="button" title="删除岗位" aria-label="删除岗位" class="type-error" @click="handleDeletePost(post)">
-                    <i class="i-material-symbols:delete-outline-rounded" />
-                  </button>
-                </span>
-              </span>
+      <section class="org-detail-panel">
+        <n-tabs v-model:value="orgWorkspaceTab" type="line" animated class="org-workspace-tabs">
+          <n-tab-pane name="members" tab="用户">
+            <div class="member-body">
+              <AiCrudPage
+                ref="userCrudRef"
+                api="/system/user"
+                :api-config="{
+                  list: 'get@/system/user/page',
+                  detail: 'post@/system/user/getById',
+                }"
+                :search-schema="userSearchSchema"
+                :columns="userTableColumns"
+                :before-load-list="beforeLoadUserList"
+                row-key="id"
+                :hide-add="true"
+                :hide-batch-delete="true"
+                :hide-selection="true"
+                :show-render-mode-switch="false"
+                :search-grid-cols="3"
+                :search-max-visible-fields="3"
+                :page-size="10"
+                :scroll-x="700"
+                :table-props="{ dragScroll: false }"
+              >
+                <template #toolbar-end>
+                  <n-button
+                    size="small"
+                    type="primary"
+                    :disabled="isShowAllOrganizations || !selectedOrgNode"
+                    @click="handleOpenAddUser"
+                  >
+                    <template #icon>
+                      <i class="i-material-symbols:person-add-rounded" />
+                    </template>
+                    添加用户
+                  </n-button>
+                </template>
+              </AiCrudPage>
             </div>
+          </n-tab-pane>
 
-            <n-empty
-              v-if="!postLoading && filteredPostList.length === 0"
-              description="暂无岗位"
-              size="small"
-              class="post-empty"
-            />
-          </div>
-        </n-spin>
-      </section>
+          <n-tab-pane name="posts" tab="岗位">
+            <header class="panel-header">
+              <div>
+                <h2>岗位列表</h2>
+              </div>
+              <n-button
+                size="small"
+                type="primary"
+                :disabled="isShowAllOrganizations || !selectedOrgNode"
+                @click="handleAddPost"
+              >
+                <template #icon>
+                  <i class="i-material-symbols:add-rounded" />
+                </template>
+                新增岗位
+              </n-button>
+            </header>
 
-      <section class="member-panel">
-        <header class="member-context">
-          <div>
-            <h2>用户列表</h2>
-          </div>
-          <n-space size="small">
-            <n-button
-              size="small"
-              type="primary"
-              :disabled="isShowAllOrganizations || !selectedOrgNode"
-              @click="handleOpenAddUser"
-            >
-              <template #icon>
-                <i class="i-material-symbols:person-add-rounded" />
-              </template>
-              添加用户
-            </n-button>
-          </n-space>
-        </header>
-
-        <div class="member-body">
-          <AiCrudPage
-            ref="userCrudRef"
-            api="/system/user"
-            :api-config="{
-              list: 'get@/system/user/page',
-              detail: 'post@/system/user/getById',
-            }"
-            :search-schema="userSearchSchema"
-            :columns="userTableColumns"
-            :before-load-list="beforeLoadUserList"
-            row-key="id"
-            :hide-add="true"
-            :hide-batch-delete="true"
-            :hide-selection="true"
-            :show-render-mode-switch="false"
-            :search-grid-cols="3"
-            :search-max-visible-fields="3"
-            :page-size="10"
-            :scroll-x="700"
-            :table-props="{ dragScroll: false }"
-          >
-            <template #toolbar-end>
-              <n-button size="small" secondary @click="refreshUserList">
+            <div class="post-search">
+              <n-input
+                v-model:value="postKeyword"
+                clearable
+                size="small"
+                placeholder="搜索岗位名称 / 编码"
+              >
+                <template #prefix>
+                  <i class="i-material-symbols:search-rounded" />
+                </template>
+              </n-input>
+              <n-button quaternary circle size="small" title="刷新岗位" :loading="postLoading" @click="loadPostList()">
                 <template #icon>
                   <i class="i-material-symbols:refresh-rounded" />
                 </template>
-                刷新
               </n-button>
-            </template>
-          </AiCrudPage>
-        </div>
+            </div>
+
+            <n-spin :show="postLoading" class="post-spin">
+              <div class="post-list">
+                <div
+                  v-for="post in filteredPostList"
+                  :key="post.id"
+                  class="post-item"
+                  :class="{ 'is-selected': isSameKey(selectedPostKey, post.id) }"
+                  role="button"
+                  tabindex="0"
+                  @click="handlePostSelect(post)"
+                  @keydown.enter.prevent="handlePostSelect(post)"
+                  @keydown.space.prevent="handlePostSelect(post)"
+                >
+                  <span class="post-main">
+                    <strong>{{ post.postName }}</strong>
+                    <small v-if="post.postCode || resolveOptionLabel(postTypeOptions, post.postType)">
+                      {{ post.postCode || resolveOptionLabel(postTypeOptions, post.postType) }}
+                    </small>
+                  </span>
+                  <span class="post-side">
+                    <DictTag :dict-type="NORMAL_DISABLE_DICT" :value="post.postStatus" size="small" force-tag />
+                    <span class="post-actions" @click.stop>
+                      <button type="button" title="编辑岗位" aria-label="编辑岗位" @click="handleEditPost(post)">
+                        <i class="i-material-symbols:edit-outline-rounded" />
+                      </button>
+                      <button type="button" title="删除岗位" aria-label="删除岗位" class="type-error" @click="handleDeletePost(post)">
+                        <i class="i-material-symbols:delete-outline-rounded" />
+                      </button>
+                    </span>
+                  </span>
+                </div>
+
+                <n-empty
+                  v-if="!postLoading && filteredPostList.length === 0"
+                  description="暂无岗位"
+                  size="small"
+                  class="post-empty"
+                />
+              </div>
+            </n-spin>
+          </n-tab-pane>
+        </n-tabs>
       </section>
     </div>
 
@@ -336,6 +326,7 @@ const postLoading = ref(false)
 const postKeyword = ref('')
 const selectedPostKey = ref(ALL_POST_KEY)
 const selectedPostNode = ref(null)
+const orgWorkspaceTab = ref('members')
 const userSelectVisible = ref(false)
 
 const tenantSelectOptions = computed(() => tenantOptions.value.map(item => ({
@@ -881,7 +872,7 @@ function orgTreeActions() {
       key: 'addChild',
       title: '新增下级组织',
       label: '新增下级',
-      icon: 'i-material-symbols:subdirectory-arrow-right-rounded',
+      icon: 'i-material-symbols:create-new-folder-outline-rounded',
       type: 'primary',
     },
     {
@@ -1411,41 +1402,27 @@ function resolveUserDisplayName(row = {}) {
 
 .org-workspace {
   display: grid;
-  grid-template-columns: 248px minmax(248px, 286px) minmax(0, 1fr);
-  gap: 0;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 8px;
   height: 100%;
   min-height: 0;
 }
 
 .org-workspace.is-org-collapsed {
-  grid-template-columns: 64px minmax(248px, 286px) minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .org-tree-panel,
-.post-panel,
-.member-panel {
+.org-detail-panel {
   min-height: 0;
-  border: 1px solid #dbe4f0;
-  border-radius: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   background: #fff;
   box-shadow: none;
 }
 
 .org-tree-panel {
-  border-radius: 8px 0 0 8px;
-  border-right: 0;
-}
-
-.post-panel {
-  border-right: 0;
-}
-
-.member-panel {
-  border-radius: 0 8px 8px 0;
-}
-
-.org-tree-panel {
-  min-width: 248px;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1467,7 +1444,7 @@ function resolveUserDisplayName(row = {}) {
   flex-shrink: 0;
   min-height: 42px;
   padding: 7px 8px;
-  border-bottom: 1px solid #e8eef5;
+  border-bottom: 1px solid #e5e7eb;
   background: #fff;
 }
 
@@ -1514,8 +1491,8 @@ function resolveUserDisplayName(row = {}) {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid #eef2f7;
+  padding: 6px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .org-tree-content {
@@ -1558,22 +1535,53 @@ function resolveUserDisplayName(row = {}) {
   color: #2563eb;
 }
 
-.post-panel,
-.member-panel {
+.org-detail-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.panel-header,
-.member-context {
+.org-workspace-tabs {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.org-workspace-tabs :deep(.n-tabs-nav) {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.org-workspace-tabs :deep(.n-tabs-tab) {
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.org-workspace-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.org-workspace-tabs :deep(.n-tab-pane) {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
   flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #eef2f7;
+  padding: 7px 10px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .panel-eyebrow {
@@ -1583,8 +1591,7 @@ function resolveUserDisplayName(row = {}) {
   font-weight: 600;
 }
 
-.panel-header h2,
-.member-context h2 {
+.panel-header h2 {
   margin: 0;
   color: #0f172a;
   font-size: 14px;
@@ -1597,8 +1604,8 @@ function resolveUserDisplayName(row = {}) {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: 7px 8px;
-  border-bottom: 1px solid #eef2f7;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .post-spin {
@@ -1816,11 +1823,10 @@ function resolveUserDisplayName(row = {}) {
 }
 
 .dark .org-tree-panel,
-.dark .post-panel,
-.dark .member-panel {
+.dark .org-detail-panel {
   border-color: #334155 !important;
   background: #0f172a !important;
-  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
+  box-shadow: none;
 }
 
 .dark .org-tree-header {
@@ -1830,7 +1836,6 @@ function resolveUserDisplayName(row = {}) {
 
 .dark .header-copy span,
 .dark .panel-header h2,
-.dark .member-context h2,
 .dark .post-main strong,
 .dark .member-user-inline strong {
   color: #f1f5f9;
@@ -1845,8 +1850,8 @@ function resolveUserDisplayName(row = {}) {
 
 .dark .org-tree-tools,
 .dark .panel-header,
-.dark .member-context,
-.dark .post-search {
+.dark .post-search,
+.dark .org-workspace-tabs :deep(.n-tabs-nav) {
   border-color: #334155;
   background: #0f172a;
 }
@@ -1880,15 +1885,15 @@ function resolveUserDisplayName(row = {}) {
 
 @media (max-width: 1280px) {
   .org-workspace {
-    grid-template-columns: 236px 260px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
   .org-workspace.is-org-collapsed {
-    grid-template-columns: 64px 260px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
   }
 
   .org-tree-panel {
-    min-width: 236px;
+    min-width: 220px;
   }
 }
 

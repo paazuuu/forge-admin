@@ -1102,10 +1102,10 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border-light);
-  background: var(--bg-secondary);
-  min-height: 50px;
+  background: var(--bg-primary);
+  min-height: 42px;
 }
 
 :deep(.n-data-table) {
@@ -1181,7 +1181,8 @@ defineExpose({
 .ai-table-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .table-slot-wrapper {

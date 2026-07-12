@@ -120,31 +120,19 @@
             </div>
           </template>
           <template #toolbar-end>
-            <n-space size="small">
-              <n-button
-                size="small"
-                type="primary"
-                :disabled="selectedUserIds.length === 0"
-                @click="handleOpenBatchAuth"
-              >
+            <n-dropdown
+              trigger="click"
+              placement="bottom-start"
+              :options="userBatchActionOptions"
+              @select="handleUserBatchActionSelect"
+            >
+              <n-button size="small" secondary :disabled="selectedUserIds.length === 0">
                 <template #icon>
-                  <i class="i-material-symbols:verified-user-outline-rounded" />
+                  <i class="i-material-symbols:checklist-rounded" />
                 </template>
-                批量授权
+                批量操作
               </n-button>
-              <n-button
-                v-if="userStore.isAdmin"
-                size="small"
-                type="info"
-                :disabled="selectedUserIds.length === 0"
-                @click="handleOpenBatchTenant"
-              >
-                <template #icon>
-                  <i class="i-material-symbols:group-add" />
-                </template>
-                加入租户
-              </n-button>
-            </n-space>
+            </n-dropdown>
           </template>
         </AiCrudPage>
       </div>
@@ -682,6 +670,20 @@ const authOrgOptions = computed(() => currentUserOrgBindings.value
   .filter(item => item.value !== null))
 const batchAuthOrgTreeOptions = computed(() => convertOrgToTreeSelect(batchAuthOrgTreeData.value))
 const tenantMemberTypeOptions = computed(() => userTypeOptions.value.filter(item => Number(item.value) !== 0))
+const userBatchActionOptions = computed(() => [
+  {
+    label: '批量授权',
+    key: 'auth',
+    icon: () => h('i', { class: 'i-material-symbols:verified-user-outline-rounded' }),
+  },
+  ...(userStore.isAdmin
+    ? [{
+        label: '加入租户',
+        key: 'tenant',
+        icon: () => h('i', { class: 'i-material-symbols:group-add' }),
+      }]
+    : []),
+])
 const rolePaginationConfig = computed(() => ({
   page: rolePagination.value.page,
   pageSize: rolePagination.value.pageSize,
@@ -1325,6 +1327,16 @@ function getSelectedBatchUserIds() {
     return []
   }
   return ids
+}
+
+function handleUserBatchActionSelect(key) {
+  if (key === 'auth') {
+    handleOpenBatchAuth()
+    return
+  }
+  if (key === 'tenant') {
+    handleOpenBatchTenant()
+  }
 }
 
 function resolveDefaultBatchTenantId() {
@@ -2408,15 +2420,15 @@ async function handleSubmitBatchTenant() {
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: 12px;
+  gap: 8px;
 }
 
 /* 左侧组织树面板 */
 .org-tree-panel {
-  width: 248px;
-  min-width: 248px;
+  width: 220px;
+  min-width: 220px;
   background: var(--bg-primary, #fff);
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--border-light, #e5e7eb);
   box-shadow: none;
   display: flex;
@@ -2447,7 +2459,7 @@ async function handleSubmitBatchTenant() {
 }
 
 .org-tree-header {
-  padding: 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-light, #e5e7eb);
   display: flex;
   justify-content: space-between;
@@ -2459,26 +2471,26 @@ async function handleSubmitBatchTenant() {
 .header-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .header-icon {
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 7px;
-  background: var(--bg-secondary, #f6f8fb);
+  border-radius: 5px;
+  background: transparent;
   color: var(--text-secondary, #4b5563);
 }
 
 .header-icon i {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .header-copy {
@@ -2489,14 +2501,14 @@ async function handleSubmitBatchTenant() {
 }
 
 .header-copy span {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary, #111827);
   line-height: 1.2;
 }
 
 .header-copy small {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary, #9ca3af);
   line-height: 1.2;
 }
@@ -2520,7 +2532,7 @@ async function handleSubmitBatchTenant() {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px;
+  padding: 6px;
 }
 
 .org-tree-content :deep(.n-spin-content) {
@@ -2566,12 +2578,12 @@ async function handleSubmitBatchTenant() {
 .org-tree-all-node {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  border-radius: 6px;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary, #4b5563);
   border: 1px solid transparent;
@@ -2582,19 +2594,19 @@ async function handleSubmitBatchTenant() {
 }
 
 .org-tree-all-node:hover {
-  background-color: var(--bg-secondary, #f6f8fb);
-  border-color: var(--border-light, #e5e7eb);
+  background-color: color-mix(in srgb, var(--primary-color, #2563eb) 4%, var(--bg-secondary, #f6f8fb));
+  border-color: transparent;
 }
 
 .org-tree-all-node.is-selected {
-  background: color-mix(in srgb, var(--primary-color, #2563eb) 8%, var(--bg-primary, #fff)) !important;
-  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 18%, var(--border-light, #e5e7eb));
+  background: color-mix(in srgb, var(--primary-color, #2563eb) 9%, var(--bg-primary, #fff)) !important;
+  border-color: transparent;
   color: var(--primary-color, #2563eb);
-  box-shadow: inset 3px 0 0 var(--primary-color, #2563eb);
+  box-shadow: inset 2px 0 0 var(--primary-color, #2563eb);
 }
 
 .org-tree-all-node i {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .org-tree-content :deep(.premium-tree) {
@@ -2624,7 +2636,7 @@ async function handleSubmitBatchTenant() {
   flex: 1;
   min-width: 0;
   background: var(--bg-primary, #fff);
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--border-light, #e5e7eb);
   box-shadow: none;
   overflow: hidden;

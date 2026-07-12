@@ -342,13 +342,13 @@ defineExpose({
 .ai-toolbar-action {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-lg);
+  gap: 4px;
+  font-size: var(--font-size-base);
 }
 
 .search-toggle-button {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   color: var(--text-tertiary);
   transition:
     color 0.16s ease,
@@ -373,26 +373,23 @@ defineExpose({
 .render-mode-switch {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--border-light) 82%, var(--primary-color));
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgb(255 255 255 / 80%), rgb(255 255 255 / 35%)),
-    color-mix(in srgb, var(--bg-secondary) 72%, transparent);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
+  gap: 2px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-primary);
 }
 
 .render-mode-button {
-  width: 30px;
-  height: 24px;
+  width: 26px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 4px;
   color: var(--text-tertiary);
   background: transparent;
   cursor: pointer;
@@ -408,9 +405,9 @@ defineExpose({
 }
 
 .render-mode-button.active {
-  color: #fff;
-  background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 68%, #2563eb));
-  box-shadow: 0 4px 10px rgb(15 23 42 / 16%);
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  box-shadow: none;
 }
 
 .render-mode-button:focus-visible {

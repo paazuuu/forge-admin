@@ -3,11 +3,7 @@
     <div class="menu-workbench-header">
       <div class="header-main">
         <div class="header-title">
-          <span class="title-mark" />
-          <div>
-            <h2>菜单管理</h2>
-            <p>按客户端、目录节点和资源类型聚焦维护菜单、按钮与 API 权限</p>
-          </div>
+          <h2>菜单管理</h2>
         </div>
 
         <div class="header-actions">
@@ -21,7 +17,7 @@
             <template #icon>
               <i class="i-material-symbols:add" />
             </template>
-            新增顶级资源
+            新增顶级菜单
           </NButton>
         </div>
       </div>
@@ -39,13 +35,6 @@
             </template>
           </n-tab-pane>
         </n-tabs>
-      </div>
-
-      <div class="metric-strip">
-        <div v-for="item in resourceMetrics" :key="item.key" class="metric-item">
-          <span class="metric-value">{{ item.value }}</span>
-          <span class="metric-label">{{ item.label }}</span>
-        </div>
       </div>
     </div>
 
@@ -716,17 +705,6 @@ const activeChildSummary = computed(() => {
     button: children.filter(item => Number(item.resourceType) === 3).length,
     api: children.filter(item => Number(item.resourceType) === 4).length,
   }
-})
-
-const resourceMetrics = computed(() => {
-  const rows = flatResources.value
-  return [
-    { key: 'total', label: '全部资源', value: rows.length },
-    { key: 'menu', label: '目录 / 菜单', value: rows.filter(item => Number(item.resourceType) === 1 || Number(item.resourceType) === 2).length },
-    { key: 'button', label: '按钮权限', value: rows.filter(item => Number(item.resourceType) === 3).length },
-    { key: 'api', label: 'API 权限', value: rows.filter(item => Number(item.resourceType) === 4).length },
-    { key: 'hidden', label: '隐藏项', value: rows.filter(item => Number(item.visible) !== 1).length },
-  ]
 })
 
 const navigationTreeData = computed(() => {
@@ -2053,7 +2031,7 @@ const editSchema = computed(() => [
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  gap: 10px;
+  gap: 8px;
 }
 
 :global(.nexus-page.menu-page-host-no-scroll) {
@@ -2069,44 +2047,29 @@ const editSchema = computed(() => [
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: 6px;
-  padding: 12px 14px 8px;
+  padding: 8px 12px 0;
 }
 
 .header-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .header-title {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.title-mark {
-  width: 4px;
-  height: 34px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #2f6fed, #12b886);
-  margin-top: 2px;
+  min-width: 0;
+  align-items: center;
 }
 
 .header-title h2 {
   margin: 0;
   color: var(--text-primary);
   font-size: 17px;
-  line-height: 1.35;
+  line-height: 1.2;
   font-weight: 650;
   letter-spacing: 0;
-}
-
-.header-title p {
-  margin: 3px 0 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .header-actions {
@@ -2117,45 +2080,11 @@ const editSchema = computed(() => [
 }
 
 .client-tabs-container {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .tab-label {
   font-size: 13px;
-}
-
-.metric-strip {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-light);
-}
-
-.metric-item {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-}
-
-.metric-value {
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1;
-  font-weight: 650;
-}
-
-.metric-label {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  white-space: nowrap;
 }
 
 .menu-workbench-body {
@@ -2163,7 +2092,7 @@ const editSchema = computed(() => [
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(520px, 1fr) minmax(280px, 340px);
-  gap: 10px;
+  gap: 8px;
 }
 
 .tree-pane,
@@ -2976,10 +2905,6 @@ const editSchema = computed(() => [
 
   .batch-actions {
     justify-content: flex-start;
-  }
-
-  .metric-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .menu-workbench-body {
