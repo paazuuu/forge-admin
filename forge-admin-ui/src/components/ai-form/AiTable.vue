@@ -55,7 +55,6 @@
       :bordered="bordered"
       :single-line="singleLine"
       :size="currentSize"
-      flex-height
       :max-height="maxHeight"
       :scroll-x="scrollX"
       :checked-row-keys="innerCheckedRowKeys"
@@ -65,17 +64,13 @@
       @update:expanded-row-keys="handleUpdateExpandedKeys"
     >
       <template #empty>
-        <div class="ai-table-empty-state">
-          <div class="ai-table-empty-icon" aria-hidden="true">
-            <i class="i-material-symbols:folder-open" />
-          </div>
-          <div class="ai-table-empty-title">
-            {{ emptyTitle }}
-          </div>
-          <div class="ai-table-empty-desc">
-            {{ emptyDescription }}
-          </div>
-        </div>
+        <NEmpty class="ai-table-empty-state" :description="emptyTitle" size="large">
+          <template #extra>
+            <div class="ai-table-empty-desc">
+              {{ emptyDescription }}
+            </div>
+          </template>
+        </NEmpty>
       </template>
     </n-data-table>
 
@@ -151,17 +146,13 @@
           </NGridItem>
         </NGrid>
 
-        <div v-else class="ai-card-empty ai-table-empty-state">
-          <div class="ai-table-empty-icon" aria-hidden="true">
-            <i class="i-material-symbols:folder-open" />
-          </div>
-          <div class="ai-table-empty-title">
-            {{ emptyTitle }}
-          </div>
-          <div class="ai-table-empty-desc">
-            {{ emptyDescription }}
-          </div>
-        </div>
+        <NEmpty v-else class="ai-card-empty ai-table-empty-state" :description="emptyTitle" size="large">
+          <template #extra>
+            <div class="ai-table-empty-desc">
+              {{ emptyDescription }}
+            </div>
+          </template>
+        </NEmpty>
       </NSpin>
 
       <NPagination
@@ -175,7 +166,7 @@
 
 <script setup>
 /* eslint-disable vue/custom-event-name-casing */
-import { NCheckbox, NGrid, NGridItem, NPagination, NSpin } from 'naive-ui'
+import { NCheckbox, NEmpty, NGrid, NGridItem, NPagination, NSpin } from 'naive-ui'
 import { computed, h, ref, useSlots, watch } from 'vue'
 import AiToolbarAction from './AiToolbarAction.vue'
 
@@ -880,11 +871,10 @@ defineExpose({
 <style scoped>
 .ai-table-wrapper {
   width: 100%;
-  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ai-card-mode {
@@ -1061,27 +1051,24 @@ defineExpose({
   text-align: center;
 }
 
-.ai-table-empty-icon {
-  display: inline-flex;
-  width: 64px;
-  height: 64px;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
+.ai-table-empty-state :deep(.n-empty__icon) {
   color: color-mix(in srgb, var(--text-tertiary) 72%, transparent);
-  font-size: 46px;
+  font-size: 48px;
 }
 
-.ai-table-empty-title {
+.ai-table-empty-state :deep(.n-empty__description) {
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: var(--font-weight-medium);
   line-height: 20px;
 }
 
+.ai-table-empty-state :deep(.n-empty__extra) {
+  margin-top: 4px;
+}
+
 .ai-table-empty-desc {
   max-width: 360px;
-  margin-top: 4px;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 18px;
@@ -1109,41 +1096,38 @@ defineExpose({
 }
 
 :deep(.n-data-table) {
-  flex: 1 1 auto;
-  height: 100%;
+  flex: 0 1 auto;
+  width: 100%;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 :deep(.n-data-table-wrapper) {
-  flex: 1 1 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
 }
 
 :deep(.n-data-table-base-table) {
-  flex: 1 1 0;
   height: auto;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 :deep(.n-data-table-base-table-body) {
-  flex: 1 1 auto;
   min-height: 144px;
-  overflow: hidden;
 }
 
 :deep(.n-data-table-base-table-body .n-scrollbar) {
-  height: 100%;
+  min-height: 144px;
 }
 
 :deep(.n-data-table-base-table-body .n-scrollbar-container) {
   min-height: 0;
+}
+
+:deep(.n-data-table-empty) {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 :deep(.n-data-table-th--fixed-left) {

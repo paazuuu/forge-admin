@@ -1,6 +1,6 @@
 import { finishGlobalLoading, startGlobalLoading } from '@/composables/useGlobalLoading'
 import { useAuthStore } from '@/store/modules/auth'
-import { generateUUID, request } from '@/utils'
+import { generateUUID, postEncrypt, request } from '@/utils'
 
 const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
 
@@ -259,14 +259,14 @@ export function providerGetById(id) {
  * 新增供应商
  */
 export function providerAdd(data) {
-  return request.post('/ai/provider', data)
+  return postEncrypt('/ai/provider', data)
 }
 
 /**
  * 修改供应商
  */
 export function providerUpdate(data) {
-  return request.put('/ai/provider', data)
+  return request.put('/ai/provider', data, { encrypt: true })
 }
 
 /**
@@ -280,7 +280,8 @@ export function providerDelete(id) {
  * 测试供应商连接
  */
 export function providerTest(data) {
-  return request.post('/ai/provider/test', data)
+  // 已保存供应商仅传 { id }；未保存供应商才传完整配置。
+  return postEncrypt('/ai/provider/test', data)
 }
 
 /**
@@ -339,6 +340,42 @@ export function modelUpdate(data) {
  */
 export function modelDelete(id) {
   return request.delete(`/ai/model/${id}`)
+}
+
+export function modelTest(id) {
+  return request.post(`/ai/model/${id}/test`)
+}
+
+export function routePolicyPage(params) {
+  return request.get('/ai/model-routing/policy/page', { params })
+}
+
+export function routePolicyGet(id) {
+  return request.get(`/ai/model-routing/policy/${id}`)
+}
+
+export function routePolicyAdd(data) {
+  return postEncrypt('/ai/model-routing/policy', data)
+}
+
+export function routePolicyUpdate(data) {
+  return request.put('/ai/model-routing/policy', data, { encrypt: true })
+}
+
+export function routePolicyDelete(id) {
+  return request.delete(`/ai/model-routing/policy/${id}`)
+}
+
+export function routePolicyPreview(data) {
+  return postEncrypt('/ai/model-routing/policy/preview', data)
+}
+
+export function invocationPage(params) {
+  return request.get('/ai/model-routing/invocation/page', { params })
+}
+
+export function invocationSummary(params) {
+  return request.get('/ai/model-routing/invocation/summary', { params })
 }
 
 // ========== 会话管理 ==========

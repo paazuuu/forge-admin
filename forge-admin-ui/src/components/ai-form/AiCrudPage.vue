@@ -3036,6 +3036,67 @@ function hasFilledSearchParams(params = {}) {
   })
 }
 
+function getNestedValue(source, path) {
+  if (!path)
+    return undefined
+  return String(path)
+    .split('.')
+    .filter(Boolean)
+    .reduce((value, key) => value?.[key], source)
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === '')
+    return undefined
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
+}
+
+function extractListRows(payload, dataField, depth = 0) {
+  if (Array.isArray(payload))
+    return payload
+  if (!payload || typeof payload !== 'object' || depth > 4)
+    return []
+
+  const configuredRows = getNestedValue(payload, dataField)
+  if (Array.isArray(configuredRows))
+    return configuredRows
+
+  for (const key of ['records', 'list', 'rows', 'items']) {
+    if (Array.isArray(payload[key]))
+      return payload[key]
+  }
+
+  if (Array.isArray(payload.data))
+    return payload.data
+  if (payload.data && typeof payload.data === 'object')
+    return extractListRows(payload.data, dataField, depth + 1)
+
+  return []
+}
+
+function extractListTotal(payload, totalField, fallbackTotal = 0, depth = 0) {
+  if (Array.isArray(payload))
+    return payload.length
+  if (!payload || typeof payload !== 'object' || depth > 4)
+    return fallbackTotal
+
+  const configuredTotal = toFiniteNumber(getNestedValue(payload, totalField))
+  if (configuredTotal !== undefined)
+    return configuredTotal
+
+  for (const key of ['total', 'count', 'itemCount', 'totalCount']) {
+    const total = toFiniteNumber(payload[key])
+    if (total !== undefined)
+      return total
+  }
+
+  if (payload.data && typeof payload.data === 'object')
+    return extractListTotal(payload.data, totalField, fallbackTotal, depth + 1)
+
+  return fallbackTotal
+}
+
 /**
  * 加载列表数据
  */
@@ -3128,16 +3189,9 @@ async function loadList() {
     let list = []
     let total = 0
 
-    if (Array.isArray(response.data)) {
-      // 后端直接返回数组（不分页）
-      list = response.data
-      total = response.data.length
-    }
-    else if (response.data && typeof response.data === 'object') {
-      // 后端返回对象（分页数据）
-      list = response.data[props.listDataField] || []
-      total = response.data[props.listTotalField] || 0
-    }
+    const responseData = response?.data ?? response
+    list = extractListRows(responseData, props.listDataField)
+    total = extractListTotal(responseData, props.listTotalField, list.length)
 
     // 调用 beforeRenderList 钩子
     list = await callHook('beforeRenderList', list, data => data)
@@ -4923,38 +4977,36 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 }
 
 .ai-crud-table :deep(.ai-table-wrapper) {
-  height: 100%;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ai-crud-table :deep(.n-data-table-wrapper) {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table) {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
+  flex: 0 1 auto;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table-base-table) {
-  flex: 1 1 0;
   min-height: 0;
 }
 
 .ai-crud-table :deep(.n-data-table-base-table-body) {
-  flex: 1 1 auto;
   min-height: 144px;
-  overflow: hidden;
+}
+
+.ai-crud-table :deep(.n-data-table-empty) {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 表格工具栏 - 不需要额外内边距因为 AiTable 已处理 */
