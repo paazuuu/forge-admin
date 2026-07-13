@@ -6,7 +6,7 @@
         <n-card :bordered="false" class="profile-info-card">
           <!-- 头像区域 -->
           <div class="avatar-section">
-            <div class="avatar-container" @click="triggerAvatarUpload">
+            <div class="avatar-container" :class="{ 'is-uploading': avatarUploading }" @click="triggerAvatarUpload">
               <n-avatar
                 v-if="avatarSrc"
                 :size="72"
@@ -23,18 +23,18 @@
               >
                 {{ avatarText }}
               </n-avatar>
-              <n-upload
-                ref="avatarUploadRef"
-                :action="uploadUrl"
-                :headers="uploadHeaders"
-                :data="{ businessType: 'avatar' }"
-                :max="1"
-                accept=".png,.jpg,.jpeg,.webp"
-                :show-file-list="false"
-                style="display: none"
-                @finish="handleAvatarUploadFinish"
-              />
-              <div class="avatar-edit-btn" @click.stop="triggerAvatarUpload">
+              <input
+                ref="avatarInputRef"
+                class="avatar-file-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                @change="handleAvatarFileChange"
+              >
+              <div v-if="avatarUploading" class="avatar-upload-mask">
+                <n-spin size="small" />
+                <span>上传中</span>
+              </div>
+              <div v-else class="avatar-edit-btn" @click.stop="triggerAvatarUpload">
                 <i class="i-material-symbols:photo-camera text-14" />
               </div>
             </div>
@@ -244,6 +244,89 @@
       </div>
     </div>
 
+    <Teleport to="body">
+      <div v-if="avatarCropVisible" class="avatar-cropper-full">
+        <div class="avatar-cropper-shell">
+          <div class="avatar-cropper-topbar">
+            <button class="cropper-icon-button" type="button" :disabled="avatarUploading || avatarCropProcessing" @click="cancelAvatarCrop">
+              <i class="i-material-symbols:close-rounded" />
+            </button>
+            <div class="cropper-title">
+              <span class="cropper-title-main">编辑头像</span>
+              <span class="cropper-title-sub">拖动图片调整位置，滚轮、双指或滑块缩放</span>
+            </div>
+            <button class="cropper-reset-button" type="button" :disabled="avatarUploading || avatarCropProcessing" @click="resetAvatarCrop">
+              重置
+            </button>
+          </div>
+
+          <div
+            ref="avatarCropStageRef"
+            class="avatar-cropper-stage"
+            @touchstart.stop="startAvatarCropTouch"
+            @touchmove.stop.prevent="moveAvatarCropTouch"
+            @touchend.stop="endAvatarCropTouch"
+            @touchcancel.stop="endAvatarCropTouch"
+            @mousedown.stop.prevent="startAvatarCropDrag"
+            @wheel.stop.prevent="handleAvatarCropWheel"
+          >
+            <img
+              v-if="avatarCropSource"
+              :src="avatarCropSource"
+              class="avatar-cropper-image"
+              :style="avatarCropImageStyle"
+              alt="待裁剪头像"
+              draggable="false"
+              @load="handleAvatarCropImageLoad"
+            >
+            <div class="avatar-cropper-frame" :class="`avatar-cropper-frame--${avatarCropShape}`" :style="avatarCropFrameStyle" />
+            <div class="avatar-cropper-grid" :class="`avatar-cropper-grid--${avatarCropShape}`" :style="avatarCropFrameStyle">
+              <span v-for="item in 4" :key="item" class="avatar-cropper-grid-line" />
+            </div>
+          </div>
+
+          <div class="avatar-cropper-panel">
+            <div class="cropper-shape-tabs">
+              <button
+                v-for="item in avatarCropShapeOptions"
+                :key="item.value"
+                class="cropper-shape-tab"
+                :class="{ active: avatarCropShape === item.value }"
+                type="button"
+                :disabled="avatarUploading || avatarCropProcessing"
+                @click="avatarCropShape = item.value"
+              >
+                <i :class="item.icon" />
+                <span>{{ item.label }}</span>
+              </button>
+            </div>
+
+            <div class="cropper-zoom-control">
+              <i class="i-material-symbols:image-rounded" />
+              <n-slider
+                :value="avatarCropZoomPercent"
+                :min="0"
+                :max="100"
+                :step="1"
+                :disabled="avatarUploading || avatarCropProcessing"
+                @update:value="handleAvatarCropZoomPercent"
+              />
+              <i class="i-material-symbols:fullscreen-rounded" />
+            </div>
+
+            <div class="cropper-actions">
+              <button class="cropper-action cropper-action--ghost" type="button" :disabled="avatarUploading || avatarCropProcessing" @click="cancelAvatarCrop">
+                取消
+              </button>
+              <button class="cropper-action cropper-action--primary" type="button" :disabled="avatarUploading || avatarCropProcessing" @click="confirmAvatarCrop">
+                {{ avatarUploading || avatarCropProcessing ? '处理中' : '使用头像' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 编辑基本资料弹窗 -->
     <n-modal v-model:show="showEditProfileModal" preset="card" title="编辑基本资料" style="max-width: 420px">
       <n-form ref="profileFormRef" :model="profileForm" :rules="profileRules" label-placement="left" label-width="80">
@@ -343,7 +426,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuthStore, useUserStore } from '@/store'
 import { request } from '@/utils'
 import { resolveRenderableFileUrl } from '@/utils/file'
@@ -364,10 +447,48 @@ const showPwdModal = ref(false)
 const showEditProfileModal = ref(false)
 
 const avatarSrc = ref('')
-const avatarUploadRef = ref(null)
+const avatarInputRef = ref(null)
+const avatarUploading = ref(false)
+const avatarCropVisible = ref(false)
+const avatarCropSource = ref('')
+const avatarCropStageRef = ref(null)
+const avatarCropZoom = ref(1)
+const avatarCropProcessing = ref(false)
+const avatarCropImageMeta = ref({ width: 1, height: 1 })
+const avatarCropOffset = ref({ x: 0, y: 0 })
+const avatarCropDragState = ref(null)
+const avatarCropPinchState = ref(null)
+const avatarCropSize = ref(280)
+const avatarCropShape = ref('circle')
+const avatarOutputSize = 512
+let avatarCropObjectUrl = ''
+const avatarCropShapeOptions = [
+  { value: 'circle', label: '圆形', icon: 'i-material-symbols:circle-outline-rounded' },
+  { value: 'round', label: '圆角', icon: 'i-material-symbols:rounded-corner-rounded' },
+  { value: 'square', label: '方形', icon: 'i-material-symbols:crop-square-rounded' },
+]
 const uploadUrl = `${import.meta.env.VITE_REQUEST_PREFIX || ''}/api/file/upload`
 const uploadHeaders = computed(() => ({
   Authorization: authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
+}))
+const avatarCropBaseScale = computed(() => Math.max(
+  avatarCropSize.value / avatarCropImageMeta.value.width,
+  avatarCropSize.value / avatarCropImageMeta.value.height,
+))
+const avatarCropRenderScale = computed(() => avatarCropBaseScale.value * avatarCropZoom.value)
+const avatarCropRenderedSize = computed(() => ({
+  width: avatarCropImageMeta.value.width * avatarCropRenderScale.value,
+  height: avatarCropImageMeta.value.height * avatarCropRenderScale.value,
+}))
+const avatarCropZoomPercent = computed(() => Math.round((avatarCropZoom.value - 1) / 2 * 100))
+const avatarCropFrameStyle = computed(() => ({
+  width: `${avatarCropSize.value}px`,
+  height: `${avatarCropSize.value}px`,
+}))
+const avatarCropImageStyle = computed(() => ({
+  width: `${avatarCropRenderedSize.value.width}px`,
+  height: `${avatarCropRenderedSize.value.height}px`,
+  transform: `translate(calc(-50% + ${avatarCropOffset.value.x}px), calc(-50% + ${avatarCropOffset.value.y}px))`,
 }))
 
 const avatarText = computed(() => {
@@ -726,12 +847,297 @@ async function handleUnbind(item) {
 
 // 头像上传
 function triggerAvatarUpload() {
-  const uploadEl = avatarUploadRef.value?.$el || avatarUploadRef.value
-  if (uploadEl) {
-    const input = uploadEl.querySelector?.('input[type="file"]')
-    if (input)
-      input.click()
+  if (avatarUploading.value || avatarCropProcessing.value)
+    return
+  avatarInputRef.value?.click()
+}
+
+function handleAvatarFileChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file)
+    return
+  if (!file.type?.startsWith('image/')) {
+    window.$message.warning('请选择图片文件')
+    return
   }
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    window.$message.warning('仅支持 PNG、JPG、WEBP 格式')
+    return
+  }
+  openAvatarCrop(URL.createObjectURL(file))
+}
+
+async function openAvatarCrop(url) {
+  releaseAvatarCropObjectUrl()
+  avatarCropObjectUrl = url
+  avatarCropSource.value = url
+  avatarCropZoom.value = 1
+  avatarCropOffset.value = { x: 0, y: 0 }
+  avatarCropImageMeta.value = { width: 1, height: 1 }
+  avatarCropShape.value = 'circle'
+  avatarCropVisible.value = true
+  lockBodyScroll()
+  await nextTick()
+  measureAvatarCropStage()
+}
+
+function cancelAvatarCrop() {
+  if (avatarUploading.value || avatarCropProcessing.value)
+    return
+  avatarCropVisible.value = false
+  avatarCropSource.value = ''
+  unlockBodyScroll()
+  releaseAvatarCropObjectUrl()
+}
+
+function handleAvatarCropImageLoad(event) {
+  const image = event.target
+  avatarCropImageMeta.value = {
+    width: image.naturalWidth || 1,
+    height: image.naturalHeight || 1,
+  }
+  resetAvatarCrop()
+}
+
+function measureAvatarCropStage() {
+  const rect = avatarCropStageRef.value?.getBoundingClientRect?.()
+  const width = rect?.width || window.innerWidth || 960
+  const height = rect?.height || Math.max(320, (window.innerHeight || 720) - 260)
+  avatarCropSize.value = Math.round(Math.min(width * 0.78, height * 0.72, 340))
+  clampAvatarCropOffset()
+}
+
+function resetAvatarCrop() {
+  avatarCropZoom.value = 1
+  avatarCropOffset.value = { x: 0, y: 0 }
+  clampAvatarCropOffset()
+}
+
+function handleAvatarCropZoomPercent(value) {
+  avatarCropZoom.value = 1 + Number(value || 0) / 100 * 2
+  clampAvatarCropOffset()
+}
+
+function handleAvatarCropWheel(event) {
+  const nextZoom = avatarCropZoom.value + (event.deltaY > 0 ? -0.08 : 0.08)
+  avatarCropZoom.value = Math.min(3, Math.max(1, nextZoom))
+  clampAvatarCropOffset()
+}
+
+function startAvatarCropTouch(event) {
+  if (event.touches?.length === 2) {
+    avatarCropPinchState.value = {
+      distance: getAvatarCropTouchDistance(event.touches),
+      zoom: avatarCropZoom.value,
+    }
+    avatarCropDragState.value = null
+    return
+  }
+  const point = event.touches?.[0]
+  if (point)
+    startAvatarCropPoint(point)
+}
+
+function moveAvatarCropTouch(event) {
+  if (event.touches?.length === 2 && avatarCropPinchState.value) {
+    const ratio = getAvatarCropTouchDistance(event.touches) / Math.max(1, avatarCropPinchState.value.distance)
+    avatarCropZoom.value = Math.min(3, Math.max(1, avatarCropPinchState.value.zoom * ratio))
+    clampAvatarCropOffset()
+    return
+  }
+  applyAvatarCropDrag(event.touches?.[0])
+}
+
+function endAvatarCropTouch() {
+  avatarCropDragState.value = null
+  avatarCropPinchState.value = null
+}
+
+function startAvatarCropDrag(event) {
+  startAvatarCropPoint(event)
+  window.addEventListener('mousemove', handleAvatarCropMouseMove)
+  window.addEventListener('mouseup', endAvatarCropDrag)
+}
+
+function startAvatarCropPoint(point) {
+  avatarCropDragState.value = {
+    x: point.clientX,
+    y: point.clientY,
+    originX: avatarCropOffset.value.x,
+    originY: avatarCropOffset.value.y,
+  }
+}
+
+function handleAvatarCropMouseMove(event) {
+  applyAvatarCropDrag(event)
+}
+
+function applyAvatarCropDrag(point) {
+  if (!avatarCropDragState.value || !point)
+    return
+  avatarCropOffset.value = {
+    x: avatarCropDragState.value.originX + point.clientX - avatarCropDragState.value.x,
+    y: avatarCropDragState.value.originY + point.clientY - avatarCropDragState.value.y,
+  }
+  clampAvatarCropOffset()
+}
+
+function endAvatarCropDrag() {
+  avatarCropDragState.value = null
+  avatarCropPinchState.value = null
+  window.removeEventListener('mousemove', handleAvatarCropMouseMove)
+  window.removeEventListener('mouseup', endAvatarCropDrag)
+}
+
+function clampAvatarCropOffset() {
+  const maxX = Math.max(0, (avatarCropRenderedSize.value.width - avatarCropSize.value) / 2)
+  const maxY = Math.max(0, (avatarCropRenderedSize.value.height - avatarCropSize.value) / 2)
+  avatarCropOffset.value = {
+    x: Math.min(maxX, Math.max(-maxX, avatarCropOffset.value.x)),
+    y: Math.min(maxY, Math.max(-maxY, avatarCropOffset.value.y)),
+  }
+}
+
+function getAvatarCropTouchDistance(touches) {
+  const [a, b] = touches
+  const x = a.clientX - b.clientX
+  const y = a.clientY - b.clientY
+  return Math.sqrt(x * x + y * y)
+}
+
+async function confirmAvatarCrop() {
+  if (avatarUploading.value || avatarCropProcessing.value || !avatarCropSource.value)
+    return
+  avatarCropProcessing.value = true
+  try {
+    const file = await cropAvatarToFile()
+    await uploadAvatarFile(file)
+    avatarCropVisible.value = false
+    avatarCropSource.value = ''
+    unlockBodyScroll()
+    releaseAvatarCropObjectUrl()
+  }
+  catch (error) {
+    window.$message.error(error.message || '头像上传失败')
+  }
+  finally {
+    avatarCropProcessing.value = false
+  }
+}
+
+function cropAvatarToFile() {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => {
+      const scale = avatarCropRenderScale.value
+      const sourceSize = avatarCropSize.value / scale
+      const sx = Math.min(
+        avatarCropImageMeta.value.width - sourceSize,
+        Math.max(0, avatarCropImageMeta.value.width / 2 - sourceSize / 2 - avatarCropOffset.value.x / scale),
+      )
+      const sy = Math.min(
+        avatarCropImageMeta.value.height - sourceSize,
+        Math.max(0, avatarCropImageMeta.value.height / 2 - sourceSize / 2 - avatarCropOffset.value.y / scale),
+      )
+      const canvas = document.createElement('canvas')
+      canvas.width = avatarOutputSize
+      canvas.height = avatarOutputSize
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('图片裁剪失败'))
+        return
+      }
+      ctx.clearRect(0, 0, avatarOutputSize, avatarOutputSize)
+      applyAvatarCropClip(ctx)
+      ctx.drawImage(image, sx, sy, sourceSize, sourceSize, 0, 0, avatarOutputSize, avatarOutputSize)
+      const mimeType = avatarCropShape.value === 'square' ? 'image/jpeg' : 'image/png'
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('图片裁剪失败'))
+          return
+        }
+        const ext = mimeType === 'image/png' ? 'png' : 'jpg'
+        resolve(new File([blob], `avatar-${Date.now()}.${ext}`, { type: mimeType }))
+      }, mimeType, 0.92)
+    }
+    image.onerror = () => reject(new Error('图片读取失败'))
+    image.src = avatarCropSource.value
+  })
+}
+
+function applyAvatarCropClip(ctx) {
+  if (avatarCropShape.value === 'square')
+    return
+  if (avatarCropShape.value === 'circle') {
+    ctx.beginPath()
+    ctx.arc(avatarOutputSize / 2, avatarOutputSize / 2, avatarOutputSize / 2, 0, Math.PI * 2)
+    ctx.clip()
+    return
+  }
+  const radius = Math.round(avatarOutputSize * 0.18)
+  ctx.beginPath()
+  ctx.moveTo(radius, 0)
+  ctx.arcTo(avatarOutputSize, 0, avatarOutputSize, avatarOutputSize, radius)
+  ctx.arcTo(avatarOutputSize, avatarOutputSize, 0, avatarOutputSize, radius)
+  ctx.arcTo(0, avatarOutputSize, 0, 0, radius)
+  ctx.arcTo(0, 0, avatarOutputSize, 0, radius)
+  ctx.closePath()
+  ctx.clip()
+}
+
+function lockBodyScroll() {
+  document.body.style.overflow = 'hidden'
+}
+
+function unlockBodyScroll() {
+  document.body.style.overflow = ''
+}
+
+async function uploadAvatarFile(file) {
+  avatarUploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('businessType', 'avatar')
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: uploadHeaders.value,
+      body: formData,
+    })
+    const res = await response.json()
+    if (!response.ok || !(res?.code === 200 || res?.respCode === '0000') || !res?.data) {
+      throw new Error(res?.msg || res?.message || '头像上传失败')
+    }
+
+    const avatar = res.data.fileId || res.data.filePath || res.data.id
+    if (!avatar)
+      throw new Error('头像上传失败')
+
+    const updateRes = await request.post('/system/user/updateProfile', {
+      username: userStore.username,
+      realName: userStore.realName,
+      phone: userStore.phone,
+      email: userStore.email,
+      avatar,
+    })
+    if (updateRes.code !== 200) {
+      throw new Error(updateRes.msg || '头像更新失败')
+    }
+
+    userStore.setUser({ ...userStore.userInfo, avatar })
+    await loadAvatar()
+    window.$message.success('头像更新成功')
+  }
+  finally {
+    avatarUploading.value = false
+  }
+}
+
+function releaseAvatarCropObjectUrl() {
+  if (avatarCropObjectUrl?.startsWith('blob:'))
+    URL.revokeObjectURL(avatarCropObjectUrl)
+  avatarCropObjectUrl = ''
 }
 
 async function loadAvatar() {
@@ -745,33 +1151,6 @@ async function loadAvatar() {
   }
   catch {
     avatarSrc.value = ''
-  }
-}
-
-async function handleAvatarUploadFinish({ event }) {
-  try {
-    const res = JSON.parse(event.target.response)
-    if (res.code === 200 && res.data) {
-      const avatar = res.data.fileId || res.data.filePath
-      const updateRes = await request.post('/system/user/updateProfile', {
-        username: userStore.username,
-        realName: userStore.realName,
-        phone: userStore.phone,
-        email: userStore.email,
-        avatar,
-      })
-      if (updateRes.code === 200) {
-        userStore.setUser({ ...userStore.userInfo, avatar })
-        loadAvatar()
-        window.$message.success('头像更新成功')
-      }
-    }
-    else {
-      window.$message.error(res.msg || '头像上传失败')
-    }
-  }
-  catch (error) {
-    window.$message.error(error.message || '头像上传失败')
   }
 }
 
@@ -807,6 +1186,11 @@ onMounted(() => {
       loadSocialBindings()
     }
   })
+})
+
+onBeforeUnmount(() => {
+  releaseAvatarCropObjectUrl()
+  endAvatarCropDrag()
 })
 </script>
 
@@ -858,6 +1242,35 @@ onMounted(() => {
 
 .avatar-container {
   position: relative;
+  cursor: pointer;
+}
+
+.avatar-container.is-uploading {
+  cursor: wait;
+}
+
+.avatar-file-input {
+  display: none;
+}
+
+.avatar-upload-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(2px);
+}
+
+.avatar-upload-mask :deep(.n-spin-body) {
+  color: #fff;
 }
 
 .avatar-edit-btn {
@@ -880,6 +1293,277 @@ onMounted(() => {
 
 .avatar-edit-btn:hover {
   transform: scale(1.1);
+}
+
+.avatar-cropper-full {
+  position: fixed;
+  z-index: 2147483000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  color: #fff;
+  background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.avatar-cropper-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 56px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 6%, rgba(37, 99, 235, 0.2), transparent 28%),
+    linear-gradient(180deg, #020617, #0f172a);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+}
+
+.avatar-cropper-topbar {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px 12px;
+  box-sizing: border-box;
+}
+
+.cropper-icon-button,
+.cropper-reset-button,
+.cropper-shape-tab,
+.cropper-action {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cropper-icon-button:disabled,
+.cropper-reset-button:disabled,
+.cropper-shape-tab:disabled,
+.cropper-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.cropper-icon-button {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cropper-icon-button i {
+  font-size: 24px;
+}
+
+.cropper-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.cropper-title-main,
+.cropper-title-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cropper-title-main {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.cropper-title-sub {
+  margin-top: 4px;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cropper-reset-button {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 800;
+  background: transparent;
+}
+
+.cropper-reset-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.avatar-cropper-stage {
+  position: relative;
+  min-height: 320px;
+  flex: 1;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.avatar-cropper-stage:active {
+  cursor: grabbing;
+}
+
+.avatar-cropper-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+  max-height: none;
+  transform-origin: center center;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.avatar-cropper-frame,
+.avatar-cropper-grid {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  overflow: hidden;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.avatar-cropper-frame {
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(37, 99, 235, 0.52),
+    0 0 0 9999px rgba(2, 6, 23, 0.66),
+    0 18px 70px rgba(0, 0, 0, 0.34);
+}
+
+.avatar-cropper-frame--circle,
+.avatar-cropper-grid--circle {
+  border-radius: 9999px;
+}
+
+.avatar-cropper-frame--round,
+.avatar-cropper-grid--round {
+  border-radius: 20%;
+}
+
+.avatar-cropper-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  opacity: 0.58;
+}
+
+.avatar-cropper-grid-line {
+  border-right: 1px solid rgba(255, 255, 255, 0.32);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.32);
+}
+
+.avatar-cropper-panel {
+  padding: 14px 20px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(2, 6, 23, 0.84);
+  backdrop-filter: blur(24px);
+}
+
+.cropper-shape-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.cropper-shape-tab {
+  display: flex;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cropper-shape-tab i {
+  font-size: 18px;
+}
+
+.cropper-shape-tab.active {
+  border-color: rgba(96, 165, 250, 0.6);
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+}
+
+.cropper-zoom-control {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 14px;
+  max-width: 520px;
+  margin: 14px auto 0;
+  color: #94a3b8;
+}
+
+.cropper-zoom-control i {
+  font-size: 20px;
+}
+
+.cropper-zoom-control :deep(.n-slider-rail__fill) {
+  background: #fff !important;
+}
+
+.cropper-zoom-control :deep(.n-slider-handle) {
+  border-color: #fff !important;
+  background: #fff !important;
+}
+
+.cropper-actions {
+  display: grid;
+  grid-template-columns: 0.84fr 1.16fr;
+  gap: 12px;
+  max-width: 520px;
+  margin: 16px auto 0;
+}
+
+.cropper-action {
+  height: 46px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.cropper-action--ghost {
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cropper-action--primary {
+  color: #0f172a;
+  background: #fff;
+}
+
+@media (max-width: 640px) {
+  .avatar-cropper-full {
+    padding: 14px;
+  }
+
+  .avatar-cropper-shell {
+    width: calc(100vw - 28px);
+    height: min(680px, calc(100vh - 28px));
+    border-radius: 14px;
+  }
 }
 
 .user-title-area {

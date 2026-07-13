@@ -162,17 +162,17 @@ function handleSelect(item) {
 .forge-side-menu-item:hover {
   color: var(--side-menu-text-color-hover);
   background: var(--side-menu-bg-color-hover);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side-menu-text-color-hover) 12%, transparent);
-  transform: translateX(3px);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--side-menu-text-color-hover) 8%, transparent);
+  transform: translateX(1px);
 }
 
 .forge-side-menu-item:hover::after {
-  opacity: 0.045;
+  opacity: 0.032;
   transform: scaleX(1);
 }
 
 .forge-side-menu-item:active {
-  transform: translateX(1px) scale(0.985);
+  transform: translateX(0.5px) scale(0.992);
 }
 
 .forge-side-menu-item:active::after {
@@ -231,7 +231,7 @@ function handleSelect(item) {
 }
 
 .forge-side-menu-item:hover .forge-side-menu-icon {
-  transform: scale(1.12);
+  transform: scale(1.04);
 }
 
 .forge-side-menu-node.is-child-active:not(.is-active) > .forge-side-menu-item:not(:hover) .forge-side-menu-icon {
@@ -245,7 +245,7 @@ function handleSelect(item) {
 
 .forge-side-menu-node.is-active > .forge-side-menu-item .forge-side-menu-icon {
   color: var(--side-menu-icon-color-active);
-  transform: scale(1.08);
+  transform: scale(1.03);
 }
 
 .forge-side-menu-icon .icon-renderer,
@@ -303,11 +303,11 @@ function handleSelect(item) {
 
 .forge-side-menu--collapsed .forge-side-menu-item:hover,
 .forge-side-menu--collapsed .forge-side-menu-node.is-active > .forge-side-menu-item {
-  transform: scale(1.04);
+  transform: scale(1.015);
 }
 
 .forge-side-menu--collapsed .forge-side-menu-item:active {
-  transform: scale(0.96);
+  transform: scale(0.985);
 }
 
 .forge-side-menu--collapsed .forge-side-menu-label,
