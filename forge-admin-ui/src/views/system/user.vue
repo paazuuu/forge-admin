@@ -1399,11 +1399,9 @@ function resolveRoleDictValue(row = {}, field) {
 }
 
 function getLeftOrgNodeIcon(node = {}) {
-  if (!node.parentId || Number(node.parentId) === 0)
-    return 'i-material-symbols:account-tree-rounded'
-  if (node.children?.length)
-    return 'i-material-symbols:corporate-fare-rounded'
-  return 'i-material-symbols:groups-rounded'
+  return node.children?.length
+    ? 'i-material-symbols:account-tree-rounded'
+    : 'i-material-symbols:domain-rounded'
 }
 
 function getLeftOrgNodeTone(node = {}) {
@@ -2594,15 +2592,15 @@ async function handleSubmitBatchTenant() {
 }
 
 .org-tree-all-node:hover {
-  background-color: color-mix(in srgb, var(--primary-color, #2563eb) 4%, var(--bg-secondary, #f6f8fb));
-  border-color: transparent;
+  background-color: var(--bg-secondary, #f8fafc);
+  border-color: var(--border-light, #e5e7eb);
 }
 
 .org-tree-all-node.is-selected {
-  background: color-mix(in srgb, var(--primary-color, #2563eb) 9%, var(--bg-primary, #fff)) !important;
-  border-color: transparent;
+  background: #f3f7ff !important;
+  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 26%, var(--border-light, #e5e7eb));
   color: var(--primary-color, #2563eb);
-  box-shadow: inset 2px 0 0 var(--primary-color, #2563eb);
+  box-shadow: none;
 }
 
 .org-tree-all-node i {
@@ -2611,6 +2609,44 @@ async function handleSubmitBatchTenant() {
 
 .org-tree-content :deep(.premium-tree) {
   padding-top: 2px;
+}
+
+.org-tree-content :deep(.premium-tree-row) {
+  min-height: 30px;
+  border-radius: 5px;
+  border-color: transparent;
+}
+
+.org-tree-content :deep(.premium-tree-row:hover) {
+  background: var(--bg-secondary, #f8fafc);
+  border-color: var(--border-light, #e5e7eb);
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected) {
+  background: #f3f7ff;
+  border-color: color-mix(in srgb, var(--primary-color, #2563eb) 26%, var(--border-light, #e5e7eb));
+  color: var(--text-primary, #0f172a);
+  box-shadow: none;
+}
+
+.org-tree-content :deep(.premium-tree-icon) {
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+  color: #94a3b8;
+}
+
+.org-tree-content :deep(.premium-tree-icon i) {
+  font-size: 13px;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-icon) {
+  color: var(--primary-color, #2563eb);
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: var(--text-primary, #0f172a);
+  font-weight: 650;
 }
 
 .org-tree-content::-webkit-scrollbar {
@@ -2881,7 +2917,22 @@ async function handleSubmitBatchTenant() {
   background: rgba(37, 99, 235, 0.18) !important;
   border-color: rgba(96, 165, 250, 0.28);
   color: #60a5fa;
-  box-shadow: inset 3px 0 0 #60a5fa;
+  box-shadow: none;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row:hover) {
+  background: #162033;
+  border-color: #334155;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row.is-selected) {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: none;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #f1f5f9;
 }
 
 .dark .org-tree-header :deep(.n-button) {

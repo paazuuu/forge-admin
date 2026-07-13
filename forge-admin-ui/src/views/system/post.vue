@@ -483,8 +483,8 @@ function getLeftOrgNodeIcon(node = {}) {
   if (!node.parentId || Number(node.parentId) === 0)
     return 'i-material-symbols:account-tree-rounded'
   if (node.children?.length)
-    return 'i-material-symbols:corporate-fare-rounded'
-  return 'i-material-symbols:groups-rounded'
+    return 'i-material-symbols:account-tree-rounded'
+  return 'i-material-symbols:domain-rounded'
 }
 
 function getLeftOrgNodeTone(node = {}) {
@@ -784,14 +784,14 @@ function handleDelete(row) {
 }
 
 .org-tree-all-node:hover {
-  border-color: transparent;
-  background-color: rgba(37, 99, 235, 0.04);
+  border-color: #e5e7eb;
+  background-color: #f8fafc;
 }
 
 .org-tree-all-node.is-selected {
-  border-color: transparent;
-  background: rgba(37, 99, 235, 0.09) !important;
-  box-shadow: inset 2px 0 0 #2563eb;
+  border-color: color-mix(in srgb, #2563eb 26%, #e5e7eb);
+  background: #f3f7ff !important;
+  box-shadow: none;
   color: #2563eb;
 }
 
@@ -801,6 +801,44 @@ function handleDelete(row) {
 
 .org-tree-content :deep(.premium-tree) {
   padding-top: 2px;
+}
+
+.org-tree-content :deep(.premium-tree-row) {
+  min-height: 30px;
+  border-radius: 5px;
+  border-color: transparent;
+}
+
+.org-tree-content :deep(.premium-tree-row:hover) {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected) {
+  background: #f3f7ff;
+  border-color: color-mix(in srgb, #2563eb 26%, #e5e7eb);
+  color: #0f172a;
+  box-shadow: none;
+}
+
+.org-tree-content :deep(.premium-tree-icon) {
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+  color: #94a3b8;
+}
+
+.org-tree-content :deep(.premium-tree-icon i) {
+  font-size: 13px;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-icon) {
+  color: #2563eb;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #0f172a;
+  font-weight: 650;
 }
 
 .org-tree-content::-webkit-scrollbar {
@@ -916,8 +954,25 @@ function handleDelete(row) {
 }
 
 .dark .org-tree-all-node.is-selected {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.12) 100%) !important;
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(37, 99, 235, 0.18) !important;
   color: #60a5fa;
+  box-shadow: none;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row:hover) {
+  background: #162033;
+  border-color: #334155;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row.is-selected) {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: none;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #f1f5f9;
 }
 
 .dark .org-tree-collapsed-hint {

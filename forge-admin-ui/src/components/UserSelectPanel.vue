@@ -318,11 +318,9 @@ function filterOrgTree(list = [], keyword) {
 }
 
 function getOrgNodeIcon(node = {}) {
-  if (!node.parentId || Number(node.parentId) === 0)
-    return 'i-material-symbols:account-tree-rounded'
-  if (node.children?.length)
-    return 'i-material-symbols:corporate-fare-rounded'
-  return 'i-material-symbols:groups-rounded'
+  return node.children?.length
+    ? 'i-material-symbols:account-tree-rounded'
+    : 'i-material-symbols:domain-rounded'
 }
 
 function getOrgNodeTone(node = {}) {
@@ -381,8 +379,51 @@ function handleClose() {
   padding: 8px;
 }
 
+.panel-left-tree :deep(.n-spin-content) {
+  width: 100%;
+  align-items: stretch;
+}
+
 .panel-left-tree :deep(.premium-tree) {
   padding-top: 2px;
+}
+
+.panel-left-tree :deep(.premium-tree-row) {
+  min-height: 30px;
+  border-radius: 5px;
+  border-color: transparent;
+}
+
+.panel-left-tree :deep(.premium-tree-row:hover) {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+.panel-left-tree :deep(.premium-tree-row.is-selected) {
+  background: #f3f7ff;
+  border-color: color-mix(in srgb, #2563eb 26%, #e5e7eb);
+  color: #0f172a;
+  box-shadow: none;
+}
+
+.panel-left-tree :deep(.premium-tree-icon) {
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+  color: #94a3b8;
+}
+
+.panel-left-tree :deep(.premium-tree-icon i) {
+  font-size: 13px;
+}
+
+.panel-left-tree :deep(.premium-tree-row.is-selected .premium-tree-icon) {
+  color: #2563eb;
+}
+
+.panel-left-tree :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #0f172a;
+  font-weight: 650;
 }
 
 .panel-right {
@@ -517,6 +558,21 @@ function handleClose() {
 
 .dark .panel-left-header {
   border-color: #374151;
+}
+
+.dark .panel-left-tree :deep(.premium-tree-row:hover) {
+  background: #162033;
+  border-color: #334155;
+}
+
+.dark .panel-left-tree :deep(.premium-tree-row.is-selected) {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: none;
+}
+
+.dark .panel-left-tree :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #f1f5f9;
 }
 
 .dark .panel-right-header,

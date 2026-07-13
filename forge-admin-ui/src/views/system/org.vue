@@ -856,8 +856,8 @@ function getLeftOrgNodeIcon(node = {}) {
   if (!node.parentId || Number(node.parentId) === 0)
     return 'i-material-symbols:account-tree-rounded'
   if (node.children?.length)
-    return 'i-material-symbols:corporate-fare-rounded'
-  return 'i-material-symbols:groups-rounded'
+    return 'i-material-symbols:account-tree-rounded'
+  return 'i-material-symbols:domain-rounded'
 }
 
 function getLeftOrgNodeTone(node = {}) {
@@ -872,7 +872,7 @@ function orgTreeActions() {
       key: 'addChild',
       title: '新增下级组织',
       label: '新增下级',
-      icon: 'i-material-symbols:create-new-folder-outline-rounded',
+      icon: 'i-material-symbols:add-circle-outline-rounded',
       type: 'primary',
     },
     {
@@ -1503,6 +1503,53 @@ function resolveUserDisplayName(row = {}) {
   padding: 6px;
 }
 
+.org-tree-content :deep(.n-spin-content) {
+  width: 100%;
+  align-items: stretch;
+}
+
+.org-tree-content :deep(.premium-tree) {
+  padding-top: 2px;
+}
+
+.org-tree-content :deep(.premium-tree-row) {
+  min-height: 30px;
+  border-radius: 5px;
+  border-color: transparent;
+}
+
+.org-tree-content :deep(.premium-tree-row:hover) {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected) {
+  background: #f3f7ff;
+  border-color: color-mix(in srgb, #2563eb 26%, #e5e7eb);
+  color: #0f172a;
+  box-shadow: none;
+}
+
+.org-tree-content :deep(.premium-tree-icon) {
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+  color: #94a3b8;
+}
+
+.org-tree-content :deep(.premium-tree-icon i) {
+  font-size: 13px;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-icon) {
+  color: #2563eb;
+}
+
+.org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #0f172a;
+  font-weight: 650;
+}
+
 .org-tree-collapsed-hint {
   flex: 1;
   display: flex;
@@ -1854,6 +1901,21 @@ function resolveUserDisplayName(row = {}) {
 .dark .org-workspace-tabs :deep(.n-tabs-nav) {
   border-color: #334155;
   background: #0f172a;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row:hover) {
+  background: #162033;
+  border-color: #334155;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row.is-selected) {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: none;
+}
+
+.dark .org-tree-content :deep(.premium-tree-row.is-selected .premium-tree-title) {
+  color: #f1f5f9;
 }
 
 .dark .post-item {

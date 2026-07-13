@@ -1,386 +1,303 @@
 <template>
   <div class="home-page">
-    <!-- 顶部大统计卡片 -->
-    <div class="stats-grid">
-      <div class="stat-card online" @click="goTo('/system/online')">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="i-material-symbols:person-pin-rounded" />
-          </div>
-          <div class="stat-trend up">
-            <i class="i-material-symbols:trending-up" />
-            <span>12%</span>
-          </div>
+    <section class="welcome-pane dashboard-pane">
+      <div class="welcome-profile">
+        <div class="welcome-avatar">
+          <img :src="welcomeAvatar" alt="用户头像">
         </div>
-        <div class="stat-body">
-          <div class="stat-value">
-            {{ onlineCount }}
+        <div class="welcome-copy">
+          <div class="welcome-kicker">
+            Forge Admin 工作台
           </div>
-          <div class="stat-title">
-            在线用户
-          </div>
-          <div class="stat-desc">
-            当前活跃会话数
-          </div>
+          <h1>{{ welcomeTitle }}</h1>
+          <p>聚合审批、应用搭建、系统运维与消息通知，优先处理今天最需要关注的事项。</p>
         </div>
       </div>
 
-      <div class="stat-card login" @click="goTo('/system/login-log')">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="i-material-symbols:login-rounded" />
-          </div>
-          <div class="stat-trend up">
-            <i class="i-material-symbols:trending-up" />
-            <span>8%</span>
-          </div>
-        </div>
-        <div class="stat-body">
-          <div class="stat-value">
-            {{ todayLoginCount }}
-          </div>
-          <div class="stat-title">
-            今日登录
-          </div>
-          <div class="stat-desc">
-            较昨日登录增长
-          </div>
-        </div>
+      <div class="welcome-metrics">
+        <button
+          v-for="metric in topMetrics"
+          :key="metric.label"
+          type="button"
+          class="welcome-metric"
+          @click="goTo(metric.path)"
+        >
+          <span>{{ metric.label }}</span>
+          <strong>{{ metric.value }}</strong>
+          <em>{{ metric.desc }}</em>
+        </button>
       </div>
 
-      <div class="stat-card user" @click="goTo('/system/user')">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="i-material-symbols:group-rounded" />
-          </div>
-          <div class="stat-trend up">
-            <i class="i-material-symbols:trending-up" />
-            <span>5%</span>
-          </div>
+      <div class="guide-pane">
+        <div class="guide-head">
+          <span>业务系统搭建路径</span>
+          <button type="button" @click="goTo('/app-center')">
+            进入应用中心
+            <i class="i-material-symbols:chevron-right-rounded" />
+          </button>
         </div>
-        <div class="stat-body">
-          <div class="stat-value">
-            {{ totalUserCount }}
-          </div>
-          <div class="stat-title">
-            总用户数
-          </div>
-          <div class="stat-desc">
-            系统注册用户总数
-          </div>
+        <div class="guide-list">
+          <button
+            v-for="(step, index) in guideSteps"
+            :key="step.title"
+            type="button"
+            class="guide-item"
+            @click="goTo(step.path)"
+          >
+            <span class="guide-index">{{ String(index + 1).padStart(2, '0') }}</span>
+            <span class="guide-icon"><i :class="step.icon" /></span>
+            <span class="guide-text">
+              <strong>{{ step.title }}</strong>
+              <em>{{ step.desc }}</em>
+            </span>
+          </button>
         </div>
-      </div>
-
-      <div class="stat-card todo" @click="goTo('/flow/todo')">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="i-material-symbols:pending-actions" />
-          </div>
-          <div v-if="todoCount > 0" class="stat-badge pulse">
-            {{ todoCount > 99 ? '99+' : todoCount }}
-          </div>
-        </div>
-        <div class="stat-body">
-          <div class="stat-value">
-            {{ todoCount }}
-          </div>
-          <div class="stat-title">
-            待办任务
-          </div>
-          <div class="stat-desc">
-            需要处理的审批任务
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-card done" @click="goTo('/flow/done')">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="i-material-symbols:task-alt" />
-          </div>
-        </div>
-        <div class="stat-body">
-          <div class="stat-value">
-            {{ doneCount }}
-          </div>
-          <div class="stat-title">
-            已办任务
-          </div>
-          <div class="stat-desc">
-            已完成的审批任务
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-card started" @click="goTo('/flow/started')">
-        <div class="stat-header">
-          <div class="stat-icon">
-            <i class="i-material-symbols:send" />
-          </div>
-          <div v-if="pendingStarted > 0" class="stat-badge">
-            {{ pendingStarted }}审批中
-          </div>
-        </div>
-        <div class="stat-body">
-          <div class="stat-value">
-            {{ startedCount }}
-          </div>
-          <div class="stat-title">
-            发起的流程
-          </div>
-          <div class="stat-desc">
-            我发起的流程实例
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <section class="community-support-panel">
-      <div class="community-support-copy">
-        <div class="community-eyebrow">
-          <i class="i-material-symbols:forum-rounded" />
-          <span>ForgeAdmin 社区</span>
-        </div>
-        <h2>把复杂后台，聊成可落地的方案</h2>
-        <p>
-          低代码配置、流程审批、插件扩展、业务二开，很多问题不是一句文档能讲清楚。添加维护者微信，把你的场景、截图和想法发过来，我们一起把路径理顺。
-        </p>
-        <div class="community-support-highlights">
-          <span>问题排查</span>
-          <span>二开建议</span>
-          <span>版本动态</span>
-        </div>
-      </div>
-      <div class="community-qr-grid">
-        <article class="community-qr-card primary">
-          <div class="community-qr-card-header">
-            <span>添加维护者微信</span>
-            <em>交流咨询</em>
-          </div>
-          <div class="community-qr-duo">
-            <div class="community-qr-person">
-              <div class="community-qr-preview">
-                <n-image
-                  class="community-qr-image"
-                  :src="wechatGroupQr"
-                  :preview-src="wechatGroupQr"
-                  object-fit="contain"
-                  alt="ForgeAdmin 维护者微信二维码"
-                />
-                <span class="community-qr-zoom">点击放大</span>
-              </div>
-              <span>维护者 A</span>
-            </div>
-            <div class="community-qr-person">
-              <div class="community-qr-preview">
-                <n-image
-                  class="community-qr-image"
-                  :src="wechatGroupQrAlt"
-                  :preview-src="wechatGroupQrAlt"
-                  object-fit="contain"
-                  alt="ForgeAdmin 维护者微信二维码"
-                />
-                <span class="community-qr-zoom">点击放大</span>
-              </div>
-              <span>维护者 B</span>
-            </div>
-          </div>
-          <p>扫码添加任一维护者，备注 ForgeAdmin，方便确认来源并拉你进入后续交流。</p>
-        </article>
-        <article class="community-qr-card support">
-          <div class="community-qr-card-header">
-            <span>支持维护</span>
-            <em>随心支持</em>
-          </div>
-          <div class="community-qr-preview">
-            <n-image
-              class="community-qr-image"
-              :src="wechatSupportQr"
-              :preview-src="wechatSupportQr"
-              object-fit="contain"
-              alt="ForgeAdmin 维护支持二维码"
-            />
-            <span class="community-qr-zoom">点击放大</span>
-          </div>
-          <p>如果这个项目帮你节省了时间，可以请维护者喝杯咖啡，支持持续优化。</p>
-        </article>
       </div>
     </section>
 
-    <!-- 中间内容区域 -->
-    <div class="content-grid">
-      <!-- 左侧：待办任务大列表 -->
-      <div class="todo-panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <i class="i-material-symbols:pending-actions" />
-            <span>待办任务</span>
-            <n-badge v-if="todoCount > 0" :value="todoCount" :max="99" type="warning" />
-          </div>
-          <n-button text class="panel-link" @click="goTo('/flow/todo')">
-            全部
-            <i class="i-material-symbols:chevron-right" />
-          </n-button>
-        </div>
-        <n-spin :show="todoLoading">
-          <div v-if="todoList.length === 0" class="empty-state">
-            <i class="i-material-symbols:check-circle-outline empty-icon" />
-            <div class="empty-text">
-              暂无待办任务
+    <section class="dashboard-pane support-pane top-support-pane">
+      <div class="support-copy">
+        <span>ForgeAdmin 社区</span>
+        <strong>低代码配置、流程审批、插件扩展、业务二开，添加维护者微信，把场景和截图发过来一起梳理。</strong>
+      </div>
+      <div class="support-qrs">
+        <n-image
+          class="support-qr"
+          :src="wechatGroupQr"
+          :preview-src="wechatGroupQr"
+          object-fit="contain"
+          alt="ForgeAdmin 维护者微信二维码"
+        />
+        <n-image
+          class="support-qr"
+          :src="wechatGroupQrAlt"
+          :preview-src="wechatGroupQrAlt"
+          object-fit="contain"
+          alt="ForgeAdmin 维护者微信二维码"
+        />
+        <n-image
+          class="support-qr"
+          :src="wechatSupportQr"
+          :preview-src="wechatSupportQr"
+          object-fit="contain"
+          alt="ForgeAdmin 维护支持二维码"
+        />
+      </div>
+    </section>
+
+    <section class="workspace-grid">
+      <div class="main-column">
+        <section class="dashboard-pane flow-pane">
+          <div class="dashboard-header">
+            <div>
+              <h2>审批中心</h2>
+              <p>按当前角色聚合流程任务，待办优先处理。</p>
             </div>
-            <div class="empty-desc">
-              所有审批任务已处理完毕
-            </div>
+            <button type="button" class="text-link" @click="goTo('/flow/todo')">
+              查看全部
+              <i class="i-material-symbols:chevron-right-rounded" />
+            </button>
           </div>
-          <n-scrollbar v-else style="max-height: 320px">
-            <div class="todo-list">
+
+          <div class="flow-grid">
+            <button
+              v-for="item in flowTiles"
+              :key="item.title"
+              type="button"
+              class="flow-tile"
+              :class="item.tone"
+              @click="goTo(item.path)"
+            >
+              <span class="flow-icon"><i :class="item.icon" /></span>
+              <span class="flow-title">{{ item.title }}</span>
+              <strong>{{ item.value }}</strong>
+              <em>{{ item.desc }}</em>
+            </button>
+          </div>
+        </section>
+
+        <section class="dashboard-pane todo-pane">
+          <div class="dashboard-header">
+            <div>
+              <h2>待办任务</h2>
+              <p>展示最近需要处理的审批事项。</p>
+            </div>
+            <button type="button" class="text-link" @click="goTo('/flow/todo')">
+              全部待办
+              <i class="i-material-symbols:chevron-right-rounded" />
+            </button>
+          </div>
+
+          <n-spin :show="todoLoading">
+            <div v-if="todoList.length === 0" class="empty-state">
+              <i class="i-material-symbols:task-alt-rounded" />
+              <strong>暂无待办任务</strong>
+              <span>所有审批任务已处理完毕。</span>
+            </div>
+            <div v-else class="todo-list">
               <article
                 v-for="task in todoList"
                 :key="task.taskId || task.id"
                 class="todo-item"
                 @click="openTodoTask(task)"
               >
-                <div class="todo-status" :class="task.status === 0 && !task.assignee ? 'candidate' : 'active'">
+                <span class="todo-status" :class="task.status === 0 && !task.assignee ? 'candidate' : 'active'">
                   {{ task.status === 0 && !task.assignee ? '待签收' : '待处理' }}
-                </div>
+                </span>
                 <div class="todo-main">
                   <div class="todo-title-row">
-                    <span class="todo-title">{{ task.title || task.processTitle || task.taskName || '-' }}</span>
+                    <strong>{{ task.title || task.processTitle || task.taskName || '-' }}</strong>
                     <span v-if="task.priority >= 2" class="priority-tag" :class="getPriorityClass(task.priority)">
                       {{ getPriorityText(task.priority) }}
                     </span>
                   </div>
                   <div class="todo-meta">
-                    <span><span class="todo-meta-label">节点</span>{{ task.taskName || '-' }}</span>
-                    <span><span class="todo-meta-label">发起人</span>{{ task.startUserName || '-' }}</span>
-                    <span v-if="task.startDeptName"><span class="todo-meta-label">部门</span>{{ task.startDeptName }}</span>
+                    <span>节点：{{ task.taskName || '-' }}</span>
+                    <span>发起人：{{ task.startUserName || '-' }}</span>
+                    <span v-if="task.startDeptName">部门：{{ task.startDeptName }}</span>
                   </div>
                 </div>
                 <div class="todo-side">
-                  <span class="todo-time">{{ formatTime(task.createTime) }}</span>
-                  <button type="button" class="todo-action" @click.stop="openTodoTask(task)">
-                    <span>处理</span>
-                    <i class="i-material-symbols:chevron-right" />
+                  <span>{{ formatTime(task.createTime) }}</span>
+                  <button type="button" @click.stop="openTodoTask(task)">
+                    处理
+                    <i class="i-material-symbols:chevron-right-rounded" />
                   </button>
                 </div>
               </article>
             </div>
-          </n-scrollbar>
-        </n-spin>
-      </div>
+          </n-spin>
+        </section>
 
-      <!-- 右侧：通知公告 + 快捷入口 -->
-      <div class="right-panel">
-        <!-- 通知公告 -->
-        <div class="notice-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="i-material-symbols:notifications-active" />
-              <span>通知公告</span>
-              <n-badge v-if="unreadNotice > 0" :value="unreadNotice" :max="99" type="info" />
-            </div>
-            <n-button text type="primary" @click="goTo('/system/notice-list')">
-              更多 <i class="i-material-symbols:arrow-right ml-4" />
-            </n-button>
-          </div>
-          <n-scrollbar style="max-height: 280px">
-            <div v-if="noticeList.length === 0" class="empty-state small">
-              <i class="i-material-symbols:inbox empty-icon" />
-              <div class="empty-text">
-                暂无公告
+        <section class="app-row">
+          <div class="dashboard-pane app-pane">
+            <div class="dashboard-header">
+              <div>
+                <h2>我的应用</h2>
+                <p>常用业务搭建与应用入口。</p>
               </div>
             </div>
-            <div v-else class="notice-list">
-              <div
-                v-for="notice in noticeList"
-                :key="notice.noticeId"
-                class="notice-item"
-                :class="{ unread: notice.isRead === 0 }"
-                @click="openNotice(notice)"
+            <div class="app-list">
+              <button
+                v-for="app in appShortcuts"
+                :key="app.title"
+                type="button"
+                class="app-item"
+                @click="goTo(app.path)"
               >
-                <div class="notice-left">
-                  <span v-if="notice.isRead === 0" class="unread-dot" />
-                  <div class="notice-content">
-                    <div class="notice-title">
-                      {{ notice.noticeTitle }}
-                    </div>
-                    <div class="notice-meta">
-                      <n-tag :type="getNoticeTypeColor(notice.noticeType)" size="small">
-                        {{ getNoticeTypeText(notice.noticeType) }}
-                      </n-tag>
-                    </div>
-                  </div>
-                </div>
-                <div class="notice-time">
-                  {{ formatTime(notice.publishTime) }}
-                </div>
-              </div>
-            </div>
-          </n-scrollbar>
-        </div>
-
-        <!-- 快捷入口 -->
-        <div class="quick-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="i-material-symbols:grid-view-rounded" />
-              <span>快捷入口</span>
+                <span class="app-icon"><i :class="app.icon" /></span>
+                <span>
+                  <strong>{{ app.title }}</strong>
+                  <em>{{ app.desc }}</em>
+                </span>
+              </button>
             </div>
           </div>
-          <div class="quick-grid">
-            <div v-for="item in quickLinks" :key="item.path" class="quick-item" @click="goTo(item.path)">
-              <div class="quick-icon" :style="{ background: item.gradient }">
-                <i :class="item.icon" />
+
+          <div class="dashboard-pane chart-pane">
+            <div class="dashboard-header compact">
+              <div>
+                <h2>访问趋势</h2>
+                <p>近 7 日系统访问概览。</p>
               </div>
-              <div class="quick-title">
-                {{ item.title }}
+              <button type="button" class="icon-action" title="刷新" @click="refreshVisitChart">
+                <i class="i-material-symbols:refresh-rounded" />
+              </button>
+            </div>
+            <div ref="visitChartRef" class="chart-container" />
+          </div>
+        </section>
+      </div>
+
+      <aside class="side-column">
+        <section class="dashboard-pane quick-pane">
+          <div class="dashboard-header compact">
+            <div>
+              <h2>快捷入口</h2>
+              <p>高频管理功能。</p>
+            </div>
+          </div>
+          <div class="quick-list">
+            <button
+              v-for="item in quickLinks"
+              :key="item.path"
+              type="button"
+              class="quick-item"
+              @click="goTo(item.path)"
+            >
+              <span><i :class="item.icon" /></span>
+              <strong>{{ item.title }}</strong>
+            </button>
+          </div>
+        </section>
+
+        <section class="dashboard-pane notice-pane">
+          <div class="dashboard-header compact">
+            <div>
+              <h2>公告消息</h2>
+              <p>{{ unreadNotice > 0 ? `${unreadNotice} 条未读` : '暂无未读消息' }}</p>
+            </div>
+            <button type="button" class="text-link" @click="goTo('/system/notice-list')">
+              更多
+            </button>
+          </div>
+
+          <div v-if="noticeList.length === 0" class="empty-state small">
+            <i class="i-material-symbols:inbox-rounded" />
+            <strong>暂无公告</strong>
+          </div>
+          <div v-else class="notice-list">
+            <button
+              v-for="notice in noticeList.slice(0, 5)"
+              :key="notice.noticeId"
+              type="button"
+              class="notice-item"
+              :class="{ unread: notice.isRead === 0 }"
+              @click="openNotice(notice)"
+            >
+              <span class="notice-dot" />
+              <span class="notice-copy">
+                <strong>{{ notice.noticeTitle }}</strong>
+                <em>{{ getNoticeTypeText(notice.noticeType) }} · {{ formatTime(notice.publishTime) }}</em>
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section class="dashboard-pane system-pane">
+          <div class="dashboard-header compact">
+            <div>
+              <h2>系统概览</h2>
+              <p>账户、流程与消息状态。</p>
+            </div>
+            <button type="button" class="icon-action" title="刷新用户增长" @click="refreshUserChart">
+              <i class="i-material-symbols:refresh-rounded" />
+            </button>
+          </div>
+          <div class="system-metrics">
+            <div v-for="metric in systemMetrics" :key="metric.label" class="system-metric">
+              <div class="system-metric-head">
+                <span>{{ metric.label }}</span>
+                <strong>{{ metric.value }}</strong>
+              </div>
+              <div class="metric-track">
+                <span :style="{ width: `${metric.percent}%` }" />
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+          <div ref="userChartRef" class="mini-chart" />
+        </section>
+      </aside>
+    </section>
 
-    <!-- 底部假统计图表 -->
-    <div class="charts-grid">
-      <div class="chart-card">
-        <div class="panel-header">
-          <div class="panel-title">
-            <i class="i-material-symbols:bar-chart-rounded" />
-            <span>访问量趋势</span>
-          </div>
-          <n-button text @click="refreshVisitChart">
-            <i class="i-material-symbols:refresh" />
-          </n-button>
-        </div>
-        <div ref="visitChartRef" class="chart-container" />
-      </div>
-
-      <div class="chart-card">
-        <div class="panel-header">
-          <div class="panel-title">
-            <i class="i-material-symbols:trending-up-rounded" />
-            <span>用户增长统计</span>
-          </div>
-          <n-button text @click="refreshUserChart">
-            <i class="i-material-symbols:refresh" />
-          </n-button>
-        </div>
-        <div ref="userChartRef" class="chart-container" />
-      </div>
-    </div>
-
-    <!-- 通知详情弹窗 -->
     <n-modal v-model:show="showNoticeModal" preset="card" title="公告详情" style="width: 800px">
       <div v-if="currentNotice" class="notice-detail">
-        <h3 class="detail-title">
-          {{ currentNotice.noticeTitle }}
-        </h3>
+        <h3>{{ currentNotice.noticeTitle }}</h3>
         <div class="detail-meta">
           <n-tag :type="getNoticeTypeColor(currentNotice.noticeType)" size="small">
             {{ getNoticeTypeText(currentNotice.noticeType) }}
           </n-tag>
-          <span class="detail-time">发布时间：{{ currentNotice.publishTime }}</span>
+          <span>发布时间：{{ currentNotice.publishTime }}</span>
         </div>
         <n-divider />
         <div class="detail-content" v-html="currentNotice.noticeContent" />
@@ -391,59 +308,99 @@
 
 <script setup>
 import * as echarts from 'echarts'
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import flowApi from '@/api/flow'
 import wechatGroupQrAlt from '@/assets/images/forge-wechat-group1.png'
 import wechatGroupQr from '@/assets/images/forge-wechat-group.png'
 import wechatSupportQr from '@/assets/images/forge-wechat-support.png'
+import welcomeAvatar from '@/assets/images/home-welcome-avatar.png'
 import { useUserStore } from '@/store'
 import { request } from '@/utils'
 
 const router = useRouter()
 const userStore = useUserStore()
 
-// 用户统计
 const onlineCount = ref(0)
 const todayLoginCount = ref(0)
 const totalUserCount = ref(0)
 
-// 流程统计
 const todoCount = ref(0)
 const doneCount = ref(0)
 const startedCount = ref(0)
 const pendingStarted = ref(0)
 
-// 通知统计
 const unreadNotice = ref(0)
-
-// 列表数据
 const todoLoading = ref(false)
 const todoList = ref([])
 const noticeList = ref([])
 
-// 弹窗
 const showNoticeModal = ref(false)
 const currentNotice = ref(null)
 
-// 图表
 const visitChartRef = ref(null)
 const userChartRef = ref(null)
+let visitChart = null
+let userChart = null
 
-// 快捷入口
-const quickLinks = [
-  { title: '发起流程', icon: 'i-material-symbols:add-circle-rounded', gradient: 'linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%)', path: '/flow/template' },
-  { title: '我的待办', icon: 'i-material-symbols:pending-actions', gradient: 'linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%)', path: '/flow/todo' },
-  { title: '用户管理', icon: 'i-material-symbols:person-rounded', gradient: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', path: '/system/user' },
-  { title: '角色管理', icon: 'i-material-symbols:admin-panel-settings-rounded', gradient: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', path: '/system/role' },
-  { title: '文件管理', icon: 'i-material-symbols:folder-open-rounded', gradient: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)', path: '/system/file' },
-  { title: '配置中心', icon: 'i-material-symbols:settings-suggest', gradient: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)', path: '/system/config-center' },
+const displayName = computed(() => userStore.realName || userStore.username || '管理员')
+const welcomeTitle = computed(() => `Hi，${displayName.value}，欢迎使用`)
+
+const topMetrics = computed(() => [
+  { label: '在线用户', value: onlineCount.value, desc: '当前活跃会话', path: '/system/online' },
+  { label: '今日登录', value: todayLoginCount.value, desc: '登录审计记录', path: '/system/login-log' },
+  { label: '待办任务', value: todoCount.value, desc: '需要处理的审批', path: '/flow/todo' },
+])
+
+const flowTiles = computed(() => [
+  { title: '我发起的', value: startedCount.value, desc: `${pendingStarted.value} 个审批中`, path: '/flow/started', icon: 'i-material-symbols:rocket-launch-rounded', tone: 'started' },
+  { title: '我的待办', value: todoCount.value, desc: '待签收 / 待处理', path: '/flow/todo', icon: 'i-material-symbols:pending-actions-rounded', tone: 'todo' },
+  { title: '我的已办', value: doneCount.value, desc: '已处理任务', path: '/flow/done', icon: 'i-material-symbols:task-alt-rounded', tone: 'done' },
+  { title: '发起流程', value: '发起', desc: '选择流程模板', path: '/flow/template', icon: 'i-material-symbols:add-task-rounded', tone: 'create' },
+  { title: '抄送我的', value: '查看', desc: '关注流转信息', path: '/flow/cc', icon: 'i-material-symbols:forward-to-inbox-rounded', tone: 'cc' },
+  { title: '流程监控', value: '监控', desc: '运行状态追踪', path: '/flow/monitor', icon: 'i-material-symbols:monitor-heart-rounded', tone: 'monitor' },
+])
+
+const guideSteps = [
+  { title: '创建应用', desc: '定义业务系统入口', path: '/app-center', icon: 'i-material-symbols:add-box-rounded' },
+  { title: '设计对象', desc: '配置表单、列表和字段', path: '/ai/lowcode-apps', icon: 'i-material-symbols:edit-document-rounded' },
+  { title: '编排流程', desc: '绑定审批与状态流转', path: '/flow/model', icon: 'i-material-symbols:account-tree-rounded' },
+  { title: '发布授权', desc: '菜单发布并配置权限', path: '/system/menu', icon: 'i-material-symbols:shield-person-rounded' },
 ]
 
-// 加载用户统计
+const appShortcuts = [
+  { title: '应用中心', desc: '创建和维护业务应用', path: '/app-center', icon: 'i-material-symbols:apps-rounded' },
+  { title: '低代码建模', desc: '业务对象与页面设计', path: '/ai/lowcode-apps', icon: 'i-material-symbols:data-object-rounded' },
+  { title: '数据统计', desc: '业务数据看板入口', path: '/app-center/stats', icon: 'i-material-symbols:query-stats-rounded' },
+  { title: '流程配置', desc: '流程模型和表单配置', path: '/flow/model', icon: 'i-material-symbols:conversion-path-rounded' },
+]
+
+const quickLinks = [
+  { title: '用户管理', icon: 'i-material-symbols:person-rounded', path: '/system/user' },
+  { title: '角色管理', icon: 'i-material-symbols:admin-panel-settings-rounded', path: '/system/role' },
+  { title: '组织管理', icon: 'i-material-symbols:account-tree-rounded', path: '/system/org' },
+  { title: '菜单管理', icon: 'i-material-symbols:menu-open-rounded', path: '/system/menu' },
+  { title: '岗位管理', icon: 'i-material-symbols:badge-rounded', path: '/system/post' },
+  { title: '文件中心', icon: 'i-material-symbols:folder-open-rounded', path: '/system/file-list' },
+]
+
+const systemMetrics = computed(() => {
+  const userBase = Math.max(totalUserCount.value, 1)
+  const flowBase = Math.max(startedCount.value + doneCount.value + todoCount.value, 1)
+  const noticeBase = Math.max(noticeList.value.length, unreadNotice.value, 1)
+  return [
+    { label: '用户规模', value: totalUserCount.value, percent: clampPercent((totalUserCount.value / userBase) * 100) },
+    { label: '流程处理', value: doneCount.value, percent: clampPercent((doneCount.value / flowBase) * 100) },
+    { label: '未读公告', value: unreadNotice.value, percent: clampPercent((unreadNotice.value / noticeBase) * 100) },
+  ]
+})
+
+function clampPercent(value) {
+  return Math.max(6, Math.min(100, Math.round(value || 0)))
+}
+
 async function loadUserStats() {
   try {
-    // 并行请求所有统计数据
     const [onlineRes, userRes] = await Promise.all([
       request.get('/auth/online/page', { params: { pageNum: 1, pageSize: 1 } }),
       request.get('/system/user/page', { params: { pageNum: 1, pageSize: 1 } }),
@@ -452,7 +409,6 @@ async function loadUserStats() {
     onlineCount.value = onlineRes.data?.total || 0
     totalUserCount.value = userRes.data?.total || 0
 
-    // 今日登录数
     const today = new Date().toISOString().split('T')[0]
     const loginRes = await request.get('/system/loginLog/page', {
       params: { pageNum: 1, pageSize: 1, startTime: today, endTime: today },
@@ -464,7 +420,6 @@ async function loadUserStats() {
   }
 }
 
-// 加载流程统计和列表
 async function loadFlowData() {
   if (!userStore.userId) {
     console.warn('用户ID未初始化，跳过加载流程数据')
@@ -481,11 +436,7 @@ async function loadFlowData() {
     todoCount.value = todoRes.data?.total || 0
     doneCount.value = doneRes.data?.total || 0
     startedCount.value = startedRes.data?.total || 0
-
-    // 统计审批中的流程
-    if (startedRes.data?.records) {
-      pendingStarted.value = startedRes.data.records.filter(r => r.status === 1).length
-    }
+    pendingStarted.value = startedRes.data?.records?.filter(item => item.status === 1).length || 0
   }
   catch {
     todoCount.value = 0
@@ -496,7 +447,6 @@ async function loadFlowData() {
   }
 }
 
-// 加载待办列表
 async function loadTodoList() {
   if (!userStore.userId) {
     console.warn('用户ID未初始化，跳过加载待办列表')
@@ -508,9 +458,7 @@ async function loadTodoList() {
       { pageNum: 1, pageSize: 8, userId: userStore.userId },
       { needTip: false },
     )
-    if (res.data) {
-      todoList.value = res.data.records || []
-    }
+    todoList.value = res.data?.records || []
   }
   catch {
     todoList.value = []
@@ -521,21 +469,17 @@ async function loadTodoList() {
   }
 }
 
-// 加载通知公告
 async function loadNoticeList() {
   try {
     const res = await request.get('/system/notice/user/page', { params: { pageNum: 1, pageSize: 10 } })
-    if (res.data) {
-      noticeList.value = res.data.records || []
-      unreadNotice.value = noticeList.value.filter(n => n.isRead === 0).length
-    }
+    noticeList.value = res.data?.records || []
+    unreadNotice.value = noticeList.value.filter(item => item.isRead === 0).length
   }
   catch {
     console.error('加载通知公告失败')
   }
 }
 
-// 跳转
 function goTo(path) {
   router.push(path)
 }
@@ -556,7 +500,6 @@ function openTodoTask(task) {
   })
 }
 
-// 打开通知
 async function openNotice(notice) {
   try {
     const res = await request.post('/system/notice/getById', null, { params: { noticeId: notice.noticeId } })
@@ -575,7 +518,6 @@ async function openNotice(notice) {
   }
 }
 
-// 格式化时间
 function formatTime(time) {
   if (!time)
     return '-'
@@ -594,27 +536,25 @@ function formatTime(time) {
     return `${Math.floor(diff / hour)}小时前`
   if (diff < 7 * day)
     return `${Math.floor(diff / day)}天前`
-  return time.split(' ')[0]
+  return String(time).split(' ')[0]
 }
 
-// 优先级
-function getPriorityClass(p) {
-  if (p >= 3)
+function getPriorityClass(priority) {
+  if (priority >= 3)
     return 'urgent'
-  if (p === 2)
+  if (priority === 2)
     return 'high'
   return ''
 }
 
-function getPriorityText(p) {
-  const m = { 0: '低', 1: '普通', 2: '高', 3: '紧急' }
-  return m[p] || '普通'
+function getPriorityText(priority) {
+  const textMap = { 0: '低', 1: '普通', 2: '高', 3: '紧急' }
+  return textMap[priority] || '普通'
 }
 
-// 通知类型
 function getNoticeTypeText(type) {
   const typeMap = { NOTICE: '通知', ANNOUNCEMENT: '公告', NEWS: '新闻' }
-  return typeMap[type] || type
+  return typeMap[type] || type || '公告'
 }
 
 function getNoticeTypeColor(type) {
@@ -622,122 +562,88 @@ function getNoticeTypeColor(type) {
   return colorMap[type] || 'default'
 }
 
-// 初始化访问量趋势图（假数据）
 function initVisitChart() {
-  const chart = echarts.init(visitChartRef.value)
-  const option = {
+  if (!visitChartRef.value)
+    return
+  if (visitChart)
+    visitChart.dispose()
+  visitChart = echarts.init(visitChartRef.value)
+  visitChart.setOption({
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e2e8f0',
+      backgroundColor: '#ffffff',
+      borderColor: '#e5e7eb',
       borderWidth: 1,
       textStyle: { color: '#0f172a' },
-      padding: [12, 16],
     },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '10%',
-      containLabel: true,
-    },
+    grid: { left: 32, right: 12, top: 18, bottom: 28 },
     xAxis: {
       type: 'category',
       data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#e2e8f0' } },
-      axisLabel: { color: '#64748b', fontSize: 12 },
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      axisLabel: { color: '#64748b', fontSize: 11 },
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      axisLabel: { color: '#64748b', fontSize: 12 },
+      splitLine: { lineStyle: { color: '#f1f5f9' } },
+      axisLabel: { color: '#64748b', fontSize: 11 },
     },
     series: [
       {
         name: '访问量',
         type: 'bar',
-        barWidth: '50%',
+        barWidth: 18,
         data: [320, 502, 301, 434, 590, 530, 420],
         itemStyle: {
-          borderRadius: [8, 8, 0, 0],
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#60a5fa' },
-            { offset: 1, color: '#93c5fd' },
-          ]),
+          borderRadius: [4, 4, 0, 0],
+          color: '#2563eb',
         },
       },
     ],
-  }
-  chart.setOption(option)
-  window.addEventListener('resize', () => chart.resize())
+  })
 }
 
-// 初始化用户增长图（假数据）
 function initUserChart() {
-  const chart = echarts.init(userChartRef.value)
-  const option = {
+  if (!userChartRef.value)
+    return
+  if (userChart)
+    userChart.dispose()
+  userChart = echarts.init(userChartRef.value)
+  userChart.setOption({
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e2e8f0',
+      backgroundColor: '#ffffff',
+      borderColor: '#e5e7eb',
       borderWidth: 1,
       textStyle: { color: '#0f172a' },
-      padding: [12, 16],
     },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '10%',
-      containLabel: true,
-    },
+    grid: { left: 8, right: 8, top: 16, bottom: 8 },
     xAxis: {
       type: 'category',
+      show: false,
       data: ['1月', '2月', '3月', '4月', '5月', '6月'],
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#e2e8f0' } },
-      axisLabel: { color: '#64748b', fontSize: 12 },
     },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      axisLabel: { color: '#64748b', fontSize: 12 },
-    },
+    yAxis: { type: 'value', show: false },
     series: [
       {
         name: '新增用户',
         type: 'line',
         smooth: true,
-        symbol: 'circle',
-        symbolSize: 8,
+        symbol: 'none',
         data: [820, 932, 901, 934, 1290, 1330],
-        lineStyle: {
-          width: 3,
-          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#2dd4bf' },
-            { offset: 1, color: '#60a5fa' },
-          ]),
-        },
-        itemStyle: {
-          color: '#2dd4bf',
-          borderColor: '#fff',
-          borderWidth: 2,
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(45, 212, 191, 0.16)' },
-            { offset: 1, color: 'rgba(96, 165, 250, 0.02)' },
-          ]),
-        },
+        lineStyle: { width: 2, color: '#2563eb' },
+        areaStyle: { color: 'rgba(37, 99, 235, 0.1)' },
       },
     ],
-  }
-  chart.setOption(option)
-  window.addEventListener('resize', () => chart.resize())
+  })
 }
 
-// 刷新图表
+function resizeCharts() {
+  visitChart?.resize()
+  userChart?.resize()
+}
+
 function refreshVisitChart() {
   initVisitChart()
 }
@@ -755,610 +661,450 @@ onMounted(() => {
   nextTick(() => {
     initVisitChart()
     initUserChart()
+    window.addEventListener('resize', resizeCharts)
   })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
+  visitChart?.dispose()
+  userChart?.dispose()
 })
 </script>
 
 <style scoped>
 .home-page {
+  --home-bg: #f6f8fb;
+  --home-panel: #fff;
+  --home-border: #e5e7eb;
+  --home-text: #0f172a;
+  --home-muted: #64748b;
+  --home-soft: #f8fafc;
+  --home-blue: #2563eb;
   height: 100%;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
+  padding: 10px;
+  background: var(--home-bg);
+  color: var(--home-text);
 }
 
-/* 统计卡片网格 */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.stat-card {
-  background: #fff;
+.dashboard-pane {
+  border: 1px solid var(--home-border);
   border-radius: 8px;
-  padding: 12px 14px;
-  cursor: pointer;
-  transition:
-    transform 0.24s ease,
-    box-shadow 0.24s ease,
-    border-color 0.24s ease;
-  border: 1px solid #e8edf5;
-  position: relative;
-  overflow: hidden;
-  animation: cardRise 0.56s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.stat-card:nth-child(1) {
-  animation-delay: 0.02s;
-}
-
-.stat-card:nth-child(2) {
-  animation-delay: 0.08s;
-}
-
-.stat-card:nth-child(3) {
-  animation-delay: 0.14s;
-}
-
-.stat-card:nth-child(4) {
-  animation-delay: 0.2s;
-}
-
-.stat-card:nth-child(5) {
-  animation-delay: 0.26s;
-}
-
-.stat-card:nth-child(6) {
-  animation-delay: 0.32s;
-}
-
-.stat-card::before {
-  content: none;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(30, 41, 59, 0.06);
-  border-color: #cbdaf5;
-}
-
-.stat-card:hover::before {
-  left: 122%;
-  opacity: 1;
-}
-
-.stat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.stat-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: #2563eb;
-  box-shadow: none;
-  transition:
-    transform 0.26s ease,
-    box-shadow 0.26s ease;
-}
-
-.stat-card:hover .stat-icon {
-  transform: translateY(-1px);
+  background: var(--home-panel);
   box-shadow: none;
 }
 
-.stat-card.online .stat-icon {
-  background: #ecfdf5;
-  color: #059669;
-}
-.stat-card.login .stat-icon {
-  background: #eff6ff;
-  color: #2563eb;
-}
-.stat-card.user .stat-icon {
-  background: #eef2ff;
-  color: #4f46e5;
-}
-.stat-card.todo .stat-icon {
-  background: #fffbeb;
-  color: #d97706;
-}
-.stat-card.done .stat-icon {
-  background: #f0fdf4;
-  color: #16a34a;
-}
-.stat-card.started .stat-icon {
-  background: #f5f3ff;
-  color: #7c3aed;
-}
-
-.stat-trend {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-
-.stat-trend.up {
-  color: #059669;
-  background: #ecfdf5;
-}
-
-.stat-badge {
-  background: #fff1f2;
-  color: #e11d48;
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.stat-badge.pulse {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-.stat-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  line-height: 30px;
-}
-
-.stat-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.stat-desc {
-  font-size: 12px;
-  color: #64748b;
-}
-
-/* 社区与维护支持 */
-.community-support-panel {
+.welcome-pane {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(520px, 680px);
-  gap: 20px;
-  align-items: stretch;
-  margin-bottom: 10px;
-  padding: 18px;
-  border: 1px solid #dbe7f3;
-  border-radius: 8px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.96) 0%,
-    rgba(248, 251, 255, 0.96) 48%,
-    rgba(240, 253, 250, 0.92) 100%
-  );
-  box-shadow: 0 8px 20px rgba(30, 41, 59, 0.04);
-}
-
-.community-support-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  padding: 8px 10px;
-}
-
-.community-eyebrow {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  padding: 5px 9px;
-  border: 1px solid #bfdbfe;
-  border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.community-eyebrow i {
-  font-size: 15px;
-}
-
-.community-support-copy h2 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 34px;
-}
-
-.community-support-copy p {
-  max-width: 620px;
-  margin: 10px 0 0;
-  color: #475569;
-  font-size: 14px;
-  line-height: 24px;
-}
-
-.community-support-highlights {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.community-support-highlights span {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid #bae6fd;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #eff6ff, #f0fdfa);
-  color: #0369a1;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.community-qr-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(280px, 0.62fr) minmax(420px, 1.15fr);
   gap: 12px;
-  min-width: 0;
-}
-
-.community-qr-card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid #e3edf8;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.community-qr-card.primary {
-  border-color: #bfdbfe;
-  background: #fbfdff;
-}
-
-.community-qr-card.support {
-  border-color: #bbf7d0;
-  background: #fbfffd;
-}
-
-.community-qr-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #0f172a;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.community-qr-card-header em {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #2563eb;
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.community-qr-card.support .community-qr-card-header em {
-  background: #ecfdf5;
-  color: #059669;
-}
-
-.community-qr-preview {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid #edf2f7;
-  border-radius: 6px;
-  background: #fff;
-}
-
-.community-qr-duo {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.community-qr-person {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.community-qr-person > span {
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
-}
-
-.community-qr-image {
-  width: 100%;
-  height: 260px;
-  cursor: zoom-in;
-}
-
-.community-qr-image :deep(img) {
-  width: 100%;
-  height: 260px;
-  object-fit: contain;
-}
-
-.community-qr-zoom {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.68);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.community-qr-card p {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-/* 内容网格 */
-.content-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
   align-items: stretch;
-  min-height: 360px;
+  margin-bottom: 10px;
+  padding: 12px;
 }
 
-.todo-panel {
+.welcome-profile,
+.welcome-metrics,
+.guide-pane {
+  min-width: 0;
+}
+
+.welcome-profile {
   display: flex;
-  flex-direction: column;
-}
-
-/* 面板通用样式 */
-.todo-panel,
-.notice-panel,
-.quick-panel,
-.chart-card {
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid #e8edf5;
-  overflow: hidden;
-  box-shadow: none;
-  animation: panelRise 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.todo-panel {
-  animation-delay: 0.18s;
-}
-
-.notice-panel {
-  animation-delay: 0.24s;
-}
-
-.quick-panel {
-  animation-delay: 0.3s;
-}
-
-.chart-card:nth-child(1) {
-  animation-delay: 0.36s;
-}
-
-.chart-card:nth-child(2) {
-  animation-delay: 0.42s;
-}
-
-.todo-panel .n-spin {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.todo-panel .n-spin > :deep(div) {
-  flex: 1;
-  min-height: 0;
-}
-
-.todo-panel .n-scrollbar {
-  height: 100%;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid #edf1f7;
+  gap: 12px;
+  padding: 8px;
+}
+
+.welcome-avatar {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: var(--home-blue);
+  font-size: 22px;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.welcome-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.welcome-copy {
+  min-width: 0;
+}
+
+.welcome-kicker {
+  color: var(--home-blue);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.welcome-copy h1 {
+  margin: 2px 0 4px;
+  color: var(--home-text);
+  font-size: 20px;
+  font-weight: 760;
+  line-height: 28px;
+}
+
+.welcome-copy p {
+  margin: 0;
+  color: var(--home-muted);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.welcome-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.welcome-metric {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--home-border);
+  border-radius: 7px;
+  background: var(--home-soft);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.welcome-metric:hover,
+.guide-item:hover,
+.flow-tile:hover,
+.app-item:hover,
+.quick-item:hover,
+.notice-item:hover,
+.todo-item:hover {
+  border-color: #bfdbfe;
+  background: #f3f7ff;
+}
+
+.welcome-metric span,
+.welcome-metric em {
+  display: block;
+  color: var(--home-muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+}
+
+.welcome-metric strong {
+  display: block;
+  margin: 3px 0 1px;
+  color: var(--home-text);
+  font-size: 22px;
+  font-weight: 780;
+  line-height: 28px;
+}
+
+.guide-pane {
+  padding: 8px;
+  border: 1px solid #edf2f7;
+  border-radius: 7px;
   background: #fbfcfe;
 }
 
-.panel-title {
+.guide-head,
+.dashboard-header,
+.system-metric-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.guide-head {
+  margin-bottom: 8px;
+}
+
+.guide-head span,
+.dashboard-header h2 {
+  margin: 0;
+  color: var(--home-text);
   font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: 720;
+  line-height: 20px;
 }
 
-.panel-title i {
-  font-size: 18px;
-  color: #3b82f6;
+.guide-head button,
+.text-link,
+.icon-action {
+  border: 0;
+  background: transparent;
+  color: var(--home-blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.panel-link {
-  color: #177c7d;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.panel-link :deep(.n-button__content) {
+.guide-head button,
+.text-link {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  white-space: nowrap;
 }
 
-/* 空状态 */
-.empty-state {
-  display: flex;
-  flex-direction: column;
+.guide-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.guide-item,
+.flow-tile,
+.app-item,
+.quick-item,
+.notice-item {
+  min-width: 0;
+  border: 1px solid var(--home-border);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.guide-item {
+  display: grid;
+  grid-template-columns: auto 28px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  padding: 8px;
+}
+
+.guide-index {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.guide-icon,
+.flow-icon,
+.app-icon,
+.quick-item span {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 28px 16px;
-  color: #94a3b8;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: var(--home-blue);
 }
 
-.empty-state.small {
-  padding: 24px;
+.guide-icon {
+  width: 28px;
+  height: 28px;
 }
 
-.empty-icon {
-  font-size: 38px;
-  margin-bottom: 8px;
-  opacity: 0.24;
+.guide-icon i,
+.flow-icon i,
+.app-icon i,
+.quick-item i {
+  font-size: 16px;
 }
 
-.empty-text {
-  font-size: 14px;
-  font-weight: 500;
+.guide-text,
+.app-item span:last-child,
+.notice-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.empty-desc {
+.guide-text strong,
+.app-item strong,
+.notice-copy strong {
+  overflow: hidden;
+  color: var(--home-text);
   font-size: 12px;
-  margin-top: 4px;
+  font-weight: 700;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* 待办任务列表 */
+.guide-text em,
+.app-item em,
+.notice-copy em {
+  overflow: hidden;
+  color: var(--home-muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 10px;
+  align-items: start;
+}
+
+.main-column,
+.side-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-header {
+  min-height: 42px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--home-border);
+}
+
+.dashboard-header.compact {
+  min-height: 38px;
+}
+
+.dashboard-header p {
+  margin: 1px 0 0;
+  color: var(--home-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.flow-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.flow-tile {
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  gap: 4px;
+  padding: 10px;
+}
+
+.flow-icon {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 2px;
+}
+
+.flow-title {
+  color: var(--home-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.flow-tile strong {
+  color: var(--home-text);
+  font-size: 21px;
+  font-weight: 780;
+  line-height: 26px;
+}
+
+.flow-tile em {
+  overflow: hidden;
+  color: var(--home-muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-tile.todo .flow-icon {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.flow-tile.done .flow-icon {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.flow-tile.create .flow-icon {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.flow-tile.cc .flow-icon {
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.flow-tile.monitor .flow-icon {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.todo-pane :deep(.n-spin-container),
+.todo-pane :deep(.n-spin-content) {
+  min-height: 236px;
+}
+
 .todo-list {
-  padding: 4px 8px 8px;
+  padding: 4px 10px 10px;
 }
 
 .todo-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
-  gap: 12px;
-  min-height: 58px;
-  padding: 9px 10px;
+  min-height: 56px;
+  padding: 8px 0;
   border-bottom: 1px solid #edf2f7;
-  background: #fff;
   cursor: pointer;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease;
 }
 
 .todo-item:last-child {
   border-bottom: 0;
 }
 
-.todo-item:hover {
-  background: #f7fbfb;
-}
-
-.todo-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid #d7eeee;
-  border-radius: 4px;
-  background: #f5fbfb;
-  color: #177c7d;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.todo-status.candidate {
-  border-color: #dbeafe;
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.todo-status.active {
-  border-color: #d7eeee;
-  background: #f5fbfb;
-  color: #177c7d;
-}
-
+.todo-status,
 .priority-tag {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   height: 22px;
-  font-size: 11px;
   padding: 0 7px;
   border-radius: 4px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.priority-tag.urgent {
-  background: #fff1f2;
-  color: #be123c;
+.todo-status {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: var(--home-blue);
 }
 
-.priority-tag.high {
-  background: #fff7ed;
-  color: #c2410c;
+.todo-status.active {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
 }
 
 .todo-main {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
   min-width: 0;
 }
 
@@ -1366,122 +1112,146 @@ onMounted(() => {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.todo-title {
+.todo-title-row strong {
   min-width: 0;
   overflow: hidden;
-  color: #111827;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 20px;
+  color: var(--home-text);
+  font-size: 13px;
+  line-height: 19px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.priority-tag {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.priority-tag.urgent {
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .todo-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  min-width: 0;
-  overflow: hidden;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.todo-meta > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.todo-meta-label {
-  margin-right: 4px;
-  color: #64748b;
-  font-weight: 600;
+  gap: 5px 12px;
+  margin-top: 3px;
+  color: var(--home-muted);
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .todo-side {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 112px;
-}
-
-.todo-time {
-  font-size: 12px;
-  color: #64748b;
+  gap: 8px;
+  color: var(--home-muted);
+  font-size: 11px;
   white-space: nowrap;
 }
 
-.todo-action {
+.todo-side button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  height: 30px;
-  padding: 0 3px 0 8px;
+  gap: 1px;
+  height: 26px;
+  padding: 0 4px 0 8px;
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #177c7d;
+  color: var(--home-blue);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
   font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease;
 }
 
-.todo-action:hover {
-  background: #effafa;
-  color: #0f5f63;
-}
-
-.todo-action i {
-  font-size: 18px;
-  line-height: 1;
-}
-
-/* 右侧面板 */
-.right-panel {
-  display: flex;
-  flex-direction: column;
+.app-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.96fr) minmax(320px, 0.8fr);
   gap: 10px;
 }
 
-/* 通知公告列表 */
+.app-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.app-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+}
+
+.app-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.chart-container {
+  height: 184px;
+}
+
+.quick-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.quick-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+}
+
+.quick-item span {
+  width: 30px;
+  height: 30px;
+}
+
+.quick-item strong {
+  overflow: hidden;
+  color: var(--home-text);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notice-list {
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
 }
 
 .notice-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
-  padding: 9px 12px;
-  margin-bottom: 6px;
-  background: #fbfcfe;
-  border: 1px solid #edf1f7;
-  border-radius: 6px;
-  cursor: pointer;
-  transition:
-    transform 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease;
+  padding: 8px;
 }
 
-.notice-item:hover {
-  background: #f8fbff;
-  transform: translateX(2px);
-  box-shadow: none;
+.notice-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.notice-item.unread .notice-dot {
+  background: #f59e0b;
 }
 
 .notice-item.unread {
@@ -1489,442 +1259,756 @@ onMounted(() => {
   border-color: #fde68a;
 }
 
-.notice-left {
+.system-metrics {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 4px;
 }
 
-.unread-dot {
-  width: 6px;
+.system-metric-head span {
+  color: var(--home-muted);
+  font-size: 12px;
+}
+
+.system-metric-head strong {
+  color: var(--home-text);
+  font-size: 13px;
+}
+
+.metric-track {
   height: 6px;
-  border-radius: 50%;
-  background: #f59e0b;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef2f7;
 }
 
-.notice-content {
+.metric-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--home-blue);
+}
+
+.mini-chart {
+  height: 82px;
+  margin: 0 10px 10px;
+}
+
+.support-pane {
+  padding: 10px;
+}
+
+.support-copy {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
-  min-width: 0;
+  margin-bottom: 10px;
 }
 
-.notice-title {
+.support-copy span {
+  color: var(--home-blue);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.support-copy strong {
+  color: var(--home-text);
   font-size: 13px;
-  color: #0f172a;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 20px;
 }
 
-.notice-item.unread .notice-title {
-  font-weight: 600;
-}
-
-.notice-meta {
-  display: flex;
+.support-qrs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.notice-time {
-  font-size: 12px;
+.support-qr {
+  width: 100%;
+  height: 92px;
+  overflow: hidden;
+  border: 1px solid var(--home-border);
+  border-radius: 6px;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+.support-qr :deep(img) {
+  width: 100%;
+  height: 92px;
+  object-fit: contain;
+}
+
+.empty-state {
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 18px;
   color: #94a3b8;
 }
 
-/* 快捷入口网格 */
-.quick-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 10px;
+.empty-state.small {
+  min-height: 124px;
 }
 
-.quick-item {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 9px 10px;
-  background: #fbfcfe;
-  border: 1px solid #edf1f7;
-  border-radius: 6px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition:
-    transform 0.22s ease,
-    background 0.22s ease,
-    box-shadow 0.22s ease;
+.empty-state i {
+  font-size: 32px;
+  opacity: 0.42;
 }
 
-.quick-item::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(14, 165, 233, 0));
-  opacity: 0;
-  transition: opacity 0.22s ease;
-  pointer-events: none;
+.empty-state strong {
+  color: var(--home-text);
+  font-size: 13px;
 }
 
-.quick-item:hover {
-  background: #f8fbff;
-  transform: translateY(-1px);
-  box-shadow: none;
+.empty-state span {
+  font-size: 12px;
 }
 
-.quick-item:hover::before {
-  opacity: 1;
-}
-
-.quick-icon {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  border-radius: 6px;
-  display: flex;
+.icon-action {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 17px;
-  color: #2563eb;
-  position: relative;
-  z-index: 1;
-  box-shadow: none;
-  transition: transform 0.24s ease;
+  border-radius: 5px;
+  color: var(--home-muted);
 }
 
-.quick-item:nth-child(2) .quick-icon {
-  color: #d97706;
+.icon-action:hover {
+  background: #eff6ff;
+  color: var(--home-blue);
 }
 
-.quick-item:nth-child(3) .quick-icon {
-  color: #2563eb;
-}
-
-.quick-item:nth-child(4) .quick-icon {
-  color: #7c3aed;
-}
-
-.quick-item:nth-child(5) .quick-icon {
-  color: #0891b2;
-}
-
-.quick-item:nth-child(6) .quick-icon {
-  color: #be185d;
-}
-
-.quick-item:hover .quick-icon {
-  transform: translateY(-2px) scale(1.06);
-}
-
-.quick-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: #334155;
-  position: relative;
-  z-index: 1;
-  white-space: nowrap;
-}
-
-/* 图表网格 */
-.charts-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.chart-container {
-  height: 240px;
-  padding: 10px;
-}
-
-@keyframes cardRise {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes panelRise {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 弹窗样式 */
-.notice-detail {
-  padding: 8px 0;
-}
-
-.detail-title {
+.notice-detail h3 {
+  margin: 0 0 8px;
+  color: var(--home-text);
   font-size: 18px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 8px 0;
+  font-weight: 760;
 }
 
 .detail-meta {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.detail-time {
+  color: var(--home-muted);
   font-size: 12px;
-  color: #64748b;
 }
 
 .detail-content {
-  line-height: 1.8;
-  font-size: 14px;
   color: #475569;
+  font-size: 14px;
+  line-height: 1.8;
 }
 
 .detail-content :deep(img) {
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
-/* 响应式 */
-@media (max-width: 1400px) {
-  .stats-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .content-grid {
-    grid-template-columns: 1.5fr 1fr;
-  }
-}
-
-@media (max-width: 1200px) {
-  .community-support-panel {
+@media (max-width: 1500px) {
+  .welcome-pane {
     grid-template-columns: 1fr;
   }
 
-  .content-grid {
+  .workspace-grid {
     grid-template-columns: 1fr;
   }
 
-  .charts-grid {
+  .side-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .flow-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .app-row,
+  .side-column {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 720px) {
   .home-page {
-    padding: 12px;
+    padding: 8px;
   }
 
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+  .welcome-profile {
+    align-items: flex-start;
   }
 
-  .stat-card {
-    padding: 16px;
-  }
-
-  .stat-value {
-    font-size: 22px;
-  }
-
-  .stat-icon {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-  }
-
-  .community-support-panel {
-    padding: 12px;
-  }
-
-  .community-support-copy {
-    padding: 0;
-  }
-
-  .community-support-copy h2 {
-    font-size: 19px;
-    line-height: 27px;
-  }
-
-  .community-qr-grid {
+  .welcome-metrics,
+  .guide-list,
+  .flow-grid,
+  .app-list,
+  .quick-list {
     grid-template-columns: 1fr;
-  }
-
-  .community-qr-duo {
-    grid-template-columns: 1fr;
-  }
-
-  .community-qr-image {
-    height: 320px;
-  }
-
-  .community-qr-image :deep(img) {
-    height: 320px;
-  }
-
-  .quick-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .todo-item {
-    grid-template-columns: auto minmax(0, 1fr);
-    row-gap: 8px;
+    grid-template-columns: 1fr;
   }
 
   .todo-side {
-    grid-column: 1 / -1;
-    min-width: 0;
     justify-content: space-between;
   }
-
-  .chart-container {
-    height: 220px;
-  }
 }
 
-@media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .quick-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* 深色模式 */
 .dark .home-page {
-  background:
-    radial-gradient(circle at 8% 4%, rgba(99, 102, 241, 0.18) 0%, transparent 26%),
-    radial-gradient(circle at 92% 12%, rgba(14, 165, 233, 0.14) 0%, transparent 24%), #0f172a;
+  --home-bg: #0f172a;
+  --home-panel: #111827;
+  --home-border: #334155;
+  --home-text: #f1f5f9;
+  --home-muted: #94a3b8;
+  --home-soft: #162033;
 }
 
-.dark .stat-card,
-.dark .community-support-panel,
-.dark .todo-panel,
-.dark .notice-panel,
-.dark .quick-panel,
-.dark .chart-card {
-  background: #1e293b;
-  border-color: #334155;
-}
-
-.dark .stat-value,
-.dark .community-support-copy h2,
-.dark .community-qr-card-header,
-.dark .panel-title,
-.dark .todo-title,
-.dark .notice-title,
-.dark .detail-title {
-  color: #f1f5f9;
-}
-
-.dark .stat-title {
-  color: #cbd5e1;
-}
-
-.dark .stat-desc,
-.dark .community-support-copy p,
-.dark .community-qr-card p,
-.dark .todo-meta,
-.dark .todo-time,
-.dark .notice-meta,
-.dark .notice-time,
-.dark .quick-title,
-.dark .detail-time {
-  color: #94a3b8;
-}
-
-.dark .todo-item,
-.dark .notice-item,
+.dark .guide-pane,
+.dark .welcome-metric,
+.dark .guide-item,
+.dark .flow-tile,
+.dark .app-item,
 .dark .quick-item,
-.dark .community-qr-card {
-  background: #334155;
+.dark .notice-item {
+  background: #162033;
 }
 
-.dark .community-support-panel {
-  background: #1e293b;
-}
-
-.dark .community-eyebrow {
-  border-color: #1d4ed8;
-  background: #172554;
-  color: #bfdbfe;
-}
-
-.dark .community-qr-card.primary {
-  border-color: #1d4ed8;
-}
-
-.dark .community-qr-card.support {
-  border-color: #047857;
-}
-
-.dark .todo-item:hover,
+.dark .welcome-metric:hover,
+.dark .guide-item:hover,
+.dark .flow-tile:hover,
+.dark .app-item:hover,
+.dark .quick-item:hover,
 .dark .notice-item:hover {
-  background: #475569;
-}
-
-.dark .todo-status.active {
-  border-color: #155e63;
-  background: #123b40;
-  color: #67e8f9;
-}
-
-.dark .todo-status.candidate {
-  border-color: #1d4ed8;
-  background: #172554;
-  color: #bfdbfe;
-}
-
-.dark .todo-action {
-  color: #5eead4;
-}
-
-.dark .todo-action:hover {
-  background: #134e4a;
-  color: #99f6e4;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  background: #1e293b;
+  border-color: rgba(96, 165, 250, 0.32);
 }
 
 .dark .notice-item.unread {
   background: #422006;
+  border-color: #92400e;
 }
 
-.dark .priority-tag.urgent {
-  background: #7f1d1d;
-  color: #fca5a5;
+.dark .metric-track {
+  background: #1e293b;
 }
 
-.dark .priority-tag.high {
-  background: #78350f;
-  color: #fcd34d;
+.dark .support-qr {
+  background: #fff;
 }
 
 .dark .detail-content {
   color: #cbd5e1;
+}
+
+/* Stable workbench override: keep the home page compact and predictable. */
+.home-page {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 10px;
+  background: var(--home-bg);
+}
+
+.home-page *,
+.home-page *::before,
+.home-page *::after {
+  box-sizing: border-box;
+}
+
+.home-page button {
+  appearance: none;
+  font: inherit;
+}
+
+.dashboard-pane {
+  overflow: hidden;
+  border: 1px solid var(--home-border);
+  border-radius: 8px;
+  background: var(--home-panel);
+}
+
+.welcome-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.welcome-profile {
+  min-height: 74px;
+  padding: 6px;
+}
+
+.welcome-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.welcome-metric,
+.guide-item,
+.flow-tile,
+.app-item,
+.quick-item,
+.notice-item {
+  display: block;
+  border: 1px solid var(--home-border);
+  background: #fff;
+  color: var(--home-text);
+  text-decoration: none;
+}
+
+.guide-pane {
+  padding: 10px;
+  border: 1px solid var(--home-border);
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.guide-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.guide-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-areas:
+    'icon title'
+    'icon desc';
+  gap: 2px 8px;
+  min-height: 58px;
+}
+
+.guide-index {
+  display: none;
+}
+
+.guide-icon {
+  grid-area: icon;
+}
+
+.guide-text strong {
+  grid-area: title;
+}
+
+.guide-text em {
+  grid-area: desc;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 10px;
+  align-items: start;
+}
+
+.main-column,
+.side-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-header,
+.dashboard-header {
+  min-height: 42px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--home-border);
+  background: #fff;
+}
+
+.flow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.flow-tile {
+  min-height: 86px;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+.app-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  gap: 10px;
+}
+
+.app-list,
+.quick-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.app-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-item,
+.quick-item {
+  min-height: 52px;
+  padding: 9px;
+  border-radius: 6px;
+}
+
+.todo-list,
+.notice-list {
+  padding: 8px 10px 10px;
+}
+
+.todo-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 9px 0;
+  background: transparent;
+}
+
+.chart-container {
+  height: 200px;
+}
+
+.mini-chart {
+  height: 82px;
+}
+
+.support-pane {
+  padding: 10px;
+}
+
+.support-qrs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.support-qr,
+.support-qr :deep(img) {
+  height: 88px;
+}
+
+.welcome-pane {
+  grid-template-columns: minmax(320px, 0.74fr) minmax(520px, 1fr);
+  grid-template-areas:
+    'profile guide'
+    'metrics guide';
+  align-items: stretch;
+}
+
+.welcome-profile {
+  grid-area: profile;
+  align-items: center;
+  border: 1px solid #edf2f7;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.welcome-metrics {
+  grid-area: metrics;
+}
+
+.guide-pane {
+  grid-area: guide;
+}
+
+.top-support-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(480px, 640px);
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 10px;
+  padding: 12px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 58%, #f0fdfa 100%);
+}
+
+.top-support-pane .support-copy {
+  justify-content: center;
+  margin-bottom: 0;
+  padding: 4px 8px;
+}
+
+.top-support-pane .support-copy span {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.top-support-pane .support-copy strong {
+  max-width: 640px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 720;
+  line-height: 25px;
+}
+
+.top-support-pane .support-qrs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.top-support-pane .support-qr,
+.top-support-pane .support-qr :deep(img) {
+  height: 148px;
+}
+
+.top-support-pane .support-qr {
+  border-color: #dbeafe;
+  background: #fff;
+}
+
+.workspace-grid {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.flow-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.flow-tile {
+  min-height: 92px;
+}
+
+.dark .welcome-metric,
+.dark .guide-item,
+.dark .flow-tile,
+.dark .app-item,
+.dark .quick-item,
+.dark .notice-item,
+.dark .dashboard-header {
+  background: #162033;
+}
+
+@media (max-width: 1280px) {
+  .welcome-pane,
+  .top-support-pane {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'profile'
+      'metrics'
+      'guide';
+  }
+
+  .workspace-grid,
+  .app-row {
+    grid-template-columns: 1fr;
+  }
+
+  .side-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .welcome-metrics,
+  .guide-list,
+  .flow-grid,
+  .app-list,
+  .quick-list,
+  .support-qrs,
+  .side-column {
+    grid-template-columns: 1fr;
+  }
+
+  .top-support-pane .support-qr,
+  .top-support-pane .support-qr :deep(img) {
+    height: 220px;
+  }
+}
+
+/* Compact pass: reduce first-screen whitespace and keep guide icons visible. */
+.home-page {
+  padding: 8px;
+}
+
+.welcome-pane {
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+}
+
+.welcome-profile {
+  min-height: 62px;
+  padding: 6px 8px;
+}
+
+.welcome-avatar {
+  width: 48px;
+  height: 48px;
+  flex-basis: 48px;
+  font-size: 18px;
+}
+
+.welcome-copy h1 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.welcome-copy p {
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.welcome-metrics {
+  gap: 6px;
+}
+
+.welcome-metric {
+  padding: 8px 9px;
+}
+
+.welcome-metric strong {
+  margin: 1px 0;
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.guide-pane {
+  padding: 8px;
+}
+
+.guide-head {
+  margin-bottom: 6px;
+}
+
+.guide-list {
+  gap: 6px;
+}
+
+.guide-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-areas: none;
+  min-height: 48px;
+  padding: 7px 8px;
+  align-items: center;
+}
+
+.guide-icon {
+  width: 30px;
+  height: 30px;
+  grid-area: auto;
+}
+
+.guide-icon i {
+  display: block;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.guide-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.top-support-pane {
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 9px 10px;
+}
+
+.top-support-pane .support-copy {
+  padding: 0 4px;
+}
+
+.top-support-pane .support-copy strong {
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.top-support-pane .support-qr,
+.top-support-pane .support-qr :deep(img) {
+  height: 116px;
+}
+
+.workspace-grid,
+.main-column,
+.side-column,
+.app-row {
+  gap: 8px;
+}
+
+.dashboard-header {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.dashboard-header h2 {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.dashboard-header p {
+  margin-top: 0;
+}
+
+.flow-grid,
+.app-list,
+.quick-list,
+.notice-list,
+.todo-list,
+.system-metrics {
+  padding: 8px;
+}
+
+.flow-grid {
+  gap: 6px;
+}
+
+.flow-tile {
+  min-height: 76px;
+  padding: 8px;
+}
+
+.flow-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.flow-tile strong {
+  font-size: 18px;
+  line-height: 22px;
+}
+
+.app-item,
+.quick-item {
+  min-height: 46px;
+  padding: 7px 8px;
+}
+
+.todo-item {
+  min-height: 48px;
+  padding: 7px 0;
+}
+
+.chart-container {
+  height: 160px;
+}
+
+.mini-chart {
+  height: 66px;
+  margin-bottom: 8px;
 }
 </style>
