@@ -1032,12 +1032,6 @@ function renderNavigationLabel({ option }) {
       h('i', { class: typeConfig.icon }),
     ]),
     h('span', { class: 'nav-tree-name' }, option.label),
-    option.resourceType
-      ? h('span', { class: 'nav-tree-count' }, [
-          h('span', '下级'),
-          h('strong', String(option.children?.length || 0)),
-        ])
-      : null,
   ])
 }
 
@@ -2707,29 +2701,6 @@ const editSchema = computed(() => [
   white-space: nowrap;
 }
 
-.tree-pane :deep(.nav-tree-count) {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 46px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #eff6ff !important;
-  border: 1px solid #93c5fd !important;
-  color: #1d4ed8 !important;
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 600;
-  justify-content: center;
-}
-
-.tree-pane :deep(.nav-tree-count strong) {
-  color: #1e3a8a !important;
-  font-weight: 750;
-  font-size: 12px;
-}
-
 .tree-pane :deep(.n-tree-node-content) {
   min-height: 28px;
   height: 28px;
@@ -2773,16 +2744,6 @@ const editSchema = computed(() => [
 .tree-pane :deep(.n-tree-node--selected .nav-tree-icon-shell),
 .tree-pane :deep(.n-tree-node--selected .nav-tree-name) {
   color: var(--primary-color, #2f6fed);
-}
-
-.tree-pane :deep(.n-tree-node--selected .nav-tree-count) {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
-}
-
-.tree-pane :deep(.n-tree-node--selected .nav-tree-count strong) {
-  color: #1d4ed8;
 }
 
 .list-pane :deep(.n-data-table-th) {
