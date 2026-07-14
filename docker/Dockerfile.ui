@@ -2,10 +2,10 @@
 # Forge Admin UI 前端 Dockerfile
 # ============================================
 # 构建上下文为项目根目录，docker compose 中 context 设为 ..
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY forge-admin-ui/package.json forge-admin-ui/pnpm-lock.yaml ./
-RUN npm install -g pnpm@8 && pnpm install --frozen-lockfile
+RUN npm install -g pnpm@8 && pnpm install --no-frozen-lockfile
 COPY forge-admin-ui/ .
 RUN pnpm build
 

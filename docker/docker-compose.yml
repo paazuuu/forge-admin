@@ -25,7 +25,7 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ../forge/forge-admin/sql:/初始化脚本.sql
+      - ../forge-server/db/全量初始化SQL.sql:/docker-entrypoint-initdb.d/init.sql
     command: >
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci

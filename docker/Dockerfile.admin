@@ -2,14 +2,14 @@
 # Forge Admin 后端服务 Dockerfile
 # ============================================
 # 构建上下文为项目根目录，docker compose 中 context 设为 ..
-FROM eclipse-temurin:17-jdk AS builder
+FROM maven:3.9-eclipse-temurin-17 AS builder
 WORKDIR /build
-COPY forge/ .
-RUN mvn clean package -pl forge-admin -am -DskipTests -Pprod
+COPY forge-server/ .
+RUN mvn clean package -pl forge-admin-server -am -DskipTests -Pprod
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=builder /build/forge-admin/target/forge-admin.jar app.jar
+COPY --from=builder /build/forge-admin-server/target/forge-admin-server.jar app.jar
 
 ENV JAVA_OPTS="-Xms256m -Xmx512m"
 ENV SPRING_PROFILES_ACTIVE=prod
