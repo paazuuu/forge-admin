@@ -331,15 +331,7 @@
                 <enabled>true</enabled>
             </releases>
         </repository>
-        <!-- 华为云 Maven 镜像 -->
-        <repository>
-            <id>public</id>
-            <name>huawei nexus</name>
-            <url>https://mirrors.huaweicloud.com/repository/maven/</url>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-        </repository>
+
         <repository>
             <id>2489946-release-KyUVJQ</id>
             <url>https://packages.aliyun.com/maven/repository/2489946-release-KyUVJQ</url>
@@ -354,9 +346,9 @@
     
     <pluginRepositories>
         <pluginRepository>
-            <id>public</id>
-            <name>huawei nexus</name>
-            <url>https://mirrors.huaweicloud.com/repository/maven/</url>
+            <id>aliyun-plugin</id>
+            <name>aliyun nexus</name>
+            <url>https://maven.aliyun.com/repository/public</url>
             <releases>
                 <enabled>true</enabled>
             </releases>
