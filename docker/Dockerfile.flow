@@ -26,11 +26,16 @@ EXPOSE 8081
 
 ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} \
   -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE} \
-  -Dspring.datasource.dynamic.datasource.master.url=jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true \
+  -Dspring.datasource.dynamic.datasource.master.url=\"jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true\" \
   -Dspring.datasource.dynamic.datasource.master.username=${MYSQL_USER} \
   -Dspring.datasource.dynamic.datasource.master.password=${MYSQL_PASSWORD} \
   -Dspring.data.redis.host=${REDIS_HOST} \
   -Dspring.data.redis.port=${REDIS_PORT} \
   -Dspring.data.redis.password=${REDIS_PASSWORD} \
   -Dspring.data.redis.redisson.config=\"singleServerConfig:\\n  address: \\\"redis://${REDIS_HOST}:${REDIS_PORT}\\\"\\n  database: 0\\n  password: ${REDIS_PASSWORD}\\n  connectTimeout: 10000\\n  timeout: 3000\\n  retryAttempts: 3\\n  retryInterval: 1500\\n  connectionPoolSize: 64\\n  connectionMinimumIdleSize: 10\\nthreads: 16\\nnettyThreads: 32\" \
+  -Dflowable.app.enabled=false \
+  -Dflowable.cmmn.enabled=false \
+  -Dflowable.dmn.enabled=false \
+  -Dflowable.idm.enabled=false \
+  -Dflowable.eventregistry.enabled=false \
   -jar app.jar"]
